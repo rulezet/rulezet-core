@@ -137,6 +137,7 @@ class Session_class:
                                 self.imported += 1
                                 self.count_per_format[rule_instance.format]["imported"] += 1
                             else:
+                                print(msg)
                                 self.skipped += 1
                                 self.count_per_format[rule_instance.format]["skipped"] += 1
                         else:
@@ -151,7 +152,8 @@ class Session_class:
                             self.count_per_format[rule_instance.format]["bad_rule"] += 1
                 
                 self.jobs.task_done()
-            except Exception:
+            except Exception as e:
+                print(f"Error occurred while processing job: {e}")
                 if not self.jobs.empty():
                     self.jobs.task_done()
         return True
