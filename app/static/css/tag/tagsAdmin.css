@@ -1,0 +1,261 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   tags-admin.css — Tag management page styles
+   Uses CSS variables from the Rulezet theme. Never hardcode colors.
+───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Source chips ───────────────────────────────────────────────────────────── */
+.source-chip {
+    border-color: var(--border-color);
+    color: var(--text-color);
+    font-size: 0.78rem;
+    padding: 0.3rem 0.75rem;
+    transition: all 0.15s ease;
+}
+
+.source-chip:hover {
+    border-color: #0d6efd;
+    color: #0d6efd;
+}
+
+.source-chip.active {
+    font-weight: 600;
+}
+
+/* ── Filter chips (active filter badges) ────────────────────────────────────── */
+.filter-chip {
+    background: var(--light-bg-color);
+    color: var(--text-color);
+    border-color: var(--border-color) !important;
+    cursor: pointer;
+    font-size: 0.72rem;
+    transition: opacity 0.15s;
+}
+
+.filter-chip:hover {
+    opacity: 0.7;
+}
+
+/* ── Tag table ──────────────────────────────────────────────────────────────── */
+.tag-table {
+    font-size: 0.84rem;
+
+}
+
+.tag-table thead th {
+    color: var(--subtle-text-color);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 2px solid var(--border-color);
+    padding: 0.5rem 0.75rem;
+    white-space: nowrap;
+}
+
+.tag-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.1s;
+}
+
+.tag-table tbody tr:hover {
+    background: var(--light-bg-color);
+}
+
+.tag-table tbody tr.table-active {
+    background: rgba(13, 110, 253, 0.06);
+}
+
+/* ── Group header ────────────────────────────────────────────────────────────── */
+.group-header {
+    font-size: 0.82rem;
+    color: var(--subtle-text-color);
+}
+
+/* ── Small utility buttons ───────────────────────────────────────────────────── */
+.btn-xs {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    border-radius: 0.25rem;
+}
+
+.icon-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 0.78rem;
+}
+
+/* ── Family chip (inside table) ─────────────────────────────────────────────── */
+.family-chip {
+    font-size: 0.72rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+/* ── Advanced filters panel ──────────────────────────────────────────────────── */
+.advanced-filters {
+    background: var(--light-bg-color);
+}
+
+/* ── Slide-down transition ───────────────────────────────────────────────────── */
+.slide-down-enter-active,
+.slide-down-leave-active {
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.slide-down-enter-to,
+.slide-down-leave-from {
+    max-height: 300px;
+    opacity: 1;
+}
+
+/* ── Family Drawer ───────────────────────────────────────────────────────────── */
+.family-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 1040;
+}
+
+.family-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 420px;
+    max-width: 95vw;
+    height: 100vh;
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border-color);
+}
+
+.drawer-header {
+    flex-shrink: 0;
+    background: var(--card-header-bg-color);
+}
+
+.drawer-body {
+    flex: 1;
+    min-height: 0;
+}
+
+.drawer-tag-item {
+    cursor: pointer;
+    transition: background 0.1s;
+    border: 1px solid transparent;
+}
+
+.drawer-tag-item:hover {
+    background: var(--light-bg-color);
+}
+
+.drawer-tag-item.selected {
+    background: rgba(13, 110, 253, 0.07);
+    border-color: rgba(13, 110, 253, 0.25);
+}
+
+/* ── Drawer slide transition ─────────────────────────────────────────────────── */
+.drawer-slide-enter-active,
+.drawer-slide-leave-active {
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.drawer-slide-enter-from,
+.drawer-slide-leave-to {
+    transform: translateX(100%);
+}
+
+/* ── Info chips (detail modal) ───────────────────────────────────────────────── */
+.info-chip {
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.info-chip small {
+    color: var(--subtle-text-color);
+    font-size: 0.72rem;
+}
+
+/* ── Detail-table (key/value table inside detail modal) ───────────────────── */
+.detail-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.85rem;
+}
+
+.detail-table tr+tr th,
+.detail-table tr+tr td {
+    border-top: 1px solid var(--border-color);
+}
+
+.detail-table th {
+    width: 160px;
+    padding: 0.55rem 0.85rem;
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.detail-table td {
+    padding: 0.55rem 0.85rem;
+    color: var(--text-color);
+    vertical-align: middle;
+    word-break: break-all;
+}
+
+.detail-table code {
+    color: var(--text-color);
+    background: transparent;
+    padding: 0;
+}
+
+/* ── Browser table ───────────────────────────────────────────────────────────── */
+.browser-table thead th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--subtle-text-color);
+    font-weight: 600;
+    border-bottom: 2px solid var(--border-color);
+}
+
+/* ── Loading overlay ─────────────────────────────────────────────────────────── */
+.table-loading-overlay {
+    min-height: 120px;
+}
+
+/* ── tag-split sizing variants ───────────────────────────────────────────────── */
+.tag-sm .tag-left,
+.tag-sm .tag-right {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+}

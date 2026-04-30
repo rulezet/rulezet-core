@@ -10,12 +10,15 @@ from app import db
 from app.core.db_class.db import Tag
 
 
+# ─── CRUD basics ─────────────────────────────────────────────────────────────
+
 def create_tag(form_data, created_by):
     """Create a new tag in the database."""
-    try: 
+    try:
         existing_tag = Tag.query.filter_by(name=form_data['name']).first()
         if existing_tag:
-            return False 
+            return False
+
         if created_by.is_admin:
             _is_active = True
             _approved_by_admin = True
@@ -24,14 +27,14 @@ def create_tag(form_data, created_by):
             _approved_by_admin = False
 
         if not form_data.get('source'):
-            form_data['source'] = 'Taxonomy'
+            form_data['source'] = 'Manual'
 
         tag = Tag(
             uuid=str(uuid.uuid4()),
             name=form_data['name'],
             description=form_data.get('description', ''),
             created_at=datetime.datetime.now(tz=datetime.timezone.utc),
-            updated_at=datetime.datetime.now(tz=datetime.timezone.utc), 
+            updated_at=datetime.datetime.now(tz=datetime.timezone.utc),
             color=form_data.get('color', '#FFFFFF'),
             icon=form_data.get('icon', 'fa-tag'),
             created_by=created_by.id,
@@ -39,118 +42,161 @@ def create_tag(form_data, created_by):
             is_approved_by_admin=_approved_by_admin,
             visibility=form_data['visibility'],
             external_id=form_data.get('external_id', None),
-            source=form_data.get('source', 'Taxonomy')
+            source=form_data.get('source', 'Manual')
         )
         db.session.add(tag)
         db.session.commit()
         return tag
-    except Exception as e:
+    except Exception:
+        db.session.rollback()
         return None
-    
+
 
 def get_tags(args):
+    """Admin tag listing with full filter support."""
     query = Tag.query
 
     if args.get('search'):
         query = query.filter(Tag.name.ilike(f"%{args['search']}%"))
 
-    sort_order = args.get('sort_order', 'asc')
-    if sort_order == 'asc':
-        query = query.order_by(Tag.created_at.desc())
-    else:
-        query = query.order_by(Tag.created_at.asc())
+    if args.get('source') and args['source'] != 'all':
+        query = query.filter_by(source=args['source'])
 
-    if args.get('visibility'):
-        if args['visibility'] != 'all':
-            query = query.filter_by(visibility=args['visibility'])
-    if args.get('is_active'):
-        if args['is_active'] != 'all':
-            is_active_value = True if args['is_active'] == 'active' else False
-            query = query.filter_by(is_active=is_active_value)
+    if args.get('visibility') and args['visibility'] != 'all':
+        query = query.filter_by(visibility=args['visibility'])
 
-    
+    if args.get('is_active') and args['is_active'] != 'all':
+        query = query.filter_by(is_active=args['is_active'] == 'active')
 
-    page = int(args.get('page', 1))
-    return query.paginate(page=page, per_page=20, max_per_page=20)
-
-
-def get_tags_bundle(args):
-    query = Tag.query
-
-    if current_user.is_authenticated:
-        if current_user.is_admin():
-            # Filter only active tags
-            query = query.filter_by(is_active=True)
-        elif args.get('user_id'):
-            if current_user.id == int(args.get('user_id')):
-                # filter only active and public tags + private tags the user has access to
-                query = query.filter_by(is_active=True, visibility='public')
-                # add all the tags the user has access to if tags.created_by == current_user.id
-                query = query.union(db.session.query(Tag).filter_by(created_by=current_user.id))
-            else:
-                # Filter only active and public tags
-                query = query.filter_by(is_active=True, visibility='public')
-        else:
-            # Filter only active and public tags
-            query = query.filter_by(is_active=True, visibility='public')
-    else:
-        query = query.filter_by(is_active=True, visibility='public')
-
-    if args.get('search'):
-        query = query.filter(Tag.name.ilike(f"%{args['search']}%"))
-
-    sort_order = args.get('sort_order', 'asc')
-    if sort_order == 'asc':
+    sort_order = args.get('sort_order', 'desc')
+    if sort_order == 'desc':
         query = query.order_by(Tag.created_at.desc())
     else:
         query = query.order_by(Tag.created_at.asc())
 
     page = int(args.get('page', 1))
-    return query.paginate(page=page, per_page=20, max_per_page=20)
+    per_page = min(int(args.get('per_page', 20)), 500)
+    return query.paginate(page=page, per_page=per_page, max_per_page=500)
+
+
+def _family_like_pattern(family):
+    """
+    Build the SQL LIKE pattern that matches every tag belonging to a family.
+
+    Examples:
+        'tlp'                       -> 'tlp:%'                  (taxonomy namespace)
+        'misp-galaxy:atrm'          -> 'misp-galaxy:atrm=%'     (galaxy type, values follow '=')
+        'misp-galaxy:threat-actor'  -> 'misp-galaxy:threat-actor=%'
+    """
+    if not family:
+        return None
+    if family.startswith("misp-galaxy:"):
+        return f"{family}=%"
+    return f"{family}:%"
+
+
+def get_tags_by_family(family, source=None):
+    """Return all tags belonging to a family (taxonomy namespace or galaxy type)."""
+    pattern = _family_like_pattern(family)
+    if not pattern:
+        return []
+
+    query = Tag.query.filter(Tag.name.ilike(pattern))
+    if source and source != 'all':
+        query = query.filter_by(source=source)
+    return query.order_by(Tag.name.asc()).all()
+
 
 def remove_tag(tag_id):
     try:
         tag = Tag.query.get(tag_id)
         if not tag:
             return False, "Tag not found."
-
+        db.session.execute(
+            db.text("DELETE FROM rule_tag_association WHERE tag_id = :id"),
+            {"id": int(tag_id)}
+        )
         db.session.delete(tag)
         db.session.commit()
-        return True, "Tag successfully deleted."
+        return True, "Tag deleted."
     except Exception as e:
-        return False, "An error occurred while deleting the tag."
+        db.session.rollback()
+        return False, f"Error deleting tag: {e}"
+
+
+def remove_tags_bulk(tag_ids):
+    """Delete a list of tags, cleaning up associations first."""
+    if not tag_ids:
+        return 0, "No tags provided."
+    try:
+        int_ids = [int(i) for i in tag_ids]
+
+        # remove associations first to avoid FK violation
+        db.session.execute(
+            db.text("DELETE FROM rule_tag_association WHERE tag_id IN :ids"),
+            {"ids": tuple(int_ids)}
+        )
+
+        deleted = Tag.query.filter(Tag.id.in_(int_ids)).delete(synchronize_session=False)
+        db.session.commit()
+        return deleted, f"Deleted {deleted} tag(s)."
+    except Exception as e:
+        db.session.rollback()
+        return 0, f"Error during bulk delete: {e}"
+
+
+def remove_family(family, source=None):
+    """Delete every tag in a given family, cleaning up associations first."""
+    pattern = _family_like_pattern(family)
+    if not pattern:
+        return 0, "Invalid family."
+    try:
+        query = Tag.query.filter(Tag.name.ilike(pattern))
+        if source and source != 'all':
+            query = query.filter_by(source=source)
+
+        ids = [t.id for t in query.with_entities(Tag.id).all()]
+        if not ids:
+            return 0, f"No tags found in family '{family}'."
+
+        db.session.execute(
+            db.text("DELETE FROM rule_tag_association WHERE tag_id IN :ids"),
+            {"ids": tuple(ids)}
+        )
+        deleted = Tag.query.filter(Tag.id.in_(ids)).delete(synchronize_session=False)
+        db.session.commit()
+        return deleted, f"Deleted {deleted} tags from family '{family}'."
+    except Exception as e:
+        db.session.rollback()
+        return 0, f"Error deleting family: {e}"
+
 
 def toggle_tag_visibility(tag_uuid):
     try:
         tag = Tag.query.filter_by(uuid=tag_uuid).first()
         if not tag:
             return False, "Tag not found."
-
-        if tag.visibility == "public":
-            tag.visibility = "private"
-        elif tag.visibility == "private":
-            tag.visibility = "public"
-        else:
-            tag.visibility = "public"
-
+        tag.visibility = "private" if tag.visibility == "public" else "public"
         db.session.commit()
-        return True, f"Tag visibility changed to {tag.visibility}."
-    except Exception as e:
-        return False, "An error occurred while toggling the tag visibility."
+        return True, f"Visibility set to {tag.visibility}."
+    except Exception:
+        db.session.rollback()
+        return False, "Error toggling visibility."
+
 
 def toggle_tag_status(tag_uuid):
     try:
         tag = Tag.query.filter_by(uuid=tag_uuid).first()
         if not tag:
             return False, "Tag not found."
-
         tag.is_active = not tag.is_active
-
         db.session.commit()
-        status = "active" if tag.is_active else "inactive"
-        return True, f"Tag status changed to {status}."
-    except Exception as e:
-        return False, "An error occurred while toggling the tag status."
+        return True, f"Status set to {'active' if tag.is_active else 'inactive'}."
+    except Exception:
+        db.session.rollback()
+        return False, "Error toggling status."
+
+
 def edit_tag(form_data, tag_id):
     try:
         tag = Tag.query.get(tag_id)
@@ -159,9 +205,10 @@ def edit_tag(form_data, tag_id):
 
         if tag.name != form_data['name'] and Tag.query.filter_by(name=form_data['name']).first():
             return False, "A tag with this name already exists."
-        #duplicate uuid check
-        if tag.external_id != form_data['external_id'] and Tag.query.filter_by(external_id=form_data['external_id']).first():
-            return False, "A tag with this uuid already exists."
+
+        if (form_data.get('external_id') and tag.external_id != form_data['external_id']
+                and Tag.query.filter_by(external_id=form_data['external_id']).first()):
+            return False, "A tag with this UUID already exists."
 
         tag.name = form_data['name']
         tag.description = form_data.get('description', tag.description)
@@ -171,56 +218,108 @@ def edit_tag(form_data, tag_id):
         tag.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
 
         db.session.commit()
-        return True, "Tag successfully updated."
-    except Exception as e:
+        return True, "Tag updated."
+    except Exception:
+        db.session.rollback()
         return False, None
 
-MISP_TAXONOMIES_PATH = "app/modules/misp-taxonomies"
-def list_all_misp_taxonomies_meta(args):
-    """
-    List only the main metadata of each MISP taxonomy (no predicates/values),
-    excluding taxonomies already present in DB (by namespace).
-    """
 
+# ─── Bundle / public listings (kept compatible with existing callers) ────────
+
+def get_tags_bundle(args):
+    query = Tag.query
+    if current_user.is_authenticated:
+        if current_user.is_admin():
+            query = query.filter_by(is_active=True)
+        elif args.get('user_id'):
+            if current_user.id == int(args.get('user_id')):
+                query = query.filter_by(is_active=True, visibility='public')
+                query = query.union(db.session.query(Tag).filter_by(created_by=current_user.id))
+            else:
+                query = query.filter_by(is_active=True, visibility='public')
+        else:
+            query = query.filter_by(is_active=True, visibility='public')
+    else:
+        query = query.filter_by(is_active=True, visibility='public')
+
+    if args.get('search'):
+        query = query.filter(Tag.name.ilike(f"%{args['search']}%"))
+
+    sort_order = args.get('sort_order', 'desc')
+    query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
+
+    page = int(args.get('page', 1))
+    return query.paginate(page=page, per_page=20, max_per_page=20)
+
+
+def get_my_tags():
+    return Tag.query.filter(
+        Tag.created_by == current_user.id,
+        Tag.source != "Taxonomy",
+        Tag.source != "Galaxy"
+    ).order_by(Tag.created_at.desc()).all()
+
+
+def get_all_tags(args):
+    query = Tag.query
+    if current_user.is_authenticated:
+        if current_user.is_admin():
+            query = query.filter_by(is_active=True)
+        elif args.get('user_id'):
+            if current_user.id == int(args.get('user_id')):
+                query = query.filter_by(is_active=True, visibility='public')
+                query = query.union(db.session.query(Tag).filter_by(created_by=current_user.id))
+            else:
+                query = query.filter_by(is_active=True, visibility='public')
+        else:
+            query = query.filter_by(is_active=True, visibility='public')
+    else:
+        query = query.filter_by(is_active=True, visibility='public')
+
+    if args.get('search'):
+        query = query.filter(Tag.name.ilike(f"%{args['search']}%"))
+
+    sort_order = args.get('sort_order', 'desc')
+    query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
+    return query.all()
+
+
+def get_all_tags_by_type(args):
+    return get_all_tags(args)
+
+
+# ─── MISP Taxonomies ─────────────────────────────────────────────────────────
+
+MISP_TAXONOMIES_PATH = "app/modules/misp-taxonomies"
+
+
+def list_all_misp_taxonomies_meta(args):
     taxonomies = []
     base_path = Path(MISP_TAXONOMIES_PATH)
-
-    # 🔥 Namespaces déjà en base
     existing_namespaces = get_all_taxonomies_in_db()
 
     for taxonomy_dir in sorted(base_path.iterdir()):
         if not taxonomy_dir.is_dir():
             continue
 
-        json_files = list(taxonomy_dir.glob("*.json"))
-        if not json_files:
-            continue
-
-        for json_file in json_files:
+        for json_file in taxonomy_dir.glob("*.json"):
             try:
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-
                 namespace = data.get("namespace")
-                if not namespace:
+                if not namespace or namespace in existing_namespaces:
                     continue
-
-                if namespace in existing_namespaces:
-                    continue
-
                 taxonomies.append({
-                    "version": data.get("version"),
+                    "version":     data.get("version"),
                     "description": data.get("description"),
-                    "expanded": data.get("expanded"),
-                    "exclusive": data.get("exclusive", False),
-                    "namespace": namespace,
-                    "uuid": data.get("uuid")
+                    "expanded":    data.get("expanded"),
+                    "exclusive":   data.get("exclusive", False),
+                    "namespace":   namespace,
+                    "uuid":        data.get("uuid"),
                 })
-
-            except Exception as e:
+            except Exception:
                 continue
 
-    # 🔍 Recherche
     search_term = args.get("search", "").lower()
     if search_term:
         taxonomies = [
@@ -230,42 +329,38 @@ def list_all_misp_taxonomies_meta(args):
             or search_term in (t["namespace"] or "").lower()
         ]
 
-    # 📄 Pagination
     page = int(args.get("page", 1))
     per_page = 20
     total = len(taxonomies)
-    total_pages = math.ceil(total / per_page)
+    total_pages = math.ceil(total / per_page) or 1
     start = (page - 1) * per_page
-    end = start + per_page
 
     return {
-        "items": taxonomies[start:end],
-        "page": page,
+        "items": taxonomies[start:start + per_page],
+        "page":  page,
         "pages": total_pages,
-        "total": total
+        "total": total,
     }
 
 
 def add_tags_from_misp_taxonomy(uuid_from_misp, created_by):
     if not uuid_from_misp:
-        return None , "Missing UUID"
+        return None, "Missing UUID"
 
     taxonomy_path = None
     base_path = Path(MISP_TAXONOMIES_PATH)
 
-
     for taxonomy_dir in base_path.iterdir():
         if not taxonomy_dir.is_dir():
             continue
-
         for json_file in taxonomy_dir.glob("*.json"):
             try:
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                if data.get("uuid") ==  uuid_from_misp:
+                if data.get("uuid") == uuid_from_misp:
                     taxonomy_path = json_file
                     break
-            except Exception as e:
+            except Exception:
                 continue
         if taxonomy_path:
             break
@@ -279,40 +374,25 @@ def add_tags_from_misp_taxonomy(uuid_from_misp, created_by):
     namespace = taxonomy_data.get("namespace", "unknown")
     tags_added = 0
 
-    # if already in the db we dont want to add it again
-    existing_namespaces = get_all_taxonomies_in_db()
-    if namespace in existing_namespaces:
-        return True , "Tags already in DB"
+    if namespace in get_all_taxonomies_in_db():
+        return True, "Taxonomy already imported."
 
-    # ==========================================================
-    # 🟢 CAS 1 : values → predicate → entry (CERT-XLM)
-    # ==========================================================
     if "values" in taxonomy_data:
         for block in taxonomy_data.get("values", []):
             predicate = block.get("predicate")
             if not predicate:
                 continue
-
             for entry in block.get("entry", []):
                 value = entry.get("value")
                 if not value:
                     continue
-
                 tag_name = f'{namespace}:{predicate}="{value}"'
-                description = (
-                    entry.get("description")
-                    or entry.get("expanded")
-                )
-                color = entry.get("colour") or "#FFFFFF"
-
                 if Tag.query.filter_by(name=tag_name).first():
                     continue
-
-
                 db.session.add(Tag(
                     name=tag_name,
-                    description=description,
-                    color=color,
+                    description=entry.get("description") or entry.get("expanded"),
+                    color=entry.get("colour") or "#FFFFFF",
                     icon="fa-tag",
                     uuid=str(uuid.uuid4()),
                     created_by=created_by.id,
@@ -322,33 +402,22 @@ def add_tags_from_misp_taxonomy(uuid_from_misp, created_by):
                     created_at=datetime.datetime.now(datetime.timezone.utc),
                     updated_at=datetime.datetime.now(datetime.timezone.utc),
                     external_id=entry.get("uuid"),
-                    source="Taxonomy"
+                    source="Taxonomy",
                 ))
                 tags_added += 1
 
-    # ==========================================================
-    # 🟢 CAS 2 & 3 : predicates simples (PAP, TLP, etc.)
-    # ==========================================================
     elif "predicates" in taxonomy_data:
         for pred in taxonomy_data.get("predicates", []):
             value = pred.get("value")
             if not value:
                 continue
-
             tag_name = f"{namespace}:{value}"
-            description = (
-                pred.get("description")
-                or pred.get("expanded")
-            )
-            color = pred.get("colour") or "#FFFFFF"
-
             if Tag.query.filter_by(name=tag_name).first():
                 continue
-
             db.session.add(Tag(
                 name=tag_name,
-                description=description,
-                color=color,
+                description=pred.get("description") or pred.get("expanded"),
+                color=pred.get("colour") or "#FFFFFF",
                 icon="fa-tag",
                 uuid=str(uuid.uuid4()),
                 external_id=pred.get("uuid"),
@@ -358,139 +427,58 @@ def add_tags_from_misp_taxonomy(uuid_from_misp, created_by):
                 visibility="public",
                 created_at=datetime.datetime.now(datetime.timezone.utc),
                 updated_at=datetime.datetime.now(datetime.timezone.utc),
-                source="Taxonomy"
+                source="Taxonomy",
             ))
             tags_added += 1
 
     if tags_added:
         db.session.commit()
-        return True, f"Added {tags_added} tags."
+        return True, f"Imported {tags_added} tags from {namespace}."
+    return None, "No tags were added."
 
-    return None , "No tags were added."
 
 def get_all_taxonomies_in_db():
-    """
-    Return a list of taxonomy namespaces already present in DB (unique).
-    Example tag:
-        tlp:green
-        CERT-XLM:intrusion-attempts="login-attempts"
-
-    ➜ returns: ["tlp", "CERT-XLM"]
-    """
     namespaces = set()
-
-    for tag in Tag.query.filter_by(is_active=True).all():
+    for tag in Tag.query.filter(Tag.source == "Taxonomy").all():
         if ":" in tag.name:
             namespaces.add(tag.name.split(":", 1)[0])
-
     return namespaces
 
-def get_my_tags():
-    """ Get all tags created by the current user """
-    my_tags = Tag.query.filter(
-        Tag.created_by == current_user.id,
-        Tag.source != "Taxonomy"
-    ).order_by(Tag.created_at.desc()).all()
-    return my_tags
 
-
-
-def get_all_tags(args):
-    query = Tag.query
-
-    if current_user.is_authenticated:
-        if current_user.is_admin():
-            query = query.filter_by(is_active=True)
-        elif args.get('user_id'):
-            if current_user.id == int(args.get('user_id')):
-                query = query.filter_by(is_active=True, visibility='public')
-                query = query.union(db.session.query(Tag).filter_by(created_by=current_user.id))
-            else:
-                query = query.filter_by(is_active=True, visibility='public')
-        else:
-            query = query.filter_by(is_active=True, visibility='public')
-    else:
-        query = query.filter_by(is_active=True, visibility='public')
-
-    if args.get('search'):
-        query = query.filter(Tag.name.ilike(f"%{args['search']}%"))
-
-    sort_order = args.get('sort_order', 'asc')
-    if sort_order == 'asc':
-        query = query.order_by(Tag.created_at.desc())
-    else:
-        query = query.order_by(Tag.created_at.asc())
-
-    return query.all()
-
-
-def get_all_tags_by_type(args):
-    query = Tag.query
-    
-
-    if current_user.is_authenticated:
-        if current_user.is_admin():
-            query = query.filter_by(is_active=True)
-        elif args.get('user_id'):
-            if current_user.id == int(args.get('user_id')):
-                query = query.filter_by(is_active=True, visibility='public')
-                query = query.union(db.session.query(Tag).filter_by(created_by=current_user.id))
-            else:
-                query = query.filter_by(is_active=True, visibility='public')
-        else:
-            query = query.filter_by(is_active=True, visibility='public')
-    else:
-        query = query.filter_by(is_active=True, visibility='public')
-
-    if args.get('search'):
-        query = query.filter(Tag.name.ilike(f"%{args['search']}%"))
-
-    sort_order = args.get('sort_order', 'asc')
-    if sort_order == 'asc':
-        query = query.order_by(Tag.created_at.desc())
-    else:
-        query = query.order_by(Tag.created_at.asc())
-
-    return query.all()
-
-#####################
-#   MISP GALAXIES   #
-#####################
+# ─── MISP Galaxies ───────────────────────────────────────────────────────────
 
 MISP_GALAXIES_PATH = "app/modules/misp-galaxy"
 
+
 def list_all_misp_galaxies_meta(args):
-    """List galaxy metadata, excluding galaxies already imported in DB."""
     galaxies = []
     galaxies_path = Path(MISP_GALAXIES_PATH) / "galaxies"
     clusters_path = Path(MISP_GALAXIES_PATH) / "clusters"
-
     existing_galaxies = get_all_galaxies_in_db()
 
     for galaxy_file in sorted(galaxies_path.glob("*.json")):
         try:
             with open(galaxy_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-
             galaxy_type = data.get("type")
             if not galaxy_type or galaxy_type in existing_galaxies:
                 continue
 
-            # same filename exists in clusters/ and contains the values
-            cluster_file = clusters_path / galaxy_file.name
             cluster_count = 0
+            cluster_file = clusters_path / galaxy_file.name
             if cluster_file.exists():
                 with open(cluster_file, "r", encoding="utf-8") as f:
                     cluster_data = json.load(f)
                 cluster_count = len(cluster_data.get("values", []))
 
             galaxies.append({
-                "name": data.get("name"),
-                "type": galaxy_type,
+                "name":        data.get("name"),
+                "type":        galaxy_type,
                 "description": data.get("description"),
-                "uuid": data.get("uuid"),
-                "version": data.get("version"),
-                "count": cluster_count
+                "uuid":        data.get("uuid"),
+                "version":     data.get("version"),
+                "icon":        data.get("icon"),
+                "count":       cluster_count,
             })
         except Exception:
             continue
@@ -507,17 +495,18 @@ def list_all_misp_galaxies_meta(args):
     page = int(args.get("page", 1))
     per_page = 20
     total = len(galaxies)
-    total_pages = math.ceil(total / per_page)
+    total_pages = math.ceil(total / per_page) or 1
     start = (page - 1) * per_page
 
     return {
         "items": galaxies[start:start + per_page],
-        "page": page,
+        "page":  page,
         "pages": total_pages,
-        "total": total
+        "total": total,
     }
+
+
 def add_tags_from_misp_galaxy(uuid_from_misp, created_by):
-    """Import all clusters of a galaxy as Tags with source='Galaxy'."""
     if not uuid_from_misp:
         return None, "Missing UUID"
 
@@ -541,10 +530,10 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by):
         return None, "Galaxy not found"
 
     galaxy_type = galaxy_data.get("type", "unknown")
+    galaxy_icon = galaxy_data.get("icon", "atom")
 
-    existing_galaxies = get_all_galaxies_in_db()
-    if galaxy_type in existing_galaxies:
-        return True, "Galaxy already in DB"
+    if galaxy_type in get_all_galaxies_in_db():
+        return True, "Galaxy already imported."
 
     cluster_file = clusters_path / matched_filename
     if not cluster_file.exists():
@@ -558,16 +547,14 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by):
         value = cluster.get("value")
         if not value:
             continue
-
         tag_name = f'misp-galaxy:{galaxy_type}="{value}"'
         if Tag.query.filter_by(name=tag_name).first():
             continue
-
         db.session.add(Tag(
             name=tag_name,
             description=cluster.get("description", ""),
             color="#8b5cf6",
-            icon="fa-atom",
+            icon=galaxy_icon,
             uuid=str(uuid.uuid4()),
             created_by=created_by.id,
             is_active=True,
@@ -577,22 +564,19 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by):
             updated_at=datetime.datetime.now(datetime.timezone.utc),
             external_id=cluster.get("uuid"),
             source="Galaxy",
-            galaxy_meta=cluster.get("meta")
+            galaxy_meta=cluster.get("meta"),
         ))
         tags_added += 1
 
     if tags_added:
         db.session.commit()
-        return True, f"Added {tags_added} clusters."
-
+        return True, f"Imported {tags_added} clusters from galaxy '{galaxy_type}'."
     return None, "No clusters were added."
 
 
 def get_all_galaxies_in_db():
-    """Return galaxy types already imported (e.g. 'threat-actor', 'malware')."""
     galaxy_types = set()
-    for tag in Tag.query.filter_by(source="Galaxy", is_active=True).all():
-        # tag name format: misp-galaxy:threat-actor="APT28"
+    for tag in Tag.query.filter_by(source="Galaxy").all():
         if tag.name.startswith("misp-galaxy:") and "=" in tag.name:
             galaxy_type = tag.name.split(":", 1)[1].split("=", 1)[0]
             galaxy_types.add(galaxy_type)

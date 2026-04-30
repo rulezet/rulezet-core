@@ -16,7 +16,7 @@ const ListMyTags = {
         const tagToDelete = Vue.ref(null);
         const isDeleting = Vue.ref(false);
 
-       
+
 
         const fetchMyTags = async () => {
             loading.value = true;
@@ -39,8 +39,8 @@ const ListMyTags = {
         };
 
         const handleTagCreated = (newTag) => {
-            fetchMyTags(); 
-            emit('tag-created-success'); 
+            fetchMyTags();
+            emit('tag-created-success');
         };
 
         const confirmDelete = (tag) => {
@@ -88,10 +88,10 @@ const ListMyTags = {
 
         Vue.onMounted(fetchMyTags);
 
-        return { 
-            tags, loading, searchQuery, filteredTags, 
+        return {
+            tags, loading, searchQuery, filteredTags,
             confirmDelete, executeDelete, tagToDelete, isDeleting,
-            getContrastYIQ, fetchMyTags, openCreateModal, handleTagCreated 
+            getContrastYIQ, fetchMyTags, openCreateModal, handleTagCreated
         };
     },
     template: `

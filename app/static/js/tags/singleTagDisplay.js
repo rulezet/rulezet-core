@@ -1,81 +1,77 @@
+import { getTextColor, mapIcon } from './utils/galaxie.js';
+
+/**
+ * SingleTagDisplay
+ * Renders one tag as a split pill with a hover tooltip.
+ * Uses the same getTextColor + mapIcon as the rest of the tag system.
+ */
 const SingleTagDisplay = {
     props: {
-        tag: { 
-            type: Object, 
-            required: true,
-            default: () => ({
-                id: null,
-                name: '',
-                color: '#6c757d',
-                icon: 'fa-tag',
-                description: '',
-                created_at: null,
-                visibility: 'Private'
-            })
-        },
-        cssPath: { type: String, default: '/static/css/tag/tags.css' }
+        tag: { type: Object, required: true },
+        showNamespace: { type: Boolean, default: true },
     },
     delimiters: ['[[', ']]'],
     setup(props) {
-        // Chargement du CSS si nécessaire
-        if (props.cssPath && !document.querySelector(`link[href="${props.cssPath}"]`)) {
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = props.cssPath;
-            document.head.appendChild(link);
+        function namespaceOf(name) {
+            if (!name || !name.includes(':')) return '';
+            if (name.startsWith('misp-galaxy:') && name.includes('=')) {
+                return name.split(':')[1].split('=')[0];
+            }
+            return name.split(':')[0];
         }
 
-        const getContrastYIQ = (hex) => {
-            if (!hex) return '#000';
-            const r = parseInt(hex.substr(1, 2), 16), 
-                  g = parseInt(hex.substr(3, 2), 16), 
-                  b = parseInt(hex.substr(5, 2), 16);
-            return ((r * 299) + (g * 587) + (b * 114)) / 1000 >= 128 ? '#000' : '#fff';
-        };
+        function valueOf(name) {
+            if (!name) return '';
+            const m = name.match(/="(.+)"$/);
+            if (m) return m[1];
+            if (name.includes(':')) return name.split(':').slice(1).join(':');
+            return name;
+        }
 
-        return { getContrastYIQ };
+        function label(tag) {
+            const ns = namespaceOf(tag.name);
+            const val = valueOf(tag.name);
+            if (props.showNamespace && ns) return `${ns}:${val}`;
+            return val;
+        }
+
+        return { getTextColor, mapIcon, label };
     },
     template: `
-    <div class="tag-wrapper d-inline-block">
-        <span class="tag-split shadow-sm on-hover-zoom">
-            <span class="tag-left">
-                <i :class="['fas', tag.icon || 'fa-tag']"></i>
-            </span>
-            <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }">
-                <span :style="{ color: getContrastYIQ(tag.color) }" class="fw-bold">
-                    [[ tag.name ]]
+        <div class="tag-wrapper d-inline-block">
+            <span class="tag-split shadow-sm on-hover-zoom">
+                <span class="tag-left" v-html="mapIcon(tag.icon)"></span>
+                <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }" :title="tag.name">
+                    <span :style="{ color: getTextColor(tag.color || '#6c757d') }" class="fw-bold">
+                        [[ label(tag) ]]
+                    </span>
                 </span>
             </span>
-        </span>
-        
-        <div class="tag-tooltip animate__animated animate__fadeIn">
-            <div class="hover-bridge"></div> 
-            
-            <div class="tooltip-header" :style="{ borderLeft: '4px solid ' + (tag.color || '#6c757d') }">
-                <i :class="['fas', tag.icon || 'fa-tag', 'me-2 text-white']"></i>
-                <strong class="text-white">[[ tag.name ]]</strong>
-            </div>
-
-            <div class="tooltip-body">
-                <div class="description-container">
-                    <div class="description-scroll text-white-50">
-                        [[ tag.description || 'No description available for this tag.' ]]
+            <div class="tag-tooltip animate__animated animate__fadeIn">
+                <div class="hover-bridge"></div>
+                <div class="tooltip-header" :style="{ borderLeft: '4px solid ' + (tag.color || '#6c757d') }">
+                    <span v-html="mapIcon(tag.icon)" class="me-2 text-white"></span>
+                    <strong class="text-white">[[ tag.name ]]</strong>
+                </div>
+                <div class="tooltip-body">
+                    <div class="description-container">
+                        <div class="description-scroll text-white-50">
+                            [[ tag.description || 'No description available.' ]]
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-2 pt-2 border-top border-white border-opacity-10" style="font-size:0.7rem;">
+                        <span class="text-white-50">
+                            <i :class="tag.visibility === 'public' ? 'fas fa-eye me-1' : 'fas fa-eye-slash me-1'"></i>
+                            [[ tag.visibility || 'private' ]]
+                        </span>
+                        <span v-if="tag.created_at" class="text-white-50">
+                            <i class="far fa-calendar-alt me-1"></i>[[ tag.created_at ]]
+                        </span>
                     </div>
                 </div>
-                
-                <div class="d-flex justify-content-between mt-2 pt-2 border-top border-white border-opacity-10" style="font-size: 0.7rem;">
-                    <span class="text-white-50">
-                        <i :class="['fas', tag.visibility === 'Public' ? 'fa-globe' : 'fa-lock', 'me-1']"></i>
-                        [[ tag.visibility || 'Private' ]]
-                    </span>
-                    <span v-if="tag.created_at" class="text-white-50">
-                        <i class="far fa-calendar-alt me-1"></i> [[ tag.created_at ]]
-                    </span>
-                </div>
+                <div class="tooltip-arrow"></div>
             </div>
-            <div class="tooltip-arrow"></div>
         </div>
-    </div>
     `
 };
 

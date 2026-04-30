@@ -1,105 +1,101 @@
+import { getTextColor, mapIcon } from './utils/galaxie.js';
+
+/**
+ * TagInput
+ * Searchable tag picker with namespace drill-down.
+ * Unified badge style with the rest of the tag system.
+ */
 const TagInput = {
     props: {
-        modelValue: { type: Array, default: () => [] }, 
-        placeholder: { type: String, default: 'Search or select tags...' },
+        modelValue: { type: Array, default: () => [] },
+        placeholder: { type: String, default: 'Search or select tags…' },
         label: { type: String, default: 'Associated Tags' },
         userId: { type: [Number, String], default: null },
-        cssPath: { type: String, default: '/static/css/tag/tags.css' }
+        showNamespace: { type: Boolean, default: true },
     },
     emits: ['update:modelValue'],
     delimiters: ['[[', ']]'],
     setup(props, { emit }) {
         const searchQuery = Vue.ref('');
-        const availableTags = Vue.ref([]); 
+        const availableTags = Vue.ref([]);
         const isLoading = Vue.ref(false);
         const isDropdownOpen = Vue.ref(false);
         const activeType = Vue.ref(null);
         const activeNamespace = Vue.ref(null);
 
-        if (props.cssPath && !document.querySelector(`link[href="${props.cssPath}"]`)) {
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = props.cssPath;
-            document.head.appendChild(link);
+        // ── label helpers ─────────────────────────────────────────────────────
+        function namespaceOf(name) {
+            if (!name || !name.includes(':')) return '';
+            if (name.startsWith('misp-galaxy:') && name.includes('=')) return name.split(':')[1].split('=')[0];
+            return name.split(':')[0];
+        }
+        function valueOf(name) {
+            if (!name) return '';
+            const m = name.match(/="(.+)"$/);
+            if (m) return m[1];
+            if (name.includes(':')) return name.split(':').slice(1).join(':');
+            return name;
+        }
+        function tagLabel(name) {
+            const ns = namespaceOf(name);
+            const val = valueOf(name);
+            if (props.showNamespace && ns) return `${ns}:${val}`;
+            return val;
         }
 
-        const getContrastYIQ = (hex) => {
-            if (!hex) return '#fff';
-            const r = parseInt(hex.substr(1, 2), 16), 
-                  g = parseInt(hex.substr(3, 2), 16), 
-                  b = parseInt(hex.substr(5, 2), 16);
-            return ((r * 299) + (g * 587) + (b * 114)) / 1000 >= 128 ? '#000' : '#fff';
-        };
-
-        const fetchAvailableTags = async () => {
+        async function fetchAvailableTags() {
             isLoading.value = true;
             try {
                 const params = new URLSearchParams();
-                if (props.userId) params.append('user_id', props.userId.toString());
-                const url = `/tags/get_all_tags?${params.toString()}`;
-                const response = await fetch(url); 
-                if (response.ok) {
-                    const data = await response.json();
+                if (props.userId) params.append('user_id', String(props.userId));
+                const res = await fetch(`/tags/get_all_tags?${params}`);
+                if (res.ok) {
+                    const data = await res.json();
                     availableTags.value = Array.isArray(data) ? data : (data.tags || []);
                 }
-            } catch (error) {
-                console.error("Fetch error:", error);
+            } catch (e) {
+                console.error('TagInput fetch error:', e);
             } finally {
                 isLoading.value = false;
             }
-        };
+        }
 
         const sortedGroupedTags = Vue.computed(() => {
-            const groups = { 'Public': {}, 'Private': {} };
+            const groups = { Public: {}, Private: {} };
             availableTags.value.forEach(tag => {
                 const type = tag.visibility === 'public' ? 'Public' : 'Private';
-                let ns = 'General';
-                let displayName = tag.name;
-                if (tag.name.includes(':')) {
-                    const parts = tag.name.split(':');
-                    ns = parts[0].trim().toUpperCase();
-                    displayName = parts.slice(1).join(':').trim();
-                } else if (tag.namespace) {
-                    ns = tag.namespace.toUpperCase();
-                }
+                const ns = namespaceOf(tag.name)?.toUpperCase() || 'OTHER';
                 if (!groups[type][ns]) groups[type][ns] = [];
-                groups[type][ns].push({ ...tag, displayName: displayName });
+                groups[type][ns].push({ ...tag, displayLabel: tagLabel(tag.name) });
             });
-            if (Object.keys(groups['Private']).length === 0) delete groups['Private'];
-            if (Object.keys(groups['Public']).length === 0) delete groups['Public'];
+            if (!Object.keys(groups.Private).length) delete groups.Private;
+            if (!Object.keys(groups.Public).length) delete groups.Public;
             return groups;
         });
 
         const filteredSuggestions = Vue.computed(() => {
-            const query = searchQuery.value.toLowerCase().trim();
-            return availableTags.value.filter(tag => {
-                return tag.name.toLowerCase().includes(query);
-            });
+            const q = searchQuery.value.toLowerCase().trim();
+            if (!q) return [];
+            return availableTags.value.filter(t => t.name.toLowerCase().includes(q));
         });
 
-        const isTagSelected = (tagId) => {
-            return props.modelValue.some(t => t.id === tagId);
-        };
+        const isTagSelected = (tagId) => props.modelValue.some(t => t.id === tagId);
 
-        const toggleTag = (tag) => {
+        function toggleTag(tag) {
             if (isTagSelected(tag.id)) {
-                const updatedValue = props.modelValue.filter(t => t.id !== tag.id);
-                emit('update:modelValue', updatedValue);
+                emit('update:modelValue', props.modelValue.filter(t => t.id !== tag.id));
             } else {
                 emit('update:modelValue', [...props.modelValue, tag]);
             }
-        };
+        }
 
-        const toggleDropdown = () => {
+        function toggleDropdown() {
             if (!isDropdownOpen.value && availableTags.value.length === 0) fetchAvailableTags();
             isDropdownOpen.value = !isDropdownOpen.value;
-        };
+        }
 
-        Vue.watch(searchQuery, (newVal) => {
-            if (newVal) {
-                activeType.value = null;
-                activeNamespace.value = null;
-            }
+        Vue.watch(searchQuery, (val) => {
+            if (val) { activeType.value = null; activeNamespace.value = null; }
         });
 
         Vue.onMounted(() => {
@@ -108,121 +104,135 @@ const TagInput = {
             });
         });
 
-        return { 
+        return {
             searchQuery, filteredSuggestions, isLoading, isDropdownOpen,
-            toggleTag, isTagSelected, toggleDropdown, getContrastYIQ,
-            sortedGroupedTags, activeType, activeNamespace
+            toggleTag, isTagSelected, toggleDropdown,
+            getTextColor, mapIcon, tagLabel,
+            sortedGroupedTags, activeType, activeNamespace,
         };
     },
     template: `
-    <div class="tag-input-container text-start position-relative">
-        <label class="form-label fw-bold text-muted small text-uppercase">[[ label ]]</label>
-        
-        <div class="input-group shadow-sm rounded-3 border bg-white" style="border-width: 2px;">
-            <span class="input-group-text border-0" style="cursor: pointer; background-color: var(--bg-color)">
-                <i class="fas fa-search" style="font-size: 0.8rem; color: var(--text-color)"></i>
-            </span>
-            <input type="text" v-model="searchQuery" @focus="toggleDropdown"
-                class="form-control border-0 shadow-none px-2" :placeholder="placeholder" style="height: 46px;">
-            <div v-if="isLoading" class="input-group-text border-0 bg-transparent">
-                <div class="spinner-border spinner-border-sm text-primary"></div>
-            </div>
-        </div>
+        <div class="tag-input-container text-start position-relative">
+            <label class="form-label fw-bold text-muted small text-uppercase">[[ label ]]</label>
 
-        <div v-if="isDropdownOpen" 
-             @click.stop
-             class="dropdown-menu show shadow-lg border-0 p-3 w-100 mt-1"
-             style="max-height: 450px; overflow-y: auto; z-index: 1060; min-width: 350px;">
-            
-            <div v-if="searchQuery">
-                <div v-for="tag in filteredSuggestions" :key="tag.id" @click.stop="toggleTag(tag)"
-                     class="dropdown-item rounded-2 py-2 d-flex align-items-center justify-content-between cursor-pointer mb-1 border"
-                     :class="{'border-primary bg-primary-subtle': isTagSelected(tag.id)}">
-                    <span class="tag-split">
-                        <span class="tag-left bg-dark"><i :class="['fas', tag.icon || 'fa-tag']"></i></span>
-                        <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }">
-                            <span :style="{ color: getContrastYIQ(tag.color) }" class="fw-bold">[[ tag.name ]]</span>
+            <div class="input-group shadow-sm rounded-3 border" style="border-width:2px; background: var(--card-bg-color)">
+                <span class="input-group-text border-0" style="background: var(--card-bg-color); cursor:pointer">
+                    <i class="fas fa-search small" style="color: var(--subtle-text-color)"></i>
+                </span>
+                <input type="text" v-model="searchQuery" @focus="toggleDropdown"
+                    class="form-control border-0 shadow-none px-2"
+                    :placeholder="placeholder"
+                    style="height:46px; background: var(--card-bg-color); color: var(--text-color)">
+                <div v-if="isLoading" class="input-group-text border-0" style="background: var(--card-bg-color)">
+                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                </div>
+            </div>
+
+            <!-- Dropdown -->
+            <div v-if="isDropdownOpen" @click.stop
+                 class="dropdown-menu show shadow-lg border-0 p-3 w-100 mt-1"
+                 style="max-height:450px; overflow-y:auto; z-index:1060; min-width:350px; background: var(--card-bg-color); border-radius:12px;">
+
+                <!-- Search results -->
+                <div v-if="searchQuery">
+                    <div v-for="tag in filteredSuggestions" :key="tag.id" @click.stop="toggleTag(tag)"
+                         class="dropdown-item rounded-2 py-2 d-flex align-items-center justify-content-between cursor-pointer mb-1 border"
+                         :class="{ 'border-primary bg-primary-subtle': isTagSelected(tag.id) }"
+                         style="cursor:pointer">
+                        <span class="tag-split shadow-sm">
+                            <span class="tag-left" v-html="mapIcon(tag.icon)"></span>
+                            <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }">
+                                <span :style="{ color: getTextColor(tag.color || '#6c757d') }" class="fw-bold">
+                                    [[ tagLabel(tag.name) ]]
+                                </span>
+                            </span>
                         </span>
-                    </span>
-                    <div class="d-flex align-items-center gap-2">
-                        <i v-if="isTagSelected(tag.id)" class="fas fa-check-circle text-primary"></i>
-                        <small :class="tag.visibility === 'public' ? 'text-success' : 'text-danger'">
-                            <i :class="['fas fa-sm', tag.visibility === 'public' ? 'fa-globe' : 'fa-lock']"></i>
-                        </small>
+                        <div class="d-flex align-items-center gap-2">
+                            <i v-if="isTagSelected(tag.id)" class="fas fa-check-circle text-primary"></i>
+                            <small :class="tag.visibility === 'public' ? 'text-success' : 'text-danger'">
+                                <i :class="tag.visibility === 'public' ? 'fas fa-eye' : 'fas fa-eye-slash'"></i>
+                            </small>
+                        </div>
+                    </div>
+                    <div v-if="filteredSuggestions.length === 0" class="text-center py-4">
+                        <i class="fas fa-search fa-2x mb-2 opacity-25 d-block" style="color: var(--text-color)"></i>
+                        <p class="fw-bold small mb-0" style="color: var(--text-color)">No tags found.</p>
                     </div>
                 </div>
-                <div v-if="filteredSuggestions.length === 0" class="text-center py-4">
-                    <i class="fas fa-search mb-2 opacity-25" style="font-size: 2rem; color: var(--text-color)"></i>
-                    <p class="fw-bold" style="color: var(--text-color)">No tags found for this search.</p>
-                </div>
-            </div>
 
-            <div v-else-if="!activeType">
-                <div v-for="(namespaces, type) in sortedGroupedTags" :key="type" 
-                     @click.stop="activeType = type"
-                     class="p-2 rounded border d-flex align-items-center justify-content-between mb-2 cursor-pointer hover-bg-light">
-                    <div class="d-flex align-items-center">
-                        <i :class="type === 'Public' ? 'fa-globe text-success' : 'fa-lock text-danger'" class="fas me-3"></i>
-                        <span class="fw-bold" style="color: var(--text-color)">[[ type ]] Tags</span>
+                <!-- Type level -->
+                <div v-else-if="!activeType">
+                    <div v-for="(namespaces, type) in sortedGroupedTags" :key="type"
+                         @click.stop="activeType = type"
+                         class="p-2 rounded border d-flex align-items-center justify-content-between mb-2"
+                         style="cursor:pointer">
+                        <div class="d-flex align-items-center">
+                            <i :class="type === 'Public' ? 'fas fa-eye text-success' : 'fas fa-eye-slash text-danger'" class="me-3"></i>
+                            <span class="fw-bold" style="color: var(--text-color)">[[ type ]] Tags</span>
+                        </div>
+                        <i class="fas fa-chevron-right small opacity-50" style="color: var(--text-color)"></i>
                     </div>
-                    <i class="fas fa-chevron-right small opacity-50" style="color: var(--text-color)"></i>
+                    <div v-if="Object.keys(sortedGroupedTags).length === 0 && !isLoading" class="text-center py-3">
+                        <p class="text-muted small fw-bold mb-0">No tags available.</p>
+                    </div>
                 </div>
-                <div v-if="Object.keys(sortedGroupedTags).length === 0 && !isLoading" class="text-center py-4">
-                    <p class="text-muted small fw-bold">No tags available.</p>
-                </div>
-            </div>
 
-            <div v-else-if="!activeNamespace">
-                <div class="mb-2">
-                    <button @click.stop="activeType = null" class="btn btn-sm text-primary p-0 fw-bold">
-                        <i class="fas fa-chevron-left me-1"></i> Back to Types
+                <!-- Namespace level -->
+                <div v-else-if="!activeNamespace">
+                    <button @click.stop="activeType = null" class="btn btn-sm text-primary p-0 fw-bold mb-2">
+                        <i class="fas fa-chevron-left me-1"></i>Back
                     </button>
-                </div>
-                <div v-for="(tags, ns) in sortedGroupedTags[activeType]" :key="ns" 
-                     @click.stop="activeNamespace = ns"
-                     class="p-2 rounded border d-flex align-items-center justify-content-between mb-2 cursor-pointer hover-bg-light">
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-folder text-primary opacity-75 me-3"></i>
-                        <span class="fw-bold" style="color: var(--text-color)">[[ ns ]]</span>
+                    <div v-for="(tags, ns) in sortedGroupedTags[activeType]" :key="ns"
+                         @click.stop="activeNamespace = ns"
+                         class="p-2 rounded border d-flex align-items-center justify-content-between mb-2"
+                         style="cursor:pointer">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-folder text-primary opacity-75 me-3"></i>
+                            <span class="fw-bold" style="color: var(--text-color)">[[ ns ]]</span>
+                        </div>
+                        <span class="badge rounded-pill border" style="background: var(--light-bg-color); color: var(--text-color)">[[ tags.length ]]</span>
                     </div>
-                    <span class="badge bg-light text-dark border rounded-pill">[[ tags.length ]]</span>
                 </div>
-            </div>
 
-            <div v-else>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <button @click.stop="activeNamespace = null" class="btn btn-sm text-primary p-0 fw-bold">
-                        <i class="fas fa-chevron-left me-1"></i> Back to [[ activeType ]]
-                    </button>
-                    <small class="text-uppercase fw-bold text-muted">[[ activeNamespace ]]</small>
-                </div>
-                <div v-for="tag in sortedGroupedTags[activeType][activeNamespace]" :key="tag.id" 
-                     @click.stop="toggleTag(tag)"
-                     class="dropdown-item rounded border mb-2 p-2 d-flex align-items-center justify-content-between cursor-pointer"
-                     :class="{'border-primary bg-primary-subtle shadow-sm': isTagSelected(tag.id)}">
-                    <span class="tag-split">
-                        <span class="tag-left bg-dark"><i :class="['fas', tag.icon || 'fa-tag']"></i></span>
-                        <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }">
-                            <span :style="{ color: getContrastYIQ(tag.color) }">[[ tag.displayName ]]</span>
+                <!-- Tag level -->
+                <div v-else>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <button @click.stop="activeNamespace = null" class="btn btn-sm text-primary p-0 fw-bold">
+                            <i class="fas fa-chevron-left me-1"></i>Back
+                        </button>
+                        <small class="text-uppercase fw-bold text-muted">[[ activeNamespace ]]</small>
+                    </div>
+                    <div v-for="tag in sortedGroupedTags[activeType][activeNamespace]" :key="tag.id"
+                         @click.stop="toggleTag(tag)"
+                         class="dropdown-item rounded border mb-2 p-2 d-flex align-items-center justify-content-between"
+                         :class="{ 'border-primary bg-primary-subtle shadow-sm': isTagSelected(tag.id) }"
+                         style="cursor:pointer">
+                        <span class="tag-split shadow-sm">
+                            <span class="tag-left" v-html="mapIcon(tag.icon)"></span>
+                            <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }">
+                                <span :style="{ color: getTextColor(tag.color || '#6c757d') }">
+                                    [[ tag.displayLabel ]]
+                                </span>
+                            </span>
                         </span>
-                    </span>
-                    <i :class="isTagSelected(tag.id) ? 'fas fa-check-circle text-primary' : 'fas fa-plus-circle text-muted'"></i>
+                        <i :class="isTagSelected(tag.id) ? 'fas fa-check-circle text-primary' : 'fas fa-plus-circle text-muted'"></i>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="d-flex flex-wrap gap-2 mt-3">
-            <div v-for="tag in modelValue" :key="tag.id" class="d-inline-block">
-                <span class="tag-split shadow-sm">
-                    <span class="tag-left bg-dark"><i :class="['fas', tag.icon || 'fa-tag']"></i></span>
+            <!-- Selected tags -->
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <span v-for="tag in modelValue" :key="tag.id" class="tag-split shadow-sm">
+                    <span class="tag-left" v-html="mapIcon(tag.icon)"></span>
                     <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }">
-                        <span :style="{ color: getContrastYIQ(tag.color) }" class="fw-bold me-2">[[ tag.name ]]</span>
-                        <i class="fas fa-times-circle cursor-pointer" style="color: black;" @click.stop="toggleTag(tag)"></i>
+                        <span :style="{ color: getTextColor(tag.color || '#6c757d') }" class="fw-bold me-2">
+                            [[ tagLabel(tag.name) ]]
+                        </span>
+                        <i class="fas fa-times-circle" style="cursor:pointer" @click.stop="toggleTag(tag)"></i>
                     </span>
                 </span>
             </div>
         </div>
-    </div>
     `
 };
 
