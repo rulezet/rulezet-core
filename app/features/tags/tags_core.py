@@ -20,7 +20,7 @@ def create_tag(form_data, created_by):
         if existing_tag:
             return False
 
-        if created_by.is_admin:
+        if created_by.is_admin():
             _is_active = True
             _approved_by_admin = True
         else:
@@ -53,6 +53,39 @@ def create_tag(form_data, created_by):
         return None
 
 
+def _inject_usage_counts(tags):
+    """
+    Annotate a list of Tag objects with rule_count and bundle_count
+    using two grouped COUNT queries instead of N per-tag queries.
+    """
+    if not tags:
+        return tags
+
+    tag_ids = [t.id for t in tags]
+
+    from app.core.db_class.db import RuleTagAssociation, BundleTagAssociation
+    from sqlalchemy import func
+
+    rule_counts = dict(
+        db.session.query(RuleTagAssociation.tag_id, func.count(RuleTagAssociation.id))
+        .filter(RuleTagAssociation.tag_id.in_(tag_ids))
+        .group_by(RuleTagAssociation.tag_id)
+        .all()
+    )
+    bundle_counts = dict(
+        db.session.query(BundleTagAssociation.tag_id, func.count(BundleTagAssociation.id))
+        .filter(BundleTagAssociation.tag_id.in_(tag_ids))
+        .group_by(BundleTagAssociation.tag_id)
+        .all()
+    )
+
+    for tag in tags:
+        tag._rule_count   = rule_counts.get(tag.id, 0)
+        tag._bundle_count = bundle_counts.get(tag.id, 0)
+
+    return tags
+
+
 def get_tags(args):
     """Admin tag listing with full filter support."""
     query = Tag.query
@@ -77,7 +110,9 @@ def get_tags(args):
 
     page = int(args.get('page', 1))
     per_page = min(int(args.get('per_page', 20)), 500)
-    return query.paginate(page=page, per_page=per_page, max_per_page=500)
+    pagination = query.paginate(page=page, per_page=per_page, max_per_page=500)
+    _inject_usage_counts(pagination.items)
+    return pagination
 
 
 def _family_like_pattern(family):
@@ -85,8 +120,8 @@ def _family_like_pattern(family):
     Build the SQL LIKE pattern that matches every tag belonging to a family.
 
     Examples:
-        'tlp'                       -> 'tlp:%'                  (taxonomy namespace)
-        'misp-galaxy:atrm'          -> 'misp-galaxy:atrm=%'     (galaxy type, values follow '=')
+        'tlp'                       -> 'tlp:%'
+        'misp-galaxy:atrm'          -> 'misp-galaxy:atrm=%'
         'misp-galaxy:threat-actor'  -> 'misp-galaxy:threat-actor=%'
     """
     if not family:
@@ -101,12 +136,42 @@ def get_tags_by_family(family, source=None):
     pattern = _family_like_pattern(family)
     if not pattern:
         return []
-
     query = Tag.query.filter(Tag.name.ilike(pattern))
     if source and source != 'all':
         query = query.filter_by(source=source)
     return query.order_by(Tag.name.asc()).all()
 
+
+# ─── Association cleanup helpers ─────────────────────────────────────────────
+
+def _delete_tag_associations(tag_id):
+    """Remove all FK references to a single tag before deletion."""
+    db.session.execute(
+        db.text("DELETE FROM rule_tag_association WHERE tag_id = :id"),
+        {"id": tag_id}
+    )
+    db.session.execute(
+        db.text("DELETE FROM bundle_tag_association WHERE tag_id = :id"),
+        {"id": tag_id}
+    )
+
+
+def _delete_tag_associations_bulk(int_ids):
+    """Remove all FK references to a list of tags before deletion."""
+    if not int_ids:
+        return
+    id_tuple = tuple(int_ids)
+    db.session.execute(
+        db.text("DELETE FROM rule_tag_association WHERE tag_id IN :ids"),
+        {"ids": id_tuple}
+    )
+    db.session.execute(
+        db.text("DELETE FROM bundle_tag_association WHERE tag_id IN :ids"),
+        {"ids": id_tuple}
+    )
+
+
+# ─── Deletions ───────────────────────────────────────────────────────────────
 
 def remove_tag(tag_id):
     try:
@@ -137,33 +202,6 @@ def remove_tags_bulk(tag_ids):
         return 0, f"Error during bulk delete: {e}"
 
 
-def _delete_tag_associations(tag_id):
-    """Remove all FK references to a single tag before deletion."""
-    db.session.execute(
-        db.text("DELETE FROM rule_tag_association WHERE tag_id = :id"),
-        {"id": tag_id}
-    )
-    db.session.execute(
-        db.text("DELETE FROM bundle_tag_association WHERE tag_id = :id"),
-        {"id": tag_id}
-    )
-
-
-def _delete_tag_associations_bulk(int_ids):
-    """Remove all FK references to a list of tags before deletion."""
-    if not int_ids:
-        return
-    id_tuple = tuple(int_ids)
-    db.session.execute(
-        db.text("DELETE FROM rule_tag_association WHERE tag_id IN :ids"),
-        {"ids": id_tuple}
-    )
-    db.session.execute(
-        db.text("DELETE FROM bundle_tag_association WHERE tag_id IN :ids"),
-        {"ids": id_tuple}
-    )
-
-
 def remove_family(family, source=None):
     """Delete every tag in a given family, cleaning up all associations first."""
     pattern = _family_like_pattern(family)
@@ -184,6 +222,8 @@ def remove_family(family, source=None):
         db.session.rollback()
         return 0, f"Error deleting family: {e}"
 
+
+# ─── Visibility / status toggles ─────────────────────────────────────────────
 
 def toggle_tag_visibility(tag_uuid):
     try:
@@ -211,6 +251,8 @@ def toggle_tag_status(tag_uuid):
         return False, "Error toggling status."
 
 
+# ─── Edit ────────────────────────────────────────────────────────────────────
+
 def edit_tag(form_data, tag_id):
     try:
         tag = Tag.query.get(tag_id)
@@ -224,12 +266,12 @@ def edit_tag(form_data, tag_id):
                 and Tag.query.filter_by(external_id=form_data['external_id']).first()):
             return False, "A tag with this UUID already exists."
 
-        tag.name = form_data['name']
+        tag.name        = form_data['name']
         tag.description = form_data.get('description', tag.description)
-        tag.color = form_data.get('color', tag.color)
-        tag.icon = form_data.get('icon', tag.icon)
+        tag.color       = form_data.get('color', tag.color)
+        tag.icon        = form_data.get('icon', tag.icon)
         tag.external_id = form_data.get('external_id', tag.external_id)
-        tag.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
+        tag.updated_at  = datetime.datetime.now(tz=datetime.timezone.utc)
 
         db.session.commit()
         return True, "Tag updated."
@@ -238,7 +280,7 @@ def edit_tag(form_data, tag_id):
         return False, None
 
 
-# ─── Bundle / public listings (kept compatible with existing callers) ────────
+# ─── Bundle / public listings ────────────────────────────────────────────────
 
 def get_tags_bundle(args):
     query = Tag.query
@@ -263,15 +305,40 @@ def get_tags_bundle(args):
     query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
 
     page = int(args.get('page', 1))
-    return query.paginate(page=page, per_page=20, max_per_page=20)
+    pagination = query.paginate(page=page, per_page=20, max_per_page=20)
+    _inject_usage_counts(pagination.items)
+    return pagination
 
 
 def get_my_tags():
-    return Tag.query.filter(
+    """All Manual tags created by the current user (unpaginated)."""
+    tags = Tag.query.filter(
         Tag.created_by == current_user.id,
-        Tag.source != "Taxonomy",
-        Tag.source != "Galaxy",
+        Tag.source == "Manual",
     ).order_by(Tag.created_at.desc()).all()
+    return _inject_usage_counts(tags)
+
+
+def get_my_tags_paged(args):
+    """Paginated Manual tags created by the current user."""
+    query = Tag.query.filter(
+        Tag.created_by == current_user.id,
+        Tag.source == "Manual",
+    )
+    if args.get('search'):
+        query = query.filter(Tag.name.ilike(f"%{args['search']}%"))
+
+    if args.get('visibility') and args['visibility'] != 'all':
+        query = query.filter_by(visibility=args['visibility'])
+
+    sort_order = args.get('sort_order', 'desc')
+    query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
+
+    page     = int(args.get('page', 1))
+    per_page = min(int(args.get('per_page', 20)), 100)
+    pagination = query.paginate(page=page, per_page=per_page, max_per_page=100)
+    _inject_usage_counts(pagination.items)
+    return pagination
 
 
 def get_all_tags(args):
@@ -295,7 +362,7 @@ def get_all_tags(args):
 
     sort_order = args.get('sort_order', 'desc')
     query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
-    return query.all()
+    return _inject_usage_counts(query.all())
 
 
 def get_all_tags_by_type(args):
@@ -315,7 +382,6 @@ def list_all_misp_taxonomies_meta(args):
     for taxonomy_dir in sorted(base_path.iterdir()):
         if not taxonomy_dir.is_dir():
             continue
-
         for json_file in taxonomy_dir.glob("*.json"):
             try:
                 with open(json_file, "r", encoding="utf-8") as f:
@@ -343,18 +409,13 @@ def list_all_misp_taxonomies_meta(args):
             or search_term in (t["namespace"] or "").lower()
         ]
 
-    page = int(args.get("page", 1))
+    page     = int(args.get("page", 1))
     per_page = 20
-    total = len(taxonomies)
+    total    = len(taxonomies)
     total_pages = math.ceil(total / per_page) or 1
-    start = (page - 1) * per_page
+    start    = (page - 1) * per_page
 
-    return {
-        "items": taxonomies[start:start + per_page],
-        "page":  page,
-        "pages": total_pages,
-        "total": total,
-    }
+    return {"items": taxonomies[start:start + per_page], "page": page, "pages": total_pages, "total": total}
 
 
 def add_tags_from_misp_taxonomy(uuid_from_misp, created_by):
@@ -385,7 +446,7 @@ def add_tags_from_misp_taxonomy(uuid_from_misp, created_by):
     with open(taxonomy_path, "r", encoding="utf-8") as f:
         taxonomy_data = json.load(f)
 
-    namespace = taxonomy_data.get("namespace", "unknown")
+    namespace  = taxonomy_data.get("namespace", "unknown")
     tags_added = 0
 
     if namespace in get_all_taxonomies_in_db():
@@ -479,7 +540,7 @@ def list_all_misp_galaxies_meta(args):
                 continue
 
             cluster_count = 0
-            cluster_file = clusters_path / galaxy_file.name
+            cluster_file  = clusters_path / galaxy_file.name
             if cluster_file.exists():
                 with open(cluster_file, "r", encoding="utf-8") as f:
                     cluster_data = json.load(f)
@@ -506,18 +567,13 @@ def list_all_misp_galaxies_meta(args):
             or search_term in (g["type"] or "").lower()
         ]
 
-    page = int(args.get("page", 1))
+    page     = int(args.get("page", 1))
     per_page = 20
-    total = len(galaxies)
+    total    = len(galaxies)
     total_pages = math.ceil(total / per_page) or 1
-    start = (page - 1) * per_page
+    start    = (page - 1) * per_page
 
-    return {
-        "items": galaxies[start:start + per_page],
-        "page":  page,
-        "pages": total_pages,
-        "total": total,
-    }
+    return {"items": galaxies[start:start + per_page], "page": page, "pages": total_pages, "total": total}
 
 
 def get_galaxy_clusters(uuid_from_misp):
@@ -528,14 +584,14 @@ def get_galaxy_clusters(uuid_from_misp):
     galaxies_path = Path(MISP_GALAXIES_PATH) / "galaxies"
     clusters_path = Path(MISP_GALAXIES_PATH) / "clusters"
 
-    galaxy_data = None
+    galaxy_data      = None
     matched_filename = None
     for galaxy_file in galaxies_path.glob("*.json"):
         try:
             with open(galaxy_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if data.get("uuid") == uuid_from_misp:
-                galaxy_data = data
+                galaxy_data      = data
                 matched_filename = galaxy_file.name
                 break
         except Exception:
@@ -552,24 +608,18 @@ def get_galaxy_clusters(uuid_from_misp):
         cluster_data = json.load(f)
 
     galaxy_type = galaxy_data.get("type", "unknown")
-
-    # mark which clusters are already in DB
-    existing = {
-        tag.external_id
-        for tag in Tag.query.filter_by(source="Galaxy").all()
-        if tag.external_id
-    }
+    existing    = {tag.external_id for tag in Tag.query.filter_by(source="Galaxy").all() if tag.external_id}
 
     clusters = []
     for cluster in cluster_data.get("values", []):
-        value = cluster.get("value")
+        value        = cluster.get("value")
+        cluster_uuid = cluster.get("uuid")
         if not value:
             continue
-        cluster_uuid = cluster.get("uuid")
         clusters.append({
-            "uuid":        cluster_uuid,
-            "value":       value,
-            "description": cluster.get("description", ""),
+            "uuid":             cluster_uuid,
+            "value":            value,
+            "description":      cluster.get("description", ""),
             "already_imported": cluster_uuid in existing,
         })
 
@@ -584,8 +634,8 @@ def get_galaxy_clusters(uuid_from_misp):
 def add_tags_from_misp_galaxy(uuid_from_misp, created_by, cluster_uuids=None):
     """Import clusters of a galaxy as Tags with source='Galaxy'.
 
-    If cluster_uuids is a non-empty list, only those specific clusters are
-    imported. Otherwise every cluster is imported (original behaviour).
+    If cluster_uuids is provided, only those clusters are imported.
+    Otherwise all clusters are imported (original behaviour).
     """
     if not uuid_from_misp:
         return None, "Missing UUID"
@@ -593,14 +643,14 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by, cluster_uuids=None):
     galaxies_path = Path(MISP_GALAXIES_PATH) / "galaxies"
     clusters_path = Path(MISP_GALAXIES_PATH) / "clusters"
 
-    galaxy_data = None
+    galaxy_data      = None
     matched_filename = None
     for galaxy_file in galaxies_path.glob("*.json"):
         try:
             with open(galaxy_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if data.get("uuid") == uuid_from_misp:
-                galaxy_data = data
+                galaxy_data      = data
                 matched_filename = galaxy_file.name
                 break
         except Exception:
@@ -612,7 +662,6 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by, cluster_uuids=None):
     galaxy_type = galaxy_data.get("type", "unknown")
     fa_icon     = _resolve_galaxy_icon(galaxy_data.get("icon", "atom"))
 
-    # when cherry-picking we skip the "already fully imported" guard
     if cluster_uuids is None and galaxy_type in get_all_galaxies_in_db():
         return True, "Galaxy already imported."
 
@@ -623,10 +672,9 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by, cluster_uuids=None):
     with open(cluster_file, "r", encoding="utf-8") as f:
         cluster_data = json.load(f)
 
-    # normalise to a set for O(1) lookup; None means "all"
-    allowed = set(cluster_uuids) if cluster_uuids else None
-
+    allowed    = set(cluster_uuids) if cluster_uuids else None
     tags_added = 0
+
     for cluster in cluster_data.get("values", []):
         value        = cluster.get("value")
         cluster_uuid = cluster.get("uuid")

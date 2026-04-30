@@ -20,6 +20,30 @@ def _admin_only():
     return None
 
 
+def _can_edit_tag(tag_id):
+    """Return error response if current user cannot edit this tag."""
+    from app.core.db_class.db import Tag
+    tag = Tag.query.get(tag_id)
+    if not tag:
+        return {"status": "error", "message": "Tag not found."}, 404
+    if not current_user.is_admin() and tag.created_by != current_user.id:
+        return {"status": "error", "message": "You can only edit your own tags.",
+                "toast_class": "danger-subtle"}, 403
+    return None
+
+
+def _can_delete_tag(tag_id):
+    """Return error response if current user cannot delete this tag."""
+    from app.core.db_class.db import Tag
+    tag = Tag.query.get(tag_id)
+    if not tag:
+        return {"status": "error", "message": "Tag not found."}, 404
+    if not current_user.is_admin() and tag.created_by != current_user.id:
+        return {"status": "error", "message": "You can only delete your own tags.",
+                "toast_class": "danger-subtle"}, 403
+    return None
+
+
 # ─── Pages ───────────────────────────────────────────────────────────────────
 
 @tags_blueprint.route('/admin/list', methods=['GET'])
@@ -85,12 +109,24 @@ def get_my_tags():
     return jsonify([t.to_json() for t in tags_core.get_my_tags()])
 
 
-# ─── Family operations ───────────────────────────────────────────────────────
+@tags_blueprint.route('/get_my_tags_paged', methods=['GET'])
+@login_required
+def get_my_tags_paged():
+    """Paginated personal tags (Manual source, owned by current user)."""
+    pagination = tags_core.get_my_tags_paged(request.args)
+    return {
+        "status": "success",
+        "tags": [t.to_json() for t in pagination.items],
+        "total_tags": pagination.total,
+        "total_pages": pagination.pages,
+    }, 200
+
+
+# ─── Family operations (admin only) ──────────────────────────────────────────
 
 @tags_blueprint.route('/get_family', methods=['GET'])
 @login_required
 def get_family():
-    """Return all tags inside a given family namespace (e.g. ?family=tlp)."""
     err = _admin_only()
     if err: return err
     family = request.args.get('family')
@@ -104,7 +140,6 @@ def get_family():
 @tags_blueprint.route('/delete_family', methods=['POST'])
 @login_required
 def delete_family():
-    """Delete every tag in a given family."""
     err = _admin_only()
     if err: return err
     data = request.json or {}
@@ -116,7 +151,7 @@ def delete_family():
     return {"status": "success", "deleted": deleted, "message": msg, "toast_class": "success-subtle"}, 200
 
 
-# ─── Single tag mutations ────────────────────────────────────────────────────
+# ─── Single tag mutations ─────────────────────────────────────────────────────
 
 @tags_blueprint.route('/remove_tag', methods=['GET'])
 @login_required
@@ -132,13 +167,24 @@ def remove_tag():
 @tags_blueprint.route('/remove_tags_bulk', methods=['POST'])
 @login_required
 def remove_tags_bulk():
-    """Bulk delete a list of tag IDs. Body: { "ids": [1,2,3] }"""
-    err = _admin_only()
-    if err: return err
+    """Bulk delete tags. Admin: any tags. User: only their own Manual tags."""
     data = request.json or {}
-    ids = data.get('ids', [])
+    ids  = data.get('ids', [])
     if not isinstance(ids, list):
         return {"status": "error", "message": "ids must be a list."}, 400
+
+    # non-admins: filter to only their own tags
+    if not current_user.is_admin():
+        from app.core.db_class.db import Tag
+        owned = {t.id for t in Tag.query.filter(
+            Tag.id.in_([int(i) for i in ids]),
+            Tag.created_by == current_user.id,
+            Tag.source == 'Manual',
+        ).all()}
+        ids = [i for i in ids if int(i) in owned]
+        if not ids:
+            return {"status": "error", "message": "No eligible tags to delete.", "toast_class": "warning-subtle"}, 400
+
     deleted, msg = tags_core.remove_tags_bulk(ids)
     if deleted > 0:
         return {"status": "success", "deleted": deleted, "message": msg, "toast_class": "success-subtle"}, 200
@@ -174,7 +220,8 @@ def toggle_status():
 @tags_blueprint.route('/edit_tag/<int:tag_id>', methods=['POST'])
 @login_required
 def edit_tag(tag_id):
-    err = _admin_only()
+    # admin: edit anything / user: only their own Manual tags
+    err = _can_edit_tag(tag_id)
     if err: return err
     if not tag_id:
         return {"status": "error", "message": "Tag ID is required."}, 400
@@ -195,7 +242,6 @@ def create_tag():
     if 'visibility' not in data:
         data['visibility'] = 'private'
     tag = tags_core.create_tag(data, current_user)
-
     if tag is False:
         return {"status": "error", "message": "A tag with this name already exists.", "toast_class": "warning-subtle"}, 201
     if tag is None:
@@ -211,6 +257,9 @@ def create_tag():
 @tags_blueprint.route('/delete_tag/<int:tag_id>', methods=['POST'])
 @login_required
 def delete_tag(tag_id):
+    # admin: delete anything / user: only their own tags
+    err = _can_delete_tag(tag_id)
+    if err: return err
     success, msg = tags_core.remove_tag(tag_id)
     cls = "success-subtle" if success else "danger-subtle"
     return jsonify({"status": "success" if success else "error", "message": msg, "toast_class": cls}), (200 if success else 500)
@@ -265,7 +314,6 @@ def get_tags_galaxy():
 @tags_blueprint.route("/get_galaxy_clusters/<uuid_param>", methods=['GET'])
 @login_required
 def get_galaxy_clusters(uuid_param):
-    """Return all clusters of a galaxy for preview before import."""
     err = _admin_only()
     if err: return err
     result, error = tags_core.get_galaxy_clusters(uuid_param)
@@ -279,16 +327,13 @@ def get_galaxy_clusters(uuid_param):
 def add_tags_galaxy():
     err = _admin_only()
     if err: return err
-
-    # POST = cherry-pick: { "uuid": "...", "cluster_uuids": ["uuid1", "uuid2"] }
     if request.method == 'POST':
-        data         = request.json or {}
-        uuid_param   = data.get("uuid")
+        data          = request.json or {}
+        uuid_param    = data.get("uuid")
         cluster_uuids = data.get("cluster_uuids") or None
     else:
         uuid_param    = request.args.get("uuid")
         cluster_uuids = None
-
     success, message = tags_core.add_tags_from_misp_galaxy(uuid_param, current_user, cluster_uuids)
     cls = "success-subtle" if success else "danger-subtle"
     return jsonify({"message": message, "toast_class": cls}), (200 if success else 400)

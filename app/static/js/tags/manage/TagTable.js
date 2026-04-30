@@ -29,7 +29,92 @@ function sourceIconClass(source) {
 }
 
 
-// ─── TagRow ──────────────────────────────────────────────────────────────────
+// ─── ColPicker ────────────────────────────────────────────────────────────────
+
+const COLUMNS = [
+    { key: 'family', label: 'Family' },
+    { key: 'description', label: 'Description' },
+    { key: 'visibility', label: 'Visibility' },
+    { key: 'status', label: 'Status' },
+    { key: 'usage', label: 'Usage' },
+];
+
+const ColPicker = {
+    props: {
+        cols: { type: Array, required: true },
+        visible: { type: Object, required: true },
+    },
+    emits: ['toggle', 'show-all', 'hide-all'],
+    setup() {
+        const { ref } = Vue;
+        const open = ref(false);
+        const btnRef = ref(null);
+        const menuRef = ref(null);
+        const menuStyle = ref({});
+
+        function toggle() {
+            open.value = !open.value;
+            if (open.value && btnRef.value) {
+                const rect = btnRef.value.getBoundingClientRect();
+                menuStyle.value = {
+                    position: 'fixed',
+                    top: (rect.bottom + 4) + 'px',
+                    right: (window.innerWidth - rect.right) + 'px',
+                    minWidth: '155px',
+                    zIndex: 9999,
+                    background: 'var(--card-bg-color, #fff)',
+                };
+            }
+        }
+
+        function onClickOutside(e) {
+            if (
+                btnRef.value && !btnRef.value.contains(e.target) &&
+                menuRef.value && !menuRef.value.contains(e.target)
+            ) {
+                open.value = false;
+            }
+        }
+
+        Vue.onMounted(() => document.addEventListener('click', onClickOutside));
+        Vue.onUnmounted(() => document.removeEventListener('click', onClickOutside));
+
+        return { open, btnRef, menuRef, menuStyle, toggle };
+    },
+    template: `
+    <div class="col-picker-wrapper d-inline-block" @click.stop>
+        <button ref="btnRef" class="btn btn-xs btn-outline-secondary"
+                @click="toggle"
+                title="Show / hide columns"
+                style="font-size:0.7rem; padding:2px 6px">
+            <i class="fas fa-columns"></i>
+        </button>
+        <teleport to="body">
+            <div v-if="open"
+                 ref="menuRef"
+                 class="shadow rounded-3 border p-2"
+                 :style="menuStyle">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                    <button class="btn btn-xs btn-link p-0 text-primary text-decoration-none fw-bold"
+                            style="font-size:0.75rem" @click="$emit('show-all')">All</button>
+                    <span class="text-muted" style="font-size:0.72rem">Columns</span>
+                    <button class="btn btn-xs btn-link p-0 text-secondary text-decoration-none fw-bold"
+                            style="font-size:0.75rem" @click="$emit('hide-all')">None</button>
+                </div>
+                <label v-for="col in cols" :key="col.key"
+                       class="d-flex align-items-center gap-2 px-1 py-1 rounded"
+                       style="cursor:pointer; font-size:0.82rem; color: var(--text-color)">
+                    <input type="checkbox" class="form-check-input m-0"
+                           :checked="visible[col.key]"
+                           @change="$emit('toggle', col.key)">
+                    {{ col.label }}
+                </label>
+            </div>
+        </teleport>
+    </div>
+`};
+
+// ─── TagRow ───────────────────────────────────────────────────────────────────
 
 const TagRow = {
     props: {
@@ -37,6 +122,7 @@ const TagRow = {
         selected: { type: Boolean, default: false },
         csrfToken: { type: String, required: true },
         showNamespace: { type: Boolean, default: true },
+        visibleCols: { type: Object, required: true },
     },
     emits: ['toggle-select', 'view-family', 'toggle-visibility', 'toggle-status', 'delete', 'refresh', 'notify'],
     components: { TagBadge },
@@ -69,14 +155,6 @@ const TagRow = {
             if (res.ok) { editOpen.value = false; emit('refresh'); }
         }
 
-        function confirmDelete() {
-            if (confirm(`Are you sure you want to permanently delete "${props.tag.name}"? This action cannot be undone.`)) {
-                emit('delete');
-                deleteOpen.value = false;
-            }
-        }
-
-        // ── pretty JSON for galaxy_meta — basic syntax highlight ───────────────
         function highlightJson(obj) {
             if (!obj) return '';
             const json = JSON.stringify(obj, null, 2)
@@ -91,49 +169,71 @@ const TagRow = {
         return {
             editDraft, detailOpen, deleteOpen, editOpen,
             tagFamily, familyLabel, sourceColor, sourceIconClass,
-            openEdit, saveEdit, confirmDelete, highlightJson,
+            openEdit, saveEdit, highlightJson,
         };
     },
     template: `
         <tr :class="{ 'table-active': selected }">
             <td>
-                <input type="checkbox" class="form-check-input" :checked="selected" @change="$emit('toggle-select')">
+                <input type="checkbox" class="form-check-input"
+                       :checked="selected" @change="$emit('toggle-select')">
             </td>
             <td><tag-badge :tag="tag" :show-namespace="showNamespace"></tag-badge></td>
-            <td>
-                <button
-                    v-if="tagFamily"
-                    class="btn btn-xs btn-outline-secondary family-chip"
-                    @click="$emit('view-family')"
-                    :title="'Browse all tags in family: ' + tagFamily"
-                >
+
+            <td v-if="visibleCols.family">
+                <button v-if="tagFamily"
+                        class="btn btn-xs btn-outline-secondary family-chip"
+                        @click="$emit('view-family')"
+                        :title="'Browse all tags in family: ' + tagFamily">
                     <i class="fas fa-folder me-1"></i>{{ familyLabel(tagFamily) }}
                 </button>
                 <span v-else class="text-muted small">—</span>
             </td>
-            <td class="text-muted small text-truncate" style="max-width:200px" :title="tag.description">
+
+            <td v-if="visibleCols.description"
+                class="text-muted small text-truncate" style="max-width:200px"
+                :title="tag.description">
                 {{ tag.description || '—' }}
             </td>
-            <td>
-                <button
-                    class="btn btn-xs rounded-pill"
-                    :class="tag.visibility === 'public' ? 'btn-primary' : 'btn-outline-secondary'"
-                    @click="$emit('toggle-visibility')"
-                >
+
+            <td v-if="visibleCols.visibility">
+                <button class="btn btn-xs rounded-pill"
+                        :class="tag.visibility === 'public' ? 'btn-primary' : 'btn-outline-secondary'"
+                        @click="$emit('toggle-visibility')">
                     <i :class="tag.visibility === 'public' ? 'fas fa-eye me-1' : 'fas fa-eye-slash me-1'"></i>
                     {{ tag.visibility }}
                 </button>
             </td>
-            <td>
-                <button
-                    class="btn btn-xs rounded-pill"
-                    :class="tag.is_active ? 'btn-success' : 'btn-danger'"
-                    @click="$emit('toggle-status')"
-                >
+
+            <td v-if="visibleCols.status">
+                <button class="btn btn-xs rounded-pill"
+                        :class="tag.is_active ? 'btn-success' : 'btn-danger'"
+                        @click="$emit('toggle-status')">
                     <i :class="tag.is_active ? 'fas fa-check me-1' : 'fas fa-ban me-1'"></i>
                     {{ tag.is_active ? 'Active' : 'Inactive' }}
                 </button>
             </td>
+
+            <td v-if="visibleCols.usage">
+                <div class="d-flex gap-1">
+                    <a v-if="tag.rule_count > 0" :href="'/rule/rules_list?tags=' + encodeURIComponent(tag.name)"
+                        class="badge rounded-pill bg-light border text-dark text-decoration-none"
+                        :title="tag.rule_count + ' rule(s) — click to view'"
+                       >
+                        <i class="fas fa-shield-alt me-1 text-primary" style="font-size:0.65rem"></i>{{ tag.rule_count }}
+                    </a>
+                    <a v-if="tag.bundle_count > 0"
+                        :href="'/bundle/list?tags=' + encodeURIComponent(tag.name)"
+                        class="badge rounded-pill bg-light border text-dark text-decoration-none"
+                        :title="tag.bundle_count + ' bundle(s) — click to view'"
+                       >
+                        <i class="fas fa-box me-1 text-warning" style="font-size:0.65rem"></i>{{ tag.bundle_count }}
+                    </a>
+                    
+                    <span v-if="!tag.rule_count && !tag.bundle_count" class="text-muted small">—</span>
+                </div>
+            </td>
+
             <td class="text-end">
                 <div class="d-inline-flex gap-1">
                     <button class="btn btn-xs btn-outline-secondary icon-btn" @click="openEdit" title="Edit">
@@ -151,8 +251,9 @@ const TagRow = {
 
         <teleport to="body">
 
-            <!-- ── Edit Modal ───────────────────────────────────────────────── -->
-            <div v-if="editOpen" class="modal fade show d-block" tabindex="-1" @click.self="editOpen=false" style="background:rgba(0,0,0,0.5)">
+            <!-- Edit Modal -->
+            <div v-if="editOpen" class="modal fade show d-block" tabindex="-1"
+                 @click.self="editOpen=false" style="background:rgba(0,0,0,0.5)">
                 <div class="modal-dialog modal-dialog-centered modal-lg">
                     <div class="modal-content border-0 shadow rounded-4" style="background: var(--card-bg-color)">
                         <div class="modal-header border-0 pb-0">
@@ -170,8 +271,10 @@ const TagRow = {
                                 <div class="col-md-4">
                                     <label class="form-label small fw-semibold">Color</label>
                                     <div class="d-flex gap-2 align-items-center">
-                                        <input type="color" class="form-control form-control-color" v-model="editDraft.color" style="width:48px">
-                                        <input type="text" class="form-control form-control-sm font-monospace" v-model="editDraft.color" placeholder="#FFFFFF">
+                                        <input type="color" class="form-control form-control-color"
+                                               v-model="editDraft.color" style="width:48px">
+                                        <input type="text" class="form-control form-control-sm font-monospace"
+                                               v-model="editDraft.color" placeholder="#FFFFFF">
                                     </div>
                                 </div>
                                 <div class="col-12">
@@ -181,16 +284,21 @@ const TagRow = {
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold">Icon (FontAwesome)</label>
                                     <div class="input-group input-group-sm">
-                                        <span class="input-group-text"><i :class="'fa ' + (editDraft.icon || 'fa-tag')"></i></span>
-                                        <input type="text" class="form-control" v-model="editDraft.icon" placeholder="bug, shield-alt, ...">
+                                        <span class="input-group-text">
+                                            <i :class="'fa ' + (editDraft.icon || 'fa-tag')"></i>
+                                        </span>
+                                        <input type="text" class="form-control"
+                                               v-model="editDraft.icon" placeholder="bug, shield-alt, ...">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold">External UUID</label>
-                                    <input type="text" class="form-control form-control-sm font-monospace" v-model="editDraft.external_id" placeholder="Optional">
+                                    <input type="text" class="form-control form-control-sm font-monospace"
+                                           v-model="editDraft.external_id" placeholder="Optional">
                                 </div>
                                 <div class="col-12">
-                                    <div class="rounded-3 p-2 small text-muted" style="background: var(--light-bg-color)">
+                                    <div class="rounded-3 p-2 small text-muted"
+                                         style="background: var(--light-bg-color)">
                                         UUID: {{ tag.uuid }} · Created by {{ tag.created_by_user_name || 'Unknown' }} · {{ tag.created_at }}
                                     </div>
                                 </div>
@@ -206,57 +314,60 @@ const TagRow = {
                 </div>
             </div>
 
-            <!-- ── Detail Modal (polished) ──────────────────────────────────── -->
-            <div v-if="detailOpen" class="modal fade show d-block" tabindex="-1" @click.self="detailOpen=false" style="background:rgba(0,0,0,0.5)">
+            <!-- Detail Modal -->
+            <div v-if="detailOpen" class="modal fade show d-block" tabindex="-1"
+                 @click.self="detailOpen=false" style="background:rgba(0,0,0,0.5)">
                 <div class="modal-dialog modal-dialog-centered modal-lg">
-                    <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="background: var(--card-bg-color)">
-
-                        <!-- Banner header with source-tinted background -->
-                        <div
-                            class="position-relative px-4 pt-4 pb-3"
-                            :style="{
-                                background: 'linear-gradient(135deg, ' + sourceColor(tag.source) + '15, ' + sourceColor(tag.source) + '05)',
-                                borderBottom: '1px solid var(--border-color)'
-                            }"
-                        >
-                            <button
-                                class="btn-close position-absolute"
-                                style="top:1rem; right:1rem;"
-                                @click="detailOpen=false"
-                            ></button>
-
+                    <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden"
+                         style="background: var(--card-bg-color)">
+                        <div class="position-relative px-4 pt-4 pb-3"
+                             :style="{
+                                 background: 'linear-gradient(135deg, ' + sourceColor(tag.source) + '15, ' + sourceColor(tag.source) + '05)',
+                                 borderBottom: '1px solid var(--border-color)'
+                             }">
+                            <button class="btn-close position-absolute" style="top:1rem; right:1rem;"
+                                    @click="detailOpen=false"></button>
                             <div class="d-flex align-items-center gap-3">
-                                <div
-                                    class="d-flex align-items-center justify-content-center flex-shrink-0 shadow-sm"
-                                    :style="{
-                                        background: tag.color || sourceColor(tag.source),
-                                        width: '64px', height: '64px',
-                                        borderRadius: '16px',
-                                        color: '#fff', fontSize: '1.6rem',
-                                    }"
-                                >
+                                <div class="d-flex align-items-center justify-content-center flex-shrink-0 shadow-sm"
+                                     :style="{
+                                         background: tag.color || sourceColor(tag.source),
+                                         width:'64px', height:'64px',
+                                         borderRadius:'16px', color:'#fff', fontSize:'1.6rem'
+                                     }">
                                     <i :class="'fa ' + (tag.icon ? (tag.icon.startsWith('fa-') ? tag.icon : 'fa-' + tag.icon) : 'fa-tag')"></i>
                                 </div>
                                 <div class="flex-grow-1 min-w-0">
                                     <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
-                                        <span
-                                            class="badge rounded-pill px-2 py-1"
-                                            :style="{ background: sourceColor(tag.source), color: '#fff' }"
-                                        >
+                                        <span class="badge rounded-pill px-2 py-1"
+                                              :style="{ background: sourceColor(tag.source), color: '#fff' }">
                                             <i :class="sourceIconClass(tag.source) + ' me-1'"></i>{{ tag.source || 'Manual' }}
                                         </span>
                                         <span class="badge rounded-pill"
-                                            :class="tag.is_active ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'"
-                                        >
+                                              :class="tag.is_active ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'">
                                             <i :class="tag.is_active ? 'fas fa-check me-1' : 'fas fa-ban me-1'"></i>
                                             {{ tag.is_active ? 'Active' : 'Inactive' }}
                                         </span>
                                         <span class="badge rounded-pill"
-                                            :class="tag.visibility === 'public' ? 'bg-primary-subtle text-primary' : 'bg-secondary-subtle text-secondary'"
-                                        >
+                                              :class="tag.visibility === 'public' ? 'bg-primary-subtle text-primary' : 'bg-secondary-subtle text-secondary'">
                                             <i :class="tag.visibility === 'public' ? 'fas fa-eye me-1' : 'fas fa-eye-slash me-1'"></i>
                                             {{ tag.visibility }}
                                         </span>
+
+                                         <a v-if="tag.rule_count > 0"
+                                            :href="'/rule/rules_list?tags=' + encodeURIComponent(tag.name)"
+                                            class="badge rounded-pill bg-light border text-dark text-decoration-none"
+                                            :title="tag.rule_count + ' rule(s) — click to view'"
+                                          >
+                                            <i class="fas fa-shield-alt me-1 text-primary" style="font-size:0.65rem"></i>{{ tag.rule_count }}
+                                        </a>
+                                        <a v-if="tag.bundle_count > 0"
+                                            :href="'/bundle/list?tags=' + encodeURIComponent(tag.name)"
+                                            class="badge rounded-pill bg-light border text-dark text-decoration-none"
+                                            :title="tag.bundle_count + ' bundle(s) — click to view'"
+                                            >
+                                            <i class="fas fa-box me-1 text-warning" style="font-size:0.65rem"></i>{{ tag.bundle_count }}
+                                        </a>
+                                        
                                     </div>
                                     <h5 class="mb-0 fw-bold font-monospace text-break" style="color: var(--text-color)">
                                         {{ tag.name }}
@@ -264,21 +375,16 @@ const TagRow = {
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Body -->
                         <div class="p-4">
-
-                            <!-- Description -->
                             <div class="mb-4">
-                                <label class="text-uppercase fw-semibold small mb-2" style="color: var(--subtle-text-color); letter-spacing:0.05em; font-size:0.7rem">
+                                <label class="text-uppercase fw-semibold small mb-2"
+                                       style="color: var(--subtle-text-color); letter-spacing:0.05em; font-size:0.7rem">
                                     <i class="fas fa-align-left me-1"></i>Description
                                 </label>
                                 <p class="mb-0" style="color: var(--text-color); line-height:1.6">
                                     {{ tag.description || 'No description provided.' }}
                                 </p>
                             </div>
-
-                            <!-- Metadata table -->
                             <table class="detail-table mb-4">
                                 <tbody>
                                     <tr>
@@ -295,7 +401,8 @@ const TagRow = {
                                     <tr>
                                         <th><i class="fas fa-user me-2"></i>Created by</th>
                                         <td>
-                                            <a :href="'/account/detail_user/' + tag.created_by_user_id" class="fw-semibold text-decoration-none">
+                                            <a :href="'/account/detail_user/' + tag.created_by_user_id"
+                                               class="fw-semibold text-decoration-none">
                                                 {{ tag.created_by_user_name || 'Unknown' }}
                                             </a>
                                         </td>
@@ -310,38 +417,31 @@ const TagRow = {
                                     </tr>
                                 </tbody>
                             </table>
-
-                            <!-- Galaxy metadata -->
                             <template v-if="tag.galaxy_meta">
-                                <label class="text-uppercase fw-semibold small mb-2 d-block" style="color: var(--subtle-text-color); letter-spacing:0.05em; font-size:0.7rem">
+                                <label class="text-uppercase fw-semibold small mb-2 d-block"
+                                       style="color: var(--subtle-text-color); letter-spacing:0.05em; font-size:0.7rem">
                                     <i class="fas fa-database me-1"></i>Galaxy Metadata
                                 </label>
-                                <div
-                                    class="rounded-3 border p-3 font-monospace"
-                                    style="background: var(--code-bg-color, #1e1e1e); color: var(--text-color); max-height:240px; overflow:auto; font-size:0.78rem; line-height:1.5;"
-                                >
-                                    <pre style="margin:0; white-space:pre-wrap; word-break:break-word;" v-html="highlightJson(tag.galaxy_meta)"></pre>
+                                <div class="rounded-3 border p-3 font-monospace"
+                                     style="background: var(--code-bg-color, #1e1e1e); color: var(--text-color);
+                                            max-height:240px; overflow:auto; font-size:0.78rem; line-height:1.5;">
+                                    <pre style="margin:0; white-space:pre-wrap; word-break:break-word;"
+                                         v-html="highlightJson(tag.galaxy_meta)"></pre>
                                 </div>
                             </template>
-
-                            <!-- Family link -->
                             <div v-if="tagFamily" class="mt-4 pt-3 border-top">
-                                <button
-                                    class="btn btn-sm btn-outline-primary rounded-pill px-3"
-                                    @click="$emit('view-family'); detailOpen=false"
-                                >
+                                <button class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                                        @click="$emit('view-family'); detailOpen=false">
                                     <i class="fas fa-folder-open me-1"></i>
                                     Browse all tags in <strong>{{ familyLabel(tagFamily) }}</strong>
                                 </button>
                             </div>
                         </div>
-
-                        <!-- Footer -->
                         <div class="modal-footer border-0 pt-0 px-4 pb-3">
-                            <button class="btn btn-sm btn-outline-secondary rounded-pill px-4" @click="detailOpen=false">
-                                Close
-                            </button>
-                            <button class="btn btn-sm btn-primary rounded-pill px-4" @click="detailOpen=false; openEdit()">
+                            <button class="btn btn-sm btn-outline-secondary rounded-pill px-4"
+                                    @click="detailOpen=false">Close</button>
+                            <button class="btn btn-sm btn-primary rounded-pill px-4"
+                                    @click="detailOpen=false; openEdit()">
                                 <i class="fas fa-pen me-1"></i>Edit
                             </button>
                         </div>
@@ -349,8 +449,9 @@ const TagRow = {
                 </div>
             </div>
 
-            <!-- ── Delete Modal ──────────────────────────────────────────────── -->
-            <div v-if="deleteOpen" class="modal fade show d-block" tabindex="-1" @click.self="deleteOpen=false" style="background:rgba(0,0,0,0.5)">
+            <!-- Delete Modal -->
+            <div v-if="deleteOpen" class="modal fade show d-block" tabindex="-1"
+                 @click.self="deleteOpen=false" style="background:rgba(0,0,0,0.5)">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content border-0 shadow rounded-4" style="background: var(--card-bg-color)">
                         <div class="modal-header border-0">
@@ -360,12 +461,16 @@ const TagRow = {
                             <button class="btn-close" @click="deleteOpen=false"></button>
                         </div>
                         <div class="modal-body text-center py-3">
-                            <p class="mb-1">Are you sure you want to permanently delete <strong class="font-monospace">{{ tag.name }}</strong>?</p>
-                            <small class="text-muted">This action cannot be undone. Consider deactivating the tag instead.</small>
+                            <p class="mb-1">Are you sure you want to permanently delete
+                                <strong class="font-monospace">{{ tag.name }}</strong>?
+                            </p>
+                            <small class="text-muted">This action cannot be undone. Consider deactivating instead.</small>
                         </div>
                         <div class="modal-footer border-0">
-                            <button class="btn btn-sm btn-light rounded-pill px-4" @click="deleteOpen=false">Cancel</button>
-                            <button class="btn btn-sm btn-danger rounded-pill px-4" @click="$emit('delete'); deleteOpen=false">
+                            <button class="btn btn-sm btn-light rounded-pill px-4"
+                                    @click="deleteOpen=false">Cancel</button>
+                            <button class="btn btn-sm btn-danger rounded-pill px-4"
+                                    @click="$emit('delete'); deleteOpen=false">
                                 <i class="fas fa-trash me-1"></i>Delete
                             </button>
                         </div>
@@ -377,10 +482,10 @@ const TagRow = {
 };
 
 
-// ─── TagTable ────────────────────────────────────────────────────────────────
+// ─── TagTable ─────────────────────────────────────────────────────────────────
 
 const TagTable = {
-    components: { 'tag-row': TagRow },
+    components: { 'tag-row': TagRow, 'col-picker': ColPicker },
     props: {
         tags: { type: Array, required: true },
         groupedTags: { type: Object, default: null },
@@ -392,6 +497,17 @@ const TagTable = {
     },
     emits: ['toggle-select', 'toggle-all', 'refresh', 'view-family', 'notify'],
     setup(props, { emit }) {
+        const { reactive } = Vue;
+
+        // ── column visibility (all on by default) ──────────────────────────────
+        const visibleCols = reactive(
+            Object.fromEntries(COLUMNS.map(c => [c.key, true]))
+        );
+
+        function toggleCol(key) { visibleCols[key] = !visibleCols[key]; }
+        function showAll() { COLUMNS.forEach(c => { visibleCols[c.key] = true; }); }
+        function hideAll() { COLUMNS.forEach(c => { visibleCols[c.key] = false; }); }
+
         function isSelected(id) { return props.selected.includes(id); }
 
         function sourceIcon(source) {
@@ -422,6 +538,7 @@ const TagTable = {
         }
 
         return {
+            COLUMNS, visibleCols, toggleCol, showAll, hideAll,
             isSelected, sourceIcon, familyOf,
             toggleVisibility, toggleStatus, deleteTag,
             mapIcon, getTextColor,
@@ -433,6 +550,7 @@ const TagTable = {
                 <div class="spinner-border text-primary" role="status"></div>
             </div>
 
+            <!-- ── Grouped view ───────────────────────────────────────────── -->
             <template v-else-if="showGrouped && groupedTags">
                 <div v-for="(group, source) in groupedTags" :key="source" class="mb-4">
                     <div class="group-header d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
@@ -446,15 +564,23 @@ const TagTable = {
                                 <tr>
                                     <th style="width:36px">
                                         <input type="checkbox" class="form-check-input"
-                                            :checked="group.every(t => isSelected(t.id))"
-                                            @change="$emit('toggle-all', group.map(t => t.id), $event.target.checked)">
+                                               :checked="group.every(t => isSelected(t.id))"
+                                               @change="$emit('toggle-all', group.map(t => t.id), $event.target.checked)">
                                     </th>
                                     <th>Tag</th>
-                                    <th>Namespace</th>
-                                    <th>Description</th>
-                                    <th>Visibility</th>
-                                    <th>Status</th>
-                                    <th class="text-end">Actions</th>
+                                    <th v-if="visibleCols.family">Family</th>
+                                    <th v-if="visibleCols.description">Description</th>
+                                    <th v-if="visibleCols.visibility">Visibility</th>
+                                    <th v-if="visibleCols.status">Status</th>
+                                    <th v-if="visibleCols.usage">Usage</th>
+                                    <th class="text-end" style="white-space:nowrap; position:relative; overflow:visible;">
+                                        Actions&nbsp;
+                                        <col-picker :cols="COLUMNS" :visible="visibleCols"
+                                                    @toggle="toggleCol"
+                                                    @show-all="showAll"
+                                                    @hide-all="hideAll">
+                                        </col-picker>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -464,6 +590,7 @@ const TagTable = {
                                     :selected="isSelected(tag.id)"
                                     :csrf-token="csrfToken"
                                     :show-namespace="showNamespace"
+                                    :visible-cols="visibleCols"
                                     @toggle-select="$emit('toggle-select', tag.id)"
                                     @view-family="$emit('view-family', tag.source, familyOf(tag))"
                                     @toggle-visibility="toggleVisibility(tag)"
@@ -481,6 +608,7 @@ const TagTable = {
                 </div>
             </template>
 
+            <!-- ── Flat view ──────────────────────────────────────────────── -->
             <template v-else>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle tag-table">
@@ -488,15 +616,23 @@ const TagTable = {
                             <tr>
                                 <th style="width:36px">
                                     <input type="checkbox" class="form-check-input"
-                                        :checked="tags.length > 0 && tags.every(t => isSelected(t.id))"
-                                        @change="$emit('toggle-all', tags.map(t => t.id), $event.target.checked)">
+                                           :checked="tags.length > 0 && tags.every(t => isSelected(t.id))"
+                                           @change="$emit('toggle-all', tags.map(t => t.id), $event.target.checked)">
                                 </th>
                                 <th>Tag</th>
-                                <th>Family</th>
-                                <th>Description</th>
-                                <th>Visibility</th>
-                                <th>Status</th>
-                                <th class="text-end">Actions</th>
+                                <th v-if="visibleCols.family">Family</th>
+                                <th v-if="visibleCols.description">Description</th>
+                                <th v-if="visibleCols.visibility">Visibility</th>
+                                <th v-if="visibleCols.status">Status</th>
+                                <th v-if="visibleCols.usage">Usage</th>
+                                <th class="text-end" style="white-space:nowrap">
+                                    Actions&nbsp;
+                                    <col-picker :cols="COLUMNS" :visible="visibleCols"
+                                                @toggle="toggleCol"
+                                                @show-all="showAll"
+                                                @hide-all="hideAll">
+                                    </col-picker>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -506,6 +642,7 @@ const TagTable = {
                                 :selected="isSelected(tag.id)"
                                 :csrf-token="csrfToken"
                                 :show-namespace="showNamespace"
+                                :visible-cols="visibleCols"
                                 @toggle-select="$emit('toggle-select', tag.id)"
                                 @view-family="$emit('view-family', tag.source, familyOf(tag))"
                                 @toggle-visibility="toggleVisibility(tag)"
@@ -515,7 +652,7 @@ const TagTable = {
                                 @notify="(m,c) => $emit('notify', m, c)"
                             ></tag-row>
                             <tr v-if="tags.length === 0">
-                                <td colspan="7" class="text-center text-muted py-5">
+                                <td colspan="8" class="text-center text-muted py-5">
                                     <i class="fas fa-tags fa-2x mb-2 d-block opacity-25"></i>No tags found
                                 </td>
                             </tr>
@@ -527,5 +664,5 @@ const TagTable = {
     `
 };
 
-export { TagTable, TagRow, familyOf, familyLabel };
+export { TagTable, TagRow, familyOf, familyLabel, COLUMNS };
 export default TagTable;

@@ -880,7 +880,6 @@ class Tag(db.Model):
     user = db.relationship('User', backref=db.backref('tags', lazy='dynamic', cascade='all, delete-orphan'))
 
     def to_json(self):
-
         return {
             "id": self.id,
             "uuid": self.uuid,
@@ -897,8 +896,14 @@ class Tag(db.Model):
             "is_approved_by_admin": self.is_approved_by_admin,
             "external_id": self.external_id,
             "source": self.source,
-            "galaxy_meta": self.galaxy_meta if self.galaxy_meta else None
+            "galaxy_meta": self.galaxy_meta if self.galaxy_meta else None,
+            # Injected by _inject_usage_counts() in tags_core.py — falls back to 0
+            # when called outside a listing context (e.g. direct Tag.to_json()).
+            "rule_count":   getattr(self, '_rule_count',   0),
+            "bundle_count": getattr(self, '_bundle_count', 0),
         }
+ 
+
 
 class CommentBundle(db.Model):
     """Model for user comments on Bundles."""

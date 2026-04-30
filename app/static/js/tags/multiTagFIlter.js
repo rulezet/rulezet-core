@@ -46,8 +46,25 @@ const MultiTagFilter = {
         const isNameSelected = (name) =>
             selectedTagNames.value.some(n => n.toLowerCase() === name.toLowerCase());
 
-        Vue.watch(() => props.modelValue, (val) => { selectedTagNames.value = [...val]; });
+        // Vue.watch(() => props.modelValue, (val) => { selectedTagNames.value = [...val]; });
+        Vue.watch(() => props.modelValue, (val) => {
+            if (val && val.length > 0) selectedTagNames.value = [...val];
+        });
 
+        // async function fetchTags() {
+        //     isLoading.value = true;
+        //     try {
+        //         const res = await fetch(props.apiEndpoint);
+        //         if (res.ok) {
+        //             const data = await res.json();
+        //             listTags.value = data.tags || [];
+        //         }
+        //     } catch (e) {
+        //         console.error('MultiTagFilter fetch error:', e);
+        //     } finally {
+        //         isLoading.value = false;
+        //     }
+        // }
         async function fetchTags() {
             isLoading.value = true;
             try {
@@ -55,6 +72,10 @@ const MultiTagFilter = {
                 if (res.ok) {
                     const data = await res.json();
                     listTags.value = data.tags || [];
+                    // re-sync: si modelValue était déjà rempli avant le chargement
+                    if (props.modelValue && props.modelValue.length > 0) {
+                        selectedTagNames.value = [...props.modelValue];
+                    }
                 }
             } catch (e) {
                 console.error('MultiTagFilter fetch error:', e);

@@ -1,102 +1,597 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container mt-4" id="main-container">
+<div class="container-fluid mt-3 px-4" id="main-container" v-cloak>
+
     <template v-if="!detail_page_1_is_loading">
-        <div class="d-flex justify-content-center align-items-center" style="height: 300px;">
+        <div class="d-flex justify-content-center align-items-center" style="height:300px">
             <div class="spinner-border text-primary" role="status"></div>
         </div>
     </template>
 
     <template v-else>
-        <div class="mb-5 text-center">
-            <h2 class="fw-bold text-primary mb-2"><i class="fa-solid fa-tags me-2"></i>My Tags</h2>
-            <p class="text-muted mx-auto" style="max-width: 600px;">Manage your custom tags.</p>
-        </div>
 
-        <div class="row">
-            <div class="col-12">
-                <list-my-tags ref="myTagsComponent" :csrf="csrfToken" @edit-tag="openEditModal"
-                    @tag-deleted="handleTagDeleted" @tag-created-success="handleTagCreated">
-                </list-my-tags>
+        <!-- Header -->
+        <h2 class="fw-bold mb-1 text-center text-primary">
+            <i class="fas fa-tags me-2 text-primary"></i>My Tags
+        </h2>
+        <div class="mx-auto mb-4" style="width:60px; height:4px; background-color:#0d6efd; border-radius:2px;"></div>
+        <p class="text-muted mt-2 text-center">Your personal custom tags — create, manage and export.</p>
+
+        <!-- Main card -->
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-3">
+
+                <!-- Filter bar -->
+                <div class="tag-filter-bar mb-3">
+
+                    <!-- Row 1: search + actions + New Tag -->
+                    <div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
+                        <div class="input-group input-group-sm flex-grow-1" style="max-width:380px">
+                            <span class="input-group-text bg-transparent border-end-0">
+                                <i class="fas fa-search text-muted"></i>
+                            </span>
+                            <input type="text" v-model="search" class="form-control border-start-0"
+                                   placeholder="Search your tags…"
+                                   @input="onSearchInput" @keyup.enter="fetchTags(1)">
+                        </div>
+
+                        <button class="btn btn-sm btn-outline-secondary position-relative"
+                                :class="{ active: showAdvanced }"
+                                @click="showAdvanced = !showAdvanced">
+                            <i class="fas fa-sliders me-1"></i>Filters
+                            <span v-if="activeFilterCount > 0"
+                                  class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                                  style="font-size:0.55rem">[[ activeFilterCount ]]</span>
+                        </button>
+
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="fas fa-download me-1"></i>Export
+                            </button>
+                            <ul class="dropdown-menu shadow border-0 rounded-3">
+                                <li>
+                                    <button class="dropdown-item small" @click="exportAll" :disabled="!tags.length">
+                                        <i class="fas fa-tags me-2 text-primary"></i>All visible ([[ totalTags ]])
+                                    </button>
+                                </li>
+                                <li v-if="selected.length > 0">
+                                    <button class="dropdown-item small" @click="exportSelected">
+                                        <i class="fas fa-check-square me-2 text-success"></i>Selected ([[ selected.length ]])
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <template v-if="selected.length > 0">
+                            <span class="badge bg-primary-subtle text-primary border border-primary rounded-pill px-2 py-1">
+                                <i class="fas fa-check-square me-1"></i>[[ selected.length ]] selected
+                            </span>
+                            <button class="btn btn-sm btn-outline-danger rounded-pill px-3" @click="bulkDelete">
+                                <i class="fas fa-trash me-1"></i>Delete
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" @click="selected = []">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </template>
+
+                        <button class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm ms-auto"
+                                data-bs-toggle="modal" data-bs-target="#add_tag_modal_">
+                            <i class="fas fa-plus me-2"></i>New Tag
+                        </button>
+                    </div>
+
+                    <!-- Row 2: advanced panel -->
+                    <transition name="slide-down">
+                        <div v-if="showAdvanced" class="border rounded-3 p-3 mb-2" style="background: var(--light-bg-color)">
+                            <div class="row g-2">
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label small fw-semibold mb-1">Sort</label>
+                                    <select class="form-select form-select-sm" v-model="sortOrder" @change="fetchTags(1)">
+                                        <option value="desc">Newest first</option>
+                                        <option value="asc">Oldest first</option>
+                                    </select>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label small fw-semibold mb-1">Visibility</label>
+                                    <select class="form-select form-select-sm" v-model="filterVisibility" @change="fetchTags(1)">
+                                        <option value="all">All</option>
+                                        <option value="public">Public</option>
+                                        <option value="private">Private</option>
+                                    </select>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label small fw-semibold mb-1">Per page</label>
+                                    <select class="form-select form-select-sm" v-model="perPage" @change="fetchTags(1)">
+                                        <option value="20">20</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                    </select>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label small fw-semibold mb-1">Namespace</label>
+                                    <select class="form-select form-select-sm" v-model="filterFamily" @change="fetchTags(1)">
+                                        <option value="all">All</option>
+                                        <option value="yes">With namespace</option>
+                                        <option value="no">Without namespace</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </transition>
+
+                    <!-- Row 3: count + active chips -->
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <span class="badge rounded-pill bg-light text-dark border px-3 py-2 shadow-sm">
+                            <i class="fas fa-tags me-1 text-primary"></i>
+                            <strong>[[ totalTags ]]</strong> personal tags
+                        </span>
+                        <span v-if="filterVisibility !== 'all'"
+                              class="badge rounded-pill border px-2 py-1 filter-chip"
+                              @click="filterVisibility = 'all'; fetchTags(1)">
+                            [[ filterVisibility ]] <i class="fas fa-times ms-1"></i>
+                        </span>
+                        <span v-if="filterFamily !== 'all'"
+                              class="badge rounded-pill border px-2 py-1 filter-chip"
+                              @click="filterFamily = 'all'; fetchTags(1)">
+                            [[ filterFamily === 'yes' ? 'With namespace' : 'Without namespace' ]]
+                            <i class="fas fa-times ms-1"></i>
+                        </span>
+                    </div>
+                </div>
+                <!-- /Filter bar -->
+
+                <!-- Table -->
+                <div v-if="loading" class="text-center py-5">
+                    <div class="spinner-border text-primary"></div>
+                </div>
+
+                <div v-else-if="tags.length === 0" class="text-center text-muted py-5">
+                    <i class="fas fa-tags fa-2x d-block mb-2 opacity-25"></i>
+                    No custom tags found.
+                </div>
+
+                <div v-else class="table-responsive">
+                    <table class="table table-sm align-middle tag-table">
+                        <thead>
+                            <tr>
+                                <th style="width:36px">
+                                    <input type="checkbox" class="form-check-input"
+                                           :checked="tags.length > 0 && tags.every(t => selected.includes(t.id))"
+                                           @change="toggleAll($event.target.checked)">
+                                </th>
+                                <th>Tag</th>
+                                <th>Namespace</th>
+                                <th>Description</th>
+                                <th>Visibility</th>
+                                <th>Created</th>
+                                <th>Usage</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="tag in tags" :key="tag.uuid"
+                                :class="{ 'table-active': selected.includes(tag.id) }">
+                                <td>
+                                    <input type="checkbox" class="form-check-input"
+                                           :checked="selected.includes(tag.id)"
+                                           @change="toggleSelect(tag.id)">
+                                </td>
+                                <td>
+                                    <tag-badge :tag="tag" :show-namespace="true"></tag-badge>
+                                </td>
+                                <td>
+                                    <button v-if="familyOf(tag)"
+                                            class="btn btn-xs btn-outline-secondary family-chip"
+                                            @click="openDrawer(tag)"
+                                            :title="'Browse all tags in ' + familyOf(tag)">
+                                        <i class="fas fa-folder me-1"></i>[[ familyOf(tag) ]]
+                                    </button>
+                                    <span v-else class="text-muted small">—</span>
+                                </td>
+                                <td class="text-muted small text-truncate" style="max-width:200px"
+                                    :title="tag.description">
+                                    [[ tag.description || '—' ]]
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill"
+                                          :class="tag.visibility === 'public'
+                                              ? 'bg-primary-subtle text-primary'
+                                              : 'bg-secondary-subtle text-secondary'">
+                                        <i :class="tag.visibility === 'public' ? 'fas fa-eye me-1' : 'fas fa-eye-slash me-1'"></i>
+                                        [[ tag.visibility ]]
+                                    </span>
+                                </td>
+                                <td class="text-muted small">[[ tag.created_at ]]</td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <a v-if="tag.rule_count > 0"
+                                        :href="'/rule/rules_list?tags=' + encodeURIComponent(tag.name)"
+                                        class="badge rounded-pill bg-light border text-dark text-decoration-none"
+                                        :title="tag.rule_count + ' rule(s) — click to view'"
+                                        >
+                                            <i class="fas fa-shield-alt me-1 text-primary" style="font-size:0.65rem"></i>[[ tag.rule_count ]]
+                                        </a>
+                                        <a v-if="tag.bundle_count > 0"
+                                        :href="'/bundle/list?tags=' + encodeURIComponent(tag.name)"
+                                        class="badge rounded-pill bg-light border text-dark text-decoration-none"
+                                        :title="tag.bundle_count + ' bundle(s) — click to view'"
+                                        >
+                                            <i class="fas fa-box me-1 text-warning" style="font-size:0.65rem"></i>[[ tag.bundle_count ]]
+                                        </a>
+                                        
+                                        <span v-if="!tag.rule_count && !tag.bundle_count" class="text-muted small">—</span>
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-inline-flex gap-1">
+                                        <button class="btn btn-xs btn-outline-secondary icon-btn"
+                                                @click="openEdit(tag)" title="Edit">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                        <button class="btn btn-xs btn-outline-secondary icon-btn"
+                                                @click="openDetail(tag)" title="Details">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn btn-xs btn-outline-danger icon-btn"
+                                                @click="confirmDelete(tag)" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- /Table -->
+
+                <!-- Pagination -->
+                <nav v-if="totalPages > 1" class="d-flex justify-content-center mt-3">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item" :class="{ disabled: currentPage <= 1 }">
+                            <button class="page-link" @click="fetchTags(currentPage - 1)">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                        </li>
+                        <li v-for="p in visiblePages" :key="p" class="page-item"
+                            :class="{ active: p === currentPage, disabled: p === '…' }">
+                            <button class="page-link" @click="p !== '…' && fetchTags(p)">[[ p ]]</button>
+                        </li>
+                        <li class="page-item" :class="{ disabled: currentPage >= totalPages }">
+                            <button class="page-link" @click="fetchTags(currentPage + 1)">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
+                <!-- /Pagination -->
+
             </div>
         </div>
+        <!-- /Main card -->
 
-        <tag-edit-modal v-if="selectedTag" :tag-data="selectedTag" :csrf="csrfToken" @tag-updated="handleTagUpdated"
-            @server-message="handleServerMessage">
-        </tag-edit-modal>
     </template>
+
+    <!-- TagCreateModal — always mounted -->
+    <tag-create-modal :csrf="csrfToken" @tag-created="handleTagCreated"></tag-create-modal>
+
+    <!-- TagEditModal — always mounted, tagData null until user clicks Edit -->
+    <tag-edit-modal
+        :csrf="csrfToken"
+        :tag-data="selectedTag"
+        @tag-updated="handleTagUpdated"
+        @server-message="handleServerMessage">
+    </tag-edit-modal>
+
+    <!-- Detail Modal -->
+    <div v-if="detailTag" class="modal fade show d-block" tabindex="-1"
+         @click.self="detailTag = null" style="background:rgba(0,0,0,0.5); z-index:1055">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden"
+                 style="background: var(--card-bg-color)">
+
+                <!-- Banner -->
+                <div class="position-relative px-4 pt-4 pb-3"
+                     :style="{
+                         background: 'linear-gradient(135deg, ' + (detailTag.color || '#6c757d') + '18, transparent)',
+                         borderBottom: '1px solid var(--border-color)'
+                     }">
+                    <button class="btn-close position-absolute" style="top:1rem; right:1rem;"
+                            @click="detailTag = null"></button>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="d-flex align-items-center justify-content-center flex-shrink-0 shadow-sm"
+                             :style="{
+                                 background: detailTag.color || '#6c757d',
+                                 width:'64px', height:'64px',
+                                 borderRadius:'16px',
+                                 color:'#fff', fontSize:'1.6rem'
+                             }">
+                            <i :class="'fa ' + (detailTag.icon || 'fa-tag')"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-1 fw-bold font-monospace" style="color: var(--text-color)">
+                                [[ detailTag.name ]]
+                            </h5>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button v-if="familyOf(detailTag)"
+                                        class="btn btn-xs btn-outline-secondary family-chip"
+                                        @click="openDrawer(detailTag); detailTag = null">
+                                    <i class="fas fa-folder me-1"></i>[[ familyOf(detailTag) ]]
+                                </button>
+                                <span class="badge rounded-pill"
+                                      :class="detailTag.visibility === 'public'
+                                          ? 'bg-primary-subtle text-primary'
+                                          : 'bg-secondary-subtle text-secondary'">
+                                    <i :class="detailTag.visibility === 'public' ? 'fas fa-eye me-1' : 'fas fa-eye-slash me-1'"></i>
+                                    [[ detailTag.visibility ]]
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Body -->
+                <div class="p-4">
+                    <div class="mb-4">
+                        <label class="text-uppercase fw-semibold small mb-2 d-block"
+                               style="color: var(--subtle-text-color); letter-spacing:0.05em; font-size:0.7rem">
+                            <i class="fas fa-align-left me-1"></i>Description
+                        </label>
+                        <p class="mb-0" style="color: var(--text-color); line-height:1.6">
+                            [[ detailTag.description || 'No description provided.' ]]
+                        </p>
+                    </div>
+
+                    <table class="detail-table mb-0">
+                        <tbody>
+                            <tr>
+                                <th><i class="fas fa-fingerprint me-2"></i>UUID</th>
+                                <td><code class="font-monospace small">[[ detailTag.uuid ]]</code></td>
+                            </tr>
+                            <tr v-if="detailTag.external_id">
+                                <th><i class="fas fa-link me-2"></i>External ID</th>
+                                <td><code class="font-monospace small">[[ detailTag.external_id ]]</code></td>
+                            </tr>
+                            <tr>
+                                <th><i class="fas fa-clock me-2"></i>Created at</th>
+                                <td><strong class="small">[[ detailTag.created_at ]]</strong></td>
+                            </tr>
+                            <tr v-if="detailTag.updated_at && detailTag.updated_at !== detailTag.created_at">
+                                <th><i class="fas fa-pen me-2"></i>Updated at</th>
+                                <td><strong class="small">[[ detailTag.updated_at ]]</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Footer -->
+                <div class="modal-footer border-0 px-4 pb-3">
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-4"
+                            @click="detailTag = null">Close</button>
+                    <button class="btn btn-sm btn-primary rounded-pill px-4"
+                            @click="openEdit(detailTag); detailTag = null">
+                        <i class="fas fa-pen me-1"></i>Edit
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- /Detail Modal -->
+
+    <!-- Family Drawer -->
+    <family-drawer
+        :show="drawerOpen"
+        :source="drawerSource"
+        :family="drawerFamily"
+        :csrf-token="csrfToken"
+        :show-namespace="true"
+        @close="drawerOpen = false"
+        @notify="(m, c) => create_message(m, c)"
+        @refresh-main="fetchTags(currentPage)">
+    </family-drawer>
+
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, onMounted, nextTick } = Vue;
+    const { createApp, ref, computed, onMounted, nextTick } = Vue;
     import { create_message, message_list } from '/static/js/toaster.js';
-    import listMyTags from '/static/js/tags/listMyTags.js';
-    import TagEditModal from '/static/js/tags/TagEditModal.js';
+    import { getTextColor, mapIcon }        from '/static/js/tags/utils/galaxie.js';
+    import TagBadge       from '/static/js/tags/manage/TagBadge.js';
+    import TagCreateModal from '/static/js/tags/tagCreateModal.js';
+    import TagEditModal   from '/static/js/tags/TagEditModal.js';
+    import FamilyDrawer   from '/static/js/tags/manage/FamilyDrawer.js';
 
     createApp({
         delimiters: ['[[', ']]'],
         components: {
-            'list-my-tags': listMyTags,
-            'tag-edit-modal': TagEditModal
+            TagBadge,
+            'tag-create-modal': TagCreateModal,
+            'tag-edit-modal':   TagEditModal,
+            'family-drawer':    FamilyDrawer,
         },
         setup() {
+            const csrfToken = '{{ csrf_token() }}';
             const detail_page_1_is_loading = ref(false);
+
+            const tags        = ref([]);
+            const totalTags   = ref(0);
+            const totalPages  = ref(1);
+            const currentPage = ref(1);
+            const loading     = ref(false);
+            const selected    = ref([]);
+
+            const search           = ref('');
+            const sortOrder        = ref('desc');
+            const filterVisibility = ref('all');
+            const filterFamily     = ref('all');
+            const perPage          = ref(20);
+            const showAdvanced     = ref(false);
+
+            const activeFilterCount = computed(() => {
+                let n = 0;
+                if (filterVisibility.value !== 'all') n++;
+                if (filterFamily.value !== 'all') n++;
+                if (sortOrder.value !== 'desc') n++;
+                return n;
+            });
+
             const selectedTag = ref(null);
-            const csrfToken = ref('{{ csrf_token() }}');
+            const detailTag   = ref(null);
 
-            const myTagsComponent = ref(null);
+            const drawerOpen   = ref(false);
+            const drawerFamily = ref(null);
+            const drawerSource = ref('Manual');
 
-            function openEditModal(tag) {
+            function openDrawer(tag) {
+                drawerFamily.value = familyOf(tag);
+                drawerSource.value = tag.source || 'Manual';
+                drawerOpen.value   = true;
+            }
+
+            function familyOf(tag) {
+                if (!tag || !tag.name || !tag.name.includes(':')) return null;
+                if (tag.name.startsWith('misp-galaxy:') && tag.name.includes('='))
+                    return tag.name.split('=')[0];
+                return tag.name.split(':')[0];
+            }
+
+            const visiblePages = computed(() => {
+                const pages = [], total = totalPages.value, cur = currentPage.value;
+                if (total <= 7) { for (let i = 1; i <= total; i++) pages.push(i); }
+                else {
+                    pages.push(1);
+                    if (cur > 3) pages.push('…');
+                    for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i);
+                    if (cur < total - 2) pages.push('…');
+                    pages.push(total);
+                }
+                return pages;
+            });
+
+            async function fetchTags(page = 1) {
+                loading.value = true;
+                try {
+                    const params = new URLSearchParams({
+                        page,
+                        search:     search.value,
+                        sort_order: sortOrder.value,
+                        visibility: filterVisibility.value,
+                        per_page:   perPage.value,
+                    });
+                    const res  = await fetch('/tags/get_my_tags_paged?' + params);
+                    const data = await res.json();
+                    if (res.ok) {
+                        let list = data.tags;
+                        if (filterFamily.value === 'yes') list = list.filter(t => t.name.includes(':'));
+                        if (filterFamily.value === 'no')  list = list.filter(t => !t.name.includes(':'));
+                        tags.value        = list;
+                        totalTags.value   = data.total_tags;
+                        totalPages.value  = data.total_pages;
+                        currentPage.value = page;
+                    }
+                } finally {
+                    loading.value = false;
+                }
+            }
+
+            function onSearchInput() { if (!search.value.trim()) fetchTags(1); }
+
+            function toggleSelect(id) {
+                const i = selected.value.indexOf(id);
+                if (i >= 0) selected.value.splice(i, 1);
+                else selected.value.push(id);
+            }
+            function toggleAll(checked) {
+                selected.value = checked ? tags.value.map(t => t.id) : [];
+            }
+
+            function openEdit(tag) {
                 selectedTag.value = { ...tag };
                 nextTick(() => {
-                    const modalElement = document.getElementById('edit_tag_modal_');
-                    if (modalElement) {
-                        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
-                        modalInstance.show();
-                    }
+                    const el = document.getElementById('edit_tag_modal_');
+                    if (el) bootstrap.Modal.getOrCreateInstance(el).show();
                 });
             }
 
+            function openDetail(tag) { detailTag.value = { ...tag }; }
+
+            async function confirmDelete(tag) {
+                if (!confirm(`Are you sure you want to delete "${tag.name}"? This cannot be undone.`)) return;
+                const res  = await fetch('/tags/delete_tag/' + tag.id, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+                const data = await res.json();
+                create_message(data.message, res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) fetchTags(currentPage.value);
+            }
+
+            async function bulkDelete() {
+                if (!selected.value.length) return;
+                if (!confirm(`Are you sure you want to permanently delete ${selected.value.length} tag(s)? This cannot be undone.`)) return;
+                const res = await fetch('/tags/remove_tags_bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ ids: selected.value }),
+                });
+                const data = await res.json();
+                create_message(data.message, res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) { selected.value = []; fetchTags(currentPage.value); }
+            }
+
+            function doExport(list) {
+                const blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
+                const url  = URL.createObjectURL(blob);
+                const a    = Object.assign(document.createElement('a'), {
+                    href: url, download: `my_tags_${Date.now()}.json`,
+                });
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+            function exportSelected() {
+                if (!confirm(`Export ${selected.value.length} selected tag(s)?`)) return;
+                doExport(tags.value.filter(t => selected.value.includes(t.id)));
+            }
+            function exportAll() {
+                if (!confirm(`Export all ${tags.value.length} visible tag(s)?`)) return;
+                doExport(tags.value);
+            }
+
             function handleTagCreated() {
-                create_message('New tag created!', 'success-subtle');
+                create_message('Tag created!', 'success-subtle');
+                fetchTags(1);
             }
-
             function handleTagUpdated(data) {
-                create_message(data.message || 'Updated!', data.type || 'success-subtle');
-
-                if (myTagsComponent.value) {
-                    myTagsComponent.value.fetchMyTags();
-                }
-
+                create_message(data.message || 'Tag updated!', data.type || 'success-subtle');
                 selectedTag.value = null;
+                fetchTags(currentPage.value);
             }
-
             function handleServerMessage(data) {
                 create_message(data.message, data.type || 'warning-subtle');
             }
 
-            function handleTagDeleted() {
-                create_message('Tag deleted.', 'info-subtle');
-            }
-
-            onMounted(() => {
+            onMounted(async () => {
+                await fetchTags(1);
                 setTimeout(() => detail_page_1_is_loading.value = true, 300);
             });
 
             return {
-                detail_page_1_is_loading,
-                selectedTag,
-                myTagsComponent,
-                openEditModal,
-                handleTagCreated,
-                handleTagUpdated,
-                handleServerMessage,
-                handleTagDeleted,
-                csrfToken,
-                message_list
+                csrfToken, detail_page_1_is_loading, message_list, create_message,
+                tags, totalTags, totalPages, currentPage, loading,
+                selected, search, sortOrder, filterVisibility, filterFamily,
+                perPage, showAdvanced, activeFilterCount,
+                visiblePages, selectedTag, detailTag,
+                drawerOpen, drawerFamily, drawerSource,
+                familyOf, openDrawer,
+                fetchTags, onSearchInput,
+                toggleSelect, toggleAll,
+                openEdit, openDetail, confirmDelete, bulkDelete,
+                exportSelected, exportAll,
+                handleTagCreated, handleTagUpdated, handleServerMessage,
+                getTextColor, mapIcon,
             };
         }
     }).mount('#main-container');

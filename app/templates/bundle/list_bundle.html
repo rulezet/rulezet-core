@@ -384,7 +384,21 @@
             }
 
             onMounted(() => {
-                fetchAllBundles(1);
+                const params = new URLSearchParams(window.location.search);
+
+                if (params.get('search'))
+                    searchQuery.value = params.get('search');
+
+                if (params.get('tags'))
+                    selectedTagIds.value = params.get('tags').split(',').filter(Boolean);
+
+                if (params.get('vulnerabilities'))
+                    selectedVulnerabilityNames.value = params.get('vulnerabilities').split(',').filter(Boolean);
+
+                if (params.get('own') === '1')
+                    showOwnBundles.value = true;
+
+                fetchAllBundles(params.get('page') ? parseInt(params.get('page')) : 1);
                 fetchCurrentUser();
             });
 
