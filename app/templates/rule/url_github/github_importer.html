@@ -332,8 +332,7 @@
                                     <th class="text-center" style="width: 50px;">#</th>
                                     <th>Repository / Source</th>
                                     <th class="text-center">Type</th>
-                                    <th class="text-center">Mode</th>
-                                    <th class="text-center">Started By</th>
+                                    <th class="text-center">Author</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -346,8 +345,8 @@
                                     <td class="text-center">
                                         <span class="badge bg-primary">Import</span>
                                     </td>
-                                    <td class="text-center text-capitalize">[[ running.info.mode || '-' ]]</td>
-                                    <td class="text-center">[[ running.info.initiated_by || 'Unknown' ]]</td>
+                                    <td class="text-center text-capitalize">[[ running.info.author || '-' ]]</td>
+
                                 </tr>
 
                                 <!-- Update sessions -->
@@ -359,8 +358,7 @@
                                     <td class="text-center">
                                         <span class="badge bg-warning text-dark">Update</span>
                                     </td>
-                                    <td class="text-center text-capitalize">[[ running.info.mode || '-' ]]</td>
-                                    <td class="text-center">[[ running.info.initiated_by || 'Unknown' ]]</td>
+                                    <td class="text-center text-capitalize">[[ running.info.author || '-' ]]</td>
                                 </tr>
 
                                 <!-- No sessions -->
