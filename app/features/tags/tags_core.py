@@ -8,6 +8,7 @@ from pathlib import Path
 from flask_login import current_user
 from app import db
 from app.core.db_class.db import Tag
+from app.features.tags.utils.map import _resolve_galaxy_icon
 
 
 # ─── CRUD basics ─────────────────────────────────────────────────────────────
@@ -112,10 +113,7 @@ def remove_tag(tag_id):
         tag = Tag.query.get(tag_id)
         if not tag:
             return False, "Tag not found."
-        db.session.execute(
-            db.text("DELETE FROM rule_tag_association WHERE tag_id = :id"),
-            {"id": int(tag_id)}
-        )
+        _delete_tag_associations(int(tag_id))
         db.session.delete(tag)
         db.session.commit()
         return True, "Tag deleted."
@@ -125,18 +123,12 @@ def remove_tag(tag_id):
 
 
 def remove_tags_bulk(tag_ids):
-    """Delete a list of tags, cleaning up associations first."""
+    """Delete a list of tags, cleaning up all associations first."""
     if not tag_ids:
         return 0, "No tags provided."
     try:
         int_ids = [int(i) for i in tag_ids]
-
-        # remove associations first to avoid FK violation
-        db.session.execute(
-            db.text("DELETE FROM rule_tag_association WHERE tag_id IN :ids"),
-            {"ids": tuple(int_ids)}
-        )
-
+        _delete_tag_associations_bulk(int_ids)
         deleted = Tag.query.filter(Tag.id.in_(int_ids)).delete(synchronize_session=False)
         db.session.commit()
         return deleted, f"Deleted {deleted} tag(s)."
@@ -145,8 +137,35 @@ def remove_tags_bulk(tag_ids):
         return 0, f"Error during bulk delete: {e}"
 
 
+def _delete_tag_associations(tag_id):
+    """Remove all FK references to a single tag before deletion."""
+    db.session.execute(
+        db.text("DELETE FROM rule_tag_association WHERE tag_id = :id"),
+        {"id": tag_id}
+    )
+    db.session.execute(
+        db.text("DELETE FROM bundle_tag_association WHERE tag_id = :id"),
+        {"id": tag_id}
+    )
+
+
+def _delete_tag_associations_bulk(int_ids):
+    """Remove all FK references to a list of tags before deletion."""
+    if not int_ids:
+        return
+    id_tuple = tuple(int_ids)
+    db.session.execute(
+        db.text("DELETE FROM rule_tag_association WHERE tag_id IN :ids"),
+        {"ids": id_tuple}
+    )
+    db.session.execute(
+        db.text("DELETE FROM bundle_tag_association WHERE tag_id IN :ids"),
+        {"ids": id_tuple}
+    )
+
+
 def remove_family(family, source=None):
-    """Delete every tag in a given family, cleaning up associations first."""
+    """Delete every tag in a given family, cleaning up all associations first."""
     pattern = _family_like_pattern(family)
     if not pattern:
         return 0, "Invalid family."
@@ -154,15 +173,10 @@ def remove_family(family, source=None):
         query = Tag.query.filter(Tag.name.ilike(pattern))
         if source and source != 'all':
             query = query.filter_by(source=source)
-
         ids = [t.id for t in query.with_entities(Tag.id).all()]
         if not ids:
             return 0, f"No tags found in family '{family}'."
-
-        db.session.execute(
-            db.text("DELETE FROM rule_tag_association WHERE tag_id IN :ids"),
-            {"ids": tuple(ids)}
-        )
+        _delete_tag_associations_bulk(ids)
         deleted = Tag.query.filter(Tag.id.in_(ids)).delete(synchronize_session=False)
         db.session.commit()
         return deleted, f"Deleted {deleted} tags from family '{family}'."
@@ -256,7 +270,7 @@ def get_my_tags():
     return Tag.query.filter(
         Tag.created_by == current_user.id,
         Tag.source != "Taxonomy",
-        Tag.source != "Galaxy"
+        Tag.source != "Galaxy",
     ).order_by(Tag.created_at.desc()).all()
 
 
@@ -506,7 +520,73 @@ def list_all_misp_galaxies_meta(args):
     }
 
 
-def add_tags_from_misp_galaxy(uuid_from_misp, created_by):
+def get_galaxy_clusters(uuid_from_misp):
+    """Return all clusters of a galaxy without importing them."""
+    if not uuid_from_misp:
+        return None, "Missing UUID"
+
+    galaxies_path = Path(MISP_GALAXIES_PATH) / "galaxies"
+    clusters_path = Path(MISP_GALAXIES_PATH) / "clusters"
+
+    galaxy_data = None
+    matched_filename = None
+    for galaxy_file in galaxies_path.glob("*.json"):
+        try:
+            with open(galaxy_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("uuid") == uuid_from_misp:
+                galaxy_data = data
+                matched_filename = galaxy_file.name
+                break
+        except Exception:
+            continue
+
+    if not galaxy_data or not matched_filename:
+        return None, "Galaxy not found"
+
+    cluster_file = clusters_path / matched_filename
+    if not cluster_file.exists():
+        return None, "Cluster file not found"
+
+    with open(cluster_file, "r", encoding="utf-8") as f:
+        cluster_data = json.load(f)
+
+    galaxy_type = galaxy_data.get("type", "unknown")
+
+    # mark which clusters are already in DB
+    existing = {
+        tag.external_id
+        for tag in Tag.query.filter_by(source="Galaxy").all()
+        if tag.external_id
+    }
+
+    clusters = []
+    for cluster in cluster_data.get("values", []):
+        value = cluster.get("value")
+        if not value:
+            continue
+        cluster_uuid = cluster.get("uuid")
+        clusters.append({
+            "uuid":        cluster_uuid,
+            "value":       value,
+            "description": cluster.get("description", ""),
+            "already_imported": cluster_uuid in existing,
+        })
+
+    return {
+        "galaxy_type": galaxy_type,
+        "galaxy_name": galaxy_data.get("name"),
+        "icon":        galaxy_data.get("icon", "atom"),
+        "clusters":    clusters,
+    }, None
+
+
+def add_tags_from_misp_galaxy(uuid_from_misp, created_by, cluster_uuids=None):
+    """Import clusters of a galaxy as Tags with source='Galaxy'.
+
+    If cluster_uuids is a non-empty list, only those specific clusters are
+    imported. Otherwise every cluster is imported (original behaviour).
+    """
     if not uuid_from_misp:
         return None, "Missing UUID"
 
@@ -530,9 +610,10 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by):
         return None, "Galaxy not found"
 
     galaxy_type = galaxy_data.get("type", "unknown")
-    galaxy_icon = galaxy_data.get("icon", "atom")
+    fa_icon     = _resolve_galaxy_icon(galaxy_data.get("icon", "atom"))
 
-    if galaxy_type in get_all_galaxies_in_db():
+    # when cherry-picking we skip the "already fully imported" guard
+    if cluster_uuids is None and galaxy_type in get_all_galaxies_in_db():
         return True, "Galaxy already imported."
 
     cluster_file = clusters_path / matched_filename
@@ -542,10 +623,16 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by):
     with open(cluster_file, "r", encoding="utf-8") as f:
         cluster_data = json.load(f)
 
+    # normalise to a set for O(1) lookup; None means "all"
+    allowed = set(cluster_uuids) if cluster_uuids else None
+
     tags_added = 0
     for cluster in cluster_data.get("values", []):
-        value = cluster.get("value")
+        value        = cluster.get("value")
+        cluster_uuid = cluster.get("uuid")
         if not value:
+            continue
+        if allowed is not None and cluster_uuid not in allowed:
             continue
         tag_name = f'misp-galaxy:{galaxy_type}="{value}"'
         if Tag.query.filter_by(name=tag_name).first():
@@ -554,7 +641,7 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by):
             name=tag_name,
             description=cluster.get("description", ""),
             color="#8b5cf6",
-            icon=galaxy_icon,
+            icon=fa_icon,
             uuid=str(uuid.uuid4()),
             created_by=created_by.id,
             is_active=True,
@@ -562,7 +649,7 @@ def add_tags_from_misp_galaxy(uuid_from_misp, created_by):
             visibility="public",
             created_at=datetime.datetime.now(datetime.timezone.utc),
             updated_at=datetime.datetime.now(datetime.timezone.utc),
-            external_id=cluster.get("uuid"),
+            external_id=cluster_uuid,
             source="Galaxy",
             galaxy_meta=cluster.get("meta"),
         ))

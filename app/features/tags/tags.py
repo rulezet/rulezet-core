@@ -262,12 +262,33 @@ def get_tags_galaxy():
     })
 
 
-@tags_blueprint.route("/add_tags_galaxy", methods=['GET'])
+@tags_blueprint.route("/get_galaxy_clusters/<uuid_param>", methods=['GET'])
+@login_required
+def get_galaxy_clusters(uuid_param):
+    """Return all clusters of a galaxy for preview before import."""
+    err = _admin_only()
+    if err: return err
+    result, error = tags_core.get_galaxy_clusters(uuid_param)
+    if error:
+        return jsonify({"message": error, "toast_class": "danger-subtle"}), 404
+    return jsonify(result)
+
+
+@tags_blueprint.route("/add_tags_galaxy", methods=['GET', 'POST'])
 @login_required
 def add_tags_galaxy():
     err = _admin_only()
     if err: return err
-    uuid_param = request.args.get("uuid")
-    success, message = tags_core.add_tags_from_misp_galaxy(uuid_param, current_user)
+
+    # POST = cherry-pick: { "uuid": "...", "cluster_uuids": ["uuid1", "uuid2"] }
+    if request.method == 'POST':
+        data         = request.json or {}
+        uuid_param   = data.get("uuid")
+        cluster_uuids = data.get("cluster_uuids") or None
+    else:
+        uuid_param    = request.args.get("uuid")
+        cluster_uuids = None
+
+    success, message = tags_core.add_tags_from_misp_galaxy(uuid_param, current_user, cluster_uuids)
     cls = "success-subtle" if success else "danger-subtle"
     return jsonify({"message": message, "toast_class": cls}), (200 if success else 400)

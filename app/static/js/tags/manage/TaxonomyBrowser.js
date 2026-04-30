@@ -1,8 +1,7 @@
-/**
- * TaxonomyBrowser
- * Tab for adding MISP taxonomies with search, stats, and per-taxonomy import.
- */
+import BrowserPagination from './BrowserPagination.js';
+
 const TaxonomyBrowser = {
+    components: { 'browser-pagination': BrowserPagination },
     props: {
         csrfToken: { type: String, required: true },
     },
@@ -59,7 +58,6 @@ const TaxonomyBrowser = {
     },
     template: `
         <div>
-            <!-- Search -->
             <div class="d-flex gap-2 align-items-center mb-3">
                 <div class="input-group input-group-sm flex-grow-1">
                     <span class="input-group-text bg-transparent border-end-0">
@@ -79,9 +77,8 @@ const TaxonomyBrowser = {
                 </span>
             </div>
 
-            <!-- Table -->
             <div class="table-responsive">
-                <table class="table table-sm align-middle browser-table">
+                <table class="table table-sm align-middle">
                     <thead>
                         <tr>
                             <th>Namespace</th>
@@ -130,7 +127,6 @@ const TaxonomyBrowser = {
                 </table>
             </div>
 
-            <!-- Pagination -->
             <browser-pagination :current="page" :total="totalPages" @change="load"></browser-pagination>
         </div>
     `

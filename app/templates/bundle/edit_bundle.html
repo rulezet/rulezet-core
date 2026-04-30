@@ -666,8 +666,16 @@
 
 
             const handleRefreshList = (newlyCreatedTag) => {
+                if (!newlyCreatedTag) return;
+                // add to selection if not already there
+                if (!selectedTags.value.includes(newlyCreatedTag.id)) {
+                    selectedTags.value.push(newlyCreatedTag.id);
+                    allSelectedTagsObjects.value.push(newlyCreatedTag);
+                }
+                create_message("Tag created and selected.", "success-subtle");
+                saveTags();
                 fetchTags(1);
-                create_message("Tag saved successfully.", "success-subtle");
+
             };
 
             /**

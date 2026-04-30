@@ -13,12 +13,12 @@ const TagCreateModal = {
     setup(props, { emit }) {
         const initialState = {
             name: '',
-            source: 'Manual', 
+            source: 'Manual',
             external_id: '',
             description: '',
             color: '#3b82f6',
             icon: 'fa-tag',
-            visibility: 'Private'
+            visibility: 'private'
         };
 
         const newTag = Vue.ref({ ...initialState });
@@ -32,15 +32,15 @@ const TagCreateModal = {
 
         const saveNewTag = async () => {
             if (!newTag.value.name.trim()) return;
-            
+
             isSubmitting.value = true;
             errorMessage.value = '';
-            
+
             try {
                 const response = await fetch('/tags/create_tag', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',  
+                    headers: {
+                        'Content-Type': 'application/json',
                         'X-CSRFToken': props.csrf
                     },
                     body: JSON.stringify(newTag.value)
@@ -48,11 +48,10 @@ const TagCreateModal = {
 
                 const result = await response.json();
 
-                if (response.ok) {
+                if (response.ok && response.status === 200 && result.tag) {
                     const modalElement = document.getElementById('add_tag_modal_');
                     const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
                     if (modalInstance) modalInstance.hide();
-
                     emit('tag-created', result.tag);
                     resetForm();
                 } else {
@@ -99,11 +98,39 @@ const TagCreateModal = {
 
                     <div class="row g-3">
                         <div class="col-md-7">
-                            <label class="form-label fw-bold small text-muted text-uppercase mb-1">Tag Name <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bold small text-muted text-uppercase mb-1">
+                                Tag Name <span class="text-danger">*</span>
+                            </label>
                             <div class="input-group shadow-sm rounded-3">
-                                <span class="input-group-text border-0 bg-light"><i class="fa-solid fa-signature text-muted"></i></span>
+                                <span class="input-group-text border-0 bg-light">
+                                    <i class="fa-solid fa-signature text-muted"></i>
+                                </span>
                                 <input type="text" class="form-control border-0 bg-light" required
                                     v-model="newTag.name" placeholder="Enter tag name..." style="height: 45px;">
+                            </div>
+
+                            <!-- Namespace hint — shown when the name contains ':' -->
+                            <div v-if="newTag.name.includes(':')" class="mt-2 px-1 d-flex align-items-start gap-2">
+                                <i class="fas fa-circle-info text-primary mt-1" style="font-size:0.75rem; flex-shrink:0"></i>
+                                <div style="font-size:0.78rem; color: var(--subtle-text-color); line-height:1.5">
+                                    <strong style="color: var(--text-color)">Namespace detected:</strong>
+                                    the part before <code>:</code> will be used to group this tag by family.
+                                    <div class="mt-1 d-flex align-items-center gap-2 flex-wrap">
+                                        <span class="badge rounded-pill bg-light border text-dark font-monospace">
+                                            namespace: <strong class="text-primary">[[ newTag.name.split(':')[0] ]]</strong>
+                                        </span>
+                                        <span class="text-muted small">→</span>
+                                        <span class="badge rounded-pill bg-light border text-dark font-monospace">
+                                            value: <strong class="text-success">[[ newTag.name.split(':').slice(1).join(':') ]]</strong>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Default hint -->
+                            <div v-else class="mt-1 px-1" style="font-size:0.75rem; color: var(--subtle-text-color)">
+                                <i class="fas fa-lightbulb me-1 text-warning"></i>
+                                Tip: use <code>namespace:value</code> format (e.g. <code>tlp:green</code>) to group related tags by family.
                             </div>
                         </div>
 
