@@ -1,0 +1,150 @@
+.rulezet-footer {
+    background-color: #0f172a;
+    padding: 2rem 0 1.25rem;
+    margin-top: auto;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* ── Top row ── */
+.footer-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+}
+
+/* ── Brand ── */
+.footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 140px;
+}
+
+.footer-brand__name {
+    font-weight: 800;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #3b82f6;
+}
+
+.footer-brand__badge {
+    font-size: 0.65rem;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.4);
+    border-radius: 4px;
+    padding: 1px 6px;
+    letter-spacing: 0.04em;
+}
+
+.footer-brand__tagline {
+    width: 100%;
+    margin: 0.15rem 0 0;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Nav ── */
+.footer-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.footer-nav__link {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px;
+    transition: color 0.2s, background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.footer-nav__link:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.footer-nav__link i {
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+/* ── Actions ── */
+.footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    min-width: 100px;
+}
+
+.footer-github {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.footer-github:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* ── Divider ── */
+.footer-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.07);
+    margin: 1.25rem 0 1rem;
+}
+
+/* ── Bottom ── */
+.footer-bottom {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.22);
+    font-size: 0.75rem;
+}
+
+.footer-bottom strong {
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .footer-top {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .footer-brand {
+        justify-content: center;
+    }
+
+    .footer-brand__tagline {
+        text-align: center;
+    }
+
+    .footer-actions {
+        justify-content: center;
+    }
+}

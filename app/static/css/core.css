@@ -56,30 +56,28 @@
 }
 
 body.dark-mode {
-  --sidebar-color: #1e293b;
   --bg-color: #1e293b;
-  --navbar-bg-color: #1e293b;
-  --navbar-text-color: #f8fafc;
+  --navbar-bg-color: #1a2744;
+  --sidebar-color: #1a2744;
   --bar-bg-color: #0f172a;
-
-  --card-bg-color: #334155;
-  --card-header-bg-color: #334155;
-  --light-bg-color: #475569;
+  --card-bg-color: #2d3f55;
+  --card-header-bg-color: #2d3f55;
+  --light-bg-color: #3d5068;
   --code-bg-color: #0f172a;
-  --border-color: #475569;
+  --border-color: #3d5068;
 
-  --text-color: #f8fafc;
-  --subtle-text-color: #cbd5e1;
+  --text-color: #e2e8f0;
+  --subtle-text-color: #94a3b8;
+  --rule-name-color: #7eb3f8;
 
-  --rule-name-color: #93c5fd;
-  --selected-color: rgba(59, 130, 246, 0.3);
+  --selected-color: rgba(59, 130, 246, 0.2);
   --page-selected-color: #60a5fa;
-
-  --bg-color-high-similarity: #991b1b;
-  --bg-diff-add: rgba(74, 222, 128, 0.2);
-  --bg-diff-add-highlight: rgba(74, 222, 128, 0.5);
-  --bg-diff-remove: rgba(248, 113, 113, 0.2);
-  --bg-diff-remove-highlight: rgba(248, 113, 113, 0.5);
+  --navbar-text-color: #e2e8f0;
+  --bg-color-high-similarity: #7f1d1d;
+  --bg-diff-add: rgba(74, 222, 128, 0.15);
+  --bg-diff-add-highlight: rgba(74, 222, 128, 0.4);
+  --bg-diff-remove: rgba(248, 113, 113, 0.15);
+  --bg-diff-remove-highlight: rgba(248, 113, 113, 0.4);
 }
 
 
@@ -169,11 +167,29 @@ body::after {
 }
 
 body.dark-mode::before {
-  background: rgba(10, 88, 202, 0.04);
+  background: radial-gradient(ellipse 800px 600px at top right,
+      rgba(99, 102, 241, 0.12) 0%,
+      rgba(59, 130, 246, 0.06) 40%,
+      rgba(30, 41, 59, 0) 70%);
+  filter: blur(60px);
+  width: 100vw;
+  height: 100vh;
+  top: -20vh;
+  right: -20vw;
+  border-radius: 0;
 }
 
 body.dark-mode::after {
-  background: rgba(10, 88, 202, 0.02);
+  background: radial-gradient(ellipse 900px 700px at bottom left,
+      rgba(59, 130, 246, 0.10) 0%,
+      rgba(99, 102, 241, 0.05) 45%,
+      rgba(15, 23, 42, 0) 70%);
+  filter: blur(80px);
+  width: 100vw;
+  height: 100vh;
+  bottom: -20vh;
+  left: -20vw;
+  border-radius: 0;
 }
 
 /* End Background */
