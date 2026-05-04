@@ -222,17 +222,17 @@ const RulesCarousel = {
 
     setup(props) {
         /* ── données ── */
-        const loading    = ref(true)
+        const loading = ref(true)
         const rules_list = ref([])
 
         /* ── carousel ── */
-        const carouselIndex   = ref(0)
-        const carouselOffset  = ref(0)
+        const carouselIndex = ref(0)
+        const carouselOffset = ref(0)
         const carouselVisible = ref(3)
-        const isDragging      = ref(false)
-        let   dragStartX      = 0
-        let   touchStartX     = 0
-        let   resizeObserver  = null
+        const isDragging = ref(false)
+        let dragStartX = 0
+        let touchStartX = 0
+        let resizeObserver = null
 
         const carouselOuter = ref(null)
         const carouselTrack = ref(null)
@@ -273,9 +273,9 @@ const RulesCarousel = {
 
         function updateVisible() {
             const w = carouselOuter.value?.offsetWidth || window.innerWidth
-            if      (w < 576)  carouselVisible.value = 1
-            else if (w < 992)  carouselVisible.value = 2
-            else               carouselVisible.value = 3
+            if (w < 576) carouselVisible.value = 1
+            else if (w < 992) carouselVisible.value = 2
+            else carouselVisible.value = 3
             const max = Math.max(0, rules_list.value.length - carouselVisible.value)
             if (carouselIndex.value > max) carouselIndex.value = max
             updateOffset()
@@ -301,7 +301,7 @@ const RulesCarousel = {
             isDragging.value = true
             dragStartX = e.clientX
             window.addEventListener('mousemove', dragMove)
-            window.addEventListener('mouseup',   dragEnd)
+            window.addEventListener('mouseup', dragEnd)
         }
         function dragMove(e) {
             if (!isDragging.value) return
@@ -311,7 +311,7 @@ const RulesCarousel = {
             if (!isDragging.value) return
             isDragging.value = false
             window.removeEventListener('mousemove', dragMove)
-            window.removeEventListener('mouseup',   dragEnd)
+            window.removeEventListener('mouseup', dragEnd)
             const diff = dragStartX - e.clientX
             if (Math.abs(diff) > 60) carouselSlide(diff > 0 ? 1 : -1)
             else updateOffset()
@@ -331,7 +331,7 @@ const RulesCarousel = {
         /* ── vote / favorite ── */
         async function doVote(voteType, ruleId) {
             if (!props.currentUserIsConnected) { window.location.href = '/account/login'; return }
-            const res  = await fetch(`/rule/vote_rule?id=${ruleId}&vote_type=${voteType}`)
+            const res = await fetch(`/rule/vote_rule?id=${ruleId}&vote_type=${voteType}`)
             const data = await res.json()
             const rule = rules_list.value.find(r => r.id === ruleId)
             if (rule) { rule.vote_up = data.vote_up; rule.vote_down = data.vote_down }
@@ -339,7 +339,7 @@ const RulesCarousel = {
 
         async function doFavorite(ruleId) {
             if (!props.currentUserIsConnected) { window.location.href = '/account/login'; return }
-            const res  = await fetch(`/rule/favorite/${ruleId}`)
+            const res = await fetch(`/rule/favorite/${ruleId}`)
             const data = await res.json()
             if (res.ok) {
                 const rule = rules_list.value.find(r => r.id === ruleId)
@@ -361,16 +361,16 @@ const RulesCarousel = {
             if (djs) {
                 try {
                     return djs.utc ? djs.utc(dateStr).fromNow() : djs(dateStr).fromNow()
-                } catch (_) {}
+                } catch (_) { }
             }
-            const diff  = Date.now() - new Date(dateStr).getTime()
-            const mins  = Math.floor(diff / 60000)
+            const diff = Date.now() - new Date(dateStr).getTime()
+            const mins = Math.floor(diff / 60000)
             const hours = Math.floor(diff / 3600000)
-            const days  = Math.floor(diff / 86400000)
-            if (mins  < 1)  return 'just now'
-            if (mins  < 60) return `${mins}m ago`
+            const days = Math.floor(diff / 86400000)
+            if (mins < 1) return 'just now'
+            if (mins < 60) return `${mins}m ago`
             if (hours < 24) return `${hours}h ago`
-            if (days  < 30) return `${days}d ago`
+            if (days < 30) return `${days}d ago`
             return new Date(dateStr).toLocaleDateString()
         }
 
@@ -380,7 +380,7 @@ const RulesCarousel = {
         onBeforeUnmount(() => {
             if (resizeObserver) resizeObserver.disconnect()
             window.removeEventListener('mousemove', dragMove)
-            window.removeEventListener('mouseup',   dragEnd)
+            window.removeEventListener('mouseup', dragEnd)
         })
 
         return {

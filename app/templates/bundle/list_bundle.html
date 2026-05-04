@@ -107,12 +107,24 @@
                             [[ bundle.name ]]
                         </a>
                     </h5>
-                    <div class="d-flex align-items-center gap-2 mt-2">
-                        <div class="avatar-circle-xs">[[ bundle.author[0].toUpperCase() ]]</div>
-                        <small class="text-muted fw-medium">[[ bundle.author ]]</small>
+                   <div class="d-flex align-items-center gap-2 mt-2">
+                        <a :href="'/account/detail_user/' + bundle.user_id" class="text-decoration-none">
+                            <div class="avatar-circle-xs">
+                                <img v-if="bundle.author_avatar"
+                                    :src="bundle.author_avatar"
+                                    class="rounded-circle w-100 h-100"
+                                    style="object-fit:cover;">
+                                <template v-else>
+                                    [[ bundle.author[0].toUpperCase() ]]
+                                </template>
+                            </div>
+                        </a>
+                        <a :href="'/account/detail_user/' + bundle.user_id"
+                        class="text-muted fw-medium small text-decoration-none">
+                            [[ bundle.author ]]
+                        </a>
                         <span class="text-muted opacity-50">|</span>
-                        <small class="text-muted"><i class="far fa-calendar-alt me-1"></i>[[ bundle.created_at
-                            ]]</small>
+                        <small class="text-muted"><i class="far fa-calendar-alt me-1"></i>[[ bundle.created_at ]]</small>
                     </div>
                 </div>
 

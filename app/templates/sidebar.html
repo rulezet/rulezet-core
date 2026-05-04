@@ -213,10 +213,19 @@
                <div class="dropdown">
                   <a class="btn btn-profile d-flex align-items-center gap-2 rounded-pill ps-1 pe-3 py-1"
                      href="#" role="button" data-bs-toggle="dropdown">
+
                      <div class="avatar-circle">
-                        {% if current_user.is_authenticated %}{{ current_user.get_first_name()[0].upper() }}
-                        {% else %}<i class="fa-solid fa-user"></i>{% endif %}
+                        {% if current_user.is_authenticated and current_user.profile_picture %}
+                              <img src="{{ current_user.get_avatar_url() }}"
+                                 class="rounded-circle w-100 h-100"
+                                 style="object-fit:cover;">
+                        {% elif current_user.is_authenticated %}
+                              {{ current_user.get_first_name()[0].upper() }}
+                        {% else %}
+                              <i class="fa-solid fa-user"></i>
+                        {% endif %}
                      </div>
+
                      <span class="fw-bold small d-none d-sm-inline">
                         {% if current_user.is_authenticated %}{{ current_user.get_first_name() }}{% else %}Profile{% endif %}
                      </span>

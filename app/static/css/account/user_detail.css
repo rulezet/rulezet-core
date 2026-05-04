@@ -14,6 +14,7 @@
     margin-bottom: 2rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
+
 .User-detail-contribution-info {
     background-color: var(--card-bg-color);
     border: 1px solid var(--border-color);
@@ -31,6 +32,7 @@
     margin-bottom: 2rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
+
 .User-detail-activity-info {
     background-color: var(--card-bg-color);
     border: 1px solid var(--border-color);
@@ -39,6 +41,7 @@
     margin-bottom: 2rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
+
 .User-detail-proposal-info {
     background-color: var(--card-bg-color);
     border: 1px solid var(--border-color);
@@ -47,6 +50,7 @@
     margin-bottom: 2rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
+
 /* ==================== Info Grid Layout ==================== */
 .global-info-grid {
     display: grid;
@@ -192,7 +196,7 @@
 .user-avatar {
     width: 80px;
     height: 80px;
-    border-radius: 8px;
+    border-radius: 40px;
     background: linear-gradient(135deg, var(--rule-name-color), rgba(13, 110, 253, 0.6));
     display: flex;
     align-items: center;

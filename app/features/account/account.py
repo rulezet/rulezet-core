@@ -125,22 +125,45 @@ def get_all_users() -> Union[render_template, dict]:
     else:
         return render_template("access_denied.html")
 
-@account_blueprint.route("/edit", methods=['GET', "POST"])
+@account_blueprint.before_app_request
+def _update_last_seen():
+    if current_user.is_authenticated:
+        AccountModel.update_last_seen(current_user.id)
+
+
+
+@account_blueprint.route("/edit", methods=['GET', 'POST'])
 @login_required
-def edit_user() -> redirect:
+def edit_user():
     """Edit the user"""
     form = EditUserForm()
     if form.validate_on_submit():
         form_dict = form_to_dict(form)
-        AccountModel.edit_user_core(form_dict, current_user.id)
-        flash('Profile update with success!', 'success')
+        avatar_file   = form.profile_picture.data          # FileStorage or None
+        remove_avatar = request.form.get("remove_avatar") == "1"
+        AccountModel.edit_user_core(
+            form_dict,
+            current_user.id,
+            avatar_file=avatar_file,
+            remove_avatar=remove_avatar
+        )
+        flash('Profile updated successfully!', 'success')
         return redirect("/account")
     else:
-        form.first_name.data = current_user.first_name
-        form.last_name.data = current_user.last_name
-        form.email.data = current_user.email
-
+        form.first_name.data  = current_user.first_name
+        form.last_name.data   = current_user.last_name
+        form.email.data       = current_user.email
+        form.username.data    = current_user.username
+        form.bio.data         = current_user.bio
+        form.location.data    = current_user.location
+        form.website_url.data = current_user.website_url
+        form.github_url.data  = current_user.github_url
+        form.twitter_url.data = current_user.twitter_url
+ 
     return render_template("account/edit_user.html", form=form)
+
+ 
+
 
 
 @account_blueprint.route('/login', methods=['GET', 'POST'])

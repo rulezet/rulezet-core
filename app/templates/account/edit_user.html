@@ -2,129 +2,243 @@
 {% import 'macros/form_macros.html' as f %}
 
 {% block content %}
-    <div  class="mb-4 border-bottom pb-3">
-        <h2 class="fw-bold mb-1 text-primary text-center">
-            Edit Profile
-            <div class="mx-auto" style="width: 60px; height: 4px; background-color: #0d6efd; border-radius: 2px;"></div>
-        </h2>
-        <p class="text-muted mt-2 text-center">
-            Update your account information below. Make sure to save your changes once you're done.
-        </p>
-    </div>
+<div class="mb-4 border-bottom pb-3">
+    <h2 class="fw-bold mb-1 text-primary text-center">
+        Edit Profile
+        <div class="mx-auto" style="width: 60px; height: 4px; background-color: #0d6efd; border-radius: 2px;"></div>
+    </h2>
+    <p class="text-muted mt-2 text-center">
+        Update your account information below. Make sure to save your changes once you're done.
+    </p>
+</div>
 
-    <form action="" method="post">
-        {{ form.hidden_tag() }}
-        <div class="modal-body bg-light p-4 rounded shadow-sm">
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label for="{{ form.first_name.id }}" class="col-form-label text-primary">{{ form.first_name.label }}</label>  <span style="color:red">*</span>
-                    {{ form.first_name(class_="form-control border-primary") }}
-                    {% if form.first_name.errors %}
-                        <div class="text-danger">{{ form.first_name.errors[0] | safe }}</div>
+<form action="" method="post" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+    <!-- hidden flag: set to "1" by JS when user clicks "Remove" -->
+    <input type="hidden" name="remove_avatar" id="removeAvatarFlag" value="0">
+
+    <div class="modal-body bg-light p-4 rounded shadow-sm">
+
+        <!-- ===== Profile Picture ===== -->
+        <div class="mb-4 pb-3 border-bottom">
+            <label class="col-form-label text-primary fw-semibold">Profile Picture</label>
+            <div class="d-flex align-items-center gap-3 mt-2 flex-wrap">
+
+                <!-- preview -->
+                <div id="avatarWrapper">
+                    {% if current_user.profile_picture %}
+                        <img id="avatarPreview"
+                             src="{{ current_user.get_avatar_url() }}"
+                             class="rounded-circle border border-2 border-primary"
+                             style="width:80px;height:80px;object-fit:cover;">
+                    {% else %}
+                        <div id="avatarPreview"
+                             class="rounded-circle border border-2 border-primary d-flex align-items-center justify-content-center bg-white"
+                             style="width:80px;height:80px;font-size:2rem;color:#0d6efd;font-weight:600;">
+                            {{ current_user.first_name[0] }}{{ current_user.last_name[0] }}
+                        </div>
                     {% endif %}
                 </div>
-                
-                <div class="col-md-6 mb-3">
-                    <label for="{{ form.last_name.id }}" class="col-form-label text-primary">{{ form.last_name.label }}</label>  <span style="color:red">*</span>
-                    {{ form.last_name(class_="form-control border-primary") }}
-                    {% if form.last_name.errors %}
-                        <div class="text-danger">{{ form.last_name.errors[0] | safe }}</div>
+
+                <div class="d-flex flex-column gap-2">
+                    {{ form.profile_picture(class_="form-control border-primary", id="avatarInput", style="max-width:320px;") }}
+                    <small class="text-muted">JPG, PNG, GIF or WebP · max 2 MB</small>
+                    {% if form.profile_picture.errors %}
+                        <div class="text-danger small">{{ form.profile_picture.errors[0] | safe }}</div>
+                    {% endif %}
+                    {% if current_user.profile_picture %}
+                        <button type="button" id="removeAvatarBtn"
+                                class="btn btn-sm btn-outline-danger" style="width:fit-content;">
+                            <i class="fa-solid fa-trash me-1"></i>Remove picture
+                        </button>
                     {% endif %}
                 </div>
             </div>
-            
-            <div class="mb-3">
-                <label for="{{ form.email.id }}" class="col-form-label text-primary">{{ form.email.label }}</label>  <span style="color:red">*</span>
+        </div>
+
+        <!-- ===== Name row ===== -->
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="{{ form.first_name.id }}" class="col-form-label text-primary">{{ form.first_name.label }}</label>
+                <span style="color:red">*</span>
+                {{ form.first_name(class_="form-control border-primary") }}
+                {% if form.first_name.errors %}
+                    <div class="text-danger">{{ form.first_name.errors[0] | safe }}</div>
+                {% endif %}
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="{{ form.last_name.id }}" class="col-form-label text-primary">{{ form.last_name.label }}</label>
+                <span style="color:red">*</span>
+                {{ form.last_name(class_="form-control border-primary") }}
+                {% if form.last_name.errors %}
+                    <div class="text-danger">{{ form.last_name.errors[0] | safe }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ===== Username + Email row ===== -->
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="{{ form.username.id }}" class="col-form-label text-primary">{{ form.username.label }}</label>
+                {{ form.username(class_="form-control border-primary", placeholder="e.g. john_doe") }}
+                {% if form.username.errors %}
+                    <div class="text-danger">{{ form.username.errors[0] | safe }}</div>
+                {% endif %}
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="{{ form.email.id }}" class="col-form-label text-primary">{{ form.email.label }}</label>
+                <span style="color:red">*</span>
                 {{ form.email(class_="form-control border-primary") }}
                 {% if form.email.errors %}
                     <div class="text-danger">{{ form.email.errors[0] | safe }}</div>
                 {% endif %}
             </div>
-            <div class="col" id="password-container">
-                <label for="password" class="col-form-label">{{ form.password.label }}</label>  
-                <span class="text-muted">(Leave blank to keep current password)</span>
-                <div class="position-relative">
-                    <div class="position-relative">
-                        {{ form.password(class_="form-control pe-5", **{"v-model": "password"}) }}
-                        <i class="fa fa-eye position-absolute top-50 end-0 translate-middle-y me-3"
-                        style="cursor: pointer"
-                        id="togglePasswordIcon"
-                        @click="togglePassword"></i>
-                    </div>
+        </div>
 
-                </div>
-                {% if form.password.errors %}
-                    <div style="color: red;">{{ form.password.errors[0] | safe }}</div>
-                {% endif %}
-                <!-- Password rules -->
-                <ul style="margin-top: 10px; padding-left: 20px; list-style: none;" v-if="password">
-                    <li :class="password.length >= 8 ? 'text-success' : 'text-danger'">
-                        <span v-if="password.length >= 8">
-                            <i class="fa-solid fa-check"></i>
-                        </span>
-                        <span v-else>
-                            <i class="fa-solid fa-xmark"></i>
-                        </span> At least 8 characters
-                    </li>
-                    <li :class="/[A-Z]/.test(password) ? 'text-success' : 'text-danger'">
-                        <span v-if="/[A-Z]/.test(password)">
-                            <i class="fa-solid fa-check"></i>
-                        </span>
-                        <span v-else>
-                            <i class="fa-solid fa-xmark"></i>
-                        </span> At least one uppercase letter
-                    </li>
-                    <li :class="/[a-z]/.test(password) ? 'text-success' : 'text-danger'">
-                        <span v-if="/[a-z]/.test(password)">
-                            <i class="fa-solid fa-check"></i>
-                        </span>
-                        <span v-else>
-                            <i class="fa-solid fa-xmark"></i>
-                        </span> At least one lowercase letter
-                    </li>
-                    <li :class="/[0-9]/.test(password) ? 'text-success' : 'text-danger'">
-                        <span v-if="/[0-9]/.test(password)">
-                            <i class="fa-solid fa-check"></i>
-                        </span>
-                        <span v-else>
-                            <i class="fa-solid fa-xmark"></i>
-                        </span> At least one digit
-                    </li>
-                </ul>
+        <!-- ===== Bio ===== -->
+        <div class="mb-3" id="bio-container">
+            <label for="{{ form.bio.id }}" class="col-form-label text-primary">{{ form.bio.label }}</label>
+            {{ form.bio(class_="form-control border-primary", rows=3,
+               placeholder="A short description about yourself…",
+               **{"v-model": "bio", "maxlength": "500"}) }}
+            <div class="d-flex justify-content-end">
+                <small class="text-muted">[[ bio.length ]] / 500</small>
             </div>
+            {% if form.bio.errors %}
+                <div class="text-danger">{{ form.bio.errors[0] | safe }}</div>
+            {% endif %}
+        </div>
 
-            <div class="modal-footer mt-3">
-                {{ form.submit(class_="btn btn-success",  id='submitBtn') }}
+        <!-- ===== Location ===== -->
+        <div class="mb-3">
+            <label for="{{ form.location.id }}" class="col-form-label text-primary">
+                <i class="fa-solid fa-location-dot me-1"></i>{{ form.location.label }}
+            </label>
+            {{ form.location(class_="form-control border-primary", placeholder="Paris, France") }}
+        </div>
+
+        <!-- ===== External links ===== -->
+        <div class="mb-4 pb-3 border-bottom">
+            <label class="col-form-label text-primary fw-semibold">External Links</label>
+            <div class="row mt-1">
+                <div class="col-md-4 mb-2">
+                    <label class="text-muted small"><i class="fa-solid fa-globe me-1"></i>Website</label>
+                    {{ form.website_url(class_="form-control border-primary", placeholder="https://example.com") }}
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label class="text-muted small"><i class="fa-brands fa-github me-1"></i>GitHub</label>
+                    {{ form.github_url(class_="form-control border-primary", placeholder="https://github.com/username") }}
+                </div>
+                <div class="col-md-4 mb-2">
+                    <label class="text-muted small"><i class="fa-brands fa-x-twitter me-1"></i>Twitter / X</label>
+                    {{ form.twitter_url(class_="form-control border-primary", placeholder="https://x.com/username") }}
+                </div>
             </div>
         </div>
-    </form>
+
+        <!-- ===== Password ===== -->
+        <div class="col mb-3" id="password-container">
+            <label for="password" class="col-form-label text-primary">{{ form.password.label }}</label>
+            <span class="text-muted">(Leave blank to keep current password)</span>
+            <div class="position-relative">
+                {{ form.password(class_="form-control pe-5 border-primary", **{"v-model": "password"}) }}
+                <i class="fa fa-eye position-absolute top-50 end-0 translate-middle-y me-3"
+                   style="cursor: pointer"
+                   id="togglePasswordIcon"
+                   @click="togglePassword"></i>
+            </div>
+            {% if form.password.errors %}
+                <div style="color: red;">{{ form.password.errors[0] | safe }}</div>
+            {% endif %}
+            <ul style="margin-top: 10px; padding-left: 20px; list-style: none;" v-if="password">
+                <li :class="password.length >= 8 ? 'text-success' : 'text-danger'">
+                    <i :class="password.length >= 8 ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>
+                    At least 8 characters
+                </li>
+                <li :class="/[A-Z]/.test(password) ? 'text-success' : 'text-danger'">
+                    <i :class="/[A-Z]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>
+                    At least one uppercase letter
+                </li>
+                <li :class="/[a-z]/.test(password) ? 'text-success' : 'text-danger'">
+                    <i :class="/[a-z]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>
+                    At least one lowercase letter
+                </li>
+                <li :class="/[0-9]/.test(password) ? 'text-success' : 'text-danger'">
+                    <i :class="/[0-9]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>
+                    At least one digit
+                </li>
+            </ul>
+        </div>
+
+        <div class="modal-footer mt-3">
+            {{ form.submit(class_="btn btn-success", id='submitBtn') }}
+            <a href="/account" class="btn btn-outline-secondary ms-2">Cancel</a>
+        </div>
+
+    </div>
+</form>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-const { createApp, ref, computed } = Vue;
+const { createApp, ref } = Vue;
 
+// Bio character counter
+createApp({
+    delimiters: ['[[', ']]'],
+    setup() {
+        const bio = ref("{{ form.bio.data | tojson if form.bio.data else 'I love coding!' }}");
+        return { bio };
+    }
+}).mount('#bio-container');
+
+// Password strength validator + toggle
 createApp({
     setup() {
         const password = ref('');
-
-        const passwordValid = computed(() => {
-            return password.value.length >= 8 &&
-                   /[A-Z]/.test(password.value) &&
-                   /[a-z]/.test(password.value) &&
-                   /[0-9]/.test(password.value);
-        });
-
         const togglePassword = () => {
             const input = document.getElementById("password");
-            const icon = document.getElementById("togglePasswordIcon");
+            const icon  = document.getElementById("togglePasswordIcon");
             input.type = input.type === "password" ? "text" : "password";
             icon.classList.toggle("fa-eye");
             icon.classList.toggle("fa-eye-slash");
         };
-
         return { password, togglePassword };
     }
 }).mount('#password-container');
+
+// Avatar live preview
+document.getElementById('avatarInput').addEventListener('change', function () {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        document.getElementById('avatarWrapper').innerHTML =
+            `<img id="avatarPreview" src="${e.target.result}"
+             class="rounded-circle border border-2 border-primary"
+             style="width:80px;height:80px;object-fit:cover;">`;
+    };
+    reader.readAsDataURL(file);
+    // if user picks a new file, cancel any pending remove
+    document.getElementById('removeAvatarFlag').value = '0';
+    const removeBtn = document.getElementById('removeAvatarBtn');
+    if (removeBtn) removeBtn.classList.remove('d-none');
+});
+
+// Remove avatar button
+const removeBtn = document.getElementById('removeAvatarBtn');
+if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+        // reset to initials placeholder
+        const initials = `{{ current_user.first_name[0] }}{{ current_user.last_name[0] }}`;
+        document.getElementById('avatarWrapper').innerHTML =
+            `<div class="rounded-circle border border-2 border-danger d-flex align-items-center justify-content-center bg-white"
+                  style="width:80px;height:80px;font-size:2rem;color:#dc3545;font-weight:600;">${initials}</div>`;
+        document.getElementById('removeAvatarFlag').value = '1';
+        // clear file input so no new upload is sent
+        document.getElementById('avatarInput').value = '';
+        removeBtn.classList.add('d-none');
+    });
+}
 </script>
 {% endblock %}

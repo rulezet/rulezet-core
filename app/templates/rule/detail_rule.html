@@ -492,12 +492,18 @@
                                                     <div class="d-flex flex-column align-items-center">
                                                         <div class="avatar-circle d-flex align-items-center justify-content-center text-white fw-bold rounded-circle shadow-sm mb-2"
                                                             :style="{ 
-                                        width: '48px', 
-                                        height: '48px', 
-                                        fontSize: '1.2rem', 
-                                        backgroundColor: getRandomColor(contributor.user_name || 'System')
-                                    }">
-                                                            [[ (contributor.user_name || '?')[0].toUpperCase() ]]
+                                                                width: '48px', 
+                                                                height: '48px', 
+                                                                fontSize: '1.2rem', 
+                                                                backgroundColor: contributor.user_avatar ? 'transparent' : getRandomColor(contributor.user_name || 'System')
+                                                            }">
+                                                            <img v-if="contributor.user_avatar"
+                                                                :src="contributor.user_avatar"
+                                                                class="rounded-circle w-100 h-100"
+                                                                style="object-fit:cover;">
+                                                            <template v-else>
+                                                                [[ (contributor.user_name || '?')[0].toUpperCase() ]]
+                                                            </template>
                                                         </div>
 
                                                         <span class="small fw-bold text-dark text-center text-truncate"

@@ -18,14 +18,17 @@
         <div class="mb-5 header-section text-center">
             <div class="position-relative d-inline-block mb-3">
                 <div class="rounded-circle shadow-sm d-flex align-items-center justify-content-center bg-light border border-2 border-primary"
-                    style="width: 120px; height: 120px; overflow: hidden;">
-                    <i class="fas fa-user fa-4x text-primary opacity-50"></i>
+                    style="width:120px;height:120px;overflow:hidden;">
+                    {% if user.profile_picture %}
+                        <img src="{{ user.profile_picture }}"
+                            style="width:100%;height:100%;object-fit:cover;">
+                    {% else %}
+                        <i class="fas fa-user fa-4x text-primary opacity-50"></i>
+                    {% endif %}
                 </div>
-                <span
-                    class="position-absolute bottom-0 end-0 p-2 bg-success border border-2 border-white rounded-circle"
-                    title="Online" style="margin-bottom: 5px; margin-right: 5px;"></span>
+                <span class="position-absolute bottom-0 end-0 p-2 bg-success border border-2 border-white rounded-circle"
+                    title="Online" style="margin-bottom:5px;margin-right:5px;"></span>
             </div>
-
             <h1 class="mb-2 text-primary fw-bold text-uppercase tracking-wider" style="letter-spacing: 2px;">
                 {{ user.username }}
             </h1>
@@ -68,15 +71,18 @@
 
                     <!-- Avatar -->
                     <div class="avatar-container">
-                        <div class="user-avatar">
-                            {{ user.first_name[0] + user.last_name[0] }}
+                        <div class="user-avatar" style="overflow:hidden;">
+                            {% if user.profile_picture %}
+                                <img src="{{ user.profile_picture }}"
+                                    style="width:100%;height:100%;object-fit:cover;">
+                            {% else %}
+                                {{ user.first_name[0] + user.last_name[0] }}
+                            {% endif %}
                         </div>
                         <div class="avatar-info">
                             <div class="avatar-name">{{ user.username }}</div>
-
                         </div>
                     </div>
-
                     <!-- Main Info Grid -->
                     <div class="global-info-grid">
                         <div class="info-item">
@@ -115,6 +121,57 @@
                             </div>
                             {% endif %}
                         </div>
+                        {% if user.location %}
+                        <div class="info-item">
+                            <label class="info-item-label">Location</label>
+                            <div class="info-item-value">
+                                <i class="fa-solid fa-location-dot me-1 text-muted"></i>{{ user.location }}
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="info-item">
+                            <label class="info-item-label">Member since</label>
+                            <div class="info-item-value">
+                                {{ user.created_at if user.created_at else '—' }}
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label class="info-item-label">Last seen</label>
+                            <div class="info-item-value">
+                                {{ user.last_seen if user.last_seen else '—' }}
+                            </div>
+                        </div>
+                        {% if user.bio %}
+                        <div class="info-item" style="grid-column: 1 / -1;">
+                            <label class="info-item-label">Bio</label>
+                            <div class="info-item-value">{{ user.bio }}</div>
+                        </div>
+                        {% endif %}
+                        {% if user.website_url or user.github_url or user.twitter_url %}
+                        <div class="info-item" style="grid-column: 1 / -1;">
+                            <label class="info-item-label">Links</label>
+                            <div class="d-flex gap-3 flex-wrap mt-1">
+                                {% if user.website_url %}
+                                <a href="{{ user.website_url }}" target="_blank" rel="noopener"
+                                class="text-muted small text-decoration-none">
+                                    <i class="fa-solid fa-globe me-1"></i>{{ user.website_url }}
+                                </a>
+                                {% endif %}
+                                {% if user.github_url %}
+                                <a href="{{ user.github_url }}" target="_blank" rel="noopener"
+                                class="text-muted small text-decoration-none">
+                                    <i class="fa-brands fa-github me-1"></i>{{ user.github_url }}
+                                </a>
+                                {% endif %}
+                                {% if user.twitter_url %}
+                                <a href="{{ user.twitter_url }}" target="_blank" rel="noopener"
+                                class="text-muted small text-decoration-none">
+                                    <i class="fa-brands fa-x me-1"></i>{{ user.twitter_url }}
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
 
                     <!-- Admin Only Section -->

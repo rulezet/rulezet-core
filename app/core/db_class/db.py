@@ -17,9 +17,14 @@ def load_user(user_id):
     """Loads the user from the session."""
     return User.query.get(int(user_id))
 
+# ============================================================
+# CHANGES TO APPLY IN app/db_class/db.py — User model only
+# Replace the existing User class with this one.
+# ============================================================
+
 class User(UserMixin, db.Model):
     """User model for authentication and authorization."""
-    
+
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     first_name = db.Column(db.String(64), index=True)
     last_name = db.Column(db.String(64), index=True)
@@ -33,14 +38,40 @@ class User(UserMixin, db.Model):
     verification_code = db.Column(db.String(6), nullable=True)
     verification_expiration = db.Column(db.DateTime, nullable=True)
 
+    # --- NEW FIELDS ---
+
+    # Profile
+    username = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    bio = db.Column(db.Text, nullable=True)
+    profile_picture = db.Column(db.String(256), nullable=True)  # relative path under /static/uploads/avatars/
+    location = db.Column(db.String(128), nullable=True)
+
+    # External links
+    website_url = db.Column(db.String(256), nullable=True)
+    github_url = db.Column(db.String(256), nullable=True)
+    twitter_url = db.Column(db.String(256), nullable=True)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=True)
+    last_seen = db.Column(db.DateTime, nullable=True)
+
+    # --- END NEW FIELDS ---
+
     def is_admin(self):
         """Check if the user has admin privileges."""
         return self.admin
+
     def get_username(self):
-        return self.first_name + " " + self.last_name
-    
+        return self.username if self.username else (self.first_name + " " + self.last_name)
+
     def get_first_name(self):
-        return self.first_name 
+        return self.first_name
+
+    def get_avatar_url(self):
+        """Return the profile picture URL or a default gravatar-style fallback."""
+        if self.profile_picture:
+            return "/static/uploads/avatars/" + self.profile_picture
+        return None
 
     @property
     def password(self):
@@ -53,22 +84,32 @@ class User(UserMixin, db.Model):
     def verify_password(self, password):
         """Check if the provided password matches the stored hash."""
         return check_password_hash(self.password_hash, password)
-    
+
     def is_anonymous(self):
         return False
 
     def to_json(self):
         """Serialize the user object to JSON."""
+        
         return {
             "id": self.id,
             "first_name": self.first_name,
             "last_name": self.last_name,
             "email": self.email,
             "admin": self.admin,
-            "username": self.first_name + " " + self.last_name,
+            "username": self.get_username(),
             "is_connected": self.is_connected,
             "is_verified": self.is_verified,
-            "is_admin": self.is_admin()
+            "is_admin": self.is_admin(),
+            # new
+            "bio": self.bio,
+            "profile_picture": self.get_avatar_url(),
+            "location": self.location,
+            "website_url": self.website_url,
+            "github_url": self.github_url,
+            "twitter_url": self.twitter_url,
+            "created_at": self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
+            "last_seen": self.last_seen.strftime('%Y-%m-%d %H:%M') if self.last_seen else None,
         }
 
 class AnonymousUser(AnonymousUserMixin):
@@ -122,6 +163,9 @@ class Rule(db.Model):
         is_favorited = False
         if not current_user.is_anonymous():
             is_favorited = RuleFavoriteUser.query.filter_by(user_id=current_user.id, rule_id=self.id).first() is not None
+
+        submitter = User.query.get(self.user_id)
+        submitter_avatar = submitter.get_avatar_url() if submitter else None
         return {
             "id": self.id,
             "format": self.format,
@@ -142,7 +186,9 @@ class Rule(db.Model):
             "is_favorited": is_favorited,
             "cve_id": self.cve_id if self.cve_id is not None else [],
             "editor": self.get_rule_user_first_name_by_id(),
-            "github_path": self.github_path if self.github_path else None
+            "github_path": self.github_path if self.github_path else None,
+            "editor": self.get_rule_user_first_name_by_id(),
+            "editor_avatar": submitter_avatar,
         }
     
     def get_extension(self):
@@ -620,7 +666,9 @@ class RuleEditContribution(db.Model):
             "proposal_id": self.proposal_id,
             "rule_id": self.rule_id,
             "rule_name": self.rule.title if self.rule else None,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            "user_name": self.user.first_name if self.user else None,
+            "user_avatar": self.user.get_avatar_url() if self.user else None,
         }
 
 
@@ -765,8 +813,10 @@ class Bundle(db.Model):
         return user.first_name + " " + user.last_name if user else None
 
     def to_json(self):
+        submitter = User.query.get(self.user_id)
         return {
             "id": self.id,
+            "author_avatar": submitter.get_avatar_url() if submitter else None,
             "name": self.name,
             "description": self.description,
             "created_at": self.created_at.strftime('%Y-%m-%d %H:%M'),

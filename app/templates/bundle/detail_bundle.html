@@ -82,18 +82,24 @@
                         </a>
                     </h3>
                     <div class="d-flex align-items-center gap-2 mt-3 flex-wrap">
-                        <div class="avatar-circle-xs bg-primary text-white d-flex align-items-center justify-content-center rounded-circle"
-                            style="width: 28px; height: 28px; font-weight: bold; flex-shrink: 0;">
-                            [[ bundle.user_name[0].toUpperCase() ]]
-                        </div>
+                        <a :href="'/account/detail_user/' + bundle.user_id" class="text-decoration-none">
+                            <div class="avatar-circle-xs bg-primary text-white d-flex align-items-center justify-content-center rounded-circle"
+                                style="width:28px;height:28px;font-weight:bold;flex-shrink:0;overflow:hidden;">
+                                <img v-if="bundle.author_avatar"
+                                    :src="bundle.author_avatar"
+                                    class="rounded-circle w-100 h-100"
+                                    style="object-fit:cover;">
+                                <template v-else>
+                                    [[ bundle.user_name[0].toUpperCase() ]]
+                                </template>
+                            </div>
+                        </a>
                         <a :href="'/account/detail_user/' + bundle.user_id"
-                            class="small fw-bold text-primary text-decoration-none">
+                        class="small fw-bold text-primary text-decoration-none">
                             [[ bundle.user_name ]]
                         </a>
                         <span class="text-muted opacity-50">|</span>
-                        <small class="text-muted"><i class="far fa-calendar-alt me-1"></i> [[
-                            dayjs(bundle.last_modif).fromNow()
-                            ]]</small>
+                        <small class="text-muted"><i class="far fa-calendar-alt me-1"></i> [[ dayjs(bundle.last_modif).fromNow() ]]</small>
                     </div>
                 </div>
 

@@ -1,3 +1,7 @@
+import os
+from werkzeug.utils import secure_filename
+ 
+
 import datetime , random
 from datetime import timezone, timedelta 
 from typing import  Tuple
@@ -12,6 +16,12 @@ from ...core.utils.utils import generate_api_key
 from ..rule import rule_core as RuleModel
 import uuid
 
+
+AVATAR_UPLOAD_FOLDER = os.path.join("app", "static", "uploads", "avatars")
+ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+MAX_AVATAR_SIZE_MB = 2
+
+
 #####################
 #   User actions    #
 #####################
@@ -21,17 +31,18 @@ import uuid
 TIME_EMAIL_EXPIRATION = timedelta(minutes=30)
 
 # Create
-def add_user_core(form_dict) -> User:
-    """Add a user to the DB with email verification logic"""
+
+def add_user_core(form_dict) -> tuple:
+    """Add a user to the DB with email verification logic."""
     api_key = form_dict.get("key")
     if not api_key:
         api_key = generate_api_key()
-
+ 
     code = str(random.randint(100000, 999999))
-    from datetime import timezone, timedelta, datetime
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    from datetime import timezone, timedelta, datetime as dt
+    now = dt.now(timezone.utc).replace(tzinfo=None)
     expires = now + TIME_EMAIL_EXPIRATION
-
+ 
     user = User(
         first_name=form_dict["first_name"],
         last_name=form_dict["last_name"],
@@ -40,17 +51,19 @@ def add_user_core(form_dict) -> User:
         api_key=api_key,
         verification_code=code,
         verification_expiration=expires,
-        is_verified=False
+        is_verified=False,
+        created_at=now,          # set on registration
     )
-    
+ 
     db.session.add(user)
     db.session.commit()
-
-    success , message = send_verify_email(user, code)
+ 
+    success, message = send_verify_email(user, code)
     if not success:
         return message, False
-
+ 
     return user, True
+
 
 def resend_verification_code_core(user_id) -> bool:
     """Resend the verification code to the user"""
@@ -130,18 +143,65 @@ def verify_user_core(id) -> bool:
         return False
 
 # Update
+def update_last_seen(user_id) -> None:
+    """Update the last_seen timestamp for the user."""
+    user = get_user(user_id)
+    if user:
+        user.last_seen = datetime.datetime.utcnow()
+        db.session.commit()
 
-def edit_user_core(form_dict, id) -> None:
-    """Edit the user in the DB and optionally update password"""
+
+
+def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> bool:
+    """Edit the user in the DB, optionally updating or removing the profile picture."""
     user = get_user(id)
-    user.first_name = form_dict["first_name"]
-    user.last_name = form_dict["last_name"]
-    user.email = form_dict["email"]
-
-    if form_dict.get("password"):  
-        user.password = form_dict["password"] 
-
+    if not user:
+        return False
+ 
+    user.first_name  = form_dict["first_name"]
+    user.last_name   = form_dict["last_name"]
+    user.email       = form_dict["email"]
+ 
+    if form_dict.get("password"):
+        user.password = form_dict["password"]
+ 
+    # optional profile fields
+    user.username    = form_dict.get("username") or None
+    user.bio         = form_dict.get("bio") or None
+    user.location    = form_dict.get("location") or None
+    user.website_url = form_dict.get("website_url") or None
+    user.github_url  = form_dict.get("github_url") or None
+    user.twitter_url = form_dict.get("twitter_url") or None
+ 
+    # --- avatar logic ---
+    if remove_avatar and user.profile_picture:
+        _delete_avatar_file(user.profile_picture)
+        user.profile_picture = None
+ 
+    elif avatar_file and avatar_file.filename:
+        ext = avatar_file.filename.rsplit(".", 1)[-1].lower()
+        if ext in ALLOWED_AVATAR_EXTENSIONS:
+            os.makedirs(AVATAR_UPLOAD_FOLDER, exist_ok=True)
+            # remove old file first
+            if user.profile_picture:
+                _delete_avatar_file(user.profile_picture)
+            filename = f"{uuid.uuid4().hex}.{ext}"
+            avatar_file.save(os.path.join(AVATAR_UPLOAD_FOLDER, filename))
+            user.profile_picture = filename
+ 
     db.session.commit()
+    return True
+ 
+ 
+def _delete_avatar_file(filename: str) -> None:
+    """Delete an avatar file from disk if it exists."""
+    if not filename:
+        return
+    path = os.path.join(AVATAR_UPLOAD_FOLDER, filename)
+    if os.path.isfile(path):
+        os.remove(path)
+
+
 
 def connected(user) -> bool:
     """connected an user"""
@@ -178,18 +238,22 @@ def promote_remove_user_admin(user_id , action) -> bool:
 # Delete
 
 def delete_user_core(id) -> bool:
-    """Delete the user to the DB"""
-    # give the right to admin 
+    """Delete the user from the DB and clean up their avatar file."""
     rules = RuleModel.get_rules_of_user_with_id(id)
     RuleModel.give_all_right_to_admin(rules)
-
+ 
     user = get_user(id)
-    if user:
-        db.session.delete(user)
-        db.session.commit()
-        return True
-    else:
+    if not user:
         return False
+ 
+    # clean up avatar file before DB delete
+    if user.profile_picture:
+        _delete_avatar_file(user.profile_picture)
+ 
+    db.session.delete(user)
+    db.session.commit()
+    return True
+
 
 # Read
 
