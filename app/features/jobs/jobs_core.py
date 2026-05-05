@@ -170,22 +170,67 @@ def get_jobs_for_user(user_id, args):
 
 
 def get_zombie_jobs():
-    """Jobs stuck at 'running' that the worker is no longer processing."""
-    return BackgroundJob.query.filter_by(status='running').all()
-
-
+    """
+    Detect jobs that are stuck and no longer being processed.
+ 
+    A zombie is:
+    - status='running' AND started more than 2 hours ago
+    - status='pending' AND created more than 6 hours ago
+    """
+    now               = datetime.datetime.now(datetime.timezone.utc)
+    threshold_running = now - datetime.timedelta(hours=2)
+    threshold_pending = now - datetime.timedelta(hours=6)
+    zombies           = []
+ 
+    stuck_running = BackgroundJob.query.filter(
+        BackgroundJob.status == 'running',
+        BackgroundJob.started_at < threshold_running,
+    ).all()
+    for job in stuck_running:
+        d = job.to_json()
+        d['zombie_reason'] = f"Running for over 2h (started {job.started_at.strftime('%Y-%m-%d %H:%M')})"
+        zombies.append(d)
+ 
+    stuck_pending = BackgroundJob.query.filter(
+        BackgroundJob.status == 'pending',
+        BackgroundJob.created_at < threshold_pending,
+    ).all()
+    for job in stuck_pending:
+        d = job.to_json()
+        d['zombie_reason'] = f"Pending for over 6h (created {job.created_at.strftime('%Y-%m-%d %H:%M')})"
+        zombies.append(d)
+ 
+    return zombies
+ 
+ 
 def kill_all_zombies():
-    """Force all running jobs to failed — use when worker crashed."""
+    """Force all zombie jobs (stuck running >2h or pending >6h) to failed."""
     try:
-        zombies = BackgroundJob.query.filter_by(status='running').all()
-        count   = len(zombies)
-        for job in zombies:
+        now               = datetime.datetime.now(datetime.timezone.utc)
+        threshold_running = now - datetime.timedelta(hours=2)
+        threshold_pending = now - datetime.timedelta(hours=6)
+ 
+        stuck = BackgroundJob.query.filter(
+            db.or_(
+                db.and_(BackgroundJob.status == 'running',
+                        BackgroundJob.started_at < threshold_running),
+                db.and_(BackgroundJob.status == 'pending',
+                        BackgroundJob.created_at < threshold_pending),
+            )
+        ).all()
+ 
+        count = len(stuck)
+        for job in stuck:
+            reason          = 'stuck running >2h' if job.status == 'running' else 'stuck pending >6h'
             job.status      = 'failed'
-            job.error       = 'Killed by admin — worker was not processing this job.'
-            job.finished_at = datetime.datetime.now(datetime.timezone.utc)
-            _log(job, "Job killed by admin — marked as failed.", level='error', event='killed')
+            job.error       = f'Killed by admin — job was {reason}.'
+            job.finished_at = now
+            _log(job,
+                 f"Job killed by admin ({reason}) — marked as failed.",
+                 level='error', event='killed')
+ 
         db.session.commit()
-        return True, count, "All zombie jobs killed."
+        return True, count, f"{count} zombie job(s) killed."
     except Exception as e:
         db.session.rollback()
         return False, 0, str(e)
