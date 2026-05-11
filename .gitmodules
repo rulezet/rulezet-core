@@ -7,3 +7,6 @@
 [submodule "app/modules/misp-galaxy"]
 	path = app/modules/misp-galaxy
 	url = https://github.com/MISP/misp-galaxy.git
+[submodule "app/modules/rulezet-cast"]
+	path = app/modules/rulezet-cast
+	url = https://github.com/rulezet/rulezet-cast.git
