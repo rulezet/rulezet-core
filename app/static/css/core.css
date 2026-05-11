@@ -2704,3 +2704,15 @@ body.dark-mode .d2h-code-side-line del {
   text-underline-offset: 3px;
   letter-spacing: 0.3px;
 }
+
+
+.fading-line-2 {
+  display: block;
+  border: none;
+  height: 1px;
+  padding: 0;
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.09), rgba(68, 109, 128, 0.75), rgba(0, 0, 0, 0.09));
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  margin: 0 0 1rem 0;
+}
