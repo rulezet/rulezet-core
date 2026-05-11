@@ -227,76 +227,136 @@
                         </div>
                   </div>
                   <div class="tab-pane fade" id="chap3-pane" role="tabpanel" aria-labelledby="chap3-tab">
-
+ 
                         <div class="card p-4 shadow-sm mb-3">
                               <h5 class="mb-2 d-flex align-items-center">
                                     <strong>
-                                          <label for="url" class="form-label m-0">
-                                                Import rules from GitHub project with URL
-                                          </label>
-                                          <span style="color:red">*</span>
+                                    <label for="url" class="form-label m-0">
+                                          Import rules from GitHub project with URL
+                                    </label>
+                                    <span style="color:red">*</span>
                                     </strong>
                                     <i class="fas fa-info-circle ms-2 text-primary" data-bs-toggle="collapse"
-                                          data-bs-target="#ruleInfo" role="button" aria-expanded="false"
-                                          aria-controls="ruleInfo" style="cursor:pointer;" title="More info"></i>
+                                    data-bs-target="#ruleInfo" role="button" aria-expanded="false"
+                                    aria-controls="ruleInfo" style="cursor:pointer;" title="More info"></i>
                               </h5>
-
+                        
                               <div class="collapse" id="ruleInfo">
                                     <div class="alert alert-info mt-2">
-                                          The script will attempt to parse the rules from the GitHub repository
-                                          according to their format (YARA, Sigma, Zeek, Suricata).
-                                          If any issues are detected during the rule validation, you will have the
-                                          opportunity to review and correct them in the "Bad Rules" section.
+                                    The script will attempt to parse the rules from the GitHub repository
+                                    according to their format (YARA, Sigma, Zeek, Suricata).
+                                    If any issues are detected during the rule validation, you will have the
+                                    opportunity to review and correct them in the "Bad Rules" section.
                                     </div>
                               </div>
-
+                        
                               {% if current_user.is_admin() %}
                               <div>
+                                    {# ── Import method toggle ─────────────────────────────────────── #}
                                     <div class="mb-3">
-                                          <input type="text" name="url" class="form-control w-100" id="url"
-                                                placeholder="https://github.com/your_username/project.git"
-                                                v-model="url">
+                                    <label class="form-label fw-bold">Import method</label>
+                                    <div class="d-flex gap-3 align-items-center flex-wrap">
+                                          <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="importMethod"
+                                                id="methodClassic" value="classic" v-model="importMethod">
+                                                <label class="form-check-label" for="methodClassic">
+                                                Classic <span class="text-muted small">(current)</span>
+                                                </label>
+                                          </div>
+                                          <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="importMethod"
+                                                id="methodRulecast" value="rulecast" v-model="importMethod">
+                                                <label class="form-check-label" for="methodRulecast">
+                                                RuleCast
+                                                <span class="badge bg-warning text-dark ms-1" style="font-size:0.7rem;">
+                                                      experimental
+                                                </span>
+                                                </label>
+                                          </div>
                                     </div>
-
+                        
+                                    {# RuleCast description — shown only when rulecast is selected #}
+                                    <div v-if="importMethod === 'rulecast'" class="alert alert-warning mt-2 mb-0 py-2 small">
+                                          <i class="fas fa-flask me-1"></i>
+                                          <strong>RuleCast (experimental)</strong> — uses
+                                          <code>can_handle()</code> to auto-detect formats per file.
+                                          Runs as a background job with live progress and per-rule logs.
+                                          .yml files that are not Sigma rules are automatically skipped.
+                                    </div>
+                                    </div>
+                        
+                                    <div class="mb-3">
+                                    <input type="text" name="url" class="form-control w-100" id="url"
+                                          placeholder="https://github.com/your_username/project.git"
+                                          v-model="url">
+                                    </div>
+                        
                                     <div id="github-url-error" style="color: brown;"></div>
-
+                        
                                     <div class="mb-3">
-                                          <strong><label for="license-select"
-                                                      class="form-label">License</label></strong>
-                                          <select id="license-select" name="license" class="form-control"
-                                                v-model="selectedLicense">
-                                                <option disabled value="">No license</option>
-                                                <option v-for="item in license" :key="item" :value="item">[[ item ]]
-                                                </option>
-                                          </select>
+                                    <strong><label for="license-select" class="form-label">License</label></strong>
+                                    <select id="license-select" name="license" class="form-control"
+                                          v-model="selectedLicense">
+                                          <option disabled value="">No license</option>
+                                          <option v-for="item in license" :key="item" :value="item">[[ item ]]</option>
+                                    </select>
                                     </div>
-
+                        
+                                    {# ── Classic button ───────────────────────────────────────────── #}
+                                    <template v-if="importMethod === 'classic'">
                                     <button v-if="!is_loading" type="submit" class="btn btn-primary"
                                           @click="import_git_url()">
                                           <i class="fas fa-paper-plane"></i> Send
                                     </button>
-
                                     <button v-else class="btn btn-primary" type="button" disabled>
                                           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                                           <span role="status">Loading...</span>
                                     </button>
+                                    </template>
+                        
+                                    {# ── RuleCast button ──────────────────────────────────────────── #}
+                                    <template v-if="importMethod === 'rulecast'">
+                                    <button v-if="!is_loading_rulecast && !rulecastJobUuid" type="button"
+                                          class="btn btn-warning text-dark"
+                                          @click="import_git_url_rulecast()">
+                                          <i class="fas fa-flask me-1"></i> Import with RuleCast
+                                    </button>
+                                    <button v-else-if="is_loading_rulecast" class="btn btn-warning text-dark"
+                                          type="button" disabled>
+                                          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                                          <span role="status">Creating job…</span>
+                                    </button>
+                                    </template>
+                        
+                                    {# ── RuleCast job tracker ─────────────────────────────────────── #}
+                                    <div v-if="rulecastJobUuid" class="mt-4">
+                                    <job-tracker
+                                          :job-uuid="rulecastJobUuid"
+                                          :poll-interval="2000"
+                                          @done="onRulecastDone"
+                                          @failed="onRulecastFailed">
+                                    </job-tracker>
+                        
+                                    <div class="mt-2">
+                                          <a :href="'/jobs/list'" class="btn btn-sm btn-outline-secondary" target="_blank">
+                                                <i class="fas fa-list me-1"></i> View all jobs
+                                          </a>
+                                    </div>
+                                    </div>
                               </div>
                               {% else %}
                               <div>
                                     <span class="mt-2">
-                                          <strong>You need to be an admin to import rules from GitHub.</strong>
+                                    <strong>You need to be an admin to import rules from GitHub.</strong>
                                     </span>
-
-
-
                                     <div class="mt-2">
-                                          <a href="/account/login" class="btn btn-primary">Login</a>
+                                    <a href="/account/login" class="btn btn-primary">Login</a>
                                     </div>
-
                               </div>
                               {% endif %}
                         </div>
-                  </div>
+                        </div>
+
                   <div class="tab-pane fade" id="chap4-pane" role="tabpanel" aria-labelledby="chap4-tab">
                         <!-- <div class="card card-body shadow-sm">
                               <form action="/rule/import_rules_from_zip" method="post" enctype="multipart/form-data">
@@ -468,6 +528,7 @@
       import CodeMirrorEditor from '/static/js/codeMirror/codeMirrorEditor.js';
       import TagInput from '/static/js/tags/tagInput.js';
       import VersionPicker from '/static/js/tags/utils/versionPicker.js';
+      import JobTracker from '/static/js/jobs/JobTracker.js';
 
       createApp({
             delimiters: ['[[', ']]'],
@@ -475,7 +536,8 @@
                   'vulnerability-input': VulnerabilityInput,
                   'codemirror-editor': CodeMirrorEditor,
                   'tag-input': TagInput,
-                  'version-picker': VersionPicker
+                  'version-picker': VersionPicker,
+                  'job-tracker': JobTracker,
             },
             setup() {
                   const license = ref([]);
@@ -486,6 +548,11 @@
                   const number_rules_formats = ref(0)
 
                   const is_loading = ref(false)
+
+                  const importMethod        = ref('classic');
+                  const is_loading_rulecast = ref(false);
+                  const rulecastJobUuid     = ref(null);
+
                   const ruleType = ref('');
 
                   async function fetchRules() {
@@ -544,6 +611,36 @@
                         is_loading.value = false
                   }
 
+                  async function import_git_url_rulecast() {
+                        is_loading_rulecast.value = true;
+                        $("#github-url-error").text("");
+                        if (!url.value) {
+                              $("#github-url-error").text("Need to give a URL");
+                              is_loading_rulecast.value = false;
+                              return;
+                        }
+                        const res = await fetch('/rule/import_rules_from_github_rulecast', {
+                              headers: { "X-CSRFToken": $("#csrf_token").val(), "Content-Type": "application/json" },
+                              method: "POST",
+                              body: JSON.stringify({ url: url.value, license: selectedLicense.value })
+                        });
+                        const data = await res.json();
+                        if (res.status === 201) {
+                              rulecastJobUuid.value = data.job_uuid;
+                              create_message("RuleCast import job created — see progress below.", "success-subtle");
+                        } else {
+                              create_message(data.message, data.toast_class || "danger-subtle");
+                        }
+                        is_loading_rulecast.value = false;
+                  }
+
+                  function onRulecastDone(job) {
+                        create_message(`RuleCast import complete — ${job.done} rule(s) processed.`, "success-subtle");
+                  }
+
+                  function onRulecastFailed(job) {
+                        create_message(`RuleCast import failed: ${job.error || "unknown error"}`, "danger-subtle");
+                  }
                   const fileZip = ref(null)
                   const selectedLicenseZip = ref("")
                   const is_loading_zip = ref(false)
@@ -615,7 +712,13 @@
                         selectedTags,
                         TagInput,
                         VersionPicker,
-                        formData
+                        formData,
+                        importMethod,
+                        is_loading_rulecast,
+                        rulecastJobUuid,
+                        import_git_url_rulecast,
+                        onRulecastDone,
+                        onRulecastFailed,
                   };
             }
       }).mount('#main-container');

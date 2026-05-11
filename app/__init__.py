@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
@@ -7,7 +9,6 @@ from flask_login import LoginManager
 from flask_session import Session
 from sqlalchemy.orm import sessionmaker
 from config import config as Config
-import os
 from flask_mail import Mail, Message
 
 load_dotenv()
@@ -66,8 +67,20 @@ def create_app():
     app.register_blueprint(api_blueprint, url_prefix="/api")
 
 
-    from app.features.jobs import job_handlers  # noqa
+    from app.features.jobs import job_handlers           # noqa
+    from app.features.jobs import job_handlers_rulecast  # noqa
     from app.features.jobs.job_worker import start_worker
+
+    # Install rulecast dependencies once at startup
+    import subprocess, sys
+    rulecast_req = os.path.join(os.path.dirname(__file__), 'modules', 'rulezet-cast', 'requirements.txt')
+    if os.path.exists(rulecast_req):
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', rulecast_req, '-q'], check=False)
+    # Add rulecast to sys.path permanently for the worker thread
+    rulecast_path = os.path.join(os.path.dirname(__file__), 'modules', 'rulezet-cast')
+    if rulecast_path not in sys.path:
+        sys.path.insert(0, rulecast_path)
+
     start_worker(app)
 
     return app

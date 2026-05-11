@@ -2447,7 +2447,7 @@ def delete_all_rule_github():
     if count > LARGE_DELETE_THRESHOLD:
         # ── large delete → background job ────────────────────────────────────
         import app.features.jobs.jobs_core as JobsModel
-        label = f"Delete {count} rule(s) from {url.split('github.com/')[-1]}"
+        label = f"[Delete github] Delete {count} rule(s) from {url.split('github.com/')[-1]}"
         job = JobsModel.create_job(
             job_type='delete_github_rules',
             payload={'urls': [url.strip()]},
@@ -3259,3 +3259,63 @@ def bulk_tag():
         return render_template('jobs/bulk_tag.html')
     else:
         return render_template('access_denied.html')
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADD THIS ROUTE in rule.py, right after import_rules_from_github()
+# (around line 1994, after the closing of that function)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@rule_blueprint.route("/import_rules_from_github_rulecast", methods=['POST'])
+@login_required
+def import_rules_from_github_rulecast():
+    """
+    Clone a GitHub repo and import rules via RuleCast (experimental).
+    Creates a BackgroundJob instead of using Session_class.
+    Uses can_handle() to correctly detect format — .yml files that are NOT
+    Sigma rules are skipped automatically.
+    """
+    try:
+        from app.features.jobs import jobs_core as JobsModel
+
+        repo_url         = request.json.get('url', '').strip()
+        selected_license = request.json.get('license', '')
+
+        if not repo_url:
+            return {"message": "Please enter a valid URL.", "toast_class": "danger-subtle"}, 400
+
+        verif = valider_repo_github(repo_url)
+        if not verif:
+            return {"message": "Please enter a valid GitHub URL.", "toast_class": "danger-subtle"}, 400
+
+        repo_dir, _ = clone_or_access_repo(repo_url)
+        if not repo_dir:
+            return {"message": "Failed to clone or access the repository.", "toast_class": "danger-subtle"}, 400
+
+        info = github_repo_metadata(repo_url, selected_license)
+
+        payload = {
+            "repo_url": repo_url,
+            "repo_dir": repo_dir,
+            "license":  selected_license,
+            "user_id":  current_user.id,
+            "info":     info,
+        }
+
+        job = JobsModel.create_job(
+            job_type   = 'import_github_rulecast',
+            payload    = payload,
+            label      = f"[RuleCast] Import {repo_url}",
+            created_by = current_user.id,
+        )
+
+        if not job:
+            return {"message": "Failed to create job.", "toast_class": "danger-subtle"}, 500
+
+        return {
+            "message":    "Import job created!",
+            "toast_class": "success-subtle",
+            "job_uuid":   job.uuid,
+        }, 201
+
+    except Exception as e:
+        return {"message": f"Error: {str(e)}", "toast_class": "danger-subtle"}, 400

@@ -20,6 +20,7 @@ from app.features.jobs.job_worker import register_handler
 from app import db
 from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJobLog
 
+
 BATCH_SIZE = 2000   # bulk_insert_mappings handles large batches efficiently
 
 LOG_EVERY  = 10     # write a progress log line every N batches

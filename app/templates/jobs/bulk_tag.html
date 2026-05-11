@@ -610,7 +610,7 @@
                     ? 'bulk_add_tag_to_rules'
                     : 'bulk_remove_tag_from_rules';
 
-                const label = `${action.value === 'add' ? 'Add' : 'Remove'} `
+                const label = `${action.value === 'add' ? '[Add]' : '[Remove]'} `
                     + `${selectedTags.value.length} tag(s) on `
                     + `${sel.count.toLocaleString()} rule(s) `
                     + `(${sel.isAllMode ? 'all matching' : 'manual pick'})`;
