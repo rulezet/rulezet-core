@@ -90,6 +90,11 @@
     #sidebar::-webkit-scrollbar { width: 4px; }
     #sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
 
+    .logo-light { display: block; }
+    .logo-dark  { display: none;  }
+    [data-theme="dark"] .logo-light { display: none;  }
+    [data-theme="dark"] .logo-dark  { display: block; }
+
     .sidebar-brand {
       display: flex;
       align-items: center;
@@ -571,7 +576,8 @@
 <!-- ═══════════════════════════ SIDEBAR ═══════════════════════════ -->
 <nav id="sidebar">
   <a href="#intro" class="sidebar-brand">
-    <i class="fas fa-shield-halved" style="color:#7eb3f8;font-size:1.2rem;"></i>
+    <img src="image/logo.png"      class="logo-light" height="40" alt="Rulezet">
+    <img src="image/logo_dark.png" class="logo-dark"  height="40" alt="Rulezet">
     <span class="sidebar-brand-name">Rulezet</span>
     <span class="sidebar-brand-badge">DOCS</span>
   </a>
