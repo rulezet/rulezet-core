@@ -1,0 +1,2331 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rulezet — Developer Documentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.3.0/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-theme" />
+  <style>
+    :root {
+      --sidebar-color: rgb(15, 23, 42);
+      --sidebar-width: 280px;
+      --bg-color: #f7f7f7;
+      --text-color: #1e1e1e;
+      --card-bg-color: #f9f9f9;
+      --light-bg-color: #f1f1f1;
+      --code-bg-color: #f8f9fa;
+      --border-color: #dee2e6;
+      --rule-name-color: rgb(10, 88, 202);
+      --indigo-solid: #4f46e5;
+      --pink-solid: #db2777;
+      --muted-color: #6c757d;
+      --header-bg: #ffffff;
+      --shadow: 0 1px 4px rgba(0,0,0,.08);
+      --sidebar-link: #94a3b8;
+      --sidebar-link-hover: #e2e8f0;
+      --sidebar-link-active: #7eb3f8;
+      --sidebar-section: #475569;
+      --tag-bg: #e0e7ff;
+      --tag-color: #3730a3;
+      --badge-green-bg: #d1fae5;
+      --badge-green-color: #065f46;
+      --badge-red-bg: #fee2e2;
+      --badge-red-color: #991b1b;
+      --badge-blue-bg: #dbeafe;
+      --badge-blue-color: #1e40af;
+      --badge-yellow-bg: #fef9c3;
+      --badge-yellow-color: #854d0e;
+    }
+
+    [data-theme="dark"] {
+      --bg-color: #1e293b;
+      --sidebar-color: #1a2744;
+      --card-bg-color: #2d3f55;
+      --text-color: #e2e8f0;
+      --rule-name-color: #7eb3f8;
+      --border-color: #3d5068;
+      --light-bg-color: #253449;
+      --code-bg-color: #1e2d3d;
+      --muted-color: #94a3b8;
+      --header-bg: #1e293b;
+      --shadow: 0 1px 4px rgba(0,0,0,.3);
+      --tag-bg: #312e81;
+      --tag-color: #a5b4fc;
+      --badge-green-bg: #064e3b;
+      --badge-green-color: #6ee7b7;
+      --badge-red-bg: #7f1d1d;
+      --badge-red-color: #fca5a5;
+      --badge-blue-bg: #1e3a5f;
+      --badge-blue-color: #93c5fd;
+      --badge-yellow-bg: #422006;
+      --badge-yellow-color: #fde68a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 0;
+      transition: background .25s, color .25s;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: var(--sidebar-width);
+      background: var(--sidebar-color);
+      overflow-y: auto;
+      z-index: 100;
+      padding-bottom: 2rem;
+    }
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+    .logo-light { display: block; }
+    .logo-dark  { display: none;  }
+    [data-theme="dark"] .logo-light { display: none;  }
+    [data-theme="dark"] .logo-dark  { display: block; }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: 1.25rem 1.2rem 1rem;
+      border-bottom: 1px solid #1e2d42;
+      text-decoration: none;
+    }
+    .sidebar-brand-name {
+      font-family: 'Space Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      letter-spacing: -.5px;
+    }
+    .sidebar-brand-badge {
+      font-size: .6rem;
+      background: var(--indigo-solid);
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-family: 'Space Mono', monospace;
+    }
+
+    .sidebar-section-title {
+      font-family: 'Space Mono', monospace;
+      font-size: .62rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--sidebar-section);
+      padding: 1.2rem 1.2rem .35rem;
+    }
+
+    .sidebar-nav a {
+      display: flex;
+      align-items: center;
+      gap: .55rem;
+      padding: .38rem 1.2rem;
+      color: var(--sidebar-link);
+      text-decoration: none;
+      font-size: .82rem;
+      border-left: 3px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+    .sidebar-nav a:hover {
+      color: var(--sidebar-link-hover);
+      background: rgba(255,255,255,.04);
+    }
+    .sidebar-nav a.active {
+      color: var(--sidebar-link-active);
+      border-left-color: var(--sidebar-link-active);
+      background: rgba(126,179,248,.07);
+    }
+    .sidebar-nav a i { width: 14px; font-size: .8rem; }
+
+    /* ── Main content ── */
+    #main {
+      margin-left: var(--sidebar-width);
+      min-height: 100vh;
+    }
+
+    /* ── Top bar ── */
+    #topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--border-color);
+      padding: .65rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow);
+    }
+    .topbar-title {
+      font-family: 'Space Mono', monospace;
+      font-size: .85rem;
+      color: var(--muted-color);
+    }
+    .topbar-title span { color: var(--rule-name-color); }
+
+    /* ── Theme toggle ── */
+    .theme-toggle {
+      display: flex;
+      gap: .3rem;
+      background: var(--light-bg-color);
+      border-radius: 20px;
+      padding: 3px;
+    }
+    .theme-toggle button {
+      border: none;
+      background: transparent;
+      padding: .25rem .65rem;
+      border-radius: 14px;
+      font-size: .75rem;
+      cursor: pointer;
+      color: var(--muted-color);
+      transition: all .2s;
+    }
+    .theme-toggle button.active {
+      background: var(--card-bg-color);
+      color: var(--text-color);
+      box-shadow: var(--shadow);
+    }
+
+    /* ── Content ── */
+    #content {
+      padding: 2.5rem 2.5rem 4rem;
+      max-width: 1100px;
+    }
+
+    /* ── Sections ── */
+    .doc-section {
+      margin-bottom: 3.5rem;
+      scroll-margin-top: 70px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: .75rem;
+      border-bottom: 2px solid var(--border-color);
+    }
+    .section-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .95rem;
+      flex-shrink: 0;
+    }
+    .icon-indigo { background: rgba(79,70,229,.15); color: var(--indigo-solid); }
+    .icon-blue   { background: rgba(10,88,202,.12); color: var(--rule-name-color); }
+    .icon-green  { background: rgba(16,185,129,.12); color: #10b981; }
+    .icon-pink   { background: rgba(219,39,119,.12); color: var(--pink-solid); }
+    .icon-orange { background: rgba(245,158,11,.12); color: #f59e0b; }
+    .icon-purple { background: rgba(139,92,246,.12); color: #8b5cf6; }
+    .icon-teal   { background: rgba(20,184,166,.12); color: #14b8a6; }
+    .icon-red    { background: rgba(239,68,68,.12); color: #ef4444; }
+    .icon-gray   { background: rgba(100,116,139,.12); color: #64748b; }
+
+    .section-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text-color);
+      margin: 0;
+    }
+
+    h3.subsection {
+      font-family: 'Space Mono', monospace;
+      font-size: .95rem;
+      font-weight: 700;
+      color: var(--text-color);
+      margin: 1.75rem 0 .75rem;
+    }
+    h3.subsection::before {
+      content: '# ';
+      color: var(--indigo-solid);
+    }
+
+    h4.subsubsection {
+      font-family: 'Space Mono', monospace;
+      font-size: .82rem;
+      color: var(--muted-color);
+      margin: 1.25rem 0 .5rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    /* ── Cards ── */
+    .doc-card {
+      background: var(--card-bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+      box-shadow: var(--shadow);
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .doc-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    /* ── Code ── */
+    pre, code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    code:not(pre code) {
+      background: var(--code-bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: .82em;
+      color: var(--pink-solid);
+    }
+    pre {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 1.1rem 1.3rem;
+      overflow-x: auto;
+      font-size: .8rem;
+      line-height: 1.65;
+      margin: .75rem 0 1rem;
+      border: 1px solid #1e2d42;
+    }
+    pre code { background: none; border: none; padding: 0; color: #e2e8f0; font-size: inherit; }
+
+    .code-label {
+      font-family: 'Space Mono', monospace;
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #475569;
+      background: #1e2d42;
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 4px 4px 0 0;
+      margin-bottom: -1px;
+    }
+
+    /* ── Badges ── */
+    .badge-method {
+      font-family: 'Space Mono', monospace;
+      font-size: .65rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: .04em;
+    }
+    .badge-get    { background: var(--badge-green-bg); color: var(--badge-green-color); }
+    .badge-post   { background: var(--badge-blue-bg);  color: var(--badge-blue-color);  }
+    .badge-put    { background: var(--badge-yellow-bg);color: var(--badge-yellow-color);}
+    .badge-delete { background: var(--badge-red-bg);   color: var(--badge-red-color);   }
+
+    .badge-format {
+      font-family: 'Space Mono', monospace;
+      font-size: .68rem;
+      background: var(--tag-bg);
+      color: var(--tag-color);
+      padding: 2px 9px;
+      border-radius: 10px;
+      font-weight: 700;
+    }
+
+    .badge-status {
+      font-size: .7rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-family: 'Space Mono', monospace;
+    }
+    .badge-ok   { background: var(--badge-green-bg); color: var(--badge-green-color); }
+    .badge-auth { background: var(--badge-blue-bg);  color: var(--badge-blue-color);  }
+    .badge-priv { background: var(--badge-yellow-bg);color: var(--badge-yellow-color);}
+
+    /* ── Tables ── */
+    .custom-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .83rem;
+      margin-bottom: 1.25rem;
+    }
+    .custom-table th {
+      font-family: 'Space Mono', monospace;
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted-color);
+      padding: .55rem .9rem;
+      background: var(--light-bg-color);
+      border: 1px solid var(--border-color);
+      text-align: left;
+    }
+    .custom-table td {
+      padding: .55rem .9rem;
+      border: 1px solid var(--border-color);
+      vertical-align: top;
+    }
+    .custom-table tr:hover td {
+      background: var(--light-bg-color);
+    }
+
+    /* ── API endpoint row ── */
+    .endpoint-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: .9rem 1.1rem;
+      background: var(--card-bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: .6rem;
+    }
+    .endpoint-path {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+      color: var(--text-color);
+      flex: 1;
+    }
+    .endpoint-desc {
+      font-size: .8rem;
+      color: var(--muted-color);
+    }
+
+    /* ── Info callouts ── */
+    .callout {
+      border-left: 4px solid;
+      padding: .85rem 1.1rem;
+      border-radius: 0 8px 8px 0;
+      margin: 1rem 0;
+      font-size: .85rem;
+    }
+    .callout-info   { border-color: var(--rule-name-color); background: var(--badge-blue-bg);   color: var(--badge-blue-color);  }
+    .callout-warn   { border-color: #f59e0b; background: var(--badge-yellow-bg); color: var(--badge-yellow-color); }
+    .callout-tip    { border-color: #10b981; background: var(--badge-green-bg);  color: var(--badge-green-color); }
+    .callout-danger { border-color: #ef4444; background: var(--badge-red-bg);    color: var(--badge-red-color);   }
+
+    /* ── Model field list ── */
+    .field-list { list-style: none; padding: 0; margin: 0; }
+    .field-list li {
+      display: flex;
+      align-items: baseline;
+      gap: .75rem;
+      padding: .35rem 0;
+      border-bottom: 1px solid var(--border-color);
+      font-size: .83rem;
+    }
+    .field-list li:last-child { border-bottom: none; }
+    .field-name {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--rule-name-color);
+      min-width: 190px;
+      flex-shrink: 0;
+    }
+    .field-type {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .74rem;
+      color: var(--pink-solid);
+      min-width: 100px;
+    }
+    .field-desc { color: var(--muted-color); }
+
+    /* ── Points table ── */
+    .points-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: .6rem;
+    }
+    .points-card {
+      background: var(--card-bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: .75rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: .83rem;
+    }
+    .points-value {
+      font-family: 'Space Mono', monospace;
+      font-weight: 700;
+      color: var(--indigo-solid);
+    }
+
+    /* ── Scroll to top ── */
+    #scroll-top {
+      position: fixed;
+      bottom: 1.75rem;
+      right: 1.75rem;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: var(--indigo-solid);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(79,70,229,.4);
+      z-index: 200;
+      font-size: .9rem;
+      transition: opacity .2s, transform .2s;
+    }
+    #scroll-top:hover { transform: translateY(-2px); }
+    #scroll-top.visible { display: flex; }
+
+    /* ── Hero ── */
+    .doc-hero {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #1e293b 100%);
+      border-radius: 12px;
+      padding: 2.5rem 2rem;
+      margin-bottom: 2rem;
+      color: #e2e8f0;
+      position: relative;
+      overflow: hidden;
+    }
+    .doc-hero::before {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 200px; height: 200px;
+      border-radius: 50%;
+      background: rgba(79,70,229,.15);
+    }
+    .doc-hero h1 {
+      font-family: 'Space Mono', monospace;
+      font-size: 1.9rem;
+      font-weight: 700;
+      margin-bottom: .5rem;
+      color: #fff;
+    }
+    .doc-hero p {
+      color: #94a3b8;
+      font-size: .95rem;
+      max-width: 600px;
+      margin: 0;
+    }
+    .version-pill {
+      display: inline-block;
+      background: rgba(79,70,229,.3);
+      border: 1px solid rgba(79,70,229,.5);
+      border-radius: 12px;
+      padding: 2px 12px;
+      font-family: 'Space Mono', monospace;
+      font-size: .72rem;
+      color: #a5b4fc;
+      margin-bottom: .75rem;
+    }
+
+    .stack-badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+    .stack-badge {
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: .75rem;
+      color: #cbd5e1;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    @media (max-width: 768px) {
+      #sidebar { transform: translateX(-100%); }
+      #main { margin-left: 0; }
+      #content { padding: 1.5rem 1rem 3rem; }
+    }
+
+    .anchor-offset { scroll-margin-top: 70px; }
+
+    hr.section-divider {
+      border: none;
+      border-top: 1px solid var(--border-color);
+      margin: 2rem 0;
+    }
+
+    .func-signature {
+      background: #0f172a;
+      border: 1px solid #1e2d42;
+      border-radius: 8px;
+      padding: .75rem 1.1rem;
+      margin: .5rem 0 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .8rem;
+      color: #e2e8f0;
+    }
+    .func-signature .fn-name { color: #7eb3f8; }
+    .func-signature .fn-param { color: #fca5a5; }
+    .func-signature .fn-ret { color: #6ee7b7; }
+    .func-signature .fn-comment { color: #475569; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ SIDEBAR ═══════════════════════════ -->
+<nav id="sidebar">
+  <a href="#intro" class="sidebar-brand">
+    <img src="image/logo.png"      class="logo-light" height="40" alt="Rulezet">
+    <img src="image/logo_dark.png" class="logo-dark"  height="40" alt="Rulezet">
+    <span class="sidebar-brand-name">Rulezet</span>
+    <span class="sidebar-brand-badge">DOCS</span>
+  </a>
+
+  <div class="sidebar-section-title">Overview</div>
+  <div class="sidebar-nav">
+    <a href="#intro"><i class="fas fa-home"></i> Introduction</a>
+    <a href="#architecture"><i class="fas fa-sitemap"></i> Architecture</a>
+    <a href="#configuration"><i class="fas fa-cog"></i> Configuration</a>
+    <a href="#commands"><i class="fas fa-terminal"></i> Commands</a>
+  </div>
+
+  <div class="sidebar-section-title">Data Layer</div>
+  <div class="sidebar-nav">
+    <a href="#models"><i class="fas fa-database"></i> Data Models</a>
+    <a href="#gamification"><i class="fas fa-trophy"></i> Gamification</a>
+  </div>
+
+  <div class="sidebar-section-title">Rule System</div>
+  <div class="sidebar-nav">
+    <a href="#rule-format"><i class="fas fa-file-code"></i> Format System</a>
+    <a href="#rule-formats-list"><i class="fas fa-list"></i> Supported Formats</a>
+    <a href="#rule-core"><i class="fas fa-gears"></i> Rule Core Logic</a>
+    <a href="#similarity"><i class="fas fa-code-compare"></i> Similarity Engine</a>
+  </div>
+
+  <div class="sidebar-section-title">Integrations</div>
+  <div class="sidebar-nav">
+    <a href="#github"><i class="fab fa-github"></i> GitHub Import</a>
+    <a href="#jobs"><i class="fas fa-layer-group"></i> Background Jobs</a>
+    <a href="#tags-bundles"><i class="fas fa-tags"></i> Tags &amp; Bundles</a>
+  </div>
+
+  <div class="sidebar-section-title">API Reference</div>
+  <div class="sidebar-nav">
+    <a href="#api-overview"><i class="fas fa-plug"></i> API Overview</a>
+    <a href="#api-auth"><i class="fas fa-key"></i> Authentication</a>
+    <a href="#api-rule-public"><i class="fas fa-unlock"></i> Rule Public</a>
+    <a href="#api-rule-private"><i class="fas fa-lock"></i> Rule Private</a>
+    <a href="#api-bundle"><i class="fas fa-box"></i> Bundle</a>
+    <a href="#api-account"><i class="fas fa-user"></i> Account</a>
+  </div>
+
+  <div class="sidebar-section-title">Quality</div>
+  <div class="sidebar-nav">
+    <a href="#testing"><i class="fas fa-flask"></i> Testing</a>
+    <a href="#blueprints"><i class="fas fa-map"></i> Blueprints</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════ TOPBAR ═══════════════════════════ -->
+<div id="main">
+  <div id="topbar">
+    <span class="topbar-title">Rulezet / <span>Developer Documentation</span></span>
+    <div class="theme-toggle">
+      <button id="btn-light" class="active" onclick="setTheme('light')"><i class="fas fa-sun"></i> Light</button>
+      <button id="btn-dark"  onclick="setTheme('dark')"><i class="fas fa-moon"></i> Dark</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ CONTENT ═══════════════════════════ -->
+  <div id="content">
+
+    <!-- ── HERO ── -->
+    <div class="doc-hero">
+      <div class="version-pill">v1.5.0</div>
+      <h1><i class="fas fa-shield-halved"></i> Rulezet</h1>
+      <p>Community-driven cybersecurity detection rules platform. Centralise, share, validate and manage YARA, Sigma, Suricata, Zeek, CRS, Wazuh, Elastic, NSE and Nova rules at scale.</p>
+      <div class="stack-badges">
+        <span class="stack-badge">Flask 3</span>
+        <span class="stack-badge">Flask-RESTX</span>
+        <span class="stack-badge">SQLAlchemy</span>
+        <span class="stack-badge">PostgreSQL</span>
+        <span class="stack-badge">Vue.js 3</span>
+        <span class="stack-badge">Bootstrap 5.3</span>
+        <span class="stack-badge">Flask-Login</span>
+        <span class="stack-badge">Flask-Migrate</span>
+        <span class="stack-badge">FAISS</span>
+        <span class="stack-badge">TF-IDF</span>
+        <span class="stack-badge">RapidFuzz</span>
+        <span class="stack-badge">GitPython</span>
+      </div>
+    </div>
+
+    <!-- ════════════════════════ INTRODUCTION ════════════════════════ -->
+    <section id="intro" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-indigo"><i class="fas fa-home"></i></div>
+        <h2 class="section-title">Introduction</h2>
+      </div>
+      <p>Rulezet is a full-stack web application built with <strong>Flask</strong> (Python) on the backend and <strong>Vue.js 3</strong> on the frontend. It lets security analysts import detection rules from GitHub repositories or create them manually, validate them, tag them, bundle them, comment on them, vote on them, and propose edits — all with a gamification layer that rewards contribution.</p>
+
+      <div class="doc-card-grid">
+        <div class="doc-card">
+          <h3.subsection style="font-family:'Space Mono',monospace;font-size:.85rem;font-weight:700;color:var(--rule-name-color);margin-bottom:.5rem;"><i class="fas fa-shield-halved"></i> Supported Rule Formats</h3.subsection>
+          <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem;">
+            <span class="badge-format">YARA</span>
+            <span class="badge-format">Sigma</span>
+            <span class="badge-format">Suricata</span>
+            <span class="badge-format">Zeek</span>
+            <span class="badge-format">CRS</span>
+            <span class="badge-format">Nova</span>
+            <span class="badge-format">NSE</span>
+            <span class="badge-format">Wazuh</span>
+            <span class="badge-format">Elastic</span>
+          </div>
+        </div>
+        <div class="doc-card">
+          <h3.subsection style="font-family:'Space Mono',monospace;font-size:.85rem;font-weight:700;color:var(--rule-name-color);margin-bottom:.5rem;"><i class="fas fa-folder-tree"></i> Entry Points</h3.subsection>
+          <ul style="margin:0;padding-left:1.1rem;font-size:.83rem;">
+            <li><code>app.py</code> — CLI runner, DB management</li>
+            <li><code>launch.sh</code> — dev/test/init helper</li>
+            <li><code>app/__init__.py</code> — <code>create_app()</code> factory</li>
+            <li><code>config.py</code> — environment configs</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════ ARCHITECTURE ════════════════════════ -->
+    <section id="architecture" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-blue"><i class="fas fa-sitemap"></i></div>
+        <h2 class="section-title">Architecture</h2>
+      </div>
+
+      <h3 class="subsection">Application Factory</h3>
+      <p>The app uses the Flask <strong>application factory</strong> pattern. <code>create_app()</code> in <code>app/__init__.py</code> wires up every extension and blueprint, then immediately calls <code>start_worker(app)</code> to boot the background job thread.</p>
+      <div class="func-signature">
+        <span class="fn-comment"># app/__init__.py</span><br>
+        def <span class="fn-name">create_app</span>(<span class="fn-param">config_name=None</span>) → <span class="fn-ret">Flask</span>:<br>
+        &nbsp;&nbsp;<span class="fn-comment"># Initialises: db, csrf, migrate, login_manager, sess, mail</span><br>
+        &nbsp;&nbsp;<span class="fn-comment"># Registers: all blueprints, api_blueprint (CSRF-exempt)</span><br>
+        &nbsp;&nbsp;<span class="fn-comment"># Calls: start_worker(app)</span>
+      </div>
+
+      <h3 class="subsection">Extension Initialization Order</h3>
+      <table class="custom-table">
+        <thead><tr><th>Extension</th><th>Object</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>Flask-SQLAlchemy</code></td><td><code>db</code></td><td>ORM, session management</td></tr>
+          <tr><td><code>Flask-Migrate</code></td><td><code>migrate</code></td><td>Alembic-based schema migrations</td></tr>
+          <tr><td><code>Flask-Login</code></td><td><code>login_manager</code></td><td>Session auth, <code>current_user</code></td></tr>
+          <tr><td><code>Flask-WTF / CSRFProtect</code></td><td><code>csrf</code></td><td>CSRF tokens (exempted for API)</td></tr>
+          <tr><td><code>Flask-Session</code></td><td><code>sess</code></td><td>Server-side sessions (SQLAlchemy or filesystem)</td></tr>
+          <tr><td><code>Flask-Mail</code></td><td><code>mail</code></td><td>Email notifications</td></tr>
+          <tr><td><code>Flask-RESTX</code></td><td><code>api</code></td><td>REST API + Swagger UI at <code>/api/</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Directory Layout</h3>
+      <pre><code>rulezet-core/
+├── app/
+│   ├── __init__.py           # create_app() factory
+│   ├── core/
+│   │   ├── db_class/db.py    # ALL SQLAlchemy models (1600+ lines)
+│   │   └── utils/            # decorators.py, utils.py
+│   ├── api/                  # Flask-RESTX namespaces
+│   │   ├── api.py            # Api object, namespace registration
+│   │   ├── rule/             # rule_public_api.py, rule_private_api.py
+│   │   ├── bundle/           # bundle_public_api.py, bundle_private_api.py
+│   │   └── account/          # account_public_api.py, account_private_api.py
+│   ├── features/
+│   │   ├── rule/
+│   │   │   ├── rule.py           # Flask Blueprint views
+│   │   │   ├── rule_core.py      # Business logic (add/update/delete rules)
+│   │   │   ├── rule_format/
+│   │   │   │   ├── abstract_rule_type/rule_type_abstract.py  # RuleType ABC
+│   │   │   │   ├── available_format/  # yara_format.py, sigma_format.py, …
+│   │   │   │   ├── main_format.py     # format orchestration helpers
+│   │   │   │   └── utils_format/
+│   │   │   ├── rule_from_github/
+│   │   │   │   ├── import_rule/session_class.py   # Session_class
+│   │   │   │   └── update_rule/update_class.py    # Update_class
+│   │   │   └── utils/similar_rules/similarity_class.py
+│   │   ├── jobs/
+│   │   │   ├── job_worker.py      # register_handler, start_worker
+│   │   │   ├── jobs_core.py       # CRUD + lifecycle helpers
+│   │   │   └── job_handlers.py    # concrete @register_handler functions
+│   │   ├── bundle/
+│   │   ├── tags/
+│   │   ├── account/
+│   │   └── home/
+│   ├── modules/               # pluggable front-end modules (rulezet-cast…)
+│   ├── static/css/core.css    # Design system & CSS variables
+│   └── templates/             # Jinja2 + Vue.js templates
+├── config.py                  # DevelopmentConfig / TestingConfig / ProductionConfig
+├── app.py                     # CLI entry point
+├── launch.sh                  # Helper script
+└── tests/                     # pytest suite</code></pre>
+
+      <h3 class="subsection">Request Lifecycle</h3>
+      <pre><code>Browser / API Client
+      │
+      ▼
+Flask Router
+      │
+      ├─► Web Blueprint (login_required via @login_required)
+      │         Jinja2 Template ◄── Vue.js 3 ([[ ]] delimiters)
+      │
+      └─► /api/... Blueprint (CSRF-exempt)
+                ├─ Public Namespaces  → no auth needed
+                └─ Private Namespaces → X-API-KEY header → verif_api_key() → @api_required</code></pre>
+    </section>
+
+    <!-- ════════════════════════ CONFIGURATION ════════════════════════ -->
+    <section id="configuration" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-orange"><i class="fas fa-cog"></i></div>
+        <h2 class="section-title">Configuration</h2>
+      </div>
+      <p>Configuration class is selected via the <code>FLASKENV</code> environment variable. All three classes inherit from a common <code>Config</code> base.</p>
+
+      <table class="custom-table">
+        <thead><tr><th>FLASKENV value</th><th>Class</th><th>Database</th><th>Session</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>development</code> (default)</td><td><code>DevelopmentConfig</code></td><td><code>postgresql:///rulezet</code></td><td>SQLAlchemy</td><td><code>DEBUG=True</code></td></tr>
+          <tr><td><code>testing</code></td><td><code>TestingConfig</code></td><td><code>sqlite:///rulezet-test.sqlite</code></td><td>filesystem</td><td>CSRF disabled, <code>TESTING=True</code></td></tr>
+          <tr><td><code>production</code></td><td><code>ProductionConfig</code></td><td><code>postgresql:///rulezet</code></td><td>SQLAlchemy</td><td><code>DEBUG=False</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Key Config Keys</h3>
+      <div class="doc-card">
+        <ul class="field-list">
+          <li><span class="field-name">SQLALCHEMY_DATABASE_URI</span><span class="field-type">str</span><span class="field-desc">Database connection string</span></li>
+          <li><span class="field-name">SECRET_KEY</span><span class="field-type">str</span><span class="field-desc">Flask session signing key</span></li>
+          <li><span class="field-name">SESSION_TYPE</span><span class="field-type">str</span><span class="field-desc">"sqlalchemy" (dev/prod) or "filesystem" (test)</span></li>
+          <li><span class="field-name">WTF_CSRF_ENABLED</span><span class="field-type">bool</span><span class="field-desc">False in testing only</span></li>
+          <li><span class="field-name">MAIL_SERVER / MAIL_PORT</span><span class="field-type">str/int</span><span class="field-desc">Email server configuration</span></li>
+          <li><span class="field-name">MAX_CONTENT_LENGTH</span><span class="field-type">int</span><span class="field-desc">Max upload size</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ════════════════════════ COMMANDS ════════════════════════ -->
+    <section id="commands" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-gray"><i class="fas fa-terminal"></i></div>
+        <h2 class="section-title">Commands &amp; Scripts</h2>
+      </div>
+
+      <h3 class="subsection">launch.sh</h3>
+      <div class="code-label">bash</div>
+      <pre><code>./launch.sh -l          # Run dev server (FLASKENV=development)
+./launch.sh -t          # Run test suite  (FLASKENV=testing pytest tests)
+./launch.sh -i          # Init database
+./launch.sh -r          # Recreate (drop + init) database
+./launch.sh -d          # Delete database</code></pre>
+
+      <h3 class="subsection">app.py CLI flags</h3>
+      <div class="code-label">bash</div>
+      <pre><code>python3 app.py           # Start the server
+python3 app.py -i        # Create all tables (db.create_all)
+python3 app.py -r        # Drop all + recreate
+python3 app.py -d        # Drop all tables</code></pre>
+
+      <h3 class="subsection">Flask-Migrate</h3>
+      <div class="code-label">bash</div>
+      <pre><code>flask db init            # Initialise migrations folder (once)
+flask db migrate -m "msg" # Generate migration from model changes
+flask db upgrade          # Apply pending migrations</code></pre>
+
+      <h3 class="subsection">Run a single test</h3>
+      <div class="code-label">bash</div>
+      <pre><code>FLASKENV=testing pytest tests/test_rule_api.py::test_search_rules -v</code></pre>
+    </section>
+
+    <!-- ════════════════════════ DATA MODELS ════════════════════════ -->
+    <section id="models" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-teal"><i class="fas fa-database"></i></div>
+        <h2 class="section-title">Data Models</h2>
+      </div>
+      <p>All models live in a single file: <code>app/core/db_class/db.py</code> (~1600 lines). All use <code>db.Model</code> from Flask-SQLAlchemy.</p>
+
+      <div class="callout callout-info"><i class="fas fa-circle-info"></i> A <code>before_flush</code> SQLAlchemy event listener (<code>receive_before_flush</code>) auto-updates <code>Gamification.score</code> and <code>level</code> whenever a relevant model is inserted or deleted.</div>
+
+      <h3 class="subsection">User &amp; Auth</h3>
+      <div class="doc-card">
+        <strong style="font-family:'Space Mono',monospace;font-size:.85rem;">User</strong>
+        <ul class="field-list" style="margin-top:.75rem;">
+          <li><span class="field-name">id</span><span class="field-type">Integer PK</span><span class="field-desc">Auto-increment primary key</span></li>
+          <li><span class="field-name">username</span><span class="field-type">String(50)</span><span class="field-desc">Unique display name</span></li>
+          <li><span class="field-name">email</span><span class="field-type">String(120)</span><span class="field-desc">Unique, used for login</span></li>
+          <li><span class="field-name">password</span><span class="field-type">String</span><span class="field-desc">Hashed (Werkzeug)</span></li>
+          <li><span class="field-name">api_key</span><span class="field-type">String(60)</span><span class="field-desc">REST API key — <code>generate_api_key()</code></span></li>
+          <li><span class="field-name">is_admin</span><span class="field-type">Boolean</span><span class="field-desc">Admin flag</span></li>
+          <li><span class="field-name">verified</span><span class="field-type">Boolean</span><span class="field-desc">Email verification</span></li>
+          <li><span class="field-name">created_at</span><span class="field-type">DateTime</span><span class="field-desc">Registration timestamp</span></li>
+        </ul>
+      </div>
+
+      <h3 class="subsection">Rule &amp; Format</h3>
+      <div class="doc-card-grid">
+        <div class="doc-card">
+          <strong style="font-family:'Space Mono',monospace;font-size:.85rem;">Rule</strong>
+          <ul class="field-list" style="margin-top:.75rem;">
+            <li><span class="field-name">id</span><span class="field-type">Integer PK</span></li>
+            <li><span class="field-name">uuid</span><span class="field-type">String(36)</span><span class="field-desc">Stable public identifier</span></li>
+            <li><span class="field-name">name</span><span class="field-type">String</span></li>
+            <li><span class="field-name">content</span><span class="field-type">Text</span><span class="field-desc">Raw rule text</span></li>
+            <li><span class="field-name">format_id</span><span class="field-type">FK → FormatRule</span></li>
+            <li><span class="field-name">author_id</span><span class="field-type">FK → User</span></li>
+            <li><span class="field-name">github_path</span><span class="field-type">String</span><span class="field-desc">Source file path in repo</span></li>
+            <li><span class="field-name">github_url</span><span class="field-type">String</span><span class="field-desc">Source repository URL</span></li>
+            <li><span class="field-name">description</span><span class="field-type">Text</span></li>
+            <li><span class="field-name">severity</span><span class="field-type">String</span></li>
+            <li><span class="field-name">score</span><span class="field-type">Integer</span><span class="field-desc">Vote aggregate</span></li>
+            <li><span class="field-name">created_at</span><span class="field-type">DateTime</span></li>
+            <li><span class="field-name">updated_at</span><span class="field-type">DateTime</span></li>
+          </ul>
+        </div>
+        <div class="doc-card">
+          <strong style="font-family:'Space Mono',monospace;font-size:.85rem;">FormatRule</strong>
+          <ul class="field-list" style="margin-top:.75rem;">
+            <li><span class="field-name">id</span><span class="field-type">Integer PK</span></li>
+            <li><span class="field-name">name</span><span class="field-type">String</span><span class="field-desc">Format identifier e.g. "yara"</span></li>
+            <li><span class="field-name">description</span><span class="field-type">Text</span></li>
+          </ul>
+          <br>
+          <strong style="font-family:'Space Mono',monospace;font-size:.85rem;">InvalidRuleModel</strong>
+          <ul class="field-list" style="margin-top:.75rem;">
+            <li><span class="field-name">id / uuid</span><span class="field-type">Integer / String</span></li>
+            <li><span class="field-name">content</span><span class="field-type">Text</span><span class="field-desc">Raw invalid rule text</span></li>
+            <li><span class="field-name">rule_type</span><span class="field-type">String</span></li>
+            <li><span class="field-name">error</span><span class="field-type">Text</span><span class="field-desc">Validation error message(s)</span></li>
+            <li><span class="field-name">user_id</span><span class="field-type">FK → User</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 class="subsection">Social &amp; Moderation</h3>
+      <table class="custom-table">
+        <thead><tr><th>Model</th><th>Key Fields</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>RuleVote</code></td><td>user_id, rule_id, value (+1/-1)</td><td>Upvote/downvote a rule</td></tr>
+          <tr><td><code>RuleFavoriteUser</code></td><td>user_id, rule_id</td><td>Bookmark a rule</td></tr>
+          <tr><td><code>Comment</code></td><td>user_id, rule_id, content, parent_id</td><td>Threaded comments on rules</td></tr>
+          <tr><td><code>RepportRule</code></td><td>user_id, rule_id, reason</td><td>Flag a rule for review</td></tr>
+          <tr><td><code>RequestOwnerRule</code></td><td>user_id, rule_id, status</td><td>Claim authorship of a rule</td></tr>
+          <tr><td><code>RuleEditProposal</code></td><td>rule_id, proposed_content, status</td><td>Community edit suggestion</td></tr>
+          <tr><td><code>RuleEditComment</code></td><td>proposal_id, user_id, content</td><td>Comments on edit proposals</td></tr>
+          <tr><td><code>RuleEditContribution</code></td><td>proposal_id, user_id</td><td>Track contributors of an edit</td></tr>
+          <tr><td><code>RuleUpdateHistory</code></td><td>rule_id, old_content, new_content, updated_at</td><td>Diff history for a rule</td></tr>
+          <tr><td><code>NewRule</code></td><td>user_id, format, content</td><td>Pending rule submission queue</td></tr>
+          <tr><td><code>RuleStatus</code></td><td>rule_id, status, reason</td><td>Review/approval status</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Tags</h3>
+      <div class="doc-card-grid">
+        <div class="doc-card">
+          <strong style="font-family:'Space Mono',monospace;font-size:.85rem;">Tag</strong>
+          <ul class="field-list" style="margin-top:.5rem;">
+            <li><span class="field-name">id</span><span class="field-type">Integer PK</span></li>
+            <li><span class="field-name">name</span><span class="field-type">String</span><span class="field-desc">Unique tag label</span></li>
+            <li><span class="field-name">color</span><span class="field-type">String</span><span class="field-desc">Hex colour for badge</span></li>
+            <li><span class="field-name">created_by</span><span class="field-type">FK → User</span></li>
+          </ul>
+        </div>
+        <div class="doc-card">
+          <strong style="font-family:'Space Mono',monospace;font-size:.85rem;">RuleTagAssociation</strong>
+          <ul class="field-list" style="margin-top:.5rem;">
+            <li><span class="field-name">rule_id</span><span class="field-type">FK → Rule</span></li>
+            <li><span class="field-name">tag_id</span><span class="field-type">FK → Tag</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 class="subsection">Bundles</h3>
+      <table class="custom-table">
+        <thead><tr><th>Model</th><th>Key Fields</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>Bundle</code></td><td>id, uuid, name, description, user_id, is_public, score</td><td>Named collection of rules</td></tr>
+          <tr><td><code>BundleNode</code></td><td>bundle_id, rule_id, position</td><td>Ordered rule within a bundle</td></tr>
+          <tr><td><code>BundleRuleAssociation</code></td><td>bundle_id, rule_id</td><td>Many-to-many bridge</td></tr>
+          <tr><td><code>BundleTagAssociation</code></td><td>bundle_id, tag_id</td><td>Tags on a bundle</td></tr>
+          <tr><td><code>BundleVote</code></td><td>user_id, bundle_id, value</td><td>Vote on a bundle</td></tr>
+          <tr><td><code>CommentBundle</code></td><td>user_id, bundle_id, content</td><td>Comments on a bundle</td></tr>
+          <tr><td><code>BundleReactionComment</code></td><td>comment_id, user_id, reaction</td><td>Emoji reactions on bundle comments</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">GitHub &amp; Import</h3>
+      <table class="custom-table">
+        <thead><tr><th>Model</th><th>Key Fields</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>ImporterResult</code></td><td>uuid, info (JSON), bad_rules, imported, skipped, total, count_per_format (JSON), query_date, user_id</td><td>Persisted result of a GitHub import session</td></tr>
+          <tr><td><code>UpdateResult</code></td><td>uuid, info (JSON), updated, skipped, errors, query_date, user_id</td><td>Persisted result of a GitHub update session</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Background Jobs</h3>
+      <table class="custom-table">
+        <thead><tr><th>Model</th><th>Key Fields</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>BackgroundJob</code></td><td>uuid, job_type, status (pending/running/done/failed/cancelled/paused), payload (JSON), label, created_by (FK→User), created_at, started_at, finished_at</td><td>Persistent job record</td></tr>
+          <tr><td><code>BackgroundJobLog</code></td><td>job_id (FK→BackgroundJob), message, level, created_at</td><td>Log entries for a job</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Similarity</h3>
+      <table class="custom-table">
+        <thead><tr><th>Model</th><th>Key Fields</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>RuleSimilarity</code></td><td>rule_id_a, rule_id_b, score (float), method</td><td>Stores pre-computed similarity pairs</td></tr>
+          <tr><td><code>SimilarResult</code></td><td>session_uuid, rule_id, similar_rule_id, score</td><td>Per-session similarity results</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Gamification</h3>
+      <div class="doc-card">
+        <strong style="font-family:'Space Mono',monospace;font-size:.85rem;">Gamification</strong>
+        <ul class="field-list" style="margin-top:.5rem;">
+          <li><span class="field-name">user_id</span><span class="field-type">FK → User</span><span class="field-desc">One-to-one with User</span></li>
+          <li><span class="field-name">score</span><span class="field-type">Integer</span><span class="field-desc">Cumulative points, auto-updated</span></li>
+          <li><span class="field-name">level</span><span class="field-type">Integer</span><span class="field-desc">Derived from score thresholds</span></li>
+          <li><span class="field-name">rules_owned</span><span class="field-type">Integer</span></li>
+          <li><span class="field-name">suggestions_accepted</span><span class="field-type">Integer</span></li>
+          <li><span class="field-name">rules_liked_or_disliked</span><span class="field-type">Integer</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ════════════════════════ GAMIFICATION ════════════════════════ -->
+    <section id="gamification" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-orange"><i class="fas fa-trophy"></i></div>
+        <h2 class="section-title">Gamification</h2>
+      </div>
+      <p>Points are automatically calculated by a <code>before_flush</code> SQLAlchemy event. The <code>POINTS</code> dict and <code>LEVEL_THRESHOLDS</code> dict live in <code>app/core/db_class/db.py</code>.</p>
+
+      <h3 class="subsection">Point Values</h3>
+      <div class="points-grid">
+        <div class="points-card"><span>suggestions_accepted</span><span class="points-value">+100</span></div>
+        <div class="points-card"><span>rules_owned</span><span class="points-value">+10</span></div>
+        <div class="points-card"><span>rules_liked_or_disliked</span><span class="points-value">+1</span></div>
+      </div>
+
+      <h3 class="subsection">Level Thresholds (LEVEL_THRESHOLDS)</h3>
+      <table class="custom-table">
+        <thead><tr><th>Level</th><th>Min Score</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>0</td></tr>
+          <tr><td>2</td><td>500</td></tr>
+          <tr><td>3</td><td>15 000</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Event Listener</h3>
+      <div class="func-signature">
+        <span class="fn-comment"># Registered in db.py</span><br>
+        event.listen(<span class="fn-param">db.session</span>, <span class="fn-param">'before_flush'</span>, <span class="fn-name">receive_before_flush</span>)<br><br>
+        <span class="fn-comment"># receive_before_flush scans session.new / session.deleted</span><br>
+        <span class="fn-comment"># for Rule, RuleVote, RuleEditContribution instances</span><br>
+        <span class="fn-comment"># and adjusts the related Gamification row accordingly</span>
+      </div>
+    </section>
+
+    <!-- ════════════════════════ RULE FORMAT SYSTEM ════════════════════════ -->
+    <section id="rule-format" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-purple"><i class="fas fa-file-code"></i></div>
+        <h2 class="section-title">Rule Format System</h2>
+      </div>
+      <p>All format support is built around an abstract base class <code>RuleType</code> in <code>app/features/rule/rule_format/abstract_rule_type/rule_type_abstract.py</code>. Each format is a subclass discovered automatically via <code>pkgutil.iter_modules</code>.</p>
+
+      <h3 class="subsection">ValidationResult Dataclass</h3>
+      <div class="doc-card">
+        <ul class="field-list">
+          <li><span class="field-name">ok</span><span class="field-type">bool</span><span class="field-desc">True if the rule passed validation</span></li>
+          <li><span class="field-name">errors</span><span class="field-type">List[str]</span><span class="field-desc">Validation error messages</span></li>
+          <li><span class="field-name">warnings</span><span class="field-type">List[str]</span><span class="field-desc">Non-fatal warnings</span></li>
+          <li><span class="field-name">normalized_content</span><span class="field-type">Optional[str]</span><span class="field-desc">Cleaned/normalized rule text after validation</span></li>
+        </ul>
+      </div>
+
+      <h3 class="subsection">RuleType Abstract Methods</h3>
+      <table class="custom-table">
+        <thead><tr><th>Method / Property</th><th>Signature</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>format</code></td><td><code>@property → str</code></td><td>Format identifier (e.g. <code>"yara"</code>)</td></tr>
+          <tr><td><code>get_class()</code></td><td><code>→ str</code></td><td>Human-readable class name</td></tr>
+          <tr><td><code>validate(content)</code></td><td><code>str → ValidationResult</code></td><td>Parse + validate raw rule text</td></tr>
+          <tr><td><code>parse_metadata(content, info, validation_result)</code></td><td><code>str, dict, ValidationResult → dict</code></td><td>Extract structured metadata dict from rule</td></tr>
+          <tr><td><code>get_rule_files(file)</code></td><td><code>str → bool</code></td><td>Whether a filename belongs to this format</td></tr>
+          <tr><td><code>extract_rules_from_file(filepath)</code></td><td><code>str → List[str]</code></td><td>Split a file into individual rule strings</td></tr>
+          <tr><td><code>find_rule_in_repo(repo_dir, rule_id)</code></td><td><code>str, str → Optional[str]</code></td><td>Locate a specific rule by ID in a cloned repo</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Auto-Discovery</h3>
+      <div class="func-signature">
+        <span class="fn-comment"># rule_type_abstract.py</span><br>
+        def <span class="fn-name">load_all_rule_formats</span>() → <span class="fn-ret">None</span>:<br>
+        &nbsp;&nbsp;<span class="fn-comment"># Uses pkgutil.iter_modules on available_format/ package</span><br>
+        &nbsp;&nbsp;<span class="fn-comment"># Imports each module so RuleType.__subclasses__() is populated</span>
+      </div>
+      <div class="callout callout-tip"><i class="fas fa-lightbulb"></i> To add a new format, create a file in <code>app/features/rule/rule_format/available_format/</code> that subclasses <code>RuleType</code> and implements all abstract methods. It will be discovered automatically.</div>
+    </section>
+
+    <!-- ════════════════════════ SUPPORTED FORMATS ════════════════════════ -->
+    <section id="rule-formats-list" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-purple"><i class="fas fa-list"></i></div>
+        <h2 class="section-title">Supported Formats</h2>
+      </div>
+
+      <h3 class="subsection">YARA — yara_format.py</h3>
+      <p>Full <code>YaraRule(RuleType)</code> implementation with advanced retry logic.</p>
+      <div class="doc-card">
+        <ul style="font-size:.84rem;margin:0;padding-left:1.2rem;">
+          <li><strong>Validation</strong>: Calls <code>yara.compile()</code>. On <code>undefined identifier</code> errors, automatically prepends <code>import "module"</code> and retries up to <strong>10 times</strong>.</li>
+          <li><strong>Extraction</strong>: Custom brace-tracking parser that handles strings sections, regex literals, line comments, block comments.</li>
+          <li><strong>File extensions</strong>: <code>.yar</code>, <code>.yara</code></li>
+        </ul>
+      </div>
+
+      <h3 class="subsection">Other Formats</h3>
+      <table class="custom-table">
+        <thead><tr><th>Format</th><th>Class</th><th>Library</th><th>Extensions</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge-format">Sigma</span></td><td><code>SigmaRule</code></td><td><code>pySigma</code></td><td><code>.yml</code>, <code>.yaml</code></td></tr>
+          <tr><td><span class="badge-format">Suricata</span></td><td><code>SuricataRule</code></td><td><code>suricataparser</code>, <code>idstools</code></td><td><code>.rules</code></td></tr>
+          <tr><td><span class="badge-format">Zeek</span></td><td><code>ZeekRule</code></td><td><code>zeekscript</code></td><td><code>.zeek</code></td></tr>
+          <tr><td><span class="badge-format">CRS</span></td><td><code>CRSRule</code></td><td><code>msc_pyparser</code></td><td><code>.conf</code></td></tr>
+          <tr><td><span class="badge-format">Nova</span></td><td><code>NovaRule</code></td><td><code>nova-hunting</code></td><td><code>.nova</code></td></tr>
+          <tr><td><span class="badge-format">NSE</span></td><td><code>NSERule</code></td><td>Lua parser</td><td><code>.nse</code></td></tr>
+          <tr><td><span class="badge-format">Wazuh</span></td><td><code>WazuhRule</code></td><td>XML/YAML</td><td><code>.xml</code>, <code>.yml</code></td></tr>
+          <tr><td><span class="badge-format">Elastic</span></td><td><code>ElasticRule</code></td><td>JSON/TOML</td><td><code>.toml</code>, <code>.json</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ════════════════════════ RULE CORE LOGIC ════════════════════════ -->
+    <section id="rule-core" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-blue"><i class="fas fa-gears"></i></div>
+        <h2 class="section-title">Rule Core Logic</h2>
+      </div>
+      <p>Business logic lives in two files: <code>app/features/rule/rule_core.py</code> (primary CRUD) and <code>app/features/rule/rule_format/main_format.py</code> (format orchestration).</p>
+
+      <h3 class="subsection">rule_core.py — Key Functions</h3>
+      <div class="func-signature">
+        def <span class="fn-name">add_rule_core</span>(<span class="fn-param">metadata: dict</span>, <span class="fn-param">user: User</span>) → <span class="fn-ret">tuple[bool, str]</span><br>
+        <span class="fn-comment">  # Inserts Rule into DB; checks duplicates, resolves FormatRule, assigns tags</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">update_rule_core</span>(<span class="fn-param">rule_id: int</span>, <span class="fn-param">data: dict</span>, <span class="fn-param">user: User</span>) → <span class="fn-ret">tuple[bool, str]</span><br>
+        <span class="fn-comment">  # Updates rule, creates RuleUpdateHistory entry</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">delete_rule_core</span>(<span class="fn-param">rule_id: int</span>, <span class="fn-param">user: User</span>) → <span class="fn-ret">tuple[bool, str]</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">vote_rule</span>(<span class="fn-param">rule_id: int</span>, <span class="fn-param">value: int</span>, <span class="fn-param">user: User</span>) → <span class="fn-ret">tuple[bool, str]</span><br>
+        <span class="fn-comment">  # value must be +1 or -1; creates/updates/removes RuleVote</span>
+      </div>
+
+      <h3 class="subsection">main_format.py — Format Orchestration</h3>
+      <div class="func-signature">
+        def <span class="fn-name">Process_rules_by_format</span>(<br>
+        &nbsp;&nbsp;<span class="fn-param">format_files</span>, <span class="fn-param">format_rule</span>, <span class="fn-param">info</span>, <span class="fn-param">format_name</span>, <span class="fn-param">user</span><br>
+        ) → <span class="fn-ret">tuple[int, int, int]</span>  <span class="fn-comment"># (bad_rules, imported, skipped)</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">extract_rule_from_repo</span>(<span class="fn-param">repo_dir: str</span>, <span class="fn-param">info: dict</span>, <span class="fn-param">user: User</span>) → <span class="fn-ret">None</span><br>
+        <span class="fn-comment">  # Async; walks repo_dir, dispatches to each RuleType subclass</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">verify_syntax_rule_by_format</span>(<span class="fn-param">rule_dict: dict</span>) → <span class="fn-ret">tuple[bool, str]</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">parse_rule_by_format</span>(<br>
+        &nbsp;&nbsp;<span class="fn-param">rule_content: str</span>, <span class="fn-param">user: User</span>, <span class="fn-param">format_name: str</span>,<br>
+        &nbsp;&nbsp;<span class="fn-param">url_repo: str</span>, <span class="fn-param">github_path: str</span><br>
+        ) → <span class="fn-ret">tuple[bool, str, Rule]</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">process_and_import_fixed_rule</span>(<span class="fn-param">bad_rule_obj</span>, <span class="fn-param">raw_content: str</span>) → <span class="fn-ret">tuple[bool, str, Rule]</span><br>
+        <span class="fn-comment">  # Re-validates a previously invalid rule and imports it on success</span>
+      </div>
+    </section>
+
+    <!-- ════════════════════════ SIMILARITY ENGINE ════════════════════════ -->
+    <section id="similarity" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-pink"><i class="fas fa-code-compare"></i></div>
+        <h2 class="section-title">Similarity Engine</h2>
+      </div>
+      <p>Implemented in <code>app/features/rule/utils/similar_rules/similarity_class.py</code>. Combines TF-IDF vectorisation, FAISS ANN search, and RapidFuzz fuzzy scoring.</p>
+
+      <h3 class="subsection">Similarity_class</h3>
+      <div class="func-signature">
+        <span class="fn-name">Similarity_class</span>(<br>
+        &nbsp;&nbsp;<span class="fn-param">user: User</span>,<br>
+        &nbsp;&nbsp;<span class="fn-param">info: dict</span>,<br>
+        &nbsp;&nbsp;<span class="fn-param">mode: str = "global"</span>,  <span class="fn-comment"># "global" | "targeted"</span><br>
+        &nbsp;&nbsp;<span class="fn-param">target_rule_id: Optional[int] = None</span>,<br>
+        &nbsp;&nbsp;<span class="fn-param">params: Optional[dict] = None</span><br>
+        )
+      </div>
+
+      <table class="custom-table">
+        <thead><tr><th>Step</th><th>Tool</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>1. Vectorise</td><td><code>sklearn TfidfVectorizer</code></td><td>Converts rule content to TF-IDF matrix</td></tr>
+          <tr><td>2. ANN search</td><td><code>faiss-cpu</code> IndexFlatIP</td><td>Fast approximate nearest-neighbour lookup</td></tr>
+          <tr><td>3. Fuzzy score</td><td><code>rapidfuzz.fuzz.ratio</code></td><td>Character-level ratio, returns 0.0–1.0</td></tr>
+          <tr><td>4. Persist</td><td>SQLAlchemy</td><td>Results stored in <code>RuleSimilarity</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="func-signature">
+        def <span class="fn-name">_parallel_fuzzy_worker</span>(<span class="fn-param">batch_data: list</span>) → <span class="fn-ret">list</span><br>
+        <span class="fn-comment">  # Runs in thread pool; applies fuzz.ratio to each rule pair in batch</span>
+      </div>
+    </section>
+
+    <!-- ════════════════════════ GITHUB IMPORT ════════════════════════ -->
+    <section id="github" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-green"><i class="fab fa-github"></i></div>
+        <h2 class="section-title">GitHub Import &amp; Update</h2>
+      </div>
+
+      <h3 class="subsection">Import Pipeline — Session_class</h3>
+      <p>Defined in <code>app/features/rule/rule_from_github/import_rule/session_class.py</code>.</p>
+      <div class="func-signature">
+        <span class="fn-name">Session_class</span>(<span class="fn-param">repo_dir: str</span>, <span class="fn-param">user: User</span>, <span class="fn-param">info: dict</span>)<br>
+        &nbsp;&nbsp;<span class="fn-comment"># uuid, thread_count=4, jobs Queue, repo_dir, counts (bad/imported/skipped)</span>
+      </div>
+
+      <table class="custom-table">
+        <thead><tr><th>Method</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>start()</code></td><td>Walks <code>repo_dir</code> with <code>os.walk</code>, skips hidden dirs/files, matches files to <code>RuleType</code> subclasses, fills the <code>jobs</code> Queue, spawns 4 daemon <code>Thread</code>s running <code>process()</code></td></tr>
+          <tr><td><code>process(loc_app, user)</code></td><td>Worker loop. Dequeues <code>(index, file, filepath, rule_instance)</code>. Calls <code>rule_instance.extract_rules_from_file()</code>, <code>validate()</code>, <code>parse_metadata()</code>, then <code>RuleModel.add_rule_core()</code> or <code>BadRuleModel.save_invalid_rule()</code>.</td></tr>
+          <tr><td><code>status()</code></td><td>Returns JSON: <code>{id, total, complete, remaining, stopped, bad_rules, imported, skipped}</code></td></tr>
+          <tr><td><code>stop()</code></td><td>Clears queue, joins threads (3.5 s timeout each), calls <code>save_info()</code>, removes session from global <code>sessions</code> list, deletes cloned repo folder</td></tr>
+          <tr><td><code>save_info()</code></td><td>Persists <code>ImporterResult</code> to DB with per-format counts</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout callout-info"><i class="fas fa-circle-info"></i> The <code>info</code> dict is enriched per-file: <code>enriched_info = {**self.info, "github_path": filepath}</code> before calling <code>parse_metadata</code>.</div>
+
+      <h3 class="subsection">Update Pipeline — Update_class</h3>
+      <p>Defined in <code>app/features/rule/rule_from_github/update_rule/update_class.py</code>.</p>
+      <div class="func-signature">
+        <span class="fn-name">Update_class</span>(<br>
+        &nbsp;&nbsp;<span class="fn-param">repo_sources: list</span>,<br>
+        &nbsp;&nbsp;<span class="fn-param">user: User</span>,<br>
+        &nbsp;&nbsp;<span class="fn-param">info: dict</span>,<br>
+        &nbsp;&nbsp;<span class="fn-param">mode: str</span>  <span class="fn-comment"># "by_url" | "by_rule"</span><br>
+        )
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Mode</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td><code>by_url</code></td><td>Re-clones the source repo and re-processes all rules</td></tr>
+          <tr><td><code>by_rule</code></td><td>Finds each individual rule in the repo using <code>find_rule_in_repo()</code> and updates only the changed ones</td></tr>
+        </tbody>
+      </table>
+      <div class="callout callout-warn"><i class="fas fa-triangle-exclamation"></i> <code>Update_class</code> uses <code>thread_count=1</code> with a <code>threading.Lock</code> to prevent concurrent DB writes during updates.</div>
+    </section>
+
+    <!-- ════════════════════════ BACKGROUND JOBS ════════════════════════ -->
+    <section id="jobs" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-orange"><i class="fas fa-layer-group"></i></div>
+        <h2 class="section-title">Background Job System</h2>
+      </div>
+      <p>The job system provides persistent, pause-able, cancellable background tasks via a single worker thread started at app startup.</p>
+
+      <h3 class="subsection">Job Lifecycle</h3>
+      <pre><code>pending → running → done
+               ↓         ↑
+           paused  → resumed
+               ↓
+           cancelled
+               ↓
+           failed  (exception in handler)</code></pre>
+
+      <h3 class="subsection">Worker — job_worker.py</h3>
+      <div class="func-signature">
+        def <span class="fn-name">register_handler</span>(<span class="fn-param">job_type: str</span>):<br>
+        &nbsp;&nbsp;<span class="fn-comment"># Decorator — registers a callable into _HANDLERS dict</span><br>
+        &nbsp;&nbsp;<span class="fn-comment"># Usage: @register_handler('bulk_add_tag_to_rules')</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">start_worker</span>(<span class="fn-param">app: Flask</span>) → <span class="fn-ret">None</span>:<br>
+        &nbsp;&nbsp;<span class="fn-comment"># Called by create_app(). Starts daemon thread → _worker_loop(app)</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">_worker_loop</span>(<span class="fn-param">app: Flask</span>) → <span class="fn-ret">None</span>:<br>
+        &nbsp;&nbsp;<span class="fn-comment"># On start: recovers any job stuck in "running" state (set to "pending")</span><br>
+        &nbsp;&nbsp;<span class="fn-comment"># Main loop: polls DB every 2 s for pending jobs</span><br>
+        &nbsp;&nbsp;<span class="fn-comment"># Dispatches to _HANDLERS[job.job_type](job, app)</span>
+      </div>
+
+      <h3 class="subsection">jobs_core.py — Lifecycle Functions</h3>
+      <table class="custom-table">
+        <thead><tr><th>Function</th><th>Signature</th></tr></thead>
+        <tbody>
+          <tr><td><code>create_job</code></td><td><code>(job_type, payload, label, created_by) → BackgroundJob</code></td></tr>
+          <tr><td><code>get_job_by_uuid</code></td><td><code>(uuid) → BackgroundJob | None</code></td></tr>
+          <tr><td><code>get_jobs_for_user</code></td><td><code>(user) → List[BackgroundJob]</code></td></tr>
+          <tr><td><code>cancel_job</code></td><td><code>(uuid, user) → (bool, str)</code></td></tr>
+          <tr><td><code>pause_job</code></td><td><code>(uuid, user) → (bool, str)</code></td></tr>
+          <tr><td><code>resume_job</code></td><td><code>(uuid, user) → (bool, str)</code></td></tr>
+          <tr><td><code>delete_job</code></td><td><code>(uuid, user) → (bool, str)</code></td></tr>
+          <tr><td><code>get_zombie_jobs</code></td><td><code>() → List[BackgroundJob]</code> — running &gt;2 h or pending &gt;6 h</td></tr>
+          <tr><td><code>kill_all_zombies</code></td><td><code>() → int</code> — count killed</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Registered Handlers — job_handlers.py</h3>
+      <table class="custom-table">
+        <thead><tr><th>Job Type</th><th>Handler Function</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>bulk_add_tag_to_rules</code></td><td><code>handle_bulk_add_tag_to_rules</code></td><td>Adds a tag to all rules matching a filter set</td></tr>
+          <tr><td><code>bulk_remove_tag_from_rules</code></td><td><code>handle_bulk_remove_tag_from_rules</code></td><td>Removes a tag from filtered rules</td></tr>
+          <tr><td><code>delete_github_rules</code></td><td><code>handle_delete_github_rules</code></td><td>Deletes all rules originating from a given GitHub source</td></tr>
+        </tbody>
+      </table>
+      <div class="callout callout-info"><i class="fas fa-circle-info"></i> <strong>BATCH_SIZE = 2000</strong>, <strong>LOG_EVERY = 10</strong>. The helper <code>_build_rule_query(payload)</code> mirrors the exact filter params from the UI search.</div>
+    </section>
+
+    <!-- ════════════════════════ TAGS & BUNDLES ════════════════════════ -->
+    <section id="tags-bundles" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-teal"><i class="fas fa-tags"></i></div>
+        <h2 class="section-title">Tags &amp; Bundles</h2>
+      </div>
+
+      <h3 class="subsection">Tags</h3>
+      <p>Tags are coloured labels attached to rules via <code>RuleTagAssociation</code>. Bulk tag operations run as background jobs (<code>bulk_add_tag_to_rules</code> / <code>bulk_remove_tag_from_rules</code>) to handle large rule sets without blocking the request.</p>
+
+      <h3 class="subsection">Bundles</h3>
+      <p>Bundles are named, ordered, optionally-public collections of rules. Users can vote on bundles, comment on them, and attach tags. The <code>BundleNode</code> table preserves rule ordering within a bundle.</p>
+
+      <table class="custom-table">
+        <thead><tr><th>Operation</th><th>Model / Function</th></tr></thead>
+        <tbody>
+          <tr><td>Create bundle</td><td><code>Bundle</code> insert</td></tr>
+          <tr><td>Add rule to bundle</td><td><code>BundleNode</code> + <code>BundleRuleAssociation</code> insert</td></tr>
+          <tr><td>Vote on bundle</td><td><code>BundleVote</code> upsert, updates <code>Bundle.score</code></td></tr>
+          <tr><td>Comment on bundle</td><td><code>CommentBundle</code> insert</td></tr>
+          <tr><td>React to comment</td><td><code>BundleReactionComment</code> upsert</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ════════════════════════ API OVERVIEW ════════════════════════ -->
+    <section id="api-overview" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-indigo"><i class="fas fa-plug"></i></div>
+        <h2 class="section-title">API Overview</h2>
+      </div>
+      <p>REST API powered by <strong>Flask-RESTX</strong>. Swagger UI is served at <code>/api/</code>. All API routes are <strong>CSRF-exempt</strong>. The base URL for a local dev server is <code>http://127.0.0.1:7009</code>.</p>
+
+      <table class="custom-table">
+        <thead><tr><th>Namespace label</th><th>URL prefix</th><th>Auth</th><th>Source file</th></tr></thead>
+        <tbody>
+          <tr><td>Public action on Rule ✅</td><td><code>/api/rule/public</code></td><td><span class="badge-status badge-ok">None</span></td><td><code>app/api/rule/rule_public_api.py</code></td></tr>
+          <tr><td>Private action on Rule 🔑</td><td><code>/api/rule/private</code></td><td><span class="badge-status badge-auth">X-API-KEY</span></td><td><code>app/api/rule/rule_private_api.py</code></td></tr>
+          <tr><td>Public action on Bundle ✅</td><td><code>/api/bundle/public</code></td><td><span class="badge-status badge-ok">None</span></td><td><code>app/api/bundle/bundle_public_api.py</code></td></tr>
+          <tr><td>Private action on Bundle 🔑</td><td><code>/api/bundle/private</code></td><td><span class="badge-status badge-auth">X-API-KEY</span></td><td><code>app/api/bundle/bundle_private_api.py</code></td></tr>
+          <tr><td>Public account action ✅</td><td><code>/api/account/public</code></td><td><span class="badge-status badge-ok">None</span></td><td><code>app/api/account/account_public_api.py</code></td></tr>
+          <tr><td>Private account action 🔑</td><td><code>/api/account/private</code></td><td><span class="badge-status badge-auth">X-API-KEY</span></td><td><code>app/api/account/account_private_api.py</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout callout-info"><i class="fas fa-circle-info"></i> Input can be sent as a <strong>JSON body</strong> (<code>Content-Type: application/json</code>) or as <strong>query string parameters</strong> for most endpoints. Private endpoints always require the <code>X-API-KEY</code> header.</div>
+    </section>
+
+    <!-- ════════════════════════ API AUTH ════════════════════════ -->
+    <section id="api-auth" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-orange"><i class="fas fa-key"></i></div>
+        <h2 class="section-title">API Authentication</h2>
+      </div>
+      <p>Private endpoints require a 60-character alphanumeric API key passed in the <code>X-API-KEY</code> HTTP request header. Your key is shown in your Rulezet profile page.</p>
+
+      <h3 class="subsection">Auth utilities — app/core/utils/utils.py</h3>
+      <div class="func-signature">
+        def <span class="fn-name">generate_api_key</span>(<span class="fn-param">length: int = 60</span>) → <span class="fn-ret">str</span><br>
+        <span class="fn-comment">  # Cryptographically-random alphanumeric key (secrets.token_hex based)</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">verif_api_key</span>(<span class="fn-param">headers: dict</span>) → <span class="fn-ret">bool</span><br>
+        <span class="fn-comment">  # Returns True if X-API-KEY header is present and matches a user row</span>
+      </div>
+      <div class="func-signature">
+        def <span class="fn-name">get_user_from_api</span>(<span class="fn-param">headers: dict</span>) → <span class="fn-ret">User | None</span><br>
+        <span class="fn-comment">  # Resolves X-API-KEY → User object (None if key invalid)</span>
+      </div>
+
+      <h3 class="subsection">@api_required decorator — app/core/utils/decorators.py</h3>
+      <p>Wraps any private resource method. Returns <code>401</code> JSON when the key is missing or invalid.</p>
+      <div class="code-label">usage</div>
+      <pre><code>from app.core.utils.decorators import api_required
+
+class MyPrivateResource(Resource):
+    @api_required
+    def get(self):
+        user = utils.get_user_from_api(request.headers)
+        ...</code></pre>
+
+      <h3 class="subsection">Error responses</h3>
+      <table class="custom-table">
+        <thead><tr><th>Status</th><th>Condition</th><th>Body</th></tr></thead>
+        <tbody>
+          <tr><td><code>401</code></td><td>Missing or invalid <code>X-API-KEY</code></td><td><code>{"message": "Unauthorized"}</code></td></tr>
+          <tr><td><code>403</code></td><td>Key valid but not enough permissions</td><td><code>{"success": false, "message": "Access denied"}</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Quick test</h3>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X GET http://127.0.0.1:7009/api/rule/private/me \
+  -H "X-API-KEY: YOUR_60_CHAR_KEY"
+
+# 200 → {"message": "Welcome Alice!", "user_id": 4}
+# 401 → {"message": "Unauthorized"}</code></pre>
+    </section>
+
+    <!-- ════════════════════════ API RULE PUBLIC ════════════════════════ -->
+    <section id="api-rule-public" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-green"><i class="fas fa-unlock"></i></div>
+        <h2 class="section-title">Rule Public API</h2>
+      </div>
+      <p>File: <code>app/api/rule/rule_public_api.py</code> — No authentication required. All endpoints accept GET query parameters.</p>
+
+      <!-- ── searchPage ── -->
+      <h3 class="subsection">GET /api/rule/public/searchPage</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/rule/public/searchPage</div>
+          <div class="endpoint-desc">Paginated rule search. Returns pagination links (next/prev URLs).</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Allowed values / notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>search</code></td><td>string</td><td>—</td><td>Keyword to match against rule title</td></tr>
+          <tr><td><code>author</code></td><td>string</td><td>—</td><td>Filter by author username</td></tr>
+          <tr><td><code>rule_type</code></td><td>string</td><td>—</td><td>yara, sigma, suricata, zeek, crs, nova, nse, wazuh, elastic</td></tr>
+          <tr><td><code>sort_by</code></td><td>string</td><td>—</td><td><code>newest</code> · <code>oldest</code> · <code>most_likes</code> · <code>least_likes</code></td></tr>
+          <tr><td><code>page</code></td><td>integer</td><td>1</td><td>1-based page number</td></tr>
+          <tr><td><code>per_page</code></td><td>integer</td><td>10</td><td>Items per page</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -G "http://127.0.0.1:7009/api/rule/public/searchPage" \
+  --data-urlencode "search=detect" \
+  --data-urlencode "author=John" \
+  --data-urlencode "sort_by=newest" \
+  --data-urlencode "page=1" \
+  --data-urlencode "per_page=10"</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{
+  "total_rules_found": 42,
+  "total_pages": 5,
+  "pagination": {
+    "prev_page": null,
+    "current_page": 1,
+    "next_page": "http://127.0.0.1:7009/api/rule/public/searchPage?page=2&per_page=10&search=detect"
+  },
+  "results": [
+    {
+      "uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Detect_Ransomware_Generic",
+      "description": "Detects generic ransomware patterns",
+      "author": "analyst01",
+      "creation_date": "2025-03-15T10:23:00",
+      "format": "yara",
+      "content": "rule Detect_Ransomware_Generic { ... }"
+    }
+  ]
+}</code></pre>
+
+      <!-- ── search ── -->
+      <h3 class="subsection">GET /api/rule/public/search</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/rule/public/search</div>
+          <div class="endpoint-desc">Same filters as <code>searchPage</code> but returns all matching rules in a single response (no pagination).</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Allowed values</th></tr></thead>
+        <tbody>
+          <tr><td><code>search</code></td><td>string</td><td>Free text</td></tr>
+          <tr><td><code>author</code></td><td>string</td><td>Author username</td></tr>
+          <tr><td><code>rule_type</code></td><td>string</td><td>yara · sigma · suricata · zeek · crs · nova · nse · wazuh · elastic</td></tr>
+          <tr><td><code>sort_by</code></td><td>string</td><td><code>newest</code> · <code>oldest</code> · <code>most_likes</code> · <code>least_likes</code></td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -G "http://127.0.0.1:7009/api/rule/public/search" \
+  --data-urlencode "search=detect" \
+  --data-urlencode "author=malgamy12" \
+  --data-urlencode "rule_type=yara" \
+  --data-urlencode "sort_by=newest"</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{
+  "total_rules_found": 3,
+  "results": [
+    { "uuid": "...", "title": "...", "description": "...", "author": "...",
+      "creation_date": "2025-01-10T08:00:00", "format": "yara", "content": "..." }
+  ]
+}</code></pre>
+
+      <!-- ── Convert_MISP ── -->
+      <h3 class="subsection">GET /api/rule/public/Convert_MISP</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/rule/public/Convert_MISP</div>
+          <div class="endpoint-desc">Search rules and convert matching ones to MISP objects. Rules that cannot be converted return <code>"misp_object": null</code>.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>search</code></td><td>string</td><td>Keyword in rule title</td></tr>
+          <tr><td><code>author</code></td><td>string</td><td>Filter by author</td></tr>
+          <tr><td><code>rule_type</code></td><td>string</td><td>Format filter</td></tr>
+          <tr><td><code>sort_by</code></td><td>string</td><td><code>newest</code> · <code>oldest</code> · <code>most_likes</code> · <code>least_likes</code></td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -G "http://127.0.0.1:7009/api/rule/public/Convert_MISP" \
+  --data-urlencode "search=mars" \
+  --data-urlencode "author=John" \
+  --data-urlencode "rule_type=yara" \
+  --data-urlencode "sort_by=newest"</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{
+  "total_rules_found": 1,
+  "results": [
+    {
+      "uuid": "...", "title": "Mars_Ransomware", "format": "yara",
+      "misp_object": { "name": "yara", "meta-category": "antivirus", ... }
+    }
+  ]
+}</code></pre>
+
+      <!-- ── detail ── -->
+      <h3 class="subsection">GET /api/rule/public/detail/&lt;rule_id&gt;</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/rule/public/detail/&lt;rule_id&gt;</div>
+          <div class="endpoint-desc">Full detail of a single rule by its integer <code>rule_id</code>.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Path param</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>rule_id</code></td><td>integer</td><td>The internal DB primary key of the rule</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl http://127.0.0.1:7009/api/rule/public/detail/6</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{
+  "id": 6,
+  "title": "Detect_Mimikatz",
+  "format": "yara",
+  "version": "1.0",
+  "to_string": "rule Detect_Mimikatz { ... }",
+  "description": "Detects Mimikatz credential dumper",
+  "source": "internal",
+  "license": "MIT",
+  "cve_id": [],
+  "original_uuid": null,
+  "user": { "id": 2, "first_name": "Alice", "last_name": "Martin" }
+}</code></pre>
+      <div class="callout callout-warn"><i class="fas fa-triangle-exclamation"></i> Returns <code>404</code> if the rule or author does not exist.</div>
+
+      <!-- ── all_by_user ── -->
+      <h3 class="subsection">GET /api/rule/public/all_by_user/&lt;user_id&gt;</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/rule/public/all_by_user/&lt;user_id&gt;</div>
+          <div class="endpoint-desc">All rules created by a specific user. Returns an empty list (not 404) when the user has no rules.</div>
+        </div>
+      </div>
+      <div class="code-label">curl</div>
+      <pre><code>curl http://127.0.0.1:7009/api/rule/public/all_by_user/4</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{
+  "message": "3 rules found for user Alice Martin",
+  "rules": [
+    { "id": 6, "title": "...", "format": "yara", "version": "1.0",
+      "to_string": "...", "description": "...", "source": "...",
+      "license": "MIT", "cve_id": null, "original_uuid": null,
+      "user": { "id": 4, "first_name": "Alice", "last_name": "Martin" } }
+  ],
+  "success": true
+}</code></pre>
+
+      <!-- ── search_rules_by_cve ── -->
+      <h3 class="subsection">GET /api/rule/public/search_rules_by_cve</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/rule/public/search_rules_by_cve</div>
+          <div class="endpoint-desc">Find rules linked to specific CVE / GHSA / PYSEC identifiers. The endpoint auto-detects and normalises vulnerability patterns from the raw input string.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>cve_ids</code></td><td>string</td><td>Comma-separated list or raw string with one or more IDs — e.g. <code>CVE-2021-44228,GHSA-j8v8-6h6r-m6pq</code></td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -G "http://127.0.0.1:7009/api/rule/public/search_rules_by_cve" \
+  --data-urlencode "cve_ids=CVE-2021-44228,GHSA-j8v8-6h6r-m6pq"</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{
+  "detected_patterns": ["CVE-2021-44228", "GHSA-j8v8-6h6r-m6pq"],
+  "total_matches": 5,
+  "stats": { "yara": 3, "sigma": 2 },
+  "results": [ { "uuid": "...", "title": "Log4Shell_Detect", ... } ]
+}</code></pre>
+    </section>
+
+    <!-- ════════════════════════ API RULE PRIVATE ════════════════════════ -->
+    <section id="api-rule-private" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-red"><i class="fas fa-lock"></i></div>
+        <h2 class="section-title">Rule Private API</h2>
+      </div>
+      <p>File: <code>app/api/rule/rule_private_api.py</code> — All endpoints require the <code>X-API-KEY</code> header decorated with <code>@api_required</code>.</p>
+
+      <!-- ── me ── -->
+      <h3 class="subsection">GET /api/rule/private/me</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/rule/private/me</div>
+          <div class="endpoint-desc">Test your API key. Returns the authenticated user's name and ID.</div>
+        </div>
+      </div>
+      <div class="code-label">curl</div>
+      <pre><code>curl http://127.0.0.1:7009/api/rule/private/me \
+  -H "X-API-KEY: YOUR_KEY"</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{ "message": "Welcome Alice!", "user_id": 4 }</code></pre>
+
+      <!-- ── create ── -->
+      <h3 class="subsection">POST /api/rule/private/create</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/rule/private/create</div>
+          <div class="endpoint-desc">Create a new detection rule. Rule syntax is validated by the matching <code>RuleType</code> subclass before insertion.</div>
+        </div>
+      </div>
+      <div class="callout callout-info"><i class="fas fa-circle-info"></i> Body accepts <strong>JSON</strong> (<code>Content-Type: application/json</code>) or URL query parameters. The <code>author</code> field is always set from the API key user and cannot be overridden.</div>
+      <table class="custom-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Constraints / Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>title</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Must be unique and non-empty</td></tr>
+          <tr><td><code>format</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>yara · sigma · suricata · zeek · crs · nova · nse · wazuh · elastic</td></tr>
+          <tr><td><code>to_string</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Full rule text. Must pass <code>verify_syntax_rule_by_format()</code></td></tr>
+          <tr><td><code>version</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Non-empty version string (e.g. <code>"1.0"</code>)</td></tr>
+          <tr><td><code>license</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Non-empty license string (e.g. <code>"MIT"</code>)</td></tr>
+          <tr><td><code>description</code></td><td>string</td><td>No</td><td>Defaults to <code>"No description provided"</code></td></tr>
+          <tr><td><code>source</code></td><td>string</td><td>No</td><td>Defaults to authenticated user's full name</td></tr>
+          <tr><td><code>original_uuid</code></td><td>string</td><td>No</td><td>Preserve original UUID from source system</td></tr>
+          <tr><td><code>cve_id</code></td><td>string</td><td>No</td><td>CVE format: <code>CVE-YYYY-NNNNN</code>. Validated with <code>utils.detect_cve()</code></td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/rule/private/create \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: YOUR_KEY" \
+  -d '{
+    "title":       "Detect_Mimikatz_v2",
+    "format":      "yara",
+    "version":     "2.0",
+    "license":     "MIT",
+    "to_string":   "rule Detect_Mimikatz { strings: $s = \"sekurlsa\" condition: $s }",
+    "description": "Detects Mimikatz sekurlsa module",
+    "source":      "internal",
+    "cve_id":      "CVE-2021-36934"
+  }'</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{ "message": "Rule created successfully", "rule": { "id": 99, "uuid": "...", "title": "Detect_Mimikatz_v2", ... } }</code></pre>
+      <table class="custom-table">
+        <thead><tr><th>Status</th><th>Condition</th></tr></thead>
+        <tbody>
+          <tr><td><code>200</code></td><td>Rule created successfully</td></tr>
+          <tr><td><code>400</code></td><td>Missing required fields, invalid CVE format, or syntax validation failure</td></tr>
+          <tr><td><code>409</code></td><td>A rule with that title already exists</td></tr>
+        </tbody>
+      </table>
+
+      <!-- ── delete ── -->
+      <h3 class="subsection">POST /api/rule/private/delete</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/rule/private/delete</div>
+          <div class="endpoint-desc">Delete a rule by its integer ID. Only the rule owner or an admin can delete.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Field (JSON body)</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>rule_id</code></td><td>integer</td><td><span class="badge-status badge-auth">Yes</span></td><td>Internal DB primary key of the rule</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/rule/private/delete \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: YOUR_KEY" \
+  -d '{"rule_id": 42}'</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>200 → {"success": true,  "message": "Rule with ID '42' deleted successfully"}
+403 → {"success": false, "message": "Access denied: you are not the owner or an admin"}
+404 → {"success": false, "message": "No rule found with ID '42'"}</code></pre>
+
+      <!-- ── favorite ── -->
+      <h3 class="subsection">GET /api/rule/private/favorite/&lt;rule_id&gt;</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/rule/private/favorite/&lt;rule_id&gt;</div>
+          <div class="endpoint-desc">Toggle a rule in/out of your favourites. Idempotent — calling twice returns the rule to its original state.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Path param</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>rule_id</code></td><td>integer</td><td>ID of the rule to favourite / unfavourite</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl http://127.0.0.1:7009/api/rule/private/favorite/4 \
+  -H "X-API-KEY: YOUR_KEY"</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>200 → {"success": true, "message": "Rule added to favorites"}
+200 → {"success": true, "message": "Rule removed from favorites"}  # if already favorited
+403 → {"success": false, "message": "Unauthorized"}</code></pre>
+
+      <!-- ── import_rules_from_github ── -->
+      <h3 class="subsection">POST /api/rule/private/import_rules_from_github</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/rule/private/import_rules_from_github</div>
+          <div class="endpoint-desc">Clone a GitHub repository and import all supported detection rules into the DB. <strong>Admin only.</strong></div>
+        </div>
+      </div>
+      <div class="callout callout-danger"><i class="fas fa-shield-halved"></i> This endpoint is restricted to admin users (<code>user.is_admin</code>). Non-admins receive a <code>400</code> error.</div>
+      <table class="custom-table">
+        <thead><tr><th>Field (JSON body)</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>url</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Valid GitHub repository URL (validated by <code>valider_repo_github()</code>)</td></tr>
+          <tr><td><code>license</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>License to apply to all imported rules (e.g. <code>"MIT"</code>)</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/rule/private/import_rules_from_github \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: ADMIN_KEY" \
+  -d '{
+    "url":     "https://github.com/org/yara-rules.git",
+    "license": "MIT"
+  }'</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>200 → { "success": true, "imported": 183, "skipped": 12, "failed": 3 }
+400 → { "success": false, "message": "You have to be an admin to import" }
+400 → { "success": false, "message": "Invalid GitHub URL" }
+500 → { "success": false, "message": "An error occurred while importing from: ...", "error": "..." }</code></pre>
+
+      <!-- ── dumpRules ── -->
+      <h3 class="subsection">POST /api/rule/private/dumpRules</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/rule/private/dumpRules</div>
+          <div class="endpoint-desc">Full structured JSON dump of all rules for analysis or integration. All parameters are optional — pass an empty body <code>{}</code> to get everything.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Field (JSON body)</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>format_name</code></td><td>string or list</td><td><code>"yara"</code>, <code>["yara","sigma"]</code>, or <code>["all"]</code> for every format</td></tr>
+          <tr><td><code>created_after</code></td><td>string</td><td>ISO date — <code>"YYYY-MM-DD"</code> or <code>"YYYY-MM-DD HH:MM"</code></td></tr>
+          <tr><td><code>created_before</code></td><td>string</td><td>Same format</td></tr>
+          <tr><td><code>updated_after</code></td><td>string</td><td>Same format</td></tr>
+          <tr><td><code>updated_before</code></td><td>string</td><td>Same format</td></tr>
+          <tr><td><code>top_liked</code></td><td>integer</td><td>Return only the top N most liked rules</td></tr>
+          <tr><td><code>top_disliked</code></td><td>integer</td><td>Return only the top N most disliked rules</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl — dump all rules</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/rule/private/dumpRules \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: YOUR_KEY" \
+  -d '{}'</code></pre>
+      <div class="code-label">curl — filtered dump</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/rule/private/dumpRules \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: YOUR_KEY" \
+  -d '{
+    "format_name":    ["yara", "sigma"],
+    "created_after":  "2025-01-01 00:00",
+    "created_before": "2025-12-31 23:59",
+    "top_liked":      10
+  }'</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{
+  "success": true,
+  "message": "Rules dump successfully generated.",
+  "filters_applied": { "format_name": ["yara","sigma"], "top_liked": 10, ... },
+  "data": {
+    "summary_by_format": { "yara": 120, "sigma": 75, "total_rules": 195 },
+    "rules": [
+      {
+        "id": 1, "title": "Example", "format": "yara", "author": "Alice",
+        "created_at": "2025-03-01 12:00", "updated_at": "2025-04-10 09:30",
+        "likes": 12, "dislikes": 0,
+        "to_string": "rule Example { condition: true }",
+        "cve_id": "CVE-2025-1234"
+      }
+    ]
+  }
+}</code></pre>
+      <table class="custom-table">
+        <thead><tr><th>Status</th><th>Condition</th></tr></thead>
+        <tbody>
+          <tr><td><code>200</code></td><td>Dump generated</td></tr>
+          <tr><td><code>400</code></td><td>Invalid JSON body or filter params</td></tr>
+          <tr><td><code>404</code></td><td>No rules match the filters</td></tr>
+          <tr><td><code>403</code></td><td>Missing/invalid API key</td></tr>
+        </tbody>
+      </table>
+
+      <!-- ── search (private) ── -->
+      <h3 class="subsection">POST /api/rule/private/search</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/rule/private/search</div>
+          <div class="endpoint-desc">Full-featured rule search identical to the web UI, with field selection, CVE filtering, tag filtering, and optional pagination. All body parameters are optional — combine with AND logic.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>search</code></td><td>string</td><td>—</td><td>Free text across title, description, format, author, content, uuid</td></tr>
+          <tr><td><code>search_field</code></td><td>string</td><td><code>all</code></td><td><code>all</code> · <code>title</code> · <code>content</code></td></tr>
+          <tr><td><code>exact_match</code></td><td>boolean</td><td><code>false</code></td><td>Title uses strict equality; content uses case-sensitive LIKE</td></tr>
+          <tr><td><code>author</code></td><td>string</td><td>—</td><td>Partial, case-insensitive match</td></tr>
+          <tr><td><code>rule_type</code></td><td>string</td><td>—</td><td>yara · sigma · suricata · zeek · crs · nova · nse · wazuh · elastic</td></tr>
+          <tr><td><code>source</code></td><td>string</td><td>—</td><td>Comma-separated for OR: <code>"github.com,internal"</code></td></tr>
+          <tr><td><code>license</code></td><td>string</td><td>—</td><td>Comma-separated for OR: <code>"MIT,GPL"</code></td></tr>
+          <tr><td><code>vulnerabilities</code></td><td>list[string]</td><td>—</td><td>CVE IDs: <code>["CVE-2021-44228"]</code> — validated as <code>CVE-YYYY-NNNNN</code></td></tr>
+          <tr><td><code>tags</code></td><td>list[string]</td><td>—</td><td>Tag names: <code>["malware","apt"]</code></td></tr>
+          <tr><td><code>sort_by</code></td><td>string</td><td><code>newest</code></td><td><code>newest</code> · <code>oldest</code> · <code>most_likes</code> · <code>least_likes</code></td></tr>
+          <tr><td><code>page</code></td><td>integer</td><td>1</td><td>Must be ≥ 1</td></tr>
+          <tr><td><code>per_page</code></td><td>integer</td><td>20</td><td>1–100</td></tr>
+          <tr><td><code>paginate</code></td><td>boolean</td><td><code>true</code></td><td>Set to <code>false</code> to get all results in one shot</td></tr>
+          <tr><td><code>fields</code></td><td>list[string]</td><td>all</td><td>Subset of available fields (see below)</td></tr>
+        </tbody>
+      </table>
+      <div class="callout callout-tip"><i class="fas fa-list"></i> <strong>Available fields</strong> for <code>fields</code> param: <code>id</code> · <code>title</code> · <code>format</code> · <code>author</code> · <code>license</code> · <code>description</code> · <code>version</code> · <code>source</code> · <code>uuid</code> · <code>original_uuid</code> · <code>creation_date</code> · <code>last_modif</code> · <code>vote_up</code> · <code>vote_down</code> · <code>to_string</code> · <code>cve_id</code> · <code>github_path</code></div>
+      <div class="code-label">curl — typical search</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/rule/private/search \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: YOUR_KEY" \
+  -d '{
+    "search":   "mimikatz",
+    "rule_type":"yara",
+    "tags":     ["credential_access"],
+    "sort_by":  "most_likes",
+    "page":     1,
+    "per_page": 20
+  }'</code></pre>
+      <div class="code-label">curl — select specific fields + no pagination</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/rule/private/search \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: YOUR_KEY" \
+  -d '{
+    "rule_type": "sigma",
+    "paginate":  false,
+    "fields":    ["uuid","title","to_string","creation_date"]
+  }'</code></pre>
+      <div class="code-label">response 200 (paginated)</div>
+      <pre><code>{
+  "success":  true,
+  "total":    142,
+  "page":     1,
+  "per_page": 20,
+  "pages":    8,
+  "paginate": true,
+  "rules": [
+    { "uuid": "...", "title": "Mimikatz_Generic", "format": "yara",
+      "author": "Alice", "vote_up": 15, "vote_down": 1, ... }
+  ]
+}</code></pre>
+    </section>
+
+    <!-- ════════════════════════ API BUNDLE ════════════════════════ -->
+    <section id="api-bundle" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-purple"><i class="fas fa-box"></i></div>
+        <h2 class="section-title">Bundle API</h2>
+      </div>
+
+      <!-- ── bundle public search ── -->
+      <h3 class="subsection">GET /api/bundle/public/search</h3>
+      <p>File: <code>app/api/bundle/bundle_public_api.py</code> — No authentication required.</p>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/bundle/public/search</div>
+          <div class="endpoint-desc">Search public bundles by name. Returns all matching bundles (no pagination).</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>search</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Keyword to match against bundle name. Empty value returns <code>400</code>.</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -G "http://127.0.0.1:7009/api/bundle/public/search" \
+  --data-urlencode "search=ransomware"</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{
+  "message": "2 bundle(s) found",
+  "bundle_list": [
+    { "id": 7, "name": "Ransomware Detections", "description": "...", "public": true, "score": 10 }
+  ]
+}</code></pre>
+
+      <!-- ── bundle private: create ── -->
+      <h3 class="subsection">POST /api/bundle/private/create</h3>
+      <p>File: <code>app/api/bundle/bundle_private_api.py</code> — Requires <code>X-API-KEY</code>.</p>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/bundle/private/create</div>
+          <div class="endpoint-desc">Create a new bundle. The authenticated user becomes the owner.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Field (JSON body)</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>name</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Non-empty string</td></tr>
+          <tr><td><code>public</code></td><td>boolean</td><td><span class="badge-status badge-auth">Yes</span></td><td>Strict boolean — must be <code>true</code> or <code>false</code> (not a string)</td></tr>
+          <tr><td><code>description</code></td><td>string</td><td>No</td><td>Defaults to empty string</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/bundle/private/create \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: YOUR_KEY" \
+  -d '{
+    "name":        "My YARA Bundle",
+    "description": "Collection of YARA rules for ransomware detection",
+    "public":      true
+  }'</code></pre>
+      <div class="code-label">response 200</div>
+      <pre><code>{ "message": "Bundle created successfully", "bundle_id": 12 }</code></pre>
+      <table class="custom-table">
+        <thead><tr><th>Status</th><th>Condition</th></tr></thead>
+        <tbody>
+          <tr><td><code>200</code></td><td>Bundle created</td></tr>
+          <tr><td><code>400</code></td><td><code>name</code> missing/invalid, or <code>public</code> is not a boolean</td></tr>
+          <tr><td><code>500</code></td><td>DB error</td></tr>
+        </tbody>
+      </table>
+
+      <!-- ── bundle private: add rule ── -->
+      <h3 class="subsection">GET /api/bundle/private/add_rule_bundle</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/bundle/private/add_rule_bundle</div>
+          <div class="endpoint-desc">Add a rule to an existing bundle. Only the bundle owner or an admin can perform this operation.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Parameter (query)</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>rule_id</code></td><td>integer</td><td><span class="badge-status badge-auth">Yes</span></td><td>ID of the rule to add</td></tr>
+          <tr><td><code>bundle_id</code></td><td>integer</td><td><span class="badge-status badge-auth">Yes</span></td><td>ID of the target bundle (must exist and be yours)</td></tr>
+          <tr><td><code>description</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Comment or note for this rule within the bundle</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl "http://127.0.0.1:7009/api/bundle/private/add_rule_bundle?rule_id=42&bundle_id=7&description=Important+APT+rule" \
+  -H "X-API-KEY: YOUR_KEY"</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>200 → {"success": true,  "message": "Rule added!",                             "toast_class": "success"}
+400 → {"success": false, "message": "Missing rule_id or bundle_id or description","toast_class": "danger"}
+401 → {"success": false, "message": "You don't have the permission to do that!",  "toast_class": "danger"}
+404 → {"success": false, "message": "Bundle not found",                           "toast_class": "danger"}</code></pre>
+
+      <!-- ── bundle private: remove rule ── -->
+      <h3 class="subsection">GET /api/bundle/private/remove_rule_bundle</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/bundle/private/remove_rule_bundle</div>
+          <div class="endpoint-desc">Remove a rule from a bundle. Only the bundle owner or an admin can do this.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Parameter (query)</th><th>Type</th><th>Required</th></tr></thead>
+        <tbody>
+          <tr><td><code>rule_id</code></td><td>integer</td><td><span class="badge-status badge-auth">Yes</span></td></tr>
+          <tr><td><code>bundle_id</code></td><td>integer</td><td><span class="badge-status badge-auth">Yes</span></td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl "http://127.0.0.1:7009/api/bundle/private/remove_rule_bundle?rule_id=42&bundle_id=7" \
+  -H "X-API-KEY: YOUR_KEY"</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>200 → {"success": true,  "message": "Rule removed!"}
+401 → {"success": false, "message": "You don't have the permission to do that!"}
+404 → {"success": false, "message": "Bundle not found"}
+500 → {"success": false, "message": "Rule not found in this bundle or already removed"}</code></pre>
+
+      <!-- ── bundle private: edit ── -->
+      <h3 class="subsection">POST /api/bundle/private/edit_bundle/&lt;bundle_id&gt;</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/bundle/private/edit_bundle/&lt;bundle_id&gt;</div>
+          <div class="endpoint-desc">Update a bundle's name and/or description. Only the owner or an admin.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Path param</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>bundle_id</code></td><td>integer</td><td>ID of the bundle to update</td></tr>
+        </tbody>
+      </table>
+      <table class="custom-table">
+        <thead><tr><th>Field (JSON body)</th><th>Type</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>name</code></td><td>string</td><td>New bundle name (optional)</td></tr>
+          <tr><td><code>description</code></td><td>string</td><td>New description (optional)</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/bundle/private/edit_bundle/7 \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: YOUR_KEY" \
+  -d '{"name": "Updated Bundle Name", "description": "New description"}'</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>200 → {"success": true,  "message": "Bundle updated successfully"}
+401 → {"success": false, "message": "You don't have the permission to do that!"}
+404 → {"success": false, "message": "Bundle not found"}</code></pre>
+    </section>
+
+    <!-- ════════════════════════ API ACCOUNT ════════════════════════ -->
+    <section id="api-account" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-blue"><i class="fas fa-user"></i></div>
+        <h2 class="section-title">Account API</h2>
+      </div>
+
+      <!-- ── register ── -->
+      <h3 class="subsection">POST /api/account/public/register</h3>
+      <p>File: <code>app/api/account/account_public_api.py</code> — No authentication required.</p>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/account/public/register</div>
+          <div class="endpoint-desc">Create a new Rulezet account. Returns the new user's <code>X-API-KEY</code> on success.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Field (JSON body)</th><th>Type</th><th>Required</th><th>Constraints</th></tr></thead>
+        <tbody>
+          <tr><td><code>email</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Valid email format, must be unique</td></tr>
+          <tr><td><code>password</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>8–64 chars, at least 1 uppercase, 1 lowercase, 1 digit</td></tr>
+          <tr><td><code>first_name</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Non-empty</td></tr>
+          <tr><td><code>last_name</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Non-empty</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/account/public/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email":      "analyst@example.com",
+    "password":   "Secur3Pass!",
+    "first_name": "Alice",
+    "last_name":  "Martin"
+  }'</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>201 → { "message": "User registered successfully", "X-API-KEY": "abc123...60chars..." }
+400 → { "message": "Password must contain at least one digit." }
+409 → { "message": "Email already exists" }</code></pre>
+
+      <!-- ── login ── -->
+      <h3 class="subsection">POST /api/account/public/login</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/account/public/login</div>
+          <div class="endpoint-desc">Authenticate and create a Flask session. Used for browser-based flows; API integrations should use <code>X-API-KEY</code> instead.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>email</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Registered email</td></tr>
+          <tr><td><code>password</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Account password</td></tr>
+          <tr><td><code>remember_me</code></td><td>boolean</td><td>No</td><td>Extends session — must be strict boolean</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/account/public/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "analyst@example.com", "password": "Secur3Pass!", "remember_me": false}'</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>200 → { "message": "Logged in successfully" }
+400 → { "message": "remember_me must be a boolean" }
+401 → { "message": "Invalid email or password" }</code></pre>
+
+      <!-- ── logout ── -->
+      <h3 class="subsection">POST /api/account/public/logout</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/account/public/logout</div>
+          <div class="endpoint-desc">Terminate the current Flask session (<code>@login_required</code> — browser session must be active).</div>
+        </div>
+      </div>
+      <div class="code-label">response 200</div>
+      <pre><code>{ "message": "You have been logged out." }</code></pre>
+
+      <!-- ── private: edit ── -->
+      <h3 class="subsection">POST /api/account/private/edit</h3>
+      <p>File: <code>app/api/account/account_private_api.py</code> — Requires active login session (uses <code>@login_required</code>, not API key).</p>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/account/private/edit</div>
+          <div class="endpoint-desc">Update the authenticated user's profile. Password update is optional — omit to keep current password.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Field (JSON body)</th><th>Type</th><th>Required</th><th>Constraints</th></tr></thead>
+        <tbody>
+          <tr><td><code>first_name</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Non-empty</td></tr>
+          <tr><td><code>last_name</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Non-empty</td></tr>
+          <tr><td><code>email</code></td><td>string</td><td><span class="badge-status badge-auth">Yes</span></td><td>Valid email, unique</td></tr>
+          <tr><td><code>password</code></td><td>string</td><td>No</td><td>8–64 chars, uppercase + lowercase + digit + special char (<code>@$!%*?&amp;</code>)</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X POST http://127.0.0.1:7009/api/account/private/edit \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: YOUR_KEY" \
+  -d '{
+    "first_name": "Alice",
+    "last_name":  "Dupont",
+    "email":      "alice@new.com",
+    "password":   "NewP@ssw0rd!"
+  }'</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>200 → { "message": "User updated successfully" }
+400 → { "message": "Password must contain at least one special character (@$!%*?&)" }
+409 → { "message": "Email already registered." }</code></pre>
+
+      <!-- ── favorites ── -->
+      <h3 class="subsection">GET /api/account/private/favorite/get_rules_page_favorite</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-get">GET</span>
+        <div>
+          <div class="endpoint-path">/api/account/private/favorite/get_rules_page_favorite</div>
+          <div class="endpoint-desc">Paginated list of the authenticated user's favourite rules.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Parameter (query)</th><th>Type</th><th>Default</th></tr></thead>
+        <tbody>
+          <tr><td><code>page</code></td><td>integer</td><td>1</td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">response 200</div>
+      <pre><code>{ "rule": [ { "id": 6, "title": "...", ... } ], "total_pages": 3 }</code></pre>
+
+      <h3 class="subsection">POST /api/account/private/favorite/delete_rule</h3>
+      <div class="endpoint-row">
+        <span class="badge-method badge-post">POST</span>
+        <div>
+          <div class="endpoint-path">/api/account/private/favorite/delete_rule</div>
+          <div class="endpoint-desc">Remove a rule from your favourites list.</div>
+        </div>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Parameter (query)</th><th>Type</th><th>Required</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>integer</td><td><span class="badge-status badge-auth">Yes</span></td></tr>
+        </tbody>
+      </table>
+      <div class="code-label">curl</div>
+      <pre><code>curl -X POST "http://127.0.0.1:7009/api/account/private/favorite/delete_rule?id=42" \
+  -H "X-API-KEY: YOUR_KEY"</code></pre>
+      <div class="code-label">responses</div>
+      <pre><code>200 → {"success": true,  "message": "Rule deleted!"}
+403 → {"success": false, "message": "Access denied"}</code></pre>
+    </section>
+
+    <!-- ════════════════════════ TESTING ════════════════════════ -->
+    <section id="testing" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-green"><i class="fas fa-flask"></i></div>
+        <h2 class="section-title">Testing</h2>
+      </div>
+      <p>Tests live in <code>tests/</code> and use <strong>pytest</strong> + Flask's test client. The testing config uses SQLite so no PostgreSQL installation is needed.</p>
+
+      <h3 class="subsection">conftest.py Fixtures</h3>
+      <div class="func-signature">
+        @pytest.fixture(scope="session")<br>
+        def <span class="fn-name">app</span>() → <span class="fn-ret">Flask</span>:<br>
+        &nbsp;&nbsp;<span class="fn-comment"># FLASKENV=testing, fresh SQLite DB, creates test users + rules</span>
+      </div>
+      <div class="func-signature">
+        @pytest.fixture(scope="session")<br>
+        def <span class="fn-name">client</span>(<span class="fn-param">app</span>) → <span class="fn-ret">FlaskClient</span>:<br>
+        &nbsp;&nbsp;<span class="fn-comment"># app.test_client()</span>
+      </div>
+
+      <h3 class="subsection">Running Tests</h3>
+      <div class="code-label">bash</div>
+      <pre><code># Full suite
+./launch.sh -t
+
+# Single test file
+FLASKENV=testing pytest tests/test_rule_api.py -v
+
+# Single test function
+FLASKENV=testing pytest tests/test_rule_api.py::test_create_yara_rule -v
+
+# With coverage
+FLASKENV=testing pytest tests/ --cov=app --cov-report=html</code></pre>
+
+      <div class="callout callout-warn"><i class="fas fa-triangle-exclamation"></i> Never run tests with <code>FLASKENV=development</code> — the test config disables CSRF and uses a throw-away SQLite database. The development PostgreSQL database must not be touched by the test suite.</div>
+    </section>
+
+    <!-- ════════════════════════ BLUEPRINTS ════════════════════════ -->
+    <section id="blueprints" class="doc-section anchor-offset">
+      <div class="section-header">
+        <div class="section-icon icon-gray"><i class="fas fa-map"></i></div>
+        <h2 class="section-title">Flask Blueprints</h2>
+      </div>
+      <table class="custom-table">
+        <thead><tr><th>Blueprint</th><th>URL Prefix</th><th>File</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td><code>home_bp</code></td><td><code>/</code></td><td><code>app/features/home/home.py</code></td><td>Landing page, search, feed</td></tr>
+          <tr><td><code>account_bp</code></td><td><code>/account</code></td><td><code>app/features/account/account.py</code></td><td>Register, login, profile, settings, API key</td></tr>
+          <tr><td><code>rule_bp</code></td><td><code>/rule</code></td><td><code>app/features/rule/rule.py</code></td><td>Rule CRUD, votes, comments, proposals</td></tr>
+          <tr><td><code>bundle_bp</code></td><td><code>/bundle</code></td><td><code>app/features/bundle/bundle.py</code></td><td>Bundle CRUD, export, votes, comments</td></tr>
+          <tr><td><code>tags_bp</code></td><td><code>/tags</code></td><td><code>app/features/tags/tags.py</code></td><td>Tag management, bulk operations</td></tr>
+          <tr><td><code>jobs_bp</code></td><td><code>/jobs</code></td><td><code>app/features/jobs/jobs.py</code></td><td>Background job management UI</td></tr>
+          <tr><td><code>api_blueprint</code></td><td><code>/api</code></td><td><code>app/api/api.py</code></td><td>Flask-RESTX REST API + Swagger</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="subsection">Frontend — Vue.js 3</h3>
+      <div class="callout callout-info"><i class="fas fa-circle-info"></i> Vue.js 3 is loaded via a local static asset (not CDN). Templates use <strong><code>[[ ]]</code> as delimiters</strong> (not <code>{{ }}</code>) to avoid conflict with Jinja2. Vue apps are ES-module scripts with <code>type="module"</code>.</div>
+    </section>
+
+    <!-- Footer -->
+    <hr class="section-divider">
+    <div style="text-align:center;color:var(--muted-color);font-size:.8rem;padding-bottom:1rem;">
+      <span style="font-family:'Space Mono',monospace;">Rulezet v1.5.0</span> &mdash; Developer Documentation &mdash;
+      Generated 2026-05-12
+    </div>
+
+  </div><!-- /#content -->
+</div><!-- /#main -->
+
+<!-- Scroll to top -->
+<button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+  <i class="fas fa-arrow-up"></i>
+</button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  // ── Theme ──
+  function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('rulezet-doc-theme', t);
+    document.getElementById('btn-light').classList.toggle('active', t === 'light');
+    document.getElementById('btn-dark').classList.toggle('active', t === 'dark');
+    document.getElementById('hljs-theme').href = t === 'dark'
+      ? 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css'
+      : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
+  }
+
+  (function() {
+    var saved = localStorage.getItem('rulezet-doc-theme') || 'light';
+    setTheme(saved);
+  })();
+
+  // ── Syntax highlight ──
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('pre code').forEach(function(el) {
+      hljs.highlightElement(el);
+    });
+  });
+
+  // ── Scroll-to-top button ──
+  window.addEventListener('scroll', function() {
+    var btn = document.getElementById('scroll-top');
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+
+  // ── Active sidebar link on scroll ──
+  var sections = document.querySelectorAll('section[id]');
+  var navLinks = document.querySelectorAll('#sidebar .sidebar-nav a');
+
+  function updateActive() {
+    var scrollPos = window.scrollY + 80;
+    var current = '';
+    sections.forEach(function(s) {
+      if (s.offsetTop <= scrollPos) current = s.id;
+    });
+    navLinks.forEach(function(a) {
+      var href = a.getAttribute('href').replace('#', '');
+      a.classList.toggle('active', href === current);
+    });
+  }
+
+  window.addEventListener('scroll', updateActive);
+  updateActive();
+</script>
+</body>
+</html>
