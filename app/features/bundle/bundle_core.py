@@ -257,9 +257,9 @@ def add_rule_to_bundle(bundle_id: int, rule_id: int , description: str) -> bool:
     if not bundle:
         return False
     rule = RuleModel.get_rule(rule_id)
-    if not rule:
-        return False    
-    
+    if not rule or rule.is_deleted:
+        return False
+
     # Check if association already exists
     existing = BundleRuleAssociation.query.filter_by(bundle_id=bundle_id, rule_id=rule_id).first()
     if existing:
@@ -433,6 +433,7 @@ def get_all_rule_bundles_page(page: int, bundle_id: int) -> list[Rule]:
         db.session.query(Rule)
         .join(BundleRuleAssociation, BundleRuleAssociation.rule_id == Rule.id)
         .filter(BundleRuleAssociation.bundle_id == bundle_id)
+        .filter(Rule.is_deleted == False)
         .order_by(Rule.creation_date.desc())
     )
 
@@ -446,7 +447,9 @@ def get_total_rule_from_bundle_count(bundle_id: int) -> int:
     """
     return (
         db.session.query(BundleRuleAssociation)
+        .join(Rule, Rule.id == BundleRuleAssociation.rule_id)
         .filter(BundleRuleAssociation.bundle_id == bundle_id)
+        .filter(Rule.is_deleted == False)
         .count()
     )
 
@@ -484,7 +487,7 @@ def get_full_rule_bundle_info(rule_id: int) -> Union[Dict[str, Any], Dict[str, s
         If the rule, association or bundle is not found, returns a dict with an "error" message.
     """
     rule = Rule.query.get(rule_id)
-    if not rule:
+    if not rule or rule.is_deleted:
         return {"error": f"No rule found with id {rule_id}"}
 
     assoc = BundleRuleAssociation.query.filter_by(rule_id=rule_id).first()
@@ -514,10 +517,15 @@ def get_rule_ids_by_bundle(bundle_id: int) -> Union[Dict[str, str], List[int]]:
         return {"error": f"No bundle found with id {bundle_id}"}
 
 
-    associations = BundleRuleAssociation.query.filter_by(bundle_id=bundle_id).all()
+    associations = (
+        db.session.query(BundleRuleAssociation)
+        .join(Rule, Rule.id == BundleRuleAssociation.rule_id)
+        .filter(BundleRuleAssociation.bundle_id == bundle_id)
+        .filter(Rule.is_deleted == False)
+        .all()
+    )
     if not associations:
         return {"error": f"No rules associated with bundle id {bundle_id}"}
-
 
     rule_ids = [assoc.rule_id for assoc in associations]
     return rule_ids
@@ -535,6 +543,7 @@ def get_rules_from_bundle(bundle_id: int) -> List[Rule]:
         db.session.query(Rule)
         .join(BundleRuleAssociation, BundleRuleAssociation.rule_id == Rule.id)
         .filter(BundleRuleAssociation.bundle_id == bundle_id)
+        .filter(Rule.is_deleted == False)
         .all()
     )
 
@@ -603,6 +612,7 @@ def get_bundles_of_user_with_id_page(
             query.join(Bundle.rules_assoc)
                  .join(BundleRuleAssociation.rule)
                  .filter(func.lower(Rule.format) == normalized_type)
+                 .filter(Rule.is_deleted == False)
                  .distinct()
         )
 
@@ -753,7 +763,7 @@ def update_bundle_from_structure(bundle_id, structure):
 
         for rid in new_rule_ids:
             rule = Rule.query.get(rid)
-            if not rule:
+            if not rule or rule.is_deleted:
                 continue
 
            
@@ -1093,7 +1103,7 @@ def get_paginated_rules_info_by_bundle(bundle_id: int, page: int):
     enriched_items = []
     for assoc in pagination.items:
         rule = Rule.query.get(assoc.rule_id)
-        if rule:
+        if rule and not rule.is_deleted:
             enriched_items.append({
                 "rule": rule.to_json(),
                 "association": assoc.to_json()

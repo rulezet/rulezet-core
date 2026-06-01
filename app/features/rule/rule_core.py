@@ -32,6 +32,187 @@ from ..account import account_core as AccountModel
 #   Rule action   #
 ###################
 
+def _active():
+    """Base query that excludes soft-deleted rules — use for all user-facing lookups."""
+    return Rule.query.filter(Rule.is_deleted == False)
+
+
+# ── Soft delete / restore ──────────────────────────────────────────────────────
+
+def soft_delete_rule(rule_id: int, user_id: int, batch_uuid: str = None) -> bool:
+    """Mark a single rule as deleted without removing it from the DB."""
+    rule = Rule.query.get(rule_id)
+    if not rule or rule.is_deleted:
+        return False
+    rule.is_deleted        = True
+    rule.deleted_at        = datetime.datetime.now(tz=datetime.timezone.utc)
+    rule.deleted_by_id     = user_id
+    rule.delete_batch_uuid = batch_uuid
+    db.session.commit()
+    return True
+
+
+def soft_delete_rule_list(rule_ids: list, user_id: int, batch_uuid: str = None) -> int:
+    """Soft-delete a list of rules. Returns the count actually deleted."""
+    if not rule_ids:
+        return 0
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    updated = Rule.query.filter(
+        Rule.id.in_(rule_ids),
+        Rule.is_deleted == False,
+    ).update(
+        {"is_deleted": True, "deleted_at": now, "deleted_by_id": user_id, "delete_batch_uuid": batch_uuid},
+        synchronize_session=False,
+    )
+    db.session.commit()
+    return updated
+
+
+def soft_delete_all_by_url(urls: list, user_id: int) -> tuple[bool, str, int]:
+    """Soft-delete all rules whose source matches the given GitHub URLs, as one batch."""
+    try:
+        if not urls:
+            return False, "No URL provided", 0
+        if isinstance(urls, str):
+            urls = [urls.strip()]
+        batch_uuid = str(uuid.uuid4())
+        rule_ids = [r[0] for r in db.session.query(Rule.id).filter(
+            Rule.source.in_(urls), Rule.is_deleted == False
+        ).all()]
+        count = soft_delete_rule_list(rule_ids, user_id, batch_uuid=batch_uuid)
+        return True, f"{count} rules moved to trash", count
+    except Exception as e:
+        db.session.rollback()
+        return False, str(e), 0
+
+
+def restore_rule(rule_id: int):
+    """Restore a single soft-deleted rule.
+
+    Returns:
+        True                          — restored OK
+        False                         — not found / not deleted
+        ("CONFLICT", active_rule)     — same content already exists in active rules
+    """
+    rule = Rule.query.get(rule_id)
+    if not rule or not rule.is_deleted:
+        return False
+    # Check if an active rule with the same content already exists
+    if rule.to_string:
+        conflict = get_rule_by_content(rule.to_string)  # uses _active()
+        if conflict and conflict.id != rule_id:
+            return "CONFLICT", conflict
+    rule.is_deleted        = False
+    rule.deleted_at        = None
+    rule.deleted_by_id     = None
+    rule.delete_batch_uuid = None
+    db.session.commit()
+    return True
+
+
+def restore_rules_bulk(rule_ids: list) -> int:
+    """Restore multiple soft-deleted rules. Returns count restored."""
+    if not rule_ids:
+        return 0
+    updated = Rule.query.filter(
+        Rule.id.in_(rule_ids), Rule.is_deleted == True
+    ).update(
+        {"is_deleted": False, "deleted_at": None, "deleted_by_id": None, "delete_batch_uuid": None},
+        synchronize_session=False,
+    )
+    db.session.commit()
+    return updated
+
+
+def restore_batch(batch_uuid: str) -> int:
+    """Restore all rules sharing the same delete_batch_uuid."""
+    if not batch_uuid:
+        return 0
+    updated = Rule.query.filter(
+        Rule.delete_batch_uuid == batch_uuid, Rule.is_deleted == True
+    ).update(
+        {"is_deleted": False, "deleted_at": None, "deleted_by_id": None, "delete_batch_uuid": None},
+        synchronize_session=False,
+    )
+    db.session.commit()
+    return updated
+
+
+def get_deleted_rules(page: int = 1, search: str = None, source: str = None,
+                      batch_uuid: str = None, fmt: str = None, per_page: int = 30,
+                      deleted_from: str = None, deleted_to: str = None):
+    """Paginated list of soft-deleted rules for the admin trash page."""
+    query = Rule.query.filter(Rule.is_deleted == True)
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(Rule.title.ilike(pattern) | Rule.author.ilike(pattern))
+    if source:
+        query = query.filter(Rule.source.ilike(f"%{source}%"))
+    if batch_uuid:
+        query = query.filter(Rule.delete_batch_uuid == batch_uuid)
+    if fmt:
+        query = query.filter(Rule.format == fmt)
+    if deleted_from:
+        try:
+            dt = datetime.datetime.strptime(deleted_from, '%Y-%m-%d')
+            query = query.filter(Rule.deleted_at >= dt)
+        except ValueError:
+            pass
+    if deleted_to:
+        try:
+            dt = datetime.datetime.strptime(deleted_to, '%Y-%m-%d') + datetime.timedelta(days=1)
+            query = query.filter(Rule.deleted_at < dt)
+        except ValueError:
+            pass
+    query = query.order_by(Rule.deleted_at.desc())
+    pagination = query.paginate(page=page, per_page=per_page, max_per_page=100)
+    return pagination
+
+
+def get_deleted_batches():
+    """Return distinct batch UUIDs with counts and source info for the trash grouped view."""
+    rows = (
+        db.session.query(
+            Rule.delete_batch_uuid,
+            Rule.source,
+            db.func.count(Rule.id).label('count'),
+            db.func.min(Rule.deleted_at).label('deleted_at'),
+        )
+        .filter(Rule.is_deleted == True, Rule.delete_batch_uuid.isnot(None))
+        .group_by(Rule.delete_batch_uuid, Rule.source)
+        .order_by(db.func.min(Rule.deleted_at).desc())
+        .all()
+    )
+    return [{"batch_uuid": r.delete_batch_uuid, "source": r.source,
+             "count": r.count, "deleted_at": r.deleted_at.strftime('%Y-%m-%d %H:%M') if r.deleted_at else None}
+            for r in rows]
+
+
+def permanent_delete_rule(rule_id: int) -> bool:
+    """Physically delete a soft-deleted rule (admin only — irreversible)."""
+    rule = Rule.query.filter(Rule.id == rule_id, Rule.is_deleted == True).first()
+    if not rule:
+        return False
+    db.session.delete(rule)
+    db.session.commit()
+    return True
+
+
+def permanent_delete_bulk(rule_ids: list) -> int:
+    """Physically delete multiple soft-deleted rules."""
+    if not rule_ids:
+        return 0
+    rules = Rule.query.filter(Rule.id.in_(rule_ids), Rule.is_deleted == True).all()
+    for r in rules:
+        db.session.delete(r)
+    db.session.commit()
+    return len(rules)
+
+
+def count_deleted_rules() -> int:
+    return Rule.query.filter(Rule.is_deleted == True).count()
+
+
 # Default tags automatically attached to every new rule
 _DEFAULT_TAG_NAMES = ['tlp:clear', 'pap:clear']
 
@@ -55,6 +236,19 @@ def _attach_default_tags(rule, user_id):
 
 # CRUD
 
+def _find_in_trash_by_content(content: str):
+    """Return a soft-deleted rule with identical content, or None."""
+    if not content:
+        return None
+    clean = "".join(content.split()).lower()
+    return Rule.query.filter(
+        Rule.is_deleted == True,
+        func.lower(
+            func.replace(func.replace(func.replace(
+                func.replace(Rule.to_string, ' ', ''), '\n', ''), '\r', ''), '\t', '')
+        ) == clean
+    ).first()
+
 # Create
 def add_rule_core(form_dict, user) -> tuple[bool, str] | tuple[Rule, str]:
     """
@@ -71,10 +265,13 @@ def add_rule_core(form_dict, user) -> tuple[bool, str] | tuple[Rule, str]:
         new_original_uuid = str(form_dict.get("original_uuid") or "").strip()  # Normalize to string
 
         existing_rule = get_rule_by_content(new_to_string)
-        # Check if the rule already exists with the original_uuid (if a rule is different but with the same uuid we don't want to import it)
-        
-        if existing_rule != None:
+        if existing_rule is not None:
             return False, "Rule already exists (content matches)"
+
+        # Check if the same content exists in the trash — offer restore instead
+        trashed_rule = _find_in_trash_by_content(new_to_string)
+        if trashed_rule is not None:
+            return False, f"TRASH_CONFLICT:{trashed_rule.uuid}:{trashed_rule.id}:{trashed_rule.title}"
 
             
         # Identify user
@@ -165,13 +362,13 @@ def get_rule_by_content(content):
     clean_content = "".join(content.split()).lower()
 
     # 2. Comparaison SQL avec gestion des Tabulations (\t)
-    query = Rule.query.filter(
+    query = _active().filter(
         func.lower(
             func.replace(
                 func.replace(
                     func.replace(
-                        func.replace(Rule.to_string, ' ', ''), 
-                    '\n', ''), 
+                        func.replace(Rule.to_string, ' ', ''),
+                    '\n', ''),
                 '\r', ''),
             '\t', '') # Ajout du remplacement des tabulations
         ) == clean_content
@@ -207,15 +404,9 @@ def rule_exists(Metadata: dict) -> tuple[bool, int]:
 
 # Delete
 
-def delete_rule_core(id) -> bool:
-    """Delete a rule"""
-    rule = get_rule(id)
-    if rule:
-        db.session.delete(rule)
-        db.session.commit()
-        return True
-    else:
-        return False
+def delete_rule_core(id, user_id=None, batch_uuid=None) -> bool:
+    """Soft-delete a rule (moves it to the trash)."""
+    return soft_delete_rule(id, user_id or 0, batch_uuid=batch_uuid)
 
 # Update
 
@@ -504,8 +695,8 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
 
 
 def get_rule_by_source(source_) -> str:
-    """Return all the rule from the source"""
-    return Rule.query.filter_by(source=source_).all()
+    """Return all active (non-deleted) rules from the source."""
+    return _active().filter(Rule.source == source_).all()
 
 def get_rule_id_by_title(title) -> int:
     """Return the rule ID from the title"""
@@ -513,8 +704,8 @@ def get_rule_id_by_title(title) -> int:
     return rule.id if rule else None
 
 def get_total_rules_count() -> int:
-    """Return the count of rules"""
-    return Rule.query.count()
+    """Return the count of active (non-deleted) rules."""
+    return _active().count()
 
 def get_rule_user_id(rule_id: int) -> int:
     """Return the user id (the user who import or create this rule) of the rule """
@@ -524,8 +715,8 @@ def get_rule_user_id(rule_id: int) -> int:
     return None  
 
 def get_last_rules_from_db(limit=12) -> Rule:
-    """Get last 10 rules"""
-    return Rule.query.order_by(
+    """Get last rules (non-deleted only)."""
+    return _active().order_by(
         case(
             (Rule.creation_date > Rule.last_modif, Rule.creation_date),
             else_=Rule.last_modif
@@ -540,40 +731,25 @@ def get_history_rule(page, rule_id) -> list:
         .paginate(page=page, per_page=20, max_per_page=20)
 
 def get_concerned_rules_page(source, page):
-    """Return paginated concerned rules for the given page (20 per page)."""
-    return Rule.query.filter_by(source=source, user_id=current_user.id).paginate(
-        page=page,
-        per_page=30,
-        max_per_page=30
-    )
+    return _active().filter(Rule.source == source, Rule.user_id == current_user.id).paginate(page=page, per_page=30, max_per_page=30)
 
 def get_concerned_rule_count(source):
-    """Return paginated concerned rules for the given page (20 per page)."""
-    return Rule.query.filter_by(source=source, user_id=current_user.id).count()
+    return _active().filter(Rule.source == source, Rule.user_id == current_user.id).count()
 
 def get_concerned_rules_admin_page(source, page, user_id_concerned):
-    """Return paginated concerned rules for the given page (20 per page)."""
-    return Rule.query.filter_by(source=source, user_id=user_id_concerned).paginate(
-        page=page,
-        per_page=30,
-        max_per_page=30
-    )
+    return _active().filter(Rule.source == source, Rule.user_id == user_id_concerned).paginate(page=page, per_page=30, max_per_page=30)
 
 def get_all_rules_by_user(user_id) -> Rule:
-    """Return all rules by user id"""
-    return Rule.query.filter_by(user_id=user_id).all()
+    return _active().filter(Rule.user_id == user_id).all()
 
 def get_concerned_rule_admin_count(source, page, user_id_concerned):
-    """Return paginated concerned rules for the given page (20 per page)."""
-    return Rule.query.filter_by(source=source, user_id=user_id_concerned).count()
+    return _active().filter(Rule.source == source, Rule.user_id == user_id_concerned).count()
 
 def get_concerned_rules(source):
-    """Return all the concerned rules"""
-    return Rule.query.filter_by(source=source, user_id=current_user.id).all()
+    return _active().filter(Rule.source == source, Rule.user_id == current_user.id).all()
 
-def get_concerned_rules_admin(source , user_id_to_send):
-    """Return all the concerned rules"""
-    return Rule.query.filter_by(source=source, user_id=user_id_to_send).all()
+def get_concerned_rules_admin(source, user_id_to_send):
+    return _active().filter(Rule.source == source, Rule.user_id == user_id_to_send).all()
 
 def get_rules_by_ids(rule_ids) -> list:
     """Get all the rules with id"""
@@ -840,55 +1016,36 @@ def calculate_diff_score(old_content, new_content) -> float:
 # Read
 
 def get_rules_edit_propose_page(page) -> RuleEditProposal:
-    """Return all rule proposals where the original rule belongs to current user (simple join version)"""
     return RuleEditProposal.query.join(RuleEditProposal.rule).filter(
         Rule.user_id == current_user.id,
+        Rule.is_deleted == False,
         RuleEditProposal.status != 'pending'
-    ).paginate(
-        page=page,
-        per_page=20,
-        max_per_page=20
-    )
+    ).paginate(page=page, per_page=20, max_per_page=20)
 
 def get_rules_edit_propose_page_pending(page) -> RuleEditProposal:
-    """Return all pending rule proposals where the original rule belongs to current user"""
     return RuleEditProposal.query.join(Rule).filter(
         Rule.user_id == current_user.id,
+        Rule.is_deleted == False,
         RuleEditProposal.status == 'pending'
-    ).options(joinedload(RuleEditProposal.rule)).paginate(
-        page=page,
-        per_page=20,
-        max_per_page=20
-    )
+    ).options(joinedload(RuleEditProposal.rule)).paginate(page=page, per_page=20, max_per_page=20)
 
 def get_rules_edit_propose_page_admin(page) -> RuleEditProposal:
-    """Return all rule proposals where the original rule belongs to current user (simple join version)"""
-    return RuleEditProposal.query.filter(
+    return RuleEditProposal.query.join(RuleEditProposal.rule).filter(
+        Rule.is_deleted == False,
         RuleEditProposal.status != 'pending'
-    ).paginate(
-        page=page,
-        per_page=20,
-        max_per_page=20
-    )
+    ).paginate(page=page, per_page=20, max_per_page=20)
 
 def get_rules_edit_propose_page_pending_admin(page) -> RuleEditProposal:
-    """Return all pending rule edit proposals (admin view, no user filter)"""
-    return RuleEditProposal.query.filter(
-        RuleEditProposal.status == 'pending'
-    ).paginate(
-        page=page,
-        per_page=20,
-        max_per_page=20
-    )
-def get_all_rules_edit_propose_page(page , rule_id) -> RuleEditProposal:
-    """Return all rule edit proposals"""
     return RuleEditProposal.query.join(RuleEditProposal.rule).filter(
-        RuleEditProposal.rule_id == rule_id
-    ).paginate(
-        page=page,
-        per_page=20,
-        max_per_page=20
-    )
+        Rule.is_deleted == False,
+        RuleEditProposal.status == 'pending'
+    ).paginate(page=page, per_page=20, max_per_page=20)
+
+def get_all_rules_edit_propose_page(page, rule_id) -> RuleEditProposal:
+    return RuleEditProposal.query.join(RuleEditProposal.rule).filter(
+        RuleEditProposal.rule_id == rule_id,
+        Rule.is_deleted == False,
+    ).paginate(page=page, per_page=20, max_per_page=20)
 def get_rule_proposal(id) -> RuleEditProposal:
     """Return the rule"""
     return RuleEditProposal.query.get(id)
@@ -1142,7 +1299,7 @@ def remove_has_voted(vote, rule_id, id) -> bool:
 
 def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False) -> Rule:
     """Filter the rules with specific field targeting"""
-    query = Rule.query
+    query = _active()
     
     if search:
         search = search.strip()
@@ -1249,7 +1406,7 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
 
 def get_rules_page_filter_bundle_page(search=None, author=None, sort_by=None, rule_type=None,page=1, bundle_id=None, per_page=10) -> Rule:
     """Filter the rules"""
-    query = Rule.query
+    query = _active()
     if search:
         search_lower = f"%{search.lower()}%"
         query = query.filter(
@@ -1288,9 +1445,9 @@ def get_rules_page_filter_bundle_page(search=None, author=None, sort_by=None, ru
     query = query.paginate(page=page, per_page=per_page)
     return query , query.total
 
-def filter_rules_owner(search=None, author=None, sort_by=None, rule_type=None , source=None) -> Rule:
+def filter_rules_owner(search=None, author=None, sort_by=None, rule_type=None, source=None) -> Rule:
     """Filter the rules"""
-    query = Rule.query.filter_by(user_id=current_user.id)
+    query = _active().filter(Rule.user_id == current_user.id)
     if search:
         search_lower = f"%{search.lower()}%"
         query = query.filter(
@@ -1326,7 +1483,7 @@ def filter_rules_owner(search=None, author=None, sort_by=None, rule_type=None , 
 
 def filter_rules_owner_github(search=None, author=None, sort_by=None, rule_type=None, source=None) -> Rule:
     """Filter the rules"""
-    query = Rule.query.filter_by(user_id=current_user.id)
+    query = _active().filter(Rule.user_id == current_user.id)
 
     if search:
         search_lower = f"%{search.lower()}%"
@@ -1900,7 +2057,7 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             .filter(RuleSimilarity.score > 0.99)
             .as_scalar()
         ).label("has_high_similarity")
-    ).filter(Rule.source.op('~')(github_pattern))
+    ).filter(Rule.source.op('~')(github_pattern), Rule.is_deleted == False)
 
     if format_filter:
         query = query.filter(Rule.format == format_filter)
@@ -1975,6 +2132,7 @@ def get_rule_count_by_github_page(page: int = 1, search: str = None):
             )
             .filter(Rule.source.isnot(None))
             .filter(Rule.source.op('~')(github_pattern))
+            .filter(Rule.is_deleted == False)
         )
 
         if search:
@@ -1990,7 +2148,7 @@ def get_rule_count_by_github_page(page: int = 1, search: str = None):
 def get_all_rule_by_url_github_page(page: int = 1, search: str = None, url: str = None):
     """Get paginated list of Rules whose source matches a specific GitHub project URL."""
 
-    query = Rule.query.filter(Rule.source.isnot(None))
+    query = _active().filter(Rule.source.isnot(None))
 
     if url:
         url = url.rstrip("/")
@@ -2019,9 +2177,9 @@ def get_all_rule_by_url_github_page(page: int = 1, search: str = None, url: str 
     
     return pagination, total_count
 
-def get_all_rule_by_url_github(url: str = None , current_user_: User = None):
+def get_all_rule_by_url_github(url: str = None, current_user_: User = None):
     """Get list of Rules whose source contains a specific GitHub project URL."""
-    query = Rule.query.filter(Rule.source.isnot(None))
+    query = _active().filter(Rule.source.isnot(None))
 
     if current_user_.is_admin():
         if url:
@@ -2042,7 +2200,7 @@ def get_all_rule_by_github_url_page(search: str = None, page: int = 1):
     per_page = 10
 
     # Base query: only rules that have a GitHub source and belong to the current user
-    query = Rule.query.filter(
+    query = _active().filter(
         Rule.source.isnot(None),
         Rule.source.ilike("%github.com%"),
         Rule.user_id == current_user.id
@@ -2541,67 +2699,22 @@ def get_total_rules():
 def get_total_formats():
     return Rule.query.distinct(Rule.format).count()
 
-def delete_all_rule_by_url(urls):
-    try:
-        if not urls:
-            return False, "URL is required", 0
-
-        if isinstance(urls, str):
-            target_urls = [urls.strip()]
-        else:
-            target_urls = [u.strip() for u in urls]
-
-        rule_ids = [r[0] for r in db.session.query(Rule.id).filter(Rule.source.in_(target_urls)).all()]
-
-        if not rule_ids:
-            return True, "No rules found to delete", 0
-
-        db.session.query(RuleUpdateHistory).filter(RuleUpdateHistory.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.query(Comment).filter(Comment.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.query(RuleSimilarity).filter(RuleSimilarity.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.query(RuleVote).filter(RuleVote.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.query(BundleRuleAssociation).filter(BundleRuleAssociation.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.query(RuleEditContribution).filter(RuleEditContribution.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.query(RuleEditProposal).filter(RuleEditProposal.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.query(RuleFavoriteUser).filter(RuleFavoriteUser.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-
-        db.session.query(RequestOwnerRule).filter(RequestOwnerRule.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.query(RuleTagAssociation).filter(RuleTagAssociation.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.query(RepportRule).filter(RepportRule.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-
-        deleted_count = Rule.query.filter(Rule.id.in_(rule_ids)).delete(synchronize_session=False)
-
-        for url in target_urls:
-            ImporterResult.query.filter(ImporterResult.info.like(f'%{url}%')).delete(synchronize_session=False)
-            UpdateResult.query.filter(UpdateResult.repo_sources.like(f'%{url}%')).delete(synchronize_session=False)
-
-        db.session.commit()
-
-        return True, f"{deleted_count} rules deleted", deleted_count
-
-    except Exception as e:
-        db.session.rollback()
-        return False, f"Error occurred while deleting rules: {str(e)}", 0
+def delete_all_rule_by_url(urls, user_id: int = 0):
+    """Soft-delete all rules from the given GitHub source URLs (moves them to trash)."""
+    return soft_delete_all_by_url(urls, user_id)
 
 def count_rules_by_url(url):
-    if not url:        
+    if not url:
         return 0
-    return Rule.query.filter(Rule.source == url.strip()).count()
+    return _active().filter(Rule.source == url.strip()).count()
 
 def get_all_github_sources(exclude_urls=None):
-    """
-    Returns a unique list of all GitHub repository URLs in the database,
-    excluding specific ones.
-    """
-
+    """Returns unique active GitHub repository URLs (excludes trash)."""
     query = db.session.query(Rule.source).distinct()
-    
     query = query.filter(Rule.source.like('https://github.com/%'))
-    
-
+    query = query.filter(Rule.is_deleted == False)
     if exclude_urls:
         query = query.filter(Rule.source.notin_(exclude_urls))
-
     return [r[0] for r in query.all()]
 
 
@@ -2624,7 +2737,7 @@ def export_rules_by_urls_as_zip(urls):
         for url in target_urls:
             folder_name = url.replace('https://', '').replace('http://', '').replace('/', '_').strip('_')
             
-            rules = Rule.query.filter(Rule.source == url).all()
+            rules = _active().filter(Rule.source == url).all()
             
 
             repo_info = {
@@ -2812,9 +2925,10 @@ def get_licenses_usage_with_filter(search_query, user_id=None, source_scope=None
 
     # Base query: count occurrences of each license string
     query = db.session.query(
-        Rule.license.label('license'), 
+        Rule.license.label('license'),
         func.count(Rule.id).label('count')
-    ).filter(Rule.license != None, Rule.license != '', Rule.license != '[]')
+    ).filter(Rule.license != None, Rule.license != '', Rule.license != '[]',
+             Rule.is_deleted == False)
 
     # Filter by search term
     if search_query:

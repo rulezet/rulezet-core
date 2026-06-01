@@ -409,122 +409,48 @@ def handle_bulk_remove_tag_from_rules(job, app):
 @register_handler('delete_github_rules')
 def handle_delete_github_rules(job, app):
     """
+    Soft-delete all rules from the given GitHub source URLs.
+    Rules are moved to the trash (is_deleted=True) and can be restored by an admin.
+
     Payload:
-        urls : list[str] — GitHub source URLs to delete
-
-    Progress strategy:
-        1. Delete all FK associations in one shot each (fast, no progress change)
-        2. Delete rules by batches of DELETE_BATCH — each commit drops the
-           Rule.count, so the poll recount sees real progression.
+        urls : list[str] — GitHub source URLs
     """
-    from app.core.db_class.db import (
-        RuleUpdateHistory, Comment, RuleSimilarity, RuleVote,
-        BundleRuleAssociation, RuleEditContribution, RuleEditProposal,
-        RuleFavoriteUser, RuleTagAssociation, RepportRule,
-        ImporterResult, UpdateResult,
-    )
-    try:
-        from app.core.db_class.db import RequestOwnerRule
-        _has_request_owner = True
-    except ImportError:
-        _has_request_owner = False
-
-    DELETE_BATCH = 500   # rules deleted per commit — adjust for granularity
+    import uuid as _uuid
+    import datetime
 
     payload = job.payload or {}
     urls    = payload.get('urls', [])
-
     if not urls:
         raise ValueError("No URLs provided.")
 
-    def recount():
-        db.session.expire_all()
-        return Rule.query.filter(Rule.source.in_(urls)).count()
-
-    # ── Initial count ─────────────────────────────────────────────────────────
-    initial = recount()
+    # Count active rules for these sources
+    initial = Rule.query.filter(Rule.source.in_(urls), Rule.is_deleted == False).count()
     if job.total == 0:
         job.total = initial
         db.session.commit()
-        log_job(job,
-            f"Job started — {initial} rule(s) to delete from: {', '.join(urls)}",
-            level='info', event='started')
+        log_job(job, f"Job started — {initial} rule(s) to move to trash from: {', '.join(urls)}",
+                level='info', event='started')
 
-    if job.total == 0:
-        log_job(job, "No rules found — nothing to delete.", level='warning', event='done')
+    if initial == 0:
+        log_job(job, "No active rules found — nothing to delete.", level='warning', event='done')
         return
 
-    # ── Collect all rule IDs once ─────────────────────────────────────────────
-    rule_ids = [r[0] for r in db.session.query(Rule.id).filter(Rule.source.in_(urls)).all()]
-    print(f"[delete_github] {len(rule_ids)} rule_ids collected")
+    batch_uuid = payload.get('batch_uuid') or str(_uuid.uuid4())
+    now        = datetime.datetime.now(tz=datetime.timezone.utc)
+    created_by = job.created_by
 
-    if not rule_ids:
-        return
-
-    # ── Step 1: delete all FK tables in one shot — fast, no rule count change ─
-    log_job(job, f"Cleaning FK associations for {len(rule_ids)} rule(s)…",
-            level='info', event='progress')
-
-    db.session.query(RuleUpdateHistory).filter(RuleUpdateHistory.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    db.session.query(Comment).filter(Comment.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    db.session.query(RuleSimilarity).filter(RuleSimilarity.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    db.session.query(RuleVote).filter(RuleVote.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    db.session.query(BundleRuleAssociation).filter(BundleRuleAssociation.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    db.session.query(RuleEditContribution).filter(RuleEditContribution.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    db.session.query(RuleEditProposal).filter(RuleEditProposal.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    db.session.query(RuleFavoriteUser).filter(RuleFavoriteUser.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    db.session.query(RuleTagAssociation).filter(RuleTagAssociation.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    db.session.query(RepportRule).filter(RepportRule.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-    db.session.commit()
-    if _has_request_owner:
-        db.session.query(RequestOwnerRule).filter(RequestOwnerRule.rule_id.in_(rule_ids)).delete(synchronize_session=False)
-        db.session.commit()
-
-    log_job(job, "FK associations cleaned — deleting rules by batch…",
-            level='info', event='progress')
-    print(f"[delete_github] FK associations cleaned, starting batch rule deletion")
-
-    # ── Step 2: delete rules in batches — each commit drops the count ─────────
-    total_deleted = 0
-    for i in range(0, len(rule_ids), DELETE_BATCH):
-        chunk = rule_ids[i:i + DELETE_BATCH]
-        nb    = Rule.query.filter(Rule.id.in_(chunk)).delete(synchronize_session=False)
-        db.session.commit()
-        total_deleted += nb
-
-        remaining  = recount()
-        job.done   = max(0, job.total - remaining)
-        db.session.commit()
-
-        print(f"[delete_github] batch deleted {nb} — remaining={remaining} ({job.progress_pct}%)")
-
-        if job.progress_pct % 10 == 0 or remaining == 0:
-            log_job(job,
-                f"{remaining} rule(s) remaining ({job.progress_pct}% done).",
-                level='info', event='progress')
-
-    # ── Clean importers/updaters ───────────────────────────────────────────────
-    for url in urls:
-        ImporterResult.query.filter(ImporterResult.info.like(f'%{url}%')).delete(synchronize_session=False)
-        UpdateResult.query.filter(UpdateResult.repo_sources.like(f'%{url}%')).delete(synchronize_session=False)
+    # Soft-delete in one bulk update
+    updated = Rule.query.filter(Rule.source.in_(urls), Rule.is_deleted == False).update(
+        {"is_deleted": True, "deleted_at": now, "deleted_by_id": created_by, "delete_batch_uuid": batch_uuid},
+        synchronize_session=False,
+    )
     db.session.commit()
 
-    remaining = recount()
-    job.done  = job.total - remaining
+    job.done = updated
     db.session.commit()
 
-    log_job(job,
-        f"Completed — {total_deleted} rule(s) deleted. {remaining} remaining.",
-        level='success', event='done')
+    log_job(job, f"Completed — {updated} rule(s) moved to trash (batch: {batch_uuid[:8]}).",
+            level='success', event='done')
 
 
 # ─── delete_activity_logs ─────────────────────────────────────────────────────
@@ -748,3 +674,131 @@ def handle_update_misp_data(job, app):
             level='success', event='step3_done')
 
     log_job(job, "All done. Your imported MISP data is up to date.", level='success', event='done')
+
+# ─── trash_restore_bulk ───────────────────────────────────────────────────────
+
+TRASH_BATCH = 200
+
+
+@register_handler('trash_restore_bulk')
+def handle_trash_restore_bulk(job, app):
+    """
+    Restore soft-deleted rules in batches.
+
+    Payload:
+        ids          : list[int]  — specific rule IDs to restore (optional)
+        restore_all  : bool       — restore every rule in the trash
+        batch_uuid   : str        — restore all rules sharing this batch UUID
+    """
+    import datetime as _dt
+    payload    = job.payload or {}
+    restore_all = payload.get('restore_all', False)
+    batch_uuid  = payload.get('batch_uuid')
+    ids         = payload.get('ids', [])
+
+    # Build the target query
+    query = Rule.query.filter(Rule.is_deleted == True)
+    if restore_all:
+        pass  # all deleted rules
+    elif batch_uuid:
+        query = query.filter(Rule.delete_batch_uuid == batch_uuid)
+    elif ids:
+        query = query.filter(Rule.id.in_(ids))
+    else:
+        log_job(job, "No target specified.", level='warning', event='done')
+        return
+
+    total = query.count()
+    if job.total == 0:
+        job.total = total
+        db.session.commit()
+        log_job(job, f"Job started — {total} rule(s) to restore.", level='info', event='started')
+
+    if total == 0:
+        log_job(job, "No deleted rules found.", level='warning', event='done')
+        return
+
+    offset = payload.get('_resume_offset', 0)
+    restored = 0
+    all_ids  = [r[0] for r in query.with_entities(Rule.id).all()]
+
+    for i in range(offset, len(all_ids), TRASH_BATCH):
+        if _is_cancelled(job):
+            log_job(job, "Cancelled.", level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+        chunk = all_ids[i:i + TRASH_BATCH]
+        now   = _dt.datetime.now(tz=_dt.timezone.utc)
+        Rule.query.filter(Rule.id.in_(chunk), Rule.is_deleted == True).update(
+            {"is_deleted": False, "deleted_at": None, "deleted_by_id": None, "delete_batch_uuid": None},
+            synchronize_session=False,
+        )
+        db.session.commit()
+        restored  += len(chunk)
+        job.done   = restored
+        _save_offset(job, i + TRASH_BATCH)
+        db.session.commit()
+        log_job(job, f"{restored}/{total} rule(s) restored.", level='info', event='progress')
+
+    log_job(job, f"Done — {restored} rule(s) restored.", level='success', event='done')
+
+
+# ─── trash_permanent_delete_bulk ──────────────────────────────────────────────
+
+@register_handler('trash_permanent_delete_bulk')
+def handle_trash_permanent_delete_bulk(job, app):
+    """
+    Permanently delete soft-deleted rules in batches (irreversible).
+
+    Payload:
+        ids          : list[int]  — specific rule IDs
+        delete_all   : bool       — delete every rule in the trash
+        batch_uuid   : str        — delete all rules sharing this batch UUID
+    """
+    payload    = job.payload or {}
+    delete_all = payload.get('delete_all', False)
+    batch_uuid = payload.get('batch_uuid')
+    ids        = payload.get('ids', [])
+
+    query = Rule.query.filter(Rule.is_deleted == True)
+    if delete_all:
+        pass
+    elif batch_uuid:
+        query = query.filter(Rule.delete_batch_uuid == batch_uuid)
+    elif ids:
+        query = query.filter(Rule.id.in_(ids))
+    else:
+        log_job(job, "No target specified.", level='warning', event='done')
+        return
+
+    total = query.count()
+    if job.total == 0:
+        job.total = total
+        db.session.commit()
+        log_job(job, f"Job started — {total} rule(s) to permanently delete.", level='info', event='started')
+
+    if total == 0:
+        log_job(job, "No rules found.", level='warning', event='done')
+        return
+
+    offset  = payload.get('_resume_offset', 0)
+    deleted = 0
+    all_ids = [r[0] for r in query.with_entities(Rule.id).all()]
+
+    for i in range(offset, len(all_ids), TRASH_BATCH):
+        if _is_cancelled(job):
+            log_job(job, "Cancelled.", level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+        chunk = all_ids[i:i + TRASH_BATCH]
+        Rule.query.filter(Rule.id.in_(chunk), Rule.is_deleted == True).delete(synchronize_session=False)
+        db.session.commit()
+        deleted  += len(chunk)
+        job.done  = deleted
+        _save_offset(job, i + TRASH_BATCH)
+        db.session.commit()
+        log_job(job, f"{deleted}/{total} rule(s) permanently deleted.", level='info', event='progress')
+
+    log_job(job, f"Done — {deleted} rule(s) permanently deleted.", level='success', event='done')

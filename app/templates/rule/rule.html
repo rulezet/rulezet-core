@@ -70,6 +70,30 @@
         <form action="" method="post" id="form">
           {{ form.hidden_tag() }}
 
+          <!-- Trash conflict warning -->
+          {% for category, message in get_flashed_messages(with_categories=True) %}
+            {% if message.startswith('TRASH_CONFLICT:') %}
+              {% set parts = message.split(':', 3) %}
+              <div class="alert alert-warning border-warning rounded-3 d-flex align-items-start gap-3 mb-4" role="alert" style="border-left:4px solid #ffc107 !important;">
+                <i class="fa-solid fa-trash-can-arrow-up fa-lg text-warning mt-1 flex-shrink-0"></i>
+                <div class="flex-grow-1">
+                  <strong>This rule exists in the trash</strong><br>
+                  <span style="font-size:.88rem;">A deleted rule named <strong>"{{ parts[3] if parts|length > 3 else 'deleted rule' }}"</strong> has the same content. You can restore it instead of creating a duplicate.</span>
+                </div>
+                {% if current_user.is_admin() %}
+                <a href="/rule/trash" class="btn btn-sm btn-warning rounded-pill ms-2 flex-shrink-0">
+                  <i class="fa-solid fa-rotate-left me-1"></i>Go to Trash
+                </a>
+                {% endif %}
+              </div>
+            {% elif category != 'warning' or not message.startswith('TRASH') %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show mb-3" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+              </div>
+            {% endif %}
+          {% endfor %}
+
           <!-- Identity -->
           <p class="form-section-title"><i class="fas fa-id-card me-1"></i>Identity</p>
           <div class="row g-3 mb-4">

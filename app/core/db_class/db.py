@@ -150,6 +150,12 @@ class Rule(db.Model):
 
     github_path = db.Column(db.String , nullable=True)
 
+    # Soft delete
+    is_deleted        = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    deleted_at        = db.Column(db.DateTime, nullable=True)
+    deleted_by_id     = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    delete_batch_uuid = db.Column(db.String(36), nullable=True, index=True)
+
     #edit
     def get_rule_user_first_name_by_id(self):
         user = User.query.get(self.user_id)  

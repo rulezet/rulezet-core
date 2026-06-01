@@ -141,6 +141,11 @@
                      </li>
                      <li><a href="/admin/logs" class="dropdown-item py-2 {% if request.path == '/admin/logs' %}active{% endif %}">
                            <i class="fa-solid fa-scroll fa-fw me-2 text-muted"></i>Activity Logs</a></li>
+                     <li>
+                        <a href="/rule/trash" class="dropdown-item py-2 d-flex justify-content-between align-items-center {% if request.path == '/rule/trash' %}active{% endif %}">
+                           <span><i class="fa-solid fa-trash-can-arrow-up fa-fw me-2 text-danger"></i>Trash</span>
+                        </a>
+                     </li>
 
                   </ul>
                </li>

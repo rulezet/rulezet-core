@@ -1,0 +1,635 @@
+{% extends 'base.html' %}
+{% block head %}
+<link rel="stylesheet" id="hljs-theme"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+<style>
+  .source-link { cursor: pointer; }
+  .source-link:hover { text-decoration: underline; color: #0d6efd; }
+  .rule-title-link { cursor: pointer; }
+  .rule-title-link:hover { color: #0d6efd !important; text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4" id="trash-app" v-cloak>
+
+  <!-- Banner -->
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-trash-can-arrow-up banner-watermark"></i>
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+      <div class="d-flex align-items-center gap-3">
+        <div class="banner-icon">
+          <i class="fa-solid fa-trash-can-arrow-up"></i>
+        </div>
+        <div>
+          <h2 class="fw-bold mb-1">
+            Deleted Rules
+            <span v-if="totalCount > 0" class="badge bg-danger ms-2" style="font-size:.75rem; vertical-align:middle;">[[ totalCount ]]</span>
+          </h2>
+          <div class="banner-accent"></div>
+        </div>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button @click="restoreAll" class="btn btn-sm btn-success rounded-pill px-3">
+          <i class="fa-solid fa-rotate-left me-1"></i>Restore All
+        </button>
+        <button @click="deleteAll" class="btn btn-sm btn-outline-danger rounded-pill px-3">
+          <i class="fa-solid fa-fire me-1"></i>Delete All Forever
+        </button>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:640px; font-size:.95rem;">
+      Deleted rules are hidden everywhere on the platform. Restore them to make them visible again, or permanently delete them to free up space. Rules deleted from the same GitHub source share a batch and can be restored together.
+    </p>
+  </div>
+
+  <!-- Filters -->
+  <div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+      <div class="row g-3 align-items-end">
+
+        <div class="col-lg-3 col-md-6">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="fa-solid fa-magnifying-glass me-1 text-primary"></i>Search
+          </label>
+          <input v-model="search" @input="debouncedFetch" class="form-control form-control-sm"
+                 placeholder="Title or author…">
+        </div>
+
+        <div class="col-lg-2 col-md-4">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="fa-solid fa-file-code me-1 text-primary"></i>Format
+          </label>
+          <select v-model="fmtFilter" @change="fetchRules(1)" class="form-select form-select-sm">
+            <option value="">All formats</option>
+            <option v-for="f in formats" :key="f" :value="f">[[ f ]]</option>
+          </select>
+        </div>
+
+        <div class="col-lg-2 col-md-4">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="fa-regular fa-calendar me-1 text-primary"></i>Deleted from
+          </label>
+          <input type="date" v-model="deletedFrom" @change="fetchRules(1)"
+                 class="form-control form-control-sm">
+        </div>
+
+        <div class="col-lg-2 col-md-4">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="fa-regular fa-calendar me-1 text-primary"></i>Deleted to
+          </label>
+          <input type="date" v-model="deletedTo" @change="fetchRules(1)"
+                 class="form-control form-control-sm">
+        </div>
+
+        <div class="col-lg-3 col-md-4">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="fa-brands fa-github me-1 text-primary"></i>GitHub batch
+          </label>
+          <select v-model="batchFilter" @change="fetchRules(1)" class="form-select form-select-sm">
+            <option value="">All / individual</option>
+            <option v-for="b in batches" :key="b.batch_uuid" :value="b.batch_uuid">
+              [[ shortSource(b.source) ]] ([[ b.count ]] rules · [[ b.deleted_at ]])
+            </option>
+          </select>
+        </div>
+
+        <div class="col-12 d-flex gap-2">
+          <button @click="fetchRules(1)" class="btn btn-sm btn-primary rounded-pill px-3">
+            <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+          </button>
+          <button @click="resetFilters" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+            <i class="fa-solid fa-rotate-left me-1"></i>Reset
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch restore banner -->
+  <div v-if="batchFilter" class="alert alert-info d-flex align-items-center gap-3 py-2 px-3 mb-3 rounded-3 border-0" style="font-size:.85rem;">
+    <i class="fa-brands fa-github fa-lg text-primary"></i>
+    <div>
+      Filtering GitHub batch — <strong>[[ batchRulesCount ]] rules</strong> deleted together.
+    </div>
+    <div class="d-flex gap-2 ms-auto flex-wrap">
+      <button @click="restoreBatch(batchFilter)" class="btn btn-sm btn-success rounded-pill">
+        <i class="fa-solid fa-rotate-left me-1"></i>Restore Batch
+      </button>
+      <button @click="deleteBatch(batchFilter)" class="btn btn-sm btn-danger rounded-pill">
+        <i class="fa-solid fa-fire me-1"></i>Delete Batch Forever
+      </button>
+      <button @click="batchFilter = ''; fetchRules(1)" class="btn btn-sm btn-outline-secondary rounded-pill">
+        <i class="fa-solid fa-xmark me-1"></i>Clear filter
+      </button>
+    </div>
+  </div>
+
+  <!-- Selection bar -->
+  <div v-if="selectedIds.length > 0" class="selection-status-card mb-3">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <div class="selection-icon-box rounded-3">
+        <i class="fa-solid fa-check-square"></i>
+        <span class="selection-badge">[[ selectedIds.length ]]</span>
+      </div>
+      <span class="fw-semibold small">[[ selectedIds.length ]] rule(s) selected</span>
+      <div class="d-flex gap-2 ms-auto flex-wrap">
+        <button @click="restoreBulk" class="selection-pill">
+          <i class="fa-solid fa-rotate-left text-success"></i>Restore
+        </button>
+        <button @click="permanentDeleteBulk" class="selection-pill">
+          <i class="fa-solid fa-fire text-danger"></i>Delete Forever
+        </button>
+        <button @click="selectedIds = []" class="selection-pill global">
+          <i class="fa-solid fa-xmark"></i>Clear
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card border-0 shadow rounded-4 overflow-hidden mb-4">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr style="background:var(--light-bg-color); border-bottom:2px solid var(--border-color);">
+            <th class="py-3 ps-3" style="width:36px; color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
+              <input type="checkbox" class="form-check-input" @change="toggleSelectAll" :checked="allSelected">
+            </th>
+            <th class="py-3" style="color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
+              <i class="fa-solid fa-shield-halved me-1"></i>Rule
+            </th>
+            <th class="py-3" style="color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
+              <i class="fa-solid fa-file-code me-1"></i>Format
+            </th>
+            <th class="py-3" style="color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
+              <i class="fa-brands fa-github me-1"></i>Source
+            </th>
+            <th class="py-3" style="color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
+              <i class="fa-regular fa-clock me-1"></i>Deleted at
+            </th>
+            <th class="py-3" style="color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
+              <i class="fa-solid fa-user me-1"></i>By
+            </th>
+            <th class="py-3 text-center" style="width:40px; color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
+              <i class="fa-brands fa-github" title="GitHub batch"></i>
+            </th>
+            <th class="py-3" style="width:110px; border:none;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-if="loading">
+            <tr><td colspan="8" class="text-center py-5">
+              <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+              <span style="color:var(--subtle-text-color);">Loading…</span>
+            </td></tr>
+          </template>
+          <template v-else-if="rules.length === 0">
+            <tr><td colspan="8" class="text-center py-5">
+              <i class="fa-solid fa-check-circle fa-2x text-success mb-2 d-block opacity-50"></i>
+              <span style="color:var(--subtle-text-color);">No deleted rules found.</span>
+            </td></tr>
+          </template>
+          <template v-else>
+            <tr v-for="rule in rules" :key="rule.id"
+                :data-highlight-id="rule.id"
+                :style="rule.id === highlightId
+                  ? 'border-bottom:1px solid var(--border-color); background:rgba(220,53,69,.08); box-shadow:inset 3px 0 0 #dc3545;'
+                  : 'border-bottom:1px solid var(--border-color);'">
+
+              <!-- Checkbox -->
+              <td class="ps-3" @click.stop>
+                <input type="checkbox" class="form-check-input" :value="rule.id" v-model="selectedIds">
+              </td>
+
+              <!-- Title + author -->
+              <td style="max-width:280px;">
+                <span class="fw-semibold rule-title-link d-block text-truncate"
+                      :title="rule.title"
+                      @click="openContentModal(rule)"
+                      style="color:var(--text-color); font-size:.85rem;">
+                  [[ rule.title ]]
+                </span>
+                <span style="color:var(--subtle-text-color); font-size:.72rem;">
+                  <i class="fa-solid fa-user-pen me-1 opacity-50"></i>[[ rule.author || '—' ]]
+                </span>
+              </td>
+
+              <!-- Format -->
+              <td>
+                <span class="badge rounded-pill bg-dark px-2 py-1" style="font-size:.68rem; letter-spacing:.04em;">
+                  [[ (rule.format || '—').toUpperCase() ]]
+                </span>
+              </td>
+
+              <!-- Source — clickable to filter -->
+              <td style="max-width:200px;">
+                <span v-if="rule.source"
+                      class="source-link text-truncate d-block small"
+                      :title="rule.source"
+                      @click="sourceFilter = rule.source; fetchRules(1)"
+                      style="color:var(--subtle-text-color); font-size:.75rem;">
+                  <i class="fa-brands fa-github me-1 opacity-60"></i>[[ shortSource(rule.source) ]]
+                </span>
+                <span v-else style="color:var(--subtle-text-color); font-size:.75rem;">—</span>
+              </td>
+
+              <!-- Deleted at -->
+              <td class="text-nowrap small" style="color:var(--subtle-text-color);">[[ rule.deleted_at || '—' ]]</td>
+
+              <!-- Deleted by -->
+              <td class="small" style="color:var(--subtle-text-color);">[[ rule.deleted_by || '—' ]]</td>
+
+              <!-- Batch badge -->
+              <td class="text-center">
+                <span v-if="rule.delete_batch_uuid"
+                      class="badge rounded-pill px-2 py-1 source-link"
+                      style="background:var(--light-bg-color); color:var(--subtle-text-color); font-size:.65rem; border:1px solid var(--border-color);"
+                      @click="batchFilter = rule.delete_batch_uuid; fetchRules(1)"
+                      title="Click to show entire batch">
+                  <i class="fa-brands fa-github"></i>
+                </span>
+              </td>
+
+              <!-- Actions -->
+              <td class="text-nowrap">
+                <button @click="openContentModal(rule)"
+                        class="btn btn-xs btn-outline-secondary px-2 py-0 me-1"
+                        title="View rule content">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+                <button @click="restoreOne(rule)"
+                        class="btn btn-xs btn-outline-success px-2 py-0 me-1"
+                        title="Restore">
+                  <i class="fa-solid fa-rotate-left"></i>
+                </button>
+                <button @click="permanentDeleteOne(rule)"
+                        class="btn btn-xs btn-outline-danger px-2 py-0"
+                        title="Delete forever">
+                  <i class="fa-solid fa-fire"></i>
+                </button>
+              </td>
+
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <pagination-component :current-page="page" :total-pages="totalPages" @change-page="fetchRules">
+  </pagination-component>
+
+  <!-- Restore conflict modal -->
+  <div v-if="conflictData" class="modal fade show d-block" style="background:rgba(0,0,0,.6);" @click.self="conflictData=null">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
+        <div class="modal-header border-0 px-4 pt-4 pb-2">
+          <div class="d-flex align-items-center gap-3">
+            <div class="banner-icon" style="width:38px;height:38px;font-size:1rem;background:rgba(255,193,7,.15);color:#ffc107;">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+              <h5 class="fw-bold mb-0">Restore conflict detected</h5>
+              <small style="color:var(--subtle-text-color);">A rule with the same content already exists. Choose which one to keep.</small>
+            </div>
+          </div>
+          <button class="btn-close ms-auto" @click="conflictData=null"></button>
+        </div>
+        <div class="modal-body px-4 py-3">
+          <div class="row g-3">
+            <!-- Active rule -->
+            <div class="col-md-6">
+              <div class="card border-0 rounded-3 h-100 shadow-sm" style="background:var(--bg-color); border:2px solid #0d6efd !important;">
+                <div class="card-body p-3">
+                  <span class="badge bg-primary mb-2">Currently active</span>
+                  <p class="fw-semibold mb-1" style="color:var(--text-color);">[[ conflictData.active_title ]]</p>
+                  <small style="color:var(--subtle-text-color);">
+                    <i class="fa-regular fa-calendar me-1"></i>Created [[ conflictData.active_created ]]
+                  </small>
+                </div>
+              </div>
+            </div>
+            <!-- Trash rule -->
+            <div class="col-md-6">
+              <div class="card border-0 rounded-3 h-100 shadow-sm" style="background:var(--bg-color); border:2px solid #dc3545 !important;">
+                <div class="card-body p-3">
+                  <span class="badge bg-danger mb-2">In trash</span>
+                  <p class="fw-semibold mb-1" style="color:var(--text-color);">[[ conflictData.trash_title ]]</p>
+                  <small style="color:var(--subtle-text-color);">
+                    <i class="fa-solid fa-trash-can me-1"></i>Deleted · id=[[ conflictData.trash_id ]]
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="text-muted small mt-3 mb-0">Both rules have identical content. Keeping one will permanently delete the other.</p>
+        </div>
+        <div class="modal-footer border-0 px-4 pb-4 gap-2">
+          <button @click="resolveConflict('keep_active')" class="btn btn-primary rounded-pill px-4">
+            <i class="fa-solid fa-check me-1"></i>Keep active — discard trash copy
+          </button>
+          <button @click="resolveConflict('keep_trash')" class="btn btn-success rounded-pill px-4">
+            <i class="fa-solid fa-rotate-left me-1"></i>Restore from trash — delete active
+          </button>
+          <button @click="conflictData=null" class="btn btn-light rounded-pill px-3 border ms-auto">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule content modal -->
+  <div v-if="contentRule" class="modal fade show d-block" style="background:rgba(0,0,0,.55);" @click.self="contentRule = null">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
+        <div class="modal-header border-0 pb-0 px-4 pt-4">
+          <div class="d-flex align-items-center gap-3 flex-grow-1 min-w-0">
+            <div class="banner-icon flex-shrink-0" style="width:38px;height:38px;font-size:1rem;">
+              <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div class="min-w-0">
+              <h5 class="fw-bold mb-0 text-truncate" style="color:var(--text-color);">[[ contentRule.title ]]</h5>
+              <small style="color:var(--subtle-text-color);">
+                <span class="badge rounded-pill bg-dark me-2" style="font-size:.65rem;">[[ (contentRule.format||'').toUpperCase() ]]</span>
+                <i class="fa-solid fa-user-pen me-1 opacity-50"></i>[[ contentRule.author || '—' ]]
+                <span class="mx-2 opacity-30">|</span>
+                <i class="fa-regular fa-clock me-1 opacity-50"></i>Deleted [[ contentRule.deleted_at ]]
+                <span v-if="contentRule.deleted_by">by [[ contentRule.deleted_by ]]</span>
+              </small>
+            </div>
+          </div>
+          <button class="btn-close ms-3" @click="contentRule = null"></button>
+        </div>
+
+        <div class="modal-body px-4 py-3">
+          <!-- Description -->
+          <p v-if="contentRule.description" class="text-muted small mb-3 fst-italic">
+            <i class="fa-solid fa-quote-left me-1 opacity-40 text-primary"></i>[[ contentRule.description ]]
+          </p>
+
+          <!-- Source -->
+          <div v-if="contentRule.source" class="mb-3 d-flex align-items-center gap-2">
+            <i class="fa-brands fa-github" style="color:var(--subtle-text-color);"></i>
+            <a :href="contentRule.source" target="_blank" rel="noreferrer"
+               class="small text-truncate" style="color:#0d6efd; max-width:500px;">
+              [[ contentRule.source ]]
+            </a>
+          </div>
+
+          <!-- Code -->
+          <pre class="rounded-3 p-0 mb-0" style="margin:0; background:#282c34; border:none; max-height:60vh; overflow:auto;">
+            <code ref="codeEl" class="p-3 d-block" style="font-size:.78rem; line-height:1.6;">[[ contentRule.to_string || '— No content —' ]]</code>
+          </pre>
+        </div>
+
+        <div class="modal-footer border-0 pt-0 px-4 pb-4 d-flex gap-2">
+          <button @click="restoreOne(contentRule); contentRule = null"
+                  class="btn btn-success rounded-pill px-4">
+            <i class="fa-solid fa-rotate-left me-1"></i>Restore
+          </button>
+          <button @click="permanentDeleteOne(contentRule); contentRule = null"
+                  class="btn btn-outline-danger rounded-pill px-4">
+            <i class="fa-solid fa-fire me-1"></i>Delete Forever
+          </button>
+          <button @click="contentRule = null" class="btn btn-light rounded-pill px-4 ms-auto border">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+import PaginationComponent from '/static/js/rule/paginationComponent.js'
+import { create_message }  from '/static/js/toaster.js'
+const { createApp, ref, computed, watch, nextTick, onMounted } = Vue
+const csrf = document.querySelector('input[name="csrf_token"]')?.value || ''
+
+createApp({
+  delimiters: ['[[', ']]'],
+  components: { 'pagination-component': PaginationComponent },
+  setup() {
+    const rules        = ref([])
+    const batches      = ref([])
+    const totalCount   = ref(0)
+    const total        = ref(0)
+    const totalPages   = ref(1)
+    const page         = ref(1)
+    const loading      = ref(false)
+    const search       = ref('')
+    const fmtFilter    = ref('')
+    const batchFilter  = ref('')
+    const sourceFilter = ref('')
+    const deletedFrom  = ref('')
+    const deletedTo    = ref('')
+    const selectedIds  = ref([])
+    const contentRule  = ref(null)
+    const codeEl       = ref(null)
+    const conflictData = ref(null)
+    const highlightId  = ref(parseInt(new URLSearchParams(location.search).get('highlight')) || null)
+
+    const formats = ['yara','sigma','suricata','zeek','crs','nova','nse','wazuh','elastic']
+
+    const batchRulesCount = computed(() => {
+      const b = batches.value.find(b => b.batch_uuid === batchFilter.value)
+      return b ? b.count : 0
+    })
+    const allSelected = computed(() =>
+      rules.value.length > 0 && selectedIds.value.length === rules.value.length
+    )
+    function toggleSelectAll(e) {
+      selectedIds.value = e.target.checked ? rules.value.map(r => r.id) : []
+    }
+
+    function shortSource(src) {
+      if (!src) return '—'
+      try {
+        const url = new URL(src)
+        return url.pathname.replace(/^\//, '').replace(/\.git$/, '')
+      } catch { return src.slice(0, 40) }
+    }
+
+    // Highlight code when modal opens
+    watch(contentRule, async (val) => {
+      if (!val) return
+      await nextTick()
+      if (codeEl.value) {
+        codeEl.value.removeAttribute('data-highlighted')
+        hljs.highlightElement(codeEl.value)
+      }
+    })
+
+    async function fetchRules(p = 1) {
+      loading.value   = true
+      selectedIds.value = []
+      page.value      = p
+      const params = new URLSearchParams({
+        page:         p,
+        search:       search.value,
+        format:       fmtFilter.value,
+        batch_uuid:   batchFilter.value,
+        source:       sourceFilter.value,
+        deleted_from: deletedFrom.value,
+        deleted_to:   deletedTo.value,
+      })
+      const res  = await fetch(`/rule/get_trash_rules?${params}`)
+      const data = await res.json()
+      rules.value      = data.rules || []
+      total.value      = data.total || 0
+      totalPages.value = data.total_pages || 1
+      batches.value    = data.batches || []
+      totalCount.value = data.count || 0
+      loading.value    = false
+      if (highlightId.value) {
+        await nextTick()
+        const el = document.querySelector(`[data-highlight-id="${highlightId.value}"]`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }
+
+    let _dbt = null
+    function debouncedFetch() { clearTimeout(_dbt); _dbt = setTimeout(() => fetchRules(1), 350) }
+    function resetFilters() {
+      search.value = ''; fmtFilter.value = ''; batchFilter.value = ''
+      sourceFilter.value = ''; deletedFrom.value = ''; deletedTo.value = ''
+      fetchRules(1)
+    }
+
+    function openContentModal(rule) { contentRule.value = rule }
+
+    async function restoreOne(rule) {
+      const res  = await fetch(`/rule/restore/${rule.id}`, { method:'POST', headers:{'X-CSRFToken':csrf} })
+      const data = await res.json()
+      if (data.success) {
+        fetchRules(page.value)
+        create_message(`'${rule.title}' restored`, 'success-subtle')
+      } else if (data.conflict) {
+        conflictData.value = data   // triggers conflict modal
+      }
+    }
+
+    async function resolveConflict(action) {
+      if (!conflictData.value) return
+      const res  = await fetch('/rule/resolve_conflict', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+        body: JSON.stringify({ action, trash_id: conflictData.value.trash_id, active_id: conflictData.value.active_id }),
+      })
+      const data = await res.json()
+      conflictData.value = null
+      if (data.success) {
+        fetchRules(page.value)
+        create_message(action === 'keep_active' ? 'Kept active rule, trash copy removed' : 'Restored from trash, active copy removed', 'success-subtle')
+      }
+    }
+
+    async function permanentDeleteOne(rule) {
+      if (!confirm(`Permanently delete "${rule.title}"?\nThis cannot be undone.`)) return
+      const res  = await fetch(`/rule/permanent_delete/${rule.id}`, { method:'POST', headers:{'X-CSRFToken':csrf} })
+      const data = await res.json()
+      if (data.success) { fetchRules(page.value); create_message('Rule permanently deleted', 'danger-subtle') }
+    }
+
+    function handleJobResponse(data, successMsg, dangerMsg) {
+      if (!data.success) return
+      if (data.job) {
+        const jobUrl = `/jobs/list?job=${data.job_uuid}`
+        create_message(data.message, 'info-subtle', true, null, jobUrl)
+        setTimeout(() => fetchRules(1), 1500)
+      } else {
+        fetchRules(1)
+        create_message(successMsg, dangerMsg ? 'danger-subtle' : 'success-subtle')
+      }
+    }
+
+    async function restoreBulk() {
+      const res  = await fetch('/rule/restore_bulk', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+        body: JSON.stringify({ids: selectedIds.value}),
+      })
+      const data = await res.json()
+      handleJobResponse(data, `${data.restored || selectedIds.value.length} rule(s) restored`)
+    }
+
+    async function permanentDeleteBulk() {
+      if (!confirm(`Permanently delete ${selectedIds.value.length} rule(s)?\nThis cannot be undone.`)) return
+      const res  = await fetch('/rule/permanent_delete_bulk', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+        body: JSON.stringify({ids: selectedIds.value}),
+      })
+      const data = await res.json()
+      handleJobResponse(data, `${data.deleted || selectedIds.value.length} rule(s) permanently deleted`, true)
+    }
+
+    async function restoreBatch(batchUuid) {
+      const res  = await fetch(`/rule/restore_batch/${batchUuid}`, { method:'POST', headers:{'X-CSRFToken':csrf} })
+      const data = await res.json()
+      if (data.success) {
+        batchFilter.value = ''
+        handleJobResponse(data, `${data.restored || '?'} rule(s) restored`)
+      }
+    }
+
+    async function deleteBatch(batchUuid) {
+      const b     = batches.value.find(b => b.batch_uuid === batchUuid)
+      const count = b ? b.count : '?'
+      if (!confirm(`Permanently delete all ${count} rules in this batch?\nThis cannot be undone.`)) return
+      const res  = await fetch('/rule/permanent_delete_bulk', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+        body: JSON.stringify({batch_uuid: batchUuid}),
+      })
+      const data = await res.json()
+      if (data.success) {
+        batchFilter.value = ''
+        handleJobResponse(data, `${data.deleted || count} rule(s) permanently deleted`, true)
+      }
+    }
+
+    async function restoreAll() {
+      if (!confirm(`Restore all ${totalCount.value} deleted rule(s)?`)) return
+      const res  = await fetch('/rule/restore_bulk', {
+        method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+        body: JSON.stringify({restore_all: true}),
+      })
+      const data = await res.json()
+      handleJobResponse(data, `${data.restored || totalCount.value} rule(s) restored`)
+    }
+
+    async function deleteAll() {
+      if (!confirm(`Permanently delete ALL ${totalCount.value} rule(s) in trash?\nThis CANNOT be undone.`)) return
+      const res  = await fetch('/rule/permanent_delete_bulk', {
+        method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+        body: JSON.stringify({delete_all: true}),
+      })
+      const data = await res.json()
+      handleJobResponse(data, `${data.deleted || totalCount.value} rule(s) permanently deleted`, true)
+    }
+
+    onMounted(() => fetchRules(1))
+
+    return {
+      rules, batches, totalCount, total, totalPages, page, loading,
+      search, fmtFilter, batchFilter, sourceFilter, deletedFrom, deletedTo,
+      formats, selectedIds, contentRule, codeEl,
+      batchRulesCount, allSelected,
+      toggleSelectAll, fetchRules, debouncedFetch, resetFilters,
+      highlightId,
+      shortSource, openContentModal,
+      conflictData, resolveConflict,
+      restoreOne, permanentDeleteOne, restoreBulk, permanentDeleteBulk,
+      restoreBatch, deleteBatch, restoreAll, deleteAll,
+    }
+  }
+}).mount('#trash-app')
+</script>
+{% endblock %}

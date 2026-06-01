@@ -79,21 +79,26 @@ def rule() -> render_template:
         except json.JSONDecodeError:
             rule_dict['tags'] = []
 
-        new_rule , message = RuleModel.add_rule_core(rule_dict , current_user)
+        new_rule, message = RuleModel.add_rule_core(rule_dict, current_user)
         if new_rule:
-            # update the gameifcation section
             profil_game_user = AccountModel.get_or_create_gamification_profile(current_user.id)
-            if profil_game_user == None:
-                return jsonify({"message": "Error to update the gameifcation section"}), 500
-
-            _ = AccountModel.update_rules_owned_gamification(profil_game_user.id, current_user.id)
+            if profil_game_user:
+                AccountModel.update_rules_owned_gamification(profil_game_user.id, current_user.id)
             log_activity("rule.create", f"Created rule '{new_rule.title}' [{new_rule.format}]",
                          target_type="rule", target_id=new_rule.id, target_uuid=new_rule.uuid)
             flash('Rule added !', 'success')
             return redirect(url_for('rule.detail_rule', rule_id=new_rule.id))
+        elif isinstance(message, str) and message.startswith("TRASH_CONFLICT:"):
+            # Rule exists in the trash — offer to restore it
+            parts   = message.split(":", 3)
+            t_uuid  = parts[1] if len(parts) > 1 else ''
+            t_id    = parts[2] if len(parts) > 2 else ''
+            t_title = parts[3] if len(parts) > 3 else 'deleted rule'
+            flash(f'TRASH_CONFLICT:{t_uuid}:{t_id}:{t_title}', 'warning')
+            return render_template("rule/rule.html", form=form, tab="manuel")
         else:
             flash(message, 'error')
-            return render_template("rule/rule.html", form=form, tab="manuel" )
+            return render_template("rule/rule.html", form=form, tab="manuel")
     return render_template("rule/rule.html", form=form )
 
 
@@ -246,19 +251,17 @@ def delete_rule() -> jsonify:
     if current_user.id == user_id or current_user.is_admin():
         rule_obj = RuleModel.get_rule(rule_id)
         rule_title = rule_obj.title if rule_obj else str(rule_id)
-        success = RuleModel.delete_rule_core(rule_id)
+        success = RuleModel.soft_delete_rule(rule_id, current_user.id)
         if not success:
             return jsonify({"success": False, "message": "Failed to delete the rule!",
                             "toast_class" : "danger"}), 400
 
         profil_game_user = AccountModel.get_or_create_gamification_profile(user_id)
-        if profil_game_user == None:
-            return jsonify({"message": "Error to update the gameifcation section"}), 500
-
-        _ = AccountModel.update_rules_owned_gamification(profil_game_user.id, user_id)
+        if profil_game_user:
+            _ = AccountModel.update_rules_owned_gamification(profil_game_user.id, user_id)
         log_activity("rule.delete", f"Deleted rule '{rule_title}' (id={rule_id})",
                      extra={"rule_id": rule_id})
-        return {"success": True, "message": "Rule deleted!" , "toast_class" : "success"}, 200
+        return {"success": True, "message": "Rule moved to trash!" , "toast_class" : "success"}, 200
     
     return render_template("access_denied.html")
 
@@ -494,29 +497,31 @@ def get_my_rules_page_filter_github() -> jsonify:
 def delete_selected_rules() -> jsonify:
     """Delete all the selected rule"""
     data = request.get_json()
-    errorDEL = 0
-    for rule_id in data['ids']:
-        user_id = RuleModel.get_rule_user_id(rule_id)  # Get the user who created the rule
-        #Check if the current user is either the owner or an admin
-        if current_user.id == user_id or current_user.is_admin():
-            success = RuleModel.delete_rule_core(rule_id)
-            if not success:
-                errorDEL += 1
-            profil_game_user_ = AccountModel.get_or_create_gamification_profile(user_id)
-            if profil_game_user_:   
-                _ = AccountModel.update_rules_owned_gamification(profil_game_user_.id,user_id)
-        else:
-            return render_template("access_denied.html") 
-    if errorDEL >= 1:
-        return jsonify({"success": False, "message": "Failed to delete the rules!",
-                        "toast_class" : "danger"}), 400
+    rule_ids = data.get('ids', [])
+    if not rule_ids:
+        return jsonify({"success": False, "message": "No rules selected.", "toast_class": "danger"}), 400
 
-    else:
-        log_activity("rule.bulk_delete", f"Bulk deleted {len(data['ids'])} rule(s)",
-                     extra={"rule_ids": data['ids']})
-        return jsonify({"success": True,
-                        "message": f"{len(data['ids'])} Rule(s) deleted!",
-                        "toast_class" : "success"}), 200
+    # Permission check
+    for rule_id in rule_ids:
+        user_id = RuleModel.get_rule_user_id(rule_id)
+        if current_user.id != user_id and not current_user.is_admin():
+            return render_template("access_denied.html")
+
+    import uuid as _uuid
+    batch_uuid = str(_uuid.uuid4())
+    count = RuleModel.soft_delete_rule_list(rule_ids, current_user.id, batch_uuid=batch_uuid)
+
+    for rule_id in rule_ids:
+        user_id = RuleModel.get_rule_user_id(rule_id)
+        profil = AccountModel.get_or_create_gamification_profile(user_id)
+        if profil:
+            AccountModel.update_rules_owned_gamification(profil.id, user_id)
+
+    log_activity("rule.bulk_delete", f"Moved {count} rule(s) to trash",
+                 extra={"rule_ids": rule_ids, "batch_uuid": batch_uuid})
+    return jsonify({"success": True,
+                    "message": f"{count} rule(s) moved to trash!",
+                    "toast_class": "success"}), 200
 
 
 @rule_blueprint.route("/owner_rules", methods=['GET'])
@@ -547,6 +552,8 @@ def detail_rule_by_uuid(rule_uuid):
     rule = RuleModel.get_rule_by_uuid(rule_uuid)
     if not rule:
         return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
     rule_misp = content_convert_to_misp_object(rule.id)
     if not rule_misp:
         return 
@@ -566,6 +573,8 @@ def detail_rule(rule_id)-> render_template:
     rule = RuleModel.get_rule(rule_id)
     if not rule:
         return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
     
     rule_misp_object = get_rule_misp_object(rule_id)
 
@@ -2577,11 +2586,11 @@ def delete_all_rule_github():
             "toast_class": "info-subtle",
         }), 202
 
-    # ── small delete → synchronous as before ─────────────────────────────────
-    success, message, nb = RuleModel.delete_all_rule_by_url(url)
+    # ── small delete → synchronous soft delete ───────────────────────────────
+    success, message, nb = RuleModel.soft_delete_all_by_url(url, current_user.id)
     if success:
         log_activity("github.source_deleted",
-                     f"Deleted {nb} rule(s) from GitHub source '{url}'",
+                     f"Moved {nb} rule(s) from '{url}' to trash",
                      extra={"url": url, "deleted_count": nb},
                      icon="fa-brands fa-github")
     return jsonify({
@@ -3430,3 +3439,230 @@ def scope_delete(rule_id):
     log_activity('rule.scope_delete', f"Removed scope declaration for rule '{rule.title}'",
                  target_type='rule', target_id=rule_id, target_uuid=rule.uuid)
     return jsonify({'success': True}), 200
+
+
+# ── Trash (soft delete management) ────────────────────────────────────────────
+
+@rule_blueprint.route('/trash', methods=['GET'])
+@login_required
+def trash():
+    if not current_user.is_admin():
+        return render_template('access_denied.html')
+    return render_template('rule/trash.html')
+
+
+@rule_blueprint.route('/get_trash_rules', methods=['GET'])
+@login_required
+def get_trash_rules():
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.core.db_class.db import User as UserModel
+    page         = request.args.get('page', 1, type=int)
+    search       = request.args.get('search', '').strip() or None
+    source       = request.args.get('source', '').strip() or None
+    batch_uuid   = request.args.get('batch_uuid', '').strip() or None
+    fmt          = request.args.get('format', '').strip() or None
+    deleted_from = request.args.get('deleted_from', '').strip() or None
+    deleted_to   = request.args.get('deleted_to', '').strip() or None
+
+    pagination = RuleModel.get_deleted_rules(
+        page=page, search=search, source=source,
+        batch_uuid=batch_uuid, fmt=fmt,
+        deleted_from=deleted_from, deleted_to=deleted_to,
+    )
+
+    _user_cache = {}
+    def _username(uid):
+        if not uid:
+            return None
+        if uid not in _user_cache:
+            u = UserModel.query.get(uid)
+            _user_cache[uid] = (u.first_name + ' ' + u.last_name).strip() if u else None
+        return _user_cache[uid]
+
+    def rule_json(r):
+        return {
+            'id':                r.id,
+            'uuid':              r.uuid,
+            'title':             r.title,
+            'format':            r.format,
+            'source':            r.source,
+            'author':            r.author,
+            'description':       r.description,
+            'to_string':         r.to_string,
+            'deleted_at':        r.deleted_at.strftime('%Y-%m-%d %H:%M') if r.deleted_at else None,
+            'deleted_by':        _username(r.deleted_by_id),
+            'delete_batch_uuid': r.delete_batch_uuid,
+        }
+
+    return jsonify({
+        'success':     True,
+        'rules':       [rule_json(r) for r in pagination.items],
+        'total':       pagination.total,
+        'total_pages': pagination.pages,
+        'page':        pagination.page,
+        'batches':     RuleModel.get_deleted_batches(),
+        'count':       RuleModel.count_deleted_rules(),
+    }), 200
+
+
+@rule_blueprint.route('/restore/<int:rule_id>', methods=['POST'])
+@login_required
+def restore_rule_route(rule_id):
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    rule = RuleModel.get_rule(rule_id)
+    result = RuleModel.restore_rule(rule_id)
+
+    if result is True:
+        if rule:
+            log_activity('rule.restore', f"Restored rule '{rule.title}' (id={rule_id})",
+                         target_type='rule', target_id=rule_id, target_uuid=rule.uuid)
+        return jsonify({'success': True}), 200
+
+    if isinstance(result, tuple) and result[0] == "CONFLICT":
+        active_rule = result[1]
+        return jsonify({
+            'success':    False,
+            'conflict':   True,
+            'trash_id':   rule_id,
+            'trash_title': rule.title if rule else '',
+            'active_id':   active_rule.id,
+            'active_title': active_rule.title,
+            'active_uuid':  active_rule.uuid,
+            'active_created': active_rule.creation_date.strftime('%Y-%m-%d %H:%M') if active_rule.creation_date else '',
+        }), 409
+
+    return jsonify({'success': False}), 404
+
+
+@rule_blueprint.route('/resolve_conflict', methods=['POST'])
+@login_required
+def resolve_conflict():
+    """Admin chooses which rule to keep when a restore conflict occurs."""
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    data       = request.get_json() or {}
+    action     = data.get('action')          # 'keep_active' | 'keep_trash'
+    trash_id   = data.get('trash_id')
+    active_id  = data.get('active_id')
+
+    if action == 'keep_active':
+        # Just permanently delete the trashed copy
+        ok = RuleModel.permanent_delete_rule(trash_id)
+        log_activity('rule.conflict_resolved', f"Conflict resolved — kept active rule id={active_id}, discarded trash id={trash_id}")
+        return jsonify({'success': ok}), 200
+
+    if action == 'keep_trash':
+        # Soft-delete the active rule, then restore the trashed one
+        RuleModel.soft_delete_rule(active_id, current_user.id)
+        RuleModel.permanent_delete_rule(active_id)   # hard-delete the active duplicate
+        # Force restore ignoring content conflict
+        trashed = Rule.query.get(trash_id)
+        if trashed:
+            trashed.is_deleted = False
+            trashed.deleted_at = None
+            trashed.deleted_by_id = None
+            trashed.delete_batch_uuid = None
+            from app import db as _db
+            _db.session.commit()
+        log_activity('rule.conflict_resolved', f"Conflict resolved — restored trash id={trash_id}, removed active id={active_id}")
+        return jsonify({'success': True}), 200
+
+    return jsonify({'success': False, 'message': 'Unknown action'}), 400
+
+
+TRASH_JOB_THRESHOLD = 50   # above this count → background job
+
+
+def _create_trash_job(job_type: str, label: str, payload: dict):
+    """Helper to create a background job for trash operations."""
+    import app.features.jobs.jobs_core as JobsModel
+    return JobsModel.create_job(job_type=job_type, payload=payload,
+                                label=label, created_by=current_user.id)
+
+
+@rule_blueprint.route('/restore_bulk', methods=['POST'])
+@login_required
+def restore_rules_bulk():
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    data        = request.get_json() or {}
+    rule_ids    = data.get('ids', [])
+    restore_all = data.get('restore_all', False)
+    batch_uuid  = data.get('batch_uuid')
+    count       = len(rule_ids) if rule_ids else RuleModel.count_deleted_rules()
+
+    if count > TRASH_JOB_THRESHOLD:
+        payload = {'ids': rule_ids, 'restore_all': restore_all, 'batch_uuid': batch_uuid}
+        label   = f"Restore {count} rule(s) from trash"
+        job     = _create_trash_job('trash_restore_bulk', label, payload)
+        log_activity('rule.restore_bulk', f"Queued restore of {count} rule(s) via job",
+                     extra={'job_uuid': job.uuid if job else None})
+        return jsonify({'success': True, 'job': True, 'job_uuid': job.uuid if job else None,
+                        'message': f'{count} rules — restore queued as background job.'}), 202
+
+    restored = RuleModel.restore_rules_bulk(rule_ids) if rule_ids else \
+               RuleModel.restore_rules_bulk([r.id for r in RuleModel.get_deleted_rules(page=1, per_page=10000).items])
+    log_activity('rule.restore_bulk', f"Restored {restored} rule(s)", extra={'rule_ids': rule_ids})
+    return jsonify({'success': True, 'restored': restored}), 200
+
+
+@rule_blueprint.route('/restore_batch/<batch_uuid>', methods=['POST'])
+@login_required
+def restore_batch(batch_uuid):
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.core.db_class.db import Rule as _Rule
+    count = _Rule.query.filter(_Rule.is_deleted == True, _Rule.delete_batch_uuid == batch_uuid).count()
+
+    if count > TRASH_JOB_THRESHOLD:
+        payload = {'batch_uuid': batch_uuid}
+        label   = f"Restore batch of {count} rule(s)"
+        job     = _create_trash_job('trash_restore_bulk', label, payload)
+        log_activity('rule.restore_bulk', f"Queued batch restore of {count} rule(s)",
+                     extra={'batch_uuid': batch_uuid, 'job_uuid': job.uuid if job else None})
+        return jsonify({'success': True, 'job': True, 'job_uuid': job.uuid if job else None,
+                        'message': f'{count} rules — restore queued as background job.'}), 202
+
+    restored = RuleModel.restore_batch(batch_uuid)
+    log_activity('rule.restore_bulk', f"Restored batch of {restored} rule(s)",
+                 extra={'batch_uuid': batch_uuid})
+    return jsonify({'success': True, 'restored': restored}), 200
+
+
+@rule_blueprint.route('/permanent_delete/<int:rule_id>', methods=['POST'])
+@login_required
+def permanent_delete_rule(rule_id):
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    ok = RuleModel.permanent_delete_rule(rule_id)
+    return jsonify({'success': ok}), 200 if ok else 404
+
+
+@rule_blueprint.route('/permanent_delete_bulk', methods=['POST'])
+@login_required
+def permanent_delete_bulk():
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    data       = request.get_json() or {}
+    ids        = data.get('ids', [])
+    delete_all = data.get('delete_all', False)
+    batch_uuid = data.get('batch_uuid')
+    count      = len(ids) if ids else RuleModel.count_deleted_rules()
+
+    if count > TRASH_JOB_THRESHOLD:
+        payload = {'ids': ids, 'delete_all': delete_all, 'batch_uuid': batch_uuid}
+        label   = f"Permanently delete {count} rule(s) from trash"
+        job     = _create_trash_job('trash_permanent_delete_bulk', label, payload)
+        log_activity('rule.permanent_delete_bulk', f"Queued permanent delete of {count} rule(s) via job",
+                     extra={'job_uuid': job.uuid if job else None})
+        return jsonify({'success': True, 'job': True, 'job_uuid': job.uuid if job else None,
+                        'message': f'{count} rules — deletion queued as background job.'}), 202
+
+    if delete_all:
+        ids = [r.id for r in RuleModel.get_deleted_rules(page=1, per_page=10000).items]
+    deleted = RuleModel.permanent_delete_bulk(ids)
+    log_activity('rule.permanent_delete_bulk', f"Permanently deleted {deleted} rule(s)",
+                 extra={'count': deleted})
+    return jsonify({'success': True, 'deleted': deleted}), 200

@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-7 col-md-9">
+
+      <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+
+        <!-- Red accent top -->
+        <div style="height:4px; background:linear-gradient(90deg, transparent, #dc3545 35%, #b02a37 65%, transparent);"></div>
+
+        <div class="card-body p-5 text-center">
+
+          <!-- Icon -->
+          <div class="d-flex align-items-center justify-content-center mb-4">
+            <div style="width:72px;height:72px;background:rgba(220,53,69,.1);border-radius:18px;display:flex;align-items:center;justify-content:center;">
+              <i class="fa-solid fa-trash-can-arrow-up fa-2x text-danger"></i>
+            </div>
+          </div>
+
+          <!-- Title -->
+          <h3 class="fw-bold mb-2" style="color:var(--text-color);">This rule has been deleted</h3>
+          <p style="color:var(--subtle-text-color); font-size:.95rem; max-width:480px; margin:0 auto 1.5rem;">
+            The rule <strong style="color:var(--text-color);">"{{ rule.title }}"</strong>
+            was moved to the trash
+            {% if rule.deleted_at %}on <strong>{{ rule.deleted_at.strftime('%d %b %Y at %H:%M') }}</strong>{% endif %}
+            and is no longer accessible.
+          </p>
+
+          {% if current_user.is_admin() %}
+          <!-- Admin view: details + restore link -->
+          <div class="card border-0 rounded-3 mb-4 text-start" style="background:var(--light-bg-color);">
+            <div class="card-body p-3">
+              <p class="small fw-semibold mb-2" style="color:var(--subtle-text-color); text-transform:uppercase; letter-spacing:.05em; font-size:.72rem;">
+                <i class="fa-solid fa-circle-info me-1"></i>Rule details
+              </p>
+              <div class="d-flex flex-column gap-1" style="font-size:.85rem;">
+                <div><span style="color:var(--subtle-text-color);">ID:</span> <span style="color:var(--text-color);">#{{ rule.id }}</span></div>
+                <div><span style="color:var(--subtle-text-color);">UUID:</span> <code style="font-size:.78rem; color:#0d6efd;">{{ rule.uuid }}</code></div>
+                <div><span style="color:var(--subtle-text-color);">Format:</span> <span class="badge bg-dark rounded-pill ms-1" style="font-size:.68rem;">{{ rule.format.upper() if rule.format else '—' }}</span></div>
+                {% if rule.source %}
+                <div><span style="color:var(--subtle-text-color);">Source:</span> <span style="color:var(--text-color);">{{ rule.source }}</span></div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-3 justify-content-center">
+            <a href="/rule/trash?highlight={{ rule.id }}"
+               class="btn btn-danger rounded-pill px-4">
+              <i class="fa-solid fa-trash-can-arrow-up me-2"></i>View in Trash &amp; Restore
+            </a>
+            <a href="/" class="btn btn-outline-secondary rounded-pill px-4">
+              <i class="fa-solid fa-house me-1"></i>Home
+            </a>
+          </div>
+
+          {% else %}
+          <!-- Non-admin: go home -->
+          <a href="/" class="btn btn-primary rounded-pill px-5">
+            <i class="fa-solid fa-house me-1"></i>Go to Home
+          </a>
+          {% endif %}
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

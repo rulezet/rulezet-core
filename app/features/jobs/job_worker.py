@@ -74,12 +74,14 @@ def _worker_loop(app):
 
                 handler = _HANDLERS.get(job.job_type)
                 if handler is None:
-                    job.status = 'failed'
-                    job.error  = f"No handler registered for job_type '{job.job_type}'"
+                    # Put back to pending so it's retried after a server restart
+                    # that loads the missing handler.
+                    job.status = 'pending'
                     _log(job, db, BackgroundJobLog,
-                         f"Failed to start: no handler registered for type '{job.job_type}'.",
-                         level='error', event='failed')
+                         f"No handler for type '{job.job_type}' — requeueing (restart may be needed).",
+                         level='warning', event='requeued')
                     db.session.commit()
+                    time.sleep(5)
                     continue
 
                 job.status     = 'running'
