@@ -2552,6 +2552,10 @@ def delete_all_rule_github():
                 "toast_class": "danger-subtle"
             }), 500
 
+        log_activity("github.source_deleted",
+                     f"Queued deletion of {count} rule(s) from GitHub source '{url}'",
+                     extra={"url": url, "rule_count": count, "job_uuid": job.uuid},
+                     icon="fa-brands fa-github")
         return jsonify({
             "status":      "job_queued",
             "message":     f"{count} rules — deletion queued as background job.",
@@ -2562,6 +2566,11 @@ def delete_all_rule_github():
 
     # ── small delete → synchronous as before ─────────────────────────────────
     success, message, nb = RuleModel.delete_all_rule_by_url(url)
+    if success:
+        log_activity("github.source_deleted",
+                     f"Deleted {nb} rule(s) from GitHub source '{url}'",
+                     extra={"url": url, "deleted_count": nb},
+                     icon="fa-brands fa-github")
     return jsonify({
         "status":        "done",
         "message":       message,
@@ -2589,7 +2598,11 @@ def bulk_action_github():
             return jsonify({"message": "No URLs to delete", "status": "warning-subtle"}), 400
         
         success, message, nb = RuleModel.delete_all_rule_by_url(target_urls)
-        
+        if success:
+            log_activity("github.source_deleted",
+                         f"Bulk-deleted {nb} rule(s) from {len(target_urls)} GitHub source(s)",
+                         extra={"urls": target_urls, "deleted_count": nb},
+                         icon="fa-brands fa-github")
         return jsonify({
             "status": "success" if success else "error",
             "message": message,
