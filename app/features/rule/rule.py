@@ -2631,6 +2631,10 @@ def github_detail():
         flash("No GitHub URL was provided.", "warning")
         return redirect(url_for("rule.list_github_url"))
 
+    url = url.rstrip("/")
+    if url.endswith(".git"):
+        url = url[:-4]
+
     return render_template(
         "rule/url_github/detail_url_github.html",
         url=url

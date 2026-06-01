@@ -599,6 +599,10 @@ def get_all_rule_update(search=None, rule_type=None, sourceFilter=None) -> List[
         if not sourceFilter.startswith("http"):
             sourceFilter = f"https://github.com/{sourceFilter}"
 
+        sourceFilter = sourceFilter.rstrip("/")
+        if sourceFilter.endswith(".git"):
+            sourceFilter = sourceFilter[:-4]
+
         query = query.filter(
             or_(
                 Rule.source.ilike(f"%{sourceFilter}%"),
@@ -1965,11 +1969,19 @@ def get_rule_count_by_github_page(page: int = 1, search: str = None):
 
 def get_all_rule_by_url_github_page(page: int = 1, search: str = None, url: str = None):
     """Get paginated list of Rules whose source matches a specific GitHub project URL."""
-    
+
     query = Rule.query.filter(Rule.source.isnot(None))
-    
+
     if url:
-        query = query.filter(Rule.source.ilike(f"{url}%"))
+        url = url.rstrip("/")
+        if url.endswith(".git"):
+            url = url[:-4]
+        query = query.filter(
+            or_(
+                Rule.source.ilike(f"{url}%"),
+                Rule.source.ilike(f"{url}.git%")
+            )
+        )
     
     if search:
         search_pattern = f"%{search}%"
