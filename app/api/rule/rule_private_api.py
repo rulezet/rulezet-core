@@ -397,6 +397,7 @@ class ImportRulesFromGithub(Resource):
         data = request.get_json(silent=True) or request.args.to_dict()
         repo_url = data.get('url')
         selected_license = data.get('license', '').strip()
+        branch = (data.get('branch') or '').strip() or None
 
         # Validation
         if not repo_url:
@@ -407,12 +408,14 @@ class ImportRulesFromGithub(Resource):
             return {"success": False, "message": "Invalid GitHub URL"}, 400
 
         # Clone or access repo
-        repo_dir, exists = clone_or_access_repo(repo_url)
+        repo_dir, exists = clone_or_access_repo(repo_url, branch=branch)
         if not repo_dir:
             return {"success": False, "message": "Failed to clone or access the repository"}, 500
 
         # Extract rules
         info = github_repo_metadata(repo_url, selected_license)
+        if branch:
+            info['branch'] = branch
         try:
             bad_rules, imported, skipped = asyncio.run(extract_rule_from_repo(repo_dir, info , user))
             delete_existing_repo_folder("Rules_Github")

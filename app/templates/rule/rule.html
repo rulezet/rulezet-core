@@ -291,6 +291,35 @@
             <div id="github-url-error" class="form-hint" style="color:#dc3545;"></div>
           </div>
 
+          <div class="mb-3">
+            <div class="d-flex align-items-center gap-1 mb-1">
+              <label class="form-label-styled mb-0" for="branch">Branch<span class="opt-badge">optional</span></label>
+              <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Leave empty to use the repository's default branch.">?</button>
+            </div>
+            <div class="input-group">
+              <span class="input-group-text" style="background:var(--light-bg-color);border-color:var(--border-color);color:var(--muted-text-color,#6c757d);">
+                <i class="fas fa-code-branch"></i>
+              </span>
+              <input type="text" name="branch" class="form-control" id="branch"
+                placeholder="main, develop, feature/xyz…" v-model="branch">
+              <span v-if="branchesLoading" class="input-group-text" style="background:var(--light-bg-color);border-color:var(--border-color);">
+                <div class="spinner-border spinner-border-sm text-primary" style="width:14px;height:14px;border-width:2px;"></div>
+              </span>
+            </div>
+            <!-- Branch suggestions -->
+            <div v-if="availableBranches.length > 0" class="d-flex flex-wrap gap-1 mt-2">
+              <button v-for="b in availableBranches" :key="b" type="button"
+                      @click="branch = b"
+                      :class="['btn btn-xs rounded-pill px-2 py-1', branch === b ? 'btn-primary' : 'btn-outline-secondary']"
+                      style="font-size:.72rem;">
+                <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ b ]]
+              </button>
+            </div>
+            <div v-if="branchesError" class="form-hint mt-1" style="color:#dc3545;font-size:.75rem;">
+              <i class="fas fa-triangle-exclamation me-1"></i>[[ branchesError ]]
+            </div>
+          </div>
+
           <div class="mb-4">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="license-select">License<span class="opt-badge">optional</span></label>
@@ -300,6 +329,16 @@
               <option disabled value="">Select a license…</option>
               <option v-for="item in license" :key="item" :value="item">[[ item ]]</option>
             </select>
+          </div>
+
+          <!-- Inline error -->
+          <div v-if="importError" class="alert alert-danger d-flex align-items-start gap-2 py-2 px-3 mb-3 rounded-3" style="font-size:.85rem;">
+            <i class="fa-solid fa-circle-exclamation mt-1 flex-shrink-0"></i>
+            <div>
+              <strong>Import failed</strong><br>
+              [[ importError ]]
+            </div>
+            <button type="button" class="btn-close ms-auto" style="font-size:.7rem;" @click="importError = ''"></button>
           </div>
 
           <div class="d-flex justify-content-end">
@@ -488,7 +527,7 @@
       });
 
 
-      const { createApp, ref, onMounted } = Vue;
+      const { createApp, ref, onMounted, watch } = Vue;
       import { message_list, create_message } from '/static/js/toaster.js';
       import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js';
       import CodeMirrorEditor from '/static/js/codeMirror/codeMirrorEditor.js';
@@ -506,7 +545,37 @@
             setup() {
                   const license = ref([]);
                   const selectedLicense = ref("");
-                  const url = ref("");
+                  const url              = ref("");
+                  const branch           = ref("");
+                  const availableBranches = ref([]);
+                  const branchesLoading  = ref(false);
+                  const branchesError    = ref("");
+                  const importError      = ref("");
+
+                  let _branchDebounce = null;
+                  watch(url, (val) => {
+                        availableBranches.value = [];
+                        branchesError.value     = "";
+                        clearTimeout(_branchDebounce);
+                        const trimmed = val.trim();
+                        if (!trimmed || !trimmed.includes('github.com')) return;
+                        _branchDebounce = setTimeout(async () => {
+                              branchesLoading.value = true;
+                              try {
+                                    const res  = await fetch(`/rule/get_github_branches?url=${encodeURIComponent(trimmed)}`);
+                                    const data = await res.json();
+                                    if (data.success && data.branches.length) {
+                                          availableBranches.value = data.branches;
+                                    } else if (!data.success) {
+                                          branchesError.value = "Could not fetch branches — check the URL.";
+                                    }
+                              } catch {
+                                    branchesError.value = "Network error while fetching branches.";
+                              } finally {
+                                    branchesLoading.value = false;
+                              }
+                        }, 700);
+                  });
 
                   const rules_formats = ref([])
                   const number_rules_formats = ref(0)
@@ -547,27 +616,31 @@
                   }
 
                   async function import_git_url() {
-                        is_loading.value = true
-                        $("#github-url-error").text("")
-                        if (url.value) {
-                              const res = await fetch(
-                                    '/rule/import_rules_from_github', {
-                                    headers: { "X-CSRFToken": $("#csrf_token").val(), "Content-Type": "application/json" },
-                                    method: "POST",
-                                    body: JSON.stringify({ "url": url.value, "license": selectedLicense.value })
-                              }
-                              )
-                              if (await res.status == 201) {
-                                    let loc = await res.json()
-
-                                    window.location.href = "/rule/import_loading/" + loc["session_uuid"]
-                              } else {
-                                    create_message((await res.json()).message, (await res.json()).toast_class);
-                              }
-                        } else {
-                              $("#github-url-error").text("Need to give an url")
+                        is_loading.value  = true;
+                        importError.value = "";
+                        $("#github-url-error").text("");
+                        if (!url.value.trim()) {
+                              $("#github-url-error").text("Please provide a GitHub repository URL.");
+                              is_loading.value = false;
+                              return;
                         }
-                        is_loading.value = false
+                        try {
+                              const res  = await fetch('/rule/import_rules_from_github', {
+                                    headers: { "X-CSRFToken": $("#csrf_token").val(), "Content-Type": "application/json" },
+                                    method:  "POST",
+                                    body:    JSON.stringify({ "url": url.value, "license": selectedLicense.value, "branch": branch.value.trim() || null })
+                              });
+                              const data = await res.json();
+                              if (res.status === 201) {
+                                    window.location.href = "/rule/import_loading/" + data.session_uuid;
+                              } else {
+                                    importError.value = data.message || "An unexpected error occurred.";
+                                    create_message(data.message, data.toast_class || "danger-subtle");
+                              }
+                        } catch (e) {
+                              importError.value = "Network error — please try again.";
+                        }
+                        is_loading.value = false;
                   }
 
                   const fileZip = ref(null)
@@ -623,6 +696,11 @@
                         license,
                         selectedLicense,
                         url,
+                        branch,
+                        availableBranches,
+                        branchesLoading,
+                        branchesError,
+                        importError,
                         rules_formats,
                         number_rules_formats,
                         is_loading,

@@ -22,24 +22,53 @@ def get_repo_name_from_url(repo_url):
     return f"{owner}/{repo}"
   
 
-def clone_or_access_repo(repo_url):
-    """Clone or access the repository from a GitHub URL without asking for credentials."""
+def clone_or_access_repo(repo_url, branch=None):
+    """Clone or access the repository from a GitHub URL.
+
+    If *branch* is specified the repo is cloned on that branch and cached in a
+    separate directory so it does not collide with the default-branch clone.
+    """
     base_dir = "app/rule_from_github/Rules_Github"
     os.makedirs(base_dir, exist_ok=True)
 
     repo_name = get_repo_name_from_url(repo_url)
-    repo_dir = os.path.join(base_dir, repo_name)
-    
+    # Use a branch-specific subfolder so different branches don't overwrite each other
+    dir_suffix = f"--{branch}" if branch else ""
+    repo_dir = os.path.join(base_dir, repo_name + dir_suffix)
+
     existe = os.path.exists(repo_dir)
     if not existe:
-        status , msg = is_github_repo_accessible(repo_url)
+        status, msg = is_github_repo_accessible(repo_url)
         if not status:
-            raise Exception(f"The repo {repo_url} is not accessible : {msg}")
-        
+            raise Exception(f"The repo {repo_url} is not accessible: {msg}")
         try:
-            Repo.clone_from(repo_url, repo_dir)
+            kwargs = {"branch": branch} if branch else {}
+            Repo.clone_from(repo_url, repo_dir, **kwargs)
         except Exception as e:
-            raise Exception(f"Eror during the clone of the repo : {str(e)}")
+            # Remove the partially-created directory so a retry starts fresh
+            if os.path.exists(repo_dir):
+                shutil.rmtree(repo_dir, ignore_errors=True)
+            err = str(e)
+            if branch and ("Remote branch" in err and "not found" in err or
+                           "not found in upstream" in err):
+                raise Exception(f"Branch '{branch}' does not exist in this repository.")
+            if "Repository not found" in err or "not found" in err.lower():
+                raise Exception("Repository not found or not accessible. Check the URL.")
+            if "Authentication failed" in err:
+                raise Exception("Authentication failed — the repository may be private.")
+            raise Exception(f"Clone failed: {err.split('stderr:')[-1].strip()[:200]}")
+    else:
+        # Repo already cached — make sure we are on the right branch and up-to-date
+        if branch:
+            try:
+                repo = Repo(repo_dir)
+                repo.git.checkout(branch)
+                repo.remotes.origin.pull()
+            except Exception as e:
+                err = str(e)
+                if "did not match any" in err or "pathspec" in err or "not found" in err.lower():
+                    raise Exception(f"Branch '{branch}' does not exist in this repository.")
+                raise Exception(f"Error switching to branch '{branch}': {err.split('stderr:')[-1].strip()[:200]}")
 
     return repo_dir, existe
 
@@ -69,6 +98,22 @@ def delete_existing_repo_folder(local_dir):
 #################
 #   GITHUB API  #
 #################
+
+def get_github_branches(repo_url: str) -> list[str]:
+    """Return the list of branch names for a public GitHub repository."""
+    clean = repo_url.rstrip('/').rstrip('.git') if repo_url.rstrip('/').endswith('.git') else repo_url.rstrip('/')
+    repo_name = get_repo_name_from_url(clean)
+    if not repo_name:
+        return []
+    api_url = f"https://api.github.com/repos/{repo_name}/branches?per_page=100"
+    try:
+        res = requests.get(api_url, timeout=6)
+        if res.status_code != 200:
+            return []
+        return [b['name'] for b in res.json()]
+    except Exception:
+        return []
+
 
 def github_repo_to_api_url(git_url: str) -> str:
     """Get the url to speak with the github api"""

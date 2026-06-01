@@ -16,7 +16,7 @@ from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_s
 from app.features.account.account_core import add_favorite, remove_favorite
 from app.features.misp.misp_core import  convert_misp_to_stix
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format
-from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
+from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, get_github_branches, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
 from . import rule_core as RuleModel
 from ..bundle import bundle_core as BundleModel
@@ -1992,6 +1992,16 @@ def parse_rule() -> dict:
     flash(f"Rules imported.", "success")
     return redirect(url_for("rule.detail_rule", rule_id=object_.id))
 
+@rule_blueprint.route("/get_github_branches", methods=['GET'])
+@login_required
+def get_repo_branches():
+    url = request.args.get('url', '').strip()
+    if not url:
+        return jsonify({'success': False, 'branches': []}), 400
+    branches = get_github_branches(url)
+    return jsonify({'success': True, 'branches': branches}), 200
+
+
 @rule_blueprint.route("/import_rules_from_github", methods=['POST'])
 @login_required
 def import_rules_from_github():
@@ -2002,28 +2012,31 @@ def import_rules_from_github():
     try:
         repo_url = request.json.get('url')
         selected_license = request.json.get('license')
+        branch = (request.json.get('branch') or '').strip() or None
 
         verif = valider_repo_github(repo_url)
-        if not verif :
+        if not verif:
             return {"message": "Please enter a valid URL to import rules.", "toast_class": "danger-subtle"}, 400
 
-        repo_dir, _ = clone_or_access_repo(repo_url) 
+        repo_dir, _ = clone_or_access_repo(repo_url, branch=branch)
 
         if not repo_dir:
             return {"message": "Failed to clone or access the repository.", "toast_class": "danger-subtle"}, 400
-        
-        info = github_repo_metadata(repo_url , selected_license)
 
-        
+        info = github_repo_metadata(repo_url, selected_license)
+        if branch:
+            info['branch'] = branch
+
         session_th = SessionModel.Session_class(repo_dir, current_user, info)
         session_th.start()
         SessionModel.sessions.append(session_th)
 
+        branch_label = f" (branch: {branch})" if branch else ""
         log_activity("github.import_started",
-                     f"Started GitHub import from '{repo_url}'",
+                     f"Started GitHub import from '{repo_url}'{branch_label}",
                      target_type="github_import",
                      target_uuid=session_th.uuid,
-                     extra={"url": repo_url},
+                     extra={"url": repo_url, "branch": branch},
                      is_public=True,
                      icon="fa-brands fa-github")
         return {"message": "Go !", "toast_class": "success-subtle", "session_uuid": session_th.uuid}, 201
