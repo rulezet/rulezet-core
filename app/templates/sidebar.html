@@ -139,6 +139,8 @@
                            <span v-if="running_jobs_count > 0" class="badge rounded-pill bg-primary ms-2">[[ running_jobs_count ]]</span>
                         </a>
                      </li>
+                     <li><a href="/admin/logs" class="dropdown-item py-2 {% if request.path == '/admin/logs' %}active{% endif %}">
+                           <i class="fa-solid fa-scroll fa-fw me-2 text-muted"></i>Activity Logs</a></li>
 
                   </ul>
                </li>

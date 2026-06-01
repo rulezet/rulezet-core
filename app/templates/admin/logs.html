@@ -1,0 +1,353 @@
+{% extends 'base.html' %}
+{% block head %}
+<style>
+  .log-row { cursor: pointer; transition: background .15s; }
+  .log-row:hover { background: var(--hover-color, rgba(0,0,0,.04)); }
+  .log-row.no-target { cursor: default; }
+  .action-badge { font-size: .72rem; font-family: monospace; }
+  .log-desc { max-width: 380px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .blurred { filter: blur(5px); transition: filter .2s; user-select: none; cursor: pointer; }
+  .blurred:hover { filter: blur(3px); }
+</style>
+{% endblock %}
+{% block content %}
+{% if current_user.is_admin() %}
+<div class="container-fluid my-4" id="logs-app" v-cloak>
+
+  <!-- Header -->
+  <div class="mb-4 text-center">
+    <h2 class="fw-bold text-primary mb-1"><i class="fa-solid fa-scroll me-2"></i>Activity Logs</h2>
+    <p class="text-muted mb-0">Full audit trail of every action on the platform.</p>
+  </div>
+
+  <!-- Filters -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-lg-4 col-md-6">
+          <label class="form-label fw-semibold small text-muted">Search description</label>
+          <input v-model="search" @input="debouncedFetch" class="form-control form-control-sm"
+                 placeholder="Search…">
+        </div>
+        <div class="col-lg-3 col-md-6">
+          <label class="form-label fw-semibold small text-muted">Action</label>
+          <select v-model="actionFilter" @change="fetchLogs(1)" class="form-select form-select-sm">
+            <option value="">All actions</option>
+            <option v-for="a in availableActions" :key="a" :value="a">[[ a ]]</option>
+          </select>
+        </div>
+        <div class="col-lg-2 col-md-4">
+          <label class="form-label fw-semibold small text-muted">Per page</label>
+          <select v-model="perPage" @change="fetchLogs(1)" class="form-select form-select-sm">
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <div class="col-lg-3 col-md-4 d-flex align-items-end gap-2 flex-wrap">
+          <button @click="fetchLogs(1)" class="btn btn-sm btn-primary">
+            <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+          </button>
+          <button @click="resetFilters" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-rotate-left me-1"></i>Reset
+          </button>
+          <button @click="sensitiveVisible = !sensitiveVisible"
+                  :class="['btn btn-sm', sensitiveVisible ? 'btn-warning' : 'btn-outline-secondary']"
+                  :title="sensitiveVisible ? 'Hide sensitive data' : 'Reveal sensitive data (IP, usernames)'">
+            <i :class="sensitiveVisible ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+      <span class="text-muted small">Total:</span>
+      <span class="badge bg-primary ms-1">[[ total ]]</span>
+      <span v-if="selectedIds.length > 0" class="ms-3 text-muted small">
+        <strong class="text-danger">[[ selectedIds.length ]]</strong> selected
+      </span>
+    </div>
+    <div class="d-flex gap-2">
+      <button v-if="selectedIds.length > 0" @click="bulkDelete" class="btn btn-sm btn-danger">
+        <i class="fa-solid fa-trash me-1"></i>Delete selected ([[ selectedIds.length ]])
+      </button>
+      <button @click="deleteAll" class="btn btn-sm btn-outline-danger">
+        <i class="fa-solid fa-fire me-1"></i>Delete ALL logs
+      </button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-responsive shadow-sm rounded">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width:36px;">
+            <input type="checkbox" class="form-check-input" @change="toggleSelectAll" :checked="allSelected">
+          </th>
+          <th>Date</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Description</th>
+          <th>Target</th>
+          <th>IP</th>
+          <th style="width:60px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <template v-if="loading">
+          <tr><td colspan="8" class="text-center py-5">
+            <div class="spinner-border spinner-border-sm text-primary"></div>
+            <span class="ms-2 text-muted">Loading…</span>
+          </td></tr>
+        </template>
+        <template v-else-if="logs.length === 0">
+          <tr><td colspan="8" class="text-center py-5 text-muted">
+            <i class="fa-solid fa-box-open fa-2x mb-2 d-block opacity-25"></i>No logs found.
+          </td></tr>
+        </template>
+        <template v-else>
+          <tr v-for="log in logs" :key="log.id"
+              :class="['log-row', targetUrl(log) ? '' : 'no-target']"
+              @click.stop="navigateLog(log, $event)">
+            <td @click.stop>
+              <input type="checkbox" class="form-check-input"
+                     :value="log.id" v-model="selectedIds" @click.stop>
+            </td>
+            <td class="text-nowrap small text-muted">[[ log.created_at ]]</td>
+            <td class="small" @click.stop>
+              <template v-if="log.user_id">
+                <a :href="`/account/detail_user/${log.user_id}`" class="text-decoration-none fw-semibold"
+                   :class="{ blurred: !sensitiveVisible }"
+                   @click.stop :title="sensitiveVisible ? '' : 'Click eye icon to reveal'">
+                  [[ log.username ]]
+                </a>
+              </template>
+              <span v-else class="text-muted">System</span>
+            </td>
+            <td>
+              <span :class="['badge', 'action-badge', actionColor(log.action)]">
+                [[ log.action ]]
+              </span>
+            </td>
+            <td class="log-desc small" :title="log.description">[[ log.description ]]</td>
+            <td class="small text-muted text-nowrap">
+              <span v-if="log.target_type">
+                <i :class="targetIcon(log.target_type)" class="me-1 text-muted"></i>
+                [[ log.target_type ]]
+                <span v-if="log.target_id" class="opacity-50">#[[ log.target_id ]]</span>
+              </span>
+            </td>
+            <td class="small text-muted text-nowrap">
+              <span :class="{ blurred: !sensitiveVisible }"
+                    :title="sensitiveVisible ? '' : 'Click eye icon to reveal'">
+                [[ log.ip_address || '—' ]]
+              </span>
+            </td>
+            <td @click.stop>
+              <button @click.stop="deleteOne(log)" class="btn btn-xs btn-outline-danger px-2 py-0"
+                      title="Delete this log">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination component -->
+  <pagination-component
+    :current-page="page"
+    :total-pages="totalPages"
+    @change-page="fetchLogs">
+  </pagination-component>
+
+</div>
+{% else %}
+<div class="container my-5 text-center">
+  <h4 class="text-danger">Access denied</h4>
+</div>
+{% endif %}
+
+<script type="module">
+import PaginationComponent from '/static/js/rule/paginationComponent.js'
+
+const { createApp, ref, computed, onMounted } = Vue
+
+createApp({
+  delimiters: ['[[', ']]'],
+  components: { 'pagination-component': PaginationComponent },
+  setup() {
+    const logs             = ref([])
+    const total            = ref(0)
+    const page             = ref(1)
+    const perPage          = ref(50)
+    const totalPages       = ref(1)
+    const loading          = ref(false)
+    const search           = ref('')
+    const actionFilter     = ref('')
+    const availableActions = ref([])
+    const selectedIds      = ref([])
+    const sensitiveVisible = ref(false)
+
+    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || ''
+
+    // ── Fetch actions list ────────────────────────────────────────────────────
+    async function fetchActions() {
+      try {
+        const res  = await fetch('/admin/logs/actions')
+        const data = await res.json()
+        availableActions.value = data.actions || []
+      } catch {}
+    }
+
+    // ── Fetch logs ────────────────────────────────────────────────────────────
+    async function fetchLogs(p = 1) {
+      loading.value = true
+      selectedIds.value = []
+      page.value = p
+      const params = new URLSearchParams({
+        page:     p,
+        per_page: perPage.value,
+        search:   search.value,
+        action:   actionFilter.value,
+      })
+      try {
+        const res  = await fetch(`/admin/get_logs_page?${params}`)
+        const data = await res.json()
+        logs.value       = data.logs || []
+        total.value      = data.total || 0
+        totalPages.value = data.total_pages || 1
+      } catch (e) {
+        console.error(e)
+      } finally {
+        loading.value = false
+      }
+    }
+
+    let _debounce = null
+    function debouncedFetch() {
+      clearTimeout(_debounce)
+      _debounce = setTimeout(() => fetchLogs(1), 350)
+    }
+
+    function resetFilters() {
+      search.value = ''
+      actionFilter.value = ''
+      fetchLogs(1)
+    }
+
+    // ── Target URL ────────────────────────────────────────────────────────────
+    function targetUrl(log) {
+      if (!log.target_type) return null
+      if (log.target_type === 'rule') {
+        if (log.target_uuid) return `/rule/detail_rule/${log.target_uuid}`
+        if (log.target_id)   return `/rule/detail_rule/${log.target_id}`
+      }
+      if (log.target_type === 'bundle') {
+        if (log.target_uuid) return `/bundle/detail/${log.target_uuid}`
+        if (log.target_id)   return `/bundle/detail/${log.target_id}`
+      }
+      if (log.target_type === 'user' && log.target_id)
+        return `/account/detail_user/${log.target_id}`
+      if (log.target_type === 'tag') return '/tags/admin/list'
+      if (log.target_type === 'job') return '/jobs/list'
+      return null
+    }
+
+    function navigateLog(log, e) {
+      if (e.target.closest('input[type=checkbox]') || e.target.closest('button')) return
+      const url = targetUrl(log)
+      if (url) window.open(url, '_blank')
+    }
+
+    function targetIcon(type) {
+      const map = {
+        rule:   'fa-solid fa-shield-halved',
+        bundle: 'fa-solid fa-box',
+        user:   'fa-solid fa-user',
+        tag:    'fa-solid fa-tag',
+        job:    'fa-solid fa-tasks',
+      }
+      return map[type] || 'fa-solid fa-circle-dot'
+    }
+
+    function actionColor(action) {
+      if (action.includes('delete') || action.includes('demote'))   return 'bg-danger'
+      if (action.includes('create') || action.includes('register')) return 'bg-success'
+      if (action.includes('edit')   || action.includes('update'))   return 'bg-warning text-dark'
+      if (action.includes('login')  || action.includes('logout'))   return 'bg-info text-dark'
+      if (action.includes('admin'))                                  return 'bg-dark'
+      return 'bg-secondary'
+    }
+
+    // ── Select all ────────────────────────────────────────────────────────────
+    const allSelected = computed(() =>
+      logs.value.length > 0 && selectedIds.value.length === logs.value.length
+    )
+    function toggleSelectAll(e) {
+      selectedIds.value = e.target.checked ? logs.value.map(l => l.id) : []
+    }
+
+    // ── Delete one ────────────────────────────────────────────────────────────
+    async function deleteOne(log) {
+      if (!confirm(`Delete this log entry?\n"${log.description}"`)) return
+      try {
+        await fetch(`/admin/logs/delete/${log.id}`, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': csrfToken },
+        })
+        fetchLogs(page.value)
+      } catch (e) { alert('Error: ' + e) }
+    }
+
+    // ── Bulk delete ───────────────────────────────────────────────────────────
+    async function bulkDelete() {
+      if (!confirm(`Delete ${selectedIds.value.length} selected log(s)? A background job will be created.`)) return
+      try {
+        const res = await fetch('/admin/logs/delete_bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify({ ids: selectedIds.value }),
+        })
+        const data = await res.json()
+        alert(data.message)
+        fetchLogs(1)
+      } catch (e) { alert('Error: ' + e) }
+    }
+
+    async function deleteAll() {
+      if (!confirm('Delete ALL activity logs? This cannot be undone. A background job will be created.')) return
+      try {
+        const res = await fetch('/admin/logs/delete_bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify({ delete_all: true, action_filter: actionFilter.value }),
+        })
+        const data = await res.json()
+        alert(data.message)
+        fetchLogs(1)
+      } catch (e) { alert('Error: ' + e) }
+    }
+
+    onMounted(() => {
+      fetchActions()
+      fetchLogs(1)
+    })
+
+    return {
+      logs, total, page, perPage, totalPages, loading,
+      search, actionFilter, availableActions, selectedIds, sensitiveVisible,
+      allSelected,
+      fetchLogs, debouncedFetch, resetFilters,
+      targetUrl, navigateLog, targetIcon, actionColor,
+      toggleSelectAll, deleteOne, bulkDelete, deleteAll,
+    }
+  }
+}).mount('#logs-app')
+</script>
+{% endblock %}

@@ -7,6 +7,7 @@ from flask import get_flashed_messages
 from flask_login import login_required, current_user
 
 from app.core.utils.utils import get_version
+from app.core.utils.activity_log import log_activity
 
 from .features.rule import rule_core as RuleModel
 from .features.account import account_core as AccountModel
@@ -290,10 +291,13 @@ def update_request_status() -> jsonify:
 
 
     is_the_owner = AccountModel.is_the_owner(request_id)
-    
+
     if current_user.is_admin() or is_the_owner:
         updated = AccountModel.update_request_status(request_id, status)
         if updated and status == "approved":
+            log_activity("admin.request_approved",
+                         f"Approved ownership request id={request_id} ({len(rules)} rules impacted)",
+                         extra={"request_id": request_id, "rule_ids": rule_ids})
             ownership_request = AccountModel.get_request_by_id(request_id)
             for rule in rules:
                 if rule.user_id == current_user.id or current_user.is_admin():
@@ -328,6 +332,10 @@ def update_request_status() -> jsonify:
 
             flash(f"Request Accepted! {len(rules)} rules are impacted", "success")
         else:
+            if updated:
+                log_activity("admin.request_rejected",
+                             f"Rejected ownership request id={request_id}",
+                             extra={"request_id": request_id})
             flash('Request decline with success!', 'success')
         return jsonify({"success": updated}), 200 if updated else 400
     else:
@@ -406,5 +414,115 @@ def history_logo() -> render_template:
 
 @home_blueprint.route('/doc/<path:filename>')
 def serve_doc_images(filename):
-    doc_path = os.path.join(home_blueprint.root_path, '../doc') 
+    doc_path = os.path.join(home_blueprint.root_path, '../doc')
     return send_from_directory(doc_path, filename)
+
+
+######################
+#   Activity Logs    #
+######################
+
+@home_blueprint.route('/admin/logs', methods=['GET'])
+@login_required
+def admin_logs():
+    if not current_user.is_admin():
+        return render_template('access_denied.html')
+    return render_template('admin/logs.html')
+
+
+@home_blueprint.route('/admin/get_logs_page', methods=['GET'])
+@login_required
+def get_logs_page():
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    from app.core.db_class.db import ActivityLog
+    from app import db
+
+    page      = request.args.get('page', 1, type=int)
+    per_page  = request.args.get('per_page', 50, type=int)
+    search    = request.args.get('search', '', type=str).strip()
+    action    = request.args.get('action', '', type=str).strip()
+    user_id_f = request.args.get('user_id', None, type=int)
+
+    q = ActivityLog.query
+    if search:
+        q = q.filter(ActivityLog.description.ilike(f'%{search}%'))
+    if action:
+        q = q.filter(ActivityLog.action.ilike(f'%{action}%'))
+    if user_id_f:
+        q = q.filter(ActivityLog.user_id == user_id_f)
+
+    q = q.order_by(ActivityLog.created_at.desc())
+    paginated = q.paginate(page=page, per_page=per_page, error_out=False)
+
+    return jsonify({
+        "logs":        [l.to_json() for l in paginated.items],
+        "total":       paginated.total,
+        "page":        page,
+        "per_page":    per_page,
+        "total_pages": paginated.pages,
+    }), 200
+
+
+@home_blueprint.route('/admin/logs/delete/<int:log_id>', methods=['POST'])
+@login_required
+def delete_log(log_id):
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    from app.core.db_class.db import ActivityLog
+    from app import db
+
+    entry = ActivityLog.query.get(log_id)
+    if not entry:
+        return jsonify({"success": False, "message": "Log not found"}), 404
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Log deleted"}), 200
+
+
+@home_blueprint.route('/admin/logs/delete_bulk', methods=['POST'])
+@login_required
+def delete_logs_bulk():
+    """Create a background job to mass-delete logs."""
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data   = request.get_json() or {}
+    ids    = data.get('ids', [])
+    all_   = data.get('delete_all', False)
+    action = data.get('action_filter', '')
+
+    if not ids and not all_:
+        return jsonify({"success": False, "message": "No logs selected"}), 400
+
+    from app.features.jobs.jobs_core import create_job
+    payload = {"log_ids": ids, "delete_all": all_, "action_filter": action}
+    job = create_job(
+        job_type   = 'delete_activity_logs',
+        payload    = payload,
+        label      = f"Delete {len(ids) if ids else 'all'} activity log(s)",
+        created_by = current_user.id,
+    )
+    if not job:
+        return jsonify({"success": False, "message": "Failed to create job"}), 500
+
+    log_activity("admin.logs_bulk_delete",
+                 f"Scheduled bulk deletion of {len(ids) if ids else 'all'} log(s)",
+                 extra=payload)
+    return jsonify({"success": True, "message": "Deletion job queued", "job": job.to_json()}), 200
+
+
+@home_blueprint.route('/admin/logs/actions', methods=['GET'])
+@login_required
+def get_log_actions():
+    """Return the distinct action types present in the log."""
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    from app.core.db_class.db import ActivityLog
+    from app import db
+
+    actions = [r[0] for r in db.session.query(ActivityLog.action).distinct().order_by(ActivityLog.action).all()]
+    return jsonify({"actions": actions}), 200

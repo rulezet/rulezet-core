@@ -1636,3 +1636,60 @@ class BackgroundJobLog(db.Model):
             "message":    self.message,
             "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
         }
+
+
+########################################
+#   Activity Log                       #
+########################################
+
+class ActivityLog(db.Model):
+    """Records every significant user action across the platform."""
+    __tablename__ = 'activity_log'
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+
+    # e.g. "rule.create", "rule.delete", "user.login", "bundle.edit", "admin.promote_user"
+    action      = db.Column(db.String(64), nullable=False, index=True)
+    description = db.Column(db.Text, nullable=True)
+
+    ip_address  = db.Column(db.String(45), nullable=True)   # IPv4 or IPv6
+    url         = db.Column(db.String(512), nullable=True)
+    method      = db.Column(db.String(8), nullable=True)
+
+    # What entity was acted on
+    target_type = db.Column(db.String(32), nullable=True, index=True)  # "rule" | "bundle" | "user" | "tag" | "job"
+    target_id   = db.Column(db.Integer, nullable=True)
+    target_uuid = db.Column(db.String(36), nullable=True)
+
+    extra       = db.Column(db.JSON, nullable=True)
+    created_at  = db.Column(db.DateTime, nullable=False,
+                            default=lambda: datetime.datetime.now(datetime.timezone.utc),
+                            index=True)
+
+    user = db.relationship('User', backref=db.backref('activity_logs', lazy='dynamic'))
+
+    def to_json(self):
+        username = "System"
+        try:
+            if self.user:
+                username = self.user.get_username()
+        except Exception:
+            pass
+        return {
+            "id":          self.id,
+            "uuid":        self.uuid,
+            "user_id":     self.user_id,
+            "username":    username,
+            "action":      self.action,
+            "description": self.description,
+            "ip_address":  self.ip_address,
+            "url":         self.url,
+            "method":      self.method,
+            "target_type": self.target_type,
+            "target_id":   self.target_id,
+            "target_uuid": self.target_uuid,
+            "extra":       self.extra,
+            "created_at":  self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        }

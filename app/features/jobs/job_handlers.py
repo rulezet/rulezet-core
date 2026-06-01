@@ -18,7 +18,7 @@ import uuid as uuid_mod
 
 from app.features.jobs.job_worker import register_handler
 from app import db
-from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJobLog
+from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJobLog, ActivityLog
 
 BATCH_SIZE = 2000   # bulk_insert_mappings handles large batches efficiently
 
@@ -523,3 +523,94 @@ def handle_delete_github_rules(job, app):
     log_job(job,
         f"Completed — {total_deleted} rule(s) deleted. {remaining} remaining.",
         level='success', event='done')
+
+
+# ─── delete_activity_logs ─────────────────────────────────────────────────────
+
+LOG_DELETE_BATCH = 1000
+
+
+@register_handler('delete_activity_logs')
+def handle_delete_activity_logs(job, app):
+    """Delete activity log entries in batches.
+
+    Payload keys:
+      log_ids      list[int]  — specific IDs to delete (ignored if delete_all=True)
+      delete_all   bool       — delete everything (filtered by action_filter if set)
+      action_filter str       — optional action prefix to filter when delete_all=True
+    """
+    payload      = job.payload or {}
+    log_ids      = payload.get('log_ids', [])
+    delete_all   = payload.get('delete_all', False)
+    action_filter = payload.get('action_filter', '')
+
+    log_job(job, "Starting activity log deletion…", level='info', event='started')
+
+    if delete_all:
+        q = ActivityLog.query
+        if action_filter:
+            q = q.filter(ActivityLog.action.ilike(f'{action_filter}%'))
+        total = q.count()
+    else:
+        log_ids = [int(i) for i in log_ids if str(i).isdigit()]
+        total = len(log_ids)
+
+    job.total = total
+    job.done  = 0
+    db.session.commit()
+
+    if total == 0:
+        log_job(job, "Nothing to delete.", level='info', event='done')
+        return
+
+    deleted = 0
+
+    if delete_all:
+        q = ActivityLog.query
+        if action_filter:
+            q = q.filter(ActivityLog.action.ilike(f'{action_filter}%'))
+
+        offset = payload.get('_resume_offset', 0)
+
+        while True:
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled — {deleted} deleted so far.", level='warning', event='cancelled')
+                return
+            if _should_pause(job):
+                _save_offset(job, offset)
+                db.session.commit()
+                log_job(job, f"Paused — {deleted} deleted so far.", level='warning', event='paused')
+                while _should_pause(job):
+                    import time; time.sleep(1)
+                log_job(job, "Resumed.", level='info', event='resumed')
+
+            batch_ids = [r.id for r in ActivityLog.query
+                         .filter(ActivityLog.action.ilike(f'{action_filter}%') if action_filter else db.true())
+                         .order_by(ActivityLog.id)
+                         .offset(offset)
+                         .limit(LOG_DELETE_BATCH)
+                         .with_entities(ActivityLog.id)
+                         .all()]
+            if not batch_ids:
+                break
+
+            ActivityLog.query.filter(ActivityLog.id.in_(batch_ids)).delete(synchronize_session=False)
+            db.session.commit()
+            deleted += len(batch_ids)
+            job.done = deleted
+            db.session.commit()
+            log_job(job, f"Deleted {deleted}/{total} log(s).", level='info', event='progress')
+    else:
+        for i in range(0, len(log_ids), LOG_DELETE_BATCH):
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled — {deleted} deleted.", level='warning', event='cancelled')
+                return
+
+            batch = log_ids[i:i + LOG_DELETE_BATCH]
+            ActivityLog.query.filter(ActivityLog.id.in_(batch)).delete(synchronize_session=False)
+            db.session.commit()
+            deleted += len(batch)
+            job.done = deleted
+            db.session.commit()
+
+    log_job(job, f"Done — {deleted} activity log(s) deleted.", level='success', event='done')

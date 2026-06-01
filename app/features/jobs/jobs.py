@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, render_template, request
 from flask_login import current_user, login_required
 
 import app.features.jobs.jobs_core as JobsModel
+from app.core.utils.activity_log import log_activity
 
 jobs_blueprint = Blueprint(
     'jobs',
@@ -102,6 +103,8 @@ def create_job():
     if not job:
         return jsonify({"error": "Failed to create job."}), 500
 
+    log_activity("job.create", f"Created job '{label}' (type={job_type})",
+                 target_type="job", target_id=job.id, target_uuid=job.uuid)
     return jsonify({"job": job.to_json(), "message": "Job queued."}), 200
 
 
@@ -111,6 +114,9 @@ def cancel_job(job_uuid):
     job, err = _get_job_or_403(job_uuid)
     if err: return err
     ok, msg = JobsModel.cancel_job(job)
+    if ok:
+        log_activity("job.cancel", f"Cancelled job '{job.label}' (uuid={job_uuid})",
+                     target_type="job", target_id=job.id, target_uuid=job_uuid)
     return jsonify({"message": msg}), 200 if ok else 400
 
 
@@ -120,6 +126,9 @@ def pause_job(job_uuid):
     job, err = _get_job_or_403(job_uuid)
     if err: return err
     ok, msg = JobsModel.pause_job(job)
+    if ok:
+        log_activity("job.pause", f"Paused job '{job.label}' (uuid={job_uuid})",
+                     target_type="job", target_id=job.id, target_uuid=job_uuid)
     return jsonify({"message": msg}), 200 if ok else 400
 
 
@@ -129,6 +138,9 @@ def resume_job(job_uuid):
     job, err = _get_job_or_403(job_uuid)
     if err: return err
     ok, msg = JobsModel.resume_job(job)
+    if ok:
+        log_activity("job.resume", f"Resumed job '{job.label}' (uuid={job_uuid})",
+                     target_type="job", target_id=job.id, target_uuid=job_uuid)
     return jsonify({"message": msg}), 200 if ok else 400
 
 
@@ -137,5 +149,9 @@ def resume_job(job_uuid):
 def delete_job(job_uuid):
     job, err = _get_job_or_403(job_uuid)
     if err: return err
+    job_label = job.label
     ok, msg = JobsModel.delete_job(job)
+    if ok:
+        log_activity("job.delete", f"Deleted job '{job_label}' (uuid={job_uuid})",
+                     extra={"job_uuid": job_uuid})
     return jsonify({"message": msg}), 200 if ok else 400

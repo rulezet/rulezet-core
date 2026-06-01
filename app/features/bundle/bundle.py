@@ -7,6 +7,7 @@ from app.features.misp.bundle.misp_object import get_bundle_misp_event
 from . import bundle_core as BundleModel
 from ..rule import rule_core as RuleModel
 from ..account import account_core as AccountModel
+from app.core.utils.activity_log import log_activity
 
 import io
 import zipfile
@@ -38,6 +39,8 @@ def create():
         
         my_bundle = BundleModel.create_bundle(form_dict, current_user)
         if my_bundle:
+            log_activity("bundle.create", f"Created bundle '{my_bundle.name}'",
+                         target_type="bundle", target_id=my_bundle.id, target_uuid=my_bundle.uuid)
             flash('Bundle created !', 'success')
             return redirect(url_for("bundle.edit", bundle_id=my_bundle.id))
         else:
@@ -92,10 +95,14 @@ def delete() :
     bundle_id = request.args.get('id', 1, type=int)
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if current_user.id == bundle.user_id or current_user.is_admin():
+        bundle_name = bundle.name
+        bundle_uuid = bundle.uuid
         success_ = BundleModel.delete_bundle(bundle_id)
         if success_:
-            return {"success": True, 
-                    "message": "Bundle deleted !", 
+            log_activity("bundle.delete", f"Deleted bundle '{bundle_name}' (id={bundle_id})",
+                         target_type="bundle", target_id=bundle_id, target_uuid=bundle_uuid)
+            return {"success": True,
+                    "message": "Bundle deleted !",
                     "toast_class" : "success-subtle"}, 200
         return {"success": False, 
                     "message": "Deleted fail  !", 
@@ -119,6 +126,8 @@ def edit(bundle_id) :
             form_dict['vulnerabilities'] = v_data
             
             BundleModel.update_bundle(bundle_id , form_dict )
+            log_activity("bundle.edit", f"Edited bundle '{bundle.name}' (id={bundle_id})",
+                         target_type="bundle", target_id=bundle_id, target_uuid=bundle.uuid)
             flash("Bundle modified with success!", "success")
             return redirect(request.referrer or '/')
         else:

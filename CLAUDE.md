@@ -190,6 +190,27 @@ Existing job types: `bulk_add_tag_to_rules`, `bulk_remove_tag_from_rules`, `dele
 
 `Similarity_class` (`utils/similar_rules/similarity_class.py`) uses TF-IDF + FAISS for candidate retrieval and rapidfuzz `fuzz.ratio` for precise scoring. Results stored in `RuleSimilarity` (top 50 per rule).
 
+### Activity Log system (`app/core/utils/activity_log.py`)
+
+Every significant user action is recorded in the `ActivityLog` DB table. Usage is a single import anywhere:
+
+```python
+from app.core.utils.activity_log import log_activity
+
+log_activity("rule.create", f"Created rule '{rule.title}'",
+             target_type="rule", target_id=rule.id, target_uuid=rule.uuid)
+```
+
+- `action` — dot-namespaced string, e.g. `rule.create`, `user.login`, `admin.delete_user`
+- `target_type` — `"rule"` | `"bundle"` | `"user"` | `"tag"` | `"job"` (nullable)
+- `target_id` / `target_uuid` — used by the UI to build redirect links
+- `extra` — arbitrary JSON dict for additional context
+- Never raises: all failures are silently swallowed
+
+**Admin UI**: `/admin/logs` — paginated table, filters by action/search, per-row delete, checkbox mass-delete via background job `delete_activity_logs`, click on row → opens target resource.
+
+**Logged everywhere**: rule create/edit/delete/vote/favorite/bulk-delete, bundle create/edit/delete, user login/logout/register/edit/delete, admin promote/demote/request approve/reject, tag create/edit/delete/toggle, job create/cancel/pause/resume/delete.
+
 ### Tests (`tests/`)
 
 - `conftest.py` — creates a fresh SQLite DB per test session with `create_user_test()`, `create_admin_test()`, `create_rule_test()`.

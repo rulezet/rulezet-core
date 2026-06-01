@@ -1,6 +1,7 @@
 from flask import Blueprint, flash, jsonify, render_template, request
 from flask_login import current_user, login_required
 import app.features.tags.tags_core as tags_core
+from app.core.utils.activity_log import log_activity
 
 
 tags_blueprint = Blueprint(
@@ -200,6 +201,9 @@ def toggle_visibility():
     if not tag_uuid:
         return {"status": "error", "message": "Tag UUID is required."}, 400
     success, message = tags_core.toggle_tag_visibility(tag_uuid)
+    if success:
+        log_activity("tag.toggle_visibility", f"Toggled visibility of tag uuid={tag_uuid}",
+                     target_type="tag", target_uuid=tag_uuid)
     cls = "success-subtle" if success else "danger-subtle"
     return {"status": "success" if success else "error", "message": message, "toast_class": cls}, (200 if success else 500)
 
@@ -213,6 +217,9 @@ def toggle_status():
     if not tag_uuid:
         return {"status": "error", "message": "Tag UUID is required."}, 400
     success, message = tags_core.toggle_tag_status(tag_uuid)
+    if success:
+        log_activity("tag.toggle_status", f"Toggled status of tag uuid={tag_uuid}",
+                     target_type="tag", target_uuid=tag_uuid)
     cls = "success-subtle" if success else "danger-subtle"
     return {"status": "success" if success else "error", "message": message, "toast_class": cls}, (200 if success else 500)
 
@@ -227,6 +234,8 @@ def edit_tag(tag_id):
         return {"status": "error", "message": "Tag ID is required."}, 400
     success, message = tags_core.edit_tag(request.json, tag_id)
     if success:
+        log_activity("tag.edit", f"Edited tag id={tag_id}",
+                     target_type="tag", target_id=tag_id)
         return {"status": "success", "message": message, "toast_class": "success-subtle"}, 200
     if not message:
         return {"status": "error", "message": "Error while updating tag", "toast_class": "danger-subtle"}, 500
@@ -246,6 +255,8 @@ def create_tag():
         return {"status": "error", "message": "A tag with this name already exists.", "toast_class": "warning-subtle"}, 201
     if tag is None:
         return {"status": "error", "message": "Error while creating tag", "toast_class": "danger-subtle"}, 500
+    log_activity("tag.create", f"Created tag '{tag.name}'",
+                 target_type="tag", target_id=tag.id, target_uuid=tag.uuid)
     return {
         "status": "success",
         "message": "Tag created successfully!",
@@ -261,6 +272,9 @@ def delete_tag(tag_id):
     err = _can_delete_tag(tag_id)
     if err: return err
     success, msg = tags_core.remove_tag(tag_id)
+    if success:
+        log_activity("tag.delete", f"Deleted tag id={tag_id}",
+                     target_type="tag", target_id=tag_id)
     cls = "success-subtle" if success else "danger-subtle"
     return jsonify({"status": "success" if success else "error", "message": msg, "toast_class": cls}), (200 if success else 500)
 

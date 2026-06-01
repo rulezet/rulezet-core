@@ -21,6 +21,7 @@ from app.features.rule.rule_format.utils_format.utils_import_update import clone
 from . import rule_core as RuleModel
 from ..bundle import bundle_core as BundleModel
 from .rule_from_github.import_rule import session_class as SessionModel
+from app.core.utils.activity_log import log_activity
 from .rule_from_github.update_rule import update_class as UpdateModel
 from .utils.similar_rules import similarity_class as SimilarityModel
 from ..account import account_core as AccountModel
@@ -84,9 +85,10 @@ def rule() -> render_template:
             profil_game_user = AccountModel.get_or_create_gamification_profile(current_user.id)
             if profil_game_user == None:
                 return jsonify({"message": "Error to update the gameifcation section"}), 500
-            
-            _ = AccountModel.update_rules_owned_gamification(profil_game_user.id, current_user.id)
 
+            _ = AccountModel.update_rules_owned_gamification(profil_game_user.id, current_user.id)
+            log_activity("rule.create", f"Created rule '{new_rule.title}' [{new_rule.format}]",
+                         target_type="rule", target_id=new_rule.id, target_uuid=new_rule.uuid)
             flash('Rule added !', 'success')
             return redirect(url_for('rule.detail_rule', rule_id=new_rule.id))
         else:
@@ -242,19 +244,20 @@ def delete_rule() -> jsonify:
     user_id = RuleModel.get_rule_user_id(rule_id)
 
     if current_user.id == user_id or current_user.is_admin():
+        rule_obj = RuleModel.get_rule(rule_id)
+        rule_title = rule_obj.title if rule_obj else str(rule_id)
         success = RuleModel.delete_rule_core(rule_id)
         if not success:
             return jsonify({"success": False, "message": "Failed to delete the rule!",
                             "toast_class" : "danger"}), 400
-        
 
         profil_game_user = AccountModel.get_or_create_gamification_profile(user_id)
         if profil_game_user == None:
             return jsonify({"message": "Error to update the gameifcation section"}), 500
-        
+
         _ = AccountModel.update_rules_owned_gamification(profil_game_user.id, user_id)
-
-
+        log_activity("rule.delete", f"Deleted rule '{rule_title}' (id={rule_id})",
+                     extra={"rule_id": rule_id})
         return {"success": True, "message": "Rule deleted!" , "toast_class" : "success"}, 200
     
     return render_template("access_denied.html")
@@ -285,6 +288,9 @@ def vote_rule() -> jsonify:
     if voter_gamif and rule:
         AccountModel.apply_vote_gamification(voter_gamif.id, rule.user_id, like_delta, dislike_delta)
 
+    log_activity(f"rule.vote_{vote_type}", f"Voted {vote_type} on rule id={rule_id}",
+                 target_type="rule", target_id=rule_id,
+                 target_uuid=rule.uuid if rule else None)
     return jsonify({
         'vote_up': vote_up,
         'vote_down': vote_down,
@@ -351,8 +357,10 @@ def edit_rule(rule_id) -> render_template:
                 rule_dict['tags'] = []
 
             success , current_rule = RuleModel.edit_rule_core(rule_dict, rule_id)
+            log_activity("rule.edit", f"Edited rule '{current_rule.title}' (id={rule_id})",
+                         target_type="rule", target_id=rule_id, target_uuid=current_rule.uuid)
             flash("Rule modified with success!", "success")
-            
+
             return redirect(url_for('rule.detail_rule', rule_id=current_rule.id))
         else:
             form.format.data = rule.format
@@ -502,10 +510,11 @@ def delete_selected_rules() -> jsonify:
     if errorDEL >= 1:
         return jsonify({"success": False, "message": "Failed to delete the rules!",
                         "toast_class" : "danger"}), 400
-    
 
     else:
-        return jsonify({"success": True, 
+        log_activity("rule.bulk_delete", f"Bulk deleted {len(data['ids'])} rule(s)",
+                     extra={"rule_ids": data['ids']})
+        return jsonify({"success": True,
                         "message": f"{len(data['ids'])} Rule(s) deleted!",
                         "toast_class" : "success"}), 200
 
@@ -688,6 +697,9 @@ def download_rule_unified() -> Response:
             "toast_class": "danger-subtle",
         })
 
+    log_activity("rule.download", f"Downloaded rule '{rule.title}' (format={fmt})",
+                 target_type="rule", target_id=rule.id, target_uuid=rule.uuid,
+                 extra={"format": fmt})
     return jsonify({
         "message": f"Rule {rule.title} ready for download",
         "success": True,
@@ -709,6 +721,8 @@ def add_favorite_rule(rule_id) -> redirect:
     existing = AccountModel.is_rule_favorited_by_user(user_id=current_user.id, rule_id=rule_id)
     if existing:
         remove_favorite(user_id=current_user.id, rule_id=rule_id)
+        log_activity("rule.unfavorite", f"Removed rule id={rule_id} from favorites",
+                     target_type="rule", target_id=rule_id)
         return jsonify({
             "is_favorited": False,
             "toast_class": 'success-subtle',
@@ -716,6 +730,8 @@ def add_favorite_rule(rule_id) -> redirect:
         }), 200
     else:
         add_favorite(user_id=current_user.id, rule_id=rule_id)
+        log_activity("rule.favorite", f"Added rule id={rule_id} to favorites",
+                     target_type="rule", target_id=rule_id)
         return jsonify({
             "is_favorited": True,
             "toast_class": 'success-subtle',

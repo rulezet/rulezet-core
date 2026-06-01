@@ -7,6 +7,7 @@ from ..rule import rule_core as RuleModel
 from . import account_core as AccountModel
 from ..bundle import bundle_core as BundleModel
 from ...core.utils.utils import form_to_dict, generate_api_key
+from ...core.utils.activity_log import log_activity
 from flask_login import current_user, login_required, login_user, logout_user
 from datetime import datetime, timedelta, timezone
 from collections import Counter
@@ -78,8 +79,12 @@ def promote_remove_admin() -> jsonify:
         response = AccountModel.promote_remove_user_admin(user_id, action)
         if response:
             if action == "remove":
+                log_activity("admin.demote_user", f"Removed admin rights from user id={user_id}",
+                             target_type="user", target_id=user_id)
                 return jsonify({"success": True , "admin": False})
             else:
+                log_activity("admin.promote_user", f"Granted admin rights to user id={user_id}",
+                             target_type="user", target_id=user_id)
                 return jsonify({"success": True , "admin": True})
         else:
             return jsonify({"success": False})
@@ -94,6 +99,8 @@ def delete_user() -> render_template:
     if current_user.is_admin():
         delete = AccountModel.delete_user_core(user_id)
         if delete:
+            log_activity("admin.delete_user", f"Deleted user id={user_id}",
+                         target_type="user", target_id=user_id)
             return {"message": "User Deleted",
                     "success": True,
                     "toast_class" : "success-subtle"}, 200
@@ -147,6 +154,8 @@ def edit_user():
             avatar_file=avatar_file,
             remove_avatar=remove_avatar
         )
+        log_activity("user.edit_profile", "Updated profile",
+                     target_type="user", target_id=current_user.id)
         flash('Profile updated successfully!', 'success')
         return redirect("/account")
     else:
@@ -178,6 +187,8 @@ def login() -> redirect:
                 return redirect(f"/account/verify/{user.id}")
             login_user(user, form.remember_me.data)
             AccountModel.connected(current_user)
+            log_activity("user.login", f"User '{user.get_username()}' logged in",
+                         target_type="user", target_id=user.id)
             flash('You are now logged in. Welcome back!', 'success')
             return redirect( "/")
         else:
@@ -188,6 +199,8 @@ def login() -> redirect:
 @login_required
 def logout() -> redirect:
     "Log out an User"
+    log_activity("user.logout", f"User '{current_user.get_username()}' logged out",
+                 target_type="user", target_id=current_user.id)
     AccountModel.disconnected(current_user)
     logout_user()
 
@@ -212,6 +225,8 @@ def add_user() -> redirect:
             flash('Error during the registration. Please try again !', 'error')
             return redirect("/account/register")
 
+        log_activity("user.register", f"New user registered: '{user.get_username()}'",
+                     target_type="user", target_id=user.id)
         flash('Registration successful. Please check your email for verification.', 'success')
         return redirect(f"/account/verify/{user.id}")
     return render_template("account/register_user.html", form=form)
