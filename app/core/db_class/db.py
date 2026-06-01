@@ -1711,6 +1711,10 @@ class ActivityLog(db.Model):
     target_uuid = db.Column(db.String(36), nullable=True)
 
     extra       = db.Column(db.JSON, nullable=True)
+
+    # Visibility & display
+    is_public   = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    icon        = db.Column(db.String(64), nullable=True)   # FontAwesome class e.g. "fa-solid fa-file-shield"
     created_at  = db.Column(db.DateTime, nullable=False,
                             default=lambda: datetime.datetime.now(datetime.timezone.utc),
                             index=True)
@@ -1738,5 +1742,7 @@ class ActivityLog(db.Model):
             "target_id":   self.target_id,
             "target_uuid": self.target_uuid,
             "extra":       self.extra,
+            "is_public":   self.is_public,
+            "icon":        self.icon,
             "created_at":  self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
         }

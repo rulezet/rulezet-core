@@ -514,6 +514,50 @@ def delete_logs_bulk():
     return jsonify({"success": True, "message": "Deletion job queued", "job": job.to_json()}), 200
 
 
+@home_blueprint.route('/activity_feed', methods=['GET'])
+def activity_feed():
+    """Public activity feed — only is_public=True entries."""
+    from app.core.db_class.db import ActivityLog
+    from app import db
+
+    page     = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    paginated = (ActivityLog.query
+                 .filter_by(is_public=True)
+                 .order_by(ActivityLog.created_at.desc())
+                 .paginate(page=page, per_page=per_page, error_out=False))
+    return jsonify({
+        "logs":        [l.to_json() for l in paginated.items],
+        "total":       paginated.total,
+        "page":        page,
+        "total_pages": paginated.pages,
+    }), 200
+
+
+@home_blueprint.route('/admin/logs/edit/<int:log_id>', methods=['POST'])
+@login_required
+def edit_log(log_id):
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    from app.core.db_class.db import ActivityLog
+    from app import db
+
+    entry = ActivityLog.query.get(log_id)
+    if not entry:
+        return jsonify({"success": False, "message": "Log not found"}), 404
+
+    data = request.get_json() or {}
+    if 'description' in data:
+        entry.description = data['description']
+    if 'is_public' in data:
+        entry.is_public = bool(data['is_public'])
+    if 'icon' in data:
+        entry.icon = data['icon']
+    db.session.commit()
+    return jsonify({"success": True, "log": entry.to_json()}), 200
+
+
 @home_blueprint.route('/admin/logs/actions', methods=['GET'])
 @login_required
 def get_log_actions():

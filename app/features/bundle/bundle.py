@@ -40,7 +40,8 @@ def create():
         my_bundle = BundleModel.create_bundle(form_dict, current_user)
         if my_bundle:
             log_activity("bundle.create", f"Created bundle '{my_bundle.name}'",
-                         target_type="bundle", target_id=my_bundle.id, target_uuid=my_bundle.uuid)
+                         target_type="bundle", target_id=my_bundle.id, target_uuid=my_bundle.uuid,
+                         is_public=bool(my_bundle.access))
             flash('Bundle created !', 'success')
             return redirect(url_for("bundle.edit", bundle_id=my_bundle.id))
         else:
@@ -127,7 +128,8 @@ def edit(bundle_id) :
             
             BundleModel.update_bundle(bundle_id , form_dict )
             log_activity("bundle.edit", f"Edited bundle '{bundle.name}' (id={bundle_id})",
-                         target_type="bundle", target_id=bundle_id, target_uuid=bundle.uuid)
+                         target_type="bundle", target_id=bundle_id, target_uuid=bundle.uuid,
+                         is_public=bool(bundle.access))
             flash("Bundle modified with success!", "success")
             return redirect(request.referrer or '/')
         else:
@@ -784,7 +786,8 @@ def add_comment():
         if new_c:
             log_activity("comment.add", f"Added comment on bundle id={bundle_id}",
                          target_type="bundle_comment", target_id=new_c.id,
-                         extra={"bundle_id": bundle_id, "bundle_uuid": bundle.uuid})
+                         extra={"bundle_id": bundle_id, "bundle_uuid": bundle.uuid},
+                         is_public=bool(bundle.access))
         return {"message": message, "toast_class": "success-subtle"}, 200
     else:
         return {"message": message, "toast_class": "danger-subtle"}, 500

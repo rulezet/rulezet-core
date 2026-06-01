@@ -2019,7 +2019,13 @@ def import_rules_from_github():
         session_th.start()
         SessionModel.sessions.append(session_th)
 
-        
+        log_activity("github.import_started",
+                     f"Started GitHub import from '{repo_url}'",
+                     target_type="github_import",
+                     target_uuid=session_th.uuid,
+                     extra={"url": repo_url},
+                     is_public=True,
+                     icon="fa-brands fa-github")
         return {"message": "Go !", "toast_class": "success-subtle", "session_uuid": session_th.uuid}, 201
     except Exception as e:
         return {"message": f"An error occurred during import: {str(e)}", "toast_class": "danger-subtle"}, 400
@@ -2071,6 +2077,13 @@ def import_rules_from_zip():
         session_th.start()
         SessionModel.sessions.append(session_th)
 
+        log_activity("github.import_started",
+                     f"Started ZIP import '{source}'",
+                     target_type="github_import",
+                     target_uuid=session_th.uuid,
+                     extra={"source": source},
+                     is_public=True,
+                     icon="fa-solid fa-file-zipper")
         return {
             "message": "ZIP uploaded and processing started!",
             "toast_class": "success-subtle",
@@ -2146,6 +2159,40 @@ def history_github_importer_list():
     return {"history": [g.to_json() for g in github_importer_list], 
             "total_history": github_importer_list.total, 
             "total_pages": github_importer_list.pages}, 200
+
+@rule_blueprint.route("/history_github_importer/find_page", methods=['GET'])
+@login_required
+def find_history_page():
+    """Return the page number where a given session UUID appears in the history."""
+    from app.core.db_class.db import ImporterResult, UpdateResult
+    uuid_param = request.args.get('uuid', type=str)
+    kind       = request.args.get('type', 'import')   # 'import' | 'update'
+    per_page   = 20
+
+    if not uuid_param:
+        return jsonify({"page": 1})
+
+    if kind == 'import':
+        target = ImporterResult.query.filter_by(uuid=uuid_param).first()
+        if not target:
+            return jsonify({"page": 1})
+        rank = ImporterResult.query.filter(ImporterResult.id <= target.id).count()
+        page = (rank - 1) // per_page + 1
+    else:
+        target = UpdateResult.query.filter_by(uuid=uuid_param).first()
+        if not target:
+            return jsonify({"page": 1})
+        if current_user.is_admin():
+            rank = UpdateResult.query.filter(UpdateResult.id <= target.id).count()
+        else:
+            rank = UpdateResult.query.filter(
+                UpdateResult.id <= target.id,
+                UpdateResult.user_id == str(current_user.id)
+            ).count()
+        page = (rank - 1) // per_page + 1
+
+    return jsonify({"page": max(1, page)})
+
 
 @rule_blueprint.route("/history_github_importer/delete", methods=['GET'])
 @login_required
@@ -2378,6 +2425,13 @@ def check_updates_by_url():
     update_session.start()
     UpdateModel.sessions.append(update_session)
 
+    log_activity("github.update_started",
+                 f"Started GitHub update check on {len(valid_urls)} repo(s)",
+                 target_type="github_update",
+                 target_uuid=update_session.uuid,
+                 extra={"urls": valid_urls},
+                 is_public=False,
+                 icon="fa-brands fa-github")
     return {
         "message": "Update check started successfully. Processing repositories...",
         "session_uuid": update_session.uuid,
@@ -2417,6 +2471,13 @@ def check_updates_by_rule():
     update_session.start()
     UpdateModel.sessions.append(update_session)
 
+    log_activity("github.update_started",
+                 f"Started rule update check on {len(rule_ids)} rule(s)",
+                 target_type="github_update",
+                 target_uuid=update_session.uuid,
+                 extra={"rule_ids": rule_ids},
+                 is_public=False,
+                 icon="fa-solid fa-rotate")
     return {
         "message": "Rule update verification started successfully.",
         "session_uuid": update_session.uuid,

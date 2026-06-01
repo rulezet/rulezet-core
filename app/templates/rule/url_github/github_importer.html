@@ -2,6 +2,16 @@
 {% import 'macros/form_macros.html' as f %}
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/importer.css') }}">
+<style>
+.row-highlight-import {
+    outline: 2px solid #0d6efd !important;
+    background: rgba(13,110,253,.08) !important;
+}
+.row-highlight-update {
+    outline: 2px solid #ffc107 !important;
+    background: rgba(255,193,7,.1) !important;
+}
+</style>
 {% endblock %}
 {% block content %}
 <div class="container mt-4" id="main-container">
@@ -69,7 +79,10 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="(history, index) in history_list" :key="index" @click="goto(history.uuid)"
+                                <tr v-for="(history, index) in history_list" :key="index"
+                                    :id="'import-row-' + history.uuid"
+                                    :class="{ 'row-highlight-import': highlightUuid === history.uuid }"
+                                    @click="goto(history.uuid)"
                                     style="cursor: pointer;">
                                     <td class="text-center">[[ index + 1 ]]</td>
                                     <td>[[ history.info.repo_url ]]</td>
@@ -178,10 +191,12 @@
                             </thead>
                             <tbody>
                                 <tr v-for="(history, index) in history_list_update" :key="history.uuid"
+                                    :id="'update-row-' + history.uuid"
                                     @click="gotoUpdate(history.uuid)" style="cursor: pointer;" :class="{
-                                'table-info': history.mode === 'by_url',
-                                'table-warning': history.mode === 'by_rule',
-                                'table-light': !['by_url', 'by_rule'].includes(history.mode)
+                                'row-highlight-update': highlightUpdateUuid === history.uuid,
+                                'table-info': history.mode === 'by_url' && highlightUpdateUuid !== history.uuid,
+                                'table-warning': history.mode === 'by_rule' && highlightUpdateUuid !== history.uuid,
+                                'table-light': !['by_url', 'by_rule'].includes(history.mode) && highlightUpdateUuid !== history.uuid
                             }">
                                     <td class="text-center">[[ index + 1 ]]</td>
 
@@ -402,6 +417,8 @@
             const current_page = ref(1)
             const total_pages = ref(1)
             const running_sessions = ref({})
+            const highlightUuid       = ref(null)
+            const highlightUpdateUuid = ref(null)
 
             async function fetchGithubImporter(page) {
                 const params = new URLSearchParams({
@@ -423,7 +440,32 @@
                 }
             }
 
-            fetchGithubImporter(1)
+            // ── Scroll helper (retries until element exists in DOM) ───────────
+            function scrollToRow(rowId, attempts = 0) {
+                const el = document.getElementById(rowId)
+                if (el) {
+                    const top = el.getBoundingClientRect().top + window.pageYOffset - 120
+                    window.scrollTo({ top, behavior: 'smooth' })
+                } else if (attempts < 12) {
+                    setTimeout(() => scrollToRow(rowId, attempts + 1), 150)
+                }
+            }
+
+            // ── Handle ?highlight / ?highlight_update from activity logs ─────
+            const _params    = new URLSearchParams(window.location.search)
+            const _hImport   = _params.get('highlight')
+            const _hUpdate   = _params.get('highlight_update')
+
+            if (_hImport) {
+                highlightUuid.value = _hImport
+                // 1. Ask backend which page this UUID is on
+                fetch(`/rule/history_github_importer/find_page?uuid=${_hImport}&type=import`)
+                    .then(r => r.json())
+                    .then(data => fetchGithubImporter(data.page || 1))
+                    .then(() => scrollToRow('import-row-' + _hImport))
+            } else {
+                fetchGithubImporter(1)
+            }
 
             async function fetchSessionRunning() {
                 const res = await fetch('/rule/import_get_session_running')
@@ -505,7 +547,21 @@
                 }
             }
 
-            fetchGithubUpdater(1)
+            if (_hUpdate) {
+                highlightUpdateUuid.value = _hUpdate
+                // Activate "Updates & Status" tab — click is most reliable
+                setTimeout(() => {
+                    const tabEl = document.getElementById('rule-tab')
+                    if (tabEl) tabEl.click()
+                }, 50)
+                // Ask backend which page, then fetch + scroll
+                fetch(`/rule/history_github_importer/find_page?uuid=${_hUpdate}&type=update`)
+                    .then(r => r.json())
+                    .then(data => fetchGithubUpdater(data.page || 1))
+                    .then(() => scrollToRow('update-row-' + _hUpdate))
+            } else {
+                fetchGithubUpdater(1)
+            }
 
             const visiblePagesUpdate = computed(() => {
                 const pages = []
@@ -571,7 +627,9 @@
                 deleteUpdateHistory,
 
                 goto,
-                gotoUpdate
+                gotoUpdate,
+                highlightUuid,
+                highlightUpdateUuid,
             }
         }
     }).mount('#main-container')

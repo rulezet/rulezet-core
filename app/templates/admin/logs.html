@@ -94,7 +94,10 @@
           <th>Description</th>
           <th>Target</th>
           <th>IP</th>
-          <th style="width:60px;"></th>
+          <th title="Public">
+            <i class="fa-solid fa-eye text-muted" style="font-size:.8rem;"></i>
+          </th>
+          <th style="width:80px;"></th>
         </tr>
       </thead>
       <tbody>
@@ -147,7 +150,15 @@
                 [[ log.ip_address || '—' ]]
               </span>
             </td>
-            <td @click.stop>
+            <td @click.stop class="text-center">
+              <i v-if="log.is_public" class="fa-solid fa-eye text-success" title="Public"></i>
+              <i v-else class="fa-solid fa-eye-slash text-secondary opacity-50" title="Private"></i>
+            </td>
+            <td @click.stop class="text-nowrap">
+              <button @click.stop="openEdit(log)" class="btn btn-xs btn-outline-secondary px-2 py-0 me-1"
+                      title="Edit this log">
+                <i class="fa-solid fa-pen"></i>
+              </button>
               <button @click.stop="deleteOne(log)" class="btn btn-xs btn-outline-danger px-2 py-0"
                       title="Delete this log">
                 <i class="fa-solid fa-xmark"></i>
@@ -166,6 +177,46 @@
     @change-page="fetchLogs">
   </pagination-component>
 
+  <!-- Edit modal -->
+  <div v-if="editLog" class="modal fade show d-block" style="background:rgba(0,0,0,.5);" @click.self="editLog=null">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold"><i class="fa-solid fa-pen me-2 text-primary"></i>Edit Log #[[ editLog.id ]]</h5>
+          <button class="btn-close" @click="editLog=null"></button>
+        </div>
+        <div class="modal-body pt-2">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Description</label>
+            <textarea v-model="editForm.description" class="form-control form-control-sm" rows="3"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Icon <span class="text-muted fw-normal">(FontAwesome class)</span></label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i :class="editForm.icon || 'fa-solid fa-circle-dot'"></i></span>
+              <input v-model="editForm.icon" class="form-control" placeholder="fa-solid fa-file-shield">
+            </div>
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" v-model="editForm.is_public" id="editPublic">
+            <label class="form-check-label small" for="editPublic">
+              <span v-if="editForm.is_public" class="text-success fw-semibold">
+                <i class="fa-solid fa-eye me-1"></i>Public — visible in the activity feed
+              </span>
+              <span v-else class="text-muted">
+                <i class="fa-solid fa-eye-slash me-1"></i>Private — admin only
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button @click="editLog=null" class="btn btn-sm btn-light border rounded-pill px-4">Cancel</button>
+          <button @click="saveEdit" class="btn btn-sm btn-primary rounded-pill px-4">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 {% else %}
 <div class="container my-5 text-center">
@@ -175,6 +226,7 @@
 
 <script type="module">
 import PaginationComponent from '/static/js/rule/paginationComponent.js'
+import { create_message } from '/static/js/toaster.js'
 
 const { createApp, ref, computed, onMounted } = Vue
 
@@ -193,6 +245,8 @@ createApp({
     const availableActions = ref([])
     const selectedIds      = ref([])
     const sensitiveVisible = ref(false)
+    const editLog          = ref(null)
+    const editForm         = ref({ description: '', icon: '', is_public: false })
 
     const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || ''
 
@@ -258,6 +312,14 @@ createApp({
       if (log.target_type === 'job' && log.target_uuid)
         return `/jobs/list?job=${log.target_uuid}`
       if (log.target_type === 'job') return '/jobs/list'
+      if (log.target_type === 'github_import')
+        return log.target_uuid
+          ? `/rule/github/history_github_importer?highlight=${log.target_uuid}`
+          : '/rule/github/history_github_importer'
+      if (log.target_type === 'github_update')
+        return log.target_uuid
+          ? `/rule/github/history_github_importer?highlight_update=${log.target_uuid}`
+          : '/rule/github/history_github_importer'
       if (log.target_type === 'comment' && log.target_id) {
         const ruleUuid = log.extra?.rule_uuid
         const ruleId   = log.extra?.rule_id
@@ -283,11 +345,15 @@ createApp({
 
     function targetIcon(type) {
       const map = {
-        rule:   'fa-solid fa-shield-halved',
-        bundle: 'fa-solid fa-box',
-        user:   'fa-solid fa-user',
-        tag:    'fa-solid fa-tag',
-        job:    'fa-solid fa-tasks',
+        rule:           'fa-solid fa-shield-halved',
+        bundle:         'fa-solid fa-box',
+        user:           'fa-solid fa-user',
+        tag:            'fa-solid fa-tag',
+        job:            'fa-solid fa-tasks',
+        comment:        'fa-solid fa-comment',
+        bundle_comment: 'fa-solid fa-comment',
+        github_import:  'fa-brands fa-github',
+        github_update:  'fa-solid fa-rotate',
       }
       return map[type] || 'fa-solid fa-circle-dot'
     }
@@ -307,6 +373,31 @@ createApp({
     )
     function toggleSelectAll(e) {
       selectedIds.value = e.target.checked ? logs.value.map(l => l.id) : []
+    }
+
+    // ── Edit one ──────────────────────────────────────────────────────────────
+    function openEdit(log) {
+      editLog.value  = log
+      editForm.value = { description: log.description || '', icon: log.icon || '', is_public: !!log.is_public }
+    }
+    async function saveEdit() {
+      if (!editLog.value) return
+      try {
+        const res  = await fetch(`/admin/logs/edit/${editLog.value.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify(editForm.value),
+        })
+        const data = await res.json()
+        if (data.success) {
+          const idx = logs.value.findIndex(l => l.id === editLog.value.id)
+          if (idx !== -1) logs.value[idx] = data.log
+          editLog.value = null
+          create_message('Log updated successfully', 'success-subtle')
+        } else {
+          create_message(data.message || 'Failed to update', 'danger-subtle')
+        }
+      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
     }
 
     // ── Delete one ────────────────────────────────────────────────────────────
@@ -358,10 +449,12 @@ createApp({
     return {
       logs, total, page, perPage, totalPages, loading,
       search, actionFilter, availableActions, selectedIds, sensitiveVisible,
+      editLog, editForm,
       allSelected,
       fetchLogs, debouncedFetch, resetFilters,
       targetUrl, navigateLog, targetIcon, actionColor,
       toggleSelectAll, deleteOne, bulkDelete, deleteAll,
+      openEdit, saveEdit,
     }
   }
 }).mount('#logs-app')
