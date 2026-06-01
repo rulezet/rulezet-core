@@ -444,32 +444,47 @@
                   new bootstrap.Tooltip(el, { trigger: 'hover' })
             );
 
-            const isDark = document.body.classList.contains('dark-mode');
-            const cmTheme = isDark ? 'dracula' : 'idea';
+            const getTheme = () => document.body.classList.contains('dark-mode') ? 'dracula' : 'idea';
+            const CM_CONFIG = { lineNumbers: true, mode: 'yaml', autoCloseBrackets: true, lineWrapping: true };
 
-            const editor = CodeMirror.fromTextArea(document.getElementById("editor"), {
-                  lineNumbers: true,
-                  mode: "yaml",
-                  theme: cmTheme,
-                  autoCloseBrackets: true,
-                  lineWrapping: true
+            let editor  = null;  // Manual tab  (#editor)
+            let editor2 = null;  // Parse tab   (#content)
+
+            function initManual() {
+                  if (editor) return;
+                  const el = document.getElementById('editor');
+                  if (!el) return;
+                  editor = CodeMirror.fromTextArea(el, { ...CM_CONFIG, theme: getTheme() });
+            }
+
+            function initParse() {
+                  if (editor2) return;
+                  const el = document.getElementById('content');
+                  if (!el) return;
+                  editor2 = CodeMirror.fromTextArea(el, { ...CM_CONFIG, theme: getTheme() });
+            }
+
+            // Init only the editor whose tab is currently active on page load
+            const activePane = document.querySelector('#createTabs .nav-link.active');
+            const activeHref = activePane ? activePane.getAttribute('href') : '#chap1-pane';
+            if (activeHref === '#chap1-pane') initManual();
+            if (activeHref === '#chap2-pane') initParse();
+
+            // Lazy init on tab switch
+            document.querySelectorAll('#createTabs [data-bs-toggle="tab"]').forEach(tab => {
+                  tab.addEventListener('shown.bs.tab', function (e) {
+                        const target = e.target.getAttribute('href');
+                        if (target === '#chap1-pane') initManual();
+                        if (target === '#chap2-pane') initParse();
+                  });
             });
 
-            const editor2 = CodeMirror.fromTextArea(document.getElementById("content"), {
-                  lineNumbers: true,
-                  mode: "yaml",
-                  theme: cmTheme,
-                  autoCloseBrackets: true,
-                  lineWrapping: true
-            });
-
-            const cmObserver = new MutationObserver(() => {
-                  const dark = document.body.classList.contains('dark-mode');
-                  const theme = dark ? 'dracula' : 'idea';
-                  editor.setOption('theme', theme);
-                  editor2.setOption('theme', theme);
-            });
-            cmObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+            // Keep theme in sync with dark mode toggle
+            new MutationObserver(() => {
+                  const theme = getTheme();
+                  if (editor)  editor.setOption('theme', theme);
+                  if (editor2) editor2.setOption('theme', theme);
+            }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
       });
 
 
