@@ -115,12 +115,13 @@ All SQLAlchemy models live in one file. Key models:
 
 | Model | Description |
 |-------|-------------|
-| `User` | Auth + profile; has `api_key`, `admin`, `is_verified`, gamification backref |
+| `User` | Auth + profile; has `api_key`, `admin`, `is_verified`, `bio`, gamification backref |
 | `Rule` | Core entity: `format`, `title`, `to_string` (raw content), `uuid`, `source`, `github_path` |
 | `FormatRule` | Registry of supported rule formats |
 | `Bundle` | Named collection of rules (many-to-many via `BundleRuleAssociation`) |
 | `BundleNode` | Tree node for bundle's file-explorer view (`folder` or `file`, recursive self-ref) |
-| `Tag` | Taxonomy tags with color/icon/galaxy metadata; linked to rules and bundles via association tables |
+| `Tag` | Taxonomy tags with `name`, `color`, `icon`, `galaxy_meta`, `visibility`; linked to rules and bundles via association tables |
+| `RuleTagAssociation` | Rule ↔ Tag many-to-many with `uuid`, `user_id`, `added_at` |
 | `RuleEditProposal` | PR-style edit request with `status` (pending/approved/rejected) |
 | `Comment` / `CommentBundle` | Comments on rules and bundles |
 | `RuleVote` / `BundleVote` | Per-user up/down votes |
@@ -130,6 +131,7 @@ All SQLAlchemy models live in one file. Key models:
 | `Gamification` | Per-user contribution points and level; auto-updated via SQLAlchemy `before_flush` event listener `receive_before_flush()` |
 | `RuleSimilarity` / `SimilarResult` | Fuzzy similarity scores between rules (TF-IDF + FAISS + rapidfuzz) |
 | `ImporterResult` / `UpdateResult` / `RuleStatus` / `NewRule` | History tracking for GitHub imports and rule update scans |
+| `ActivityLog` | Audit trail entry: `action`, `description`, `user_id`, `target_type`, `target_id`, `target_uuid`, `ip_address`, `is_public`, `icon`, `extra` (JSON) |
 
 ### Business logic layer (`app/features/*/` and `app/core/`)
 
@@ -137,7 +139,7 @@ Each feature has a `*_core.py` file with pure Python DB logic, called by both bl
 
 | File | Key functions |
 |------|--------------|
-| `app/features/rule/rule_core.py` | `add_rule_core()`, `get_rule()`, `get_rule_by_content()`, `rule_exists()`, `get_rules_page_filter()` |
+| `app/features/rule/rule_core.py` | `add_rule_core()`, `_attach_default_tags()`, `get_rule()`, `get_rule_by_content()`, `rule_exists()`, `get_rules_page_filter()`, `get_all_rule_by_url_github_page()` |
 | `app/features/account/account_core.py` | `add_user_core()`, `add_favorite()`, `remove_favorite()` |
 | `app/features/bundle/bundle_core.py` | Bundle CRUD, tag association |
 | `app/features/jobs/jobs_core.py` | `create_job()`, `cancel_job()`, `pause_job()`, `resume_job()`, `get_zombie_jobs()`, `kill_all_zombies()` |
@@ -163,12 +165,27 @@ The format system uses an **abstract base class** pattern so new formats can be 
 
 Adding a new format: create a file in `available_format/`, subclass `RuleType`, implement all abstract methods. `load_all_rule_formats()` auto-discovers it via `pkgutil.iter_modules`.
 
+### Default tag system
+
+Every new rule receives `tlp:clear` and `pap:clear` tags automatically at creation time.
+
+Implemented in `rule_core.py`:
+- `_DEFAULT_TAG_NAMES = ['tlp:clear', 'pap:clear']`
+- `_attach_default_tags(rule, user_id)` — called inside `add_rule_core()` before `db.session.commit()`
+- Tags are looked up by name (`ilike`) — silently skipped if they don't exist in the DB
+- Idempotent — no duplicate associations are created
+- Covers **all** creation flows: manual UI, parse, GitHub import (`session_class.py`), bad-rule re-import, API
+
+**Prerequisite**: the tags `tlp:clear` and `pap:clear` must be created in the DB (via Tags admin) for auto-attachment to work.
+
 ### GitHub import pipeline
 
 1. User submits a GitHub repo URL via UI or API.
 2. `utils_import_update.py` — `clone_or_access_repo()` clones or `git pull`s the repo into `Rules_Github/<owner>/<repo>/`.
 3. `Session_class` (`import_rule/session_class.py`) — multi-threaded worker that walks the repo directory, matches files to format subclasses, validates and inserts rules via `rule_core.add_rule_core()`. Invalid rules go to `InvalidRuleModel`.
 4. Results stored in `ImporterResult`.
+
+**URL normalization**: GitHub clone URLs ending with `.git` are stripped before DB lookup and before being passed to templates. The `get_all_rule_by_url_github_page()` and `get_rules_page_filter()` functions normalize the URL and match both `url` and `url.git` patterns in the `source` column.
 
 ### Rule update pipeline
 
@@ -184,7 +201,14 @@ Adding a new format: create a file in `available_format/`, subclass `RuleType`, 
 - Jobs interrupted by server restart are auto-recovered to `pending`.
 - Handlers support pause/resume via `_should_pause()` / `_is_cancelled()` checked between batches, with `_resume_offset` stored in `job.payload`.
 
-Existing job types: `bulk_add_tag_to_rules`, `bulk_remove_tag_from_rules`, `delete_github_rules`.
+Existing job types:
+
+| Job type | Description |
+|----------|-------------|
+| `bulk_add_tag_to_rules` | Add tags to a filtered set of rules |
+| `bulk_remove_tag_from_rules` | Remove tags from a filtered set of rules |
+| `delete_github_rules` | Delete rules imported from a GitHub source |
+| `delete_activity_logs` | Bulk-delete activity log entries by ID list or filter |
 
 ### Similarity engine
 
@@ -202,14 +226,64 @@ log_activity("rule.create", f"Created rule '{rule.title}'",
 ```
 
 - `action` — dot-namespaced string, e.g. `rule.create`, `user.login`, `admin.delete_user`
-- `target_type` — `"rule"` | `"bundle"` | `"user"` | `"tag"` | `"job"` (nullable)
+- `target_type` — `"rule"` | `"bundle"` | `"user"` | `"tag"` | `"job"` | `"github_import"` | `"github_update"` | `"comment"` | `"bundle_comment"` (nullable)
 - `target_id` / `target_uuid` — used by the UI to build redirect links
+- `is_public` — whether the log entry is visible in the public activity feed
 - `extra` — arbitrary JSON dict for additional context
 - Never raises: all failures are silently swallowed
 
-**Admin UI**: `/admin/logs` — paginated table, filters by action/search, per-row delete, checkbox mass-delete via background job `delete_activity_logs`, click on row → opens target resource.
+**Admin UI** (`/admin/logs`):
+- Paginated table in a rounded card with shadow
+- Filters: description search, action type, per-page count
+- **Visibility column**: clickable badge (`Public` / `Private`) — single click toggles `is_public` via `POST /admin/logs/edit/:id`
+- **Selection bar**: appears when rows are checked — bulk actions: Set Public, Set Private, Delete, Clear
+- Bulk visibility endpoint: `POST /admin/logs/set_visibility` with `{ ids: [...], is_public: bool }`
+- Bulk delete: `POST /admin/logs/delete_bulk` — creates a `delete_activity_logs` background job
+- Click on a row → opens the target resource in a new tab
+- Sensitive columns (username, IP) are blurred until revealed via the eye toggle button
 
 **Logged everywhere**: rule create/edit/delete/vote/favorite/bulk-delete, bundle create/edit/delete, user login/logout/register/edit/delete, admin promote/demote/request approve/reject, tag create/edit/delete/toggle, job create/cancel/pause/resume/delete.
+
+### UI conventions
+
+#### Page header banner (`.explorer-banner`)
+
+All pages accessible from the navigation use a shared banner component defined in `app/static/css/core.css` (section 18):
+
+```html
+<div class="explorer-banner mb-4">
+    <i class="fa-solid fa-[icon] banner-watermark"></i>
+    <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="banner-icon"><i class="fa-solid fa-[icon]"></i></div>
+        <div>
+            <h2 class="fw-bold mb-1">Page Title</h2>
+            <div class="banner-accent"></div>
+        </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">Description.</p>
+</div>
+```
+
+Classes: `.explorer-banner` (card wrapper with blue top accent line), `.banner-icon` (52×52 icon box), `.banner-accent` (36×3 gradient underbar), `.banner-watermark` (decorative background icon), `.banner-formats` (formats pill, rules list only).
+
+The gradient uses only blue tones: `#0d6efd → #0a58ca`.
+
+#### Tag tooltips (`app/static/js/tags/singleTagDisplay.js`)
+
+Tag tooltips use Vue 3 `<teleport to="body">` with `position: fixed` computed at `mouseenter`. This bypasses `overflow: hidden` on parent containers (e.g. carousels). A 120ms debounce on `mouseleave` allows the mouse to move from the tag to the tooltip without it closing.
+
+#### Dark mode
+
+Core CSS variables (`app/static/css/core.css`):
+- `--text-color` — primary text (`#1e1e1e` / `#e2e8f0`)
+- `--subtle-text-color` — secondary/muted text (`#6c757d` / `#94a3b8`)
+- `--card-bg-color` — card backgrounds
+- `--border-color` — borders
+- `--light-bg-color` — table headers, subtle backgrounds
+
+Dark mode overrides (section 17-18 of core.css) cover: `.text-muted`, `.table-light`, `.table-hover`, `.bg-*-subtle`, `.text-secondary`, `.table .opacity-50`.
+
+**Important**: use `var(--subtle-text-color)` for secondary text, NOT `var(--color-text)` (that variable does not exist).
 
 ### Tests (`tests/`)
 

@@ -6,171 +6,272 @@
 
 ## Community-Driven Detection Rules Platform
 
-**Rulezet** is an open-source web platform for sharing, evaluating, improving, and managing cybersecurity detection rules (YARA, Sigma, Suricata, etc). It aims to foster collaboration among professionals and enthusiasts to improve the quality and reliability of detection rules.
+**Rulezet** is an open-source web platform for sharing, evaluating, improving, and managing cybersecurity detection rules (YARA, Sigma, Suricata, Zeek, CRS, Nova, NSE, Wazuh, Elastic). It fosters collaboration among security professionals and enthusiasts to improve the quality and reliability of detection rules.
 
-Rulezet is available as an online service at the following address [https://rulezet.org/](https://rulezet.org/)
+Rulezet is available as an online service at [https://rulezet.org/](https://rulezet.org/)
+
+---
 
 ## Technology Stack
 
-This project is built with:
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.12 · Flask · Flask-Login · Flask-SQLAlchemy · Flask-RESTX |
+| Frontend | Vue.js 3 · Bootstrap 5.3 · Font Awesome 6 |
+| Database | PostgreSQL (production) · SQLite (testing) |
+| Workers | Python `threading` — daemon background job queue |
+| Similarity | TF-IDF + FAISS + rapidfuzz |
 
-- **Flask** (Python)
-- **Vue.js 3**
-- **Flask Blueprints**
-- **Flask-Login** (Authentication)
-- **Flask-SQLAlchemy** (ORM)
-- **PostgreSQL** (Database)
+---
 
 ## Installation
 
-> It is strongly recommended to use a **Python virtual environment**.
+> A Python virtual environment is strongly recommended.
 
 ```bash
 ./install.sh
 ```
 
-## First Connection
-
-At the beginning, password and api Keys are generate to security reason
-
-```bash
-====================================================================================================
-✅ Admin account created successfully!
-🔑 API Key     : xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ( Unique secret key )
-👤 Username    : admin@admin.admin
-🔐 Password    : xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   (⚠️ Change it after first login)
-====================================================================================================
-
-```
-
-You should change the password after the first connection
-
-## Launching the Application
-
-```bash
-./launch.sh -l
-```
-
-## Features Overview
-
-The platform includes a wide set of functionalities to manage and collaborate around detection rules:
-
-### User Management
-
-- Admin panel to **manage users**
-- **Favorite** rules for users
-
-### Rule Lifecycle
-
-- **Create**, **Edit**, and **Delete** rules
-- **Assign ownership** to rules
-
-### Search & Browse
-
-- Powerful **search bar** and rule **filtering**
-- **View detailed rule** and download or copy it
-
-### Community Collaboration
-
-- Propose **modifications** to existing rules via pull-request style edits
-- **Evaluate** rules to identify the most effective ones
-- **Comment** and **discuss** arround the rules
-
-### GitHub Integration
-
-- **Import detection rules directly** from public GitHub repositories
-
-### Rule Validity
-
-- Automatic **validation of imported rules**
-- Display and **manage invalid or malformed rules**
-
-### Light/Dark Mode
-
-- The **most** important feature to enhance user comfort while working in different environments 😉.
-
-## Rule's Formats
-
-New rule formats may be added over time.  
-If you want to propose a new format, feel free to open an **issue** on our [GitHub](https://github.com/ngsoti/rulezet-core.git).
-
-Currently, the supported rule formats are:
-
-- yara
-- sigma
-- zeek
-- suricata
-- crs
-- nova
-- elastic
-- no format
-
-## UI Previews
-
-| Homepage                                                                                 | Rule Detail                                                                                         | Rule Management                                                                                    |
-| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| ![Home](https://raw.githubusercontent.com/ngsoti/rulezet-core/main/doc/rulezet_home.png) | ![Detail](https://raw.githubusercontent.com/ngsoti/rulezet-core/main/doc/rulezet_detail_readme.png) | ![Readme](https://raw.githubusercontent.com/ngsoti/rulezet-core/main/doc/rulezet_invalid_rule.png) |
-
-## API Access
-
-RULEZET provides a RESTful API to allow seamless integration and automation of key processes such as rule creation, importation, account management, and more.
-
-You can access the interactive API documentation using the following URL:
-
-### Example Endpoints:
-
-- `http://127.0.0.1:7009/api/rule/doc/` – Manage detection rules (create, update, delete, import, etc.)
-- `http://127.0.0.1:7009/api/account/doc/` – Manage user accounts (registration, login, etc.)
-
-### Why Use the API?
-
-- Automate rule import/update from GitHub or local sources
-- Create and update rules programmatically
-- Manage user accounts and permissions via scripts or clients
-- Integrate RULEZET into your CI/CD or SOC pipeline
-
-With this API, developers and analysts can save time, reduce errors, and streamline workflows — all while ensuring full compatibility with RULEZET's internal engine.
-
-> Tip: Use tools like [cURL](https://curl.se/) to interact with the API and test endpoints easily.
-
-## Project Summary
-
-This internship offers a unique opportunity to contribute to the development of a cutting-edge, open-source platform: a community-driven website designed for sharing, evaluating, and refining security detection rules. These rules, which are critical for identifying threats in cybersecurity, currently lack a central place for community validation. This project addresses that gap by creating a collaborative space where users can:
-
-- **Share Rules**: Contribute detection rules in various formats (YARA, Sigma, Suricata, and others), allowing for broad community access.
-- **Evaluate Rules**: Rate and comment on the effectiveness of rules, report false positives, and share practical experiences.
-- **Refine Rules**: Participate in the collaborative improvement of rules through feedback and proposed changes, enhancing their accuracy and reliability.
-- **Organize Rules**: Bundle rules into logical sets and classify them using tags and categories, improving searchability and usability.
-
-Interns will play a key role in developing the website’s features and functionalities. This will involve implementing core features, exploring integrations with other security tools such as MISP and Suricata, and assisting in the development of a security rule data model for a standardized format to facilitate easy exchange. Interns will gain hands-on experience in open-source software development, web development, and practical cybersecurity applications.
-
-This project offers a chance to make a real-world impact by improving the way security professionals interact with essential threat detection information. You will gain exposure to web development, APIs, data modeling, and security knowledge.
+This installs Python dependencies inside `env/` and sets up the project.
 
 ---
 
-## Original Inspiration
+## First Run
 
-This project is inspired by [Ptit Crolle](https://github.com/DavidCruciani/ptit-crolle), and takes it further with a modern UI, collaborative features, and integration capabilities.
+### 1. Initialize the database
+
+```bash
+source env/bin/activate
+python3 app.py -i
+```
+
+The output will show the generated admin credentials:
+
+```
+====================================================================================================
+✅ Admin account created successfully!
+🔑 API Key     : xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+👤 Username    : admin@admin.admin
+🔐 Password    : xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   (⚠️ Change after first login)
+====================================================================================================
+```
+
+### 2. Launch the application
+
+```bash
+./launch.sh -l
+# or manually:
+FLASKENV=development python3 app.py
+```
+
+The app runs on `http://127.0.0.1:7009` by default.
+
+### 3. Production (Gunicorn)
+
+```bash
+gunicorn -w 4 wsgi:app
+```
+
+---
+
+## Configuration
+
+`config.py` selects the environment via the `FLASKENV` variable:
+
+| `FLASKENV` | Database | Notes |
+|------------|----------|-------|
+| `development` | `postgresql:///rulezet` | `DEBUG=True`, sessions in PostgreSQL |
+| `testing` | `sqlite:///rulezet-test.sqlite` | CSRF disabled, sessions on filesystem |
+| `production` | `postgresql:///rulezet` | `DEBUG=False` |
+
+Secrets are stored in `.env`:
+
+```env
+SECRET_KEY=your-secret-key
+MAIL_PASSWORD=your-mail-password
+```
+
+---
+
+## Database Management
+
+```bash
+# Re-create from scratch (drop + reinit)
+python3 app.py -r
+
+# Run migrations after model changes
+flask db migrate -m "description"
+flask db upgrade
+
+# Backup / restore
+./backup/scripts/backup_rulezet.sh
+./backup/scripts/restore_rulezet.sh
+```
+
+---
+
+## Running Tests
+
+```bash
+# All tests
+./launch.sh -t
+# or:
+FLASKENV=testing pytest tests
+
+# Single file
+FLASKENV=testing pytest tests/rules/test_rule.py
+FLASKENV=testing pytest tests/rules/test_search_rules.py -k "test_name"
+```
+
+---
+
+## Supported Rule Formats
+
+New formats can be added at any time without modifying the import pipeline — see the Contributing section.
+
+| Format | Description |
+|--------|-------------|
+| `yara` | YARA malware detection rules |
+| `sigma` | Generic SIEM detection rules |
+| `suricata` | Network IDS/IPS rules |
+| `zeek` | Network traffic analysis scripts |
+| `crs` | OWASP Core Rule Set (ModSecurity/Coraza) |
+| `nova` | Nova hunting rules |
+| `nse` | Nmap Scripting Engine scripts |
+| `wazuh` | Wazuh SIEM detection rules |
+| `elastic` | Elastic Security detection rules |
+
+---
+
+## Features
+
+### Rule Lifecycle
+- **Create**, **edit**, and **delete** detection rules
+- **Parse** raw content to auto-extract metadata
+- **Import** rules from GitHub repositories or ZIP archives
+- Automatic **syntax validation** on import — invalid rules are quarantined and can be fixed
+- Default **TLP:CLEAR** and **PAP:CLEAR** tags attached to every new rule automatically
+
+### Search & Browse
+- **Rules Explorer** with full-text search, format/tag/vulnerability filters, pagination
+- **Bundles Explorer** — named collections of rules with a file-tree view
+- **Tag taxonomy** — MISP-compatible tags with color, icon, and galaxy metadata
+- Tag tooltips with description, visibility, and creation date
+
+### Community Collaboration
+- **Vote** (up/down) on rules
+- **Favorite** rules for personal collections
+- **Comment** and discuss on rules and bundles
+- **Propose edits** via PR-style change proposals (pending / approved / rejected)
+
+### GitHub Integration
+- Import detection rules directly from public GitHub repositories
+- Scheduled **update checks** to pull new rule versions
+- Bulk GitHub source management with per-source rule listing
+- Activity log links correctly strip `.git` suffixes when navigating to source details
+
+### Activity Logs
+- Full admin audit trail at `/admin/logs`
+- Inline **Public/Private visibility toggle** per log entry (click the badge)
+- **Bulk visibility change** (select rows → Set Public / Set Private)
+- Bulk delete with background job
+- Filters by action type, description search, and per-page count
+
+### Administration
+- **User management** — promote/demote, view profiles, delete accounts
+- **Background jobs** monitor and control panel (`/jobs/list`) with zombie detection
+- **Bulk tag** rules with fine-grained filters via background jobs
+- **Manage rule formats** — enable/disable detection format support
+- **Similarity engine** — compute TF-IDF + fuzzy similarity scores between rules
+- **Reported rules** management
+
+### UI / UX
+- Consistent **page header banner** across all navigation pages (icon, title, accent bar)
+- Full **light / dark mode** support with correct text contrast at all sizes
+- Tag tooltips teleported to `<body>` — display correctly above carousels and overflow-hidden containers
+- Smooth tooltip fade-in animation
+
+---
+
+## API Access
+
+Swagger UI is available at `/api/`.
+
+| Namespace | Auth | Description |
+|-----------|------|-------------|
+| `/api/rule/public` | None | Read rules publicly |
+| `/api/rule/private` | `X-API-KEY` | Create / update / delete rules |
+| `/api/bundle/public` | None | Read bundles publicly |
+| `/api/bundle/private` | `X-API-KEY` | Manage bundles |
+| `/api/account/public` | None | Public account info |
+| `/api/account/private` | `X-API-KEY` | Account management |
+
+Pass your API key in the `X-API-KEY` request header. Keys are generated on account creation and visible in your profile.
+
+### Common use cases
+
+```bash
+# Import rules from a GitHub repo
+curl -X POST http://127.0.0.1:7009/api/rule/private/import_github \
+  -H "X-API-KEY: your-key" \
+  -d '{"url": "https://github.com/org/repo"}'
+
+# Create a rule
+curl -X POST http://127.0.0.1:7009/api/rule/private/create \
+  -H "X-API-KEY: your-key" \
+  -H "Content-Type: application/json" \
+  -d '{"format": "yara", "title": "My Rule", "to_string": "rule My_Rule { ... }"}'
+```
+
+---
+
+## UI Previews
+
+| Homepage | Rule Detail | Invalid Rules |
+|----------|-------------|---------------|
+| ![Home](https://raw.githubusercontent.com/ngsoti/rulezet-core/main/doc/rulezet_home.png) | ![Detail](https://raw.githubusercontent.com/ngsoti/rulezet-core/main/doc/rulezet_detail_readme.png) | ![Invalid](https://raw.githubusercontent.com/ngsoti/rulezet-core/main/doc/rulezet_invalid_rule.png) |
+
+---
+
+## Adding a New Rule Format
+
+1. Create `app/features/rule/rule_format/available_format/myformat_format.py`
+2. Subclass `RuleType` from `rule_type_abstract.py`
+3. Implement all abstract methods: `format`, `validate()`, `parse_metadata()`, `get_rule_files()`, `extract_rules_from_file()`, `find_rule_in_repo()`
+4. `load_all_rule_formats()` auto-discovers it via `pkgutil.iter_modules` — no further registration needed
+
+---
 
 ## Contributing
 
-We welcome contributions from the community. You can:
+We welcome contributions from the community:
 
 - Submit pull requests for new features or bug fixes
-- Suggest enhancements via GitHub Issues
+- Report issues and suggest enhancements via [GitHub Issues](https://github.com/ngsoti/rulezet-core/issues)
 - Help expand supported rule formats
+- Improve documentation
+
+---
 
 ## License
 
-This software is licensed under [GNU Affero General Public License version 3](http://www.gnu.org/licenses/agpl-3.0.html)
+This software is licensed under the [GNU Affero General Public License version 3](http://www.gnu.org/licenses/agpl-3.0.html).
 
 ```
 Copyright (C) 2025-2026 CIRCL - Computer Incident Response Center Luxembourg
 Copyright (C) 2025-2026 Theo Geffe
 ```
 
+---
+
 ## Funding
 
-Rulezet is co-funded by [CIRCL](https://www.circl.lu/) and by the European Union under [FETTA](https://www.circl.lu/pub/press/20240131/) (Federated European Team for Threat Analysis) project.
+Rulezet is co-funded by [CIRCL](https://www.circl.lu/) and by the European Union under the [FETTA](https://www.circl.lu/pub/press/20240131/) (Federated European Team for Threat Analysis) project.
 
 ![EU logo](https://www.vulnerability-lookup.org/images/eu-funded.jpg)
+
+---
+
+## Inspiration
+
+This project is inspired by [Ptit Crolle](https://github.com/DavidCruciani/ptit-crolle), extended with a modern UI, collaborative features, and full integration capabilities.
