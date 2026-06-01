@@ -570,3 +570,27 @@ def get_log_actions():
 
     actions = [r[0] for r in db.session.query(ActivityLog.action).distinct().order_by(ActivityLog.action).all()]
     return jsonify({"actions": actions}), 200
+
+
+@home_blueprint.route('/admin/logs/set_visibility', methods=['POST'])
+@login_required
+def set_logs_visibility():
+    """Bulk-set is_public on a list of activity log entries."""
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    from app.core.db_class.db import ActivityLog
+    from app import db
+
+    data      = request.get_json() or {}
+    ids       = data.get('ids', [])
+    is_public = bool(data.get('is_public', False))
+
+    if not ids:
+        return jsonify({"success": False, "message": "No IDs provided"}), 400
+
+    updated = ActivityLog.query.filter(ActivityLog.id.in_(ids)).update(
+        {"is_public": is_public}, synchronize_session=False
+    )
+    db.session.commit()
+    return jsonify({"success": True, "updated": updated}), 200

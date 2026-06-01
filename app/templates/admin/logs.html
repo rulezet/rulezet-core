@@ -75,17 +75,34 @@
     <div>
       <span class="text-muted small">Total:</span>
       <span class="badge bg-primary ms-1">[[ total ]]</span>
-      <span v-if="selectedIds.length > 0" class="ms-3 text-muted small">
-        <strong class="text-danger">[[ selectedIds.length ]]</strong> selected
-      </span>
     </div>
-    <div class="d-flex gap-2">
-      <button v-if="selectedIds.length > 0" @click="bulkDelete" class="btn btn-sm btn-danger">
-        <i class="fa-solid fa-trash me-1"></i>Delete selected ([[ selectedIds.length ]])
-      </button>
-      <button @click="deleteAll" class="btn btn-sm btn-outline-danger">
-        <i class="fa-solid fa-fire me-1"></i>Delete ALL logs
-      </button>
+    <button @click="deleteAll" class="btn btn-sm btn-outline-danger">
+      <i class="fa-solid fa-fire me-1"></i>Delete ALL logs
+    </button>
+  </div>
+
+  <!-- Selection bar -->
+  <div v-if="selectedIds.length > 0" class="selection-status-card mb-3">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <div class="selection-icon-box rounded-3">
+        <i class="fa-solid fa-check-square"></i>
+        <span class="selection-badge">[[ selectedIds.length ]]</span>
+      </div>
+      <span class="fw-semibold small">[[ selectedIds.length ]] log(s) selected</span>
+      <div class="d-flex gap-2 ms-auto flex-wrap">
+        <button @click="bulkSetVisibility(true)" class="selection-pill">
+          <i class="fa-solid fa-globe text-success"></i>Public
+        </button>
+        <button @click="bulkSetVisibility(false)" class="selection-pill">
+          <i class="fa-solid fa-lock text-muted"></i>Private
+        </button>
+        <button @click="bulkDelete" class="selection-pill">
+          <i class="fa-solid fa-trash text-danger"></i>Delete
+        </button>
+        <button @click="selectedIds = []" class="selection-pill global">
+          <i class="fa-solid fa-xmark"></i>Clear
+        </button>
+      </div>
     </div>
   </div>
 
@@ -103,9 +120,7 @@
           <th>Description</th>
           <th>Target</th>
           <th>IP</th>
-          <th title="Public">
-            <i class="fa-solid fa-eye text-muted" style="font-size:.8rem;"></i>
-          </th>
+          <th class="text-center" style="min-width:90px;">Visibility</th>
           <th style="width:80px;"></th>
         </tr>
       </thead>
@@ -160,8 +175,16 @@
               </span>
             </td>
             <td @click.stop class="text-center">
-              <i v-if="log.is_public" class="fa-solid fa-eye text-success" title="Public"></i>
-              <i v-else class="fa-solid fa-eye-slash text-secondary opacity-50" title="Private"></i>
+              <span @click="toggleVisibility(log)"
+                    class="badge rounded-pill px-2 py-1"
+                    :class="log.is_public
+                      ? 'bg-success-subtle text-success border border-success-subtle'
+                      : 'bg-secondary-subtle text-secondary border border-secondary-subtle'"
+                    style="font-size:.7rem; cursor:pointer; user-select:none; transition:all .15s;"
+                    :title="log.is_public ? 'Click to make Private' : 'Click to make Public'">
+                <i :class="log.is_public ? 'fa-solid fa-globe me-1' : 'fa-solid fa-lock me-1'"></i>
+                [[ log.is_public ? 'Public' : 'Private' ]]
+              </span>
             </td>
             <td @click.stop class="text-nowrap">
               <button @click.stop="openEdit(log)" class="btn btn-xs btn-outline-secondary px-2 py-0 me-1"
@@ -421,6 +444,39 @@ createApp({
       } catch (e) { alert('Error: ' + e) }
     }
 
+    // ── Toggle single visibility ──────────────────────────────────────────────
+    async function toggleVisibility(log) {
+      try {
+        const res  = await fetch(`/admin/logs/edit/${log.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify({ is_public: !log.is_public }),
+        })
+        const data = await res.json()
+        if (data.success) log.is_public = data.log.is_public
+      } catch (e) { console.error(e) }
+    }
+
+    // ── Bulk set visibility ───────────────────────────────────────────────────
+    async function bulkSetVisibility(is_public) {
+      try {
+        const res  = await fetch('/admin/logs/set_visibility', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify({ ids: selectedIds.value, is_public }),
+        })
+        const data = await res.json()
+        if (data.success) {
+          const set = new Set(selectedIds.value)
+          logs.value.forEach(l => { if (set.has(l.id)) l.is_public = is_public })
+          selectedIds.value = []
+          create_message(`${data.updated} log(s) set to ${is_public ? 'Public' : 'Private'}`, 'success-subtle')
+        } else {
+          create_message(data.message || 'Failed', 'danger-subtle')
+        }
+      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
+    }
+
     // ── Bulk delete ───────────────────────────────────────────────────────────
     async function bulkDelete() {
       if (!confirm(`Delete ${selectedIds.value.length} selected log(s)? A background job will be created.`)) return
@@ -463,6 +519,7 @@ createApp({
       fetchLogs, debouncedFetch, resetFilters,
       targetUrl, navigateLog, targetIcon, actionColor,
       toggleSelectAll, deleteOne, bulkDelete, deleteAll,
+      toggleVisibility, bulkSetVisibility,
       openEdit, saveEdit,
     }
   }
