@@ -907,7 +907,7 @@ class Tag(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     uuid = db.Column(db.String(36), unique=True, nullable=False, index=True)
-    name = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    name = db.Column(db.Text, unique=True, nullable=False)
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc))
     updated_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc))

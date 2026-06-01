@@ -14,7 +14,9 @@ Pause / Cancel support:
 """
 
 import datetime
+import subprocess
 import uuid as uuid_mod
+from pathlib import Path
 
 from app.features.jobs.job_worker import register_handler
 from app import db
@@ -614,3 +616,135 @@ def handle_delete_activity_logs(job, app):
             db.session.commit()
 
     log_job(job, f"Done — {deleted} activity log(s) deleted.", level='success', event='done')
+
+
+# ─── update_misp_data ─────────────────────────────────────────────────────────
+
+ROOT_DIR = Path(__file__).resolve().parents[3]   # rulezet-core/
+TAX_PATH = ROOT_DIR / "app" / "modules" / "misp-taxonomies"
+GAL_PATH = ROOT_DIR / "app" / "modules" / "misp-galaxy"
+
+
+def _git_submodule_update(submodule_path: Path) -> tuple[bool, str]:
+    """Update a git submodule to its latest upstream commit.
+
+    Submodules are always in detached-HEAD state, so `git pull` inside them
+    fails. The correct command is `git submodule update --remote` run from
+    the project root, passing the relative submodule path.
+    """
+    try:
+        rel = submodule_path.relative_to(ROOT_DIR)
+        r = subprocess.run(
+            ["git", "submodule", "update", "--remote", "--merge", str(rel)],
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        output = (r.stdout + r.stderr).strip()
+        return r.returncode == 0, output or "Already up to date."
+    except Exception as e:
+        return False, str(e)
+
+
+@register_handler('update_misp_data')
+def handle_update_misp_data(job, app):
+    """3-step MISP data update:
+      Step 1 — git pull both submodules
+      Step 2 — update ALREADY-IMPORTED taxonomies only (add new tags, skip existing)
+      Step 3 — update ALREADY-IMPORTED galaxies only (add new clusters, skip existing)
+    """
+    from app.core.db_class.db import User
+    from app.features.tags import tags_core
+
+    user = User.query.get(job.created_by)
+    if not user:
+        log_job(job, "User not found — aborting.", level='error', event='error')
+        return
+
+    # ── Step 1: git pull ──────────────────────────────────────────────────────
+    log_job(job, "Step 1 — Pulling latest MISP data from GitHub…",
+            level='info', event='step1_start')
+    job.total = 3
+    job.done  = 0
+    db.session.commit()
+
+    tax_ok, tax_out = _git_submodule_update(TAX_PATH)
+    log_job(job,
+            f"misp-taxonomies: {tax_out}",
+            level='success' if tax_ok else 'warning',
+            event='step1_tax_pull')
+
+    gal_ok, gal_out = _git_submodule_update(GAL_PATH)
+    log_job(job,
+            f"misp-galaxy: {gal_out}",
+            level='success' if gal_ok else 'warning',
+            event='step1_gal_pull')
+
+    job.done = 1
+    db.session.commit()
+    log_job(job, "Step 1 done.", level='success', event='step1_done')
+
+    # ── Step 2: update already-imported taxonomies only ───────────────────────
+    tax_list = tags_core.get_imported_taxonomy_uuids_from_disk()
+    log_job(job,
+            f"Step 2 — Updating {len(tax_list)} imported taxonomy(ies)…",
+            level='info', event='step2_start')
+
+    updated_t = 0
+    uptodate_t = 0
+    error_t = 0
+
+    for uid, ns in tax_list:
+        if _is_cancelled(job):
+            log_job(job, "Cancelled during taxonomy update.", level='warning', event='cancelled')
+            return
+
+        ok, msg = tags_core.update_tags_from_misp_taxonomy(uid, user)
+        if ok is True and "up to date" in msg:
+            uptodate_t += 1
+        elif ok is True:
+            updated_t += 1
+            log_job(job, f"[taxonomy] {msg}", level='success', event='step2_progress')
+        else:
+            error_t += 1
+            log_job(job, f"[taxonomy] {msg}", level='warning', event='step2_progress')
+
+    job.done = 2
+    db.session.commit()
+    log_job(job,
+            f"Step 2 done — {updated_t} updated, {uptodate_t} already up to date, {error_t} errors.",
+            level='success', event='step2_done')
+
+    # ── Step 3: update already-imported galaxies only ────────────────────────
+    gal_list = tags_core.get_imported_galaxy_uuids_from_disk()
+    log_job(job,
+            f"Step 3 — Updating {len(gal_list)} imported galaxy(ies)…",
+            level='info', event='step3_start')
+
+    updated_g  = 0
+    uptodate_g = 0
+    error_g    = 0
+
+    for uid, gtype in gal_list:
+        if _is_cancelled(job):
+            log_job(job, "Cancelled during galaxy update.", level='warning', event='cancelled')
+            return
+
+        ok, msg = tags_core.update_tags_from_misp_galaxy(uid, user)
+        if ok is True and "up to date" in msg:
+            uptodate_g += 1
+        elif ok is True:
+            updated_g += 1
+            log_job(job, f"[galaxy] {msg}", level='success', event='step3_progress')
+        else:
+            error_g += 1
+            log_job(job, f"[galaxy] {msg}", level='warning', event='step3_progress')
+
+    job.done = 3
+    db.session.commit()
+    log_job(job,
+            f"Step 3 done — {updated_g} updated, {uptodate_g} already up to date, {error_g} errors.",
+            level='success', event='step3_done')
+
+    log_job(job, "All done. Your imported MISP data is up to date.", level='success', event='done')

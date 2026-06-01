@@ -36,6 +36,11 @@
                     <i class="fas fa-atom"></i>Add Galaxies
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link d-flex align-items-center gap-1" data-bs-toggle="tab" href="#pane-update" style="color: var(--text-color)">
+                    <i class="fas fa-rotate me-1"></i>Update MISP
+                </a>
+            </li>
 
             <!-- spacer -->
             <li class="nav-item ms-auto">
@@ -140,6 +145,15 @@
                 </div>
             </div>
 
+            <!-- TAB 4 — Update MISP -->
+            <div class="tab-pane fade" id="pane-update">
+                <misp-updater
+                    :csrf-token="csrfToken"
+                    @notify="notify"
+                    @refresh-main="fetchTags(1)"
+                ></misp-updater>
+            </div>
+
         </div>
     </template>
 
@@ -168,7 +182,8 @@
     import TaxonomyBrowser   from '/static/js/tags/manage/TaxonomyBrowser.js';
     import GalaxyBrowser     from '/static/js/tags/manage/GalaxyBrowser.js';
     import BrowserPagination from '/static/js/tags/manage/BrowserPagination.js';
-    import TagCreateModal from '/static/js/tags/tagCreateModal.js';
+    import TagCreateModal    from '/static/js/tags/tagCreateModal.js';
+    import MispUpdater       from '/static/js/tags/manage/MispUpdater.js';
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -180,6 +195,7 @@
             'galaxy-browser':     GalaxyBrowser,
             'browser-pagination': BrowserPagination,
             'tag-create-modal':   TagCreateModal,
+            'misp-updater':       MispUpdater,
         },
         setup() {
             const csrfToken    = '{{ csrf_token() }}';

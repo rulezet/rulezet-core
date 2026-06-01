@@ -351,3 +351,25 @@ def add_tags_galaxy():
     success, message = tags_core.add_tags_from_misp_galaxy(uuid_param, current_user, cluster_uuids)
     cls = "success-subtle" if success else "danger-subtle"
     return jsonify({"message": message, "toast_class": cls}), (200 if success else 400)
+
+
+@tags_blueprint.route('/admin/update_misp', methods=['POST'])
+@login_required
+def update_misp():
+    """Launch a background job that git-pulls both MISP submodules then re-imports all taxonomies/galaxies."""
+    err = _admin_only()
+    if err: return err
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type   = 'update_misp_data',
+        payload    = {},
+        label      = 'Update MISP taxonomies & galaxies',
+        created_by = current_user.id,
+    )
+    if not job:
+        return jsonify({"success": False, "message": "Failed to create job", "toast_class": "danger-subtle"}), 500
+
+    log_activity("admin.update_misp", "Launched MISP data update job",
+                 target_type="job", target_id=job.id, target_uuid=job.uuid)
+    return jsonify({"success": True, "job": job.to_json(), "message": "Update job queued!", "toast_class": "success-subtle"}), 200
