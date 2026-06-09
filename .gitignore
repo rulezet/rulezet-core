@@ -34,3 +34,4 @@ node_modules
 app/rule/output_rules
 /backup/dumps
 /static/uploads/*
+app/modules/*
