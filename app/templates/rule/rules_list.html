@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-
+{% block title %}Rules Explorer — Rulezet{% endblock %}
 {% block content %}
 
 <div class="container mt-4">
@@ -18,6 +18,12 @@
 
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-shield-halved banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Rules</li>
+            </ol>
+        </nav>
 
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon">

@@ -1,8 +1,16 @@
 {% extends "base.html" %}
-
+{% block title %}Proposal Discussion — Rulezet{% endblock %}
 {% block content %}
 <div v-if="proposal">
     <div class="container my-4" id="main-container">
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rule_propose_edit" class="text-decoration-none text-muted">Proposals</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">[[ proposal.rule_name ]]</li>
+            </ol>
+        </nav>
         <h2 class="mb-4 ">
             <a :href="`detail_rule/${proposal.rule_id}`">
                 <i class="fas fa-code-branch  me-2 "></i>

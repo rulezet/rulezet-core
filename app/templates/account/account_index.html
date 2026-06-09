@@ -1,11 +1,19 @@
 {% extends 'base.html' %}
-
+{% block title %}My Account — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/user_detail.css') }}">
 {% endblock %}
 
 {% block content %}
 <div class="container my-5" id="page-app" v-cloak>
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+            <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+            <li class="breadcrumb-item active text-muted" aria-current="page">My Account</li>
+        </ol>
+    </nav>
 
     <!-- Header -->
     <div class="mb-5 header-section text-center">

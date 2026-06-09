@@ -1,8 +1,16 @@
 {% extends 'base.html' %}
+{% block title %}Similar Rules — Rulezet{% endblock %}
 {% block content %}
 
 
 <div id="main-container" class="container mt-5" v-cloak>
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+            <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+            <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+            <li class="breadcrumb-item active text-muted" aria-current="page">Similar Rules</li>
+        </ol>
+    </nav>
     <div v-if="data_is_loading">
 
 

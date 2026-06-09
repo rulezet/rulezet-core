@@ -1,9 +1,17 @@
 {% extends 'base.html' %}
+{% block title %}Ownership Requests — Rulezet{% endblock %}
 {% block content %}
 <div class="container my-4" id="main-container" v-cloak>
 
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-envelope banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Ownership Requests</li>
+            </ol>
+        </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon">
                 <i class="fa-solid fa-envelope"></i>

@@ -1,10 +1,19 @@
 {% extends 'base.html' %}
+{% block title %}GitHub Rules Dashboard — Rulezet{% endblock %}
 {% import 'macros/form_macros.html' as f %}
 
 {% block content %}
 <div class="container mt-5" id="main-container" v-cloak>
 
   <div class="mb-4 border-bottom pb-3">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+            <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+            <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+            <li class="breadcrumb-item"><a href="/rule/url_github" class="text-decoration-none text-muted">GitHub Sources</a></li>
+            <li class="breadcrumb-item active text-muted" aria-current="page">Dashboard</li>
+        </ol>
+    </nav>
     <!-- Title principal -->
     <h2 class="fw-bold mb-2 text-center text-primary">GitHub Rules Dashboard</h2>
     <div class="mx-auto mb-3" style="width: 80px; height: 5px; background-color: #0d6efd; border-radius: 2px;"></div>

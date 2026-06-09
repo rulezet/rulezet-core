@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block title %}Edit Bundle — Rulezet{% endblock %}
 {% block content %}
 <div class="container-fluid mt-3" id="page-app" v-cloak>
     <div class="mx-3 mb-4 d-flex align-items-center justify-content-between border-bottom pb-3">
@@ -9,9 +10,11 @@
             </a>
             <div>
                 <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb mb-1" style="font-size: 0.75rem; text-transform: uppercase;">
-                        <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none">Bundles</a></li>
-                        <li class="breadcrumb-item active text-muted">[[truncateText("{{bundle.name}}", 40)]]</li>
+                    <ol class="breadcrumb mb-1" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                        <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
+                        <li class="breadcrumb-item"><a :href="'/bundle/detail/' + bundleId" class="text-decoration-none text-muted">[[truncateText("{{bundle.name}}", 40)]]</a></li>
+                        <li class="breadcrumb-item active text-muted" aria-current="page">Edit</li>
                     </ol>
                 </nav>
                 <div>

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% block title %}{{ bundle_name if bundle_name is defined else 'Bundle' }} — Rulezet{% endblock %}
 {% block head %}
 <style>
 @keyframes comment-pulse {
@@ -37,6 +38,13 @@
     <div id="bundle-info" data-bundle-id="{{ bundle_id }}"></div>
 
     <template v-if="detail_page_1_is_loading">
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">[[ truncateText(bundle.name, 40) ]]</li>
+            </ol>
+        </nav>
         <div class="text-center mb-4">
             <h2 class="fw-bold mb-1 text-primary text-truncate d-block mx-auto" style="max-width: 80%;">
                 <i class="fas fa-shield-alt me-2"></i> [[ bundle.name ]]

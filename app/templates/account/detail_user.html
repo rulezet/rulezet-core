@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% block title %}{{ user.username }} — Rulezet{% endblock %}
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/user_detail.css') }}">
@@ -13,6 +14,15 @@
     </div>
 
     <div v-else class="container my-5">
+
+        <!-- Breadcrumb -->
+        <nav aria-label="breadcrumb" class="mb-4">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/account/list_user" class="text-decoration-none text-muted">Users</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">{{ user.username }}</li>
+            </ol>
+        </nav>
 
         <!-- Header Section -->
         <div class="mb-5 header-section text-center">

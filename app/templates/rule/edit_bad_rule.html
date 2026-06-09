@@ -1,12 +1,25 @@
-{% extends "base.html" %} {% block content %} {% with messages =
-get_flashed_messages(with_categories=True) %} {% if messages %} {% for category,
-message in messages %}
+{% extends "base.html" %}
+{% block title %}Edit Invalid Rule — Rulezet{% endblock %}
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=True) %}
+{% if messages %}
+{% for category, message in messages %}
 <div class="alert alert-{{ category }} alert-dismissible fade show mt-3" role="alert">
     <i class="fas fa-info-circle me-2"></i>{{ message }}
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
 </div>
-{% endfor %} {% endif %} {% endwith %}
+{% endfor %}
+{% endif %}
+{% endwith %}
 
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('rule.bad_rules_summary') }}" class="text-decoration-none text-muted">Invalid Rules</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Edit</li>
+    </ol>
+</nav>
 <h2>Edit Invalid Rule</h2>
 
 <form method="POST">
