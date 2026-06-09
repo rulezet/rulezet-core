@@ -8,6 +8,7 @@ from flask_login import current_user, login_required
 
 import app.features.jobs.jobs_core as JobsModel
 from app.core.utils.activity_log import log_activity
+from app import db
 
 jobs_blueprint = Blueprint(
     'jobs',
@@ -142,6 +143,33 @@ def resume_job(job_uuid):
         log_activity("job.resume", f"Resumed job '{job.label}' (uuid={job_uuid})",
                      target_type="job", target_id=job.id, target_uuid=job_uuid)
     return jsonify({"message": msg}), 200 if ok else 400
+
+
+@jobs_blueprint.route('/my_active', methods=['GET'])
+@login_required
+def my_active_jobs():
+    """Active jobs + recently completed jobs for the current user — used by the widget.
+
+    Returns pending/running/paused jobs plus 'done' jobs finished in the last 30 seconds
+    so the widget can briefly display 100% before the job disappears.
+    """
+    from datetime import datetime, timedelta, timezone
+    from app.core.db_class.db import BackgroundJob
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=30)
+    jobs = (BackgroundJob.query
+            .filter(
+                BackgroundJob.created_by == current_user.id,
+                db.or_(
+                    BackgroundJob.status.in_(['pending', 'running', 'paused']),
+                    db.and_(
+                        BackgroundJob.status == 'done',
+                        BackgroundJob.finished_at >= cutoff,
+                    ),
+                )
+            )
+            .order_by(BackgroundJob.created_at.desc())
+            .limit(20).all())
+    return jsonify([j.to_json() for j in jobs]), 200
 
 
 @jobs_blueprint.route('/delete/<string:job_uuid>', methods=['POST'])

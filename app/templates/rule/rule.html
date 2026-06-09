@@ -599,7 +599,9 @@
                                     if (data.success && data.branches.length) {
                                           availableBranches.value = data.branches;
                                     } else if (!data.success) {
-                                          branchesError.value = "Could not fetch branches — check the URL.";
+                                          branchesError.value = data.error || "Could not fetch branches — check the URL.";
+                                    } else {
+                                          branchesError.value = "No branches found for this repository.";
                                     }
                               } catch {
                                     branchesError.value = "Network error while fetching branches.";

@@ -262,17 +262,34 @@
                         <table class="table table-sm table-hover mb-0 pkg-table">
                             <thead style="position:sticky;top:0;z-index:2;">
                                 <tr>
-                                    <th class="ps-4" style="width:42%;">Package</th>
-                                    <th style="width:20%;">Version</th>
+                                    <th class="ps-4" style="width:40%;">Package</th>
+                                    <th style="width:18%;">Version</th>
+                                    <th class="text-center" style="width:22%;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="pkg in filteredPackages" :key="pkg.name">
                                     <td class="ps-4"><span class="pkg-name">[[ pkg.name ]]</span></td>
                                     <td><span class="pkg-version">[[ pkg.version ]]</span></td>
+                                    <td class="text-center">
+                                        <div class="d-flex gap-1 justify-content-center">
+                                            <button class="btn btn-xs btn-outline-success rounded-pill px-2 py-0"
+                                                    style="font-size:.7rem;"
+                                                    @click="createPkgJob('update_package', pkg.name)"
+                                                    title="Upgrade to latest">
+                                                <i class="fa-solid fa-rotate me-1"></i>Update
+                                            </button>
+                                            <button class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0"
+                                                    style="font-size:.7rem;"
+                                                    @click="confirmPkgUninstall(pkg.name)"
+                                                    title="Uninstall package">
+                                                <i class="fa-solid fa-trash me-1"></i>Remove
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                                 <tr v-if="filteredPackages.length === 0">
-                                    <td colspan="2" class="text-center text-muted py-5">No packages match your search.</td>
+                                    <td colspan="3" class="text-center text-muted py-5">No packages match your search.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -306,10 +323,8 @@
                         <i class="fa-solid fa-check-square me-2"></i>[[ selectedSubs.length ]] selected
                     </span>
                     <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-light rounded-pill px-3" @click="bulkUpdate"
-                                :disabled="updatingAny">
-                            <span v-if="updatingAny" class="spinner-border spinner-border-sm me-1"></span>
-                            <i v-else class="fa-solid fa-rotate me-1"></i>Update Selected
+                        <button class="btn btn-sm btn-light rounded-pill px-3" @click="bulkUpdateSelected">
+                            <i class="fa-solid fa-rotate me-1"></i>Update Selected
                         </button>
                         <button class="btn btn-sm btn-outline-light rounded-pill px-3" @click="selectedSubs = []">
                             Clear
@@ -325,13 +340,12 @@
                         </span>
                         <div class="d-flex gap-2">
                             <button class="btn btn-sm btn-outline-primary rounded-pill px-3"
-                                    @click="selectAllSubs" :disabled="updatingAny">
+                                    @click="selectAllSubs">
                                 <i class="fa-solid fa-check-double me-1"></i>Select All
                             </button>
                             <button class="btn btn-sm btn-primary rounded-pill px-3"
-                                    @click="bulkUpdateAll" :disabled="updatingAny">
-                                <span v-if="updatingAny" class="spinner-border spinner-border-sm me-1"></span>
-                                <i v-else class="fa-solid fa-rotate me-1"></i>Update All
+                                    @click="bulkUpdateAllJobs">
+                                <i class="fa-solid fa-rotate me-1"></i>Update All
                             </button>
                         </div>
                     </div>
@@ -382,10 +396,13 @@
                                     <td class="text-center">
                                         <div class="d-flex gap-2 justify-content-center">
                                             <button class="btn btn-sm btn-outline-success rounded-pill px-3"
-                                                    @click="updateOneSub(sub)" :disabled="sub._updating || updatingAny">
-                                                <span v-if="sub._updating" class="spinner-border spinner-border-sm"></span>
-                                                <i v-else class="fa-solid fa-rotate"></i>
+                                                    @click="createSubJob('update_submodule_bg', sub.path, 'Update ' + sub.name)">
+                                                <i class="fa-solid fa-rotate"></i>
                                                 <span class="ms-1 d-none d-xl-inline">Update</span>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger rounded-pill px-3"
+                                                    @click="confirmSubRemove(sub)">
+                                                <i class="fa-solid fa-trash"></i>
                                             </button>
                                             <button class="btn btn-sm btn-outline-secondary rounded-pill px-3"
                                                     @click="showSubDetail(sub)">
@@ -399,14 +416,9 @@
                     </div>
                 </div>
 
-                <!-- Update results -->
-                <div v-if="updateResults.length" class="mt-3">
-                    <div v-for="res in updateResults" :key="res.path"
-                         :class="['alert border-0 rounded-4 py-2 px-3 mb-2', res.success ? 'alert-success' : 'alert-danger']">
-                        <strong>[[ res.path ]]:</strong>
-                        <span v-if="res.success"> Updated successfully. <span v-if="res.output" class="text-muted small">([[ res.output ]])</span></span>
-                        <span v-else> [[ res.error ]]</span>
-                    </div>
+                <div v-if="lastJobMsg" class="alert alert-info border-0 rounded-4 py-2 px-3 mt-3 mb-0" style="font-size:.83rem;">
+                    <i class="fa-solid fa-circle-info me-2"></i>[[ lastJobMsg ]]
+                    <a href="/jobs/list" target="_blank" class="ms-2 fw-semibold">View jobs →</a>
                 </div>
 
             </template>
@@ -732,14 +744,69 @@
             <div class="modal-footer border-0 px-4 pt-0 pb-4">
                 <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-success rounded-pill px-4"
-                        @click="updateOneSub(selectedSub); bootstrap.Modal.getInstance(document.getElementById('subDetailModal')).hide()"
-                        v-if="selectedSub" :disabled="updatingAny">
-                    <i class="fa-solid fa-rotate me-1"></i>Update Now
+                        @click="createSubJob('update_submodule_bg', selectedSub.path, 'Update ' + selectedSub.name); bootstrap.Modal.getInstance(document.getElementById('subDetailModal')).hide()"
+                        v-if="selectedSub">
+                    <i class="fa-solid fa-rotate me-1"></i>Update (background job)
                 </button>
             </div>
         </div>
     </div>
     </div><!-- /subDetailModal -->
+
+    <!-- ── Confirm: Remove Submodule ── -->
+    <div class="modal fade" id="subRemoveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
+            <div class="modal-header border-0 pb-0 px-4 pt-4">
+                <h5 class="modal-title fw-bold text-danger">
+                    <i class="fa-solid fa-triangle-exclamation me-2"></i>Remove Submodule
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body px-4 pb-2" v-if="subToRemove">
+                <p>This will <strong>permanently remove</strong> the submodule
+                   <code>[[ subToRemove.name ]]</code> from the repository.</p>
+                <p class="text-muted small mb-0">
+                    <i class="fa-solid fa-circle-info me-1"></i>
+                    Runs <code>git submodule deinit</code> + <code>git rm</code>. This cannot be undone without git history.
+                </p>
+            </div>
+            <div class="modal-footer border-0 px-4 pt-2 pb-4">
+                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger rounded-pill px-4" @click="doRemoveSub">
+                    <i class="fa-solid fa-trash me-1"></i>Remove
+                </button>
+            </div>
+        </div>
+    </div>
+    </div><!-- /subRemoveModal -->
+
+    <!-- ── Confirm: Uninstall Package ── -->
+    <div class="modal fade" id="pkgUninstallModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
+            <div class="modal-header border-0 pb-0 px-4 pt-4">
+                <h5 class="modal-title fw-bold text-danger">
+                    <i class="fa-solid fa-triangle-exclamation me-2"></i>Uninstall Package
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body px-4 pb-2">
+                <p>Uninstall <code>[[ pkgToUninstall ]]</code> from the server environment?</p>
+                <p class="text-warning small mb-0">
+                    <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                    If this package is required by the app, it may crash after removal. The server must be restarted.
+                </p>
+            </div>
+            <div class="modal-footer border-0 px-4 pt-2 pb-4">
+                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger rounded-pill px-4" @click="doPkgUninstall">
+                    <i class="fa-solid fa-trash me-1"></i>Uninstall
+                </button>
+            </div>
+        </div>
+    </div>
+    </div><!-- /pkgUninstallModal -->
 
 </div><!-- /settings-app -->
 
@@ -775,8 +842,7 @@ createApp({
         const submodulesLoaded  = ref(false)
         const selectedSubs      = ref([])
         const selectedSub       = ref(null)
-        const updateResults     = ref([])
-        const updatingAny       = ref(false)
+        const lastJobMsg        = ref('')
 
         const config        = ref(null)
         const configLoading = ref(false)
@@ -851,7 +917,7 @@ createApp({
             submodulesLoading.value = true
             try {
                 const data = await fetch('/admin/settings/submodules').then(r => r.json())
-                submodules.value = data.map(s => ({ ...s, _updating: false }))
+                submodules.value = data.map(s => ({ ...s }))
                 submodulesLoaded.value = true
             } finally {
                 submodulesLoading.value = false
@@ -866,44 +932,71 @@ createApp({
             selectedSubs.value = checked ? submodules.value.map(s => s.path) : []
         }
 
-        async function _doUpdate(paths) {
-            updatingAny.value = true
-            updateResults.value = []
-            paths.forEach(p => {
-                const sub = submodules.value.find(s => s.path === p)
-                if (sub) sub._updating = true
-            })
-            try {
-                const data = await post('/admin/settings/submodule/update', { paths })
-                Object.entries(data.results || {}).forEach(([path, res]) => {
-                    updateResults.value.push({ path, ...res })
-                    const sub = submodules.value.find(s => s.path === path)
-                    if (sub) {
-                        sub._updating = false
-                        if (res.success) sub.status = 'up-to-date'
-                    }
-                })
-            } finally {
-                updatingAny.value = false
-                selectedSubs.value = []
+        async function createSubJob(job_type, path, label) {
+            const data = await post('/jobs/create', { job_type, label, payload: { path } })
+            const { create_message } = await import('/static/js/toaster.js')
+            if (data.job) {
+                lastJobMsg.value = `"${label}" queued as a background job.`
+                create_message(`${label} — queued`, 'success-subtle')
+            } else {
+                create_message(data.error || 'Failed to queue job', 'danger-subtle')
             }
         }
 
-        function updateOneSub(sub) {
-            _doUpdate([sub.path])
+        function bulkUpdateSelected() {
+            selectedSubs.value.forEach(path => {
+                const sub = submodules.value.find(s => s.path === path)
+                const label = sub ? `Update ${sub.name}` : `Update ${path}`
+                createSubJob('update_submodule_bg', path, label)
+            })
+            selectedSubs.value = []
         }
 
-        function bulkUpdate() {
-            if (selectedSubs.value.length) _doUpdate([...selectedSubs.value])
+        function bulkUpdateAllJobs() {
+            submodules.value.forEach(sub =>
+                createSubJob('update_submodule_bg', sub.path, `Update ${sub.name}`)
+            )
         }
 
-        function bulkUpdateAll() {
-            _doUpdate(submodules.value.map(s => s.path))
+        // Remove submodule — ask for confirmation first
+        const subToRemove = ref(null)
+        function confirmSubRemove(sub) {
+            subToRemove.value = sub
+            new bootstrap.Modal(document.getElementById('subRemoveModal')).show()
+        }
+        function doRemoveSub() {
+            if (!subToRemove.value) return
+            createSubJob('remove_submodule', subToRemove.value.path, `Remove ${subToRemove.value.name}`)
+            bootstrap.Modal.getInstance(document.getElementById('subRemoveModal'))?.hide()
+            subToRemove.value = null
         }
 
         function showSubDetail(sub) {
             selectedSub.value = sub
             new bootstrap.Modal(document.getElementById('subDetailModal')).show()
+        }
+
+        /* ── Package jobs ── */
+        const pkgToUninstall = ref('')
+        async function createPkgJob(job_type, name) {
+            const label = job_type === 'update_package' ? `Update ${name}` : `Uninstall ${name}`
+            const data = await post('/jobs/create', { job_type, label, payload: { name } })
+            const { create_message } = await import('/static/js/toaster.js')
+            if (data.job) {
+                create_message(`${label} — queued`, 'success-subtle')
+            } else {
+                create_message(data.error || 'Failed to queue job', 'danger-subtle')
+            }
+        }
+        function confirmPkgUninstall(name) {
+            pkgToUninstall.value = name
+            new bootstrap.Modal(document.getElementById('pkgUninstallModal')).show()
+        }
+        function doPkgUninstall() {
+            if (!pkgToUninstall.value) return
+            createPkgJob('uninstall_package', pkgToUninstall.value)
+            bootstrap.Modal.getInstance(document.getElementById('pkgUninstallModal'))?.hide()
+            pkgToUninstall.value = ''
         }
 
         /* ── Config ── */
@@ -962,8 +1055,11 @@ createApp({
         return {
             system, systemLoading,
             packages, packagesLoading, pkgSearch, filteredPackages, loadPackages,
-            submodules, submodulesLoading, selectedSubs, selectedSub, updateResults, updatingAny,
-            loadSubmodules, selectAllSubs, toggleAllSubs, updateOneSub, bulkUpdate, bulkUpdateAll, showSubDetail,
+            createPkgJob, confirmPkgUninstall, pkgToUninstall, doPkgUninstall,
+            submodules, submodulesLoading, selectedSubs, selectedSub, lastJobMsg,
+            loadSubmodules, selectAllSubs, toggleAllSubs, showSubDetail,
+            createSubJob, bulkUpdateSelected, bulkUpdateAllJobs,
+            confirmSubRemove, subToRemove, doRemoveSub,
             config, configLoading, loadConfig,
             showSecret, editingSecret, secretKeyNew, generatingKey, generateKey,
             editingMailPwd, mailPwdNew,

@@ -14,7 +14,9 @@ Pause / Cancel support:
 """
 
 import datetime
+import os
 import subprocess
+import sys
 import uuid as uuid_mod
 from pathlib import Path
 
@@ -802,3 +804,184 @@ def handle_trash_permanent_delete_bulk(job, app):
         log_job(job, f"{deleted}/{total} rule(s) permanently deleted.", level='info', event='progress')
 
     log_job(job, f"Done — {deleted} rule(s) permanently deleted.", level='success', event='done')
+
+
+# ─── Package management ───────────────────────────────────────────────────────
+
+@register_handler('update_package')
+def handle_update_package(job, app):
+    payload = job.payload or {}
+    name = payload.get('name', '').strip()
+    if not name:
+        job.status = 'failed'
+        job.error = 'No package name provided.'
+        db.session.commit()
+        return
+
+    with app.app_context():
+        job.total = 1
+        job.done = 0
+        db.session.commit()
+        log_job(job, f"Upgrading: {name}", level='info', event='started')
+        try:
+            result = subprocess.run(
+                [sys.executable, '-m', 'pip', 'install', '--upgrade', name],
+                capture_output=True, text=True, timeout=180,
+            )
+            output = (result.stdout + result.stderr).strip()
+            # Emit output lines as log entries
+            for line in output.splitlines()[-30:]:
+                if line.strip():
+                    log_job(job, line, level='info', event='progress')
+            if result.returncode == 0:
+                log_job(job, f"Successfully upgraded {name}.", level='success', event='done')
+                job.status = 'done'
+                job.done = 1
+            else:
+                job.status = 'failed'
+                job.error = output[-500:]
+                log_job(job, f"pip returned code {result.returncode}.", level='error', event='failed')
+        except Exception as e:
+            job.status = 'failed'
+            job.error = str(e)
+            log_job(job, str(e), level='error', event='failed')
+        db.session.commit()
+
+
+@register_handler('uninstall_package')
+def handle_uninstall_package(job, app):
+    payload = job.payload or {}
+    name = payload.get('name', '').strip()
+    if not name:
+        job.status = 'failed'
+        job.error = 'No package name provided.'
+        db.session.commit()
+        return
+
+    with app.app_context():
+        job.total = 1
+        job.done = 0
+        db.session.commit()
+        log_job(job, f"Uninstalling: {name}", level='warning', event='started')
+        try:
+            result = subprocess.run(
+                [sys.executable, '-m', 'pip', 'uninstall', '-y', name],
+                capture_output=True, text=True, timeout=60,
+            )
+            output = (result.stdout + result.stderr).strip()
+            for line in output.splitlines()[-20:]:
+                if line.strip():
+                    log_job(job, line, level='info', event='progress')
+            if result.returncode == 0:
+                log_job(job, f"Successfully uninstalled {name}.", level='success', event='done')
+                job.status = 'done'
+                job.done = 1
+            else:
+                job.status = 'failed'
+                job.error = output[-500:]
+                log_job(job, f"pip returned code {result.returncode}.", level='error', event='failed')
+        except Exception as e:
+            job.status = 'failed'
+            job.error = str(e)
+            log_job(job, str(e), level='error', event='failed')
+        db.session.commit()
+
+
+# ─── Git submodule management ─────────────────────────────────────────────────
+
+@register_handler('update_submodule_bg')
+def handle_update_submodule_bg(job, app):
+    payload = job.payload or {}
+    path = payload.get('path', '').strip()
+    if not path:
+        job.status = 'failed'
+        job.error = 'No submodule path provided.'
+        db.session.commit()
+        return
+
+    cwd = os.getcwd()
+    with app.app_context():
+        job.total = 1
+        job.done = 0
+        db.session.commit()
+        log_job(job, f"Updating submodule: {path}", level='info', event='started')
+        try:
+            result = subprocess.run(
+                ['git', 'submodule', 'update', '--remote', '--merge', '--', path],
+                capture_output=True, text=True, timeout=300, cwd=cwd,
+            )
+            output = (result.stdout + result.stderr).strip()
+            for line in output.splitlines()[-30:]:
+                if line.strip():
+                    log_job(job, line, level='info', event='progress')
+            if result.returncode == 0:
+                log_job(job, f"Submodule '{path}' updated successfully.", level='success', event='done')
+                job.status = 'done'
+                job.done = 1
+            else:
+                job.status = 'failed'
+                job.error = output[-500:]
+                log_job(job, f"git returned code {result.returncode}.", level='error', event='failed')
+        except Exception as e:
+            job.status = 'failed'
+            job.error = str(e)
+            log_job(job, str(e), level='error', event='failed')
+        db.session.commit()
+
+
+@register_handler('remove_submodule')
+def handle_remove_submodule(job, app):
+    payload = job.payload or {}
+    path = payload.get('path', '').strip()
+    if not path:
+        job.status = 'failed'
+        job.error = 'No submodule path provided.'
+        db.session.commit()
+        return
+
+    cwd = os.getcwd()
+    with app.app_context():
+        job.total = 3
+        job.done = 0
+        db.session.commit()
+        log_job(job, f"Removing submodule: {path}", level='warning', event='started')
+        try:
+            # Step 1: deinit
+            r1 = subprocess.run(
+                ['git', 'submodule', 'deinit', '--force', '--', path],
+                capture_output=True, text=True, timeout=30, cwd=cwd,
+            )
+            log_job(job, (r1.stdout + r1.stderr).strip() or 'deinit done', level='info', event='progress')
+            job.done = 1
+            db.session.commit()
+
+            # Step 2: git rm
+            r2 = subprocess.run(
+                ['git', 'rm', '-f', path],
+                capture_output=True, text=True, timeout=30, cwd=cwd,
+            )
+            log_job(job, (r2.stdout + r2.stderr).strip() or 'git rm done', level='info', event='progress')
+            job.done = 2
+            db.session.commit()
+
+            # Step 3: remove .git/modules entry
+            modules_dir = os.path.join(cwd, '.git', 'modules', path)
+            if os.path.isdir(modules_dir):
+                import shutil
+                shutil.rmtree(modules_dir, ignore_errors=True)
+                log_job(job, f"Cleaned .git/modules/{path}", level='info', event='progress')
+
+            if r1.returncode == 0 and r2.returncode == 0:
+                log_job(job, f"Submodule '{path}' removed successfully.", level='success', event='done')
+                job.status = 'done'
+                job.done = 3
+            else:
+                err = (r1.stderr + r2.stderr).strip()
+                job.status = 'failed'
+                job.error = err[-500:]
+                log_job(job, f"Removal may be incomplete: {err[:300]}", level='warning', event='failed')
+        except Exception as e:
+            job.status = 'failed'
+            job.error = str(e)
+            log_job(job, str(e), level='error', event='failed')
+        db.session.commit()

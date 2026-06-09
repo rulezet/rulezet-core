@@ -25,6 +25,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/core.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/base/sidebar.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/base/toaster.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/jobWidget.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/verify_email.css') }}">
 
     {% block head %}
@@ -199,6 +200,11 @@
             });
         });
     </script>
+
+    {% if current_user.is_authenticated %}
+    <div id="job-widget"></div>
+    <script type="module" src="{{ url_for('static', filename='js/jobs/jobWidget.js') }}"></script>
+    {% endif %}
 </body>
 
 </html>

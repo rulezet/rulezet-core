@@ -99,20 +99,34 @@ def delete_existing_repo_folder(local_dir):
 #   GITHUB API  #
 #################
 
-def get_github_branches(repo_url: str) -> list[str]:
-    """Return the list of branch names for a public GitHub repository."""
-    clean = repo_url.rstrip('/').rstrip('.git') if repo_url.rstrip('/').endswith('.git') else repo_url.rstrip('/')
+def get_github_branches(repo_url: str) -> tuple[list[str], str | None]:
+    """Return (branch_names, error_message) for a GitHub repository.
+
+    error_message is None on success, a string on failure.
+    """
+    import os
+    clean = repo_url.rstrip('/')
+    if clean.endswith('.git'):
+        clean = clean[:-4]
     repo_name = get_repo_name_from_url(clean)
     if not repo_name:
-        return []
+        return [], "Could not parse repository name from URL."
     api_url = f"https://api.github.com/repos/{repo_name}/branches?per_page=100"
+    headers = {}
+    token = os.environ.get('GITHUB_TOKEN')
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
     try:
-        res = requests.get(api_url, timeout=6)
+        res = requests.get(api_url, headers=headers, timeout=8)
+        if res.status_code == 403:
+            return [], "GitHub API rate limit exceeded. Add a GITHUB_TOKEN to .env to increase the limit."
+        if res.status_code == 404:
+            return [], "Repository not found or is private."
         if res.status_code != 200:
-            return []
-        return [b['name'] for b in res.json()]
-    except Exception:
-        return []
+            return [], f"GitHub API returned status {res.status_code}."
+        return [b['name'] for b in res.json()], None
+    except Exception as exc:
+        return [], f"Network error: {exc}"
 
 
 def github_repo_to_api_url(git_url: str) -> str:

@@ -1,0 +1,214 @@
+/* ─────────────────────────────────────────────────────────
+   Job Widget — floating bottom-right card
+   Follows Rulezet CSS variable conventions from core.css
+───────────────────────────────────────────────────────── */
+
+#job-widget {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 1090;
+    width: 380px;
+    max-width: calc(100vw - 2rem);
+    font-size: .85rem;
+}
+
+/* ── Collapsed bar ── */
+.jw-bar {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: .55rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,.12);
+    cursor: pointer;
+    user-select: none;
+    transition: box-shadow .18s;
+}
+
+.jw-bar:hover { box-shadow: 0 6px 24px rgba(13,110,253,.18); }
+
+.jw-bar__label {
+    flex: 1;
+    font-weight: 600;
+    color: var(--text-color);
+    font-size: .82rem;
+}
+
+.jw-bar__count {
+    background: #0d6efd;
+    color: #fff;
+    border-radius: 20px;
+    padding: .1rem .55rem;
+    font-size: .72rem;
+    font-weight: 700;
+}
+
+/* ── Expanded panel ── */
+.jw-panel {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.15);
+    overflow: hidden;
+    animation: jw-slide-up .18s ease;
+}
+
+@keyframes jw-slide-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.jw-header {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+}
+
+.jw-header__title {
+    flex: 1;
+    font-weight: 700;
+    font-size: .82rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--subtle-text-color);
+}
+
+/* ── Individual job card ── */
+.jw-job {
+    padding: .85rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.jw-job:last-child { border-bottom: 0; }
+
+.jw-job__top {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: .4rem;
+}
+
+.jw-job__name {
+    flex: 1;
+    font-weight: 600;
+    color: var(--text-color);
+    font-size: .83rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
+
+/* Progress bar */
+.jw-progress {
+    height: 4px;
+    background: var(--light-bg-color);
+    border-radius: 2px;
+    margin: .35rem 0;
+    overflow: hidden;
+}
+
+.jw-progress__fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #0d6efd, #0a58ca);
+    transition: width .4s ease;
+}
+
+/* Log feed */
+.jw-logs {
+    background: var(--light-bg-color);
+    border-radius: 8px;
+    padding: .4rem .6rem;
+    margin: .4rem 0;
+    max-height: 100px;
+    overflow-y: auto;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: .72rem;
+}
+
+.jw-log-line {
+    color: var(--subtle-text-color);
+    line-height: 1.5;
+    padding: .05rem 0;
+}
+
+.jw-log-line--success { color: #198754; }
+.jw-log-line--warning { color: #fd7e14; }
+.jw-log-line--error   { color: #dc3545; }
+
+/* Status badge */
+.jw-status {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .72rem;
+    font-weight: 600;
+    padding: .15rem .5rem;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.jw-status--running { background: rgba(13,110,253,.1);  color: #0d6efd; }
+.jw-status--pending { background: rgba(108,117,125,.1); color: #6c757d; }
+.jw-status--paused  { background: rgba(255,193,7,.15);  color: #b88a00; }
+.jw-status--done    { background: rgba(25,135,84,.1);   color: #198754; }
+.jw-status--failed  { background: rgba(220,53,69,.1);   color: #dc3545; }
+
+/* Controls row */
+.jw-controls {
+    display: flex;
+    gap: .35rem;
+    align-items: center;
+    margin-top: .45rem;
+}
+
+/* Icon buttons */
+.jw-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: .2rem .5rem;
+    font-size: .72rem;
+    cursor: pointer;
+    color: var(--subtle-text-color);
+    transition: background .15s, color .15s;
+    line-height: 1.4;
+}
+
+.jw-btn:hover { background: var(--light-bg-color); color: var(--text-color); }
+.jw-btn--danger:hover { background: rgba(220,53,69,.08); color: #dc3545; border-color: #dc3545; }
+.jw-btn--dismiss {
+    margin-left: auto;
+    border: none;
+    background: none;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    padding: .1rem .25rem;
+    font-size: .82rem;
+    line-height: 1;
+    transition: color .12s;
+}
+.jw-btn--dismiss:hover { color: #dc3545; }
+
+/* Indeterminate progress animation */
+@keyframes jw-indeterminate {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Scrollbar for logs */
+.jw-logs::-webkit-scrollbar { width: 4px; }
+.jw-logs::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+
+/* Dark mode */
+body.dark-mode .jw-bar,
+body.dark-mode .jw-panel { background: var(--card-bg-color); border-color: var(--border-color); }
+body.dark-mode .jw-logs  { background: var(--light-bg-color); }

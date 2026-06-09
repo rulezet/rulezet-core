@@ -2006,8 +2006,10 @@ def parse_rule() -> dict:
 def get_repo_branches():
     url = request.args.get('url', '').strip()
     if not url:
-        return jsonify({'success': False, 'branches': []}), 400
-    branches = get_github_branches(url)
+        return jsonify({'success': False, 'branches': [], 'error': 'No URL provided.'}), 400
+    branches, error = get_github_branches(url)
+    if error:
+        return jsonify({'success': False, 'branches': [], 'error': error}), 200
     return jsonify({'success': True, 'branches': branches}), 200
 
 
