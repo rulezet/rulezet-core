@@ -58,6 +58,38 @@ function actionIcon(action) {
     if (action.includes('update'))       return 'fa-solid fa-pen'
     return 'fa-solid fa-circle-dot'
 }
+function dotClass(action) {
+    if (!action) return 'neutral'
+    if (action.includes('pull_done'))    return 'success'
+    if (action.includes('pull_trigger')) return 'primary'
+    if (action.includes('test_ok'))      return 'info'
+    if (action.includes('error'))        return 'danger'
+    if (action.includes('delete'))       return 'danger'
+    if (action.includes('update'))       return 'warning'
+    return 'neutral'
+}
+function _computeStats(items) {
+    const pulls        = items.filter(e => e.action?.includes('pull_done')).length
+    const tests        = items.filter(e => e.action?.includes('test')).length
+    const errors       = items.filter(e => e.action?.includes('error')).length
+    const rulesAdded   = items.reduce((s, e) => s + (e.extra?.rules_added   || 0), 0)
+    const bundlesAdded = items.reduce((s, e) => s + (e.extra?.bundles_added || 0), 0)
+    const lastSync     = items.length ? items[0].timestamp : null
+
+    const dayCounts = {}
+    items.forEach(e => {
+        const day = (e.timestamp || '').split(' ')[0]
+        if (day) dayCounts[day] = (dayCounts[day] || 0) + 1
+    })
+    const sparkline = []
+    for (let i = 29; i >= 0; i--) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        sparkline.push(dayCounts[d.toISOString().split('T')[0]] || 0)
+    }
+    const maxCount = Math.max(...sparkline, 1)
+    return { pulls, tests, errors, rulesAdded, bundlesAdded, lastSync, sparkline, maxCount }
+}
 
 // ─── ConnectorRow (table expanded detail) ─────────────────────────────────────
 
@@ -76,6 +108,8 @@ const ConnectorRow = {
         const historyItems   = ref([])
         const historyLoading = ref(false)
         const actionBusy     = ref(null)
+
+        const historyStats = computed(() => _computeStats(historyItems.value))
 
         async function doPost(url) {
             return fetch(url, {
@@ -133,9 +167,9 @@ const ConnectorRow = {
         }
 
         return {
-            expanded, historyItems, historyLoading, actionBusy,
+            expanded, historyItems, historyLoading, actionBusy, historyStats,
             statusClass, statusLabel, statusIcon,
-            actionBadgeClass, actionIcon,
+            actionBadgeClass, actionIcon, dotClass,
             testConn, pullConn, deleteConn, toggleHistory,
         }
     },
@@ -207,29 +241,99 @@ const ConnectorRow = {
     </td>
   </tr>
 
-  <!-- expanded history row -->
+  <!-- expanded history panel -->
   <tr v-if="expanded" class="cnt-tr-expand">
     <td :colspan="8" class="cnt-td-expand">
-      <div v-if="historyLoading" class="text-center py-2">
+      <div v-if="historyLoading" class="text-center py-3">
         <div class="spinner-border spinner-border-sm text-primary"></div>
       </div>
-      <div v-else-if="historyItems.length === 0" class="text-muted small py-2 text-center">No history yet.</div>
-      <div v-else class="cnt-history-list">
-        <div v-for="e in historyItems" :key="e.timestamp+e.action" class="cnt-history-item">
-          <span :class="['badge', actionBadgeClass(e.action)]" style="font-size:.62rem;">
-            <i :class="actionIcon(e.action)"></i>
-          </span>
-          <span class="cnt-history-ts">[[ e.timestamp ]]</span>
-          <span class="cnt-history-desc">[[ e.description ]]
-            <span v-if="e.extra && e.extra.rules_added !== undefined" class="text-muted">
-              (+[[ e.extra.rules_added ]]r, +[[ e.extra.bundles_added ]]b)
-            </span>
-          </span>
+      <template v-else-if="historyItems.length === 0">
+        <div class="cnt-hist-empty">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <span>No history yet — test or pull to record interactions.</span>
         </div>
-      </div>
-      <div v-if="c.last_error" class="cnt-last-error mt-1">
-        <i class="fa-solid fa-triangle-exclamation me-1"></i>[[ c.last_error ]]
-      </div>
+      </template>
+      <template v-else>
+        <!-- Stats row -->
+        <div class="cnt-hist-stats">
+          <div class="cnt-hist-stat">
+            <span class="cnt-hist-stat__icon" style="color:#198754;"><i class="fa-solid fa-cloud-arrow-down"></i></span>
+            <span class="cnt-hist-stat__value">[[ historyStats.pulls ]]</span>
+            <span class="cnt-hist-stat__label">Pulls</span>
+          </div>
+          <div class="cnt-hist-stat">
+            <span class="cnt-hist-stat__icon" style="color:#0d6efd;"><i class="fa-solid fa-wifi"></i></span>
+            <span class="cnt-hist-stat__value">[[ historyStats.tests ]]</span>
+            <span class="cnt-hist-stat__label">Tests</span>
+          </div>
+          <div class="cnt-hist-stat">
+            <span class="cnt-hist-stat__icon" style="color:#0dcaf0;"><i class="fa-solid fa-shield-halved"></i></span>
+            <span class="cnt-hist-stat__value">+[[ historyStats.rulesAdded.toLocaleString() ]]</span>
+            <span class="cnt-hist-stat__label">Rules synced</span>
+          </div>
+          <div class="cnt-hist-stat">
+            <span class="cnt-hist-stat__icon" style="color:#6f42c1;"><i class="fa-solid fa-box"></i></span>
+            <span class="cnt-hist-stat__value">+[[ historyStats.bundlesAdded ]]</span>
+            <span class="cnt-hist-stat__label">Bundles synced</span>
+          </div>
+          <div class="cnt-hist-stat" v-if="historyStats.errors > 0">
+            <span class="cnt-hist-stat__icon" style="color:#dc3545;"><i class="fa-solid fa-triangle-exclamation"></i></span>
+            <span class="cnt-hist-stat__value">[[ historyStats.errors ]]</span>
+            <span class="cnt-hist-stat__label">Errors</span>
+          </div>
+          <div class="cnt-hist-stat ms-auto" v-if="historyStats.lastSync">
+            <span class="cnt-hist-stat__icon" style="color:var(--subtle-text-color);"><i class="fa-solid fa-rotate"></i></span>
+            <span class="cnt-hist-stat__value" style="font-size:.75rem;">[[ historyStats.lastSync ]]</span>
+            <span class="cnt-hist-stat__label">Last sync</span>
+          </div>
+        </div>
+
+        <!-- Sparkline -->
+        <div class="cnt-sparkline-wrap">
+          <span class="cnt-sparkline-label">Activity — last 30 days</span>
+          <svg viewBox="0 0 300 32" preserveAspectRatio="none" class="cnt-sparkline">
+            <rect v-for="(v, i) in historyStats.sparkline" :key="i"
+                  :x="i * 10 + 1"
+                  y="0"
+                  :width="8"
+                  :height="32"
+                  :fill="v > 0 ? 'rgba(13,110,253,.08)' : 'transparent'"
+                  rx="2"/>
+            <rect v-for="(v, i) in historyStats.sparkline" :key="'b'+i"
+                  :x="i * 10 + 1"
+                  :y="v > 0 ? (1 - v/historyStats.maxCount) * 28 + 2 : 30"
+                  :width="8"
+                  :height="v > 0 ? Math.max((v/historyStats.maxCount) * 28, 3) : 2"
+                  :fill="v > 0 ? '#0d6efd' : 'var(--border-color)'"
+                  rx="2"/>
+          </svg>
+        </div>
+
+        <!-- Error banner -->
+        <div v-if="c.last_error" class="cnt-hist-error-banner">
+          <i class="fa-solid fa-triangle-exclamation me-2"></i>[[ c.last_error ]]
+        </div>
+
+        <!-- Timeline -->
+        <div class="cnt-timeline">
+          <div v-for="(e, idx) in historyItems" :key="e.timestamp+e.action+idx" class="cnt-timeline-item">
+            <div class="cnt-timeline-dot" :class="'cnt-timeline-dot--'+dotClass(e.action)"></div>
+            <div class="cnt-timeline-content">
+              <div class="cnt-timeline-header">
+                <span :class="['badge', 'me-1', actionBadgeClass(e.action)]" style="font-size:.6rem;">
+                  <i :class="actionIcon(e.action)"></i> [[ e.action ? e.action.split('.').pop() : '?' ]]
+                </span>
+                <span class="cnt-timeline-ts">[[ e.timestamp ]]</span>
+              </div>
+              <div class="cnt-timeline-desc">[[ e.description ]]</div>
+              <div v-if="e.extra && e.extra.rules_added !== undefined" class="cnt-timeline-meta">
+                <span><i class="fa-solid fa-shield-halved me-1 text-primary"></i>+[[ e.extra.rules_added ]] rules</span>
+                <span><i class="fa-solid fa-box me-1 text-secondary"></i>+[[ e.extra.bundles_added ]] bundles</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
     </td>
   </tr>
 </tbody>
@@ -253,6 +357,8 @@ const ConnectorCard = {
         const historyItems   = ref([])
         const historyLoading = ref(false)
         const actionBusy     = ref(null)
+
+        const historyStats = computed(() => _computeStats(historyItems.value))
 
         async function doPost(url) {
             return fetch(url, {
@@ -310,9 +416,9 @@ const ConnectorCard = {
         }
 
         return {
-            expanded, historyItems, historyLoading, actionBusy,
+            expanded, historyItems, historyLoading, actionBusy, historyStats,
             statusClass, statusLabel, statusIcon,
-            actionBadgeClass, actionIcon,
+            actionBadgeClass, actionIcon, dotClass,
             testConn, pullConn, deleteConn, toggleHistory,
         }
     },
@@ -396,21 +502,85 @@ const ConnectorCard = {
     </button>
   </div>
 
-  <!-- inline history -->
+  <!-- inline history panel -->
   <div v-if="expanded" class="cnt-card-history">
-    <div v-if="historyLoading" class="text-center py-2">
+    <div v-if="historyLoading" class="text-center py-3">
       <div class="spinner-border spinner-border-sm text-primary"></div>
     </div>
-    <div v-else-if="historyItems.length === 0" class="text-muted small text-center py-2">No history yet.</div>
-    <div v-else class="cnt-history-list">
-      <div v-for="e in historyItems" :key="e.timestamp+e.action" class="cnt-history-item">
-        <span :class="['badge', actionBadgeClass(e.action)]" style="font-size:.62rem;"><i :class="actionIcon(e.action)"></i></span>
-        <span class="cnt-history-ts">[[ e.timestamp ]]</span>
-        <span class="cnt-history-desc">[[ e.description ]]
-          <span v-if="e.extra && e.extra.rules_added !== undefined" class="text-muted">(+[[ e.extra.rules_added ]]r, +[[ e.extra.bundles_added ]]b)</span>
-        </span>
+    <template v-else-if="historyItems.length === 0">
+      <div class="cnt-hist-empty">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>No history yet — test or pull to record interactions.</span>
       </div>
-    </div>
+    </template>
+    <template v-else>
+      <!-- Stats -->
+      <div class="cnt-hist-stats">
+        <div class="cnt-hist-stat">
+          <span class="cnt-hist-stat__icon" style="color:#198754;"><i class="fa-solid fa-cloud-arrow-down"></i></span>
+          <span class="cnt-hist-stat__value">[[ historyStats.pulls ]]</span>
+          <span class="cnt-hist-stat__label">Pulls</span>
+        </div>
+        <div class="cnt-hist-stat">
+          <span class="cnt-hist-stat__icon" style="color:#0d6efd;"><i class="fa-solid fa-wifi"></i></span>
+          <span class="cnt-hist-stat__value">[[ historyStats.tests ]]</span>
+          <span class="cnt-hist-stat__label">Tests</span>
+        </div>
+        <div class="cnt-hist-stat">
+          <span class="cnt-hist-stat__icon" style="color:#0dcaf0;"><i class="fa-solid fa-shield-halved"></i></span>
+          <span class="cnt-hist-stat__value">+[[ historyStats.rulesAdded.toLocaleString() ]]</span>
+          <span class="cnt-hist-stat__label">Rules</span>
+        </div>
+        <div class="cnt-hist-stat">
+          <span class="cnt-hist-stat__icon" style="color:#6f42c1;"><i class="fa-solid fa-box"></i></span>
+          <span class="cnt-hist-stat__value">+[[ historyStats.bundlesAdded ]]</span>
+          <span class="cnt-hist-stat__label">Bundles</span>
+        </div>
+        <div class="cnt-hist-stat" v-if="historyStats.errors > 0">
+          <span class="cnt-hist-stat__icon" style="color:#dc3545;"><i class="fa-solid fa-triangle-exclamation"></i></span>
+          <span class="cnt-hist-stat__value">[[ historyStats.errors ]]</span>
+          <span class="cnt-hist-stat__label">Errors</span>
+        </div>
+      </div>
+      <!-- Sparkline -->
+      <div class="cnt-sparkline-wrap">
+        <span class="cnt-sparkline-label">Activity — last 30 days</span>
+        <svg viewBox="0 0 300 32" preserveAspectRatio="none" class="cnt-sparkline">
+          <rect v-for="(v, i) in historyStats.sparkline" :key="i"
+                :x="i * 10 + 1" y="0" :width="8" :height="32"
+                :fill="v > 0 ? 'rgba(13,110,253,.08)' : 'transparent'" rx="2"/>
+          <rect v-for="(v, i) in historyStats.sparkline" :key="'b'+i"
+                :x="i * 10 + 1"
+                :y="v > 0 ? (1 - v/historyStats.maxCount) * 28 + 2 : 30"
+                :width="8"
+                :height="v > 0 ? Math.max((v/historyStats.maxCount) * 28, 3) : 2"
+                :fill="v > 0 ? '#0d6efd' : 'var(--border-color)'" rx="2"/>
+        </svg>
+      </div>
+      <!-- Error banner -->
+      <div v-if="c.last_error" class="cnt-hist-error-banner">
+        <i class="fa-solid fa-triangle-exclamation me-2"></i>[[ c.last_error ]]
+      </div>
+      <!-- Timeline -->
+      <div class="cnt-timeline">
+        <div v-for="(e, idx) in historyItems" :key="e.timestamp+e.action+idx" class="cnt-timeline-item">
+          <div class="cnt-timeline-dot" :class="'cnt-timeline-dot--'+dotClass(e.action)"></div>
+          <div class="cnt-timeline-content">
+            <div class="cnt-timeline-header">
+              <span :class="['badge', 'me-1', actionBadgeClass(e.action)]" style="font-size:.6rem;">
+                <i :class="actionIcon(e.action)"></i> [[ e.action ? e.action.split('.').pop() : '?' ]]
+              </span>
+              <span class="cnt-timeline-ts">[[ e.timestamp ]]</span>
+            </div>
+            <div class="cnt-timeline-desc">[[ e.description ]]</div>
+            <div v-if="e.extra && e.extra.rules_added !== undefined" class="cnt-timeline-meta">
+              <span><i class="fa-solid fa-shield-halved me-1 text-primary"></i>+[[ e.extra.rules_added ]] rules</span>
+              <span><i class="fa-solid fa-box me-1 text-secondary"></i>+[[ e.extra.bundles_added ]] bundles</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </div>
 `
@@ -441,7 +611,7 @@ export default {
         const alert         = reactive({ msg: '', type: 'success' })
 
         // View / search / pagination
-        const viewMode  = ref('card')   // 'table' | 'card'
+        const viewMode  = ref('table')  // 'table' | 'card'
         const search    = ref('')
         const page      = ref(1)
         const perPage   = ref(12)

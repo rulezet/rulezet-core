@@ -362,17 +362,123 @@ body.dark-mode .connector-card {
     text-transform: uppercase; letter-spacing: .04em;
 }
 
-/* ── History ───────────────────────────────────────────── */
-.cnt-history-list { display: flex; flex-direction: column; gap: .3rem; }
-.cnt-history-item { display: flex; align-items: flex-start; gap: .5rem; font-size: .76rem; }
-.cnt-history-ts   { color: var(--subtle-text-color); white-space: nowrap; flex-shrink: 0; }
-.cnt-history-desc { color: var(--text-color); }
-.cnt-last-error   { font-size: .75rem; color: #dc3545; }
+/* ── History panel ─────────────────────────────────────── */
 .cnt-card-history {
     margin-top: .75rem;
     padding-top: .65rem;
     border-top: 1px solid var(--border-color);
 }
+.cnt-hist-empty {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .75rem 0;
+    font-size: .78rem; color: var(--subtle-text-color);
+}
+
+/* Stats row */
+.cnt-hist-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    margin-bottom: .75rem;
+}
+.cnt-hist-stat {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: .35rem .65rem;
+    min-width: 0;
+}
+.cnt-hist-stat__icon { font-size: .85rem; flex-shrink: 0; }
+.cnt-hist-stat__value {
+    font-weight: 700;
+    font-size: .88rem;
+    color: var(--text-color);
+    white-space: nowrap;
+}
+.cnt-hist-stat__label {
+    font-size: .68rem;
+    color: var(--subtle-text-color);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    white-space: nowrap;
+}
+
+/* Sparkline */
+.cnt-sparkline-wrap {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: .75rem;
+    padding: .45rem .65rem;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+.cnt-sparkline-label {
+    font-size: .68rem;
+    color: var(--subtle-text-color);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.cnt-sparkline {
+    flex: 1;
+    height: 32px;
+    display: block;
+}
+
+/* Error banner */
+.cnt-hist-error-banner {
+    background: rgba(220,53,69,.08);
+    border: 1px solid rgba(220,53,69,.2);
+    border-radius: 8px;
+    color: #dc3545;
+    font-size: .75rem;
+    padding: .4rem .65rem;
+    margin-bottom: .6rem;
+}
+
+/* Timeline */
+.cnt-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+.cnt-timeline-item {
+    display: flex;
+    gap: .65rem;
+    padding: .45rem 0;
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+}
+.cnt-timeline-item:last-child { border-bottom: none; }
+
+.cnt-timeline-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: .35rem;
+    background: #adb5bd;
+}
+.cnt-timeline-dot--success { background: #198754; }
+.cnt-timeline-dot--primary { background: #0d6efd; }
+.cnt-timeline-dot--info    { background: #0dcaf0; }
+.cnt-timeline-dot--warning { background: #ffc107; }
+.cnt-timeline-dot--danger  { background: #dc3545; }
+.cnt-timeline-dot--neutral { background: #adb5bd; }
+
+.cnt-timeline-content { flex: 1; min-width: 0; }
+.cnt-timeline-header  { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; margin-bottom: .15rem; }
+.cnt-timeline-ts      { font-size: .68rem; color: var(--subtle-text-color); white-space: nowrap; }
+.cnt-timeline-desc    { font-size: .76rem; color: var(--text-color); }
+.cnt-timeline-meta    { display: flex; gap: .75rem; font-size: .7rem; color: var(--subtle-text-color); margin-top: .2rem; }
 
 /* ── Card selected ─────────────────────────────────────── */
 .connector-card--selected { border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13,110,253,.15); }
@@ -437,3 +543,5 @@ body.dark-mode .connector-card {
 
 /* ── Checkbox ──────────────────────────────────────────── */
 .cnt-checkbox { width: 15px; height: 15px; cursor: pointer; accent-color: #0d6efd; }
+
+
