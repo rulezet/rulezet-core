@@ -23,6 +23,7 @@ from pathlib import Path
 from app.features.jobs.job_worker import register_handler
 from app import db
 from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJobLog, ActivityLog
+from app.features.rule.rule_core import _wipe_rule_children
 
 BATCH_SIZE = 2000   # bulk_insert_mappings handles large batches efficiently
 
@@ -795,6 +796,7 @@ def handle_trash_permanent_delete_bulk(job, app):
         while _should_pause(job):
             import time; time.sleep(2)
         chunk = all_ids[i:i + TRASH_BATCH]
+        _wipe_rule_children(chunk)
         Rule.query.filter(Rule.id.in_(chunk), Rule.is_deleted == True).delete(synchronize_session=False)
         db.session.commit()
         deleted  += len(chunk)

@@ -15,7 +15,7 @@ import requests
 from sqlalchemy.exc import SQLAlchemyError
 from flask import current_app, jsonify, send_file
 from flask_login import current_user
-from sqlalchemy import and_, case, or_, text
+from sqlalchemy import and_, case, delete as sa_delete, or_, text, update as sa_update
 from sqlalchemy.orm import joinedload
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -188,11 +188,69 @@ def get_deleted_batches():
             for r in rows]
 
 
+def _wipe_rule_children(rule_ids: list) -> None:
+    """Delete all FK-dependent rows for the given rule IDs before removing the rules.
+
+    Must be called within an active app/request context with a live DB session.
+    No commit is issued here — caller commits after deleting the rules.
+    """
+    if not rule_ids:
+        return
+    ids = list(rule_ids)
+
+    # 1. Comment reactions (reference rule.id and comment.id)
+    db.session.execute(sa_delete(RuleCommentReaction).where(RuleCommentReaction.rule_id.in_(ids)))
+
+    # 2. Null-out self-referencing parent_comment_id to avoid FK cycle, then bulk delete
+    db.session.execute(sa_update(Comment).where(Comment.rule_id.in_(ids)).values(parent_comment_id=None))
+    db.session.execute(sa_delete(Comment).where(Comment.rule_id.in_(ids)))
+
+    # 3. Tag associations
+    db.session.execute(sa_delete(RuleTagAssociation).where(RuleTagAssociation.rule_id.in_(ids)))
+
+    # 4. Favorites
+    db.session.execute(sa_delete(RuleFavoriteUser).where(RuleFavoriteUser.rule_id.in_(ids)))
+
+    # 5. Votes
+    db.session.execute(sa_delete(RuleVote).where(RuleVote.rule_id.in_(ids)))
+
+    # 6. Scope declarations
+    db.session.execute(sa_delete(RuleScope).where(RuleScope.rule_id.in_(ids)))
+
+    # 7. Edit contributions (reference rule.id and proposal.id — delete before proposals)
+    db.session.execute(sa_delete(RuleEditContribution).where(RuleEditContribution.rule_id.in_(ids)))
+
+    # 8. Edit comments (only reference proposal.id — delete before proposals)
+    proposal_ids = db.session.scalars(
+        db.select(RuleEditProposal.id).where(RuleEditProposal.rule_id.in_(ids))
+    ).all()
+    if proposal_ids:
+        db.session.execute(sa_delete(RuleEditComment).where(RuleEditComment.proposal_id.in_(proposal_ids)))
+
+    # 9. Edit proposals
+    db.session.execute(sa_delete(RuleEditProposal).where(RuleEditProposal.rule_id.in_(ids)))
+
+    # 10. Reports
+    db.session.execute(sa_delete(RepportRule).where(RepportRule.rule_id.in_(ids)))
+
+    # 11. Ownership requests
+    db.session.execute(sa_delete(RequestOwnerRule).where(RequestOwnerRule.rule_id.in_(ids)))
+
+    # 12. Update history
+    db.session.execute(sa_delete(RuleUpdateHistory).where(RuleUpdateHistory.rule_id.in_(ids)))
+
+    # 13. Similarity pairs (has ondelete=CASCADE at DB level but be explicit)
+    db.session.execute(sa_delete(RuleSimilarity).where(
+        or_(RuleSimilarity.rule_id.in_(ids), RuleSimilarity.similar_rule_id.in_(ids))
+    ))
+
+
 def permanent_delete_rule(rule_id: int) -> bool:
     """Physically delete a soft-deleted rule (admin only — irreversible)."""
     rule = Rule.query.filter(Rule.id == rule_id, Rule.is_deleted == True).first()
     if not rule:
         return False
+    _wipe_rule_children([rule_id])
     db.session.delete(rule)
     db.session.commit()
     return True
@@ -202,11 +260,14 @@ def permanent_delete_bulk(rule_ids: list) -> int:
     """Physically delete multiple soft-deleted rules."""
     if not rule_ids:
         return 0
-    rules = Rule.query.filter(Rule.id.in_(rule_ids), Rule.is_deleted == True).all()
-    for r in rules:
-        db.session.delete(r)
+    valid_ids = [r.id for r in Rule.query.filter(Rule.id.in_(rule_ids), Rule.is_deleted == True)
+                 .with_entities(Rule.id).all()]
+    if not valid_ids:
+        return 0
+    _wipe_rule_children(valid_ids)
+    db.session.execute(sa_delete(Rule).where(Rule.id.in_(valid_ids)))
     db.session.commit()
-    return len(rules)
+    return len(valid_ids)
 
 
 def count_deleted_rules() -> int:
