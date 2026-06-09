@@ -116,22 +116,28 @@ All SQLAlchemy models live in one file. Key models:
 | Model | Description |
 |-------|-------------|
 | `User` | Auth + profile; has `api_key`, `admin`, `is_verified`, `bio`, gamification backref |
-| `Rule` | Core entity: `format`, `title`, `to_string` (raw content), `uuid`, `source`, `github_path` |
+| `Rule` | Core entity: `format`, `title`, `to_string` (raw content), `uuid`, `source`, `github_path`; soft-delete fields: `is_deleted`, `deleted_at`, `deleted_by_id`, `delete_batch_uuid` |
 | `FormatRule` | Registry of supported rule formats |
 | `Bundle` | Named collection of rules (many-to-many via `BundleRuleAssociation`) |
 | `BundleNode` | Tree node for bundle's file-explorer view (`folder` or `file`, recursive self-ref) |
 | `Tag` | Taxonomy tags with `name`, `color`, `icon`, `galaxy_meta`, `visibility`; linked to rules and bundles via association tables |
 | `RuleTagAssociation` | Rule ↔ Tag many-to-many with `uuid`, `user_id`, `added_at` |
 | `RuleEditProposal` | PR-style edit request with `status` (pending/approved/rejected) |
+| `RuleEditComment` | Comments on edit proposals |
+| `RuleEditContribution` | Contribution records for edit proposals |
 | `Comment` / `CommentBundle` | Comments on rules and bundles |
+| `RuleCommentReaction` / `BundleReactionComment` | Per-user reactions (emoji) on rule/bundle comments |
 | `RuleVote` / `BundleVote` | Per-user up/down votes |
 | `RuleFavoriteUser` | User favorites |
 | `InvalidRuleModel` | Rules that failed validation on import |
+| `RequestOwnerRule` | Ownership requests for rules (`rule_id`, `user_id`, `status`, `request_date`) |
+| `RepportRule` | User reports/flags on rules (`rule_id`, `user_id`, `reason`, `status`) |
 | `BackgroundJob` + `BackgroundJobLog` | Persistent job queue for long-running tasks |
 | `Gamification` | Per-user contribution points and level; auto-updated via SQLAlchemy `before_flush` event listener `receive_before_flush()` |
 | `RuleSimilarity` / `SimilarResult` | Fuzzy similarity scores between rules (TF-IDF + FAISS + rapidfuzz) |
-| `ImporterResult` / `UpdateResult` / `RuleStatus` / `NewRule` | History tracking for GitHub imports and rule update scans |
+| `ImporterResult` / `UpdateResult` / `RuleStatus` / `NewRule` / `RuleUpdateHistory` | History tracking for GitHub imports and rule update scans |
 | `ActivityLog` | Audit trail entry: `action`, `description`, `user_id`, `target_type`, `target_id`, `target_uuid`, `ip_address`, `is_public`, `icon`, `extra` (JSON) |
+| `RuleScope` | User-specific environment declarations per rule: whether a rule works in their environment, with structured entries (OS, version, etc.) and a comment |
 
 ### Business logic layer (`app/features/*/` and `app/core/`)
 
@@ -139,7 +145,7 @@ Each feature has a `*_core.py` file with pure Python DB logic, called by both bl
 
 | File | Key functions |
 |------|--------------|
-| `app/features/rule/rule_core.py` | `add_rule_core()`, `_attach_default_tags()`, `get_rule()`, `get_rule_by_content()`, `rule_exists()`, `get_rules_page_filter()`, `get_all_rule_by_url_github_page()` |
+| `app/features/rule/rule_core.py` | `add_rule_core()`, `_attach_default_tags()`, `get_rule()`, `get_rule_by_content()`, `rule_exists()`, `get_rules_page_filter()`, `get_all_rule_by_url_github_page()`; soft-delete: `_active()`, `soft_delete_rule()`, `soft_delete_all_by_url()`, `restore_rule()`, `restore_batch()`, `permanent_delete_rule()`, `get_deleted_rules()`, `get_deleted_batches()`; scopes: `get_scopes()`, `upsert_scope()`, `delete_scope()` |
 | `app/features/account/account_core.py` | `add_user_core()`, `add_favorite()`, `remove_favorite()` |
 | `app/features/bundle/bundle_core.py` | Bundle CRUD, tag association |
 | `app/features/jobs/jobs_core.py` | `create_job()`, `cancel_job()`, `pause_job()`, `resume_job()`, `get_zombie_jobs()`, `kill_all_zombies()` |
@@ -209,6 +215,113 @@ Existing job types:
 | `bulk_remove_tag_from_rules` | Remove tags from a filtered set of rules |
 | `delete_github_rules` | Delete rules imported from a GitHub source |
 | `delete_activity_logs` | Bulk-delete activity log entries by ID list or filter |
+| `trash_restore_bulk` | Restore soft-deleted rules in chunks; supports specific IDs, a whole batch UUID, or all trash; pause/resume safe |
+| `trash_permanent_delete_bulk` | Irreversibly delete soft-deleted rules from DB in chunks; same pause/resume support; **irreversible** |
+| `update_misp_data` | 3-step: git pull MISP submodules → update already-imported taxonomies → update already-imported galaxies |
+
+### Soft-delete / Trash system
+
+Rules are never hard-deleted by default. Instead they are soft-deleted and land in a trash that admins can manage.
+
+**Rule model fields** (added via migration `31e4523a751b`):
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `is_deleted` | Boolean (indexed) | Soft-delete flag; default `False` |
+| `deleted_at` | DateTime | Timestamp of deletion |
+| `deleted_by_id` | Integer FK | User who triggered the deletion |
+| `delete_batch_uuid` | String(36, indexed) | Groups all rules deleted from the same GitHub source in one operation |
+
+**Critical invariant**: all user-facing queries must use `_active()` from `rule_core.py`:
+
+```python
+def _active():
+    return Rule.query.filter(Rule.is_deleted == False)
+```
+
+Never call `Rule.query` directly — it will silently return deleted rules.
+
+**Core functions** (`app/features/rule/rule_core.py`):
+
+| Function | Purpose |
+|----------|---------|
+| `soft_delete_rule(rule_id, user_id, batch_uuid)` | Soft-delete one rule |
+| `soft_delete_rule_list(rule_ids, user_id, batch_uuid)` | Batch soft-delete |
+| `soft_delete_all_by_url(urls, user_id)` | Soft-delete all rules from a GitHub source as one batch |
+| `restore_rule(rule_id)` | Restore single rule |
+| `restore_rules_bulk(rule_ids)` | Restore a list of rules |
+| `restore_batch(batch_uuid)` | Restore an entire GitHub deletion batch |
+| `permanent_delete_rule(rule_id)` | Hard-delete from DB (only already soft-deleted rules) |
+| `permanent_delete_bulk(rule_ids)` | Batch hard-delete |
+| `get_deleted_rules(page, search, source, batch_uuid, …)` | Paginated trash listing with filters |
+| `get_deleted_batches()` | Metadata on all batch groups (source, count, deleted_at) |
+| `count_deleted_rules()` | Total trash count |
+| `_find_in_trash_by_content(content)` | Check during rule creation if a matching deleted rule exists |
+
+**Routes** (`/rule/trash`, `/rule/delete_rule`, `/rule/delete_rule_list`, `/rule/get_trash_rules`, `/rule/conflict_resolve`).
+
+**Templates**: `app/templates/rule/trash.html` (admin trash management with filters, bulk restore/delete, batch operations) and `app/templates/rule/rule_in_trash.html` (single deleted rule detail).
+
+**Conflict resolution**: if a new upload's content matches a deleted rule still in trash, the UI offers to restore it instead of creating a duplicate.
+
+**Async operations**: large restore/delete operations are dispatched as `trash_restore_bulk` / `trash_permanent_delete_bulk` background jobs.
+
+### RuleScope declarations
+
+Users can declare whether a detection rule works in their specific environment.
+
+**Model** (`RuleScope` in `db.py`):
+- `rule_id` / `user_id` — unique pair (one declaration per user per rule)
+- `works` — Boolean (`True` = works, `False` = doesn't work)
+- `entries` — JSON list of `{key, value}` pairs (e.g. `[{os: linux}, {version: 10.x}]`)
+- `comment` — optional free-text note (max 500 chars)
+
+**Routes** (in `app/features/rule/rule.py`):
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/rule/get_scopes/<rule_id>` | GET | All declarations + works/nworks counts + caller's own declaration |
+| `/rule/scope/<rule_id>` | POST | Create or update own declaration |
+| `/rule/scope/<rule_id>` | DELETE | Remove own declaration |
+
+**UI**: bottom section of the rule detail page — badge counters, form for own declaration, list of all user declarations. Activity logged as `rule.scope_add`, `rule.scope_update`, `rule.scope_delete`.
+
+### rulezet-cast module (`app/modules/rulezet-cast/`)
+
+A standalone rule parser and normalizer (Git submodule). It converts multi-format detection signatures into structured JSON before import.
+
+**Pipeline**: detect format → split multi-rule files → validate → parse → normalize → emit JSON.
+
+**Architecture**:
+- `main.py` — CLI entry point
+- `parsers/engine.py` — `RuleCastEngine` orchestrates the pipeline
+- `parsers/base.py` — `BaseRuleParser` (ABC) + `ValidationResult`
+- `parsers/formats/*.py` — one file per format (YARA implemented; Sigma, Suricata, Zeek, etc. planned)
+
+**CLI usage**:
+```bash
+python3 main.py parse -t 'rule X { ... }'      # parse from text
+python3 main.py parse -i rules.yar --json       # parse file, JSON output
+python3 main.py validate -i rules.yar           # validate only
+python3 main.py detect -t 'rule X { ... }'     # auto-detect format
+python3 main.py new sigma                        # scaffold new parser
+```
+
+**Output schema** (per rule):
+```json
+{
+  "format": "yara",
+  "identity": {"name": "...", "tags": [], "scopes": []},
+  "metadata": {},
+  "content": "...",
+  "tags": [],
+  "vulnerabilities": [],
+  "references": [],
+  "sources": [],
+  "original_uuid": null,
+  "status": "parsed"
+}
+```
 
 ### Similarity engine
 
@@ -242,7 +355,9 @@ log_activity("rule.create", f"Created rule '{rule.title}'",
 - Click on a row → opens the target resource in a new tab
 - Sensitive columns (username, IP) are blurred until revealed via the eye toggle button
 
-**Logged everywhere**: rule create/edit/delete/vote/favorite/bulk-delete, bundle create/edit/delete, user login/logout/register/edit/delete, admin promote/demote/request approve/reject, tag create/edit/delete/toggle, job create/cancel/pause/resume/delete.
+**Public activity feed** (`/activity_feed`): only entries with `is_public=True` are shown; the `_is_accessible(log)` helper additionally checks that the linked rule/bundle/comment still exists and is not deleted.
+
+**Logged everywhere**: rule create/edit/delete/vote/favorite/bulk-delete/scope change, bundle create/edit/delete, user login/logout/register/edit/delete, admin promote/demote/request approve/reject, tag create/edit/delete/toggle, job create/cancel/pause/resume/delete, GitHub source delete.
 
 ### UI conventions
 
@@ -284,6 +399,10 @@ Core CSS variables (`app/static/css/core.css`):
 Dark mode overrides (section 17-18 of core.css) cover: `.text-muted`, `.table-light`, `.table-hover`, `.bg-*-subtle`, `.text-secondary`, `.table .opacity-50`.
 
 **Important**: use `var(--subtle-text-color)` for secondary text, NOT `var(--color-text)` (that variable does not exist).
+
+#### Sidebar navigation (`app/templates/sidebar.html`)
+
+The trash icon linking to `/rule/trash` is shown only to admins or rule moderators.
 
 ### Tests (`tests/`)
 
