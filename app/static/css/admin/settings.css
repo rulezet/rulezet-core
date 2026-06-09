@@ -1,0 +1,287 @@
+/* ─────────────────────────────────────────────────────────
+   Admin Settings — settings.css
+   Follows Rulezet CSS variable conventions from core.css
+───────────────────────────────────────────────────────── */
+
+/* ── Stat cards (system overview) ── */
+.stat-card {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: box-shadow .18s, transform .18s;
+}
+
+.stat-card:hover {
+    box-shadow: 0 6px 20px rgba(13, 110, 253, .1);
+    transform: translateY(-2px);
+}
+
+.stat-card__icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(13, 110, 253, .08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: #0d6efd;
+    flex-shrink: 0;
+}
+
+.stat-card__icon--green  { background: rgba(25, 135, 84, .08); color: #198754; }
+.stat-card__icon--orange { background: rgba(253, 126, 20, .08); color: #fd7e14; }
+.stat-card__icon--red    { background: rgba(220, 53, 69, .08);  color: #dc3545; }
+.stat-card__icon--purple { background: rgba(111, 66, 193, .08); color: #6f42c1; }
+.stat-card__icon--teal   { background: rgba(32, 201, 151, .08); color: #20c997; }
+
+.stat-card__label {
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--subtle-text-color);
+    margin-bottom: .15rem;
+}
+
+.stat-card__value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-color);
+    word-break: break-all;
+    line-height: 1.2;
+}
+
+.stat-card__sub {
+    font-size: .75rem;
+    color: var(--subtle-text-color);
+    margin-top: .15rem;
+}
+
+/* ── Progress bar for disk/memory ── */
+.usage-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--light-bg-color);
+    margin-top: .5rem;
+    overflow: hidden;
+}
+
+.usage-bar__fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #0d6efd, #0a58ca);
+    transition: width .5s ease;
+}
+
+.usage-bar__fill--warning { background: linear-gradient(90deg, #fd7e14, #e55c00); }
+.usage-bar__fill--danger  { background: linear-gradient(90deg, #dc3545, #b02a37); }
+
+/* ── Package table ── */
+.pkg-table th {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--subtle-text-color);
+    background: var(--light-bg-color);
+    border-bottom: 1px solid var(--border-color);
+    padding: .6rem 1rem;
+}
+
+.pkg-table td {
+    font-size: .85rem;
+    padding: .5rem 1rem;
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.pkg-table tr:last-child td { border-bottom: 0; }
+
+.pkg-name {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-weight: 600;
+    color: var(--rule-name-color);
+}
+
+.pkg-version {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: .78rem;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: .1rem .45rem;
+    color: var(--subtle-text-color);
+}
+
+/* ── Submodule table ── */
+.submodule-row td { vertical-align: middle; }
+
+.submodule-path {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: .83rem;
+    color: var(--rule-name-color);
+    font-weight: 600;
+}
+
+.submodule-sha {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: .75rem;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: .1rem .4rem;
+    color: var(--subtle-text-color);
+}
+
+.submodule-status--ok       { color: #198754; }
+.submodule-status--modified { color: #fd7e14; }
+.submodule-status--error    { color: #dc3545; }
+
+/* ── Config section ── */
+.config-section {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.config-section__title {
+    font-size: .8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--subtle-text-color);
+    margin-bottom: 1.25rem;
+    padding-bottom: .6rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.config-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .7rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.config-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.config-row:first-child { padding-top: 0; }
+
+.config-row__key {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--subtle-text-color);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    min-width: 160px;
+}
+
+.config-row__value {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: .85rem;
+    color: var(--text-color);
+    word-break: break-all;
+    flex: 1;
+    text-align: right;
+}
+
+.config-secret {
+    letter-spacing: .12em;
+    color: var(--subtle-text-color);
+    font-size: .8rem;
+}
+
+/* ── Masked value toggle ── */
+.mask-toggle {
+    cursor: pointer;
+    user-select: none;
+    background: none;
+    border: none;
+    padding: 0 .25rem;
+    color: var(--subtle-text-color);
+    font-size: .9rem;
+    transition: color .15s;
+}
+
+.mask-toggle:hover { color: #0d6efd; }
+
+/* ── Env edit inline ── */
+.env-edit-form {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    margin-top: .5rem;
+}
+
+.env-edit-form input {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: .82rem;
+}
+
+/* ── Status badge pill ── */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .2rem .65rem;
+    border-radius: 20px;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.status-pill--ok       { background: rgba(25,135,84,.1);  color: #198754; }
+.status-pill--modified { background: rgba(253,126,20,.1); color: #fd7e14; }
+.status-pill--error    { background: rgba(220,53,69,.1);  color: #dc3545; }
+
+/* ── Selection bar ── */
+.selection-bar {
+    position: sticky;
+    top: 60px;
+    z-index: 20;
+    background: #0d6efd;
+    color: #fff;
+    border-radius: 10px;
+    padding: .6rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-bottom: .75rem;
+    box-shadow: 0 4px 14px rgba(13,110,253,.35);
+    animation: slideDown .18s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Dark mode adjustments ── */
+body.dark-mode .stat-card        { background: var(--card-bg-color); border-color: var(--border-color); }
+body.dark-mode .pkg-table th     { background: var(--light-bg-color); }
+body.dark-mode .config-section   { background: var(--card-bg-color); border-color: var(--border-color); }
+body.dark-mode .pkg-version      { background: var(--light-bg-color); border-color: var(--border-color); }
+body.dark-mode .submodule-sha    { background: var(--light-bg-color); border-color: var(--border-color); }
+
+/* ── Spinner wrapper ── */
+.pane-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    color: var(--subtle-text-color);
+    flex-direction: column;
+    gap: .75rem;
+}

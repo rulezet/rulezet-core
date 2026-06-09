@@ -147,6 +147,11 @@
                         </a>
                      </li>
 
+                     <li><hr class="dropdown-divider"></li>
+
+                     <li><a href="/admin/settings" class="dropdown-item py-2 {% if request.path.startswith('/admin/settings') %}active{% endif %}">
+                           <i class="fa-solid fa-sliders fa-fw me-2 text-muted"></i>Settings</a></li>
+
                   </ul>
                </li>
                {% endif %}

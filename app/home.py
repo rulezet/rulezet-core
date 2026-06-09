@@ -1,7 +1,7 @@
 import json
 import os
 from flask import send_from_directory
-from flask import  Blueprint, flash, jsonify, redirect, render_template, request, send_from_directory, abort
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, send_from_directory, abort
 from flask_login import current_user, login_required
 from flask import get_flashed_messages
 from flask_login import login_required, current_user
@@ -601,6 +601,132 @@ def get_log_actions():
 
     actions = [r[0] for r in db.session.query(ActivityLog.action).distinct().order_by(ActivityLog.action).all()]
     return jsonify({"actions": actions}), 200
+
+
+###########################
+#   Admin Settings section #
+###########################
+
+@home_blueprint.route('/admin/settings', methods=['GET'])
+@login_required
+def admin_settings():
+    if not current_user.is_admin():
+        abort(403)
+    return render_template('admin/settings.html')
+
+
+@home_blueprint.route('/admin/settings/system', methods=['GET'])
+@login_required
+def admin_settings_system():
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .features.admin import admin_core as AdminModel
+    return jsonify(AdminModel.get_system_info())
+
+
+@home_blueprint.route('/admin/settings/packages', methods=['GET'])
+@login_required
+def admin_settings_packages():
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .features.admin import admin_core as AdminModel
+    return jsonify(AdminModel.get_installed_packages())
+
+
+@home_blueprint.route('/admin/settings/submodules', methods=['GET'])
+@login_required
+def admin_settings_submodules():
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .features.admin import admin_core as AdminModel
+    return jsonify(AdminModel.get_git_submodules())
+
+
+@home_blueprint.route('/admin/settings/submodule/update', methods=['POST'])
+@login_required
+def admin_settings_submodule_update():
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .features.admin import admin_core as AdminModel
+    data = request.get_json() or {}
+    paths = data.get('paths', [])
+    if not paths:
+        return jsonify({'success': False, 'error': 'No paths provided'}), 400
+    results = {path: AdminModel.update_submodule(path) for path in paths}
+    log_activity('admin.submodule_update', f"Updated {len(paths)} submodule(s): {', '.join(paths)}")
+    return jsonify({'success': True, 'results': results})
+
+
+@home_blueprint.route('/admin/settings/config', methods=['GET'])
+@login_required
+def admin_settings_config():
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .features.admin import admin_core as AdminModel
+    return jsonify(AdminModel.get_app_config())
+
+
+@home_blueprint.route('/admin/settings/update_env', methods=['POST'])
+@login_required
+def admin_settings_update_env():
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .features.admin import admin_core as AdminModel
+    data = request.get_json() or {}
+    key = data.get('key', '').strip()
+    value = data.get('value', '').strip()
+    if key not in AdminModel._ENV_ALLOWED:
+        return jsonify({'success': False, 'message': 'Key not allowed.'})
+    ok = AdminModel.write_env_value(key, value)
+    if ok:
+        # Apply immediately to running config for everything except SECRET_KEY
+        _NEEDS_RESTART = {'SECRET_KEY'}
+        if key not in _NEEDS_RESTART:
+            if key == 'MAIL_PORT' or key == 'FLASK_PORT':
+                try:
+                    current_app.config[key] = int(value)
+                except ValueError:
+                    pass
+            elif key == 'MAIL_USE_TLS' or key == 'MAIL_USE_SSL':
+                current_app.config[key] = value.lower() == 'true'
+            else:
+                current_app.config[key] = value
+        log_activity(
+            'admin.settings_changed',
+            f"Updated {key} via admin settings",
+            extra={'key': key, 'requires_restart': key in _NEEDS_RESTART},
+        )
+    needs_restart = key == 'SECRET_KEY'
+    msg = ('Saved. Restart the server to apply the new SECRET_KEY.' if needs_restart and ok
+           else 'Saved and applied.' if ok
+           else 'Key not allowed or write failed.')
+    return jsonify({'success': ok, 'message': msg})
+
+
+@home_blueprint.route('/admin/settings/test_email', methods=['POST'])
+@login_required
+def admin_settings_test_email():
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .features.admin import admin_core as AdminModel
+    data = request.get_json() or {}
+    recipient = data.get('recipient', '').strip()
+    if not recipient:
+        return jsonify({'success': False, 'error': 'No recipient provided'}), 400
+    result = AdminModel.send_test_email(recipient)
+    if result.get('success'):
+        log_activity('admin.test_email_sent', f"Test email sent to {recipient}")
+    return jsonify(result)
+
+
+@home_blueprint.route('/admin/settings/generate_key', methods=['POST'])
+@login_required
+def admin_settings_generate_key():
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .features.admin import admin_core as AdminModel
+    key = AdminModel.generate_secret_key()
+    return jsonify({'success': True, 'key': key})
 
 
 @home_blueprint.route('/admin/logs/set_visibility', methods=['POST'])

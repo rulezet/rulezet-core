@@ -1,0 +1,979 @@
+{% extends 'base.html' %}
+{% block title %}Admin Settings — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/admin/settings.css') }}">
+{% endblock %}
+
+{% block content %}
+{% if current_user.is_admin() %}
+<div class="container-fluid my-4" id="settings-app" v-cloak>
+
+    <!-- ── Banner ── -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-sliders banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Settings</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-sliders"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Admin Settings</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            System overview, installed libraries, Git submodule management, and application configuration.
+            Changes to secrets require a server restart to take effect.
+        </p>
+    </div>
+
+    <!-- ── Tabs ── -->
+    <ul class="nav nav-underline justify-content-center w-100 mb-4" id="settingsTabs" role="tablist">
+        <li class="nav-item flex-fill text-center">
+            <a class="nav-link active fw-bold px-4" data-bs-toggle="tab" href="#pane-system" role="tab"
+               style="color:var(--text-color);">
+                <i class="fa-solid fa-server me-2"></i>System
+            </a>
+        </li>
+        <li class="nav-item flex-fill text-center">
+            <a class="nav-link fw-bold px-4" data-bs-toggle="tab" href="#pane-packages" role="tab"
+               @click="loadPackages" style="color:var(--text-color);">
+                <i class="fa-solid fa-cubes me-2"></i>Libraries
+                <span v-if="packages.length" class="badge bg-secondary ms-1" style="font-size:.65rem;">[[ packages.length ]]</span>
+            </a>
+        </li>
+        <li class="nav-item flex-fill text-center">
+            <a class="nav-link fw-bold px-4" data-bs-toggle="tab" href="#pane-submodules" role="tab"
+               @click="loadSubmodules" style="color:var(--text-color);">
+                <i class="fa-brands fa-git-alt me-2"></i>Submodules
+                <span v-if="submodules.length" class="badge bg-secondary ms-1" style="font-size:.65rem;">[[ submodules.length ]]</span>
+            </a>
+        </li>
+        <li class="nav-item flex-fill text-center">
+            <a class="nav-link fw-bold px-4" data-bs-toggle="tab" href="#pane-config" role="tab"
+               @click="loadConfig" style="color:var(--text-color);">
+                <i class="fa-solid fa-gear me-2"></i>Configuration
+            </a>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="settingsTabContent">
+
+        <!-- ══════════════════════════════════════════════════════
+             TAB 1 — SYSTEM OVERVIEW
+        ══════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade show active" id="pane-system" role="tabpanel">
+
+            <div v-if="systemLoading" class="pane-loading">
+                <div class="spinner-border text-primary" role="status"></div>
+                <span class="text-muted small">Loading system info…</span>
+            </div>
+
+            <template v-else-if="system">
+
+                <!-- Top stat cards -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4 col-lg-3">
+                        <div class="stat-card">
+                            <div class="stat-card__icon"><i class="fa-solid fa-desktop"></i></div>
+                            <div>
+                                <div class="stat-card__label">Hostname</div>
+                                <div class="stat-card__value">[[ system.hostname ]]</div>
+                                <div class="stat-card__sub">[[ system.os ]] [[ system.os_release ]]</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-lg-3">
+                        <div class="stat-card">
+                            <div class="stat-card__icon stat-card__icon--green"><i class="fa-brands fa-python"></i></div>
+                            <div>
+                                <div class="stat-card__label">Python</div>
+                                <div class="stat-card__value">[[ system.python_version ]]</div>
+                                <div class="stat-card__sub">Flask [[ system.flask_version ]]</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-lg-3">
+                        <div class="stat-card">
+                            <div class="stat-card__icon stat-card__icon--orange"><i class="fa-solid fa-globe"></i></div>
+                            <div>
+                                <div class="stat-card__label">Running at</div>
+                                <div class="stat-card__value">[[ system.flask_url ]]:[[ system.flask_port ]]</div>
+                                <div class="stat-card__sub">PID [[ system.pid ]]</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-lg-3">
+                        <div class="stat-card">
+                            <div class="stat-card__icon stat-card__icon--purple"><i class="fa-solid fa-layer-group"></i></div>
+                            <div>
+                                <div class="stat-card__label">Environment</div>
+                                <div class="stat-card__value text-capitalize">[[ system.environment ]]</div>
+                                <div class="stat-card__sub">
+                                    <span :class="system.debug ? 'text-warning' : 'text-success'">
+                                        <i :class="system.debug ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-circle-check'"></i>
+                                        Debug [[ system.debug ? 'ON' : 'OFF' ]]
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Disk + Memory + DB -->
+                <div class="row g-3 mb-4">
+                    <!-- Disk -->
+                    <div class="col-md-4" v-if="system.disk && system.disk.total_gb">
+                        <div class="card border-0 shadow-sm rounded-4 p-4 h-100" style="background:var(--card-bg-color);">
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <i class="fa-solid fa-hard-drive text-primary"></i>
+                                <span class="fw-semibold" style="font-size:.9rem;">Disk Usage</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1" style="font-size:.8rem;">
+                                <span class="text-muted">Used [[ system.disk.used_gb ]] GB</span>
+                                <span class="fw-semibold">[[ system.disk.percent ]]%</span>
+                            </div>
+                            <div class="usage-bar">
+                                <div class="usage-bar__fill"
+                                     :class="system.disk.percent > 90 ? 'usage-bar__fill--danger' : system.disk.percent > 75 ? 'usage-bar__fill--warning' : ''"
+                                     :style="`width:${system.disk.percent}%`"></div>
+                            </div>
+                            <div class="text-muted mt-2" style="font-size:.75rem;">Total [[ system.disk.total_gb ]] GB — Free [[ system.disk.free_gb ]] GB</div>
+                        </div>
+                    </div>
+
+                    <!-- Memory -->
+                    <div class="col-md-4" v-if="system.memory && system.memory.total_gb">
+                        <div class="card border-0 shadow-sm rounded-4 p-4 h-100" style="background:var(--card-bg-color);">
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <i class="fa-solid fa-memory text-primary"></i>
+                                <span class="fw-semibold" style="font-size:.9rem;">Memory</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1" style="font-size:.8rem;">
+                                <span class="text-muted">Used [[ (system.memory.total_gb - system.memory.available_gb).toFixed(1) ]] GB</span>
+                                <span class="fw-semibold">[[ system.memory.percent ]]%</span>
+                            </div>
+                            <div class="usage-bar">
+                                <div class="usage-bar__fill"
+                                     :class="system.memory.percent > 90 ? 'usage-bar__fill--danger' : system.memory.percent > 75 ? 'usage-bar__fill--warning' : ''"
+                                     :style="`width:${system.memory.percent}%`"></div>
+                            </div>
+                            <div class="text-muted mt-2" style="font-size:.75rem;">Total [[ system.memory.total_gb ]] GB — Available [[ system.memory.available_gb ]] GB</div>
+                        </div>
+                    </div>
+
+                    <!-- Database -->
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm rounded-4 p-4 h-100" style="background:var(--card-bg-color);">
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <i class="fa-solid fa-database text-primary"></i>
+                                <span class="fw-semibold" style="font-size:.9rem;">Database</span>
+                            </div>
+                            <div class="stat-card__label mt-1">URI</div>
+                            <code style="font-size:.78rem;word-break:break-all;color:var(--text-color);">[[ system.db_uri ]]</code>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Full info table -->
+                <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+                    <div class="card-header bg-transparent border-bottom px-4 py-3 fw-semibold" style="font-size:.9rem;">
+                        <i class="fa-solid fa-circle-info text-primary me-2"></i>Full Details
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-sm table-hover mb-0 pkg-table">
+                            <tbody>
+                                <tr>
+                                    <td class="fw-semibold ps-4" style="width:220px;">OS Full</td>
+                                    <td><code style="font-size:.8rem;">[[ system.os_full ]]</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold ps-4">Architecture</td>
+                                    <td>[[ system.architecture ]]</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold ps-4">Python (full)</td>
+                                    <td><code style="font-size:.8rem;">[[ system.python_full ]]</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold ps-4">Working Directory</td>
+                                    <td><code style="font-size:.8rem;">[[ system.cwd ]]</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold ps-4">Process ID</td>
+                                    <td>[[ system.pid ]]</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold ps-4">Last Fetched</td>
+                                    <td class="text-muted" style="font-size:.82rem;">[[ system.timestamp ]]</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </template>
+        </div><!-- /pane-system -->
+
+
+        <!-- ══════════════════════════════════════════════════════
+             TAB 2 — INSTALLED LIBRARIES
+        ══════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="pane-packages" role="tabpanel">
+
+            <div v-if="packagesLoading" class="pane-loading">
+                <div class="spinner-border text-primary" role="status"></div>
+                <span class="text-muted small">Loading packages — this may take a moment…</span>
+            </div>
+
+            <template v-else-if="packages.length">
+
+                <!-- Search bar -->
+                <div class="card border-0 shadow-sm rounded-4 mb-3">
+                    <div class="card-body p-3">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-md-6">
+                                <div class="input-group shadow-sm border rounded-pill px-2">
+                                    <span class="input-group-text border-0 bg-transparent">
+                                        <i class="fa-solid fa-magnifying-glass text-muted"></i>
+                                    </span>
+                                    <input type="text" v-model="pkgSearch" class="form-control border-0 shadow-none py-2"
+                                           placeholder="Search packages…">
+                                    <button v-if="pkgSearch" @click="pkgSearch=''" class="btn btn-sm border-0 bg-transparent text-muted px-2">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-md-6 text-md-end text-muted" style="font-size:.85rem;">
+                                Showing <strong>[[ filteredPackages.length ]]</strong> of <strong>[[ packages.length ]]</strong> packages
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Package table -->
+                <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+                    <div class="table-responsive" style="max-height:62vh;overflow-y:auto;">
+                        <table class="table table-sm table-hover mb-0 pkg-table">
+                            <thead style="position:sticky;top:0;z-index:2;">
+                                <tr>
+                                    <th class="ps-4" style="width:42%;">Package</th>
+                                    <th style="width:20%;">Version</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="pkg in filteredPackages" :key="pkg.name">
+                                    <td class="ps-4"><span class="pkg-name">[[ pkg.name ]]</span></td>
+                                    <td><span class="pkg-version">[[ pkg.version ]]</span></td>
+                                </tr>
+                                <tr v-if="filteredPackages.length === 0">
+                                    <td colspan="2" class="text-center text-muted py-5">No packages match your search.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </template>
+
+            <div v-else-if="!packagesLoading" class="text-center text-muted py-5">
+                <i class="fa-solid fa-cubes fa-2x mb-3 opacity-25"></i>
+                <p>Click the <strong>Libraries</strong> tab to load packages.</p>
+            </div>
+        </div><!-- /pane-packages -->
+
+
+        <!-- ══════════════════════════════════════════════════════
+             TAB 3 — GIT SUBMODULES
+        ══════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="pane-submodules" role="tabpanel">
+
+            <div v-if="submodulesLoading" class="pane-loading">
+                <div class="spinner-border text-primary" role="status"></div>
+                <span class="text-muted small">Loading submodule status…</span>
+            </div>
+
+            <template v-else-if="submodules.length">
+
+                <!-- Bulk selection bar -->
+                <div class="selection-bar" v-if="selectedSubs.length > 0">
+                    <span class="fw-semibold">
+                        <i class="fa-solid fa-check-square me-2"></i>[[ selectedSubs.length ]] selected
+                    </span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-light rounded-pill px-3" @click="bulkUpdate"
+                                :disabled="updatingAny">
+                            <span v-if="updatingAny" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fa-solid fa-rotate me-1"></i>Update Selected
+                        </button>
+                        <button class="btn btn-sm btn-outline-light rounded-pill px-3" @click="selectedSubs = []">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+                    <div class="card-header bg-transparent border-bottom px-4 py-3 d-flex align-items-center justify-content-between">
+                        <span class="fw-semibold" style="font-size:.9rem;">
+                            <i class="fa-brands fa-git-alt text-primary me-2"></i>[[ submodules.length ]] submodule(s)
+                        </span>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                                    @click="selectAllSubs" :disabled="updatingAny">
+                                <i class="fa-solid fa-check-double me-1"></i>Select All
+                            </button>
+                            <button class="btn btn-sm btn-primary rounded-pill px-3"
+                                    @click="bulkUpdateAll" :disabled="updatingAny">
+                                <span v-if="updatingAny" class="spinner-border spinner-border-sm me-1"></span>
+                                <i v-else class="fa-solid fa-rotate me-1"></i>Update All
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 pkg-table">
+                            <thead>
+                                <tr>
+                                    <th class="ps-3" style="width:40px;">
+                                        <input type="checkbox" class="form-check-input"
+                                               @change="toggleAllSubs($event.target.checked)"
+                                               :checked="selectedSubs.length === submodules.length && submodules.length > 0">
+                                    </th>
+                                    <th>Path</th>
+                                    <th>Commit</th>
+                                    <th>Status</th>
+                                    <th>Last Commit</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="sub in submodules" :key="sub.path" class="submodule-row"
+                                    :class="{'table-warning': sub.status === 'modified', 'table-danger': sub.status === 'conflict'}">
+                                    <td class="ps-3">
+                                        <input type="checkbox" class="form-check-input"
+                                               :value="sub.path" v-model="selectedSubs">
+                                    </td>
+                                    <td>
+                                        <div class="submodule-path">[[ sub.name ]]</div>
+                                        <div class="text-muted" style="font-size:.73rem;">[[ sub.path ]]</div>
+                                    </td>
+                                    <td>
+                                        <span class="submodule-sha">[[ sub.sha ]]</span>
+                                        <div class="text-muted mt-1" style="font-size:.72rem;" v-if="sub.describe">[[ sub.describe ]]</div>
+                                    </td>
+                                    <td>
+                                        <span class="status-pill"
+                                              :class="{'status-pill--ok': sub.status === 'up-to-date', 'status-pill--modified': sub.status === 'modified', 'status-pill--error': sub.status !== 'up-to-date' && sub.status !== 'modified'}">
+                                            <i :class="sub.status === 'up-to-date' ? 'fa-solid fa-circle-check' : sub.status === 'modified' ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-circle-xmark'"></i>
+                                            [[ sub.status ]]
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div style="font-size:.8rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="sub.last_commit_msg">
+                                            [[ sub.last_commit_msg || '—' ]]
+                                        </div>
+                                        <div class="text-muted" style="font-size:.72rem;">[[ sub.last_commit_date ]] <template v-if="sub.last_commit_author">· [[ sub.last_commit_author ]]</template></div>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-flex gap-2 justify-content-center">
+                                            <button class="btn btn-sm btn-outline-success rounded-pill px-3"
+                                                    @click="updateOneSub(sub)" :disabled="sub._updating || updatingAny">
+                                                <span v-if="sub._updating" class="spinner-border spinner-border-sm"></span>
+                                                <i v-else class="fa-solid fa-rotate"></i>
+                                                <span class="ms-1 d-none d-xl-inline">Update</span>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                                                    @click="showSubDetail(sub)">
+                                                <i class="fa-solid fa-circle-info"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Update results -->
+                <div v-if="updateResults.length" class="mt-3">
+                    <div v-for="res in updateResults" :key="res.path"
+                         :class="['alert border-0 rounded-4 py-2 px-3 mb-2', res.success ? 'alert-success' : 'alert-danger']">
+                        <strong>[[ res.path ]]:</strong>
+                        <span v-if="res.success"> Updated successfully. <span v-if="res.output" class="text-muted small">([[ res.output ]])</span></span>
+                        <span v-else> [[ res.error ]]</span>
+                    </div>
+                </div>
+
+            </template>
+
+            <div v-else-if="!submodulesLoading" class="text-center text-muted py-5">
+                <i class="fa-brands fa-git-alt fa-2x mb-3 opacity-25"></i>
+                <p>No Git submodules found in this repository.</p>
+            </div>
+        </div><!-- /pane-submodules -->
+
+
+        <!-- ══════════════════════════════════════════════════════
+             TAB 4 — APP CONFIGURATION
+        ══════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="pane-config" role="tabpanel">
+
+            <div v-if="configLoading" class="pane-loading">
+                <div class="spinner-border text-primary" role="status"></div>
+                <span class="text-muted small">Loading configuration…</span>
+            </div>
+
+            <template v-else-if="config">
+                <div class="row g-4">
+
+                    <!-- LEFT: App + Security -->
+                    <div class="col-lg-6">
+
+                        <!-- Application -->
+                        <div class="config-section">
+                            <div class="config-section__title">
+                                <i class="fa-solid fa-rocket text-primary"></i>Application
+                            </div>
+                            <div class="config-row">
+                                <div class="config-row__key">Server URL</div>
+                                <div class="config-row__value">[[ config.app.flask_url ]]:[[ config.app.flask_port ]]</div>
+                            </div>
+                            <div class="config-row">
+                                <div class="config-row__key">Environment</div>
+                                <div class="config-row__value text-capitalize">[[ config.app.environment ]]</div>
+                            </div>
+                            <div class="config-row">
+                                <div class="config-row__key">Debug mode</div>
+                                <div class="config-row__value">
+                                    <span :class="config.app.debug ? 'badge bg-warning text-dark' : 'badge bg-success'">
+                                        [[ config.app.debug ? 'Enabled' : 'Disabled' ]]
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Security -->
+                        <div class="config-section">
+                            <div class="config-section__title">
+                                <i class="fa-solid fa-shield-halved text-danger"></i>Security
+                            </div>
+                            <div class="config-row">
+                                <div class="config-row__key">Secret Key</div>
+                                <div class="config-row__value">
+                                    <span class="config-secret">[[ showSecret ? secretKeyNew || config.app.secret_key_preview : config.app.secret_key_preview ]]</span>
+                                    <button class="mask-toggle ms-2" @click="showSecret = !showSecret" title="Toggle visibility">
+                                        <i :class="showSecret ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill ms-2 px-2 py-0" @click="editingSecret = !editingSecret" style="font-size:.72rem;">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="editingSecret" class="pb-2">
+                                <div class="env-edit-form flex-wrap gap-2">
+                                    <input type="text" v-model="secretKeyNew" class="form-control form-control-sm rounded-pill flex-grow-1"
+                                           placeholder="New SECRET_KEY…" style="font-family:monospace;font-size:.78rem;">
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                                            @click="generateKey" :disabled="generatingKey">
+                                        <span v-if="generatingKey" class="spinner-border spinner-border-sm"></span>
+                                        <i v-else class="fa-solid fa-dice me-1"></i>Generate
+                                    </button>
+                                    <button class="btn btn-sm btn-success rounded-pill px-3"
+                                            @click="saveEnvKey('SECRET_KEY', secretKeyNew)" :disabled="!secretKeyNew">
+                                        <i class="fa-solid fa-check me-1"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2"
+                                            @click="editingSecret=false; secretKeyNew=''">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                                <div class="text-warning small mt-1">
+                                    <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                                    Restart the server to apply. Changing the key invalidates all active sessions.
+                                </div>
+                            </div>
+                            <div class="config-row">
+                                <div class="config-row__key">Key Length</div>
+                                <div class="config-row__value">[[ config.app.secret_key_length ]] characters</div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- RIGHT: Email -->
+                    <div class="col-lg-6">
+                        <div class="config-section">
+                            <div class="config-section__title">
+                                <i class="fa-solid fa-envelope text-primary"></i>Email (SMTP)
+                                <span class="ms-auto badge bg-primary-subtle text-primary" style="font-size:.65rem;">Flask-Mail</span>
+                            </div>
+
+                            <!-- SMTP Server -->
+                            <div class="config-row">
+                                <div class="config-row__key">SMTP Server</div>
+                                <div class="config-row__value d-flex align-items-center gap-2">
+                                    <span>[[ config.mail.server ]]</span>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 ms-auto" style="font-size:.72rem;"
+                                            @click="editingMailServer = !editingMailServer">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="editingMailServer" class="pb-2">
+                                <div class="env-edit-form">
+                                    <input type="text" v-model="mailServerNew" class="form-control form-control-sm rounded-pill"
+                                           placeholder="smtp.gmail.com">
+                                    <button class="btn btn-sm btn-success rounded-pill px-3"
+                                            @click="saveEnvKey('MAIL_SERVER', mailServerNew)" :disabled="!mailServerNew">
+                                        <i class="fa-solid fa-check me-1"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2"
+                                            @click="editingMailServer=false; mailServerNew=''">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- SMTP Port -->
+                            <div class="config-row">
+                                <div class="config-row__key">SMTP Port</div>
+                                <div class="config-row__value d-flex align-items-center gap-2">
+                                    <span>[[ config.mail.port ]]</span>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 ms-auto" style="font-size:.72rem;"
+                                            @click="editingMailPort = !editingMailPort">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="editingMailPort" class="pb-2">
+                                <div class="env-edit-form">
+                                    <input type="number" v-model="mailPortNew" class="form-control form-control-sm rounded-pill"
+                                           placeholder="587" style="max-width:120px;">
+                                    <button class="btn btn-sm btn-success rounded-pill px-3"
+                                            @click="saveEnvKey('MAIL_PORT', mailPortNew)" :disabled="!mailPortNew">
+                                        <i class="fa-solid fa-check me-1"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2"
+                                            @click="editingMailPort=false; mailPortNew=''">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Username -->
+                            <div class="config-row">
+                                <div class="config-row__key">Username</div>
+                                <div class="config-row__value d-flex align-items-center gap-2">
+                                    <span>[[ config.mail.username || '—' ]]</span>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 ms-auto" style="font-size:.72rem;"
+                                            @click="editingMailUser = !editingMailUser">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="editingMailUser" class="pb-2">
+                                <div class="env-edit-form">
+                                    <input type="email" v-model="mailUserNew" class="form-control form-control-sm rounded-pill"
+                                           placeholder="user@example.com">
+                                    <button class="btn btn-sm btn-success rounded-pill px-3"
+                                            @click="saveEnvKey('MAIL_USERNAME', mailUserNew)" :disabled="!mailUserNew">
+                                        <i class="fa-solid fa-check me-1"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2"
+                                            @click="editingMailUser=false; mailUserNew=''">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Password -->
+                            <div class="config-row">
+                                <div class="config-row__key">Password</div>
+                                <div class="config-row__value d-flex align-items-center gap-2">
+                                    <span class="config-secret">[[ config.mail.password_set ? config.mail.password_preview : 'not set' ]]</span>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 ms-auto" style="font-size:.72rem;"
+                                            @click="editingMailPwd = !editingMailPwd">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="editingMailPwd" class="pb-2">
+                                <div class="env-edit-form">
+                                    <input type="password" v-model="mailPwdNew" class="form-control form-control-sm rounded-pill"
+                                           placeholder="App password or SMTP password…">
+                                    <button class="btn btn-sm btn-success rounded-pill px-3"
+                                            @click="saveEnvKey('MAIL_PASSWORD', mailPwdNew)" :disabled="!mailPwdNew">
+                                        <i class="fa-solid fa-check me-1"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2"
+                                            @click="editingMailPwd=false; mailPwdNew=''">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Security -->
+                            <div class="config-row">
+                                <div class="config-row__key">Security</div>
+                                <div class="config-row__value">
+                                    <span v-if="config.mail.use_tls" class="badge bg-success me-1">TLS</span>
+                                    <span v-if="config.mail.use_ssl" class="badge bg-info me-1">SSL</span>
+                                    <span v-if="!config.mail.use_tls && !config.mail.use_ssl" class="badge bg-warning text-dark">None</span>
+                                </div>
+                            </div>
+
+                            <!-- Default Sender -->
+                            <div class="config-row">
+                                <div class="config-row__key">Default Sender</div>
+                                <div class="config-row__value">[[ config.mail.default_sender || '—' ]]</div>
+                            </div>
+
+                            <!-- Test email -->
+                            <div class="mt-3 pt-3" style="border-top:1px solid var(--border-color);">
+                                <div class="fw-semibold mb-2" style="font-size:.82rem;">
+                                    <i class="fa-solid fa-paper-plane text-primary me-1"></i>Send Test Email
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <input type="email" v-model="testEmailRecipient"
+                                           class="form-control form-control-sm rounded-pill"
+                                           placeholder="recipient@example.com"
+                                           @keyup.enter="sendTestEmail">
+                                    <button class="btn btn-sm btn-primary rounded-pill px-4"
+                                            @click="sendTestEmail"
+                                            :disabled="testEmailSending || !testEmailRecipient">
+                                        <span v-if="testEmailSending" class="spinner-border spinner-border-sm me-1"></span>
+                                        <i v-else class="fa-solid fa-paper-plane me-1"></i>Send
+                                    </button>
+                                </div>
+                                <div v-if="testEmailResult" class="mt-2">
+                                    <div :class="['alert border-0 rounded-3 py-2 px-3 mb-0', testEmailResult.success ? 'alert-success' : 'alert-danger']">
+                                        <i :class="testEmailResult.success ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-xmark'" class="me-2"></i>
+                                        [[ testEmailResult.success ? 'Test email sent successfully.' : testEmailResult.error ]]
+                                    </div>
+                                </div>
+                                <div class="text-muted mt-2" style="font-size:.75rem;">
+                                    <i class="fa-solid fa-circle-info me-1"></i>
+                                    Changes to mail settings are applied immediately. Test right after saving.
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </template>
+        </div><!-- /pane-config -->
+
+    </div><!-- /tab-content -->
+
+    <!-- ── Submodule Detail Modal ── -->
+    <div class="modal fade" id="subDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="background:var(--card-bg-color);">
+            <div class="modal-header border-0 pb-0 px-4 pt-4">
+                <h5 class="modal-title fw-bold">
+                    <i class="fa-brands fa-git-alt text-primary me-2"></i>
+                    <span v-if="selectedSub">[[ selectedSub.name ]]</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body px-4 pb-4" v-if="selectedSub">
+                <table class="table table-sm mb-0 pkg-table">
+                    <tbody>
+                        <tr>
+                            <td class="fw-semibold" style="width:160px;">Path</td>
+                            <td><code class="submodule-path">[[ selectedSub.path ]]</code></td>
+                        </tr>
+                        <tr>
+                            <td class="fw-semibold">Remote URL</td>
+                            <td>
+                                <a :href="selectedSub.url" target="_blank" rel="noopener"
+                                   class="text-decoration-none" style="font-size:.83rem;">
+                                    <i class="fa-brands fa-github me-1"></i>[[ selectedSub.url ]]
+                                </a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="fw-semibold">Current SHA</td>
+                            <td><span class="submodule-sha">[[ selectedSub.sha_full ]]</span></td>
+                        </tr>
+                        <tr>
+                            <td class="fw-semibold">Status</td>
+                            <td>
+                                <span class="status-pill"
+                                      :class="{'status-pill--ok': selectedSub.status === 'up-to-date', 'status-pill--modified': selectedSub.status === 'modified', 'status-pill--error': selectedSub.status !== 'up-to-date' && selectedSub.status !== 'modified'}">
+                                    [[ selectedSub.status ]]
+                                </span>
+                            </td>
+                        </tr>
+                        <tr v-if="selectedSub.describe">
+                            <td class="fw-semibold">Tag / Version</td>
+                            <td>[[ selectedSub.describe ]]</td>
+                        </tr>
+                        <tr v-if="selectedSub.last_commit_msg">
+                            <td class="fw-semibold">Last Commit</td>
+                            <td>[[ selectedSub.last_commit_msg ]]</td>
+                        </tr>
+                        <tr v-if="selectedSub.last_commit_date">
+                            <td class="fw-semibold">Commit Date</td>
+                            <td>[[ selectedSub.last_commit_date ]]</td>
+                        </tr>
+                        <tr v-if="selectedSub.last_commit_author">
+                            <td class="fw-semibold">Author</td>
+                            <td>[[ selectedSub.last_commit_author ]]</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer border-0 px-4 pt-0 pb-4">
+                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success rounded-pill px-4"
+                        @click="updateOneSub(selectedSub); bootstrap.Modal.getInstance(document.getElementById('subDetailModal')).hide()"
+                        v-if="selectedSub" :disabled="updatingAny">
+                    <i class="fa-solid fa-rotate me-1"></i>Update Now
+                </button>
+            </div>
+        </div>
+    </div>
+    </div><!-- /subDetailModal -->
+
+</div><!-- /settings-app -->
+
+{% else %}
+<div class="container my-5 text-center">
+    <i class="fa-solid fa-lock fa-3x text-danger mb-3"></i>
+    <h4>Admin access required</h4>
+    <a href="/" class="btn btn-outline-primary rounded-pill mt-2">Back to Home</a>
+</div>
+{% endif %}
+{% endblock %}
+
+
+{% block script %}
+<script type="module">
+const { createApp, ref, computed, reactive } = Vue
+
+createApp({
+    delimiters: ['[[', ']]'],
+    setup() {
+
+        /* ── State ── */
+        const system        = ref(null)
+        const systemLoading = ref(true)
+
+        const packages        = ref([])
+        const packagesLoading = ref(false)
+        const packagesLoaded  = ref(false)
+        const pkgSearch       = ref('')
+
+        const submodules        = ref([])
+        const submodulesLoading = ref(false)
+        const submodulesLoaded  = ref(false)
+        const selectedSubs      = ref([])
+        const selectedSub       = ref(null)
+        const updateResults     = ref([])
+        const updatingAny       = ref(false)
+
+        const config        = ref(null)
+        const configLoading = ref(false)
+        const configLoaded  = ref(false)
+
+        // Config editing
+        const showSecret        = ref(false)
+        const editingSecret     = ref(false)
+        const secretKeyNew      = ref('')
+        const generatingKey     = ref(false)
+        const editingMailPwd    = ref(false)
+        const mailPwdNew        = ref('')
+        const editingMailServer = ref(false)
+        const mailServerNew     = ref('')
+        const editingMailUser   = ref(false)
+        const mailUserNew       = ref('')
+        const editingMailPort   = ref(false)
+        const mailPortNew       = ref('')
+
+        // Test email
+        const testEmailRecipient = ref('')
+        const testEmailSending   = ref(false)
+        const testEmailResult    = ref(null)
+
+        /* ── CSRF ── */
+        function csrf() {
+            return document.getElementById('csrf_token')?.value || ''
+        }
+
+        /* ── Helpers ── */
+        function post(url, body) {
+            return fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                body: JSON.stringify(body),
+            }).then(r => r.json())
+        }
+
+        /* ── System ── */
+        async function loadSystem() {
+            systemLoading.value = true
+            try {
+                const data = await fetch('/admin/settings/system').then(r => r.json())
+                system.value = data
+            } finally {
+                systemLoading.value = false
+            }
+        }
+
+        /* ── Packages ── */
+        const filteredPackages = computed(() => {
+            if (!pkgSearch.value) return packages.value
+            const q = pkgSearch.value.toLowerCase()
+            return packages.value.filter(p => p.name.toLowerCase().includes(q))
+        })
+
+        async function loadPackages() {
+            if (packagesLoaded.value) return
+            packagesLoading.value = true
+            try {
+                const data = await fetch('/admin/settings/packages').then(r => r.json())
+                packages.value = data
+                packagesLoaded.value = true
+            } finally {
+                packagesLoading.value = false
+            }
+        }
+
+        /* ── Submodules ── */
+        async function loadSubmodules() {
+            if (submodulesLoaded.value) return
+            submodulesLoading.value = true
+            try {
+                const data = await fetch('/admin/settings/submodules').then(r => r.json())
+                submodules.value = data.map(s => ({ ...s, _updating: false }))
+                submodulesLoaded.value = true
+            } finally {
+                submodulesLoading.value = false
+            }
+        }
+
+        function selectAllSubs() {
+            selectedSubs.value = submodules.value.map(s => s.path)
+        }
+
+        function toggleAllSubs(checked) {
+            selectedSubs.value = checked ? submodules.value.map(s => s.path) : []
+        }
+
+        async function _doUpdate(paths) {
+            updatingAny.value = true
+            updateResults.value = []
+            paths.forEach(p => {
+                const sub = submodules.value.find(s => s.path === p)
+                if (sub) sub._updating = true
+            })
+            try {
+                const data = await post('/admin/settings/submodule/update', { paths })
+                Object.entries(data.results || {}).forEach(([path, res]) => {
+                    updateResults.value.push({ path, ...res })
+                    const sub = submodules.value.find(s => s.path === path)
+                    if (sub) {
+                        sub._updating = false
+                        if (res.success) sub.status = 'up-to-date'
+                    }
+                })
+            } finally {
+                updatingAny.value = false
+                selectedSubs.value = []
+            }
+        }
+
+        function updateOneSub(sub) {
+            _doUpdate([sub.path])
+        }
+
+        function bulkUpdate() {
+            if (selectedSubs.value.length) _doUpdate([...selectedSubs.value])
+        }
+
+        function bulkUpdateAll() {
+            _doUpdate(submodules.value.map(s => s.path))
+        }
+
+        function showSubDetail(sub) {
+            selectedSub.value = sub
+            new bootstrap.Modal(document.getElementById('subDetailModal')).show()
+        }
+
+        /* ── Config ── */
+        async function loadConfig() {
+            if (configLoaded.value) return
+            configLoading.value = true
+            try {
+                const data = await fetch('/admin/settings/config').then(r => r.json())
+                config.value = data
+                configLoaded.value = true
+            } finally {
+                configLoading.value = false
+            }
+        }
+
+        async function generateKey() {
+            generatingKey.value = true
+            try {
+                const data = await post('/admin/settings/generate_key', {})
+                if (data.success) secretKeyNew.value = data.key
+            } finally {
+                generatingKey.value = false
+            }
+        }
+
+        async function saveEnvKey(key, value) {
+            if (!value) return
+            const data = await post('/admin/settings/update_env', { key, value })
+            if (data.success) {
+                if (key === 'SECRET_KEY')    { editingSecret.value = false; secretKeyNew.value = '' }
+                if (key === 'MAIL_PASSWORD') { editingMailPwd.value = false; mailPwdNew.value = '' }
+                if (key === 'MAIL_SERVER')   { editingMailServer.value = false; mailServerNew.value = '' }
+                if (key === 'MAIL_USERNAME') { editingMailUser.value = false; mailUserNew.value = '' }
+                if (key === 'MAIL_PORT')     { editingMailPort.value = false; mailPortNew.value = '' }
+                configLoaded.value = false
+                loadConfig()
+            }
+            const { create_message } = await import('/static/js/toaster.js')
+            create_message(data.message || (data.success ? 'Saved.' : 'Failed.'), data.success ? 'success-subtle' : 'danger-subtle')
+        }
+
+        async function sendTestEmail() {
+            testEmailSending.value = true
+            testEmailResult.value = null
+            try {
+                const data = await post('/admin/settings/test_email', { recipient: testEmailRecipient.value })
+                testEmailResult.value = data
+            } finally {
+                testEmailSending.value = false
+            }
+        }
+
+        /* ── Init ── */
+        loadSystem()
+
+        return {
+            system, systemLoading,
+            packages, packagesLoading, pkgSearch, filteredPackages, loadPackages,
+            submodules, submodulesLoading, selectedSubs, selectedSub, updateResults, updatingAny,
+            loadSubmodules, selectAllSubs, toggleAllSubs, updateOneSub, bulkUpdate, bulkUpdateAll, showSubDetail,
+            config, configLoading, loadConfig,
+            showSecret, editingSecret, secretKeyNew, generatingKey, generateKey,
+            editingMailPwd, mailPwdNew,
+            editingMailServer, mailServerNew,
+            editingMailUser, mailUserNew,
+            editingMailPort, mailPortNew,
+            saveEnvKey,
+            testEmailRecipient, testEmailSending, testEmailResult, sendTestEmail,
+        }
+    }
+}).mount('#settings-app')
+</script>
+{% endblock %}

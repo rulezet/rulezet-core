@@ -7,16 +7,16 @@ class Config:
     load_dotenv()
 
     SECRET_KEY = os.environ.get('SECRET_KEY')
-    
-    FLASK_URL = '127.0.0.1'
-    FLASK_PORT = 7009
 
-    MAIL_SERVER = 'smtp.gmail.com'
-    MAIL_PORT = 587
-    MAIL_USE_TLS = True
-    MAIL_USE_SSL = False
-    MAIL_USERNAME = 'rulezet.org@gmail.com'
-    MAIL_DEFAULT_SENDER = 'rulezet.org@gmail.com'
+    FLASK_URL = os.environ.get('FLASK_URL', '127.0.0.1')
+    FLASK_PORT = int(os.environ.get('FLASK_PORT', 7009))
+
+    MAIL_SERVER   = os.environ.get('MAIL_SERVER',   'smtp.gmail.com')
+    MAIL_PORT     = int(os.environ.get('MAIL_PORT', 587))
+    MAIL_USE_TLS  = os.environ.get('MAIL_USE_TLS',  'true').lower() == 'true'
+    MAIL_USE_SSL  = os.environ.get('MAIL_USE_SSL',  'false').lower() == 'true'
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', os.environ.get('MAIL_USERNAME', ''))
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
    
     
