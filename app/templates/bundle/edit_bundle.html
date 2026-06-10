@@ -900,7 +900,7 @@
 
             const addRuleToBundle = async (rule) => {
                 if (!selectedNode.value || selectedNode.value.type !== 'folder') {
-                    alert("Action Denied: Select a folder in the explorer first.");
+                    create_message('Action Denied: Select a folder in the explorer first.', 'warning-subtle');
                     return;
                 }
                 const ext = rule.format === 'yara' ? '.yar' : '.yaml';

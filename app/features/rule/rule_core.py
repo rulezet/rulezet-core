@@ -1,15 +1,12 @@
 
-import io
 import json
 from collections import Counter
 import math
 import os
 import re
-import threading
 from typing import Any, Dict, List, Optional, Tuple
 import uuid
 import datetime
-from typing import List
 import zipfile
 import requests
 from sqlalchemy.exc import SQLAlchemyError
@@ -601,26 +598,6 @@ def get_sources_from_ids(rule_ids: List[int]) -> List[str]:
 
     return sources
 
-def get_sources_from_ids(rules_list: List[dict]) -> List[str]:
-    """
-    Given a list of dicts containing 'id', retrieve the 'source' from the DB for each rule,
-    but only if the id is unique in the DB and the source has not already been added.
-    Returns a deduplicated list of sources.
-    """
-    sources = []
-
-    for rule_id in rules_list:
-        
-            
-        count = Rule.query.filter_by(id=rule_id).count()
-
-        if count == 1:
-            rule = Rule.query.filter_by(id=rule_id).first()
-            if rule.source not in sources:
-                sources.append(rule.source)
-
-    return sources
-
 def get_rules() -> Rule:
     """Get all the rules"""
     return Rule.query.all()
@@ -827,14 +804,6 @@ def get_rules_by_ids(rule_ids) -> list:
         
     return rule_list
             
-
-def is_valid_github_url(url: str) -> bool:
-    """Check if a URL is a valid GitHub URL."""
-    try:
-        parsed = urlparse(url)
-        return parsed.scheme in ('http', 'https') and 'github.com' in parsed.netloc
-    except Exception:
-        return False
 
 def get_all_rule_update(search=None, rule_type=None, sourceFilter=None) -> List[Rule]:
     """Select all current user's rules with optional filters: search, rule_type, and sourceFilter.
@@ -1322,42 +1291,6 @@ def process_vote(rule_id, user_id, vote_type):
     db.session.commit()
     return rule.vote_up, rule.vote_down, like_delta, dislike_delta
 
-
-# Legacy helpers — still used elsewhere
-def increment_up(id) -> None:
-    rule = get_rule(id)
-    rule.vote_up += 1
-    db.session.commit()
-
-def decrement_up(id) -> None:
-    rule = get_rule(id)
-    rule.vote_down += 1
-    db.session.commit()
-
-def remove_one_to_increment_up(id) -> None:
-    rule = get_rule(id)
-    rule.vote_up -= 1
-    db.session.commit()
-
-def remove_one_to_decrement_up(id) -> None:
-    rule = get_rule(id)
-    rule.vote_down -= 1
-    db.session.commit()
-
-def has_voted(vote, rule_id, id) -> bool:
-    user_id = id or current_user.id
-    db.session.add(RuleVote(rule_id=rule_id, user_id=user_id, vote_type=vote))
-    db.session.commit()
-    return True
-
-def remove_has_voted(vote, rule_id, id) -> bool:
-    user_id = id or current_user.id
-    existing_vote = RuleVote.query.filter_by(rule_id=rule_id, user_id=user_id, vote_type=vote).first()
-    if existing_vote:
-        db.session.delete(existing_vote)
-        db.session.commit()
-        return True
-    return False
 
 #############
 #   Filter  #

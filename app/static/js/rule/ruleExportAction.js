@@ -51,7 +51,6 @@ const RuleExportAction = {
         };
 
         const onBundleCompleted = () => {
-            console.log('uuid', uuid.value);
             create_message('Export completed!', 'success-subtle', false, null,'/bundle/detail/' + uuid.value);
             resetView();
             const modalEl = document.getElementById('exportActionModal');

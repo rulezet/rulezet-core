@@ -25,13 +25,17 @@
             <li class="breadcrumb-item active text-muted" aria-current="page">Edit [[ currentRule.title || 'Rule' ]]</li>
         </ol>
     </nav>
-    <div class="mb-4 border-bottom pb-3">
-        <h2 class="fw-bold mb-1 text-primary text-center">
-            Edit [[ currentRule.title || 'Rule' ]]
-            <div class="mx-auto" style="width: 60px; height: 4px; background-color: #0d6efd; border-radius: 2px;"></div>
-        </h2>
-        <p class="text-muted mt-2 text-center">
-            Modify the details of your rule below. Ensure all required fields marked with an asterisk are completed.
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-pen-to-square banner-watermark"></i>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-pen-to-square"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">[[ currentRule.title || 'Edit Rule' ]]</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+            Modify the details of your rule below. Ensure all required fields are completed.
         </p>
     </div>
 

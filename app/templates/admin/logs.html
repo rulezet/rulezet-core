@@ -454,7 +454,7 @@ createApp({
           headers: { 'X-CSRFToken': csrfToken },
         })
         fetchLogs(page.value)
-      } catch (e) { alert('Error: ' + e) }
+      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
     }
 
     // ── Toggle single visibility ──────────────────────────────────────────────
@@ -500,9 +500,9 @@ createApp({
           body: JSON.stringify({ ids: selectedIds.value }),
         })
         const data = await res.json()
-        alert(data.message)
+        create_message(data.message, data.success ? 'success-subtle' : 'danger-subtle')
         fetchLogs(1)
-      } catch (e) { alert('Error: ' + e) }
+      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
     }
 
     async function deleteAll() {
@@ -514,9 +514,9 @@ createApp({
           body: JSON.stringify({ delete_all: true, action_filter: actionFilter.value }),
         })
         const data = await res.json()
-        alert(data.message)
+        create_message(data.message, data.success ? 'success-subtle' : 'danger-subtle')
         fetchLogs(1)
-      } catch (e) { alert('Error: ' + e) }
+      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
     }
 
     onMounted(() => {
