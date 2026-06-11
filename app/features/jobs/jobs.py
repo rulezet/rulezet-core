@@ -35,14 +35,34 @@ def list_jobs():
 @jobs_blueprint.route('/get_jobs', methods=['GET'])
 @login_required
 def get_jobs():
-    items, total, page, per_page = JobsModel.get_jobs_for_user(current_user.id, request.args)
+    is_admin = current_user.is_admin()
+    items, total, page, per_page = JobsModel.get_jobs_for_user(
+        current_user.id, request.args, is_admin=is_admin)
+    jobs = []
+    for j in items:
+        d = j.to_json()
+        if is_admin:
+            # owner column only exists for admins — never exposed to plain users
+            d['owner'] = (f"{j.user.first_name} {j.user.last_name or ''}".strip()
+                          if j.user else f"user #{j.created_by}")
+        jobs.append(d)
     return jsonify({
-        "jobs":       [j.to_json() for j in items],
+        "jobs":       jobs,
         "total":      total,
         "page":       page,
         "per_page":   per_page,
         "total_pages": max(1, -(-total // per_page)),  # ceil division
     }), 200
+
+
+@jobs_blueprint.route('/errors', methods=['GET'])
+@login_required
+def job_errors():
+    """Recent error/warning log lines across all jobs — admin only."""
+    if not current_user.is_admin():
+        return jsonify({"error": "Forbidden."}), 403
+    limit = min(300, request.args.get('limit', 100, type=int))
+    return jsonify(JobsModel.get_job_error_logs(limit=limit)), 200
 
 
 @jobs_blueprint.route('/zombies', methods=['GET'])
@@ -85,6 +105,12 @@ def job_logs(job_uuid):
 @jobs_blueprint.route('/create', methods=['POST'])
 @login_required
 def create_job():
+    # Job types reachable from this endpoint (bulk tag, packages, submodules)
+    # are all administrative — user-level jobs are created server-side by
+    # their own gated routes, never through here.
+    if not current_user.is_admin():
+        return jsonify({"error": "Forbidden."}), 403
+
     data     = request.json or {}
     job_type = data.get('job_type')
     payload  = data.get('payload', {})

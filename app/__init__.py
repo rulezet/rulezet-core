@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
 from flask_migrate import Migrate
@@ -93,6 +93,19 @@ def create_app(start_worker=True):
             'app_version':        _app_version,
             'is_official':        app.config.get('IS_OFFICIAL_INSTANCE', False),
         }
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        # API consumers and fetch() calls get JSON; browsers get the page
+        if request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json':
+            return jsonify({"error": "Forbidden."}), 403
+        return render_template('access_denied.html'), 403
+
+    @app.errorhandler(404)
+    def page_not_found(e):
+        if request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json':
+            return jsonify({"error": "Not found."}), 404
+        return render_template('404.html'), 404
 
     _init_instance_config(app)
     if start_worker:
