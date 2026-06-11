@@ -1648,7 +1648,8 @@ class BackgroundJob(db.Model):
     @property
     def progress_pct(self):
         if not self.total:
-            return 0
+            # a finished job with no countable items is still 100% complete
+            return 100 if self.status == 'done' else 0
         return round((self.done / self.total) * 100)
  
     def to_json(self):

@@ -424,26 +424,33 @@ Connectors allow an admin to link this Rulezet instance to another and pull dete
 | `GET /api/sync/rules` | None | Paginated rules with `?since=`, `?page=`, `?per_page=` |
 | `GET /api/sync/bundles` | None | Paginated public bundles |
 
-`_rule_to_sync_json()` includes `update_history` (list of `RuleUpdateHistory` entries) so pulling instances can import the full change history.
+`_rule_to_sync_json()` includes `update_history` (list of `RuleUpdateHistory` entries) so pulling instances can import the full change history. The exported `uuid` is the **canonical origin uuid** (`remote_rule_uuid or uuid`) so rule identity stays stable across federation hops. `_bundle_to_sync_json()` includes `rules` — the canonical uuids of the bundle's rules — so pulling instances can rebuild bundle membership.
 
 #### Pull modes
 
+Matching is **by uuid only** (remote canonical uuid vs local `remote_rule_uuid` or `uuid`) — content is never compared. Trashed rules are matched too (active first). Both modes fetch the full remote set (`since=1970`).
+
 | Mode | Behaviour |
 |------|-----------|
-| **Soft** | Fetches all rules from remote (`since=1970` to get everything). For each rule: checks locally by `remote_rule_uuid` then by `to_string` content. **If match found → skip. If no match → create.** Existing rules and their history are never touched. |
-| **Hard** | Same lookup. **If match found → soft-delete local rule (goes to trash), salvage its `RuleUpdateHistory`, create fresh rule from remote, import salvaged history + remote history. If no match → create + import remote history.** The local rule can be restored from trash. |
+| **Soft** | **If uuid match found (even in the trash) → skip. If no match → create.** Existing rules, local deletions and history are never touched. |
+| **Hard** | Same lookup. **If uuid match found and the remote version differs → import it over the local rule in place. A content (`to_string`) change is archived first in `RuleUpdateHistory` (old_content = local, new_content = remote); metadata-only changes (title, description, …) are applied without a history entry. A match found in the trash is restored. Identical active rule → skip. If no match → create + import remote history.** Rules are never deleted/recreated — id, votes, comments and favorites are preserved. |
 
 #### `_upsert_rule` logic (`connector_core.py`)
 
 ```python
-# 1. Find local match: by remote_rule_uuid, then by to_string
+# 1. Find local match by uuid: or_(remote_rule_uuid == uuid, Rule.uuid == uuid)
 # 2. Soft mode + match → return 'skipped'
-# 3. Hard mode + match → soft-delete local, collect salvaged_history
-# 4. Create new Rule(remote_rule_uuid=..., sync_instance_url=connector.instance_url, source=remote['source'], ...)
-# 5. _sync_tags() — attach tags that exist locally, skip unknown
-# 6. _import_rule_history(rule, salvaged_history + remote['update_history'])
-# Returns: 'created' | 'skipped' | 'invalid'
+# 3. Hard mode + match → if content identical → 'skipped';
+#    else add RuleUpdateHistory(old_content=local, new_content=remote),
+#    update the rule fields in place, _sync_tags(), _import_rule_history()
+#    → return 'updated'
+# 4. No match → create new Rule(remote_rule_uuid=..., sync_instance_url=..., ...)
+#    + _sync_tags() + _import_rule_history(remote['update_history']) → 'created'
 ```
+
+#### Bundle membership sync
+
+`_upsert_bundle()` calls `_sync_bundle_rules(bundle, remote['rules'])` which attaches local rules matched by uuid via `BundleRuleAssociation`. Additive only — rules a local user added to the bundle are never removed. Membership is repaired on every pull, even for bundles that are otherwise skipped/unchanged. Rules are pulled before bundles in `handle_connector_pull`, so the rules already exist locally when `sync_rules` is enabled.
 
 Owner of the created rule:
 - `owner_mode='shadow'` → `shadow_user_id` (the ghost account)

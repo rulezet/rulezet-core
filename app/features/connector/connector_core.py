@@ -10,13 +10,14 @@ import uuid as uuid_mod
 import logging
 
 import requests as http_requests
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
 
 from app import db
 from app.core.db_class.db import (
-    Bundle, Connector, Rule, User,
+    Bundle, BundleRuleAssociation, Connector, Rule, User,
     RuleTagAssociation, Tag, ActivityLog, RuleUpdateHistory,
 )
 from app.core.utils.activity_log import log_activity
@@ -312,15 +313,20 @@ def trigger_pull(connector: Connector, triggered_by: int, mode: str = 'soft') ->
 def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
                  mode: str = 'soft', triggered_by_id: int = None) -> str:
     """
-    soft: if a local rule matches remote (by uuid OR content) → skip.
-          Otherwise create.
+    Matching is by UUID only (remote canonical uuid vs local remote_rule_uuid
+    or uuid) — content is never compared.
 
-    hard: if a local rule matches (by uuid OR content) → soft-delete it,
-          transfer its RuleUpdateHistory to the new rule, then create fresh
-          from remote data + import remote history.
-          If no match → create + import remote history.
+    soft: local match (even in trash) → skip. No match → create.
 
-    Returns: 'created' | 'skipped' | 'invalid'
+    hard: local match → if the remote version differs, import it over the
+          local rule in place. A content (to_string) change is archived first
+          in RuleUpdateHistory (old_content = local, new_content = remote);
+          metadata-only changes (title, description, …) are applied without
+          a history entry. A match found in the trash is restored. Identical
+          active rule → skip.
+          No match → create + import remote history.
+
+    Returns: 'created' | 'updated' | 'skipped' | 'invalid'
     """
     remote_uuid = remote.get('uuid')
     if not remote_uuid:
@@ -329,44 +335,71 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
     owner_id = triggered_by_id if (mode == 'hard' and triggered_by_id) else shadow_user_id
     now      = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
-    # ── Find local match: by connector uuid first, then by content ────────────
+    # ── Find local match by uuid only ─────────────────────────────────────────
+    # Rule.uuid is also checked so a rule that originated here and comes back
+    # from a remote instance is recognised instead of duplicated. Trashed rules
+    # are matched too (active ones first) so a hard pull can restore them and
+    # a soft pull does not recreate a rule the local admin deleted.
     local_match = Rule.query.filter(
-        Rule.is_deleted == False,
-        Rule.remote_rule_uuid == remote_uuid,
-    ).first()
+        or_(Rule.remote_rule_uuid == remote_uuid, Rule.uuid == remote_uuid),
+    ).order_by(Rule.is_deleted.asc()).first()
 
-    if local_match is None and remote.get('to_string'):
-        local_match = Rule.query.filter(
-            Rule.is_deleted == False,
-            Rule.to_string == remote['to_string'],
-        ).first()
+    if local_match:
+        # ── Soft mode: existence (even in trash) → skip ───────────────────────
+        if mode == 'soft':
+            return 'skipped'
 
-    # ── Soft mode: existence → skip ───────────────────────────────────────────
-    if local_match and mode == 'soft':
-        return 'skipped'
+        # ── Hard mode: import the remote version over the local rule ─────────
+        restored = False
+        if local_match.is_deleted:
+            local_match.is_deleted        = False
+            local_match.deleted_at        = None
+            local_match.deleted_by_id     = None
+            local_match.delete_batch_uuid = None
+            restored = True
 
-    # ── Hard mode: delete local match, salvage its history ───────────────────
-    salvaged_history = []
-    was_replacement  = False
-    if local_match and mode == 'hard':
-        # Collect local history entries to re-attach to the new rule
-        for h in local_match.rule_update_history.all():
-            salvaged_history.append({
-                'old_content':   h.old_content,
-                'new_content':   h.new_content,
-                'message':       h.message,
-                'success':       h.success,
-                'analyzed_at':   h.analyzed_at.isoformat() if h.analyzed_at else None,
-                'manuel_submit': h.manuel_submit or False,
-            })
-        # Soft-delete the local rule so it goes to trash (recoverable)
-        local_match.is_deleted    = True
-        local_match.deleted_at    = now
-        local_match.deleted_by_id = owner_id
-        was_replacement           = True
+        new_content     = remote.get('to_string', '')
+        content_changed = (local_match.to_string or '') != new_content
+
+        if content_changed:
+            # Archive the version being overwritten before touching it
+            db.session.add(RuleUpdateHistory(
+                rule_id=local_match.id,
+                rule_title=local_match.title,
+                success=True,
+                message=f"Updated by pull from '{connector.name}' ({connector.instance_url})",
+                old_content=local_match.to_string,
+                new_content=new_content,
+                analyzed_by_user_id=owner_id,
+                analyzed_at=now,
+                manuel_submit=False,
+            ))
+            local_match.to_string = new_content
+
+        meta_changed = False
+        for field in ('format', 'title', 'description', 'author', 'version', 'license', 'source'):
+            value = remote.get(field)
+            if value is None:
+                continue
+            if field == 'version':
+                value = str(value)
+            if getattr(local_match, field) != value:
+                setattr(local_match, field, value)
+                meta_changed = True
+
+        if not content_changed and not meta_changed and not restored:
+            return 'skipped'
+
+        local_match.connector_id      = connector.id
+        local_match.sync_instance_url = connector.instance_url
+        local_match.last_modif        = now
         db.session.flush()
 
-    # ── Create the new rule from remote data ──────────────────────────────────
+        _sync_tags(local_match, remote.get('tags', []), owner_id)
+        _import_rule_history(local_match, remote.get('update_history', []), owner_id)
+        return 'updated'
+
+    # ── No match → create the rule from remote data ───────────────────────────
     rule = Rule(
         uuid=str(uuid_mod.uuid4()),
         remote_rule_uuid=remote_uuid,
@@ -390,17 +423,20 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
     db.session.add(rule)
     db.session.flush()
     _sync_tags(rule, remote.get('tags', []), owner_id)
-
-    # Import history: salvaged local entries first, then remote entries (dedup by date)
-    _import_rule_history(rule, salvaged_history + remote.get('update_history', []), owner_id)
-    return 'updated' if was_replacement else 'created'
+    _import_rule_history(rule, remote.get('update_history', []), owner_id)
+    return 'created'
 
 
 def _import_rule_history(rule: Rule, history: list, fallback_user_id: int) -> None:
-    """Attach RuleUpdateHistory entries to a rule, deduplicating by analyzed_at."""
+    """Attach RuleUpdateHistory entries to a rule, deduplicating by analyzed_at
+    (both within the batch and against entries already stored for the rule)."""
     if not history:
         return
-    seen = set()
+    seen = {
+        h.analyzed_at.isoformat()
+        for h in rule.rule_update_history.all()
+        if h.analyzed_at
+    }
     for h in history:
         try:
             if h.get('analyzed_at'):
@@ -445,9 +481,32 @@ def _sync_tags(rule: Rule, tag_names: list, user_id: int) -> None:
             ))
 
 
+def _sync_bundle_rules(bundle: Bundle, rule_uuids: list) -> int:
+    """Attach local rules (matched by uuid) to the bundle.
+    Additive only — never removes rules a local user added. Returns the
+    number of new associations created."""
+    added = 0
+    for r_uuid in rule_uuids or []:
+        rule = Rule.query.filter(
+            Rule.is_deleted == False,
+            or_(Rule.remote_rule_uuid == r_uuid, Rule.uuid == r_uuid),
+        ).first()
+        if rule is None:
+            continue
+        already = BundleRuleAssociation.query.filter_by(
+            bundle_id=bundle.id, rule_id=rule.id,
+        ).first()
+        if already is None:
+            db.session.add(BundleRuleAssociation(bundle_id=bundle.id, rule_id=rule.id))
+            added += 1
+    return added
+
+
 def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
                    mode: str = 'soft', triggered_by_id: int = None) -> str:
-    """Create or update a Bundle from a remote payload dict.
+    """Create or update a Bundle from a remote payload dict, then attach the
+    local rules listed in remote['rules'] (rules are pulled before bundles,
+    so they already exist locally when sync_rules is enabled).
     Returns 'created', 'updated', 'skipped', 'unchanged', or 'invalid'.
     """
     remote_uuid = remote.get('uuid')
@@ -464,14 +523,16 @@ def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
     now = datetime.datetime.now(datetime.timezone.utc)
 
     if existing:
+        # Always repair membership, even when the bundle itself is untouched
+        added = _sync_bundle_rules(existing, remote.get('rules', []))
         if mode == 'soft':
-            return 'skipped'
+            return 'updated' if added else 'skipped'
         remote_ts = remote.get('updated_at')
         if remote_ts and existing.updated_at:
             try:
                 remote_dt = datetime.datetime.fromisoformat(remote_ts.replace('Z', '+00:00')).replace(tzinfo=None)
                 if remote_dt <= existing.updated_at:
-                    return 'unchanged'
+                    return 'updated' if added else 'unchanged'
             except ValueError:
                 pass
         # Only update content fields, keep metadata
@@ -496,4 +557,6 @@ def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
         updated_at=now,
     )
     db.session.add(bundle)
+    db.session.flush()
+    _sync_bundle_rules(bundle, remote.get('rules', []))
     return 'created'

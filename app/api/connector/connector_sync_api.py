@@ -48,7 +48,9 @@ def _rule_to_sync_json(rule: Rule) -> dict:
                   .all())
     ]
     return {
-        'uuid':           rule.uuid,
+        # canonical identity: keep the origin uuid when this rule was itself
+        # pulled from another instance, so identity stays stable across hops
+        'uuid':           rule.remote_rule_uuid or rule.uuid,
         'format':         rule.format,
         'title':          rule.title,
         'description':    rule.description,
@@ -65,10 +67,16 @@ def _rule_to_sync_json(rule: Rule) -> dict:
 
 
 def _bundle_to_sync_json(bundle: Bundle) -> dict:
+    rule_uuids = [
+        (a.rule.remote_rule_uuid or a.rule.uuid)
+        for a in bundle.rules_assoc.all()
+        if a.rule and not a.rule.is_deleted
+    ]
     return {
         'uuid':        bundle.uuid,
         'name':        bundle.name,
         'description': bundle.description,
+        'rules':       rule_uuids,
         'updated_at':  bundle.updated_at.isoformat() if bundle.updated_at else None,
         'created_at':  bundle.created_at.isoformat() if bundle.created_at else None,
     }

@@ -22,7 +22,7 @@ from pathlib import Path
 
 from app.features.jobs.job_worker import register_handler
 from app import db
-from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJobLog, ActivityLog
+from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJob, BackgroundJobLog, ActivityLog
 from app.features.rule.rule_core import _wipe_rule_children
 
 BATCH_SIZE = 2000   # bulk_insert_mappings handles large batches efficiently
@@ -853,10 +853,10 @@ def handle_connector_pull(job, app):
         if connector.api_key_outbound:
             headers['X-API-KEY'] = connector.api_key_outbound
 
-        # soft pull always fetches all rules (no since filter) so skipped count is accurate
-        since    = '1970-01-01T00:00:00' if mode == 'soft' else (
-            connector.last_sync_at.isoformat() if connector.last_sync_at else '1970-01-01T00:00:00'
-        )
+        # Full fetch in both modes: hard must also see remote rules that have
+        # not changed since last_sync_at (e.g. to restore a locally deleted
+        # rule), and soft needs the full set for accurate skip counts.
+        since    = '1970-01-01T00:00:00'
         base     = connector.instance_url.rstrip('/')
         PER_PAGE = 500
 
@@ -972,7 +972,7 @@ def handle_connector_pull(job, app):
                         job.done = min(processed, job.total)
                     db.session.commit()
                     log_job(job,
-                            f"Rules p.{page}: +{pg_created} new, ~{pg_updated} replaced, ={pg_skipped} skipped.",
+                            f"Rules p.{page}: +{pg_created} new, ~{pg_updated} updated, ={pg_skipped} skipped.",
                             level='info', event='progress')
                     if not data.get('has_more', False):
                         break
@@ -1081,7 +1081,13 @@ def handle_update_package(job, app):
         db.session.commit()
         return
 
+    job_uuid = job.uuid
     with app.app_context():
+        # Re-fetch in this context's session — the worker's `job` object belongs
+        # to another session, so commits here would silently drop its changes.
+        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+        if job is None:
+            return
         job.total = 1
         job.done = 0
         db.session.commit()
@@ -1121,7 +1127,12 @@ def handle_uninstall_package(job, app):
         db.session.commit()
         return
 
+    job_uuid = job.uuid
     with app.app_context():
+        # Re-fetch in this context's session (see handle_update_package).
+        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+        if job is None:
+            return
         job.total = 1
         job.done = 0
         db.session.commit()
@@ -1163,7 +1174,12 @@ def handle_update_submodule_bg(job, app):
         return
 
     cwd = os.getcwd()
+    job_uuid = job.uuid
     with app.app_context():
+        # Re-fetch in this context's session (see handle_update_package).
+        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+        if job is None:
+            return
         job.total = 1
         job.done = 0
         db.session.commit()
@@ -1203,7 +1219,12 @@ def handle_remove_submodule(job, app):
         return
 
     cwd = os.getcwd()
+    job_uuid = job.uuid
     with app.app_context():
+        # Re-fetch in this context's session (see handle_update_package).
+        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+        if job is None:
+            return
         job.total = 3
         job.done = 0
         db.session.commit()
