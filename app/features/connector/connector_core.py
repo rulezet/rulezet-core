@@ -805,16 +805,20 @@ def _sync_bundle_tags(bundle: Bundle, tag_names: list, user_id: int,
     return missing
 
 
-def _sync_cve_ids(obj, remote_cve_ids: list) -> None:
-    """Merge remote CVE ids into the local object's cve_id field (additive)."""
+def _sync_cve_ids(obj, remote_cve_ids: list, field: str = 'cve_id') -> None:
+    """Merge remote CVE ids into the local object's CVE field (additive).
+
+    Rules use field='cve_id', Bundles use field='vulnerability_identifiers'.
+    """
     if not remote_cve_ids:
         return
+    raw = getattr(obj, field, None)
     try:
-        existing = _json.loads(obj.cve_id) if obj.cve_id else []
+        existing = _json.loads(raw) if raw else []
         if not isinstance(existing, list):
             existing = [existing] if existing else []
     except (TypeError, ValueError):
-        existing = [obj.cve_id] if obj.cve_id else []
+        existing = [raw] if raw else []
 
     merged = list(existing)
     for cid in remote_cve_ids:
@@ -822,7 +826,7 @@ def _sync_cve_ids(obj, remote_cve_ids: list) -> None:
             merged.append(cid)
 
     if merged != existing:
-        obj.cve_id = _json.dumps(merged)
+        setattr(obj, field, _json.dumps(merged))
 
 
 def _extract_tag_family(name: str) -> str | None:
@@ -923,7 +927,7 @@ def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
     if existing:
         added = _sync_bundle_rules(existing, remote.get('rules', []))
         _sync_bundle_tags(existing, remote.get('tags', []), owner_id, tag_cache=tag_cache)
-        _sync_cve_ids(existing, remote.get('vulnerability_identifiers', []))
+        _sync_cve_ids(existing, remote.get('vulnerability_identifiers', []), field='vulnerability_identifiers')
         remote_ts = remote.get('updated_at')
         changed = False
         if remote_ts and existing.updated_at:
@@ -957,5 +961,5 @@ def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
     db.session.flush()
     _sync_bundle_rules(bundle, remote.get('rules', []))
     _sync_bundle_tags(bundle, remote.get('tags', []), owner_id, tag_cache=tag_cache)
-    _sync_cve_ids(bundle, remote.get('vulnerability_identifiers', []))
+    _sync_cve_ids(bundle, remote.get('vulnerability_identifiers', []), field='vulnerability_identifiers')
     return 'created'
