@@ -78,20 +78,12 @@ def create_app(start_worker=True):
         except Exception:
             pass
 
-    _version_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'version')
-    try:
-        with open(_version_path) as _f:
-            _app_version = _f.read().strip()
-    except OSError:
-        _app_version = 'unknown'
-
-    app.config['APP_VERSION'] = _app_version
-
     @app.context_processor
     def inject_globals():
+        from flask import current_app
         return {
-            'app_version':        _app_version,
-            'is_official':        app.config.get('IS_OFFICIAL_INSTANCE', False),
+            'app_version': current_app.config.get('APP_VERSION', 'unknown'),
+            'is_official': current_app.config.get('IS_OFFICIAL_INSTANCE', False),
         }
 
     @app.errorhandler(403)
@@ -162,6 +154,14 @@ def _start_telemetry(app):
     STARTUP_DELAY = int(os.environ.get('TELEMETRY_STARTUP_DELAY', 90))
     INTERVAL      = int(os.environ.get('TELEMETRY_INTERVAL',      86400))
 
+    def _read_version():
+        try:
+            vp = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'version')
+            with open(vp) as _f:
+                return _f.read().strip()
+        except OSError:
+            return app.config.get('APP_VERSION', 'unknown')
+
     def _loop():
         time.sleep(STARTUP_DELAY)
         while True:
@@ -176,10 +176,13 @@ def _start_telemetry(app):
                         # Always recompute from URL — never trust in-memory cfg.uuid
                         # which may be stale if the code was updated without restarting.
                         ping_uuid = str(_uuid_mod.uuid5(_uuid_mod.NAMESPACE_URL, reported_url))
+                        # Re-read version file each ping so version updates without restart
+                        current_version = _read_version()
+                        app.config['APP_VERSION'] = current_version
                         _req.post(PING_URL, json={
                             'uuid':          ping_uuid,
                             'url':           reported_url,
-                            'version':       app.config.get('APP_VERSION', 'unknown'),
+                            'version':       current_version,
                             'rules_count':   Rule.query.filter_by(is_deleted=False).count(),
                             'bundles_count': Bundle.query.count(),
                         }, timeout=8)

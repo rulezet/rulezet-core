@@ -2,9 +2,19 @@ import os
 
 from dotenv import load_dotenv
 
+# Read version from the project root 'version' file once at import time
+_version_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'version')
+try:
+    with open(_version_file) as _vf:
+        _APP_VERSION = _vf.read().strip()
+except OSError:
+    _APP_VERSION = 'unknown'
+
 
 class Config:
     load_dotenv()
+
+    APP_VERSION = _APP_VERSION
 
     SECRET_KEY = os.environ.get('SECRET_KEY')
 

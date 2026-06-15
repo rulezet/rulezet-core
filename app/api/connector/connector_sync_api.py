@@ -276,12 +276,8 @@ def _apply_rule_filters(query, params: dict):
 class SyncManifest(Resource):
     @sync_ns.doc(description="Returns this instance's identity and capabilities. No auth required.")
     def get(self):
-        version_file = os.path.join(os.getcwd(), 'version')
-        try:
-            with open(version_file) as f:
-                ver = f.read().strip()
-        except OSError:
-            ver = 'unknown'
+        from flask import current_app
+        ver = current_app.config.get('APP_VERSION', 'unknown')
 
         return {
             'instance': {
