@@ -23,6 +23,28 @@
 
 {% block content %}
 <div class="container py-5" id="main-container">
+
+    {% if show_import_hint %}
+    <div class="alert alert-primary alert-dismissible d-flex align-items-center gap-3 rounded-3 shadow-sm mb-4 border-0"
+         role="alert"
+         style="background:linear-gradient(135deg,rgba(13,110,253,.1),rgba(10,88,202,.07));border-left:4px solid #0d6efd !important;border:1px solid rgba(13,110,253,.2);">
+        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+             style="width:42px;height:42px;background:rgba(13,110,253,.15);">
+            <i class="fa-solid fa-circle-arrow-down text-primary fs-5"></i>
+        </div>
+        <div class="flex-grow-1">
+            <div class="fw-bold mb-1">Your instance has no rules yet.</div>
+            <div class="text-muted" style="font-size:.88rem;">
+                Pull from <strong>Rulezet Official</strong> to instantly populate your instance with the full community rule set.
+            </div>
+        </div>
+        <a href="/connector/list" class="btn btn-primary btn-sm rounded-pill px-3 flex-shrink-0">
+            <i class="fa-solid fa-plug me-1"></i>Go to Connectors
+        </a>
+        <button type="button" class="btn-close ms-1" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
     <template v-if="is_loading">
 
         <!-- ── Hero ── -->
@@ -95,6 +117,23 @@
                     <i class="fa-solid fa-arrow-right text-warning ms-auto opacity-50"></i>
                 </div>
                 </a>
+
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="/connector/list" class="text-decoration-none flex-fill">
+                <div class="p-3 rounded-4 shadow-sm d-flex align-items-center gap-3 h-100"
+                     style="background-color:var(--card-bg-color);border-left:4px solid #6f42c1;">
+                    <div class="rounded-circle bg-purple-subtle d-flex align-items-center justify-content-center flex-shrink-0"
+                         style="width:44px;height:44px;background:rgba(111,66,193,.12)!important;">
+                        <i class="fa-solid fa-plug" style="color:#6f42c1;"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold" style="color:var(--bs-body-color);">Connectors</div>
+                        <div class="text-muted small">Sync detection rules from remote Rulezet instances.</div>
+                    </div>
+                    <i class="fa-solid fa-arrow-right ms-auto opacity-50" style="color:#6f42c1;"></i>
+                </div>
+                </a>
+                {% endif %}
 
             </div>
 

@@ -1,178 +1,127 @@
 {% extends 'base.html' %}
 {% block title %}GitHub Rules Dashboard — Rulezet{% endblock %}
-{% import 'macros/form_macros.html' as f %}
+{% block head %}
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="container mt-5" id="main-container" v-cloak>
+<div class="container-fluid my-4 px-4" id="main-container" v-cloak>
 
-  <div class="mb-4 border-bottom pb-3">
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
-            <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-            <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
-            <li class="breadcrumb-item"><a href="/rule/url_github" class="text-decoration-none text-muted">GitHub Sources</a></li>
-            <li class="breadcrumb-item active text-muted" aria-current="page">Dashboard</li>
-        </ol>
-    </nav>
-    <!-- Title principal -->
-    <h2 class="fw-bold mb-2 text-center text-primary">GitHub Rules Dashboard</h2>
-    <div class="mx-auto mb-3" style="width: 80px; height: 5px; background-color: #0d6efd; border-radius: 2px;"></div>
-
-    <!-- URL card -->
-    <div class="card shadow-sm mx-auto hover-shadow cursor-pointer" style="transition: transform 0.2s;">
-      <div class="card-body text-truncate">
-        <i class="fa-brands fa-github me-2 text-dark"></i> Source URL:
-        <strong><a href="{{ url }}" rel="noreferrer" target="_blank" class="stretched-link"></a> {{ url }}</strong>
-      </div>
-    </div>
-  </div>
-  <rule-filter-bar ref="filterBar" api-endpoint="/rule/get_rules_page_filter" @update:results="onRulesUpdated"
-    :hidden-fields="['sources']" @loading="search_is_loading = $event" :source-rules="source_rules">
-  </rule-filter-bar>
-
-  <pagination-component :current-page="current_page" :total-pages="total_pages" @change-page="changePage">
-  </pagination-component>
-
-
-  <p class="text-center mt-3 text-muted" v-if="!loading">Total rules found: [[ total_rules_liste ]]</p>
-  <!-- Loading Spinner -->
-  <div v-if="search_is_loading" class="d-flex justify-content-center my-5">
-    <div class="spinner-border text-primary" role="status">
-      <span class="visually-hidden">Loading...</span>
-    </div>
-  </div>
-
-  <!-- Table -->
-  <div class="table-responsive" v-if="!search_is_loading">
-    <table class="table table-hover table-striped align-middle shadow-sm rounded">
-      <thead style="color: var(--text-color)">
-        <tr>
-          <th scope="col" class="text-center">#</th>
-          <th scope="col">Title</th>
-          <th scope="col">Author</th>
-          <th scope="col">Description</th>
-          <th scope="col">Format</th>
-          <th scope="col">Creation Date</th>
-          <th scope="col"> Vulnerability</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(rule, index) in rule_github_url" :key="rule.id" @click="goto(rule.id)" style="cursor: pointer;">
-          <td class="text-center">[[ index + 1 + (current_page - 1) * 20 ]]</td>
-          <td>[[ rule.title ]]</td>
-          <td>[[ rule.author ]]</td>
-          <td class="text-truncate" style="max-width: 200px;">[[ rule.description ]]</td>
-          <td>
-            <span class="badge bg-primary">
-              [[ rule.format ]]
-            </span>
-          </td>
-          <td>[[ rule.creation_date ]]</td>
-          <td>
-            <div class="mb-3" @click.stop>
-              <template v-if="rule.cve_id && rule.cve_id !== '[]' && rule.cve_id !== ''">
-                <vulnerability-displays-list object-type="rule" :object-id="rule.id" :max-visible="2">
-                </vulnerability-displays-list>
-              </template>
-              <template v-else>
-                <span class="text-muted small opacity-75">
-                  <i class="fa-solid fa-circle-info me-1"></i> No vulnerabilities
-                </span>
-              </template>
+    <!-- ── Header banner ── -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-brands fa-github banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item"><a href="/rule/url_github" class="text-decoration-none text-muted">GitHub Sources</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Dashboard</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon">
+                <i class="fa-brands fa-github"></i>
             </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <div v-if="rule_github_url.length === 0" class="alert alert-warning text-center shadow-sm mt-3">
-      No rules found.
+            <div class="min-width-0">
+                <h2 class="fw-bold mb-1">{{ url.replace('https://github.com/', '') }}</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-3" style="max-width: 700px; font-size: 0.95rem;">
+            All detection rules imported from
+            <a href="{{ url }}" target="_blank" rel="noreferrer" class="fw-semibold text-decoration-none">
+                {{ url }} <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:.7rem;"></i>
+            </a>
+        </p>
+
+        <!-- Source stats -->
+        <div class="d-flex gap-3 flex-wrap" v-if="stats">
+            <div class="d-flex align-items-center gap-2 px-3 py-2 rounded-3"
+                 style="background: var(--light-bg-color); border: 1px solid var(--border-color);">
+                <i class="fa-solid fa-file-shield text-primary"></i>
+                <div>
+                    <div class="fw-bold" style="line-height:1.1">[[ stats.total_rules ]]</div>
+                    <div class="text-muted" style="font-size:.7rem; text-transform:uppercase; letter-spacing:.04em;">Rules</div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 px-3 py-2 rounded-3"
+                 style="background: var(--light-bg-color); border: 1px solid var(--border-color);">
+                <i class="fa-solid fa-user-pen text-success"></i>
+                <div>
+                    <div class="fw-bold" style="line-height:1.1">[[ stats.authors_count ]]</div>
+                    <div class="text-muted" style="font-size:.7rem; text-transform:uppercase; letter-spacing:.04em;">Authors</div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 px-3 py-2 rounded-3"
+                 style="background: var(--light-bg-color); border: 1px solid var(--border-color);">
+                <i class="fa-solid fa-scale-balanced text-info"></i>
+                <div>
+                    <div class="fw-bold" style="line-height:1.1">[[ stats.licenses_count ]]</div>
+                    <div class="text-muted" style="font-size:.7rem; text-transform:uppercase; letter-spacing:.04em;">Licenses</div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 px-3 py-2 rounded-3" v-if="stats.last_update"
+                 style="background: var(--light-bg-color); border: 1px solid var(--border-color);">
+                <i class="fa-solid fa-clock-rotate-left text-warning"></i>
+                <div>
+                    <div class="fw-bold" style="line-height:1.1">[[ stats.last_update ]]</div>
+                    <div class="text-muted" style="font-size:.7rem; text-transform:uppercase; letter-spacing:.04em;">Last update</div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 px-3 py-2 rounded-3" v-if="stats.formats && stats.formats.length"
+                 style="background: var(--light-bg-color); border: 1px solid var(--border-color);">
+                <i class="fa-solid fa-file-code text-secondary"></i>
+                <div class="d-flex gap-1 flex-wrap align-items-center">
+                    <span v-for="f in stats.formats" :key="f.name" class="badge bg-primary-subtle text-primary">
+                        [[ f.name.toUpperCase() ]] · [[ f.count ]]
+                    </span>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 
+    <!-- ── Rules table / cards (search, filters, sort, select & export) ── -->
+    <rule-data-table
+        source="{{ url }}"
+        :initial-per-page="25"
+        :exportable="true"
+        :csrf-token="'{{ csrf_token() }}'"
+        :current-user-is-authenticated="'{{ current_user.is_authenticated }}'">
+    </rule-data-table>
 
-  <pagination-component :current-page="current_page" :total-pages="total_pages" @change-page="changePage">
-  </pagination-component>
-
-  <div class="d-flex justify-content-center gap-3 mt-4 mb-3">
-    <a href="javascript:history.back()" style="width: auto;"
-      class="btn btn-secondary btn-sm d-inline-flex align-items-center shadow-sm px-3 py-2 rounded-pill">
-      <i class="fas fa-arrow-left me-2"></i>
-      Back
-    </a>
-  </div>
-
-
+    <div class="d-flex justify-content-center gap-3 mt-4 mb-3">
+        <a href="javascript:history.back()" style="width: auto;"
+           class="btn btn-secondary btn-sm d-inline-flex align-items-center shadow-sm px-3 py-2 rounded-pill">
+            <i class="fas fa-arrow-left me-2"></i>
+            Back
+        </a>
+    </div>
 
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-  const { createApp, ref, computed } = Vue
-  import { message_list, create_message } from '/static/js/toaster.js'
-  import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
-  import RuleFilterBar from '/static/js/rule/ruleFilterBar.js';
-  import PaginationComponent from '/static/js/rule/paginationComponent.js';
+  const { createApp, ref, onMounted } = Vue
+  import { message_list } from '/static/js/toaster.js'
+  import RuleDataTable from '/static/js/rule/ruleDataTable.js';
 
   createApp({
     delimiters: ['[[', ']]'],
     components: {
-      'vulnerability-displays-list': VulnerabilityDisplaysList,
-      'rule-filter-bar': RuleFilterBar,
-      'pagination-component': PaginationComponent
+      'rule-data-table': RuleDataTable,
     },
     setup() {
+      const stats = ref(null)
 
-      const total_rules_liste = ref(0);
-      const filterBar = ref(null);
-      const search_is_loading = ref(true);
-      const source_rules = "{{ url }}";
+      onMounted(async () => {
+        try {
+          const res = await fetch('/rule/github_source_stats?url=' + encodeURIComponent('{{ url }}'))
+          if (res.ok) stats.value = await res.json()
+        } catch { /* banner stats stay hidden */ }
+      })
 
-
-      const rule_github_url = ref([])
-
-      const current_page = ref(1)
-      const total_pages = ref(1)
-      const searchQuery = ref('')
-
-      const onRulesUpdated = (results) => {
-        rule_github_url.value = results.rules.rule || [];
-        total_pages.value = results.total_pages || 1;
-        current_page.value = results.current_page || 1;
-        total_rules_liste.value = results.total_rules || 0;
-
-
-        search_is_loading.value = false;
-      };
-
-      const changePage = (page) => {
-        if (filterBar.value) {
-          filterBar.value.fetchRules(page);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-      };
-
-
-      function goto(id) {
-        window.location.href = "/rule/detail_rule/" + id
-      }
-
-      return {
-        message_list,
-        rule_github_url,
-        total_pages,
-        current_page,
-        goto,
-        total_rules_liste,
-        filterBar,
-        search_is_loading,
-        changePage,
-        onRulesUpdated,
-        VulnerabilityDisplaysList,
-        RuleFilterBar,
-        PaginationComponent,
-        source_rules
-      }
+      return { message_list, stats }
     }
   }).mount('#main-container')
 </script>

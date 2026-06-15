@@ -1,0 +1,854 @@
+{% extends "base.html" %}
+
+{% block title %}How Connectors Work — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/connector/connector.css') }}">
+<style>
+  .hiw-section { scroll-margin-top: 80px; }
+
+  .hiw-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    color: #fff;
+    font-weight: 700;
+    font-size: .85rem;
+    flex-shrink: 0;
+  }
+
+  .hiw-endpoint {
+    font-family: monospace;
+    font-size: .82rem;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 2px 8px;
+    color: #0d6efd;
+    word-break: break-all;
+  }
+
+  .hiw-flow-arrow {
+    font-size: 1.4rem;
+    color: #0d6efd;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .hiw-flow-box {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--card-bg-color);
+    padding: .75rem 1rem;
+    font-size: .83rem;
+    text-align: center;
+    flex: 1;
+  }
+
+  .hiw-mode-card {
+    border-radius: 12px;
+    padding: 1.25rem;
+    height: 100%;
+  }
+
+  .hiw-toc-link {
+    display: block;
+    padding: .35rem .75rem;
+    color: var(--subtle-text-color);
+    text-decoration: none;
+    font-size: .82rem;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+    border-radius: 0 4px 4px 0;
+  }
+  .hiw-toc-link:hover {
+    color: #0d6efd;
+    border-left-color: #0d6efd;
+    background: rgba(13,110,253,.06);
+  }
+
+  .hiw-badge-method {
+    font-family: monospace;
+    font-size: .7rem;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 700;
+    letter-spacing: .03em;
+  }
+  .hiw-badge-get  { background: rgba(25,135,84,.15);  color: #157347; }
+  .hiw-badge-post { background: rgba(255,193,7,.15);   color: #997404; }
+
+  .hiw-verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 20px;
+  }
+  .hiw-verdict--skip    { background: rgba(108,117,125,.12); color: #6c757d; }
+  .hiw-verdict--create  { background: rgba(13,110,253,.12);  color: #0d6efd; }
+  .hiw-verdict--update  { background: rgba(255,193,7,.15);   color: #997404; }
+  .hiw-verdict--restore { background: rgba(25,135,84,.12);   color: #198754; }
+
+  .hiw-callout {
+    border-left: 3px solid;
+    border-radius: 0 8px 8px 0;
+    padding: .75rem 1rem;
+    font-size: .84rem;
+    margin-bottom: 0;
+  }
+  .hiw-callout--info    { border-color: #0d6efd; background: rgba(13,110,253,.07); }
+  .hiw-callout--warning { border-color: #ffc107; background: rgba(255,193,7,.07); }
+  .hiw-callout--success { border-color: #198754; background: rgba(25,135,84,.07); }
+  .hiw-callout--danger  { border-color: #dc3545; background: rgba(220,53,69,.07); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-xl py-4">
+
+  <!-- ── Banner ──────────────────────────────────────────────────── -->
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-book-open banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('connector.connector_list') }}" class="text-decoration-none text-muted">Connectors</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">How it works</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-book-open"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">How Connectors Work</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:660px;font-size:.95rem;">
+      A complete walkthrough of the Rulezet federation system — from connector configuration to the
+      exact logic used to sync rules and bundles between instances.
+    </p>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- ── Sticky Table of Contents ──────────────────────────────── -->
+    <div class="col-lg-3 d-none d-lg-block">
+      <div class="sticky-top" style="top:1.5rem;">
+        <div class="p-3 rounded-3 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+          <div class="fw-bold mb-3" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--subtle-text-color);">
+            <i class="fa-solid fa-list-ul me-2 text-primary"></i>On this page
+          </div>
+          <nav class="border-start ps-1" style="border-color:var(--border-color)!important;">
+            <a class="hiw-toc-link" href="#what-is">What is a Connector?</a>
+            <a class="hiw-toc-link" href="#setup">Setting up a Connector</a>
+            <a class="hiw-toc-link" href="#sync-api">The Sync API</a>
+            <a class="hiw-toc-link" href="#pull-lifecycle">Pull lifecycle</a>
+            <a class="hiw-toc-link" href="#pull-logic">Pull logic (upsert)</a>
+            <a class="hiw-toc-link" href="#deduplication">Rule deduplication</a>
+            <a class="hiw-toc-link" href="#tags">Tag synchronization</a>
+            <a class="hiw-toc-link" href="#bundles">Bundle synchronization</a>
+            <a class="hiw-toc-link" href="#ownership">Ownership modes</a>
+            <a class="hiw-toc-link" href="#self-sync">Self-sync prevention</a>
+            <a class="hiw-toc-link" href="#activity">Activity &amp; history</a>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Main content ──────────────────────────────────────────── -->
+    <div class="col-lg-9">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 1 — What is a Connector?
+      ════════════════════════════════════════════════════════════ -->
+      <section id="what-is" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-plug" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">What is a Connector?</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          A <strong>connector</strong> is a link between two Rulezet instances. It stores the remote instance URL,
+          optional authentication credentials, sync preferences, and a record of every pull that was ever triggered.
+          Once created, any admin can trigger a <strong>pull</strong> to import detection rules
+          (and optionally bundles) from that remote instance into the local one.
+        </p>
+
+        <!-- High-level diagram -->
+        <div class="d-flex align-items-center gap-3 flex-wrap mt-4 mb-2">
+          <div class="hiw-flow-box">
+            <i class="fa-solid fa-server text-primary mb-1 d-block" style="font-size:1.3rem;"></i>
+            <strong>This instance</strong><br>
+            <span class="text-muted" style="font-size:.75rem;">admin triggers pull</span>
+          </div>
+          <div class="hiw-flow-arrow text-center" style="min-width:2.5rem;">
+            <i class="fa-solid fa-arrow-right"></i><br>
+            <span style="font-size:.68rem;color:var(--subtle-text-color);">HTTP GET</span>
+          </div>
+          <div class="hiw-flow-box" style="border-color:rgba(13,110,253,.3);background:rgba(13,110,253,.04);">
+            <i class="fa-solid fa-globe text-primary mb-1 d-block" style="font-size:1.3rem;"></i>
+            <strong>Remote instance</strong><br>
+            <span class="text-muted" style="font-size:.75rem;">/api/sync/* endpoints</span>
+          </div>
+          <div class="hiw-flow-arrow text-center" style="min-width:2.5rem;">
+            <i class="fa-solid fa-arrow-right"></i><br>
+            <span style="font-size:.68rem;color:var(--subtle-text-color);">JSON pages</span>
+          </div>
+          <div class="hiw-flow-box" style="border-color:rgba(25,135,84,.3);background:rgba(25,135,84,.04);">
+            <i class="fa-solid fa-database text-success mb-1 d-block" style="font-size:1.3rem;"></i>
+            <strong>Local DB</strong><br>
+            <span class="text-muted" style="font-size:.75rem;">rules &amp; bundles stored</span>
+          </div>
+        </div>
+
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-2 text-primary"></i>
+          The connection is <strong>one-directional</strong>: this instance pulls from the remote.
+          The remote instance does not need to know about this connector, and no data is ever pushed to it.
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 2 — Setting up a Connector
+      ════════════════════════════════════════════════════════════ -->
+      <section id="setup" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-sliders" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Setting up a Connector</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Creating a connector requires an <strong>admin account</strong>. The form accepts the following fields:
+        </p>
+
+        <div class="table-responsive rounded-3 border shadow-sm" style="border-color:var(--border-color)!important;">
+          <table class="table table-sm mb-0 align-middle" style="background:var(--card-bg-color);font-size:.83rem;">
+            <thead style="background:var(--light-bg-color);">
+              <tr>
+                <th class="fw-semibold ps-3" style="width:22%;">Field</th>
+                <th class="fw-semibold">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="ps-3 fw-semibold text-primary">Name</td>
+                <td>Display name shown in the connector table and in job logs.</td>
+              </tr>
+              <tr>
+                <td class="ps-3 fw-semibold text-primary">Instance URL</td>
+                <td>
+                  Base URL of the remote Rulezet instance — e.g. <code>https://rulezet.org</code>.<br>
+                  <span class="text-muted">Trailing slashes are stripped automatically.</span>
+                </td>
+              </tr>
+              <tr>
+                <td class="ps-3 fw-semibold text-primary">API Key</td>
+                <td>
+                  Optional. If the remote requires authentication, enter its API key.
+                  It will be sent as <code>X-API-KEY</code> on every request.
+                </td>
+              </tr>
+              <tr>
+                <td class="ps-3 fw-semibold text-primary">Sync rules</td>
+                <td>Enable to pull detection rules (YARA, Sigma, etc.) from the remote.</td>
+              </tr>
+              <tr>
+                <td class="ps-3 fw-semibold text-primary">Sync bundles</td>
+                <td>Enable to also pull public rule bundles. Rules are always pulled first so bundle membership can be resolved.</td>
+              </tr>
+              <tr>
+                <td class="ps-3 fw-semibold text-primary">Ownership mode</td>
+                <td>
+                  <strong>Shadow user</strong> — a dedicated ghost account is created to own all imported content.
+                  Your account stays clean.<br>
+                  <strong>Become owner</strong> — you (the triggering admin) own all imported rules.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="hiw-callout hiw-callout--success mt-3">
+          <i class="fa-solid fa-shield-check me-2 text-success"></i>
+          After creation, use the <strong>Test Connection</strong> button to verify the remote is reachable
+          and supports the sync API. The test also fetches public rule/bundle counts shown in the connector card.
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 3 — The Sync API
+      ════════════════════════════════════════════════════════════ -->
+      <section id="sync-api" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-code" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">The Sync API</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Every Rulezet instance exposes a set of <strong>read-only federation endpoints</strong>
+          under <code>/api/sync/</code>. These endpoints require no authentication by default
+          (an API key can be enforced by the remote admin). They are what the connector queries during a pull.
+        </p>
+
+        <div class="row g-3 mt-1">
+          <div class="col-12">
+            <div class="rounded-3 border p-3 shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+              <div class="d-flex align-items-start gap-3">
+                <span class="hiw-badge-method hiw-badge-get mt-1">GET</span>
+                <div class="flex-grow-1">
+                  <span class="hiw-endpoint">/api/sync/manifest</span>
+                  <p class="mb-0 mt-1 text-muted" style="font-size:.82rem;">
+                    Returns the remote instance identity (name, version) and its capabilities
+                    (<code>sync_rules</code>, <code>sync_bundles</code>).
+                    Used as a preflight check — if this returns 404, the remote is running an older version
+                    that does not support federation.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="rounded-3 border p-3 shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+              <div class="d-flex align-items-start gap-3">
+                <span class="hiw-badge-method hiw-badge-get mt-1">GET</span>
+                <div class="flex-grow-1">
+                  <span class="hiw-endpoint">/api/sync/stats</span>
+                  <p class="mb-0 mt-1 text-muted" style="font-size:.82rem;">
+                    Returns the total number of active rules and public bundles on the remote.
+                    Used to populate the connector info strip in the pull modal.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="rounded-3 border p-3 shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+              <div class="d-flex align-items-start gap-3">
+                <span class="hiw-badge-method hiw-badge-get mt-1">GET</span>
+                <div class="flex-grow-1">
+                  <span class="hiw-endpoint">/api/sync/rules?since=1970-01-01&amp;page=1&amp;per_page=500</span>
+                  <p class="mb-0 mt-1 text-muted" style="font-size:.82rem;">
+                    Paginated list of non-deleted rules. Each rule payload includes its UUID, format, content,
+                    metadata, all tags, CVE IDs, and the full update history.
+                    The UUID exported is always the <em>canonical origin UUID</em>
+                    (<code>remote_rule_uuid or uuid</code>) so identity stays stable across federation hops.
+                    Up to 500 rules per page.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="rounded-3 border p-3 shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+              <div class="d-flex align-items-start gap-3">
+                <span class="hiw-badge-method hiw-badge-get mt-1">GET</span>
+                <div class="flex-grow-1">
+                  <span class="hiw-endpoint">/api/sync/bundles?since=1970-01-01&amp;page=1&amp;per_page=500</span>
+                  <p class="mb-0 mt-1 text-muted" style="font-size:.82rem;">
+                    Paginated list of public bundles. Each bundle payload includes the list of
+                    canonical rule UUIDs it contains, so the pulling instance can rebuild exact bundle membership.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 4 — Pull lifecycle
+      ════════════════════════════════════════════════════════════ -->
+      <section id="pull-lifecycle" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-rotate" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Pull lifecycle</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          When an admin clicks <em>Pull</em>, a background job of type <code>connector_pull</code> is queued.
+          The job runs asynchronously in the background worker thread and reports progress in real time
+          via the Jobs panel.
+        </p>
+
+        <div class="d-flex flex-column gap-3 mt-2">
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">1</div>
+            <div style="font-size:.88rem;">
+              <strong>Preflight — manifest check</strong><br>
+              <span class="text-muted">
+                The job fetches <code>/api/sync/manifest</code>. If the endpoint returns 404, the pull fails
+                immediately with a clear error message. Otherwise the remote version and capabilities are logged.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">2</div>
+            <div style="font-size:.88rem;">
+              <strong>Pre-flight totals</strong><br>
+              <span class="text-muted">
+                A single one-item request is sent to <code>/api/sync/rules</code> and
+                <code>/api/sync/bundles</code> to read the <code>total</code> field and
+                initialise the progress bar accurately.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">3</div>
+            <div style="font-size:.88rem;">
+              <strong>Paginated rule fetch &amp; upsert</strong><br>
+              <span class="text-muted">
+                Rules are fetched 500 at a time (always from <code>since=1970</code> — full history).
+                For each rule, <code>_upsert_rule()</code> is called and the result is tallied as
+                <em>created / updated / skipped / error</em>.
+                After each page the progress counter is committed so the UI updates in real time.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">4</div>
+            <div style="font-size:.88rem;">
+              <strong>Paginated bundle fetch &amp; upsert (if enabled)</strong><br>
+              <span class="text-muted">
+                After all rules are stored, bundles are fetched and processed via <code>_upsert_bundle()</code>.
+                Rules are always pulled first so bundle membership can be resolved by UUID.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">5</div>
+            <div style="font-size:.88rem;">
+              <strong>Completion</strong><br>
+              <span class="text-muted">
+                A <code>connector.pull_done</code> activity log entry is written with full stats
+                (created / updated / skipped / errors). <code>last_sync_at</code> is updated on the connector.
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 5 — Pull logic (upsert)
+      ════════════════════════════════════════════════════════════ -->
+      <section id="pull-logic" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-code-branch" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Pull logic (upsert)</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          There is a single pull mode. For each rule received from the remote, the same decision tree
+          is always applied. Matching is done exclusively by <strong>UUID</strong> — never by content.
+        </p>
+
+        <!-- Decision tree -->
+        <div class="p-3 rounded-3 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+          <div class="fw-semibold mb-4 text-primary" style="font-size:.85rem;">
+            <i class="fa-solid fa-sitemap me-2"></i>Decision tree — applied to every rule from the remote
+          </div>
+
+          <!-- Step A: UUID match? -->
+          <div class="d-flex align-items-start gap-3 mb-3" style="font-size:.84rem;">
+            <i class="fa-solid fa-diamond text-primary mt-1" style="font-size:.65rem;flex-shrink:0;margin-top:.35rem;"></i>
+            <div>
+              <strong>Is there a local rule whose <code>remote_rule_uuid</code> or <code>uuid</code> matches the remote UUID?</strong>
+            </div>
+          </div>
+
+          <div class="row g-3 ms-2 mb-4">
+            <!-- YES branch -->
+            <div class="col-12 col-md-8">
+              <div class="p-3 rounded-3 border" style="background:var(--light-bg-color);border-color:var(--border-color)!important;font-size:.83rem;">
+                <div class="fw-semibold mb-3 text-success"><i class="fa-solid fa-check me-2"></i>Yes — a local match was found</div>
+
+                <!-- Sub-case: in trash -->
+                <div class="d-flex align-items-start gap-2 mb-2">
+                  <i class="fa-solid fa-caret-right text-muted mt-1" style="font-size:.7rem;flex-shrink:0;"></i>
+                  <div>
+                    <span class="fw-semibold">If the matched rule is in the trash:</span>
+                    it is automatically restored (soft-delete fields are cleared).
+                    Processing then continues with the update checks below.
+                  </div>
+                </div>
+
+                <!-- Sub-case: content changed -->
+                <div class="d-flex align-items-start gap-2 mb-2">
+                  <i class="fa-solid fa-caret-right text-muted mt-1" style="font-size:.7rem;flex-shrink:0;"></i>
+                  <div>
+                    <span class="fw-semibold">If the content (<code>to_string</code>) differs from the remote:</span>
+                    the old content is <strong>archived</strong> in <code>RuleUpdateHistory</code>
+                    before being overwritten. The local rule is updated in place —
+                    its id, votes, comments, and favorites are <strong>never touched</strong>.
+                    <div class="mt-1">
+                      <span class="hiw-verdict hiw-verdict--update"><i class="fa-solid fa-pen"></i> Updated + history archived</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Sub-case: metadata changed -->
+                <div class="d-flex align-items-start gap-2 mb-2">
+                  <i class="fa-solid fa-caret-right text-muted mt-1" style="font-size:.7rem;flex-shrink:0;"></i>
+                  <div>
+                    <span class="fw-semibold">If only metadata changed</span> (title, description, author, version, license, source)
+                    with no content change: fields are updated silently, no history entry is created.
+                    <div class="mt-1">
+                      <span class="hiw-verdict hiw-verdict--update"><i class="fa-solid fa-pen"></i> Updated (metadata only)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Sub-case: identical -->
+                <div class="d-flex align-items-start gap-2">
+                  <i class="fa-solid fa-caret-right text-muted mt-1" style="font-size:.7rem;flex-shrink:0;"></i>
+                  <div>
+                    <span class="fw-semibold">If content and metadata are identical:</span>
+                    nothing is changed.
+                    Tags and CVEs are still re-synced (additive).
+                    <div class="mt-1">
+                      <span class="hiw-verdict hiw-verdict--skip"><i class="fa-solid fa-ban"></i> Skipped</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- NO branch -->
+            <div class="col-12 col-md-4">
+              <div class="p-3 rounded-3 border h-100" style="background:rgba(13,110,253,.05);border-color:rgba(13,110,253,.2)!important;font-size:.83rem;">
+                <div class="fw-semibold mb-2 text-primary"><i class="fa-solid fa-xmark me-2"></i>No match found</div>
+                <p class="text-muted mb-2">
+                  A new local rule is created from the remote data.
+                  Tags, CVEs, and the full update history are imported from the remote.
+                </p>
+                <span class="hiw-verdict hiw-verdict--create"><i class="fa-solid fa-plus"></i> Created</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Always synced note -->
+          <div class="hiw-callout hiw-callout--info">
+            <i class="fa-solid fa-rotate me-2 text-primary"></i>
+            <strong>Tags and CVEs are always re-synced</strong> on every pull, even when content and metadata
+            are identical. This ensures tags added upstream are reflected locally without requiring a content change.
+          </div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 6 — Rule deduplication
+      ════════════════════════════════════════════════════════════ -->
+      <section id="deduplication" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-fingerprint" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Rule deduplication</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Rules are matched exclusively by <strong>UUID</strong> — never by content.
+        </p>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="p-3 rounded-3 h-100 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;font-size:.83rem;">
+              <div class="fw-bold mb-2"><i class="fa-solid fa-key text-primary me-2"></i>Canonical UUID</div>
+              <p class="text-muted mb-0">
+                When a rule is pulled, its <code>remote_rule_uuid</code> is set to the UUID exported by the remote
+                (<code>remote_rule_uuid or uuid</code> on the remote side).
+                Identity is preserved across multi-hop federations:
+                if instance A pulls from B which pulled from C, the canonical UUID traces back to C.
+              </p>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 rounded-3 h-100 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;font-size:.83rem;">
+              <div class="fw-bold mb-2"><i class="fa-solid fa-trash text-danger me-2"></i>Trashed rules are checked too</div>
+              <p class="text-muted mb-0">
+                The local match query explicitly includes soft-deleted rules (active rules are preferred).
+                This prevents a rule you deleted locally from being re-imported as a duplicate.
+                If it is matched, it is restored and updated in place.
+              </p>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 rounded-3 h-100 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;font-size:.83rem;">
+              <div class="fw-bold mb-2"><i class="fa-solid fa-arrow-left text-secondary me-2"></i>Own rules coming back</div>
+              <p class="text-muted mb-0">
+                If a rule that originated on this instance was shared upstream and then comes back during a pull,
+                the lookup also checks <code>Rule.uuid == remote_uuid</code>.
+                This prevents your own rules from being duplicated as a new import.
+              </p>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 rounded-3 h-100 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;font-size:.83rem;">
+              <div class="fw-bold mb-2"><i class="fa-solid fa-shield text-primary me-2"></i>Original source preserved</div>
+              <p class="text-muted mb-0">
+                The <code>source</code> field (e.g. a GitHub URL) is copied from the remote and never
+                overwritten with the connector URL. The connector URL is stored separately in
+                <code>sync_instance_url</code> and displayed in the rule detail page as "Synced from".
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 7 — Tag synchronization
+      ════════════════════════════════════════════════════════════ -->
+      <section id="tags" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-tags" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Tag synchronization</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Tags are re-synced on <strong>every pull</strong>, even when the rule content and metadata are identical.
+          The sync is <strong>additive only</strong> — tags are never removed from a local rule,
+          even if they were removed on the remote.
+        </p>
+
+        <div class="d-flex flex-column gap-3">
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num" style="background:linear-gradient(135deg,#198754,#146c43);">1</div>
+            <div style="font-size:.88rem;">
+              <strong>Exact name lookup</strong><br>
+              <span class="text-muted">
+                For each tag name from the remote, the local DB is searched by exact name (case-insensitive).
+                If found and the tag is inactive, it is reactivated automatically.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num" style="background:linear-gradient(135deg,#198754,#146c43);">2</div>
+            <div style="font-size:.88rem;">
+              <strong>Galaxy auto-install</strong><br>
+              <span class="text-muted">
+                If the tag name starts with <code>misp-galaxy:</code> and is not found locally,
+                the corresponding MISP galaxy is auto-installed from the local submodule (once per galaxy type per pull).
+                The lookup is then retried.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num" style="background:linear-gradient(135deg,#198754,#146c43);">3</div>
+            <div style="font-size:.88rem;">
+              <strong>Galaxy stub creation</strong><br>
+              <span class="text-muted">
+                If the galaxy cluster still does not exist after auto-install (e.g. the local submodule
+                is behind the remote), a <em>stub tag</em> is created so the rule can still be tagged correctly.
+                Stubs are marked with <code>galaxy_meta.stub = true</code>.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num" style="background:linear-gradient(135deg,#198754,#146c43);">4</div>
+            <div style="font-size:.88rem;">
+              <strong>Missing tags reported</strong><br>
+              <span class="text-muted">
+                Non-galaxy tags (taxonomy or manual tags) that don't exist locally are collected and reported
+                in the job summary as "missing tags". The connector panel lets you import these tag families
+                on demand directly from the MISP submodule.
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 8 — Bundle synchronization
+      ════════════════════════════════════════════════════════════ -->
+      <section id="bundles" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-box" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Bundle synchronization</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Bundles are only pulled if <em>Sync bundles</em> is enabled on the connector.
+          Bundle membership sync is <strong>additive</strong>: rules a local user added to the bundle are never removed.
+        </p>
+
+        <div class="table-responsive rounded-3 border shadow-sm" style="border-color:var(--border-color)!important;">
+          <table class="table table-sm mb-0 align-middle" style="background:var(--card-bg-color);font-size:.83rem;">
+            <thead style="background:var(--light-bg-color);">
+              <tr>
+                <th class="fw-semibold ps-3" style="width:30%;">Scenario</th>
+                <th class="fw-semibold">Behaviour</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="ps-3"><span class="hiw-verdict hiw-verdict--create"><i class="fa-solid fa-plus"></i> New bundle</span></td>
+                <td>A new local bundle is created. Its name, description, tags, and CVE identifiers are copied from the remote. Rules are linked by canonical UUID.</td>
+              </tr>
+              <tr>
+                <td class="ps-3"><span class="hiw-verdict hiw-verdict--update"><i class="fa-solid fa-pen"></i> Existing bundle</span></td>
+                <td>Missing rule associations are added (additive). Tags and CVEs are merged. Name/description are updated only if the remote version is newer (<code>updated_at</code> comparison).</td>
+              </tr>
+              <tr>
+                <td class="ps-3"><span class="hiw-verdict hiw-verdict--skip"><i class="fa-solid fa-ban"></i> Unchanged</span></td>
+                <td>If no new rules, tags, or metadata changes are detected, the bundle is skipped.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-2 text-primary"></i>
+          Rules are always pulled <em>before</em> bundles in the same job run, so local rule records
+          are guaranteed to exist when bundle membership is resolved.
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 9 — Ownership modes
+      ════════════════════════════════════════════════════════════ -->
+      <section id="ownership" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-user-shield" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Ownership modes</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Every imported rule and bundle must be associated with a local user account.
+          You choose the ownership strategy when creating the connector.
+        </p>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="p-3 rounded-3 h-100 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;font-size:.84rem;">
+              <div class="fw-bold mb-2">
+                <i class="fa-solid fa-ghost text-secondary me-2"></i>Shadow user
+                <span class="badge bg-primary ms-1" style="font-size:.65rem;">Default</span>
+              </div>
+              <p class="text-muted mb-2">
+                A ghost user account is automatically created for the connector
+                (<code>shadow_&lt;uuid8&gt;@connector.local</code>, random unusable password).
+                All imported rules and bundles are owned by this ghost account.
+              </p>
+              <ul class="mb-0 ps-3 text-muted" style="line-height:1.7;">
+                <li>Your admin account stays clean.</li>
+                <li>Imported content is clearly labelled as coming from the connector.</li>
+                <li>The ghost account cannot log in.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 rounded-3 h-100 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;font-size:.84rem;">
+              <div class="fw-bold mb-2">
+                <i class="fa-solid fa-user-tie text-primary me-2"></i>Become owner
+              </div>
+              <p class="text-muted mb-2">
+                The admin who triggered the pull becomes the owner of all imported rules and bundles.
+              </p>
+              <ul class="mb-0 ps-3 text-muted" style="line-height:1.7;">
+                <li>Useful when you want full editorial control over imported content.</li>
+                <li>Imported rules appear in your profile like locally created ones.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 10 — Self-sync prevention
+      ════════════════════════════════════════════════════════════ -->
+      <section id="self-sync" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-ban" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Self-sync prevention</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          To prevent an instance from pulling from itself (which would cause duplicate rules),
+          the pull endpoint compares the full <code>host:port</code> netloc of the connector URL
+          against <code>request.host</code>.
+        </p>
+        <div class="hiw-callout hiw-callout--danger">
+          <i class="fa-solid fa-circle-xmark me-2 text-danger"></i>
+          If the URLs match, the pull is blocked both client-side (the pull button is disabled with
+          an orange "self" badge) and server-side (HTTP 400). This check compares the full netloc —
+          <code>127.0.0.1:7009</code> and <code>127.0.0.1:7010</code> are considered <em>different</em> instances.
+        </div>
+        <p class="mt-3" style="font-size:.84rem;color:var(--subtle-text-color);">
+          The official Rulezet connector (pointing to <code>https://rulezet.org</code>) is a
+          <strong>system connector</strong> — it is created automatically at startup and cannot be
+          modified or deleted.
+        </p>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 11 — Activity & history
+      ════════════════════════════════════════════════════════════ -->
+      <section id="activity" class="hiw-section mb-4">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-clock-rotate-left" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Activity &amp; history</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Every significant event in the connector lifecycle is recorded in the <strong>Activity Log</strong>
+          and visible in the connector history timeline (last 30 entries, shown 2 at a time with "Show more").
+        </p>
+
+        <div class="row g-2">
+          {% set events = [
+            ('connector.create',         'plug',             'primary',   'Connector created — name, URL, and ownership mode are logged.'),
+            ('connector.update',         'pen',              'secondary', 'Connector settings updated.'),
+            ('connector.delete',         'trash',            'danger',    'Connector deleted — existing imported rules are not deleted; connector_id is nullified on them.'),
+            ('connector.test_ok',        'check',            'success',   'Connection test succeeded — remote name and rule/bundle counts are logged.'),
+            ('connector.pull_triggered', 'cloud-arrow-down', 'info',      'Pull job queued — records the triggering admin and the background job UUID.'),
+            ('connector.pull_done',      'flag-checkered',   'primary',   'Pull completed — full stats (created / updated / skipped / errors / missing tags) stored in extra.'),
+          ] %}
+          {% for action, icon, color, description in events %}
+          <div class="col-12">
+            <div class="d-flex align-items-center gap-3 p-2 rounded-2"
+                 style="background:var(--card-bg-color);border:1px solid var(--border-color);">
+              <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
+                   style="width:28px;height:28px;background:rgba(var(--bs-{{ color }}-rgb),.12);">
+                <i class="fa-solid fa-{{ icon }} text-{{ color }}" style="font-size:.7rem;"></i>
+              </div>
+              <div style="font-size:.82rem;">
+                <code class="text-{{ color }}">{{ action }}</code>
+                <span class="text-muted ms-2">— {{ description }}</span>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="hiw-callout hiw-callout--info mt-4">
+          <i class="fa-solid fa-circle-info me-2 text-primary"></i>
+          Rule content changes made during a pull are also archived in <code>RuleUpdateHistory</code>
+          and visible in the rule's own history tab. These entries are marked
+          <code>manuel_submit=True</code> so they never appear in the pending edit proposals queue.
+        </div>
+      </section>
+
+      <!-- Back to connectors -->
+      <div class="text-center pt-3">
+        <a href="{{ url_for('connector.connector_list') }}" class="btn btn-primary rounded-pill px-4">
+          <i class="fa-solid fa-arrow-left me-2"></i>Back to Connectors
+        </a>
+      </div>
+
+    </div><!-- /col main -->
+  </div><!-- /row -->
+</div><!-- /container -->
+{% endblock %}

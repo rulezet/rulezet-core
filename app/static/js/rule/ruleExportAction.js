@@ -17,7 +17,12 @@ const RuleExportAction = {
         userId: { type: Number, default: null },
         authorFilter: { type: String, default: '' },
         csrfToken: { type: String, default: '' },
-        currentUserIsAuthenticated: { type: Boolean, default: false }
+        currentUserIsAuthenticated: { type: Boolean, default: false },
+        // Explicit rule selection — takes precedence over filters when set
+        ruleIds: { type: Array, default: null },
+        // Hide the trigger button (modal opened programmatically by the host)
+        showButton: { type: Boolean, default: true },
+        modalId: { type: String, default: 'exportActionModal' },
     },
     delimiters: ['[[', ']]'],
     setup(props) {
@@ -26,6 +31,7 @@ const RuleExportAction = {
         const currentView = Vue.ref('main');
         const csrfToken = Vue.ref(props.csrfToken);
         const isOverLimit = Vue.computed(() => props.totalRules > MAX_LIMIT);
+        const hasIdSelection = Vue.computed(() => !!(props.ruleIds && props.ruleIds.length));
         
         const current_user_is_authenticated = Vue.ref(props.currentUserIsAuthenticated);
        
@@ -51,10 +57,9 @@ const RuleExportAction = {
         };
 
         const onBundleCompleted = () => {
-            console.log('uuid', uuid.value);
             create_message('Export completed!', 'success-subtle', false, null,'/bundle/detail/' + uuid.value);
             resetView();
-            const modalEl = document.getElementById('exportActionModal');
+            const modalEl = document.getElementById(props.modalId);
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
         };
@@ -64,17 +69,23 @@ const RuleExportAction = {
             try {
                 const params = new URLSearchParams();
                 params.append('export_format', formatType);
+
+                if (hasIdSelection.value) {
+                    // Explicit selection: export exactly these rules
+                    params.append('ids', props.ruleIds.join(','));
+                } else {
                 params.append('search', props.searchQuery || '');
                 params.append('sort_by', props.sortBy);
                 params.append('rule_type', props.ruleType || '');
                 params.append('author', props.authorFilter || '');
-                
+
                 if (props.userId) params.append('user_id', props.userId);
                 if (props.selectedSources.length) params.append('sources', props.selectedSources.join(','));
                 if (props.selectedVulnerabilities.length) params.append('vulnerabilities', props.selectedVulnerabilities.join(','));
                 if (props.selectedLicenses.length) params.append('licenses', props.selectedLicenses.join(','));
                 if (props.selectedTags.length) params.append('tags', props.selectedTags.join(','));
                 if (props.searchField) params.append('search_field', props.searchField);
+                }
 
                 const response = await fetch(`/rule/export/download?${params.toString()}`);
                 if (!response.ok) throw new Error('Export failed');
@@ -106,20 +117,22 @@ const RuleExportAction = {
             uuid,
             handleUuid,
             message_list,
-            current_user_is_authenticated
+            current_user_is_authenticated,
+            hasIdSelection
         };
     },
     template: `
-    <div class="export-action-container p-3 border-top bg-light-subtle" style="border-radius: 0 0 15px 15px;">
-        <button class="btn btn-primary shadow-sm px-4 fw-bold rounded-pill" 
-                data-bs-toggle="modal" 
-                data-bs-target="#exportActionModal"
+    <div :class="showButton ? 'export-action-container p-3 border-top bg-light-subtle' : ''" :style="showButton ? 'border-radius: 0 0 15px 15px;' : ''">
+        <button v-if="showButton"
+                class="btn btn-primary shadow-sm px-4 fw-bold rounded-pill"
+                data-bs-toggle="modal"
+                :data-bs-target="'#' + modalId"
                 @click="resetView">
             <i class="fa-solid fa-file-export me-2"></i> Export / Bundle
         </button>
 
         <teleport to="body">
-            <div class="modal fade" id="exportActionModal" tabindex="-1" aria-hidden="true" style="z-index: 2000;">
+            <div class="modal fade" :id="modalId" tabindex="-1" aria-hidden="true" style="z-index: 2000;">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
                         
@@ -151,7 +164,7 @@ const RuleExportAction = {
                                         </div>
                                     </div>
                                 </div>
-                                <template v-if="current_user_is_authenticated === 'True'">
+                                <template v-if="current_user_is_authenticated === 'True' && !hasIdSelection">
                                     <div class="col-12">
                                         <div class="p-3 border rounded-4 cursor-pointer transition-all shadow-sm-hover" @click="currentView = 'bundle'">
                                             <div class="d-flex align-items-center text-start">

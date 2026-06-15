@@ -221,6 +221,8 @@ def promote_remove_user_admin(user_id , action) -> bool:
     """Promote or remove user to admin right"""
     if current_user.is_admin():
         user = get_user(user_id)
+        if not user or user.id == current_user.id:
+            return False
         if action == 'remove':
             user.admin = False
             db.session.commit()

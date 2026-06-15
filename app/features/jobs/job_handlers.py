@@ -22,7 +22,7 @@ from pathlib import Path
 
 from app.features.jobs.job_worker import register_handler
 from app import db
-from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJobLog, ActivityLog
+from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJob, BackgroundJobLog, ActivityLog
 from app.features.rule.rule_core import _wipe_rule_children
 
 BATCH_SIZE = 2000   # bulk_insert_mappings handles large batches efficiently
@@ -808,6 +808,278 @@ def handle_trash_permanent_delete_bulk(job, app):
     log_job(job, f"Done — {deleted} rule(s) permanently deleted.", level='success', event='done')
 
 
+# ─── Connector pull ───────────────────────────────────────────────────────────
+
+@register_handler('connector_pull')
+def handle_connector_pull(job, app):
+    """
+    Pull rules (and optionally bundles) from a remote Rulezet instance.
+
+    Payload:
+        connector_id : int — local Connector.id to pull from
+    """
+    import datetime
+    import requests as http_requests
+    from app.core.db_class.db import Connector
+    from app.features.connector.connector_core import (
+        _get_or_create_shadow_user, _upsert_rule, _upsert_bundle, _extract_tag_family,
+    )
+    from app.core.utils.activity_log import log_activity
+
+    import time as _time
+
+    payload      = job.payload or {}
+    connector_id = payload.get('connector_id')
+    job_uuid     = job.uuid
+    t_start      = _time.monotonic()
+
+    with app.app_context():
+        from app.core.db_class.db import BackgroundJob as BJ
+        job = BJ.query.filter_by(uuid=job_uuid).first()
+        connector = Connector.query.get(connector_id)
+        if not connector or not connector.is_active:
+            job.status = 'failed'
+            job.error  = 'Connector not found or inactive.'
+            db.session.commit()
+            return
+
+        if connector.owner_mode == 'self':
+            effective_user_id = connector.owner_id
+        else:
+            shadow = _get_or_create_shadow_user(connector)
+            effective_user_id = shadow.id
+        headers = {'Accept': 'application/json'}
+        if connector.api_key_outbound:
+            headers['X-API-KEY'] = connector.api_key_outbound
+
+        # Full fetch in both modes: hard must also see remote rules that have
+        # not changed since last_sync_at (e.g. to restore a locally deleted
+        # rule), and soft needs the full set for accurate skip counts.
+        since    = '1970-01-01T00:00:00'
+        base     = connector.instance_url.rstrip('/')
+        PER_PAGE = 500
+
+        log_job(job, f"Starting pull from {base}", level='info', event='started')
+
+        # ── Manifest preflight: verify remote supports sync API ────────────────
+        try:
+            mf_resp = http_requests.get(f"{base}/api/sync/manifest", headers=headers, timeout=8)
+            if mf_resp.status_code == 404:
+                msg = ("Remote does not support the sync API — it may be running an older version of "
+                       "Rulezet that does not support federation. Ask the remote admin to upgrade.")
+                log_job(job, msg, level='error', event='done')
+                job.status = 'failed'
+                job.error  = msg
+                connector.last_error = msg
+                db.session.commit()
+                return
+            elif mf_resp.status_code != 200:
+                msg = f"Remote manifest check failed (HTTP {mf_resp.status_code}) — check connectivity."
+                log_job(job, msg, level='error', event='done')
+                job.status = 'failed'
+                job.error  = msg
+                connector.last_error = msg
+                db.session.commit()
+                return
+            mf_data    = mf_resp.json()
+            remote_ver = mf_data.get('instance', {}).get('version', 'unknown')
+            log_job(job, f"Remote version: {remote_ver}", level='info', event='progress')
+            caps = mf_data.get('capabilities', {})
+            if connector.sync_rules and not caps.get('sync_rules', True):
+                log_job(job, "Remote reports sync_rules=false — no rules will be fetched.", level='warning', event='progress')
+            if connector.sync_bundles and not caps.get('sync_bundles', True):
+                log_job(job, "Remote reports sync_bundles=false — no bundles will be fetched.", level='warning', event='progress')
+        except Exception as mf_exc:
+            log_job(job, f"Manifest preflight failed: {mf_exc}", level='warning', event='progress')
+
+        # ── Pre-flight: fetch totals for progress bar ─────────────────────────
+        total_rules_remote   = 0
+        total_bundles_remote = 0
+        try:
+            if connector.sync_rules:
+                r = http_requests.get(f"{base}/api/sync/rules?since={since}&page=1&per_page=1",
+                                      headers=headers, timeout=10)
+                if r.status_code == 200:
+                    total_rules_remote = r.json().get('total', 0)
+            if connector.sync_bundles:
+                r = http_requests.get(f"{base}/api/sync/bundles?since={since}&page=1&per_page=1",
+                                      headers=headers, timeout=10)
+                if r.status_code == 200:
+                    total_bundles_remote = r.json().get('total', 0)
+        except Exception:
+            pass
+
+        job.total = max(1, total_rules_remote + total_bundles_remote)
+        job.done  = 0
+        db.session.commit()
+        log_job(job,
+                f"Remote: {total_rules_remote} rule(s), {total_bundles_remote} bundle(s) available.",
+                level='info', event='progress')
+
+        rules_created  = 0
+        rules_updated  = 0
+        rules_skipped  = 0
+        rules_errors   = 0
+        bundles_created = 0
+        bundles_updated = 0
+        bundles_skipped = 0
+        had_error       = False
+        all_missing_tags: set = set()
+
+        MAX_PAGES = 10_000  # safety guard against infinite pagination loops
+
+        # ── Pull rules ────────────────────────────────────────────────────────
+        if connector.sync_rules:
+            page = 1
+            while page <= MAX_PAGES:
+                if _is_cancelled(job):
+                    log_job(job, 'Cancelled.', level='warning', event='cancelled')
+                    return
+                while _should_pause(job):
+                    import time; time.sleep(2)
+
+                url = f"{base}/api/sync/rules?since={since}&page={page}&per_page={PER_PAGE}"
+                try:
+                    resp = http_requests.get(url, headers=headers, timeout=30)
+                    if resp.status_code != 200:
+                        msg = f"Remote returned HTTP {resp.status_code} for rules page {page}."
+                        log_job(job, msg, level='error', event='progress')
+                        connector.last_error = msg
+                        had_error = True
+                        break
+                    data  = resp.json()
+                    items = data.get('rules', [])
+                    if not items and page > 1:
+                        break  # empty page — remote lied about has_more
+                    pg_created = pg_updated = pg_skipped = 0
+                    for item in items:
+                        try:
+                            result = _upsert_rule(connector, effective_user_id, item, triggered_by_id=job.created_by, missing_tags=all_missing_tags)
+                            if result == 'created':
+                                rules_created += 1; pg_created += 1
+                            elif result == 'updated':
+                                rules_updated += 1; pg_updated += 1
+                            elif result == 'skipped':
+                                rules_skipped += 1; pg_skipped += 1
+                            else:
+                                rules_errors += 1
+                        except Exception as item_exc:
+                            rules_errors += 1
+                            log_job(job, f"Error on rule '{item.get('title', '?')}': {item_exc}",
+                                    level='warning', event='progress')
+                        # Count every processed item so the progress bar actually moves
+                        processed = rules_created + rules_updated + rules_skipped + rules_errors + bundles_created + bundles_updated + bundles_skipped
+                        job.done = min(processed, job.total)
+                    db.session.commit()
+                    log_job(job,
+                            f"Rules p.{page}: +{pg_created} new, ~{pg_updated} updated, ={pg_skipped} skipped.",
+                            level='info', event='progress')
+                    if not data.get('has_more', False):
+                        break
+                    page += 1
+                except Exception as exc:
+                    msg = f"Error fetching rules page {page}: {exc}"
+                    log_job(job, msg, level='error', event='progress')
+                    connector.last_error = msg
+                    had_error = True
+                    db.session.commit()
+                    break
+
+        # ── Pull bundles ──────────────────────────────────────────────────────
+        if connector.sync_bundles:
+            page = 1
+            while page <= MAX_PAGES:
+                if _is_cancelled(job):
+                    log_job(job, 'Cancelled.', level='warning', event='cancelled')
+                    return
+                while _should_pause(job):
+                    import time; time.sleep(2)
+
+                url = f"{base}/api/sync/bundles?since={since}&page={page}&per_page={PER_PAGE}"
+                try:
+                    resp = http_requests.get(url, headers=headers, timeout=30)
+                    if resp.status_code != 200:
+                        had_error = True
+                        break
+                    data  = resp.json()
+                    items = data.get('bundles', [])
+                    if not items and page > 1:
+                        break  # empty page — remote lied about has_more
+                    for item in items:
+                        try:
+                            result = _upsert_bundle(connector, effective_user_id, item, triggered_by_id=job.created_by)
+                            if result == 'created':
+                                bundles_created += 1
+                            elif result == 'updated':
+                                bundles_updated += 1
+                            elif result == 'skipped':
+                                bundles_skipped += 1
+                        except Exception as bundle_exc:
+                            log_job(job, f"Error on bundle '{item.get('name', '?')}': {bundle_exc}",
+                                    level='warning', event='progress')
+                        processed = rules_created + rules_updated + rules_skipped + rules_errors + bundles_created + bundles_updated + bundles_skipped
+                        job.done = min(processed, job.total)
+                    db.session.commit()
+                    if not data.get('has_more', False):
+                        break
+                    page += 1
+                except Exception as exc:
+                    log_job(job, f"Error fetching bundles page {page}: {exc}",
+                            level='error', event='progress')
+                    had_error = True
+                    break
+
+        # ── Finalize ──────────────────────────────────────────────────────────
+        now       = datetime.datetime.now(datetime.timezone.utc)
+        duration  = round(_time.monotonic() - t_start, 1)
+
+        # Compute unique tag families that had no local match
+        missing_families = sorted({
+            f for n in all_missing_tags
+            for f in [_extract_tag_family(n)] if f
+        })
+
+        if not had_error:
+            connector.last_sync_at = now
+            connector.is_verified  = True
+        connector.rules_synced   += rules_created + rules_updated
+        connector.bundles_synced += bundles_created + bundles_updated
+        job.done   = job.total
+        job.status = 'done'
+        db.session.commit()
+
+        summary = (
+            f"Pull done in {duration}s — "
+            f"rules: +{rules_created} new, ~{rules_updated} updated, "
+            f"={rules_skipped} skipped, {rules_errors} errors | "
+            f"bundles: +{bundles_created} new, ~{bundles_updated} updated, ={bundles_skipped} skipped."
+        )
+        if missing_families:
+            log_job(job,
+                    f"Tag families from remote not installed locally: {', '.join(missing_families)}",
+                    level='warning', event='progress')
+
+        log_job(job, summary, level='success', event='done')
+        log_activity('connector.pull_done',
+                     f"Connector '{connector.name}': {summary}",
+                     target_type='connector', target_id=connector.id,
+                     target_uuid=connector.uuid,
+                     extra={
+                         'rules_added':         rules_created,
+                         'rules_updated':       rules_updated,
+                         'rules_skipped':       rules_skipped,
+                         'rules_errors':        rules_errors,
+                         'bundles_added':       bundles_created,
+                         'bundles_updated':     bundles_updated,
+                         'bundles_skipped':     bundles_skipped,
+                         'remote_rules':        total_rules_remote,
+                         'remote_bundles':      total_bundles_remote,
+                         'had_error':           had_error,
+                         'duration_s':          duration,
+                         'missing_tag_families': missing_families,
+                     })
+
+
 # ─── Package management ───────────────────────────────────────────────────────
 
 @register_handler('update_package')
@@ -820,7 +1092,13 @@ def handle_update_package(job, app):
         db.session.commit()
         return
 
+    job_uuid = job.uuid
     with app.app_context():
+        # Re-fetch in this context's session — the worker's `job` object belongs
+        # to another session, so commits here would silently drop its changes.
+        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+        if job is None:
+            return
         job.total = 1
         job.done = 0
         db.session.commit()
@@ -860,7 +1138,12 @@ def handle_uninstall_package(job, app):
         db.session.commit()
         return
 
+    job_uuid = job.uuid
     with app.app_context():
+        # Re-fetch in this context's session (see handle_update_package).
+        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+        if job is None:
+            return
         job.total = 1
         job.done = 0
         db.session.commit()
@@ -902,7 +1185,12 @@ def handle_update_submodule_bg(job, app):
         return
 
     cwd = os.getcwd()
+    job_uuid = job.uuid
     with app.app_context():
+        # Re-fetch in this context's session (see handle_update_package).
+        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+        if job is None:
+            return
         job.total = 1
         job.done = 0
         db.session.commit()
@@ -942,7 +1230,12 @@ def handle_remove_submodule(job, app):
         return
 
     cwd = os.getcwd()
+    job_uuid = job.uuid
     with app.app_context():
+        # Re-fetch in this context's session (see handle_update_package).
+        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+        if job is None:
+            return
         job.total = 3
         job.done = 0
         db.session.commit()

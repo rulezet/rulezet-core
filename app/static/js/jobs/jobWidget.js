@@ -1,7 +1,18 @@
 /**
  * jobWidget.js — Floating background-job status widget
  * Mounts on #job-widget in base.html.
- * Polls /jobs/my_active every 5 s and shows a compact card per job.
+ *
+ * Polling is on-demand, not permanent: one /jobs/my_active call on page load,
+ * then a 5 s loop ONLY while at least one job is pending/running/paused.
+ * Once every job is terminal (or there are none) the loop stops — an idle
+ * user costs a single request per page load.
+ *
+ * Wake-up signals that restart the loop:
+ *   - window event 'rz:job-created' — dispatched by any page right after it
+ *     creates a background job (fire-and-forget, no import needed):
+ *         window.dispatchEvent(new Event('rz:job-created'))
+ *   - tab regaining focus / becoming visible (catches jobs created elsewhere)
+ *
  * Dismissed job UUIDs are stored in sessionStorage and survive page
  * navigation within the same tab, but reset on a new session.
  */
@@ -114,6 +125,31 @@ const JobWidget = {
         async function poll() {
             await pollJobs()
             await pollLogs()
+            // Stop the loop as soon as nothing can still change state
+            if (!jobs.value.some(j => ['pending', 'running', 'paused'].includes(j.status))) {
+                stopPolling()
+            }
+        }
+
+        function startPolling() {
+            if (timer) return
+            timer = setInterval(poll, POLL_INTERVAL)
+        }
+
+        function stopPolling() {
+            if (timer) { clearInterval(timer); timer = null }
+        }
+
+        // One poll now; keep looping only if something is active
+        async function wake() {
+            await poll()
+            if (jobs.value.some(j => ['pending', 'running', 'paused'].includes(j.status))) {
+                startPolling()
+            }
+        }
+
+        function onVisible() {
+            if (document.visibilityState === 'visible') wake()
         }
 
         // ── Toggle log panel ─────────────────────────────────────────────────
@@ -139,9 +175,9 @@ const JobWidget = {
         }
 
         // ── Job controls ─────────────────────────────────────────────────────
-        async function pauseJob(uuid)  { await postJson(`/jobs/pause/${uuid}`);  poll() }
-        async function resumeJob(uuid) { await postJson(`/jobs/resume/${uuid}`); poll() }
-        async function cancelJob(uuid) { await postJson(`/jobs/cancel/${uuid}`); poll() }
+        async function pauseJob(uuid)  { await postJson(`/jobs/pause/${uuid}`);  wake() }
+        async function resumeJob(uuid) { await postJson(`/jobs/resume/${uuid}`); wake() }
+        async function cancelJob(uuid) { await postJson(`/jobs/cancel/${uuid}`); wake() }
 
         // ── Helpers ──────────────────────────────────────────────────────────
         function progress(job) {
@@ -168,12 +204,17 @@ const JobWidget = {
 
         // ── Lifecycle ────────────────────────────────────────────────────────
         onMounted(() => {
-            poll()
-            timer = setInterval(poll, POLL_INTERVAL)
+            wake()
+            window.addEventListener('rz:job-created', wake)
+            document.addEventListener('visibilitychange', onVisible)
+            window.addEventListener('focus', wake)
         })
 
         onUnmounted(() => {
-            if (timer) clearInterval(timer)
+            stopPolling()
+            window.removeEventListener('rz:job-created', wake)
+            document.removeEventListener('visibilitychange', onVisible)
+            window.removeEventListener('focus', wake)
         })
 
         return {

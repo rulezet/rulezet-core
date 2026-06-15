@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% block title %}Instance Registry — Rulezet{% endblock %}
+
+{% block content %}
+{% if current_user.is_admin() %}
+<div class="container-fluid my-4">
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-earth-americas banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Instance Registry</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-earth-americas"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Instance Registry</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:640px;font-size:0.95rem;">
+            All Rulezet instances that have phoned home to this server. Each instance sends a periodic
+            ping containing its UUID, public URL (if configured), version, and rule/bundle counts.
+        </p>
+    </div>
+
+    <!-- Stats strip -->
+    <div class="row g-3 mb-4">
+        {% set active_count  = instances | selectattr('last_seen') | list | length %}
+        {% set ns = namespace(active=0, stale=0, offline=0) %}
+        {% for i in instances %}
+            {# status computed server-side to avoid Jinja date math issues — done via data attr #}
+        {% endfor %}
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 text-center py-3 px-2">
+                <div class="fw-bold" style="font-size:1.8rem;color:var(--text-color);">{{ instances | length }}</div>
+                <div class="text-muted" style="font-size:.8rem;">Total instances</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 text-center py-3 px-2">
+                <div class="fw-bold text-success" style="font-size:1.8rem;" id="count-active">—</div>
+                <div class="text-muted" style="font-size:.8rem;">Active <span class="text-muted">(last 24 h)</span></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 text-center py-3 px-2">
+                <div class="fw-bold text-warning" style="font-size:1.8rem;" id="count-stale">—</div>
+                <div class="text-muted" style="font-size:.8rem;">Stale <span class="text-muted">(1 – 7 days)</span></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 text-center py-3 px-2">
+                <div class="fw-bold text-danger" style="font-size:1.8rem;" id="count-offline">—</div>
+                <div class="text-muted" style="font-size:.8rem;">Offline <span class="text-muted">(&gt; 7 days)</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Own instance info -->
+    {% if own_uuid %}
+    <div class="alert alert-primary d-flex align-items-center gap-3 rounded-4 border-0 shadow-sm mb-4"
+         style="font-size:.87rem;">
+        <i class="fa-solid fa-fingerprint fa-lg"></i>
+        <div>
+            <span class="fw-semibold">This instance's UUID:</span>
+            <code class="ms-2 user-select-all">{{ own_uuid }}</code>
+            <span class="ms-3 text-muted">— this is what remote instances see when they look you up</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Table -->
+    {% if instances %}
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="instances-table">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px;"></th>
+                        <th>UUID</th>
+                        <th>URL</th>
+                        <th>Version</th>
+                        <th class="text-center">Rules</th>
+                        <th class="text-center">Bundles</th>
+                        <th class="text-center">Pings</th>
+                        <th>First seen</th>
+                        <th>Last seen</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inst in instances %}
+                    <tr class="instance-row"
+                        data-last-seen="{{ inst.last_seen }}"
+                        data-uuid="{{ inst.uuid }}">
+                        <td class="text-center">
+                            {% if inst.public_url %}
+                            <a href="{{ inst.public_url }}" target="_blank" rel="noopener"
+                               class="text-muted" title="Open instance">
+                                <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:.75rem;"></i>
+                            </a>
+                            {% else %}
+                            <i class="fa-solid fa-circle-question opacity-25" style="font-size:.75rem;"></i>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <code style="font-size:.78rem;">{{ inst.uuid[:8] }}…</code>
+                            <button class="btn btn-sm p-0 ms-1 text-muted copy-uuid"
+                                    data-uuid="{{ inst.uuid }}" title="Copy full UUID"
+                                    style="font-size:.65rem;vertical-align:middle;">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                            {% if inst.uuid == own_uuid %}
+                            <span class="badge bg-primary-subtle text-primary ms-1" style="font-size:.6rem;">this instance</span>
+                            {% endif %}
+                        </td>
+                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            {% if inst.public_url %}
+                            <a href="{{ inst.public_url }}" target="_blank" rel="noopener"
+                               class="text-decoration-none text-truncate d-block"
+                               style="font-size:.82rem;max-width:200px;">{{ inst.public_url }}</a>
+                            {% else %}
+                            <span class="text-muted" style="font-size:.8rem;">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if inst.version %}
+                            <span class="badge bg-secondary-subtle text-secondary" style="font-size:.72rem;">v{{ inst.version }}</span>
+                            {% else %}
+                            <span class="text-muted" style="font-size:.8rem;">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if inst.rules_count is not none %}
+                            <span class="fw-semibold" style="font-size:.85rem;">{{ "{:,}".format(inst.rules_count) }}</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if inst.bundles_count is not none %}
+                            <span class="fw-semibold" style="font-size:.85rem;">{{ "{:,}".format(inst.bundles_count) }}</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <span style="font-size:.82rem;">{{ inst.ping_count }}</span>
+                        </td>
+                        <td>
+                            <span class="text-muted" style="font-size:.78rem;" title="{{ inst.first_seen }}">{{ inst.first_seen }}</span>
+                        </td>
+                        <td>
+                            <span class="last-seen-cell" style="font-size:.78rem;" data-ts="{{ inst.last_seen }}">{{ inst.last_seen }}</span>
+                        </td>
+                        <td class="status-cell"></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+        <i class="fa-solid fa-satellite-dish d-block mb-3" style="font-size:2.5rem;opacity:.25;"></i>
+        <div class="fw-semibold mb-1">No instances registered yet</div>
+        <p style="font-size:.88rem;max-width:460px;margin:0 auto;">
+            Other Rulezet instances will appear here automatically once they start and phone home
+            to <code>{{ request.host_url }}api/instance/register</code>.
+        </p>
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+(function () {
+    const now = Date.now()
+    const H24 = 24 * 3600 * 1000
+    const D7  = 7  * H24
+
+    let active = 0, stale = 0, offline = 0
+
+    document.querySelectorAll('.instance-row').forEach(row => {
+        const ts  = new Date(row.dataset.lastSeen + ' UTC').getTime()
+        const ago = now - ts
+        const cell = row.querySelector('.status-cell')
+        let badge
+
+        if (ago < H24) {
+            active++
+            badge = '<span class="badge rounded-pill bg-success-subtle text-success" style="font-size:.7rem;"><i class="fa-solid fa-circle me-1" style="font-size:.5rem;"></i>Active</span>'
+        } else if (ago < D7) {
+            stale++
+            badge = '<span class="badge rounded-pill bg-warning-subtle text-warning" style="font-size:.7rem;">Stale</span>'
+        } else {
+            offline++
+            badge = '<span class="badge rounded-pill bg-danger-subtle text-danger" style="font-size:.7rem;">Offline</span>'
+        }
+        cell.innerHTML = badge
+
+        // Relative "last seen" label
+        const lsCell = row.querySelector('.last-seen-cell')
+        if (lsCell) {
+            const mins = Math.floor(ago / 60000)
+            const hrs  = Math.floor(mins / 60)
+            const days = Math.floor(hrs / 24)
+            let rel
+            if (mins < 2)       rel = 'just now'
+            else if (mins < 60) rel = `${mins} min ago`
+            else if (hrs < 24)  rel = `${hrs} h ago`
+            else                rel = `${days} d ago`
+            lsCell.textContent = rel
+        }
+    })
+
+    document.getElementById('count-active').textContent  = active
+    document.getElementById('count-stale').textContent   = stale
+    document.getElementById('count-offline').textContent = offline
+
+    // Copy UUID buttons
+    document.querySelectorAll('.copy-uuid').forEach(btn => {
+        btn.addEventListener('click', () => {
+            navigator.clipboard.writeText(btn.dataset.uuid).then(() => {
+                btn.innerHTML = '<i class="fa-solid fa-check text-success"></i>'
+                setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i>' }, 1500)
+            })
+        })
+    })
+})()
+</script>
+
+{% else %}
+{% include 'access_denied.html' %}
+{% endif %}
+{% endblock %}

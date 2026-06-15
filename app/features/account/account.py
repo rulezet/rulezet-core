@@ -1,6 +1,6 @@
 from typing import Union
 import datetime
-from ...core.db_class.db import User
+from ...core.db_class.db import User, RegisteredInstance, InstanceConfig
 from flask import Blueprint, jsonify, render_template, redirect, url_for, request, flash
 from .form import LoginForm, EditUserForm, AddNewUserForm
 from ..rule import rule_core as RuleModel
@@ -27,6 +27,22 @@ account_blueprint = Blueprint(
 def index() -> render_template:
     """Redirect to the user section"""
     return render_template("account/account_index.html", user=current_user)
+
+@account_blueprint.route("/admin/instances")
+@login_required
+def admin_instances():
+    import uuid as _uuid_mod
+    from flask import current_app, abort
+    if not current_user.is_admin() or not current_app.config.get('IS_OFFICIAL_INSTANCE'):
+        abort(404)
+    instances = RegisteredInstance.query.order_by(RegisteredInstance.last_seen.desc()).all()
+    own_cfg   = InstanceConfig.query.first()
+    return render_template(
+        "admin/instances.html",
+        instances=[i.to_json() for i in instances],
+        own_uuid=own_cfg.uuid if own_cfg else None,
+    )
+
 
 @account_blueprint.route("/admin/all_users")
 @login_required

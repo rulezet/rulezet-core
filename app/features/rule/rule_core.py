@@ -1,15 +1,12 @@
 
-import io
 import json
 from collections import Counter
 import math
 import os
 import re
-import threading
 from typing import Any, Dict, List, Optional, Tuple
 import uuid
 import datetime
-from typing import List
 import zipfile
 import requests
 from sqlalchemy.exc import SQLAlchemyError
@@ -279,8 +276,18 @@ def count_deleted_rules() -> int:
     return Rule.query.filter(Rule.is_deleted == True).count()
 
 
-# Default tags automatically attached to every new rule
-_DEFAULT_TAG_NAMES = ['tlp:clear', 'pap:clear']
+# Default tags automatically attached to every new rule — loaded from config/default_tags.json
+def _load_default_tag_names() -> list:
+    try:
+        from pathlib import Path
+        config_path = Path(__file__).parents[3] / "config" / "default_tags.json"
+        with open(config_path) as f:
+            return json.load(f).get("auto_attach", [])
+    except Exception:
+        return ["tlp:clear", "pap:clear"]
+
+_DEFAULT_TAG_NAMES = _load_default_tag_names()
+
 
 def _attach_default_tags(rule, user_id):
     """Silently attach default tags to a newly created rule if they exist in the DB."""
@@ -601,26 +608,6 @@ def get_sources_from_ids(rule_ids: List[int]) -> List[str]:
 
     return sources
 
-def get_sources_from_ids(rules_list: List[dict]) -> List[str]:
-    """
-    Given a list of dicts containing 'id', retrieve the 'source' from the DB for each rule,
-    but only if the id is unique in the DB and the source has not already been added.
-    Returns a deduplicated list of sources.
-    """
-    sources = []
-
-    for rule_id in rules_list:
-        
-            
-        count = Rule.query.filter_by(id=rule_id).count()
-
-        if count == 1:
-            rule = Rule.query.filter_by(id=rule_id).first()
-            if rule.source not in sources:
-                sources.append(rule.source)
-
-    return sources
-
 def get_rules() -> Rule:
     """Get all the rules"""
     return Rule.query.all()
@@ -827,14 +814,6 @@ def get_rules_by_ids(rule_ids) -> list:
         
     return rule_list
             
-
-def is_valid_github_url(url: str) -> bool:
-    """Check if a URL is a valid GitHub URL."""
-    try:
-        parsed = urlparse(url)
-        return parsed.scheme in ('http', 'https') and 'github.com' in parsed.netloc
-    except Exception:
-        return False
 
 def get_all_rule_update(search=None, rule_type=None, sourceFilter=None) -> List[Rule]:
     """Select all current user's rules with optional filters: search, rule_type, and sourceFilter.
@@ -1322,42 +1301,6 @@ def process_vote(rule_id, user_id, vote_type):
     db.session.commit()
     return rule.vote_up, rule.vote_down, like_delta, dislike_delta
 
-
-# Legacy helpers — still used elsewhere
-def increment_up(id) -> None:
-    rule = get_rule(id)
-    rule.vote_up += 1
-    db.session.commit()
-
-def decrement_up(id) -> None:
-    rule = get_rule(id)
-    rule.vote_down += 1
-    db.session.commit()
-
-def remove_one_to_increment_up(id) -> None:
-    rule = get_rule(id)
-    rule.vote_up -= 1
-    db.session.commit()
-
-def remove_one_to_decrement_up(id) -> None:
-    rule = get_rule(id)
-    rule.vote_down -= 1
-    db.session.commit()
-
-def has_voted(vote, rule_id, id) -> bool:
-    user_id = id or current_user.id
-    db.session.add(RuleVote(rule_id=rule_id, user_id=user_id, vote_type=vote))
-    db.session.commit()
-    return True
-
-def remove_has_voted(vote, rule_id, id) -> bool:
-    user_id = id or current_user.id
-    existing_vote = RuleVote.query.filter_by(rule_id=rule_id, user_id=user_id, vote_type=vote).first()
-    if existing_vote:
-        db.session.delete(existing_vote)
-        db.session.commit()
-        return True
-    return False
 
 #############
 #   Filter  #
@@ -2008,7 +1951,7 @@ def get_last_cve_rules(limit: int = 12) -> list:
         return max((int(y) for y in years), default=0)
 
     rules = (
-        Rule.query
+        _active()
         .filter(
             Rule.cve_id.isnot(None),
             ~Rule.cve_id.in_(['', '[]', 'null', '[""]'])
@@ -2210,6 +2153,101 @@ def get_rule_count_by_github_page(page: int = 1, search: str = None):
         pagination = query.paginate(page=page, per_page=20, max_per_page=20)
 
         return pagination, total_count
+
+_DATA_TABLE_SORT_KEYS = {
+    'title':         Rule.title,
+    'author':        Rule.author,
+    'format':        Rule.format,
+    'license':       Rule.license,
+    'creation_date': Rule.creation_date,
+    'last_modif':    Rule.last_modif,
+    'vote_up':       Rule.vote_up,
+}
+
+
+def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
+                         direction='asc', source=None, user_id=None,
+                         search_field='all', exact_match=False, rule_type=None,
+                         author=None, vulnerabilities=None, licenses=None,
+                         tags=None):
+    """Generic paginated / searchable / sortable rule listing consumed by the
+    rule-data-table component. Filtering is delegated to filter_rules() so the
+    advanced filter bar (tags, licenses, vulnerabilities, sources, exact
+    match…) works identically everywhere. Returns a pagination object."""
+    query = filter_rules(
+        search=search,
+        search_field=search_field or 'all',
+        author=author,
+        sort_by='newest',
+        rule_type=rule_type,
+        vulnerabilities=vulnerabilities,
+        source=source,
+        user_id=user_id,
+        license=licenses,
+        tags=tags,
+        exact_match=exact_match,
+    )
+
+    col = _DATA_TABLE_SORT_KEYS.get(sort)
+    if col is not None:
+        # Replace filter_rules' default ordering with the requested column sort
+        query = query.order_by(None).order_by(
+            col.desc() if direction == 'desc' else col.asc()
+        )
+
+    per_page = max(1, min(100, per_page))
+    return query.paginate(page=page, per_page=per_page, error_out=False)
+
+
+def get_active_rules_by_ids(ids: list) -> list:
+    """Active (non-deleted) rules matching the given id list."""
+    if not ids:
+        return []
+    return _active().filter(Rule.id.in_(ids)).all()
+
+
+def get_github_source_stats(url: str) -> dict:
+    """Aggregate stats about all rules imported from one GitHub source URL —
+    feeds the header of the GitHub source dashboard page."""
+    url = url.rstrip('/')
+    if url.endswith('.git'):
+        url = url[:-4]
+    source_filter = or_(
+        Rule.source.ilike(f"{url}%"),
+        Rule.source.ilike(f"{url}.git%"),
+    )
+    base = _active().filter(source_filter)
+
+    total = base.count()
+    formats = (
+        db.session.query(Rule.format, func.count(Rule.id))
+        .filter(Rule.is_deleted == False, source_filter)
+        .group_by(Rule.format)
+        .order_by(func.count(Rule.id).desc())
+        .all()
+    )
+    authors_count = (
+        db.session.query(func.count(func.distinct(Rule.author)))
+        .filter(Rule.is_deleted == False, source_filter)
+        .scalar()
+    ) or 0
+    licenses_count = (
+        db.session.query(func.count(func.distinct(Rule.license)))
+        .filter(Rule.is_deleted == False, source_filter, Rule.license.isnot(None))
+        .scalar()
+    ) or 0
+    last = base.order_by(Rule.last_modif.desc()).first()
+    first = base.order_by(Rule.creation_date.asc()).first()
+
+    return {
+        'total_rules':    total,
+        'formats':        [{'name': f or 'unknown', 'count': c} for f, c in formats],
+        'authors_count':  authors_count,
+        'licenses_count': licenses_count,
+        'last_update':    last.last_modif.strftime('%Y-%m-%d %H:%M') if last else None,
+        'first_import':   first.creation_date.strftime('%Y-%m-%d %H:%M') if first else None,
+    }
+
 
 def get_all_rule_by_url_github_page(page: int = 1, search: str = None, url: str = None):
     """Get paginated list of Rules whose source matches a specific GitHub project URL."""
@@ -2643,15 +2681,16 @@ def accept_rule_change(history_id):
         return False
     
 def get_all_pending_changes():
+    base = [
+        RuleUpdateHistory.message != "accepted",
+        RuleUpdateHistory.message != "rejected",
+        RuleUpdateHistory.manuel_submit != True,   # already-applied entries (connector pull etc.)
+    ]
     if current_user.is_admin():
-        return RuleUpdateHistory.query.filter(
-            RuleUpdateHistory.message != "accepted",
-            RuleUpdateHistory.message != "rejected"
-        ).all()
+        return RuleUpdateHistory.query.filter(*base).all()
     else:
         return RuleUpdateHistory.query.filter(
-            RuleUpdateHistory.message != "accepted",
-            RuleUpdateHistory.message != "rejected",
+            *base,
             RuleUpdateHistory.analyzed_by_user_id == current_user.id
         ).all()
 

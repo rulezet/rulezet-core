@@ -9,7 +9,9 @@ import os
 
 
 from app.features.rule.rule_format.utils_format.utils_import_update import delete_existing_repo_folder
-from app.core.utils.init_db import create_admin, create_default_user, insert_default_formats, show_admin_first_connection
+from app.core.utils.init_db import create_admin, create_default_user, insert_default_formats, seed_default_tags, show_admin_first_connection
+from app.features.connector.connector_core import seed_official_connector
+from app import _init_instance_config
 
 
 
@@ -27,7 +29,8 @@ os.environ.setdefault('FLASKENV', 'development')
 
 load_dotenv()
 
-app = create_app()
+_cli_mode = args.init_db or args.recreate_db or args.delete_db
+app = create_app(start_worker=not _cli_mode)
 
 @app.errorhandler(404)
 def error_page_not_found(e):
@@ -42,22 +45,28 @@ if args.init_db:
         admin, raw_password = create_admin()
         editor = create_default_user()
         insert_default_formats()
-        show_admin_first_connection(admin , raw_password)
+        seed_official_connector()
+        _init_instance_config(app)
+        seed_default_tags(admin)
+        show_admin_first_connection(admin, raw_password)
 
 elif args.recreate_db:
     with app.app_context():
         db.drop_all()
         db.create_all()
         delete_existing_repo_folder("Rules_Github")
-        admin , raw_password = create_admin()
-        insert_default_formats()
-        show_admin_first_connection(admin , raw_password)
-
+        admin, raw_password = create_admin()
         editor = create_default_user()
+        insert_default_formats()
+        seed_official_connector()
+        _init_instance_config(app)
+        seed_default_tags(admin)
+        show_admin_first_connection(admin, raw_password)
 elif args.delete_db:
     with app.app_context():
         db.drop_all()
         print("DB delete with success")
 else:
-    app.run(host=app.config.get("FLASK_URL"), port=app.config.get("FLASK_PORT"))
+    port = int(os.environ.get("PORT", app.config.get("FLASK_PORT", 7009)))
+    app.run(host=app.config.get("FLASK_URL"), port=port)
     

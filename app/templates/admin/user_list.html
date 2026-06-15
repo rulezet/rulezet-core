@@ -135,10 +135,55 @@
                                 class="btn btn-sm btn-primary me-2">
                                 <i class="fas fa-eye"></i>
                             </a>
+                            <button v-if="{{current_user.id}} != user.id" type="button"
+                                class="btn btn-sm btn-warning me-2"
+                                :title="user.admin ? 'Remove admin rights' : 'Promote to admin'"
+                                data-bs-toggle="modal" :data-bs-target="'#admin_user_modal_'+user.id">
+                                <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
+                            </button>
                             <button type="button" class="btn btn-sm btn-danger" title="Delete the user"
                                 data-bs-toggle="modal" :data-bs-target="'#delete_user_modal_'+user.id">
                                 <i class="fas fa-trash-alt"></i>
                             </button>
+
+                            <!-- Promote / Demote Admin Modal -->
+                            <div class="modal fade" :id="'admin_user_modal_'+user.id" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered modal-sm">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h6 class="modal-title fw-bold text-warning">
+                                                <i class="fas fa-user-shield me-2"></i>
+                                                [[ user.admin ? 'Remove Admin Rights' : 'Promote to Admin' ]]
+                                            </h6>
+                                            <button class="btn-close" data-bs-dismiss="modal"
+                                                aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <p class="mb-2" v-if="user.admin">
+                                                Remove admin rights from
+                                                <strong>[[ user.first_name ]] [[ user.last_name ]]</strong>?
+                                            </p>
+                                            <p class="mb-2" v-else>
+                                                Grant admin rights to
+                                                <strong>[[ user.first_name ]] [[ user.last_name ]]</strong>?
+                                            </p>
+                                            <p class="text-muted small mb-0" v-if="!user.admin">
+                                                Admins can manage users, rules, tags and all administrative sections.
+                                            </p>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-sm btn-secondary"
+                                                data-bs-dismiss="modal">
+                                                Cancel
+                                            </button>
+                                            <button class="btn btn-sm btn-warning" @click="toggleAdmin(user)">
+                                                <i :class="user.admin ? 'fas fa-user-minus me-1' : 'fas fa-user-shield me-1'"></i>
+                                                [[ user.admin ? 'Remove' : 'Promote' ]]
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
                             <!-- Delete Modal -->
                             <div class="modal fade" :id="'delete_user_modal_'+user.id" tabindex="-1" aria-hidden="true">
@@ -286,6 +331,32 @@
 
             }
 
+            /******************promote / demote admin section************************/
+            async function toggleAdmin(user) {
+                const params = new URLSearchParams({
+                    userId: user.id,
+                    action: user.admin ? 'remove' : 'promote'
+                })
+                const res = await fetch('/account/promote_remove_admin?' + params.toString())
+                const data = await res.json()
+
+                const myModalEl = document.getElementById('admin_user_modal_' + user.id);
+                const modal = bootstrap.Modal.getInstance(myModalEl)
+                if (modal) modal.hide();
+
+                if (data.success) {
+                    user.admin = data.admin
+                    create_message(
+                        data.admin
+                            ? user.first_name + ' is now an admin'
+                            : 'Admin rights removed from ' + user.first_name,
+                        "success-subtle"
+                    )
+                } else {
+                    create_message("Failed to update admin rights", "danger-subtle")
+                }
+            }
+
             /*************************filter section******************************/
             async function onSearchInput() {
                 await fetchUsers(1)
@@ -317,6 +388,7 @@
                 total_users,
                 users_list,
                 deleteUser,
+                toggleAdmin,
                 visiblePages,
                 fetchUsers,
                 isAdminFilter,

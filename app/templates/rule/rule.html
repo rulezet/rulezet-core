@@ -625,7 +625,7 @@
 
                   function showParsingModal(event) {
                         if (!url.value.trim()) {
-                              alert("The URL field is required.");
+                              create_message('The URL field is required.', 'warning-subtle');
                               return;
                         }
                         const modal = new bootstrap.Modal(document.getElementById('parsingModal'));

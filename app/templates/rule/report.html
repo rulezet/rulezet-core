@@ -9,6 +9,21 @@
           <li class="breadcrumb-item active text-muted" aria-current="page">Report</li>
       </ol>
   </nav>
+  <!-- Banner -->
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-flag banner-watermark"></i>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-flag"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">Report a Rule</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+      Report content that violates community guidelines. Your report will be reviewed by a moderator.
+    </p>
+  </div>
+
   <!-- Rule Summary -->
   <div class="card shadow-sm mb-4">
     <div class="card-header text-primary d-flex align-items-center">
@@ -141,7 +156,7 @@
 
       async function submitReport() {
         if (!rule.value || !reason.value) {
-          alert("Please select a reason to report.");
+          create_message('Please select a reason to report.', 'warning-subtle');
           return;
         }
 

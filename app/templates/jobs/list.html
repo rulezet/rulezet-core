@@ -48,7 +48,11 @@
             </div>
         </div>
         <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+            {% if current_user.is_admin() %}
             Track and manage all background tasks running on the platform.
+            {% else %}
+            Track the background tasks you started — bulk deletions, restores and imports.
+            {% endif %}
         </p>
     </div>
 
@@ -169,6 +173,10 @@
                             </span>
                             <span class="badge bg-light border text-dark small font-monospace">
                                 [[ job.job_type ]]
+                            </span>
+                            <span v-if="job.owner" class="badge bg-info-subtle text-info small"
+                                  title="Job owner">
+                                <i class="fas fa-user me-1"></i>[[ job.owner ]]
                             </span>
                             <i class="fas ms-auto opacity-50"
                                :class="expandedJob === job.uuid ? 'fa-chevron-up' : 'fa-chevron-down'"
@@ -327,6 +335,60 @@
         @change-page="load">
     </pagination-component>
 
+    {% if current_user.is_admin() %}
+    <!-- ── Section 2 (admin): errors & warnings across all jobs ── -->
+    <div class="card border-0 shadow-sm rounded-4 mt-4 mb-4">
+        <div class="card-body p-3">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="fas fa-triangle-exclamation text-danger"></i>
+                <span class="fw-semibold" style="color: var(--text-color)">Errors &amp; Warnings</span>
+                <span class="badge bg-danger-subtle text-danger rounded-pill">
+                    [[ errors.length ]]
+                </span>
+                <button class="btn btn-sm btn-outline-secondary ms-auto" @click="loadErrors" title="Refresh">
+                    <i class="fas fa-sync" :class="{ 'fa-spin': errorsLoading }"></i>
+                </button>
+            </div>
+            <p class="small mb-2" style="color: var(--subtle-text-color)">
+                Latest error and warning lines recorded by all jobs — including details that
+                otherwise only show up in the server terminal.
+            </p>
+
+            <div v-if="errorsLoading && !errors.length" class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-primary"></div>
+            </div>
+
+            <div v-else-if="!errors.length" class="text-center text-muted small py-3">
+                <i class="fas fa-check-circle me-1 text-success"></i>No errors or warnings recorded.
+            </div>
+
+            <div v-else class="rounded-3 p-2"
+                 style="background: var(--code-bg-color);
+                        max-height: 320px;
+                        overflow-y: auto;
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                        line-height: 1.8;">
+                <div v-for="e in errors" :key="e.id" class="d-flex gap-2 align-items-start">
+                    <span style="color: var(--subtle-text-color); flex-shrink:0; user-select:none">
+                        [[ e.created_at ]]
+                    </span>
+                    <i :class="[logLevelIcon(e.level), logLevelColor(e.level)]"
+                       style="flex-shrink:0; margin-top:5px; font-size:0.65rem"></i>
+                    <a v-if="e.job_uuid" :href="'/jobs/list?job=' + e.job_uuid"
+                       class="badge bg-light border text-dark text-decoration-none"
+                       style="flex-shrink:0" title="Open this job">
+                        [[ e.job_label ]]
+                    </a>
+                    <span :class="logLevelColor(e.level)" style="word-break:break-word">
+                        [[ e.message ]]
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 {% endblock %}
 
@@ -341,6 +403,7 @@
         components: { 'pagination-component': PaginationComponent },
         setup() {
             const csrfToken    = '{{ csrf_token() }}';
+            const isAdmin      = {{ 'true' if current_user.is_admin() else 'false' }};
             const jobs         = ref([]);
             const loading      = ref(true);
             const filterStatus = ref('');
@@ -422,6 +485,19 @@
                 } finally {
                     loading.value = false;
                 }
+            }
+
+            // ── Errors panel (admin) ─────────────────────────────────────────
+            const errors        = ref([]);
+            const errorsLoading = ref(false);
+            async function loadErrors() {
+                if (!isAdmin) return;
+                errorsLoading.value = true;
+                try {
+                    const res = await fetch('/jobs/errors');
+                    if (res.ok) errors.value = await res.json();
+                } catch { /* keep previous list */ }
+                finally { errorsLoading.value = false; }
             }
 
             // ── Zombies ──────────────────────────────────────────────────────
@@ -530,9 +606,12 @@
                 if (targetUuid) highlightUuid.value = targetUuid;
 
                 await load(1);
-                loadZombies();
                 autoTimer = setInterval(maybeAutoRefresh, 3000);
-                setInterval(loadZombies, 15000);
+                if (isAdmin) {
+                    loadZombies();
+                    loadErrors();
+                    setInterval(loadZombies, 15000);
+                }
 
                 if (targetUuid) {
                     await nextTick();
@@ -555,6 +634,7 @@
                 jobs, loading, filterStatus, search, perPage,
                 currentPage, totalPages, totalJobs,
                 acting, zombies, killingZombies,
+                errors, errorsLoading, loadErrors,
                 highlightUuid, expandedJob, jobLogs, logsLoading, logRefs,
                 statusColor, statusIcon, logLevelColor, logLevelIcon,
                 shortTime, elapsed, load, doAction, toggleDetail,

@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
 from flask_migrate import Migrate
@@ -20,7 +20,7 @@ sess = Session()
 ThreadLocalSession = None
 mail = Mail()
 
-def create_app():
+def create_app(start_worker=True):
     load_dotenv()
 
     app = Flask(__name__)
@@ -49,8 +49,7 @@ def create_app():
     from .features.bundle.bundle import bundle_blueprint
     from .features.tags.tags import tags_blueprint
     from app.features.jobs.jobs import jobs_blueprint
-
-
+    from app.features.connector.connector import connector_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
     app.register_blueprint(account_blueprint, url_prefix="/account")
@@ -58,6 +57,7 @@ def create_app():
     app.register_blueprint(bundle_blueprint, url_prefix="/bundle")
     app.register_blueprint(tags_blueprint, url_prefix="/tags")
     app.register_blueprint(jobs_blueprint, url_prefix='/jobs')
+    app.register_blueprint(connector_blueprint, url_prefix='/connector')
 
     from app.api.api import api_blueprint
 
@@ -67,8 +67,16 @@ def create_app():
 
 
     from app.features.jobs import job_handlers  # noqa
-    from app.features.jobs.job_worker import start_worker
-    start_worker(app)
+    if start_worker:
+        from app.features.jobs.job_worker import start_worker as _start_worker
+        _start_worker(app)
+
+    with app.app_context():
+        try:
+            from app.features.connector.connector_core import seed_official_connector
+            seed_official_connector()
+        except Exception:
+            pass
 
     _version_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'version')
     try:
@@ -77,10 +85,109 @@ def create_app():
     except OSError:
         _app_version = 'unknown'
 
+    app.config['APP_VERSION'] = _app_version
+
     @app.context_processor
-    def inject_version():
-        return {'app_version': _app_version}
+    def inject_globals():
+        return {
+            'app_version':        _app_version,
+            'is_official':        app.config.get('IS_OFFICIAL_INSTANCE', False),
+        }
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        # API consumers and fetch() calls get JSON; browsers get the page
+        if request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json':
+            return jsonify({"error": "Forbidden."}), 403
+        return render_template('access_denied.html'), 403
+
+    @app.errorhandler(404)
+    def page_not_found(e):
+        if request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json':
+            return jsonify({"error": "Not found."}), 404
+        return render_template('404.html'), 404
+
+    _init_instance_config(app)
+    if start_worker:
+        _start_telemetry(app)
 
     return app
+
+
+def _init_instance_config(app):
+    """Create or refresh the single InstanceConfig row on every boot.
+
+    cfg.uuid is the stable registry UUID — uuid5(NAMESPACE_URL, reported_url).
+    It matches the UUID sent in telemetry pings and shown in RegisteredInstance.
+    """
+    import uuid as _uuid_mod
+    import datetime
+    from app.core.db_class.db import InstanceConfig
+    with app.app_context():
+        try:
+            cfg = InstanceConfig.query.first()
+            reported_url = (
+                app.config.get('INSTANCE_PUBLIC_URL') or
+                f"http://{app.config.get('FLASK_URL', '127.0.0.1')}"
+                f":{app.config.get('FLASK_PORT', 7009)}"
+            )
+            stable_uuid = str(_uuid_mod.uuid5(_uuid_mod.NAMESPACE_URL, reported_url))
+            if not cfg:
+                cfg = InstanceConfig(
+                    uuid              = stable_uuid,
+                    telemetry_enabled = True,
+                    public_url        = app.config.get('INSTANCE_PUBLIC_URL'),
+                )
+                db.session.add(cfg)
+                db.session.flush()
+            else:
+                cfg.uuid       = stable_uuid
+                cfg.public_url = app.config.get('INSTANCE_PUBLIC_URL') or cfg.public_url
+            cfg.version         = app.config.get('APP_VERSION', 'unknown')
+            cfg.last_started_at = datetime.datetime.utcnow()
+            db.session.commit()
+        except Exception:
+            pass
+
+
+def _start_telemetry(app):
+    """Daemon thread: ping rulezet.org every 24 h so the community can see this instance."""
+    import threading
+    import time
+    import uuid as _uuid_mod
+    import requests as _req
+    from app.core.db_class.db import InstanceConfig, Rule, Bundle
+
+    PING_URL      = os.environ.get('TELEMETRY_URL', 'https://rulezet.org/api/instance/register')
+    STARTUP_DELAY = int(os.environ.get('TELEMETRY_STARTUP_DELAY', 90))
+    INTERVAL      = int(os.environ.get('TELEMETRY_INTERVAL',      86400))
+
+    def _loop():
+        time.sleep(STARTUP_DELAY)
+        while True:
+            try:
+                with app.app_context():
+                    cfg = InstanceConfig.query.first()
+                    if cfg and cfg.telemetry_enabled:
+                        reported_url = cfg.public_url or (
+                            f"http://{app.config.get('FLASK_URL', '127.0.0.1')}"
+                            f":{app.config.get('FLASK_PORT', 7009)}"
+                        )
+                        # Always recompute from URL — never trust in-memory cfg.uuid
+                        # which may be stale if the code was updated without restarting.
+                        ping_uuid = str(_uuid_mod.uuid5(_uuid_mod.NAMESPACE_URL, reported_url))
+                        _req.post(PING_URL, json={
+                            'uuid':          ping_uuid,
+                            'url':           reported_url,
+                            'version':       app.config.get('APP_VERSION', 'unknown'),
+                            'rules_count':   Rule.query.filter_by(is_deleted=False).count(),
+                            'bundles_count': Bundle.query.count(),
+                        }, timeout=8)
+            except Exception:
+                pass
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name='rulezet-telemetry')
+    t.start()
     
     

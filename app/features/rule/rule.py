@@ -1886,9 +1886,7 @@ def get_rules_format() -> dict:
 @rule_blueprint.route("/get_last_cve_rules", methods=['GET'])
 def get_last_cve_rules() -> dict:
     rules = RuleModel.get_last_cve_rules()
-    if rules:
-        return {"success": True, "rules": [r.to_json() for r in rules], "length": len(rules)}, 200
-    return {"message": "No rules with CVE found"}, 404
+    return {"success": True, "rules": [r.to_json() for r in rules], "length": len(rules)}, 200
 
 @rule_blueprint.route("/admin/manage_format_rule", methods=["GET", "POST"])
 @login_required
@@ -2664,6 +2662,67 @@ def github_detail():
         url=url
     )
 
+def _csv_arg(name):
+    raw = request.args.get(name, '', type=str)
+    return [v.strip() for v in raw.split(',') if v.strip()] if raw else None
+
+
+@rule_blueprint.route("/data_table", methods=['GET'])
+def rules_data_table():
+    """Generic rule listing for the rule-data-table component.
+    Supports the full advanced filter set (search_field, exact_match,
+    rule_type, author, sources, vulnerabilities, licenses, tags) on top of
+    page / per_page / search / sort / dir.
+    Response shape: { items, total, total_pages }."""
+    sources = _csv_arg('sources')
+    source  = request.args.get('source', None, type=str)
+    if source:
+        sources = (sources or []) + [source]
+
+    pagination = RuleModel.get_rules_data_table(
+        page=request.args.get('page', 1, type=int),
+        per_page=request.args.get('per_page', 10, type=int),
+        search=request.args.get('search', None, type=str),
+        sort=request.args.get('sort', None, type=str),
+        direction=request.args.get('dir', 'asc', type=str),
+        source=sources,
+        user_id=request.args.get('user_id', None, type=int),
+        search_field=request.args.get('search_field', 'all', type=str),
+        exact_match=request.args.get('exact_match', 'false', type=str) == 'true',
+        rule_type=request.args.get('rule_type', None, type=str),
+        author=request.args.get('author', None, type=str),
+        vulnerabilities=_csv_arg('vulnerabilities'),
+        licenses=_csv_arg('licenses'),
+        tags=_csv_arg('tags'),
+    )
+
+    items = []
+    for r in pagination.items:
+        d = r.to_json()
+        d['tags'] = [t.to_json() for t in RuleModel.get_tags_for_rule(r.id)]
+        try:
+            cves = json.loads(r.cve_id) if r.cve_id else []
+            d['cves'] = cves if isinstance(cves, list) else []
+        except (ValueError, TypeError):
+            d['cves'] = []
+        items.append(d)
+
+    return jsonify({
+        "items":       items,
+        "total":       pagination.total,
+        "total_pages": pagination.pages,
+    }), 200
+
+
+@rule_blueprint.route("/github_source_stats", methods=['GET'])
+def github_source_stats():
+    """Aggregate stats for one GitHub source URL (GitHub dashboard header)."""
+    url = request.args.get('url', None, type=str)
+    if not url:
+        return jsonify({"message": "url is required"}), 400
+    return jsonify(RuleModel.get_github_source_stats(url)), 200
+
+
 @rule_blueprint.route("/get_rule_url_github", methods=['GET'])
 def get_rule_url_github():
     """List all the rule from GitHub URLs"""
@@ -3026,24 +3085,31 @@ def download_rules_export():
 
     vuln_raw = request.args.get("vulnerabilities", "")
     vuln_list = [v.strip() for v in vuln_raw.split(',') if v.strip()] if vuln_raw else []
-    
+
     tag_raw = request.args.get("tags", "")
     tag_list = [t.strip() for t in tag_raw.split(',') if t.strip()] if tag_raw else []
 
-    query = RuleModel.filter_rules(
-        search=filters["search"],
-        search_field=filters["search_field"],
-        author=filters["author"], 
-        sort_by=filters["sort_by"], 
-        rule_type=filters["rule_type"], 
-        vulnerabilities=vuln_list, 
-        source=filters["sources"], 
-        user_id=filters["user_id"], 
-        license=filters["licenses"], 
-        tags=tag_list
-    )
-    
-    rules = query.all()
+    # Explicit selection takes precedence over filters (rule-data-table export)
+    ids_raw = request.args.get("ids", "")
+    ids = [int(i) for i in ids_raw.split(',') if i.strip().isdigit()] if ids_raw else []
+
+    if ids:
+        filters["ids"] = ids
+        rules = RuleModel.get_active_rules_by_ids(ids)
+    else:
+        query = RuleModel.filter_rules(
+            search=filters["search"],
+            search_field=filters["search_field"],
+            author=filters["author"],
+            sort_by=filters["sort_by"],
+            rule_type=filters["rule_type"],
+            vulnerabilities=vuln_list,
+            source=filters["sources"],
+            user_id=filters["user_id"],
+            license=filters["licenses"],
+            tags=tag_list
+        )
+        rules = query.all()
 
     if not rules:
         return "No rules found to export", 404

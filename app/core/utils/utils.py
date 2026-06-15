@@ -60,8 +60,6 @@ def form_to_dict(form):
     return loc_dict
 
 
-import difflib
-
 def generate_diff_html(text_old: str, text_new: str) -> str:
     """
     Generate an HTML representation of the diff between two multi-line texts.

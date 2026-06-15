@@ -96,7 +96,7 @@
 
 <script type="module">
     const { createApp, ref, nextTick } = Vue;
-    import { message_list } from '/static/js/toaster.js';
+    import { message_list, create_message } from '/static/js/toaster.js';
     import { renderDiff } from "/static/js/diff_macro.js";
     createApp({
         delimiters: ['[[', ']]'],
@@ -163,7 +163,7 @@
                         comments.value = await res.json();
                     }
                 } catch (err) {
-                    alert(err)
+                    create_message('Error loading comments: ' + err, 'danger-subtle');
                 }
             }
 

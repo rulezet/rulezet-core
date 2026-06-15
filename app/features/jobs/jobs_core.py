@@ -63,15 +63,6 @@ def get_job_by_uuid(job_uuid):
     return BackgroundJob.query.filter_by(uuid=job_uuid).first()
 
 
-def get_jobs_for_user(user_id, args):
-    query = BackgroundJob.query.filter_by(created_by=user_id)
-    if args.get('status'):
-        query = query.filter_by(status=args['status'])
-    if args.get('job_type'):
-        query = query.filter_by(job_type=args['job_type'])
-    return query.order_by(BackgroundJob.created_at.desc()).limit(50).all()
-
-
 def get_job_logs(job_uuid, since_id=0):
     """Return log lines for a job, optionally only those after since_id."""
     db.session.expire_all()
@@ -82,6 +73,31 @@ def get_job_logs(job_uuid, since_id=0):
     if since_id:
         query = query.filter(BackgroundJobLog.id > since_id)
     return query.order_by(BackgroundJobLog.created_at.asc()).all()
+
+
+def get_job_error_logs(limit=100):
+    """Error/warning log lines across ALL jobs, most recent first, enriched
+    with the job identity — feeds the admin errors panel on /jobs/list."""
+    db.session.expire_all()
+    logs = (BackgroundJobLog.query
+            .filter(BackgroundJobLog.level.in_(['error', 'warning']))
+            .order_by(BackgroundJobLog.created_at.desc())
+            .limit(limit).all())
+    entries = []
+    for log in logs:
+        job = log.job
+        entries.append({
+            'id':         log.id,
+            'level':      log.level,
+            'event':      log.event,
+            'message':    log.message,
+            'created_at': log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else None,
+            'job_uuid':   job.uuid if job else None,
+            'job_label':  (job.label or job.job_type) if job else 'deleted job',
+            'job_type':   job.job_type if job else None,
+            'job_status': job.status if job else None,
+        })
+    return entries
 
 
 def cancel_job(job):
@@ -151,8 +167,9 @@ def delete_job(job):
         return False, str(e)
 
 
-def get_jobs_for_user(user_id, args):
-    query = BackgroundJob.query.filter_by(created_by=user_id)
+def get_jobs_for_user(user_id, args, is_admin=False):
+    """Jobs visible to a user: admins see every job, others only their own."""
+    query = BackgroundJob.query if is_admin else BackgroundJob.query.filter_by(created_by=user_id)
     if args.get('status'):
         query = query.filter_by(status=args['status'])
     if args.get('job_type'):

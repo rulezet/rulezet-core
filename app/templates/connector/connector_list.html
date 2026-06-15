@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+
+{% block title %}Connectors{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/connector/connector.css') }}">
+{% endblock %}
+
+{% block content %}
+<div id="connector-app" v-cloak>
+<div class="container-xl py-4">
+
+   <!-- ── Banner ─────────────────────────────────────────── -->
+   <div class="explorer-banner mb-4">
+      <i class="fa-solid fa-plug banner-watermark"></i>
+      <nav aria-label="breadcrumb" class="mb-3">
+         <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+            <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+            <li class="breadcrumb-item active text-muted" aria-current="page">Connectors</li>
+         </ol>
+      </nav>
+      <div class="d-flex align-items-center gap-3 mb-3">
+         <div class="banner-icon"><i class="fa-solid fa-plug"></i></div>
+         <div>
+            <h2 class="fw-bold mb-1">Connectors</h2>
+            <div class="banner-accent"></div>
+         </div>
+      </div>
+      <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+         Sync detection rules from remote Rulezet instances or compatible platforms.
+         Pulls are triggered by admins.
+      </p>
+   </div>
+
+   <!-- ── How connectors work — link to doc page ─────────── -->
+   <div class="mb-4">
+      <a href="{{ url_for('connector.connector_how_it_works') }}"
+         class="d-inline-flex align-items-center gap-2 px-4 py-2 rounded-pill text-decoration-none fw-semibold shadow-sm"
+         style="background:var(--card-bg-color);border:1px solid var(--border-color);color:var(--text-color);font-size:.875rem;transition:box-shadow .15s;">
+         <i class="fa-solid fa-book-open text-primary"></i>
+         How do connectors work?
+         <i class="fa-solid fa-arrow-right text-primary" style="font-size:.75rem;"></i>
+      </a>
+   </div>
+
+   <!-- ═══════════════════════════════════════════════════════
+        SECTION 1 — Rulezet Instances
+   ════════════════════════════════════════════════════════ -->
+   <div class="d-flex align-items-center gap-2 mb-3">
+      <i class="fa-solid fa-shield-halved text-primary"></i>
+      <h5 class="fw-bold mb-0">Rulezet Instances</h5>
+   </div>
+
+   <connector-table
+      ref="rulezetTable"
+      section="rulezet"
+      :is-admin="IS_ADMIN"
+      :csrf-token="CSRF"
+      @create="openCreate('rulezet')"
+      @edit="openEdit"
+      @pull-requested="openPullModal"
+      class="mb-5">
+   </connector-table>
+
+   <!-- ═══════════════════════════════════════════════════════
+        SECTION 2 — Other Connectors
+   ════════════════════════════════════════════════════════ -->
+   <!-- <div class="d-flex align-items-center gap-2 mb-3">
+      <i class="fa-solid fa-network-wired text-secondary"></i>
+      <h5 class="fw-bold mb-0">Other Connectors</h5>
+      <span class="badge bg-secondary" style="font-size:.65rem;">Coming soon</span>
+   </div>
+
+   <connector-table
+      ref="otherTable"
+      section="other"
+      :is-admin="IS_ADMIN"
+      :csrf-token="CSRF"
+      @create="openCreate('other')"
+      @edit="openEdit"
+      class="mb-5">
+   </connector-table> -->
+
+</div><!-- /container -->
+
+<!-- ── Create / Edit modal ────────────────────────────────── -->
+<div class="modal fade" id="connectorModal" tabindex="-1">
+   <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg" style="background:var(--card-bg-color);">
+         <div class="modal-header border-bottom">
+            <h5 class="modal-title fw-bold">
+               <i class="fa-solid fa-plug text-primary me-2"></i>
+               [[ editMode ? 'Edit Connector' : 'New Connector' ]]
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+         </div>
+         <div class="modal-body p-4">
+
+            <!-- Icon picker -->
+            <div class="mb-3">
+               <label class="connector-form-label">Icon</label>
+               <div class="d-flex gap-2 flex-wrap">
+                  <button v-for="ic in ICON_OPTIONS" :key="ic.cls"
+                     type="button"
+                     :class="['btn', 'btn-sm', 'rounded-pill', form.icon === ic.cls ? 'btn-primary' : 'btn-outline-secondary']"
+                     @click="form.icon = ic.cls" :title="ic.label">
+                     <i :class="ic.cls + ' me-1'"></i>[[ ic.label ]]
+                  </button>
+               </div>
+            </div>
+
+            <div class="mb-3">
+               <label class="connector-form-label">Name <span class="text-danger">*</span></label>
+               <input v-model="form.name" type="text" class="form-control"
+                      placeholder="My Rulezet Instance" maxlength="120">
+            </div>
+
+            <div class="mb-3">
+               <label class="connector-form-label">Instance URL <span class="text-danger">*</span></label>
+               <input v-model="form.instance_url" type="url" class="form-control"
+                      placeholder="https://rulezet.example.com">
+            </div>
+
+            <div class="mb-3">
+               <label class="connector-form-label">Description</label>
+               <input v-model="form.description" type="text" class="form-control"
+                      placeholder="Optional note" maxlength="255">
+            </div>
+
+            <!-- Owner mode -->
+            <div class="mb-3">
+               <label class="connector-form-label">Imported content ownership</label>
+               <div class="d-flex gap-3 mt-1">
+                  <div class="form-check">
+                     <input class="form-check-input" type="radio" id="modeShd" value="shadow" v-model="form.owner_mode">
+                     <label class="form-check-label" for="modeShd">
+                        <strong>Shadow user</strong>
+                        <div class="connector-form-hint">A ghost account owns imported rules — keeps your account clean</div>
+                     </label>
+                  </div>
+                  <div class="form-check">
+                     <input class="form-check-input" type="radio" id="modeSelf" value="self" v-model="form.owner_mode">
+                     <label class="form-check-label" for="modeSelf">
+                        <strong>Become owner</strong>
+                        <div class="connector-form-hint">You become the owner of all imported rules and public bundles</div>
+                     </label>
+                  </div>
+               </div>
+            </div>
+
+            <div class="d-flex gap-4 mb-1">
+               <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="chkRules" v-model="form.sync_rules">
+                  <label class="form-check-label" for="chkRules">Sync rules</label>
+               </div>
+               <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="chkBundles" v-model="form.sync_bundles">
+                  <label class="form-check-label" for="chkBundles">Sync bundles</label>
+               </div>
+               <div v-if="editMode" class="form-check">
+                  <input class="form-check-input" type="checkbox" id="chkActive" v-model="form.is_active">
+                  <label class="form-check-label" for="chkActive">Active</label>
+               </div>
+            </div>
+
+            <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2">
+               <i class="fa-solid fa-circle-exclamation me-1"></i>[[ formError ]]
+            </div>
+         </div>
+         <div class="modal-footer border-top">
+            <button class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Cancel</button>
+            <button class="btn btn-primary rounded-pill px-4" @click="saveConnector" :disabled="saving">
+               <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>
+               [[ editMode ? 'Save Changes' : 'Create Connector' ]]
+            </button>
+         </div>
+      </div>
+   </div>
+</div>
+
+<!-- ── Pull modal ──────────────────────────────────────────── -->
+<div class="modal fade" id="pullModal" tabindex="-1">
+   <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+      <div class="modal-content border-0 shadow-lg" style="background:var(--card-bg-color);">
+
+         <div class="modal-header border-bottom">
+            <div class="d-flex align-items-center gap-2">
+               <i class="fa-solid fa-cloud-arrow-down text-primary"></i>
+               <h5 class="modal-title fw-bold mb-0">
+                  Pull from <span class="text-primary">[[ pullConnector?.name || '…' ]]</span>
+               </h5>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+         </div>
+
+         <div class="modal-body p-4">
+
+            <!-- Connector info strip -->
+            <div v-if="pullConnector" class="d-flex align-items-center gap-3 p-3 mb-4 rounded-3"
+                 style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+               <div class="cnt-icon-sm" :class="pullConnector.is_verified ? 'cnt-icon-sm--ok' : (pullConnector.last_error ? 'cnt-icon-sm--err' : '')">
+                  <i :class="pullConnector.icon || 'fa-solid fa-plug'"></i>
+               </div>
+               <div class="flex-grow-1 min-w-0">
+                  <div class="fw-semibold text-truncate" style="font-size:.88rem;">[[ pullConnector.instance_url ]]</div>
+                  <div class="d-flex flex-wrap gap-3 mt-1" style="font-size:.78rem;color:var(--subtle-text-color);">
+                     <span><i class="fa-solid fa-shield-halved me-1 text-primary"></i>[[ (pullConnector.rules_count ?? '?').toLocaleString() ]] rules</span>
+                     <span><i class="fa-solid fa-box me-1 text-secondary"></i>[[ pullConnector.bundles_count ?? '?' ]] bundles</span>
+                     <span v-if="pullConnector.last_sync_at"><i class="fa-solid fa-rotate me-1"></i>Last sync: [[ pullConnector.last_sync_at ]]</span>
+                     <span v-if="pullConnector.last_error" class="text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>[[ pullConnector.last_error ]]</span>
+                  </div>
+               </div>
+            </div>
+
+            <!-- Filters -->
+            <connector-pull-filter ref="pullFilterRef" @filter="onFilterChange"></connector-pull-filter>
+
+         </div>
+
+         <div class="modal-footer border-top d-flex justify-content-between align-items-center">
+            <div v-if="pullConnector" class="text-muted" style="font-size:.78rem;">
+               <i class="fa-solid fa-circle-info me-1"></i>
+               Pulling from <strong>[[ pullConnector.name ]]</strong>
+            </div>
+            <div class="d-flex gap-2">
+               <button class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Cancel</button>
+               <button class="btn btn-success rounded-pill px-4"
+                       @click="submitPull" :disabled="pullBusy">
+                  <span v-if="pullBusy" class="spinner-border spinner-border-sm me-1"></span>
+                  <i v-else class="fa-solid fa-cloud-arrow-down me-1"></i>
+                  Pull
+               </button>
+            </div>
+         </div>
+
+      </div>
+   </div>
+</div>
+
+</div><!-- /connector-app -->
+{% endblock %}
+
+{% block script %}
+<script type="module">
+import ConnectorTable      from '/static/js/connector/connectorTable.js'
+import ConnectorPullFilter from '/static/js/connector/connectorPullFilter.js'
+import { create_message }  from '/static/js/toaster.js'
+
+const { createApp, ref, reactive, onMounted } = Vue
+
+const CSRF     = '{{ csrf_token() }}'
+const IS_ADMIN = {{ 'true' if current_user.is_admin() else 'false' }}
+
+const ICON_OPTIONS = [
+   { cls: 'fa-solid fa-plug',          label: 'Plug' },
+   { cls: 'fa-solid fa-shield-halved', label: 'Shield' },
+   { cls: 'fa-solid fa-network-wired', label: 'Network' },
+   { cls: 'fa-solid fa-cloud',         label: 'Cloud' },
+   { cls: 'fa-solid fa-server',        label: 'Server' },
+   { cls: 'fa-solid fa-globe',         label: 'Globe' },
+   { cls: 'fa-brands fa-github',       label: 'GitHub' },
+   { cls: 'fa-solid fa-lock',          label: 'Lock' },
+]
+
+
+createApp({
+   delimiters: ['[[', ']]'],
+   components: {
+      'connector-table':       ConnectorTable,
+      'connector-pull-filter': ConnectorPullFilter,
+   },
+   setup() {
+      const rulezetTable = ref(null)
+      const otherTable   = ref(null)
+
+      const saving    = ref(false)
+      const editMode  = ref(false)
+      const editUuid  = ref(null)
+      const formError = ref('')
+
+      const form = reactive({
+         name: '', instance_url: '', description: '',
+         icon: 'fa-solid fa-plug',
+         connector_type: 'rulezet',
+         sync_rules: true, sync_bundles: false,
+         is_active: true, owner_mode: 'shadow',
+      })
+
+      // Pull modal state
+      const pullConnector = ref(null)
+      const pullBusy      = ref(false)
+      const pullFilterRef = ref(null)
+      const pullFilters   = ref({})
+
+      function onFilterChange(f) { pullFilters.value = f }
+
+      let bsModal, bsPullModal
+
+      onMounted(() => {
+         const Modal = window.bootstrap?.Modal
+         if (Modal) {
+            bsModal     = new Modal(document.getElementById('connectorModal'))
+            bsPullModal = new Modal(document.getElementById('pullModal'))
+         }
+      })
+
+      function resetForm(type = 'rulezet') {
+         Object.assign(form, {
+            name: '', instance_url: '', description: '',
+            icon: 'fa-solid fa-plug',
+            connector_type: type,
+            sync_rules: true, sync_bundles: false,
+            is_active: true, owner_mode: 'shadow',
+         })
+         formError.value = ''
+      }
+
+      function openCreate(type = 'rulezet') {
+         editMode.value = false
+         editUuid.value = null
+         resetForm(type)
+         bsModal?.show()
+      }
+
+      function openEdit(c) {
+         editMode.value = true
+         editUuid.value = c.uuid
+         Object.assign(form, {
+            name:           c.name,
+            instance_url:   c.instance_url,
+            description:    c.description || '',
+            icon:           c.icon || 'fa-solid fa-plug',
+            connector_type: c.connector_type,
+            sync_rules:     c.sync_rules,
+            sync_bundles:   c.sync_bundles,
+            is_active:      c.is_active,
+            owner_mode:     c.owner_mode,
+         })
+         formError.value = ''
+         bsModal?.show()
+      }
+
+      async function saveConnector() {
+         formError.value = ''
+         if (!form.name.trim() || !form.instance_url.trim()) {
+            formError.value = 'Name and Instance URL are required.'
+            return
+         }
+         saving.value = true
+         try {
+            const url  = editMode.value ? `/connector/update/${editUuid.value}` : '/connector/create'
+            const res  = await fetch(url, {
+               method:  'POST',
+               headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+               body:    JSON.stringify({ ...form }),
+            })
+            const data = await res.json()
+            if (data.success) {
+               bsModal?.hide()
+               create_message(editMode.value ? 'Connector updated.' : 'Connector created.', 'success')
+               rulezetTable.value?.refresh()
+               otherTable.value?.refresh()
+            } else {
+               formError.value = data.error || 'An error occurred.'
+            }
+         } catch { formError.value = 'Network error.' }
+         finally { saving.value = false }
+      }
+
+      function openPullModal(c) {
+         pullConnector.value = c
+         bsPullModal?.show()
+      }
+
+      async function submitPull() {
+         if (!pullConnector.value) return
+         pullBusy.value = true
+         try {
+            const filters = pullFilterRef.value?.getFilter?.() || pullFilters.value || {}
+            const res  = await fetch(`/connector/pull/${pullConnector.value.uuid}`, {
+               method:  'POST',
+               headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+               body:    JSON.stringify({ filters }),
+            })
+            const data = await res.json()
+            bsPullModal?.hide()
+            if (data.success) window.dispatchEvent(new Event('rz:job-created'))
+            create_message(
+               data.success ? 'Pull queued as background job.' : (data.error || 'Error queuing pull.'),
+               data.success ? 'success' : 'danger'
+            )
+         } catch { create_message('Network error — pull not queued.', 'danger') }
+         finally { pullBusy.value = false }
+      }
+
+      return {
+         IS_ADMIN, CSRF, ICON_OPTIONS,
+         rulezetTable, otherTable,
+         saving, editMode, form, formError,
+         openCreate, openEdit, saveConnector,
+         pullConnector, pullBusy, pullFilterRef,
+         onFilterChange, openPullModal, submitPull,
+      }
+   }
+}).mount('#connector-app')
+</script>
+{% endblock %}

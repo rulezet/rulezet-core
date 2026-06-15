@@ -101,6 +101,16 @@
                </li>
                {% endif %}
 
+               <!-- ── Connectors (admin only) ── -->
+               {% if current_user.is_authenticated and current_user.is_admin() %}
+               <li class="nav-item">
+                  <a class="nav-link custom-nav-link fw-bold {% if request.path.startswith('/connector') %}active{% endif %}"
+                     href="/connector/list">
+                     <i class="fa-solid fa-plug fa-fw me-1 text-primary"></i>Connectors
+                  </a>
+               </li>
+               {% endif %}
+
                <!-- ── Admin ── -->
                {% if current_user.is_authenticated and current_user.is_admin() %}
                <li class="nav-item dropdown px-2">
@@ -141,6 +151,10 @@
                      </li>
                      <li><a href="/admin/logs" class="dropdown-item py-2 {% if request.path == '/admin/logs' %}active{% endif %}">
                            <i class="fa-solid fa-scroll fa-fw me-2 text-muted"></i>Activity Logs</a></li>
+                     {% if is_official %}
+                     <li><a href="/account/admin/instances" class="dropdown-item py-2 {% if request.path == '/account/admin/instances' %}active{% endif %}">
+                           <i class="fa-solid fa-earth-americas fa-fw me-2 text-muted"></i>Instance Registry</a></li>
+                     {% endif %}
                      <li>
                         <a href="/rule/trash" class="dropdown-item py-2 d-flex justify-content-between align-items-center {% if request.path == '/rule/trash' %}active{% endif %}">
                            <span><i class="fa-solid fa-trash-can-arrow-up fa-fw me-2 "></i>Trash</span>
@@ -256,6 +270,8 @@
                            <i class="fa-solid fa-user-shield me-2 text-muted"></i>My Rules</a></li>
                      <li><a href="/tags/my_tags" class="dropdown-item rounded py-2">
                            <i class="fa-solid fa-tags me-2 text-muted"></i>My Tags</a></li>
+                     <li><a href="/jobs/list" class="dropdown-item rounded py-2">
+                           <i class="fa-solid fa-tasks me-2 text-muted"></i>My Jobs</a></li>
                      <li><a href="/account/contributor" class="dropdown-item rounded py-2">
                            <i class="fa-solid fa-user-group fa-fw me-2 text-muted"></i>Contributors</a></li>
                      <li><hr class="dropdown-divider"></li>

@@ -70,6 +70,18 @@ gunicorn -w 4 wsgi:app
 
 Secrets live in `.env` (`SECRET_KEY`, `MAIL_PASSWORD`). The app runs on `127.0.0.1:7009` by default.
 
+### Additional `.env` variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASK_URL` | `127.0.0.1` | Host the app binds to |
+| `FLASK_PORT` | `7009` | Port the app listens on |
+| `INSTANCE_PUBLIC_URL` | *(none)* | Public-facing URL reported in telemetry (e.g. `https://myinstance.example.com`). If unset, `http://FLASK_URL:FLASK_PORT` is used. |
+| `IS_OFFICIAL_INSTANCE` | `false` | **Set to `true` only on rulezet.org.** Enables the Instance Registry admin page and makes `/api/instance/register` accept incoming pings. All other instances return 404 on that endpoint. |
+| `TELEMETRY_URL` | `https://rulezet.org/api/instance/register` | Override ping destination (for local testing only — remove in production). |
+| `TELEMETRY_STARTUP_DELAY` | `90` | Seconds to wait after boot before first ping. |
+| `TELEMETRY_INTERVAL` | `86400` | Seconds between pings (default 24 h). |
+
 ---
 
 ## Architecture
@@ -357,7 +369,127 @@ log_activity("rule.create", f"Created rule '{rule.title}'",
 
 **Public activity feed** (`/activity_feed`): only entries with `is_public=True` are shown; the `_is_accessible(log)` helper additionally checks that the linked rule/bundle/comment still exists and is not deleted.
 
-**Logged everywhere**: rule create/edit/delete/vote/favorite/bulk-delete/scope change, bundle create/edit/delete, user login/logout/register/edit/delete, admin promote/demote/request approve/reject, tag create/edit/delete/toggle, job create/cancel/pause/resume/delete, GitHub source delete.
+**Logged everywhere**: rule create/edit/delete/vote/favorite/bulk-delete/scope change, bundle create/edit/delete, user login/logout/register/edit/delete, admin promote/demote/request approve/reject, tag create/edit/delete/toggle, job create/cancel/pause/resume/delete, GitHub source delete, connector create/update/delete/test/pull.
+
+### Connector / Federation sync system
+
+Connectors allow an admin to link this Rulezet instance to another and pull detection rules from it. **Accessible to admins only** (enforced via `connector_blueprint.before_request` — non-admins get 403, unauthenticated users are redirected to login). The sidebar link is also hidden for non-admins.
+
+#### Files
+
+| File | Role |
+|------|------|
+| `app/features/connector/connector.py` | Blueprint — UI routes, all gated by `_require_admin()` before_request |
+| `app/features/connector/connector_core.py` | Business logic: CRUD, shadow user, test, pull trigger, sync helpers |
+| `app/features/jobs/job_handlers.py` | `handle_connector_pull` — background job handler that drives the actual sync |
+| `app/api/connector/connector_sync_api.py` | Sync API exposed **by** this instance to remote connectors (`/api/sync/…`) |
+| `app/static/js/connector/connectorTable.js` | Vue 3 component — table + card view, pull dropdown, history timeline |
+| `app/templates/connector/connector_list.html` | Page template — uses `ConnectorTable` component |
+| `app/static/css/connector/connector.css` | Connector-specific styles |
+
+#### Data model (`Connector` in `db.py`)
+
+| Field | Purpose |
+|-------|---------|
+| `uuid` | Public identifier |
+| `name` / `description` / `icon` | Display info |
+| `connector_type` | `'rulezet'` (only type currently implemented) |
+| `instance_url` | Base URL of the remote instance (stripped of trailing `/`) |
+| `api_key_outbound` | Optional key sent in `X-API-KEY` header when calling the remote |
+| `owner_id` | Admin user who created the connector |
+| `owner_mode` | `'shadow'` — a ghost account owns imported rules; `'self'` — the triggering admin owns them |
+| `sync_rules` / `sync_bundles` | What to synchronize |
+| `is_active` | Disabling prevents new pulls |
+| `is_system` | `True` for the read-only official Rulezet connector (cannot be modified or deleted) |
+| `shadow_user_id` | FK to the auto-created ghost `User` for `owner_mode='shadow'` |
+| `last_sync_at` | Timestamp of last completed pull |
+| `last_error` | Last connection error string |
+
+#### Rule origin fields (on the `Rule` model)
+
+| Field | Purpose |
+|-------|---------|
+| `connector_id` | FK to the `Connector` that imported this rule (SET NULL if connector deleted) |
+| `remote_rule_uuid` | UUID of the rule **on the remote instance** — used for deduplication |
+| `sync_instance_url` | URL of the remote instance — persisted even after connector deletion; shown in rule detail as "Synced from" |
+
+`source` is kept **intact** from the remote (original GitHub URL etc.) — it is never overwritten with the connector URL.
+
+#### Sync API (exposed by this instance — `app/api/connector/connector_sync_api.py`)
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/sync/manifest` | None | Instance identity + capabilities |
+| `GET /api/sync/stats` | None | Public rule/bundle counts |
+| `GET /api/sync/rules` | None | Paginated rules with `?since=`, `?page=`, `?per_page=` |
+| `GET /api/sync/bundles` | None | Paginated public bundles |
+
+`_rule_to_sync_json()` includes `update_history` (list of `RuleUpdateHistory` entries) so pulling instances can import the full change history. The exported `uuid` is the **canonical origin uuid** (`remote_rule_uuid or uuid`) so rule identity stays stable across federation hops. `_bundle_to_sync_json()` includes `rules` — the canonical uuids of the bundle's rules — so pulling instances can rebuild bundle membership.
+
+#### Pull modes
+
+Matching is **by uuid only** (remote canonical uuid vs local `remote_rule_uuid` or `uuid`) — content is never compared. Trashed rules are matched too (active first). Both modes fetch the full remote set (`since=1970`).
+
+| Mode | Behaviour |
+|------|-----------|
+| **Soft** | **If uuid match found (even in the trash) → skip. If no match → create.** Existing rules, local deletions and history are never touched. |
+| **Hard** | Same lookup. **If uuid match found and the remote version differs → import it over the local rule in place. A content (`to_string`) change is archived first in `RuleUpdateHistory` (old_content = local, new_content = remote); metadata-only changes (title, description, …) are applied without a history entry. A match found in the trash is restored. Identical active rule → skip. If no match → create + import remote history.** Rules are never deleted/recreated — id, votes, comments and favorites are preserved. |
+
+#### `_upsert_rule` logic (`connector_core.py`)
+
+```python
+# 1. Find local match by uuid: or_(remote_rule_uuid == uuid, Rule.uuid == uuid)
+# 2. Soft mode + match → return 'skipped'
+# 3. Hard mode + match → if content identical → 'skipped';
+#    else add RuleUpdateHistory(old_content=local, new_content=remote),
+#    update the rule fields in place, _sync_tags(), _import_rule_history()
+#    → return 'updated'
+# 4. No match → create new Rule(remote_rule_uuid=..., sync_instance_url=..., ...)
+#    + _sync_tags() + _import_rule_history(remote['update_history']) → 'created'
+```
+
+#### Bundle membership sync
+
+`_upsert_bundle()` calls `_sync_bundle_rules(bundle, remote['rules'])` which attaches local rules matched by uuid via `BundleRuleAssociation`. Additive only — rules a local user added to the bundle are never removed. Membership is repaired on every pull, even for bundles that are otherwise skipped/unchanged. Rules are pulled before bundles in `handle_connector_pull`, so the rules already exist locally when `sync_rules` is enabled.
+
+Owner of the created rule:
+- `owner_mode='shadow'` → `shadow_user_id` (the ghost account)
+- `owner_mode='self'` + hard pull → the admin who triggered the pull (`triggered_by_id`)
+
+#### Background job (`handle_connector_pull` in `job_handlers.py`)
+
+Job type: `connector_pull`. Payload: `{ connector_id, mode }`.
+
+- Fetches all pages from `/api/sync/rules` (soft: `since=1970`, hard: `since=last_sync_at`)
+- Calls `_upsert_rule()` per rule, tallies `rules_created / rules_skipped / rules_errors`
+- Fetches bundles if `connector.sync_bundles`, calls `_upsert_bundle()`
+- Sets `job.done = job.total` at completion (critical — was hardcoded to 1)
+- Logs `connector.pull_done` with full stats in `extra`
+
+#### Self-sync prevention
+
+`_is_self(instance_url)` compares the **full netloc** (`host:port`) of the connector URL against `request.host`. Prevents pulling from the current instance even on a different port (e.g. `127.0.0.1:7009` ≠ `127.0.0.1:7010`).
+
+#### Shadow user
+
+Each connector lazily creates a ghost `User` with email `shadow_<uuid8>@connector.local` and a random unusable password. This user owns all rules imported in `owner_mode='shadow'`. Retrieved via `_get_or_create_shadow_user(connector)`.
+
+#### Official connector
+
+`seed_official_connector()` (called at app start) creates a read-only system connector pointing to `https://rulezet.org` if none exists yet. It cannot be modified or deleted.
+
+#### UI (`connectorTable.js`)
+
+- `ConnectorRow` (table) and `ConnectorCard` (card) Vue components, both in `connectorTable.js`
+- Pull button is a single Bootstrap dropdown with **Soft pull** / **Hard pull** options; disabled if `is_self`
+- `is_self` connectors show an orange "self" badge; pull is blocked client-side and server-side
+- History timeline shows the last 30 `ActivityLog` entries; displayed 2 at a time with "Show more" (+5 per click)
+- All notifications use `create_message(msg, class)` from `/static/js/toaster.js` — no inline alert divs
+- Bulk pull skips self-connectors automatically
+
+#### Activity actions logged
+
+`connector.create`, `connector.update`, `connector.delete`, `connector.test_ok`, `connector.pull_triggered`, `connector.pull_done`
 
 ### UI conventions
 
@@ -403,6 +535,71 @@ Dark mode overrides (section 17-18 of core.css) cover: `.text-muted`, `.table-li
 #### Sidebar navigation (`app/templates/sidebar.html`)
 
 The trash icon linking to `/rule/trash` is shown only to admins or rule moderators.
+
+### Instance Registry (phone-home system)
+
+Every Rulezet instance automatically identifies itself and reports its existence to rulezet.org. This gives the community a live map of all running instances.
+
+#### How it works
+
+1. **On first boot** — `_init_instance_config()` (called from `create_app()`) generates a persistent UUID and stores it in `InstanceConfig` (single-row table). Never regenerated.
+2. **90 seconds after boot** — `_start_telemetry()` launches a daemon thread that POSTs to `https://rulezet.org/api/instance/register`. Repeats every 24 h.
+3. **rulezet.org** receives the ping, upserts a `RegisteredInstance` row, and shows all instances in the admin page `/account/admin/instances`.
+
+#### Ping payload
+
+```json
+{
+  "uuid":          "<endpoint_uuid>",
+  "url":           "<reported_url>",
+  "version":       "1.5.0",
+  "rules_count":   42,
+  "bundles_count": 3
+}
+```
+
+`endpoint_uuid` is derived as `uuid5(base_uuid, reported_url)` — two processes sharing the same DB but on different ports get different endpoint UUIDs and appear as distinct rows.
+
+`reported_url` = `INSTANCE_PUBLIC_URL` if set, otherwise `http://FLASK_URL:FLASK_PORT`.
+
+#### Security
+
+- `/api/instance/register` returns **404** on any instance where `IS_OFFICIAL_INSTANCE=false` (the default). Only rulezet.org accepts pings.
+- The ping destination is hardcoded to `https://rulezet.org` — protected by TLS. Nobody else can intercept pings without controlling that domain.
+- Even if someone forks the repo and sets `IS_OFFICIAL_INSTANCE=true` on their instance, their endpoint still rejects incoming registrations (404), and community instances still ping rulezet.org via TLS — not them.
+
+#### Models (`db.py`)
+
+| Model | Description |
+|-------|-------------|
+| `InstanceConfig` | Single-row: this instance's `uuid`, `telemetry_enabled`, `public_url` |
+| `RegisteredInstance` | One row per remote instance that has phoned home: `uuid`, `public_url`, `version`, `rules_count`, `bundles_count`, `ping_count`, `first_seen`, `last_seen` |
+
+#### Files
+
+| File | Role |
+|------|------|
+| `app/__init__.py` | `_init_instance_config()` + `_start_telemetry()` called in `create_app()` |
+| `app/api/instance/instance_api.py` | `POST /api/instance/register` — upserts `RegisteredInstance`, rate-limited to 1 update/hour/UUID, requires `IS_OFFICIAL_INSTANCE=true` |
+| `app/features/account/account.py` | `GET /account/admin/instances` — admin-only, requires `IS_OFFICIAL_INSTANCE=true` |
+| `app/templates/admin/instances.html` | Admin table with Active/Stale/Offline status badges |
+
+#### Opt-out
+
+Any instance admin can disable telemetry by setting `telemetry_enabled = False` on the `InstanceConfig` row in the database. No pings will be sent.
+
+#### Production setup (rulezet.org only)
+
+Add to `.env` on the rulezet.org server — **do not add these to any other instance**:
+
+```
+IS_OFFICIAL_INSTANCE=true
+INSTANCE_PUBLIC_URL=https://rulezet.org
+```
+
+Remove any `TELEMETRY_URL`, `TELEMETRY_STARTUP_DELAY`, `TELEMETRY_INTERVAL` overrides (those are for local testing only).
+
+---
 
 ### Tests (`tests/`)
 

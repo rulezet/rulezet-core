@@ -548,6 +548,7 @@ createApp({
     function handleJobResponse(data, successMsg, dangerMsg) {
       if (!data.success) return
       if (data.job) {
+        window.dispatchEvent(new Event('rz:job-created'))
         const jobUrl = `/jobs/list?job=${data.job_uuid}`
         create_message(data.message, 'info-subtle', true, null, jobUrl)
         setTimeout(() => fetchRules(1), 1500)

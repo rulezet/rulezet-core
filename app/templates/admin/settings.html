@@ -60,6 +60,12 @@
                 <i class="fa-solid fa-gear me-2"></i>Configuration
             </a>
         </li>
+        <li class="nav-item flex-fill text-center">
+            <a class="nav-link fw-bold px-4" data-bs-toggle="tab" href="#pane-instance" role="tab"
+               @click="loadInstance" style="color:var(--text-color);">
+                <i class="fa-solid fa-fingerprint me-2"></i>Instance
+            </a>
+        </li>
     </ul>
 
     <div class="tab-content" id="settingsTabContent">
@@ -680,6 +686,184 @@
             </template>
         </div><!-- /pane-config -->
 
+        <!-- ══════════════════════════════════════════════════════
+             TAB 5 — INSTANCE IDENTITY
+        ══════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="pane-instance" role="tabpanel">
+
+            <div v-if="instanceLoading" class="pane-loading">
+                <div class="spinner-border text-primary" role="status"></div>
+                <span class="text-muted small">Loading instance info…</span>
+            </div>
+
+            <template v-else-if="instance">
+
+                <!-- Init / Refresh banner when endpoint_uuid is missing -->
+                <div v-if="!instance.endpoint_uuid" class="alert alert-warning border-0 rounded-4 d-flex align-items-center gap-3 mb-4">
+                    <i class="fa-solid fa-triangle-exclamation fa-lg"></i>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">Instance not yet initialized</div>
+                        <div class="small mt-1 text-muted">This instance has no endpoint UUID. Click Initialize to generate it and register the info in the database.</div>
+                    </div>
+                    <button class="btn btn-warning rounded-pill px-4 fw-semibold"
+                            @click="initInstance" :disabled="instanceInitSaving">
+                        <span v-if="instanceInitSaving" class="spinner-border spinner-border-sm me-1"></span>
+                        <i v-else class="fa-solid fa-wand-magic-sparkles me-1"></i>Initialize
+                    </button>
+                </div>
+
+                <div class="row g-4">
+
+                    <!-- LEFT — Identity -->
+                    <div class="col-lg-6">
+                        <div class="config-section">
+                            <div class="config-section__title">
+                                <i class="fa-solid fa-fingerprint text-primary"></i>Identity
+                            </div>
+
+                            <!-- Endpoint UUID (registry key) -->
+                            <div class="config-row flex-column align-items-start gap-1">
+                                <div class="d-flex w-100 align-items-center">
+                                    <div class="config-row__key">Registry UUID</div>
+                                    <span v-if="instance.endpoint_uuid" class="badge bg-success-subtle text-success ms-auto" style="font-size:.65rem;">active</span>
+                                    <span v-else class="badge bg-warning-subtle text-warning ms-auto" style="font-size:.65rem;">not set</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 w-100">
+                                    <code style="font-size:.78rem;word-break:break-all;flex:1;color:var(--text-color);">
+                                        [[ instance.endpoint_uuid || '—' ]]
+                                    </code>
+                                    <button v-if="instance.endpoint_uuid"
+                                            class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 flex-shrink-0"
+                                            style="font-size:.72rem;"
+                                            @click="copyText(instance.endpoint_uuid)"
+                                            title="Copy">
+                                        <i class="fa-regular fa-copy"></i>
+                                    </button>
+                                </div>
+                                <div class="text-muted" style="font-size:.72rem;">
+                                    <i class="fa-solid fa-circle-info me-1"></i>
+                                    This UUID identifies your instance on the Rulezet registry.
+                                    Derived from <code style="font-size:.72rem;">[[ instance.reported_url ]]</code>.
+                                </div>
+                            </div>
+
+                            <!-- Base UUID -->
+                            <div class="config-row">
+                                <div class="config-row__key">Base UUID</div>
+                                <div class="config-row__value d-flex align-items-center gap-2">
+                                    <code style="font-size:.76rem;color:var(--text-color);">[[ instance.uuid ]]</code>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 flex-shrink-0"
+                                            style="font-size:.72rem;"
+                                            @click="copyText(instance.uuid)" title="Copy">
+                                        <i class="fa-regular fa-copy"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Version -->
+                            <div class="config-row">
+                                <div class="config-row__key">Rulezet Version</div>
+                                <div class="config-row__value">
+                                    <span v-if="instance.version" class="badge bg-primary-subtle text-primary px-3" style="font-size:.78rem;">v[[ instance.version ]]</span>
+                                    <span v-else class="text-muted">—</span>
+                                </div>
+                            </div>
+
+                            <!-- Created at -->
+                            <div class="config-row">
+                                <div class="config-row__key">First boot</div>
+                                <div class="config-row__value text-muted" style="font-size:.83rem;">[[ instance.created_at || '—' ]]</div>
+                            </div>
+
+                            <!-- Last started -->
+                            <div class="config-row">
+                                <div class="config-row__key">Last started</div>
+                                <div class="config-row__value text-muted" style="font-size:.83rem;">[[ instance.last_started_at || '—' ]]</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT — Telemetry -->
+                    <div class="col-lg-6">
+                        <div class="config-section">
+                            <div class="config-section__title">
+                                <i class="fa-solid fa-satellite-dish text-primary"></i>Telemetry
+                            </div>
+
+                            <div class="config-row">
+                                <div class="config-row__key">Status</div>
+                                <div class="config-row__value">
+                                    <span :class="instance.telemetry_enabled ? 'badge bg-success' : 'badge bg-secondary'">
+                                        [[ instance.telemetry_enabled ? 'Enabled' : 'Disabled' ]]
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="config-row">
+                                <div class="config-row__key">Ping target</div>
+                                <div class="config-row__value">
+                                    <code style="font-size:.76rem;color:var(--text-color);">[[ instance.telemetry_url ]]</code>
+                                </div>
+                            </div>
+
+                            <div class="config-row flex-column align-items-start gap-1">
+                                <div class="config-row__key">Reported URL</div>
+                                <div class="d-flex align-items-center gap-2 w-100">
+                                    <code style="font-size:.78rem;flex:1;color:var(--text-color);">[[ instance.reported_url ]]</code>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 flex-shrink-0"
+                                            style="font-size:.72rem;"
+                                            @click="copyText(instance.reported_url)" title="Copy">
+                                        <i class="fa-regular fa-copy"></i>
+                                    </button>
+                                </div>
+                                <div class="text-muted" style="font-size:.72rem;">
+                                    Set <code style="font-size:.72rem;">INSTANCE_PUBLIC_URL</code> in <code style="font-size:.72rem;">.env</code> to override.
+                                </div>
+                            </div>
+
+                            <div class="config-row">
+                                <div class="config-row__key">Official instance</div>
+                                <div class="config-row__value">
+                                    <span :class="instance.is_official ? 'badge bg-primary' : 'badge bg-secondary'">
+                                        [[ instance.is_official ? 'Yes — accepts incoming pings' : 'No — community instance' ]]
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="mt-3 pt-3" style="border-top:1px solid var(--border-color);">
+                                <div class="text-muted" style="font-size:.78rem;line-height:1.6;">
+                                    <i class="fa-solid fa-circle-info text-primary me-1"></i>
+                                    This instance pings <strong>rulezet.org</strong> every 24 h so the community can see it in the instance registry.
+                                    To opt out, set <code style="font-size:.72rem;">telemetry_enabled = False</code> directly in the database.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Refresh button when already initialized -->
+                        <div v-if="instance.endpoint_uuid" class="mt-3 d-flex justify-content-end">
+                            <button class="btn btn-outline-primary rounded-pill px-4"
+                                    @click="initInstance" :disabled="instanceInitSaving">
+                                <span v-if="instanceInitSaving" class="spinner-border spinner-border-sm me-1"></span>
+                                <i v-else class="fa-solid fa-rotate me-1"></i>Refresh info
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </template>
+
+            <div v-else-if="!instanceLoading" class="text-center text-muted py-5">
+                <i class="fa-solid fa-fingerprint fa-2x mb-3 opacity-25"></i>
+                <p>No instance config found in the database.</p>
+                <button class="btn btn-primary rounded-pill px-5 mt-2"
+                        @click="initInstance" :disabled="instanceInitSaving">
+                    <span v-if="instanceInitSaving" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="fa-solid fa-wand-magic-sparkles me-1"></i>Initialize now
+                </button>
+            </div>
+
+        </div><!-- /pane-instance -->
+
     </div><!-- /tab-content -->
 
     <!-- ── Submodule Detail Modal ── -->
@@ -867,6 +1051,12 @@ createApp({
         const testEmailSending   = ref(false)
         const testEmailResult    = ref(null)
 
+        // Instance identity
+        const instance          = ref(null)
+        const instanceLoading   = ref(false)
+        const instanceLoaded    = ref(false)
+        const instanceInitSaving = ref(false)
+
         /* ── CSRF ── */
         function csrf() {
             return document.getElementById('csrf_token')?.value || ''
@@ -936,6 +1126,7 @@ createApp({
             const data = await post('/jobs/create', { job_type, label, payload: { path } })
             const { create_message } = await import('/static/js/toaster.js')
             if (data.job) {
+                window.dispatchEvent(new Event('rz:job-created'))
                 lastJobMsg.value = `"${label}" queued as a background job.`
                 create_message(`${label} — queued`, 'success-subtle')
             } else {
@@ -983,6 +1174,7 @@ createApp({
             const data = await post('/jobs/create', { job_type, label, payload: { name } })
             const { create_message } = await import('/static/js/toaster.js')
             if (data.job) {
+                window.dispatchEvent(new Event('rz:job-created'))
                 create_message(`${label} — queued`, 'success-subtle')
             } else {
                 create_message(data.error || 'Failed to queue job', 'danger-subtle')
@@ -1049,6 +1241,44 @@ createApp({
             }
         }
 
+        /* ── Instance ── */
+        async function loadInstance() {
+            if (instanceLoaded.value) return
+            instanceLoading.value = true
+            try {
+                const data = await fetch('/admin/settings/instance').then(r => r.json())
+                instance.value = data.exists ? data : null
+                instanceLoaded.value = true
+            } finally {
+                instanceLoading.value = false
+            }
+        }
+
+        async function initInstance() {
+            instanceInitSaving.value = true
+            const { create_message } = await import('/static/js/toaster.js')
+            try {
+                const data = await post('/admin/settings/instance/init', {})
+                if (data.success) {
+                    instanceLoaded.value = false
+                    await loadInstance()
+                    create_message('Instance initialized — UUID saved to database.', 'success-subtle')
+                } else {
+                    create_message(data.error || 'Initialization failed.', 'danger-subtle')
+                }
+            } finally {
+                instanceInitSaving.value = false
+            }
+        }
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                import('/static/js/toaster.js').then(({ create_message }) =>
+                    create_message('Copied to clipboard.', 'success-subtle')
+                )
+            })
+        }
+
         /* ── Init ── */
         loadSystem()
 
@@ -1068,6 +1298,7 @@ createApp({
             editingMailPort, mailPortNew,
             saveEnvKey,
             testEmailRecipient, testEmailSending, testEmailResult, sendTestEmail,
+            instance, instanceLoading, instanceInitSaving, loadInstance, initInstance, copyText,
         }
     }
 }).mount('#settings-app')

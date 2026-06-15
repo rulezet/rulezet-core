@@ -202,6 +202,16 @@
                                             </small>
                                         </template>
                                     </div>
+                                    <div v-if="currentRule.sync_instance_url" class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-plug me-2 text-secondary w-20px"></i>
+                                        <small class="text-muted me-2">Synced from:</small>
+                                        <small class="text-truncate">
+                                            <a :href="currentRule.sync_instance_url" rel="noreferrer" target="_blank"
+                                               class="text-primary text-decoration-none">
+                                                [[ currentRule.sync_instance_url ]]
+                                            </a>
+                                        </small>
+                                    </div>
                                     <div class="d-flex align-items-center">
                                         <i class="fas fa-user-edit me-2 text-secondary w-20px"></i>
                                         <small class="text-muted me-2">Editor:</small>

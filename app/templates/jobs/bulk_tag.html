@@ -654,6 +654,7 @@
                     const data = await res.json();
                     if (res.ok) {
                         activeJobUuid.value = data.job.uuid;
+                        window.dispatchEvent(new Event('rz:job-created'));
                         create_message('Job queued! Processing in background…', 'success-subtle');
                         loadRunningJobs();
                     } else {

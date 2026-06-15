@@ -312,6 +312,7 @@
 
             async function deleteRule(id, index) {
                 const res = await fetch(`/rule/delete_rule?id=${id}`);
+                const data = await res.json();
                 if (res.status === 200) {
                     rules_list.value.splice(index, 1);
                     total_rules_liste.value--;
@@ -320,7 +321,7 @@
                     const modal = bootstrap.Modal.getInstance(modalEl);
                     if (modal) modal.hide();
                 }
-                create_message(res.message, res.toast_class);
+                create_message(data.message, data.toast_class);
             }
 
             async function vote(voteType, ruleId) {

@@ -10,6 +10,8 @@ class Config:
 
     FLASK_URL = os.environ.get('FLASK_URL', '127.0.0.1')
     FLASK_PORT = int(os.environ.get('FLASK_PORT', 7009))
+    INSTANCE_PUBLIC_URL  = os.environ.get('INSTANCE_PUBLIC_URL')   # e.g. https://myinstance.example.com
+    IS_OFFICIAL_INSTANCE = os.environ.get('IS_OFFICIAL_INSTANCE', 'false').lower() == 'true'
 
     MAIL_SERVER   = os.environ.get('MAIL_SERVER',   'smtp.gmail.com')
     MAIL_PORT     = int(os.environ.get('MAIL_PORT', 587))
@@ -25,7 +27,8 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = "postgresql:///rulezet"
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql:///rulezet')
+    SESSION_COOKIE_NAME = os.environ.get('SESSION_COOKIE_NAME', 'session')
 
     
 
