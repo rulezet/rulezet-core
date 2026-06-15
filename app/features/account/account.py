@@ -34,6 +34,7 @@ def admin_instances():
     import uuid as _uuid_mod
     from flask import current_app, abort
     from sqlalchemy import func
+    from app import db
     from app.core.db_class.db import RemotePullLog
     if not current_user.is_admin() or not current_app.config.get('IS_OFFICIAL_INSTANCE'):
         abort(404)
