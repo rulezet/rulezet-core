@@ -172,9 +172,28 @@ class SyncRules(Resource):
             'since':    'ISO-8601 datetime — only rules modified after this date are returned',
             'page':     'Page number (default 1)',
             'per_page': f'Items per page (default 50, max {PER_PAGE_MAX})',
+            'uuids':    'Comma-separated list of rule UUIDs — returns only those specific rules (ignores since/page)',
         }
     )
     def get(self):
+        # ── UUID-targeted fetch (bundle-only pull path) ───────────────────────
+        uuids_param = request.args.get('uuids', '').strip()
+        if uuids_param:
+            uuid_list = [u.strip() for u in uuids_param.split(',') if u.strip()]
+            rules = Rule.query.filter(
+                Rule.is_deleted == False,
+                or_(Rule.uuid.in_(uuid_list), Rule.remote_rule_uuid.in_(uuid_list)),
+            ).all()
+            return {
+                'since':    None,
+                'page':     1,
+                'per_page': len(rules),
+                'total':    len(rules),
+                'has_more': False,
+                'rules':    [_rule_to_sync_json(r) for r in rules],
+            }, 200
+
+        # ── Standard paginated fetch ──────────────────────────────────────────
         since    = _since_dt(request.args.get('since'))
         page     = max(1, request.args.get('page', 1, type=int))
         per_page = min(PER_PAGE_MAX, max(1, request.args.get('per_page', 50, type=int)))

@@ -231,6 +231,9 @@
                      </label>
                   </div>
                </div>
+               <div v-if="pullSyncBundles && !pullSyncRules" class="text-muted mt-2" style="font-size:.78rem;">
+                  <i class="fa-solid fa-circle-info me-1"></i>Only the rules inside those bundles will be imported.
+               </div>
                <div v-if="!pullSyncRules && !pullSyncBundles" class="text-warning mt-2" style="font-size:.78rem;">
                   <i class="fa-solid fa-triangle-exclamation me-1"></i>Select at least one content type.
                </div>

@@ -872,6 +872,7 @@ def handle_connector_pull(job, app):
         do_rules   = payload.get('sync_rules',   connector.sync_rules)
         do_bundles = payload.get('sync_bundles', connector.sync_bundles)
 
+
         since    = '1970-01-01T00:00:00'
         base     = connector.instance_url.rstrip('/')
         PER_PAGE = 500
@@ -1116,47 +1117,138 @@ def handle_connector_pull(job, app):
             if tag_cache is None:
                 tag_cache = build_tag_cache()
                 log_job(job, f"Tag cache built: {len(tag_cache)} tags loaded.", level='info', event='progress')
+
+            # Phase 1 — collect all bundle pages and their referenced rule UUIDs
+            all_bundle_items: list = []
+            bundle_rule_uuids: set = set()
             page = 1
             while page <= MAX_PAGES:
                 if _is_cancelled(job):
                     log_job(job, 'Cancelled.', level='warning', event='cancelled')
                     return
-                while _should_pause(job):
-                    import time; time.sleep(2)
-
                 url = f"{base}/api/sync/bundles?since={since}&page={page}&per_page={PER_PAGE}"
                 try:
                     resp = http_requests.get(url, headers=headers, timeout=30)
                     if resp.status_code != 200:
-                        had_error = True
-                        break
+                        had_error = True; break
                     data  = resp.json()
                     items = data.get('bundles', [])
                     if not items and page > 1:
-                        break  # empty page — remote lied about has_more
+                        break
+                    all_bundle_items.extend(items)
                     for item in items:
-                        try:
-                            result = _upsert_bundle(connector, effective_user_id, item, triggered_by_id=job.created_by, tag_cache=tag_cache)
-                            if result == 'created':
-                                bundles_created += 1
-                            elif result == 'updated':
-                                bundles_updated += 1
-                            elif result == 'skipped':
-                                bundles_skipped += 1
-                        except Exception as bundle_exc:
-                            log_job(job, f"Error on bundle '{item.get('name', '?')}': {bundle_exc}",
-                                    level='warning', event='progress')
-                        processed = rules_created + rules_updated + rules_skipped + rules_errors + bundles_created + bundles_updated + bundles_skipped
-                        job.done = min(processed, job.total)
-                    db.session.commit()
+                        bundle_rule_uuids.update(item.get('rules', []))
                     if not data.get('has_more', False):
                         break
                     page += 1
                 except Exception as exc:
                     log_job(job, f"Error fetching bundles page {page}: {exc}",
                             level='error', event='progress')
-                    had_error = True
-                    break
+                    had_error = True; break
+
+            # Phase 2 — when not already pulling all rules, import only the rules
+            # referenced by the bundles that don't exist locally yet.
+            if bundle_rule_uuids and not do_rules:
+                existing_local = set(
+                    r[0] for r in Rule.query.filter(
+                        or_(Rule.uuid.in_(bundle_rule_uuids),
+                            Rule.remote_rule_uuid.in_(bundle_rule_uuids))
+                    ).with_entities(Rule.uuid).all()
+                ) | set(
+                    r[0] for r in Rule.query.filter(
+                        or_(Rule.uuid.in_(bundle_rule_uuids),
+                            Rule.remote_rule_uuid.in_(bundle_rule_uuids))
+                    ).with_entities(Rule.remote_rule_uuid).all()
+                    if r[0]
+                )
+                missing_uuids = bundle_rule_uuids - existing_local
+                if missing_uuids:
+                    log_job(job,
+                            f"Fetching {len(missing_uuids)} rule(s) referenced by bundles…",
+                            level='info', event='progress')
+                    # Chunk to keep URL size reasonable
+                    CHUNK = 100
+                    missing_list = list(missing_uuids)
+                    for i in range(0, len(missing_list), CHUNK):
+                        if _is_cancelled(job):
+                            log_job(job, 'Cancelled.', level='warning', event='cancelled')
+                            return
+                        chunk = missing_list[i:i + CHUNK]
+                        uuids_qs = ','.join(chunk)
+                        try:
+                            r = http_requests.get(
+                                f"{base}/api/sync/rules?uuids={uuids_qs}",
+                                headers=headers, timeout=60,
+                            )
+                            if r.status_code != 200:
+                                log_job(job, f"Failed to fetch bundle rules chunk (HTTP {r.status_code})",
+                                        level='warning', event='progress')
+                                continue
+                            chunk_rules = r.json().get('rules', [])
+                            new_rules_pending = []
+                            chunk_uuids = [item['uuid'] for item in chunk_rules if item.get('uuid')]
+                            existing_chunk = Rule.query.filter(
+                                or_(Rule.remote_rule_uuid.in_(chunk_uuids),
+                                    Rule.uuid.in_(chunk_uuids))
+                            ).all()
+                            chunk_lookup = {}
+                            for ex in existing_chunk:
+                                if ex.remote_rule_uuid:
+                                    chunk_lookup[ex.remote_rule_uuid] = ex
+                                chunk_lookup[ex.uuid] = ex
+
+                            for item in chunk_rules:
+                                pre_match = chunk_lookup.get(item.get('uuid'))
+                                if pre_match:
+                                    _upsert_rule(connector, effective_user_id, item,
+                                                 triggered_by_id=job.created_by,
+                                                 missing_tags=all_missing_tags,
+                                                 local_match=pre_match,
+                                                 tag_cache=tag_cache)
+                                    rules_updated += 1
+                                else:
+                                    rule = _prepare_new_rule(connector, effective_user_id, item)
+                                    new_rules_pending.append((item, rule))
+
+                            if new_rules_pending:
+                                db.session.flush()
+                                for item, rule in new_rules_pending:
+                                    missed = _sync_tags(rule, item.get('tags', []),
+                                                        effective_user_id,
+                                                        tag_cache=tag_cache)
+                                    all_missing_tags.update(missed)
+                                    _sync_cve_ids(rule, item.get('cve_ids', []))
+                                    _import_rule_history_new(rule, item.get('update_history', []),
+                                                             effective_user_id)
+                                rules_created += len(new_rules_pending)
+
+                            db.session.commit()
+                        except Exception as exc:
+                            log_job(job, f"Error importing bundle rules chunk: {exc}",
+                                    level='warning', event='progress')
+                            db.session.rollback()
+
+            # Phase 3 — upsert bundles (rules are now locally available)
+            for item in all_bundle_items:
+                if _is_cancelled(job):
+                    log_job(job, 'Cancelled.', level='warning', event='cancelled')
+                    return
+                try:
+                    result = _upsert_bundle(connector, effective_user_id, item,
+                                            triggered_by_id=job.created_by,
+                                            tag_cache=tag_cache)
+                    if result == 'created':
+                        bundles_created += 1
+                    elif result == 'updated':
+                        bundles_updated += 1
+                    elif result == 'skipped':
+                        bundles_skipped += 1
+                except Exception as bundle_exc:
+                    log_job(job, f"Error on bundle '{item.get('name', '?')}': {bundle_exc}",
+                            level='warning', event='progress')
+                processed = rules_created + rules_updated + rules_skipped + rules_errors + bundles_created + bundles_updated + bundles_skipped
+                job.done = min(processed, job.total)
+            db.session.commit()
 
         # ── Finalize ──────────────────────────────────────────────────────────
         now       = datetime.datetime.now(datetime.timezone.utc)

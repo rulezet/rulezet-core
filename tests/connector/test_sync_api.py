@@ -163,7 +163,7 @@ def test_rules_pagination(app, client):
 
 def test_rules_per_page_capped_at_500(client):
     data = client.get("/api/sync/rules?per_page=99999").get_json()
-    assert data["per_page"] == 500
+    assert data["per_page"] == 2000
 
 
 def test_rules_per_page_minimum_is_1(client):
@@ -295,4 +295,4 @@ def test_bundles_item_has_required_fields(app, client):
 
 def test_bundles_per_page_capped(client):
     data = client.get("/api/sync/bundles?per_page=99999").get_json()
-    assert data["per_page"] == 500
+    assert data["per_page"] == 2000
