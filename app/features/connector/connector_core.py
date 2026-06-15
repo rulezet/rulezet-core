@@ -286,16 +286,19 @@ def seed_official_connector() -> None:
 
 
 def trigger_pull(connector: Connector, triggered_by: int,
-                 sync_rules: bool = None, sync_bundles: bool = None) -> object | None:
+                 sync_rules: bool = None, sync_bundles: bool = None,
+                 filters: dict = None) -> object | None:
     """Enqueue a connector_pull background job and return the job object.
 
     sync_rules / sync_bundles override the connector's own flags for this pull only.
+    filters — dict from ConnectorPullFilter (date, formats, tags, cves, …).
     """
     if not connector.is_active:
         return None
     payload: dict = {'connector_id': connector.id}
     if sync_rules   is not None: payload['sync_rules']   = sync_rules
     if sync_bundles is not None: payload['sync_bundles'] = sync_bundles
+    if filters:                  payload['filters']      = filters
 
     what = ' + '.join(filter(None, [
         'rules'   if (sync_rules   if sync_rules   is not None else connector.sync_rules)   else '',

@@ -242,6 +242,34 @@
             <!-- Filters -->
             <connector-pull-filter ref="pullFilterRef" @filter="onFilterChange"></connector-pull-filter>
 
+            <!-- CVE preview panel — shown when at least one CVE is selected in the filter -->
+            <div v-if="(pullFilters.cves || []).some(g => g.names?.length)"
+                 class="mt-3 p-3 rounded-3"
+                 style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+               <div class="d-flex align-items-center gap-2 mb-2">
+                  <i class="fa-solid fa-shield-virus text-danger" style="font-size:.85rem;"></i>
+                  <span class="fw-semibold" style="font-size:.83rem;">CVE preview</span>
+                  <button class="btn btn-sm btn-outline-danger rounded-pill px-3 ms-1"
+                          @click="previewCve" :disabled="cvePreviewBusy" style="font-size:.75rem;">
+                     <span v-if="cvePreviewBusy" class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></span>
+                     <i v-else class="fa-solid fa-magnifying-glass me-1"></i>
+                     Count matching rules on remote
+                  </button>
+               </div>
+               <div v-if="cvePreviewError" class="text-danger" style="font-size:.8rem;">
+                  <i class="fa-solid fa-triangle-exclamation me-1"></i>[[ cvePreviewError ]]
+               </div>
+               <div v-else-if="cvePreviewCount !== null" class="d-flex align-items-center gap-2" style="font-size:.85rem;">
+                  <span class="badge rounded-pill" :class="cvePreviewCount > 0 ? 'bg-danger' : 'bg-secondary'"
+                        style="font-size:.78rem;">[[ cvePreviewCount.toLocaleString() ]]</span>
+                  <span class="text-muted">rules on <strong>[[ pullConnector?.name ]]</strong> match <code>[[ cvePreviewLabel ]]</code></span>
+                  <span v-if="cvePreviewCount === 0" class="text-muted" style="font-size:.75rem;">— nothing to import</span>
+               </div>
+               <div v-else class="text-muted" style="font-size:.78rem;">
+                  Click "Count" to preview how many rules match before importing.
+               </div>
+            </div>
+
          </div>
 
          <div class="modal-footer border-top d-flex justify-content-between align-items-center">
@@ -321,7 +349,43 @@ createApp({
       const pullSyncRules   = ref(true)
       const pullSyncBundles = ref(false)
 
-      function onFilterChange(f) { pullFilters.value = f }
+      // CVE preview state
+      const cvePreviewBusy  = ref(false)
+      const cvePreviewCount = ref(null)   // null = not yet fetched
+      const cvePreviewError = ref('')
+      const cvePreviewLabel = ref('')     // the CVE(s) that were previewed
+
+      function onFilterChange(f) {
+         pullFilters.value = f
+         // Reset preview whenever filters change
+         cvePreviewCount.value = null
+         cvePreviewError.value = ''
+         cvePreviewLabel.value = ''
+      }
+
+      async function previewCve() {
+         const filters = pullFilterRef.value?.getFilter?.() || pullFilters.value || {}
+         const cveGroups = filters.cves || []
+         const cveNames  = cveGroups.flatMap(g => g.names || []).filter(Boolean)
+         if (!cveNames.length || !pullConnector.value) return
+         cvePreviewBusy.value  = true
+         cvePreviewCount.value = null
+         cvePreviewError.value = ''
+         cvePreviewLabel.value = cveNames.join(', ')
+         try {
+            const res  = await fetch(`/connector/preview/${pullConnector.value.uuid}?cve=${encodeURIComponent(cveNames.join(','))}`)
+            const data = await res.json()
+            if (data.success) {
+               cvePreviewCount.value = data.count
+            } else {
+               cvePreviewError.value = data.error || 'Preview failed.'
+            }
+         } catch {
+            cvePreviewError.value = 'Network error.'
+         } finally {
+            cvePreviewBusy.value = false
+         }
+      }
 
       let bsModal, bsPullModal
 
@@ -397,10 +461,12 @@ createApp({
       }
 
       function openPullModal(c) {
-         pullConnector.value  = c
-         // Default to connector's own sync settings
+         pullConnector.value   = c
          pullSyncRules.value   = c.sync_rules  ?? true
          pullSyncBundles.value = c.sync_bundles ?? false
+         cvePreviewCount.value = null
+         cvePreviewError.value = ''
+         cvePreviewLabel.value = ''
          bsPullModal?.show()
       }
 
@@ -437,6 +503,7 @@ createApp({
          openCreate, openEdit, saveConnector,
          pullConnector, pullBusy, pullFilterRef, pullSyncRules, pullSyncBundles,
          onFilterChange, openPullModal, submitPull,
+         cvePreviewBusy, cvePreviewCount, cvePreviewError, cvePreviewLabel, previewCve,
       }
    }
 }).mount('#connector-app')

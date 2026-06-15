@@ -875,9 +875,87 @@ def handle_connector_pull(job, app):
 
         since    = '1970-01-01T00:00:00'
         base     = connector.instance_url.rstrip('/')
-        PER_PAGE = 500
+        PER_PAGE = 500    # safe page size — remote serialises 500 rules per request
+
+        # ── Build filter query-string params from the pull payload ──────────
+        pull_filters = payload.get('filters', {}) or {}
+
+        def _names_from_groups(groups, include_exclude=False):
+            """Extract names from [{names, mode, exclude}, ...] filter groups.
+            With include_exclude=False (default) only include non-excluded groups."""
+            result = []
+            for grp in (groups or []):
+                if not isinstance(grp, dict):
+                    continue
+                if include_exclude or not grp.get('exclude', False):
+                    result.extend(grp.get('names', []))
+            return [n for n in result if n]
+
+        # CVE filter
+        cve_names  = _names_from_groups(pull_filters.get('cves', []))
+        cve_qs     = ','.join(cve_names) if cve_names else ''
+
+        # Format filter
+        fmt_list   = [f for f in (pull_filters.get('formats') or []) if f]
+        formats_qs = ','.join(fmt_list) if fmt_list else ''
+
+        # Author filter
+        auth_list   = [a for a in (pull_filters.get('authors') or []) if a]
+        authors_qs  = ','.join(auth_list) if auth_list else ''
+
+        # License filter (group structure, include only non-excluded)
+        lic_names  = _names_from_groups(pull_filters.get('licenses', []))
+        license_qs = ','.join(lic_names) if lic_names else ''
+
+        # Tag filter
+        tag_groups  = pull_filters.get('tags', []) or []
+        tag_names   = _names_from_groups(tag_groups, include_exclude=True)  # include all for building params
+        tags_qs     = ','.join(tag_names) if tag_names else ''
+        tag_mode_qs = 'OR'
+        tag_excl_qs = 'false'
+        if tag_groups and isinstance(tag_groups[0], dict):
+            tag_mode_qs = (tag_groups[0].get('mode') or 'OR').upper()
+            tag_excl_qs = 'true' if tag_groups[0].get('exclude', False) else 'false'
+
+        # Date range
+        date_from_qs = (pull_filters.get('date_from') or '').strip()
+        date_to_qs   = (pull_filters.get('date_to') or '').strip()
+
+        def _build_rule_url(p: int) -> str:
+            url = f"{base}/api/sync/rules?since={since}&page={p}&per_page={PER_PAGE}"
+            if cve_qs:       url += f"&cve={cve_qs}"
+            if formats_qs:   url += f"&formats={formats_qs}"
+            if authors_qs:   url += f"&author={authors_qs}"
+            if license_qs:   url += f"&license={license_qs}"
+            if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
+            if date_from_qs: url += f"&date_from={date_from_qs}"
+            if date_to_qs:   url += f"&date_to={date_to_qs}"
+            return url
+
+        def _build_preflight_url() -> str:
+            url = f"{base}/api/sync/rules?since={since}&count_only=true"
+            if cve_qs:       url += f"&cve={cve_qs}"
+            if formats_qs:   url += f"&formats={formats_qs}"
+            if authors_qs:   url += f"&author={authors_qs}"
+            if license_qs:   url += f"&license={license_qs}"
+            if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
+            if date_from_qs: url += f"&date_from={date_from_qs}"
+            if date_to_qs:   url += f"&date_to={date_to_qs}"
+            return url
+
+        active_filters = [k for k in [cve_qs, formats_qs, authors_qs, license_qs, tags_qs, date_from_qs, date_to_qs] if k]
 
         log_job(job, f"Starting pull from {base}", level='info', event='started')
+        if active_filters:
+            parts = []
+            if cve_qs:       parts.append(f"cve={cve_qs}")
+            if formats_qs:   parts.append(f"formats={formats_qs}")
+            if authors_qs:   parts.append(f"authors={authors_qs}")
+            if license_qs:   parts.append(f"license={license_qs}")
+            if tags_qs:      parts.append(f"tags={tags_qs} ({tag_mode_qs}{', exclude' if tag_excl_qs=='true' else ''})")
+            if date_from_qs: parts.append(f"from={date_from_qs}")
+            if date_to_qs:   parts.append(f"to={date_to_qs}")
+            log_job(job, f"Filters active: {' · '.join(parts)}", level='info', event='progress')
 
         # ── Manifest preflight: verify remote supports sync API ────────────────
         try:
@@ -915,10 +993,10 @@ def handle_connector_pull(job, app):
         total_bundles_remote = 0
         try:
             if do_rules:
-                r = http_requests.get(f"{base}/api/sync/rules?since={since}&page=1&per_page=1",
-                                      headers=headers, timeout=10)
+                r = http_requests.get(_build_preflight_url(), headers=headers, timeout=10)
                 if r.status_code == 200:
-                    total_rules_remote = r.json().get('total', 0)
+                    d = r.json()
+                    total_rules_remote = d.get('count', d.get('total', 0))
             if do_bundles:
                 r = http_requests.get(f"{base}/api/sync/bundles?since={since}&page=1&per_page=1",
                                       headers=headers, timeout=10)
@@ -953,12 +1031,10 @@ def handle_connector_pull(job, app):
             tag_cache = build_tag_cache()
             log_job(job, f"Tag cache built: {len(tag_cache)} tags loaded.", level='info', event='progress')
 
-            PER_PAGE = 2000   # 4× larger pages = 4× fewer HTTP round-trips
             PREFETCH  = 4     # sliding window: up to 4 pages fetched in parallel
 
             def _http_get_rules(p):
-                url = f"{base}/api/sync/rules?since={since}&page={p}&per_page={PER_PAGE}"
-                return http_requests.get(url, headers=headers, timeout=60)
+                return http_requests.get(_build_rule_url(p), headers=headers, timeout=120)
 
             page          = 1
             page_futures  = {}   # page_num → Future
@@ -1128,7 +1204,7 @@ def handle_connector_pull(job, app):
                     return
                 url = f"{base}/api/sync/bundles?since={since}&page={page}&per_page={PER_PAGE}"
                 try:
-                    resp = http_requests.get(url, headers=headers, timeout=30)
+                    resp = http_requests.get(url, headers=headers, timeout=60)
                     if resp.status_code != 200:
                         had_error = True; break
                     data  = resp.json()

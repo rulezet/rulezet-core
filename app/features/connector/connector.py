@@ -149,6 +149,36 @@ def import_tag_families():
     return jsonify({'success': True, 'results': results, 'all_ok': all_ok}), 200
 
 
+@connector_blueprint.route('/preview/<string:connector_uuid>', methods=['GET'])
+def preview_connector(connector_uuid):
+    """Fetch the count of rules matching a CVE filter on the remote without importing."""
+    import requests as http_requests
+
+    connector = ConnectorModel.get_connector_by_uuid(connector_uuid)
+    if not connector:
+        return jsonify({'success': False, 'error': 'Not found.'}), 404
+
+    cve = request.args.get('cve', '').strip()
+    if not cve:
+        return jsonify({'success': False, 'error': 'No CVE specified.'}), 400
+
+    headers = {'Accept': 'application/json'}
+    if connector.api_key_outbound:
+        headers['X-API-KEY'] = connector.api_key_outbound
+    try:
+        resp = http_requests.get(
+            f"{connector.instance_url}/api/sync/rules?cve={cve}&count_only=true",
+            headers=headers, timeout=10,
+        )
+        if resp.status_code == 200:
+            data  = resp.json()
+            count = data.get('count', data.get('total', 0))
+            return jsonify({'success': True, 'count': count, 'cve': cve}), 200
+        return jsonify({'success': False, 'error': f'Remote returned HTTP {resp.status_code}'}), 502
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
 @connector_blueprint.route('/pull/<string:connector_uuid>', methods=['POST'])
 def pull_connector(connector_uuid):
     connector = ConnectorModel.get_connector_by_uuid(connector_uuid)
@@ -164,12 +194,14 @@ def pull_connector(connector_uuid):
     data         = request.get_json(silent=True) or {}
     sync_rules   = data.get('sync_rules',   connector.sync_rules)
     sync_bundles = data.get('sync_bundles', connector.sync_bundles)
+    filters      = data.get('filters') or {}
 
     if not sync_rules and not sync_bundles:
         return jsonify({'success': False, 'error': 'Nothing to pull — select rules and/or bundles.'}), 400
 
     job = ConnectorModel.trigger_pull(connector, triggered_by=current_user.id,
-                                      sync_rules=sync_rules, sync_bundles=sync_bundles)
+                                      sync_rules=sync_rules, sync_bundles=sync_bundles,
+                                      filters=filters if filters else None)
     if not job:
         return jsonify({'success': False, 'error': 'Could not queue pull job.'}), 500
 
