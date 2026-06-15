@@ -212,6 +212,30 @@
                </div>
             </div>
 
+            <!-- Content to pull -->
+            <div class="mb-4">
+               <label class="fw-semibold mb-2 d-block" style="font-size:.85rem;">
+                  <i class="fa-solid fa-sliders me-2 text-primary"></i>What to pull
+               </label>
+               <div class="d-flex gap-3">
+                  <div class="form-check d-flex align-items-center gap-2 mb-0">
+                     <input class="form-check-input" type="checkbox" id="pullRules" v-model="pullSyncRules" style="width:1rem;height:1rem;">
+                     <label class="form-check-label d-flex align-items-center gap-1" for="pullRules" style="font-size:.85rem;">
+                        <i class="fa-solid fa-shield-halved text-primary"></i> Rules
+                     </label>
+                  </div>
+                  <div class="form-check d-flex align-items-center gap-2 mb-0">
+                     <input class="form-check-input" type="checkbox" id="pullBundles" v-model="pullSyncBundles" style="width:1rem;height:1rem;">
+                     <label class="form-check-label d-flex align-items-center gap-1" for="pullBundles" style="font-size:.85rem;">
+                        <i class="fa-solid fa-box text-secondary"></i> Bundles
+                     </label>
+                  </div>
+               </div>
+               <div v-if="!pullSyncRules && !pullSyncBundles" class="text-warning mt-2" style="font-size:.78rem;">
+                  <i class="fa-solid fa-triangle-exclamation me-1"></i>Select at least one content type.
+               </div>
+            </div>
+
             <!-- Filters -->
             <connector-pull-filter ref="pullFilterRef" @filter="onFilterChange"></connector-pull-filter>
 
@@ -225,10 +249,10 @@
             <div class="d-flex gap-2">
                <button class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Cancel</button>
                <button class="btn btn-success rounded-pill px-4"
-                       @click="submitPull" :disabled="pullBusy">
+                       @click="submitPull" :disabled="pullBusy || (!pullSyncRules && !pullSyncBundles)">
                   <span v-if="pullBusy" class="spinner-border spinner-border-sm me-1"></span>
                   <i v-else class="fa-solid fa-cloud-arrow-down me-1"></i>
-                  Pull
+                  Pull [[ pullSyncRules && pullSyncBundles ? 'both' : pullSyncRules ? 'rules' : pullSyncBundles ? 'bundles' : '—' ]]
                </button>
             </div>
          </div>
@@ -287,10 +311,12 @@ createApp({
       })
 
       // Pull modal state
-      const pullConnector = ref(null)
-      const pullBusy      = ref(false)
-      const pullFilterRef = ref(null)
-      const pullFilters   = ref({})
+      const pullConnector  = ref(null)
+      const pullBusy       = ref(false)
+      const pullFilterRef  = ref(null)
+      const pullFilters    = ref({})
+      const pullSyncRules   = ref(true)
+      const pullSyncBundles = ref(false)
 
       function onFilterChange(f) { pullFilters.value = f }
 
@@ -368,19 +394,27 @@ createApp({
       }
 
       function openPullModal(c) {
-         pullConnector.value = c
+         pullConnector.value  = c
+         // Default to connector's own sync settings
+         pullSyncRules.value   = c.sync_rules  ?? true
+         pullSyncBundles.value = c.sync_bundles ?? false
          bsPullModal?.show()
       }
 
       async function submitPull() {
          if (!pullConnector.value) return
+         if (!pullSyncRules.value && !pullSyncBundles.value) return
          pullBusy.value = true
          try {
             const filters = pullFilterRef.value?.getFilter?.() || pullFilters.value || {}
             const res  = await fetch(`/connector/pull/${pullConnector.value.uuid}`, {
                method:  'POST',
                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-               body:    JSON.stringify({ filters }),
+               body:    JSON.stringify({
+                  filters,
+                  sync_rules:   pullSyncRules.value,
+                  sync_bundles: pullSyncBundles.value,
+               }),
             })
             const data = await res.json()
             bsPullModal?.hide()
@@ -398,7 +432,7 @@ createApp({
          rulezetTable, otherTable,
          saving, editMode, form, formError,
          openCreate, openEdit, saveConnector,
-         pullConnector, pullBusy, pullFilterRef,
+         pullConnector, pullBusy, pullFilterRef, pullSyncRules, pullSyncBundles,
          onFilterChange, openPullModal, submitPull,
       }
    }

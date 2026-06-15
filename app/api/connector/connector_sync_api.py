@@ -8,18 +8,41 @@ Authentication uses the standard X-API-KEY header (same as private API).
 import json
 import os
 import datetime
+import logging
 
 from flask import request
 from flask_restx import Namespace, Resource
+from sqlalchemy import or_
 
 from app.core.db_class.db import Rule, Bundle, Tag, RuleTagAssociation, BundleTagAssociation, RuleUpdateHistory
+
+logger = logging.getLogger(__name__)
+
+
+def _log_pull_event(rules_total: int) -> None:
+    """Record one row in remote_pull_log. Never raises — sync must not fail because of logging."""
+    try:
+        from app import db
+        from app.core.db_class.db import RemotePullLog
+        ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
+        entry = RemotePullLog(
+            instance_uuid=request.headers.get('X-Rulezet-Instance-UUID') or None,
+            instance_url=request.headers.get('X-Rulezet-Instance-URL') or None,
+            ip_address=ip or None,
+            rules_total=rules_total,
+            created_at=datetime.datetime.utcnow(),
+        )
+        db.session.add(entry)
+        db.session.commit()
+    except Exception as exc:
+        logger.debug("_log_pull_event failed (non-fatal): %s", exc)
 
 sync_ns = Namespace(
     "Sync 🔗",
     description="Federation sync endpoints — used by remote connectors to pull content from this instance."
 )
 
-PER_PAGE_MAX = 500
+PER_PAGE_MAX = 2000
 
 
 def _since_dt(since_str: str | None) -> datetime.datetime:
@@ -156,17 +179,22 @@ class SyncRules(Resource):
         page     = max(1, request.args.get('page', 1, type=int))
         per_page = min(PER_PAGE_MAX, max(1, request.args.get('per_page', 50, type=int)))
 
-        # Only expose non-deleted, non-connector-imported rules
+        since_dt = since.replace(tzinfo=None)
+        # Include rules where last_modif is NULL (older rules may not have it set)
         query = (Rule.query
                  .filter(
                      Rule.is_deleted == False,
-                     Rule.last_modif >= since.replace(tzinfo=None),
+                     or_(Rule.last_modif.is_(None), Rule.last_modif >= since_dt),
                  )
-                 .order_by(Rule.last_modif.asc()))
+                 .order_by(Rule.last_modif.asc().nullsfirst()))
 
         total    = query.count()
         rules    = query.offset((page - 1) * per_page).limit(per_page).all()
         has_more = (page * per_page) < total
+
+        # Log pull sessions (page 1 only — avoids one entry per pagination page)
+        if page == 1:
+            _log_pull_event(total)
 
         return {
             'since':    since.isoformat(),
@@ -195,12 +223,13 @@ class SyncBundles(Resource):
         page     = max(1, request.args.get('page', 1, type=int))
         per_page = min(PER_PAGE_MAX, max(1, request.args.get('per_page', 50, type=int)))
 
+        since_dt = since.replace(tzinfo=None)
         query = (Bundle.query
                  .filter(
                      Bundle.access == True,
-                     Bundle.updated_at >= since.replace(tzinfo=None),
+                     or_(Bundle.updated_at.is_(None), Bundle.updated_at >= since_dt),
                  )
-                 .order_by(Bundle.updated_at.asc()))
+                 .order_by(Bundle.updated_at.asc().nullsfirst()))
 
         total   = query.count()
         bundles = query.offset((page - 1) * per_page).limit(per_page).all()

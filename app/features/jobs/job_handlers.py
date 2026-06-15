@@ -820,11 +820,15 @@ def handle_connector_pull(job, app):
     """
     import datetime
     import requests as http_requests
-    from app.core.db_class.db import Connector
+    from concurrent.futures import ThreadPoolExecutor
+    from app.core.db_class.db import Connector, Rule, RuleTagAssociation
     from app.features.connector.connector_core import (
-        _get_or_create_shadow_user, _upsert_rule, _upsert_bundle, _extract_tag_family,
+        _get_or_create_shadow_user, _upsert_rule, _upsert_bundle,
+        _extract_tag_family, build_tag_cache,
+        _prepare_new_rule, _import_rule_history_new, _sync_tags, _sync_cve_ids,
     )
     from app.core.utils.activity_log import log_activity
+    from sqlalchemy import or_
 
     import time as _time
 
@@ -851,10 +855,23 @@ def handle_connector_pull(job, app):
         headers = {'Accept': 'application/json'}
         if connector.api_key_outbound:
             headers['X-API-KEY'] = connector.api_key_outbound
+        # Identify this instance on the remote so it can track pull history
+        try:
+            from app.core.db_class.db import InstanceConfig as _IC
+            import os as _os
+            _cfg = _IC.query.first()
+            if _cfg:
+                headers['X-Rulezet-Instance-UUID'] = str(_cfg.uuid)
+            _pub = _os.environ.get('INSTANCE_PUBLIC_URL') or ''
+            if _pub:
+                headers['X-Rulezet-Instance-URL'] = _pub
+        except Exception:
+            pass
 
-        # Full fetch in both modes: hard must also see remote rules that have
-        # not changed since last_sync_at (e.g. to restore a locally deleted
-        # rule), and soft needs the full set for accurate skip counts.
+        # Per-pull content overrides (from trigger payload, fall back to connector flags)
+        do_rules   = payload.get('sync_rules',   connector.sync_rules)
+        do_bundles = payload.get('sync_bundles', connector.sync_bundles)
+
         since    = '1970-01-01T00:00:00'
         base     = connector.instance_url.rstrip('/')
         PER_PAGE = 500
@@ -885,9 +902,9 @@ def handle_connector_pull(job, app):
             remote_ver = mf_data.get('instance', {}).get('version', 'unknown')
             log_job(job, f"Remote version: {remote_ver}", level='info', event='progress')
             caps = mf_data.get('capabilities', {})
-            if connector.sync_rules and not caps.get('sync_rules', True):
+            if do_rules and not caps.get('sync_rules', True):
                 log_job(job, "Remote reports sync_rules=false — no rules will be fetched.", level='warning', event='progress')
-            if connector.sync_bundles and not caps.get('sync_bundles', True):
+            if do_bundles and not caps.get('sync_bundles', True):
                 log_job(job, "Remote reports sync_bundles=false — no bundles will be fetched.", level='warning', event='progress')
         except Exception as mf_exc:
             log_job(job, f"Manifest preflight failed: {mf_exc}", level='warning', event='progress')
@@ -896,12 +913,12 @@ def handle_connector_pull(job, app):
         total_rules_remote   = 0
         total_bundles_remote = 0
         try:
-            if connector.sync_rules:
+            if do_rules:
                 r = http_requests.get(f"{base}/api/sync/rules?since={since}&page=1&per_page=1",
                                       headers=headers, timeout=10)
                 if r.status_code == 200:
                     total_rules_remote = r.json().get('total', 0)
-            if connector.sync_bundles:
+            if do_bundles:
                 r = http_requests.get(f"{base}/api/sync/bundles?since={since}&page=1&per_page=1",
                                       headers=headers, timeout=10)
                 if r.status_code == 200:
@@ -925,68 +942,180 @@ def handle_connector_pull(job, app):
         bundles_skipped = 0
         had_error       = False
         all_missing_tags: set = set()
+        tag_cache: dict = None   # built once and reused across rules + bundles
 
         MAX_PAGES = 10_000  # safety guard against infinite pagination loops
 
         # ── Pull rules ────────────────────────────────────────────────────────
-        if connector.sync_rules:
-            page = 1
-            while page <= MAX_PAGES:
-                if _is_cancelled(job):
-                    log_job(job, 'Cancelled.', level='warning', event='cancelled')
-                    return
-                while _should_pause(job):
-                    import time; time.sleep(2)
+        if do_rules:
+            # Build a full tag cache once for the entire pull — reused for bundles too.
+            tag_cache = build_tag_cache()
+            log_job(job, f"Tag cache built: {len(tag_cache)} tags loaded.", level='info', event='progress')
 
-                url = f"{base}/api/sync/rules?since={since}&page={page}&per_page={PER_PAGE}"
-                try:
-                    resp = http_requests.get(url, headers=headers, timeout=30)
+            PER_PAGE = 2000   # 4× larger pages = 4× fewer HTTP round-trips
+            PREFETCH  = 4     # sliding window: up to 4 pages fetched in parallel
+
+            def _http_get_rules(p):
+                url = f"{base}/api/sync/rules?since={since}&page={p}&per_page={PER_PAGE}"
+                return http_requests.get(url, headers=headers, timeout=60)
+
+            page          = 1
+            page_futures  = {}   # page_num → Future
+            executor      = ThreadPoolExecutor(max_workers=PREFETCH)
+
+            def _enqueue(p):
+                if p not in page_futures and p <= MAX_PAGES:
+                    page_futures[p] = executor.submit(_http_get_rules, p)
+
+            # Seed the sliding window
+            for p in range(1, PREFETCH + 1):
+                _enqueue(p)
+
+            try:
+                while page <= MAX_PAGES:
+                    if _is_cancelled(job):
+                        log_job(job, 'Cancelled.', level='warning', event='cancelled')
+                        return
+                    while _should_pause(job):
+                        import time; time.sleep(2)
+
+                    if page not in page_futures:
+                        break
+
+                    try:
+                        resp = page_futures.pop(page).result(timeout=90)
+                    except Exception as exc:
+                        msg = f"Error fetching rules page {page}: {exc}"
+                        log_job(job, msg, level='error', event='progress')
+                        connector.last_error = msg
+                        had_error = True
+                        db.session.commit()
+                        break
+
                     if resp.status_code != 200:
                         msg = f"Remote returned HTTP {resp.status_code} for rules page {page}."
                         log_job(job, msg, level='error', event='progress')
                         connector.last_error = msg
                         had_error = True
                         break
+
                     data  = resp.json()
                     items = data.get('rules', [])
                     if not items and page > 1:
-                        break  # empty page — remote lied about has_more
+                        break
+
+                    # Advance the sliding window
+                    _enqueue(page + PREFETCH)
+
+                    # ── Batch UUID lookup: 1 query for the whole page ─────────
+                    page_uuids = [item['uuid'] for item in items if item.get('uuid')]
+                    existing_rules = Rule.query.filter(
+                        or_(Rule.remote_rule_uuid.in_(page_uuids),
+                            Rule.uuid.in_(page_uuids))
+                    ).order_by(Rule.is_deleted.asc()).all()
+
+                    rule_lookup: dict = {}
+                    for r in existing_rules:
+                        if r.remote_rule_uuid and r.remote_rule_uuid not in rule_lookup:
+                            rule_lookup[r.remote_rule_uuid] = r
+                        if r.uuid not in rule_lookup:
+                            rule_lookup[r.uuid] = r
+
+                    # ── Batch assoc lookup: 1 query for all matched rules ─────
+                    matched_ids = [r.id for r in existing_rules]
+                    assoc_set: set = set()
+                    if matched_ids:
+                        assocs = (RuleTagAssociation.query
+                                  .filter(RuleTagAssociation.rule_id.in_(matched_ids))
+                                  .with_entities(RuleTagAssociation.rule_id,
+                                                 RuleTagAssociation.tag_id)
+                                  .all())
+                        assoc_set = {(a.rule_id, a.tag_id) for a in assocs}
+
+                    # ── Two-pass page processing ──────────────────────────────
+                    # Pass 1: existing rules (already have DB ids — no flush needed).
+                    # Pass 2: new rules — batch all INSERTs into a single flush.
                     pg_created = pg_updated = pg_skipped = 0
+                    new_rules_pending: list = []   # [(remote_item, Rule)]
+
                     for item in items:
-                        try:
-                            result = _upsert_rule(connector, effective_user_id, item, triggered_by_id=job.created_by, missing_tags=all_missing_tags)
-                            if result == 'created':
-                                rules_created += 1; pg_created += 1
-                            elif result == 'updated':
-                                rules_updated += 1; pg_updated += 1
-                            elif result == 'skipped':
-                                rules_skipped += 1; pg_skipped += 1
-                            else:
-                                rules_errors += 1
-                        except Exception as item_exc:
+                        remote_uuid = item.get('uuid')
+                        if not remote_uuid:
                             rules_errors += 1
-                            log_job(job, f"Error on rule '{item.get('title', '?')}': {item_exc}",
-                                    level='warning', event='progress')
-                        # Count every processed item so the progress bar actually moves
-                        processed = rules_created + rules_updated + rules_skipped + rules_errors + bundles_created + bundles_updated + bundles_skipped
-                        job.done = min(processed, job.total)
+                            continue
+                        pre_match = rule_lookup.get(remote_uuid)
+
+                        if pre_match:
+                            # Existing rule — handle inline (update or skip)
+                            try:
+                                result = _upsert_rule(
+                                    connector, effective_user_id, item,
+                                    triggered_by_id=job.created_by,
+                                    missing_tags=all_missing_tags,
+                                    local_match=pre_match,
+                                    tag_cache=tag_cache,
+                                    assoc_set=assoc_set,
+                                )
+                                if result == 'updated':
+                                    rules_updated += 1; pg_updated += 1
+                                elif result == 'skipped':
+                                    rules_skipped += 1; pg_skipped += 1
+                                else:
+                                    rules_errors += 1
+                            except Exception as item_exc:
+                                rules_errors += 1
+                                log_job(job, f"Error updating '{item.get('title', '?')}': {item_exc}",
+                                        level='warning', event='progress')
+                        else:
+                            # New rule — stage for batch insert
+                            try:
+                                rule = _prepare_new_rule(connector, effective_user_id, item)
+                                new_rules_pending.append((item, rule))
+                            except Exception as item_exc:
+                                rules_errors += 1
+                                log_job(job, f"Error staging '{item.get('title', '?')}': {item_exc}",
+                                        level='warning', event='progress')
+
+                    # Single flush for ALL new rules on this page (1 DB round-trip)
+                    if new_rules_pending:
+                        try:
+                            db.session.flush()
+                            for item, rule in new_rules_pending:
+                                missed = _sync_tags(rule, item.get('tags', []),
+                                                    effective_user_id,
+                                                    tag_cache=tag_cache,
+                                                    assoc_set=assoc_set)
+                                all_missing_tags.update(missed)
+                                _sync_cve_ids(rule, item.get('cve_ids', []))
+                                _import_rule_history_new(rule, item.get('update_history', []),
+                                                         effective_user_id)
+                            pg_created    = len(new_rules_pending)
+                            rules_created += pg_created
+                        except Exception as batch_exc:
+                            rules_errors += len(new_rules_pending)
+                            log_job(job, f"Batch insert error on page {page}: {batch_exc}",
+                                    level='error', event='progress')
+                            db.session.rollback()
+
                     db.session.commit()
+
+                    processed = (rules_created + rules_updated + rules_skipped + rules_errors
+                                 + bundles_created + bundles_updated + bundles_skipped)
+                    job.done = min(processed, job.total)
                     log_job(job,
                             f"Rules p.{page}: +{pg_created} new, ~{pg_updated} updated, ={pg_skipped} skipped.",
                             level='info', event='progress')
                     if not data.get('has_more', False):
                         break
                     page += 1
-                except Exception as exc:
-                    msg = f"Error fetching rules page {page}: {exc}"
-                    log_job(job, msg, level='error', event='progress')
-                    connector.last_error = msg
-                    had_error = True
-                    db.session.commit()
-                    break
+            finally:
+                executor.shutdown(wait=False)
 
         # ── Pull bundles ──────────────────────────────────────────────────────
-        if connector.sync_bundles:
+        if do_bundles:
+            if tag_cache is None:
+                tag_cache = build_tag_cache()
+                log_job(job, f"Tag cache built: {len(tag_cache)} tags loaded.", level='info', event='progress')
             page = 1
             while page <= MAX_PAGES:
                 if _is_cancelled(job):
@@ -1007,7 +1136,7 @@ def handle_connector_pull(job, app):
                         break  # empty page — remote lied about has_more
                     for item in items:
                         try:
-                            result = _upsert_bundle(connector, effective_user_id, item, triggered_by_id=job.created_by)
+                            result = _upsert_bundle(connector, effective_user_id, item, triggered_by_id=job.created_by, tag_cache=tag_cache)
                             if result == 'created':
                                 bundles_created += 1
                             elif result == 'updated':

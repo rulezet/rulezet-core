@@ -1978,3 +1978,26 @@ class RegisteredInstance(db.Model):
             'first_seen':    self.first_seen.strftime('%Y-%m-%d %H:%M'),
             'last_seen':     self.last_seen.strftime('%Y-%m-%d %H:%M'),
         }
+
+
+class RemotePullLog(db.Model):
+    """One row per pull session initiated by a remote instance against this instance's sync API.
+    Logged when a remote connector fetches page 1 of /api/sync/rules."""
+    __tablename__ = 'remote_pull_log'
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    instance_uuid = db.Column(db.String(36),  nullable=True, index=True)
+    instance_url  = db.Column(db.String(512), nullable=True)
+    ip_address    = db.Column(db.String(64),  nullable=True)
+    rules_total   = db.Column(db.Integer,     nullable=True)
+    created_at    = db.Column(db.DateTime,    nullable=False,
+                              default=datetime.datetime.utcnow, index=True)
+
+    def to_json(self):
+        return {
+            'id':            self.id,
+            'instance_uuid': self.instance_uuid,
+            'instance_url':  self.instance_url,
+            'ip_address':    self.ip_address,
+            'rules_total':   self.rules_total,
+            'created_at':    self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        }

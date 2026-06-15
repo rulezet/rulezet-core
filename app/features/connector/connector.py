@@ -161,12 +161,21 @@ def pull_connector(connector_uuid):
     if not connector.is_active:
         return jsonify({'success': False, 'error': 'Connector is disabled.'}), 400
 
-    job = ConnectorModel.trigger_pull(connector, triggered_by=current_user.id)
+    data         = request.get_json(silent=True) or {}
+    sync_rules   = data.get('sync_rules',   connector.sync_rules)
+    sync_bundles = data.get('sync_bundles', connector.sync_bundles)
+
+    if not sync_rules and not sync_bundles:
+        return jsonify({'success': False, 'error': 'Nothing to pull — select rules and/or bundles.'}), 400
+
+    job = ConnectorModel.trigger_pull(connector, triggered_by=current_user.id,
+                                      sync_rules=sync_rules, sync_bundles=sync_bundles)
     if not job:
         return jsonify({'success': False, 'error': 'Could not queue pull job.'}), 500
 
+    what = ' + '.join(filter(None, ['rules' if sync_rules else '', 'bundles' if sync_bundles else '']))
     return jsonify({
         'success': True,
-        'message': 'Pull queued as background job.',
+        'message': f'Pull queued ({what}) as background job.',
         'job_uuid': job.uuid,
     }), 200

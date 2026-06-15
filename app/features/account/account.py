@@ -33,15 +33,60 @@ def index() -> render_template:
 def admin_instances():
     import uuid as _uuid_mod
     from flask import current_app, abort
+    from sqlalchemy import func
+    from app.core.db_class.db import RemotePullLog
     if not current_user.is_admin() or not current_app.config.get('IS_OFFICIAL_INSTANCE'):
         abort(404)
     instances = RegisteredInstance.query.order_by(RegisteredInstance.last_seen.desc()).all()
     own_cfg   = InstanceConfig.query.first()
+
+    # Pull counts per instance UUID (one query)
+    pull_counts = {
+        row.instance_uuid: row.cnt
+        for row in db.session.query(
+            RemotePullLog.instance_uuid,
+            func.count(RemotePullLog.id).label('cnt'),
+        ).group_by(RemotePullLog.instance_uuid).all()
+        if row.instance_uuid
+    }
+    # Last pull date per instance UUID
+    last_pulls = {
+        row.instance_uuid: row.last
+        for row in db.session.query(
+            RemotePullLog.instance_uuid,
+            func.max(RemotePullLog.created_at).label('last'),
+        ).group_by(RemotePullLog.instance_uuid).all()
+        if row.instance_uuid
+    }
+
+    instances_data = []
+    for inst in instances:
+        d = inst.to_json()
+        d['pull_count'] = pull_counts.get(inst.uuid, 0)
+        last = last_pulls.get(inst.uuid)
+        d['last_pull'] = last.strftime('%Y-%m-%d %H:%M') if last else None
+        instances_data.append(d)
+
     return render_template(
         "admin/instances.html",
-        instances=[i.to_json() for i in instances],
+        instances=instances_data,
         own_uuid=own_cfg.uuid if own_cfg else None,
     )
+
+
+@account_blueprint.route("/admin/instances/<string:instance_uuid>/pulls")
+@login_required
+def admin_instance_pulls(instance_uuid):
+    from flask import current_app, abort, jsonify
+    from app.core.db_class.db import RemotePullLog
+    if not current_user.is_admin() or not current_app.config.get('IS_OFFICIAL_INSTANCE'):
+        abort(404)
+    logs = (RemotePullLog.query
+            .filter_by(instance_uuid=instance_uuid)
+            .order_by(RemotePullLog.created_at.desc())
+            .limit(100)
+            .all())
+    return jsonify([l.to_json() for l in logs])
 
 
 @account_blueprint.route("/admin/all_users")

@@ -74,6 +74,32 @@
     </div>
     {% endif %}
 
+    <!-- Pull history offcanvas -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="pullHistoryCanvas" style="width:420px;">
+        <div class="offcanvas-header border-bottom" style="background:var(--card-bg-color);">
+            <div>
+                <h6 class="offcanvas-title fw-bold mb-0">
+                    <i class="fa-solid fa-cloud-arrow-down text-primary me-2"></i>Pull history
+                </h6>
+                <div id="pull-canvas-subtitle" class="text-muted" style="font-size:.75rem;"></div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+        </div>
+        <div class="offcanvas-body p-0" style="background:var(--card-bg-color);">
+            <!-- Stats strip -->
+            <div class="d-flex gap-3 px-3 py-2 border-bottom" style="font-size:.8rem;background:var(--light-bg-color);">
+                <div><span class="fw-semibold" id="pull-stat-total">—</span> <span class="text-muted">pulls</span></div>
+                <div><span class="fw-semibold" id="pull-stat-last">—</span> <span class="text-muted">last pull</span></div>
+            </div>
+            <!-- Timeline -->
+            <div id="pull-history-list" class="px-3 py-2">
+                <div class="text-center text-muted py-5" id="pull-history-loading">
+                    <div class="spinner-border spinner-border-sm mb-2"></div><br>Loading…
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Table -->
     {% if instances %}
     <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
@@ -88,6 +114,8 @@
                         <th class="text-center">Rules</th>
                         <th class="text-center">Bundles</th>
                         <th class="text-center">Pings</th>
+                        <th class="text-center">Pulls</th>
+                        <th>Last pull</th>
                         <th>First seen</th>
                         <th>Last seen</th>
                         <th>Status</th>
@@ -97,7 +125,11 @@
                     {% for inst in instances %}
                     <tr class="instance-row"
                         data-last-seen="{{ inst.last_seen }}"
-                        data-uuid="{{ inst.uuid }}">
+                        data-uuid="{{ inst.uuid }}"
+                        data-url="{{ inst.public_url or '' }}"
+                        data-pull-count="{{ inst.pull_count }}"
+                        data-last-pull="{{ inst.last_pull or '' }}"
+                        style="cursor:default;">
                         <td class="text-center">
                             {% if inst.public_url %}
                             <a href="{{ inst.public_url }}" target="_blank" rel="noopener"
@@ -151,6 +183,27 @@
                         </td>
                         <td class="text-center">
                             <span style="font-size:.82rem;">{{ inst.ping_count }}</span>
+                        </td>
+                        <!-- Pulls column — clickable if pulls exist -->
+                        <td class="text-center">
+                            {% if inst.pull_count > 0 %}
+                            <button class="btn btn-sm btn-link p-0 text-decoration-none show-pulls fw-semibold"
+                                    data-uuid="{{ inst.uuid }}"
+                                    data-url="{{ inst.public_url or inst.uuid[:8] }}"
+                                    data-count="{{ inst.pull_count }}"
+                                    title="View pull history">
+                                <i class="fa-solid fa-cloud-arrow-down text-primary me-1" style="font-size:.7rem;"></i>{{ inst.pull_count }}
+                            </button>
+                            {% else %}
+                            <span class="text-muted" style="font-size:.8rem;">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if inst.last_pull %}
+                            <span class="last-pull-cell text-muted" style="font-size:.78rem;" data-ts="{{ inst.last_pull }}">{{ inst.last_pull }}</span>
+                            {% else %}
+                            <span class="text-muted" style="font-size:.8rem;">—</span>
+                            {% endif %}
                         </td>
                         <td>
                             <span class="text-muted" style="font-size:.78rem;" title="{{ inst.first_seen }}">{{ inst.first_seen }}</span>
@@ -223,6 +276,21 @@
     document.getElementById('count-stale').textContent   = stale
     document.getElementById('count-offline').textContent = offline
 
+    // Relative "last pull" labels
+    document.querySelectorAll('.last-pull-cell').forEach(cell => {
+        const ts = new Date(cell.dataset.ts + ' UTC').getTime()
+        const a  = now - ts
+        const mins = Math.floor(a / 60000)
+        const hrs  = Math.floor(mins / 60)
+        const days = Math.floor(hrs / 24)
+        let rel
+        if (mins < 2)       rel = 'just now'
+        else if (mins < 60) rel = `${mins} min ago`
+        else if (hrs < 24)  rel = `${hrs} h ago`
+        else                rel = `${days} d ago`
+        cell.textContent = rel
+    })
+
     // Copy UUID buttons
     document.querySelectorAll('.copy-uuid').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -230,6 +298,86 @@
                 btn.innerHTML = '<i class="fa-solid fa-check text-success"></i>'
                 setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i>' }, 1500)
             })
+        })
+    })
+
+    // ── Pull history offcanvas ──────────────────────────────────────────────
+    const pullCanvas = new bootstrap.Offcanvas(document.getElementById('pullHistoryCanvas'))
+    const pullList   = document.getElementById('pull-history-list')
+    const pullLoading = document.getElementById('pull-history-loading')
+    const pullSubtitle = document.getElementById('pull-canvas-subtitle')
+    const pullStatTotal = document.getElementById('pull-stat-total')
+    const pullStatLast  = document.getElementById('pull-stat-last')
+
+    function relTime(dateStr) {
+        const ms  = now - new Date(dateStr + ' UTC').getTime()
+        const min = Math.floor(ms / 60000)
+        const hr  = Math.floor(min / 60)
+        const d   = Math.floor(hr / 24)
+        if (min < 2)    return 'just now'
+        if (min < 60)   return `${min} min ago`
+        if (hr  < 24)   return `${hr} h ago`
+        return `${d} d ago`
+    }
+
+    function renderPullHistory(entries, count, label) {
+        pullStatTotal.textContent = count
+        if (entries.length === 0) {
+            pullStatLast.textContent = '—'
+            pullList.innerHTML = '<div class="text-center text-muted py-5" style="font-size:.85rem;">No pull history recorded yet.</div>'
+            return
+        }
+        const lastEntry = entries[0]
+        pullStatLast.textContent = relTime(lastEntry.created_at)
+
+        const items = entries.map(e => {
+            const rel   = relTime(e.created_at)
+            const ip    = e.ip_address ? `<span class="badge bg-secondary-subtle text-secondary ms-2" style="font-size:.65rem;font-family:monospace;">${e.ip_address}</span>` : ''
+            const url   = e.instance_url ? `<div class="text-muted" style="font-size:.72rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px;">${e.instance_url}</div>` : ''
+            const total = e.rules_total != null ? `<div class="text-muted" style="font-size:.72rem;">${Number(e.rules_total).toLocaleString()} rules available</div>` : ''
+            return `
+            <div class="d-flex gap-3 py-2 border-bottom" style="font-size:.8rem;">
+                <div class="flex-shrink-0 text-center" style="width:32px;padding-top:2px;">
+                    <i class="fa-solid fa-cloud-arrow-down text-primary" style="font-size:.85rem;"></i>
+                </div>
+                <div class="flex-grow-1 overflow-hidden">
+                    <div class="d-flex align-items-center">
+                        <span class="fw-semibold">${e.created_at}</span>${ip}
+                        <span class="text-muted ms-auto flex-shrink-0" style="font-size:.72rem;">${rel}</span>
+                    </div>
+                    ${url}${total}
+                </div>
+            </div>`
+        }).join('')
+        pullList.innerHTML = items
+    }
+
+    document.querySelectorAll('.show-pulls').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation()
+            const uuid  = btn.dataset.uuid
+            const label = btn.dataset.url || uuid.slice(0, 8)
+            const count = btn.dataset.count
+
+            pullSubtitle.textContent = label
+            pullStatTotal.textContent = count
+            pullStatLast.textContent  = '—'
+            pullList.innerHTML = ''
+            pullLoading.style.display = ''
+            pullList.appendChild(pullLoading)
+
+            pullCanvas.show()
+
+            fetch(`/account/admin/instances/${uuid}/pulls`)
+                .then(r => r.json())
+                .then(data => {
+                    pullLoading.style.display = 'none'
+                    renderPullHistory(data.pulls || [], count, label)
+                })
+                .catch(() => {
+                    pullLoading.style.display = 'none'
+                    pullList.innerHTML = '<div class="text-danger px-2 py-4 text-center" style="font-size:.85rem;">Failed to load pull history.</div>'
+                })
         })
     })
 })()

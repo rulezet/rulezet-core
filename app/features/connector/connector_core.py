@@ -285,14 +285,26 @@ def seed_official_connector() -> None:
         db.session.rollback()
 
 
-def trigger_pull(connector: Connector, triggered_by: int) -> object | None:
-    """Enqueue a connector_pull background job and return the job object."""
+def trigger_pull(connector: Connector, triggered_by: int,
+                 sync_rules: bool = None, sync_bundles: bool = None) -> object | None:
+    """Enqueue a connector_pull background job and return the job object.
+
+    sync_rules / sync_bundles override the connector's own flags for this pull only.
+    """
     if not connector.is_active:
         return None
+    payload: dict = {'connector_id': connector.id}
+    if sync_rules   is not None: payload['sync_rules']   = sync_rules
+    if sync_bundles is not None: payload['sync_bundles'] = sync_bundles
+
+    what = ' + '.join(filter(None, [
+        'rules'   if (sync_rules   if sync_rules   is not None else connector.sync_rules)   else '',
+        'bundles' if (sync_bundles if sync_bundles is not None else connector.sync_bundles) else '',
+    ]))
     job = create_job(
         job_type='connector_pull',
-        payload={'connector_id': connector.id},
-        label=f"Pull from '{connector.name}'",
+        payload=payload,
+        label=f"Pull from '{connector.name}' ({what})",
         created_by=triggered_by,
     )
     log_activity('connector.pull_triggered',
@@ -307,13 +319,17 @@ def trigger_pull(connector: Connector, triggered_by: int) -> object | None:
 
 def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
                  triggered_by_id: int = None,
-                 missing_tags: set = None) -> str:
+                 missing_tags: set = None,
+                 local_match=None,
+                 tag_cache: dict = None,
+                 assoc_set: set = None) -> str:
     """UUID-based upsert: match → update in place with history; no match → create.
 
-    - Trashed rules are restored on match.
-    - Content changes are archived in RuleUpdateHistory (already-applied,
-      marked manuel_submit=True so they never appear as pending proposals).
-    - Tags and CVEs are always synced on every pull.
+    local_match — pre-looked-up Rule object (avoids per-rule DB query when caller
+                  does a batch UUID lookup for the whole page).
+    tag_cache   — {name.lower(): Tag} dict built once per pull for O(1) tag lookups.
+    assoc_set   — {(rule_id, tag_id)} set for O(1) duplicate-association checks;
+                  updated in place as new associations are added.
 
     Returns: 'created' | 'updated' | 'skipped' | 'invalid'
     """
@@ -324,11 +340,11 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
     owner_id = triggered_by_id if triggered_by_id else shadow_user_id
     now      = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
-    # Rule.uuid is also checked so a rule that originated here and comes back
-    # from a remote instance is recognised instead of duplicated.
-    local_match = Rule.query.filter(
-        or_(Rule.remote_rule_uuid == remote_uuid, Rule.uuid == remote_uuid),
-    ).order_by(Rule.is_deleted.asc()).first()
+    # Use pre-looked-up match when available (batch path), otherwise fall back to DB query.
+    if local_match is None:
+        local_match = Rule.query.filter(
+            or_(Rule.remote_rule_uuid == remote_uuid, Rule.uuid == remote_uuid),
+        ).order_by(Rule.is_deleted.asc()).first()
 
     if local_match:
         restored = False
@@ -343,9 +359,6 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
         content_changed = (local_match.to_string or '') != new_content
 
         if content_changed:
-            # Archive the version being overwritten.
-            # manuel_submit=True marks this as already applied — it must not
-            # appear in the pending-changes queue.
             db.session.add(RuleUpdateHistory(
                 rule_id=local_match.id,
                 rule_title=local_match.title,
@@ -370,8 +383,8 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
                 setattr(local_match, field, value)
                 meta_changed = True
 
-        # Always sync tags and CVEs — even when content/metadata are identical
-        missed = _sync_tags(local_match, remote.get('tags', []), owner_id)
+        missed = _sync_tags(local_match, remote.get('tags', []), owner_id,
+                            tag_cache=tag_cache, assoc_set=assoc_set)
         if missing_tags is not None:
             missing_tags.update(missed)
         _sync_cve_ids(local_match, remote.get('cve_ids', []))
@@ -389,7 +402,7 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
 
     # ── No match → create the rule from remote data ───────────────────────────
     rule = Rule(
-        uuid=str(uuid_mod.uuid4()),
+        uuid=remote_uuid,           # preserve origin UUID for cross-instance lookup
         remote_rule_uuid=remote_uuid,
         connector_id=connector.id,
         user_id=owner_id,
@@ -409,13 +422,81 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
         is_deleted=False,
     )
     db.session.add(rule)
-    db.session.flush()
-    missed = _sync_tags(rule, remote.get('tags', []), owner_id)
+    db.session.flush()  # needed to obtain rule.id for tag associations
+    missed = _sync_tags(rule, remote.get('tags', []), owner_id,
+                        tag_cache=tag_cache, assoc_set=assoc_set)
     if missing_tags is not None:
         missing_tags.update(missed)
     _sync_cve_ids(rule, remote.get('cve_ids', []))
     _import_rule_history(rule, remote.get('update_history', []), owner_id)
     return 'created'
+
+
+def _prepare_new_rule(connector: Connector, owner_id: int, remote: dict) -> Rule:
+    """Create a Rule ORM object from remote data and add it to the session — do NOT flush.
+
+    The caller must call db.session.flush() after batching all new rules, then call
+    _sync_tags / _sync_cve_ids / _import_rule_history_new to finish each rule.
+    This allows a whole page of new rules to be inserted in a single DB round-trip.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    remote_uuid = remote.get('uuid')
+    rule = Rule(
+        uuid=remote_uuid,           # preserve origin UUID for cross-instance lookup
+        remote_rule_uuid=remote_uuid,
+        connector_id=connector.id,
+        user_id=owner_id,
+        format=remote.get('format', 'unknown'),
+        title=remote.get('title', ''),
+        description=remote.get('description'),
+        to_string=remote.get('to_string', ''),
+        author=remote.get('author') or connector.name,
+        source=remote.get('source'),
+        sync_instance_url=connector.instance_url,
+        version=remote.get('version'),
+        license=remote.get('license'),
+        vote_up=0,
+        vote_down=0,
+        creation_date=now,
+        last_modif=now,
+        is_deleted=False,
+    )
+    db.session.add(rule)
+    return rule
+
+
+def _import_rule_history_new(rule: Rule, history: list, fallback_user_id: int) -> None:
+    """Same as _import_rule_history but skips the existing-history DB query.
+    Safe to call only for brand-new rules (just flushed, guaranteed empty history).
+    """
+    if not history:
+        return
+    seen: set = set()
+    for h in history:
+        try:
+            if h.get('analyzed_at'):
+                raw = datetime.datetime.fromisoformat(
+                    h['analyzed_at'].replace('Z', '+00:00')
+                ).replace(tzinfo=None)
+            else:
+                raw = datetime.datetime.utcnow()
+            key = raw.isoformat()
+            if key in seen:
+                continue
+            seen.add(key)
+            db.session.add(RuleUpdateHistory(
+                rule_id=rule.id,
+                rule_title=rule.title,
+                success=h.get('success', True),
+                message=h.get('message'),
+                old_content=h.get('old_content'),
+                new_content=h.get('new_content'),
+                analyzed_by_user_id=fallback_user_id,
+                analyzed_at=raw,
+                manuel_submit=h.get('manuel_submit', False),
+            ))
+        except Exception as exc:
+            logger.warning("_import_rule_history_new: skipped entry for rule %s: %s", rule.id, exc)
 
 
 def _import_rule_history(rule: Rule, history: list, fallback_user_id: int) -> None:
@@ -455,9 +536,52 @@ def _import_rule_history(rule: Rule, history: list, fallback_user_id: int) -> No
             logger.warning("_import_rule_history: skipped entry for rule %s: %s", rule.id, exc)
 
 
-def _find_tag(name: str):
-    """Exact case-insensitive tag lookup — avoids ilike treating _ and % as wildcards."""
+def build_tag_cache() -> dict:
+    """Load every Tag into a name.lower() → Tag dict for O(1) lookups during a pull.
+    Call once at the start of a pull job and pass it down to _sync_tags / _ensure_tag."""
+    return {t.name.lower(): t for t in Tag.query.all()}
+
+
+def _find_tag(name: str, tag_cache: dict = None):
+    """Exact case-insensitive tag lookup. Uses in-memory cache when provided."""
+    if tag_cache is not None:
+        return tag_cache.get(name.lower())
     return Tag.query.filter(func.lower(Tag.name) == name.lower()).first()
+
+
+def _auto_install_taxonomy(namespace: str) -> bool:
+    """Ensure a MISP taxonomy namespace is installed from the local submodule.
+    Returns True if the namespace is now usable."""
+    try:
+        from app.features.tags.tags_core import (
+            add_tags_from_misp_taxonomy,
+            update_tags_from_misp_taxonomy,
+            get_all_taxonomy_uuids_from_disk,
+            get_all_taxonomies_in_db,
+        )
+        from app.features.account.account_core import get_admin_user
+
+        admin = get_admin_user()
+        if not admin:
+            return False
+
+        ns_to_uid = {ns: uid for uid, ns in get_all_taxonomy_uuids_from_disk()}
+        uid = ns_to_uid.get(namespace)
+        if not uid:
+            logger.debug("_auto_install_taxonomy: '%s' not found in submodule", namespace)
+            return False
+
+        if namespace not in get_all_taxonomies_in_db():
+            ok, msg = add_tags_from_misp_taxonomy(uid, admin)
+            logger.info("_auto_install_taxonomy: installed '%s' — %s", namespace, msg)
+        else:
+            ok, msg = update_tags_from_misp_taxonomy(uid, admin)
+            logger.info("_auto_install_taxonomy: updated '%s' — %s", namespace, msg)
+
+        return bool(ok)
+    except Exception as exc:
+        logger.warning("_auto_install_taxonomy: failed for '%s': %s", namespace, exc)
+        return False
 
 
 def _auto_install_galaxy(gtype: str) -> bool:
@@ -503,7 +627,7 @@ def _auto_install_galaxy(gtype: str) -> bool:
         return False
 
 
-def _create_stub_galaxy_tag(name: str, user_id: int) -> "Tag | None":
+def _create_stub_galaxy_tag(name: str, user_id: int, tag_cache: dict = None) -> "Tag | None":
     """Create a minimal Tag for a galaxy cluster not present in the local submodule.
 
     Uses a savepoint so a duplicate-name error only rolls back this one insert,
@@ -525,22 +649,53 @@ def _create_stub_galaxy_tag(name: str, user_id: int) -> "Tag | None":
             )
             db.session.add(tag)
         logger.info("_create_stub_galaxy_tag: created stub '%s'", name)
+        if tag_cache is not None:
+            tag_cache[name.lower()] = tag
         return tag
     except Exception:
         # Savepoint rolled back — tag was already created in this transaction
-        return _find_tag(name)
+        tag = _find_tag(name, tag_cache)
+        return tag
 
 
-def _ensure_tag(name: str, user_id: int, auto_installed: set) -> "Tag | None":
+def _create_stub_tag(name: str, user_id: int, tag_cache: dict = None) -> "Tag | None":
+    """Create a minimal Tag for any name not found locally.
+
+    Uses a savepoint so a duplicate-name error only rolls back this insert.
+    """
+    try:
+        with db.session.begin_nested():
+            tag = Tag(
+                uuid=str(uuid_mod.uuid4()),
+                name=name,
+                source="Connector",
+                is_active=True,
+                is_approved_by_admin=True,
+                created_by=user_id,
+                created_at=datetime.datetime.now(datetime.timezone.utc),
+                updated_at=datetime.datetime.now(datetime.timezone.utc),
+            )
+            db.session.add(tag)
+        logger.info("_create_stub_tag: created stub '%s'", name)
+        if tag_cache is not None:
+            tag_cache[name.lower()] = tag
+        return tag
+    except Exception:
+        tag = _find_tag(name, tag_cache)
+        return tag
+
+
+def _ensure_tag(name: str, user_id: int, auto_installed: set,
+                tag_cache: dict = None) -> "Tag | None":
     """Return a local Tag for *name*, installing/creating it if needed.
 
-    1. Look up the tag by exact name.
-    2. If not found and it is a galaxy tag: auto-install the galaxy (once per type),
-       then retry the lookup.
-    3. If still not found and it is a galaxy tag: create a stub so the cluster is
-       attached even when the local submodule is behind the remote.
+    Priority:
+    1. Found in cache/DB → return it.
+    2. misp-galaxy: tag → auto-install galaxy, then stub if still missing.
+    3. namespace:value tag → auto-install MISP taxonomy, then stub if still missing.
+    4. Unknown format → create stub tag directly.
     """
-    tag = _find_tag(name)
+    tag = _find_tag(name, tag_cache)
     if tag is not None:
         return tag
 
@@ -549,25 +704,52 @@ def _ensure_tag(name: str, user_id: int, auto_installed: set) -> "Tag | None":
         if gtype not in auto_installed:
             _auto_install_galaxy(gtype)
             auto_installed.add(gtype)
-        tag = _find_tag(name)
+            if tag_cache is not None:
+                new_tags = Tag.query.filter(
+                    func.lower(Tag.name).like(f"misp-galaxy:{gtype.lower()}%")
+                ).all()
+                for t in new_tags:
+                    tag_cache[t.name.lower()] = t
+        tag = _find_tag(name, tag_cache)
         if tag is None:
-            # Cluster not in local submodule — create a stub
-            tag = _create_stub_galaxy_tag(name, user_id)
+            tag = _create_stub_galaxy_tag(name, user_id, tag_cache)
+
+    elif ":" in name:
+        # Regular MISP taxonomy tag (e.g. tlp:clear, pap:white)
+        namespace = name.split(":")[0].lower()
+        if namespace not in auto_installed:
+            _auto_install_taxonomy(namespace)
+            auto_installed.add(namespace)
+            if tag_cache is not None:
+                new_tags = Tag.query.filter(
+                    func.lower(Tag.name).like(f"{namespace}:%")
+                ).all()
+                for t in new_tags:
+                    tag_cache[t.name.lower()] = t
+        tag = _find_tag(name, tag_cache)
+        if tag is None:
+            tag = _create_stub_tag(name, user_id, tag_cache)
+
+    else:
+        tag = _create_stub_tag(name, user_id, tag_cache)
 
     return tag
 
 
-def _sync_tags(rule: Rule, tag_names: list, user_id: int) -> set:
+def _sync_tags(rule: Rule, tag_names: list, user_id: int,
+               tag_cache: dict = None, assoc_set: set = None) -> set:
     """Attach tags to a rule, auto-installing/creating galaxy tags as needed.
 
-    Returns a set of non-galaxy tag names that could not be found locally
-    (taxonomy or manual tags that simply do not exist on this instance).
+    tag_cache  — optional {name.lower(): Tag} dict built once per pull for O(1) lookups.
+    assoc_set  — optional {(rule_id, tag_id)} set for O(1) duplicate checks; updated in place.
+
+    Returns a set of non-galaxy tag names that could not be found locally.
     """
     missing: set = set()
     auto_installed: set = set()
 
     for name in tag_names:
-        tag = _ensure_tag(name, user_id, auto_installed)
+        tag = _ensure_tag(name, user_id, auto_installed, tag_cache)
 
         if tag is None:
             missing.add(name)
@@ -576,25 +758,33 @@ def _sync_tags(rule: Rule, tag_names: list, user_id: int) -> set:
         if not tag.is_active:
             tag.is_active = True
 
-        already = RuleTagAssociation.query.filter_by(rule_id=rule.id, tag_id=tag.id).first()
-        if not already:
-            db.session.add(RuleTagAssociation(
-                uuid=str(uuid_mod.uuid4()),
-                rule_id=rule.id,
-                tag_id=tag.id,
-                user_id=user_id,
-                added_at=datetime.datetime.now(datetime.timezone.utc),
-            ))
+        key = (rule.id, tag.id)
+        if assoc_set is not None:
+            if key in assoc_set:
+                continue
+            assoc_set.add(key)
+        else:
+            if RuleTagAssociation.query.filter_by(rule_id=rule.id, tag_id=tag.id).first():
+                continue
+
+        db.session.add(RuleTagAssociation(
+            uuid=str(uuid_mod.uuid4()),
+            rule_id=rule.id,
+            tag_id=tag.id,
+            user_id=user_id,
+            added_at=datetime.datetime.now(datetime.timezone.utc),
+        ))
     return missing
 
 
-def _sync_bundle_tags(bundle: Bundle, tag_names: list, user_id: int) -> set:
+def _sync_bundle_tags(bundle: Bundle, tag_names: list, user_id: int,
+                      tag_cache: dict = None) -> set:
     """Same as _sync_tags but for bundles via BundleTagAssociation."""
     missing: set = set()
     auto_installed: set = set()
 
     for name in tag_names:
-        tag = _ensure_tag(name, user_id, auto_installed)
+        tag = _ensure_tag(name, user_id, auto_installed, tag_cache)
 
         if tag is None:
             missing.add(name)
@@ -711,7 +901,7 @@ def _sync_bundle_rules(bundle: Bundle, rule_uuids: list) -> int:
 
 
 def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
-                   triggered_by_id: int = None) -> str:
+                   triggered_by_id: int = None, tag_cache: dict = None) -> str:
     """Create or update a Bundle from a remote payload dict, then attach the
     local rules listed in remote['rules'] (rules are pulled before bundles,
     so they already exist locally when sync_rules is enabled).
@@ -732,7 +922,7 @@ def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
 
     if existing:
         added = _sync_bundle_rules(existing, remote.get('rules', []))
-        _sync_bundle_tags(existing, remote.get('tags', []), owner_id)
+        _sync_bundle_tags(existing, remote.get('tags', []), owner_id, tag_cache=tag_cache)
         _sync_cve_ids(existing, remote.get('vulnerability_identifiers', []))
         remote_ts = remote.get('updated_at')
         changed = False
@@ -766,6 +956,6 @@ def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
     db.session.add(bundle)
     db.session.flush()
     _sync_bundle_rules(bundle, remote.get('rules', []))
-    _sync_bundle_tags(bundle, remote.get('tags', []), owner_id)
+    _sync_bundle_tags(bundle, remote.get('tags', []), owner_id, tag_cache=tag_cache)
     _sync_cve_ids(bundle, remote.get('vulnerability_identifiers', []))
     return 'created'
