@@ -2,6 +2,196 @@
 {% block title %}My Account — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/user_detail.css') }}">
+<style>
+/* ── Profile page top tabs (Profile / Community) ─────────────── */
+.profile-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--border-color, #dee2e6);
+    margin-bottom: 24px;
+}
+.profile-tab {
+    padding: 10px 22px;
+    font-size: .87rem;
+    font-weight: 600;
+    color: var(--subtle-text-color);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+    border-radius: 6px 6px 0 0;
+}
+.profile-tab:hover { color: #0d6efd; }
+.profile-tab.active { color: #0d6efd; border-bottom-color: #0d6efd; }
+
+/* ── Follow card (inherits detail_rule card look) ─────────────── */
+.follow-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+}
+.follow-card-watermark {
+    position: absolute;
+    right: 30px;
+    top: 10px;
+    font-size: 14rem;
+    color: rgba(13, 110, 253, 0.03);
+    transform: rotate(-15deg);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ── Toggle pill (Following / Followers) ──────────────────────── */
+.follow-toggle {
+    display: inline-flex;
+    background: var(--light-bg-color);
+    border-radius: 24px;
+    padding: 3px;
+    gap: 2px;
+}
+.follow-toggle__btn {
+    padding: 6px 18px;
+    font-size: .8rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 20px;
+    background: transparent;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    transition: background .18s, color .18s, box-shadow .18s;
+}
+.follow-toggle__btn.active {
+    background: #0d6efd;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(13,110,253,.35);
+}
+.follow-toggle__btn:not(.active):hover { color: #0d6efd; }
+
+/* ── Search input ─────────────────────────────────────────────── */
+.follow-search-wrap {
+    position: relative;
+}
+.follow-search-wrap i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--subtle-text-color);
+    font-size: .78rem;
+    pointer-events: none;
+}
+.follow-search {
+    width: 100%;
+    padding: 7px 12px 7px 32px;
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 10px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: .82rem;
+    outline: none;
+    transition: border-color .18s, box-shadow .18s;
+}
+.follow-search:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,.1);
+}
+
+/* ── User list ────────────────────────────────────────────────── */
+.follow-list {
+    max-height: 420px;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1;
+}
+
+.follow-user-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+    transition: background .12s;
+}
+.follow-user-row:last-child { border-bottom: none; }
+
+.follow-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .95rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(13,110,253,.25);
+}
+.follow-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.follow-user-info { flex: 1; min-width: 0; }
+.follow-user-name {
+    font-size: .86rem;
+    font-weight: 600;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.follow-user-meta {
+    font-size: .72rem;
+    color: var(--subtle-text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+.follow-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.follow-row-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .75rem;
+    cursor: pointer;
+    transition: background .13s, color .13s, transform .13s;
+    text-decoration: none;
+    border: none;
+}
+.follow-row-btn:hover { transform: scale(1.08); }
+.follow-row-btn--view     { background: rgba(13,110,253,.1);   color: #0d6efd; }
+.follow-row-btn--view:hover { background: rgba(13,110,253,.2); }
+.follow-row-btn--unfollow { background: rgba(220,53,69,.08);   color: #dc3545; }
+.follow-row-btn--unfollow:hover { background: rgba(220,53,69,.18); }
+
+/* Empty state */
+.follow-empty {
+    padding: 48px 20px;
+    text-align: center;
+    color: var(--subtle-text-color);
+}
+.follow-empty i { font-size: 2rem; opacity: .22; display: block; margin-bottom: 10px; }
+.follow-empty-title { font-size: .88rem; font-weight: 600; color: var(--text-color); margin-bottom: 4px; }
+.follow-empty-sub   { font-size: .76rem; }
+
+/* Skeleton */
+.follow-skeleton-row { display: flex; align-items: center; gap: 14px; padding: 11px 0;
+    border-bottom: 1px solid var(--border-color, #dee2e6); }
+.sk { background: var(--light-bg-color); animation: sk-pulse 1.3s ease infinite; }
+@keyframes sk-pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+.sk-circle { width:44px; height:44px; border-radius:50%; flex-shrink:0; }
+.sk-lines  { flex:1; display:flex; flex-direction:column; gap:7px; }
+.sk-line   { height:12px; border-radius:6px; }
+.sk-line-w { width:60%; }
+.sk-line-s { width:40%; }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -9,7 +199,7 @@
 
     <!-- Breadcrumb -->
     <nav aria-label="breadcrumb" class="mb-4">
-        <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+        <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
             <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
             <li class="breadcrumb-item active text-muted" aria-current="page">My Account</li>
         </ol>
@@ -34,7 +224,7 @@
             {% endif %}
         </div>
 
-        <h1 class="mb-1 text-primary fw-bold text-uppercase" style="letter-spacing: 2px;">
+        <h1 class="mb-1 text-primary fw-bold text-uppercase" style="letter-spacing:2px;">
             {{ current_user.get_username() }}
         </h1>
 
@@ -42,7 +232,6 @@
         <p class="text-muted mb-2" style="max-width:500px;margin:0 auto;">{{ current_user.bio }}</p>
         {% endif %}
 
-        <!-- location + external links row -->
         <div class="d-flex justify-content-center align-items-center gap-3 mt-1 flex-wrap">
             {% if current_user.location %}
             <span class="text-muted small">
@@ -69,144 +258,309 @@
             {% endif %}
         </div>
 
-        <p class="text-muted mt-2 fw-medium">
-            <i class="fas fa-id-badge me-2 text-secondary"></i>
-            ACCOUNT INFORMATION AND SETTINGS
-        </p>
+        <!-- Follow counts -->
+        <div class="d-flex justify-content-center gap-4 mt-3">
+            <div class="text-center" style="cursor:pointer;" @click="activeTab='follow'">
+                <div class="fw-bold fs-5 text-primary">[[ followingList.length ]]</div>
+                <div class="text-muted" style="font-size:.78rem;">Following</div>
+            </div>
+            <div class="text-center" style="cursor:pointer;" @click="activeTab='follow'">
+                <div class="fw-bold fs-5 text-primary">[[ followersList.length ]]</div>
+                <div class="text-muted" style="font-size:.78rem;">Followers</div>
+            </div>
+        </div>
+
         <div class="mx-auto mt-3 bg-primary opacity-25" style="width:60px;height:4px;border-radius:2px;"></div>
     </div>
 
-    <!-- Main card -->
-    <div class="User-detail-global-info">
+    <!-- ── Tabs ── -->
+    <div class="profile-tabs">
+        <button class="profile-tab" :class="{active: activeTab==='info'}"   @click="activeTab='info'">
+            <i class="fa-solid fa-circle-user me-2"></i>Profile
+        </button>
+        <button class="profile-tab" :class="{active: activeTab==='follow'}" @click="activeTab='follow'; loadFollow()">
+            <i class="fa-solid fa-users me-2"></i>Community
+            <span v-if="followersList.length + followingList.length > 0"
+                  class="badge rounded-pill bg-primary ms-2"
+                  style="font-size:.6rem;padding:2px 6px;">
+                [[ followersList.length + followingList.length ]]
+            </span>
+        </button>
+    </div>
 
-        <!-- Avatar row -->
-        <div class="avatar-container">
-            <div class="user-avatar" style="overflow:hidden;">
-                {% if current_user.profile_picture %}
-                    <img src="{{ current_user.get_avatar_url() }}"
-                         style="width:100%;height:100%;object-fit:cover;">
-                {% else %}
-                    {{ current_user.first_name[0] }}{{ current_user.last_name[0] }}
-                {% endif %}
-            </div>
-            <div class="avatar-info">
-                <div class="avatar-name">{{ current_user.get_username() }}</div>
-                <div class="avatar-email">{{ current_user.email }}</div>
-            </div>
-        </div>
+    <!-- ── Tab 1 : Profile info ── -->
+    <div v-show="activeTab==='info'">
 
-        <!-- Info grid -->
-        <div class="global-info-grid">
-            <div class="info-item">
-                <label class="info-item-label">First Name</label>
-                <div class="info-item-value">{{ current_user.first_name }}</div>
-            </div>
-            <div class="info-item">
-                <label class="info-item-label">Last Name</label>
-                <div class="info-item-value">{{ current_user.last_name }}</div>
-            </div>
-            <div class="info-item">
-                <label class="info-item-label">Username</label>
-                <div class="info-item-value">
-                    {{ current_user.username if current_user.username else '—' }}
+        <div class="User-detail-global-info">
+
+            <div class="avatar-container">
+                <div class="user-avatar" style="overflow:hidden;">
+                    {% if current_user.profile_picture %}
+                        <img src="{{ current_user.get_avatar_url() }}"
+                             style="width:100%;height:100%;object-fit:cover;">
+                    {% else %}
+                        {{ current_user.first_name[0] }}{{ current_user.last_name[0] }}
+                    {% endif %}
+                </div>
+                <div class="avatar-info">
+                    <div class="avatar-name">{{ current_user.get_username() }}</div>
+                    <div class="avatar-email">{{ current_user.email }}</div>
                 </div>
             </div>
-            <div class="info-item">
-                <label class="info-item-label">User ID</label>
-                <div class="info-item-value font-monospace">#{{ current_user.id }}</div>
-            </div>
-            <div class="info-item">
-                <label class="info-item-label">Member since</label>
-                <div class="info-item-value">
-                    {{ current_user.created_at.strftime('%B %d, %Y') if current_user.created_at else '—' }}
+
+            <div class="global-info-grid">
+                <div class="info-item">
+                    <label class="info-item-label">First Name</label>
+                    <div class="info-item-value">{{ current_user.first_name }}</div>
                 </div>
-            </div>
-            <div class="info-item">
-                <label class="info-item-label">Last seen</label>
-                <div class="info-item-value">
-                    {{ current_user.last_seen.strftime('%Y-%m-%d %H:%M') if current_user.last_seen else '—' }}
+                <div class="info-item">
+                    <label class="info-item-label">Last Name</label>
+                    <div class="info-item-value">{{ current_user.last_name }}</div>
                 </div>
-            </div>
-            <div class="info-item">
-                <label class="info-item-label">Verification</label>
-                {% if current_user.is_verified %}
-                <div class="info-badge badge-verified">
-                    <i class="fas fa-check-circle"></i> Verified
+                <div class="info-item">
+                    <label class="info-item-label">Username</label>
+                    <div class="info-item-value">
+                        {{ current_user.username if current_user.username else '—' }}
+                    </div>
                 </div>
-                {% else %}
-                <div class="info-badge badge-unverified">
-                    <i class="fas fa-clock"></i> Pending
+                <div class="info-item">
+                    <label class="info-item-label">User ID</label>
+                    <div class="info-item-value font-monospace">#{{ current_user.id }}</div>
+                </div>
+                <div class="info-item">
+                    <label class="info-item-label">Member since</label>
+                    <div class="info-item-value">
+                        {{ current_user.created_at.strftime('%B %d, %Y') if current_user.created_at else '—' }}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <label class="info-item-label">Last seen</label>
+                    <div class="info-item-value">
+                        {{ current_user.last_seen.strftime('%Y-%m-%d %H:%M') if current_user.last_seen else '—' }}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <label class="info-item-label">Verification</label>
+                    {% if current_user.is_verified %}
+                    <div class="info-badge badge-verified">
+                        <i class="fas fa-check-circle"></i> Verified
+                    </div>
+                    {% else %}
+                    <div class="info-badge badge-unverified">
+                        <i class="fas fa-clock"></i> Pending
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="info-item">
+                    <label class="info-item-label">Role</label>
+                    {% if current_user.is_admin() %}
+                    <div class="info-badge badge-admin">
+                        <i class="fas fa-crown"></i> Administrator
+                    </div>
+                    {% else %}
+                    <div class="info-badge">
+                        <i class="fas fa-user"></i> User
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="info-item">
+                    <label class="info-item-label">Email Address</label>
+                    <div class="info-item-value">{{ current_user.email }}</div>
+                </div>
+                {% if current_user.location %}
+                <div class="info-item">
+                    <label class="info-item-label">Location</label>
+                    <div class="info-item-value">
+                        <i class="fa-solid fa-location-dot me-1 text-muted"></i>{{ current_user.location }}
+                    </div>
                 </div>
                 {% endif %}
             </div>
-            <div class="info-item">
-                <label class="info-item-label">Role</label>
-                {% if current_user.is_admin() %}
-                <div class="info-badge badge-admin">
-                    <i class="fas fa-crown"></i> Administrator
-                </div>
-                {% else %}
-                <div class="info-badge">
-                    <i class="fas fa-user"></i> User
-                </div>
-                {% endif %}
+
+            <!-- API Key -->
+            <div class="info-section-header mt-3">
+                <i class="fas fa-key"></i>
+                <h3>API Access</h3>
             </div>
-            <div class="info-item">
-                <label class="info-item-label">Email Address</label>
-                <div class="info-item-value">{{ current_user.email }}</div>
+            {% if current_user.api_key %}
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                <code id="api-key" class="api-key blurred flex-grow-1 p-2 rounded"
+                    style="background:var(--code-bg-color);font-size:.85rem;word-break:break-all;">
+                    {{ current_user.api_key }}
+                </code>
+                <button id="toggle-api-key" type="button" class="btn btn-sm btn-outline-secondary blur-btn"
+                    title="Show/Hide" data-visible="false">
+                    <i class="fas fa-eye"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary"
+                    onclick="navigator.clipboard.writeText('{{ current_user.api_key }}').then(() => window.create_message('API key copied!', 'success-subtle'))"
+                    title="Copy">
+                    <i class="fas fa-copy"></i>
+                </button>
             </div>
-            {% if current_user.location %}
-            <div class="info-item">
-                <label class="info-item-label">Location</label>
-                <div class="info-item-value">
-                    <i class="fa-solid fa-location-dot me-1 text-muted"></i>{{ current_user.location }}
-                </div>
-            </div>
+            <small class="text-muted">
+                Use the <code>X-API-KEY</code> header —
+                <a href="http://rulezet.org/api/" target="_blank">API docs
+                    <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.7rem;"></i>
+                </a>
+            </small>
+            {% else %}
+            <p class="text-muted mb-0"><i class="fas fa-ban me-2"></i>No API key generated yet.</p>
             {% endif %}
         </div>
 
-        <!-- API Key section -->
-        <div class="info-section-header mt-3">
-            <i class="fas fa-key"></i>
-            <h3>API Access</h3>
-        </div>
-        {% if current_user.api_key %}
-        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-            <code id="api-key" class="api-key blurred flex-grow-1 p-2 rounded"
-                style="background: var(--code-bg-color); font-size: 0.85rem; word-break: break-all;">
-                {{ current_user.api_key }}
-            </code>
-            <button id="toggle-api-key" type="button" class="btn btn-sm btn-outline-secondary blur-btn"
-                title="Show/Hide" data-visible="false">
-                <i class="fas fa-eye"></i>
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-primary"
-                onclick="navigator.clipboard.writeText('{{ current_user.api_key }}').then(() => window.create_message('API key copied!', 'success-subtle'))"
-                title="Copy">
-                <i class="fas fa-copy"></i>
-            </button>
-        </div>
-        <small class="text-muted">
-            Use the <code>X-API-KEY</code> header —
-            <a href="http://rulezet.org/api/" target="_blank">API docs
-                <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:0.7rem;"></i>
+        <div class="text-end mt-2 mb-5 d-flex justify-content-end gap-2">
+            <a class="btn btn-outline-primary" href="/account/detail_user/{{ current_user.id }}"
+                title="View detailed account information">
+                <i class="fas fa-chart-bar me-2"></i>Stats
             </a>
-        </small>
-        {% else %}
-        <p class="text-muted mb-0"><i class="fas fa-ban me-2"></i>No API key generated yet.</p>
-        {% endif %}
+            <a class="btn btn-outline-success" href="{{ url_for('account.edit_user') }}"
+                title="Edit your profile information">
+                <i class="fas fa-edit me-2"></i>Edit Profile
+            </a>
+        </div>
     </div>
 
-    <!-- Actions -->
-    <div class="text-end mt-2 mb-5 d-flex justify-content-end gap-2">
-        <a class="btn btn-outline-primary" href="/account/detail_user/{{ current_user.id }}"
-            title="View detailed account information">
-            <i class="fas fa-chart-bar me-2"></i>Stats
-        </a>
-        <a class="btn btn-outline-success" href="{{ url_for('account.edit_user') }}"
-            title="Edit your profile information">
-            <i class="fas fa-edit me-2"></i>Edit Profile
-        </a>
+    <!-- ── Tab 2 : Community ── -->
+    <div v-show="activeTab==='follow'">
+
+        <div class="card border-0 follow-card card_detail border-top shadow-lg mb-5">
+
+            <!-- Decorative watermark -->
+            <div class="follow-card-watermark">
+                <i class="fa-solid fa-users"></i>
+            </div>
+
+            <div class="card-body p-4" style="position:relative;z-index:1;">
+
+                <!-- Header row: toggle + count -->
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+
+                    <!-- Toggle Following / Followers -->
+                    <div class="follow-toggle">
+                        <button class="follow-toggle__btn"
+                                :class="{active: followView==='following'}"
+                                @click="followView='following'; followSearch=''">
+                            <i class="fa-solid fa-user-check me-2"></i>
+                            Following
+                            <span class="ms-2 opacity-75">[[ followingList.length ]]</span>
+                        </button>
+                        <button class="follow-toggle__btn"
+                                :class="{active: followView==='followers'}"
+                                @click="followView='followers'; followSearch=''">
+                            <i class="fa-solid fa-users me-2"></i>
+                            Followers
+                            <span class="ms-2 opacity-75">[[ followersList.length ]]</span>
+                        </button>
+                    </div>
+
+                    <!-- Search -->
+                    <div class="follow-search-wrap" style="width:220px;">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input class="follow-search"
+                               v-model="followSearch"
+                               :placeholder="followView==='following' ? 'Search following…' : 'Search followers…'">
+                    </div>
+                </div>
+
+                <!-- ── List ── -->
+                <div class="follow-list">
+
+                    <!-- Skeleton -->
+                    <template v-if="loadingFollow">
+                        <div v-for="i in 5" :key="i" class="follow-skeleton-row">
+                            <div class="sk sk-circle"></div>
+                            <div class="sk-lines">
+                                <div class="sk sk-line sk-line-w"></div>
+                                <div class="sk sk-line sk-line-s"></div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template v-else>
+
+                        <!-- Following view -->
+                        <template v-if="followView==='following'">
+                            <div v-if="filteredFollowing.length === 0" class="follow-empty">
+                                <i class="fa-solid fa-user-slash"></i>
+                                <div class="follow-empty-title">
+                                    <span v-if="followSearch">No results for "[[ followSearch ]]"</span>
+                                    <span v-else>Not following anyone yet</span>
+                                </div>
+                                <div class="follow-empty-sub" v-if="!followSearch">
+                                    Explore user profiles and hit Follow to get started.
+                                </div>
+                            </div>
+                            <div v-for="u in filteredFollowing" :key="u.id" class="follow-user-row">
+                                <div class="follow-avatar">
+                                    <img v-if="u.avatar" :src="u.avatar" :alt="u.username">
+                                    <span v-else>[[ u.username[0].toUpperCase() ]]</span>
+                                </div>
+                                <div class="follow-user-info">
+                                    <div class="follow-user-name">[[ u.username ]]</div>
+                                    <div class="follow-user-meta">
+                                        <span v-if="u.bio">[[ u.bio ]]</span>
+                                        <span v-else-if="u.location">
+                                            <i class="fa-solid fa-location-dot me-1"></i>[[ u.location ]]
+                                        </span>
+                                        <span v-else class="opacity-50">No bio</span>
+                                    </div>
+                                </div>
+                                <div class="follow-row-actions">
+                                    <a :href="`/account/detail_user/${u.id}`"
+                                       class="follow-row-btn follow-row-btn--view"
+                                       title="View profile">
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                                    </a>
+                                    <button class="follow-row-btn follow-row-btn--unfollow"
+                                            title="Unfollow"
+                                            @click="unfollow(u)">
+                                        <i class="fa-solid fa-user-minus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Followers view -->
+                        <template v-if="followView==='followers'">
+                            <div v-if="filteredFollowers.length === 0" class="follow-empty">
+                                <i class="fa-solid fa-users-slash"></i>
+                                <div class="follow-empty-title">
+                                    <span v-if="followSearch">No results for "[[ followSearch ]]"</span>
+                                    <span v-else>No followers yet</span>
+                                </div>
+                            </div>
+                            <div v-for="u in filteredFollowers" :key="u.id" class="follow-user-row">
+                                <div class="follow-avatar">
+                                    <img v-if="u.avatar" :src="u.avatar" :alt="u.username">
+                                    <span v-else>[[ u.username[0].toUpperCase() ]]</span>
+                                </div>
+                                <div class="follow-user-info">
+                                    <div class="follow-user-name">[[ u.username ]]</div>
+                                    <div class="follow-user-meta">
+                                        <span v-if="u.bio">[[ u.bio ]]</span>
+                                        <span v-else-if="u.location">
+                                            <i class="fa-solid fa-location-dot me-1"></i>[[ u.location ]]
+                                        </span>
+                                        <span v-else class="opacity-50">No bio</span>
+                                    </div>
+                                </div>
+                                <div class="follow-row-actions">
+                                    <a :href="`/account/detail_user/${u.id}`"
+                                       class="follow-row-btn follow-row-btn--view"
+                                       title="View profile">
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </template>
+
+                    </template>
+                </div>
+
+            </div>
+        </div>
+
     </div>
 
 </div>
@@ -214,14 +568,85 @@
 
 {% block script %}
 <script type="module">
-    const { createApp } = Vue;
-    import { message_list, create_message } from '/static/js/toaster.js';
+    const { createApp, ref, computed, onMounted } = Vue
+    import { message_list, create_message } from '/static/js/toaster.js'
+    window.create_message = create_message
+
+    function csrf() { return document.getElementById('csrf_token')?.value || '' }
 
     createApp({
         delimiters: ['[[', ']]'],
-        setup() { return { message_list }; }
-    }).mount('#page-app');
+        setup() {
+            const activeTab     = ref('info')
+            const loadingFollow = ref(false)
+            const followLoaded  = ref(false)
+            const followingList = ref([])
+            const followersList = ref([])
+            const followView    = ref('following')   // 'following' | 'followers'
+            const followSearch  = ref('')
 
-    window.create_message = create_message;
+            // ── Filtered computed ─────────────────────────────────
+            const filteredFollowing = computed(() => {
+                const q = followSearch.value.trim().toLowerCase()
+                if (!q) return followingList.value
+                return followingList.value.filter(u =>
+                    u.username.toLowerCase().includes(q) ||
+                    (u.bio      && u.bio.toLowerCase().includes(q)) ||
+                    (u.location && u.location.toLowerCase().includes(q))
+                )
+            })
+
+            const filteredFollowers = computed(() => {
+                const q = followSearch.value.trim().toLowerCase()
+                if (!q) return followersList.value
+                return followersList.value.filter(u =>
+                    u.username.toLowerCase().includes(q) ||
+                    (u.bio      && u.bio.toLowerCase().includes(q)) ||
+                    (u.location && u.location.toLowerCase().includes(q))
+                )
+            })
+
+            // ── Fetch ─────────────────────────────────────────────
+            async function loadFollow() {
+                if (followLoaded.value) return
+                loadingFollow.value = true
+                try {
+                    const [fing, fers] = await Promise.all([
+                        fetch('/notifications/my_following').then(r => r.json()),
+                        fetch('/notifications/my_followers').then(r => r.json()),
+                    ])
+                    followingList.value = fing
+                    followersList.value = fers
+                    followLoaded.value  = true
+                } catch {}
+                loadingFollow.value = false
+            }
+
+            // ── Unfollow ──────────────────────────────────────────
+            async function unfollow(user) {
+                const res = await fetch(`/notifications/unfollow/${user.id}`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf() },
+                })
+                if (res.ok) {
+                    followingList.value = followingList.value.filter(u => u.id !== user.id)
+                    create_message(`Unfollowed ${user.username}`, 'info-subtle')
+                }
+            }
+
+            onMounted(() => {
+                loadFollow()   // pre-load so header counts appear immediately
+            })
+
+            return {
+                message_list,
+                activeTab, loadingFollow,
+                followingList, followersList,
+                followView, followSearch,
+                filteredFollowing, filteredFollowers,
+                loadFollow, unfollow,
+            }
+        }
+    }).mount('#page-app')
 </script>
 {% endblock %}

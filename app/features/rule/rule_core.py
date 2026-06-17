@@ -418,6 +418,15 @@ def add_rule_core(form_dict, user) -> tuple[bool, str] | tuple[Rule, str]:
         _attach_default_tags(new_rule, user_id)
 
         db.session.commit()
+
+        # Notify followers of the rule author
+        if user_id:
+            try:
+                from app.features.notification.notification_core import notify_followers_new_rule
+                notify_followers_new_rule(new_rule, user_id)
+            except Exception:
+                pass
+
         return new_rule, "rule created"
 
     except Exception as e:

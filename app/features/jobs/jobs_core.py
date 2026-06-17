@@ -50,6 +50,13 @@ def create_job(job_type, payload, label, created_by):
              f"Job created and queued — waiting for worker.",
              level='info', event='queued')
 
+        # Notify the job owner
+        try:
+            from app.features.notification.notification_core import create_job_notification
+            create_job_notification(job, created_by)
+        except Exception:
+            pass
+
         return job
     except Exception as e:
         db.session.rollback()

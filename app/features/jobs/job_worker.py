@@ -118,6 +118,13 @@ def _worker_loop(app):
 
                     print(f"[worker] Job {job.uuid} finished with status={job.status}")
 
+                    # Update notification so bell shows final state
+                    try:
+                        from app.features.notification.notification_core import update_job_notification
+                        update_job_notification(job)
+                    except Exception:
+                        pass
+
                 except Exception as e:
                     db.session.rollback()
                     try:
@@ -130,6 +137,11 @@ def _worker_loop(app):
                             _log(job, db, BackgroundJobLog,
                                  f"Unexpected error: {str(e)}",
                                  level='error', event='failed')
+                            try:
+                                from app.features.notification.notification_core import update_job_notification
+                                update_job_notification(job)
+                            except Exception:
+                                pass
                     except Exception:
                         pass
                     print(f"[worker] Job {job_uuid} failed: {e}")
