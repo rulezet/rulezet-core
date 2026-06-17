@@ -119,21 +119,7 @@
                         </a>
                     </h5>
                    <div class="d-flex align-items-center gap-2 mt-2">
-                        <a :href="'/account/detail_user/' + bundle.user_id" class="text-decoration-none">
-                            <div class="avatar-circle-xs">
-                                <img v-if="bundle.author_avatar"
-                                    :src="bundle.author_avatar"
-                                    class="rounded-circle w-100 h-100"
-                                    style="object-fit:cover;">
-                                <template v-else>
-                                    [[ bundle.author[0].toUpperCase() ]]
-                                </template>
-                            </div>
-                        </a>
-                        <a :href="'/account/detail_user/' + bundle.user_id"
-                        class="text-muted fw-medium small text-decoration-none">
-                            [[ bundle.author ]]
-                        </a>
+                        <user-chip :user-id="bundle.user_id" :username="bundle.author" :avatar="bundle.author_avatar" size="xs"></user-chip>
                         <span class="text-muted opacity-50">|</span>
                         <small class="text-muted"><i class="far fa-calendar-alt me-1"></i>[[ bundle.created_at ]]</small>
                     </div>
@@ -276,6 +262,7 @@
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
     import MultiVulnerabilityFilter from '/static/js/vulnerability/multiVulnerabilityFilter.js';
+    import UserChip from '/static/js/components/UserChip.js';
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -283,7 +270,8 @@
             'multi-tag-filter': MultiTagFilter,
             'tags-displays-list': TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
-            'multi-vulnerability-filter': MultiVulnerabilityFilter
+            'multi-vulnerability-filter': MultiVulnerabilityFilter,
+            'user-chip': UserChip,
         },
         setup() {
             const searchQuery = ref('');

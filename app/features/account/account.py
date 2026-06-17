@@ -107,6 +107,26 @@ def detail_user(user_id) -> render_template:
         return redirect(request.referrer)
     return render_template("account/detail_user.html" , user=user.to_json())
 
+@account_blueprint.route("/user_mini/<int:user_id>")
+def user_mini(user_id):
+    """Lightweight public user card — used by UserChip tooltip."""
+    user = AccountModel.get_user(user_id)
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    rules_count = RuleModel._active().filter_by(user_id=user.id).count()
+    followers_count = user.followers.count() if hasattr(user, 'followers') else 0
+    return jsonify({
+        "id":        user.id,
+        "username":  user.get_username(),
+        "avatar":    user.get_avatar_url(),
+        "bio":       (user.bio or "")[:120] if user.bio else None,
+        "location":  user.location,
+        "created_at": user.created_at.strftime("%b %Y") if user.created_at else None,
+        "rules_count": rules_count,
+        "followers": followers_count,
+    })
+
+
 @account_blueprint.route("/get_user")
 @login_required
 def get_user() -> jsonify:

@@ -492,10 +492,7 @@
                                 </div>
                             </div>
                             <div v-for="u in filteredFollowing" :key="u.id" class="follow-user-row">
-                                <div class="follow-avatar">
-                                    <img v-if="u.avatar" :src="u.avatar" :alt="u.username">
-                                    <span v-else>[[ u.username[0].toUpperCase() ]]</span>
-                                </div>
+                                <user-chip :user-id="u.id" :username="u.username" :avatar="u.avatar" size="md" :show-name="false"></user-chip>
                                 <div class="follow-user-info">
                                     <div class="follow-user-name">[[ u.username ]]</div>
                                     <div class="follow-user-meta">
@@ -531,10 +528,7 @@
                                 </div>
                             </div>
                             <div v-for="u in filteredFollowers" :key="u.id" class="follow-user-row">
-                                <div class="follow-avatar">
-                                    <img v-if="u.avatar" :src="u.avatar" :alt="u.username">
-                                    <span v-else>[[ u.username[0].toUpperCase() ]]</span>
-                                </div>
+                                <user-chip :user-id="u.id" :username="u.username" :avatar="u.avatar" size="md" :show-name="false"></user-chip>
                                 <div class="follow-user-info">
                                     <div class="follow-user-name">[[ u.username ]]</div>
                                     <div class="follow-user-meta">
@@ -570,12 +564,14 @@
 <script type="module">
     const { createApp, ref, computed, onMounted } = Vue
     import { message_list, create_message } from '/static/js/toaster.js'
+    import UserChip from '/static/js/components/UserChip.js'
     window.create_message = create_message
 
     function csrf() { return document.getElementById('csrf_token')?.value || '' }
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { 'user-chip': UserChip },
         setup() {
             const activeTab     = ref('info')
             const loadingFollow = ref(false)

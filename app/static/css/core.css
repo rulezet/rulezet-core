@@ -2842,3 +2842,29 @@ body.dark-mode .table .opacity-50 {
   font-family: 'Space Mono', monospace;
   letter-spacing: 0.2px;
 }
+
+/* =========================================================================
+   19. UserChip tooltip
+   ========================================================================= */
+
+.user-chip-tooltip__inner {
+  background: var(--card-bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  pointer-events: auto;
+}
+
+.user-chip-tooltip__skeleton {
+  display: inline-block;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--border-color) 25%, var(--light-bg-color) 50%, var(--border-color) 75%);
+  background-size: 200% 100%;
+  animation: uc-shimmer 1.2s infinite;
+}
+
+@keyframes uc-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
