@@ -2087,3 +2087,137 @@ class Notification(db.Model):
             'is_job_active': self.is_job_active(),
             'created_at':   self.created_at.strftime('%Y-%m-%dT%H:%M:%SZ'),
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Unified comment system
+# ─────────────────────────────────────────────────────────────────────────────
+
+import uuid as _uuid_mod
+
+
+def _gen_comment_uuid():
+    return str(_uuid_mod.uuid4())
+
+
+class UnifiedComment(db.Model):
+    """Single polymorphic comment table for rules, bundles, and edit proposals."""
+    __tablename__ = 'comment_v2'
+
+    id               = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid             = db.Column(db.String(36), unique=True, nullable=False, index=True, default=_gen_comment_uuid)
+    content          = db.Column(db.Text, nullable=False)
+    content_original = db.Column(db.Text, nullable=True)
+
+    # Thread structure
+    parent_id = db.Column(db.Integer, db.ForeignKey('comment_v2.id', ondelete='SET NULL'), nullable=True, index=True)
+    depth     = db.Column(db.Integer, default=0, nullable=False)
+    root_id   = db.Column(db.Integer, nullable=True, index=True)
+
+    # Polymorphic target — object_type: 'rule' | 'bundle' | 'proposal'
+    object_type = db.Column(db.String(64), nullable=False, index=True)
+    object_id   = db.Column(db.Integer,    nullable=False, index=True)
+
+    is_public   = db.Column(db.Boolean, default=True,  nullable=False)
+    is_active   = db.Column(db.Boolean, default=True,  nullable=False)
+    deleted_at  = db.Column(db.DateTime, nullable=True)
+    deleted_by  = db.Column(db.Integer, nullable=True)
+
+    created_at  = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+    updated_at  = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_by  = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+
+    author = db.relationship(
+        'User',
+        foreign_keys=[created_by],
+        lazy='joined',
+        primaryjoin='UnifiedComment.created_by == User.id',
+    )
+    reactions = db.relationship(
+        'UnifiedCommentReaction',
+        backref='comment',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+    )
+    replies = db.relationship(
+        'UnifiedComment',
+        backref=db.backref('parent_comment', remote_side='UnifiedComment.id'),
+        lazy='dynamic',
+        foreign_keys=[parent_id],
+        cascade='all, delete-orphan',
+    )
+
+    @property
+    def reply_count(self):
+        return UnifiedComment.query.filter_by(parent_id=self.id, is_active=True).count()
+
+    @property
+    def like_count(self):
+        return self.reactions.filter_by(reaction='like').count()
+
+    @property
+    def dislike_count(self):
+        return self.reactions.filter_by(reaction='dislike').count()
+
+    def to_json(self, current_user_id=None):
+        author = self.author
+        if author:
+            initials = ''
+            if author.first_name:
+                initials += author.first_name[0].upper()
+            if author.last_name:
+                initials += author.last_name[0].upper()
+            author_dict = {
+                'id':       author.id,
+                'name':     author.get_username(),
+                'avatar':   author.profile_picture,
+                'initials': initials or '?',
+                'handle':   author.username,
+            }
+        else:
+            author_dict = {'id': None, 'name': 'Deleted user', 'avatar': None, 'initials': '?', 'handle': None}
+
+        user_reaction = None
+        if current_user_id:
+            rxn = self.reactions.filter_by(user_id=current_user_id).first()
+            if rxn:
+                user_reaction = rxn.reaction
+
+        return {
+            'id':            self.id,
+            'uuid':          self.uuid,
+            'content':       self.content if self.is_active else '[deleted]',
+            'parent_id':     self.parent_id,
+            'depth':         self.depth,
+            'root_id':       self.root_id,
+            'object_type':   self.object_type,
+            'object_id':     self.object_id,
+            'is_public':     self.is_public,
+            'created_at':    self.created_at.isoformat() if self.created_at else None,
+            'updated_at':    self.updated_at.isoformat() if self.updated_at else None,
+            'created_by':    self.created_by,
+            'is_active':     self.is_active,
+            'is_deleted':    not self.is_active,
+            'deleted_at':    self.deleted_at.isoformat() if self.deleted_at else None,
+            'reply_count':   self.reply_count,
+            'like_count':    self.like_count,
+            'dislike_count': self.dislike_count,
+            'user_reaction': user_reaction,
+            'author':        author_dict,
+            'is_admin':      author.is_admin() if author else False,
+        }
+
+
+class UnifiedCommentReaction(db.Model):
+    __tablename__ = 'comment_reaction'
+    __table_args__ = (
+        db.UniqueConstraint('comment_id', 'user_id', name='uq_comment_reaction_user'),
+    )
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey('comment_v2.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id',       ondelete='CASCADE'), nullable=False, index=True)
+    reaction   = db.Column(db.String(16), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+
+    user = db.relationship('User', backref=db.backref('unified_comment_reactions', lazy='dynamic'))

@@ -1,0 +1,362 @@
+/*
+ * comment-thread.css — Unified comment thread styles for Rulezet.
+ * Variable bridge: maps flask-launchpad tokens to Rulezet's core.css variables.
+ */
+
+:root {
+    --cm-brand:       #0d6efd;
+    --cm-brand-glow:  rgba(13, 110, 253, 0.08);
+    --cm-brand-dim:   rgba(13, 110, 253, 0.25);
+    --cm-bg-card:     var(--card-bg-color);
+    --cm-border:      var(--border-color);
+    --cm-text-main:   var(--text-color);
+    --cm-text-muted:  var(--subtle-text-color);
+    --cm-bg-muted:    var(--light-bg-color);
+    --cm-radius:      0.5rem;
+    --cm-radius-sm:   0.25rem;
+}
+
+/*---THREAD---*/
+
+.cm-thread {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+}
+
+/*---BADGES---*/
+
+.cm-admin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: 3px 8px;
+    background-color: var(--cm-brand);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+
+.cm-you-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: 3px 8px;
+    background-color: var(--cm-brand-glow);
+    color: var(--cm-brand);
+    border: 1px solid var(--cm-brand-dim);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+
+/*---ITEM---*/
+
+.cm-item {
+    background: var(--cm-bg-card);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-radius);
+    padding: .85rem 1rem;
+    position: relative;
+    transition: border-color .15s;
+}
+
+.cm-item:hover {
+    border-color: var(--cm-brand-dim);
+}
+
+.cm-item--deleted {
+    opacity: .65;
+}
+
+.cm-item--deleted .cm-body {
+    font-style: italic;
+    color: var(--cm-text-muted);
+}
+
+.cm-item--private {
+    border-left: 3px solid var(--cm-brand-dim);
+}
+
+.cm-item--collapsed .cm-body,
+.cm-item--collapsed .cm-actions,
+.cm-item--collapsed .cm-replies {
+    display: none;
+}
+
+/*---HEADER---*/
+
+.cm-header {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: .5rem;
+    flex-wrap: wrap;
+}
+
+.cm-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--cm-brand-glow);
+    color: var(--cm-brand);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-decoration: none;
+    border: 1px solid var(--cm-brand-dim);
+}
+
+.cm-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cm-author {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--cm-text-main);
+    text-decoration: none;
+}
+
+.cm-author:hover {
+    color: var(--cm-brand);
+    text-decoration: underline;
+}
+
+.cm-date {
+    font-size: .74rem;
+    color: var(--cm-text-muted);
+    margin-left: .1rem;
+}
+
+.cm-collapse-btn {
+    background: none;
+    border: none;
+    padding: 0 .3rem;
+    color: var(--cm-text-muted);
+    cursor: pointer;
+    font-size: .72rem;
+    line-height: 1;
+    margin-left: auto;
+    transition: color .15s;
+}
+
+.cm-collapse-btn:hover {
+    color: var(--cm-text-main);
+}
+
+/*---PRIVATE_BADGE---*/
+
+.cm-private-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .68rem;
+    font-weight: 500;
+    padding: .1rem .4rem;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, .12);
+    color: #6366f1;
+    white-space: nowrap;
+}
+
+/*---BODY---*/
+
+.cm-body {
+    font-size: .86rem;
+    color: var(--cm-text-muted);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: .6rem;
+}
+
+/*---ACTIONS---*/
+
+.cm-actions {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    flex-wrap: wrap;
+}
+
+.cm-action-btn {
+    background: none;
+    border: 1px solid transparent;
+    padding: .2rem .55rem;
+    border-radius: var(--cm-radius-sm);
+    font-size: .74rem;
+    color: var(--cm-text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    transition: color .15s, border-color .15s, background .15s;
+    line-height: 1.4;
+}
+
+.cm-action-btn:hover {
+    color: var(--cm-text-main);
+    background: var(--cm-bg-muted);
+    border-color: var(--cm-border);
+}
+
+/*---REACTION_BUTTONS---*/
+
+.cm-react-btn {
+    background: none;
+    border: 1px solid var(--cm-border);
+    padding: .2rem .55rem;
+    border-radius: var(--cm-radius-sm);
+    font-size: .74rem;
+    color: var(--cm-text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    transition: color .15s, border-color .15s, background .15s;
+    line-height: 1.4;
+}
+
+.cm-react-btn:hover {
+    border-color: var(--cm-brand-dim);
+    color: var(--cm-brand);
+}
+
+.cm-react-btn--active.cm-react-btn--like {
+    background: rgba(34, 197, 94, .1);
+    border-color: rgba(34, 197, 94, .4);
+    color: #16a34a;
+}
+
+.cm-react-btn--active.cm-react-btn--dislike {
+    background: rgba(239, 68, 68, .1);
+    border-color: rgba(239, 68, 68, .4);
+    color: #dc2626;
+}
+
+/*---REPLY_FORM---*/
+
+.cm-reply-form,
+.cm-edit-form {
+    margin-top: .65rem;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.cm-reply-form textarea,
+.cm-edit-form textarea {
+    font-size: .84rem;
+    resize: vertical;
+    min-height: 64px;
+    border-color: var(--cm-border);
+    background: var(--cm-bg-card);
+    color: var(--cm-text-main);
+}
+
+.cm-reply-form textarea:focus,
+.cm-edit-form textarea:focus {
+    border-color: var(--cm-brand);
+    box-shadow: 0 0 0 2px var(--cm-brand-glow);
+}
+
+.cm-form-actions {
+    display: flex;
+    gap: .4rem;
+}
+
+/*---INDENT---*/
+
+.cm-indent {
+    margin-left: 1.2rem;
+    padding-left: .7rem;
+    border-left: 2px solid var(--cm-border);
+    margin-top: .5rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.cm-indent .cm-indent {
+    margin-left: .85rem;
+}
+
+/*---LOAD_MORE---*/
+
+.cm-load-more {
+    background: none;
+    border: 1px dashed var(--cm-border);
+    padding: .4rem .9rem;
+    border-radius: var(--cm-radius-sm);
+    font-size: .78rem;
+    color: var(--cm-text-muted);
+    cursor: pointer;
+    width: 100%;
+    text-align: center;
+    transition: color .15s, border-color .15s;
+    margin-top: .35rem;
+}
+
+.cm-load-more:hover {
+    color: var(--cm-brand);
+    border-color: var(--cm-brand-dim);
+}
+
+/*---NEW_FORM---*/
+
+.cm-new-form {
+    background: var(--cm-bg-card);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-radius);
+    padding: .9rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.cm-new-form-title {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--cm-text-muted);
+    margin-bottom: .6rem;
+}
+
+.cm-new-form textarea {
+    font-size: .84rem;
+    resize: vertical;
+    min-height: 80px;
+    border-color: var(--cm-border);
+    background: var(--cm-bg-card);
+    color: var(--cm-text-main);
+}
+
+.cm-new-form textarea:focus {
+    border-color: var(--cm-brand);
+    box-shadow: 0 0 0 2px var(--cm-brand-glow);
+}
+
+/*---EMPTY_STATE---*/
+
+.cm-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--cm-text-muted);
+    font-size: .85rem;
+}
+
+.cm-empty i {
+    font-size: 1.75rem;
+    margin-bottom: .5rem;
+    display: block;
+    opacity: .4;
+}

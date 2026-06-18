@@ -3,6 +3,7 @@
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/file-tree.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick.css') }}">
@@ -514,367 +515,18 @@
             </div>
 
         </div>
-        <!-- Comment section-->
-        <div class="comments-container mt-5">
-            <div class="d-flex align-items-center mb-4">
-                <h5 class="fw-bold mb-0">[[ total_comments ]] Comments</h5>
-            </div>
-
-            <div class="d-flex mb-5">
-                {% if current_user.is_authenticated %}
-                <div class="flex-shrink-0 me-3">
-                    <user-chip :user-id="{{ current_user.id }}" username="{{ current_user.get_username() }}" {% if current_user.get_avatar_url() %}avatar="{{ current_user.get_avatar_url() }}"{% endif %} size="md" :show-name="false"></user-chip>
-                </div>
-
-                <div class="flex-grow-1">
-                    <form @submit.prevent="submitComment(null)">
-                        <div class="mb-2">
-                            <textarea class="form-control comment-input-line" v-model="newCommentContent"
-                                placeholder="Add a comment..." rows="1" required></textarea>
-                        </div>
-                        <div v-if="newCommentContent.trim()"
-                            class="d-flex justify-content-end gap-2 animate__animated animate__fadeIn">
-                            <button type="button" class="btn btn-sm fw-bold px-3 text-secondary"
-                                @click="newCommentContent = ''">Cancel</button>
-                            <button type="submit"
-                                class="btn btn-primary btn-sm rounded-pill px-4 fw-bold">Comment</button>
-                        </div>
-                    </form>
-                </div>
-                {% else %}
-                <div class="alert bg-light border-0 w-100 rounded-4 p-4 text-center">
-                    <p class="mb-2 text-muted">Join the conversation</p>
-                    <a href="{{ url_for('account.login') }}"
-                        class="btn btn-outline-primary btn-sm rounded-pill px-4 fw-bold">Login to reply</a>
-                </div>
-                {% endif %}
-            </div>
-
-            <div class="card border-0 shadow-sm bg-white rounded-4 overflow-hidden border mb-4">
-                <div class="card-body p-4">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h4 class="fw-bold mb-0 text-dark border-start border-primary border-4 ps-3">
-                            Community Discussion
-                        </h4>
-                        <button class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-bold shadow-sm" type="button"
-                            data-bs-toggle="collapse" data-bs-target="#collapseComments" aria-expanded="false"
-                            aria-controls="collapseComments">
-                            <i class="fas fa-comments me-1"></i>
-                            [[ comments_list.length ]] [[ comments_list.length > 1 ? 'Comments' : 'Comment' ]]
-                            <i class="fas fa-chevron-down ms-2 small"></i>
-                        </button>
-                    </div>
-
-                    <div class="collapse show mt-4" id="collapseComments">
-                        <div v-if="comments_list && comments_list.length > 0">
-                            <div v-for="comment in comments_list" :key="comment.id"
-                                :id="'bcomment-' + comment.id"
-                                :class="['mb-4', highlightBundleCommentId == comment.id ? 'comment-highlight' : '']">
-
-                                <div
-                                    class="card border shadow-none comment-card p-3 rounded-3 hover-shadow-light transition-all mb-2">
-                                    <div class="d-flex">
-                                        <div class="flex-shrink-0 me-3">
-                                            <user-chip :user-id="comment.user_id" :username="comment.user_name" size="md" :show-name="false"></user-chip>
-                                        </div>
-
-                                        <div class="flex-grow-1 min-w-0">
-                                            <div class="d-flex justify-content-between align-items-start mb-1">
-                                                <div>
-                                                    <div class="d-flex align-items-center gap-2 mb-1">
-                                                        <user-chip :user-id="comment.user_id" :username="comment.user_name" size="xs"></user-chip>
-                                                        <span v-if="comment.is_admin"><i
-                                                                class="fas fa-star text-warning"
-                                                                style="font-size: 0.8rem;"></i></span>
-                                                        <span
-                                                            v-else-if="parseInt('{{current_user.id}}') == comment.user_id"
-                                                            class="badge bg-light text-primary border px-2"
-                                                            style="font-size: 0.6rem;">YOU</span>
-                                                    </div>
-                                                    <span class="text-muted" style="font-size: 0.75rem;"><i
-                                                            class="far fa-clock me-1"></i>[[
-                                                        dayjs.utc(comment.created_at).fromNow() ]]</span>
-                                                </div>
-                                                <div class="d-flex gap-1">
-                                                    <template
-                                                        v-if="parseInt('{{current_user.id}}') == comment.user_id || current_user_is_admin">
-                                                        <button class="btn btn-link btn-sm text-muted p-1"
-                                                            data-bs-toggle="collapse"
-                                                            :data-bs-target="'#editForm' + comment.id"
-                                                            @click="comment.editContent = comment.content">
-                                                            <i class="fas fa-pencil-alt" style="font-size: 0.8rem;"></i>
-                                                        </button>
-                                                        <button @click="deleteComment(comment.id)"
-                                                            class="btn btn-link btn-sm text-muted p-1"><i
-                                                                class="fas fa-trash"
-                                                                style="font-size: 0.8rem;"></i></button>
-                                                    </template>
-                                                </div>
-                                            </div>
-
-                                            <div class="comment-content my-2 p-3 bg-light rounded-4 text-dark shadow-sm border-0"
-                                                style="font-size: 0.95rem; line-height: 1.5; border-top-left-radius: 2px !important;">
-                                                [[ comment.content ]]
-                                            </div>
-
-                                            <div class="d-flex align-items-center gap-3 my-2 flex-wrap">
-                                                <button @click="addReaction(comment.id, 'like')"
-                                                    class="btn btn-link btn-sm p-0 text-decoration-none d-flex align-items-center gap-1 fw-bold"
-                                                    :class="comment.user_has_liked ? 'text-primary' : 'text-muted'">
-                                                    <i
-                                                        :class="comment.user_has_liked ? 'fas fa-thumbs-up' : 'far fa-thumbs-up'"></i>
-                                                    <span>[[ comment.likes || 0 ]]</span>
-                                                </button>
-                                                <button @click="addReaction(comment.id, 'dislike')"
-                                                    class="btn btn-link btn-sm p-0 text-decoration-none d-flex align-items-center gap-1 fw-bold"
-                                                    :class="comment.user_has_disliked ? 'text-danger' : 'text-muted'">
-                                                    <i
-                                                        :class="comment.user_has_disliked ? 'fas fa-thumbs-down' : 'far fa-thumbs-down'"></i>
-                                                    <span>[[ comment.dislikes || 0 ]]</span>
-                                                </button>
-
-                                                <div class="dropdown">
-                                                    <button class="btn btn-link btn-sm p-0 text-muted" type="button"
-                                                        data-bs-toggle="dropdown"><i
-                                                            class="far fa-face-smile"></i></button>
-                                                    <ul class="dropdown-menu shadow-sm border-0 rounded-4 p-2">
-                                                        <div class="d-flex gap-2">
-                                                            <button v-for="emo in emodji_picker.getIcons()" :key="emo"
-                                                                @click="addReaction(comment.id, emo)"
-                                                                class="btn btn-hover-emoji p-1 border-0 bg-transparent fs-5">[[
-                                                                emo ]]</button>
-                                                        </div>
-                                                    </ul>
-                                                </div>
-
-                                                <div v-if="comment.reactions && comment.reactions.some(r => !['like', 'dislike'].includes(r.reaction_type))"
-                                                    class="d-flex align-items-center gap-1">
-
-                                                    <template v-map="sumP = comment.reactions.reduce((acc, r) => { 
-                                                        if(!['like', 'dislike'].includes(r.reaction_type)) { 
-                                                            const icon = emodji_picker.getEmoji(r.reaction_type); 
-                                                            if (!acc[icon]) acc[icon] = { count: 0, users: [] };
-                                                            acc[icon].count++;
-                                                            acc[icon].users.push(r.user_name); // On récupère le user_name de l'objet reaction
-                                                        } 
-                                                        return acc; 
-                                                    }, {})">
-                                                    </template>
-
-                                                    <template v-for="(data, emo, index) in sumP" :key="emo">
-                                                        <div v-if="index < 4" @click="addReaction(comment.id, emo)"
-                                                            :title="data.users.join(', ')"
-                                                            class="badge rounded-pill bg-white border text-dark p-1 px-2 d-flex align-items-center shadow-sm"
-                                                            style="font-size: 0.75rem; cursor: pointer;"
-                                                            data-bs-toggle="tooltip"> [[ emo ]]
-                                                            <span v-if="data.count > 1" class="ms-1 fw-bold"
-                                                                style="font-size: 0.6rem;">
-                                                                [[ data.count ]]
-                                                            </span>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                                {% if current_user.is_authenticated %}
-
-                                                <button @click="replyingTo = comment.id; replyContent = ''"
-                                                    class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-primary"><i
-                                                        class="fas fa-reply me-1"></i> Reply</button>
-                                                {% endif %}
-                                            </div>
-
-                                            <div class="collapse mt-3" :id="'editForm' + comment.id">
-                                                <form @submit.prevent="editComment(comment)"
-                                                    class="bg-light p-3 rounded-3 border">
-                                                    <textarea class="form-control border-0 shadow-none mb-3"
-                                                        v-model="comment.editContent" rows="3" required></textarea>
-                                                    <div class="d-flex justify-content-end gap-2">
-                                                        <button type="button"
-                                                            class="btn btn-xs btn-light border rounded-pill px-3"
-                                                            data-bs-toggle="collapse"
-                                                            :data-bs-target="'#editForm' + comment.id">Cancel</button>
-                                                        <button type="submit"
-                                                            class="btn btn-xs btn-primary rounded-pill px-3">Update</button>
-                                                    </div>
-                                                </form>
-                                            </div>
-
-                                            <button v-if="comment.replies && comment.replies.length > 0"
-                                                @click="toggleReplies(comment.id)"
-                                                class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-muted mt-1"
-                                                style="font-size: 0.8rem;">
-                                                <i
-                                                    :class="visibleReplies[comment.id] ? 'fas fa-eye-slash' : 'fas fa-comments'"></i>
-                                                [[ visibleReplies[comment.id] ? 'Hide' : 'Show' ]] [[
-                                                comment.replies.length ]] replies
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div v-if="replyingTo === comment.id"
-                                    class="ms-5 mt-2 mb-3 p-3 bg-light rounded shadow-sm border animate__animated animate__fadeIn">
-                                    <label class="small fw-bold text-primary mb-1">Replying to @[[ comment.user_name
-                                        ]]</label>
-                                    <textarea class="form-control form-control-sm mb-2" v-model="replyContent"
-                                        placeholder="Write your reply..."></textarea>
-                                    <div class="d-flex justify-content-end gap-2">
-                                        <button @click="replyingTo = null"
-                                            class="btn btn-sm btn-light border">Cancel</button>
-                                        <button @click="submitComment(comment.id)" class="btn btn-sm btn-primary">Post
-                                            Reply</button>
-                                    </div>
-                                </div>
-
-                                <div v-if="comment.replies && comment.replies.length > 0 && visibleReplies[comment.id]"
-                                    class="ms-5 border-start ps-3">
-                                    <div v-for="reply in comment.replies" :key="reply.id" class="mb-3">
-                                        <div class="p-3 rounded-3 bg-white border transition-all shadow-sm">
-                                            <div class="d-flex align-items-start">
-                                                <div class="me-2">
-                                                    <user-chip :user-id="reply.user_id" :username="reply.user_name" size="sm" :show-name="false"></user-chip>
-                                                </div>
-                                                <div class="flex-grow-1 min-w-0">
-                                                    <div class="d-flex justify-content-between align-items-start mb-1">
-                                                        <div>
-                                                            <user-chip :user-id="reply.user_id" :username="reply.user_name" size="xs"></user-chip>
-                                                            <small class="text-muted d-block"
-                                                                style="font-size: 0.7rem;">[[
-                                                                dayjs.utc(reply.created_at).fromNow() ]]</small>
-                                                        </div>
-                                                        <div class="d-flex gap-1">
-                                                            <template
-                                                                v-if="parseInt('{{current_user.id}}') == reply.user_id || current_user_is_admin">
-                                                                <button class="btn btn-link btn-sm text-muted p-1"
-                                                                    @click="reply.editContent = reply.content"
-                                                                    data-bs-toggle="collapse"
-                                                                    :data-bs-target="'#editReply' + reply.id"><i
-                                                                        class="fas fa-pencil-alt"
-                                                                        style="font-size: 0.7rem;"></i></button>
-                                                                <button @click="deleteComment(reply.id)"
-                                                                    class="btn btn-link btn-sm text-muted p-1"><i
-                                                                        class="fas fa-trash"
-                                                                        style="font-size: 0.7rem;"></i></button>
-                                                            </template>
-                                                        </div>
-                                                    </div>
-
-                                                    <div class="comment-content my-2 p-2 px-3 bg-light rounded-4 text-dark border-0 shadow-none"
-                                                        style="font-size: 0.9rem; border-top-left-radius: 2px !important;">
-                                                        [[ reply.content ]]
-                                                    </div>
-
-                                                    <div class="d-flex align-items-center gap-3 my-2 flex-wrap">
-                                                        <button @click="addReaction(reply.id, 'like')"
-                                                            class="btn btn-link btn-sm p-0 text-decoration-none d-flex align-items-center gap-1 fw-bold"
-                                                            :class="reply.user_has_liked ? 'text-primary' : 'text-muted'"
-                                                            style="font-size: 0.8rem;">
-                                                            <i
-                                                                :class="reply.user_has_liked ? 'fas fa-thumbs-up' : 'far fa-thumbs-up'"></i>
-                                                            <span>[[ reply.likes || 0 ]]</span>
-                                                        </button>
-                                                        <button @click="addReaction(reply.id, 'dislike')"
-                                                            class="btn btn-link btn-sm p-0 text-decoration-none d-flex align-items-center gap-1 fw-bold"
-                                                            :class="reply.user_has_disliked ? 'text-danger' : 'text-muted'"
-                                                            style="font-size: 0.8rem;">
-                                                            <i
-                                                                :class="reply.user_has_disliked ? 'fas fa-thumbs-down' : 'far fa-thumbs-down'"></i>
-                                                            <span>[[ reply.dislikes || 0 ]]</span>
-                                                        </button>
-                                                        <div class="dropdown">
-                                                            <button class="btn btn-link btn-sm p-0 text-muted"
-                                                                type="button" data-bs-toggle="dropdown"><i
-                                                                    class="far fa-face-smile"
-                                                                    style="font-size: 0.8rem;"></i></button>
-                                                            <ul class="dropdown-menu shadow border-0 rounded-4 p-2">
-                                                                <div class="d-flex gap-2">
-                                                                    <button v-for="emo in emodji_picker.getIcons()"
-                                                                        @click="addReaction(reply.id, emo)"
-                                                                        class="btn btn-hover-emoji p-1 border-0 bg-transparent fs-5">[[
-                                                                        emo ]]</button>
-                                                                </div>
-                                                            </ul>
-                                                        </div>
-
-                                                        <div v-if="reply.reactions && reply.reactions.some(r => !['like', 'dislike'].includes(r.reaction_type))"
-                                                            class="d-flex align-items-center gap-1">
-
-                                                            <template v-map="sumR = reply.reactions.reduce((acc, r) => { 
-                                                                if(!['like', 'dislike'].includes(r.reaction_type)) { 
-                                                                    const icon = emodji_picker.getEmoji(r.reaction_type); 
-                                                                    if (!acc[icon]) acc[icon] = { count: 0, users: [] };
-                                                                    acc[icon].count++;
-                                                                    // Prevent duplicate names for the same emoji if needed, or just push
-                                                                    if(!acc[icon].users.includes(r.user_name)) acc[icon].users.push(r.user_name);
-                                                                } 
-                                                                return acc; 
-                                                            }, {})"></template>
-
-                                                            <template v-for="(data, emo, index) in sumR" :key="emo">
-                                                                <div v-if="index < 4"
-                                                                    @click="addReaction(reply.id, emo)"
-                                                                    :title="data.users.join(', ')"
-                                                                    class="badge rounded-pill bg-white border text-dark p-1 px-2 d-flex align-items-center shadow-sm"
-                                                                    style="font-size: 0.7rem; cursor: pointer;"
-                                                                    data-bs-toggle="tooltip">
-
-                                                                    [[ emo ]]
-                                                                    <span v-if="data.count > 1" class="ms-1 fw-bold"
-                                                                        style="font-size: 0.55rem;">
-                                                                        [[ data.count ]]
-                                                                    </span>
-                                                                </div>
-                                                            </template>
-                                                        </div>
-                                                        {% if current_user.is_authenticated %}
-                                                        <button @click="replyingTo = reply.id; replyContent = ''"
-                                                            class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-auto text-primary"
-                                                            style="font-size: 0.75rem;"><i
-                                                                class="fas fa-reply me-1"></i> Reply</button>
-                                                        {% endif %}
-                                                    </div>
-
-                                                    <div class="collapse mt-2" :id="'editReply' + reply.id">
-                                                        <form @submit.prevent="editComment(reply)"
-                                                            class="bg-white p-2 rounded border">
-                                                            <textarea
-                                                                class="form-control form-control-sm mb-2 shadow-none"
-                                                                v-model="reply.editContent" rows="2"
-                                                                required></textarea>
-                                                            <div class="d-flex justify-content-end gap-2">
-                                                                <button type="button"
-                                                                    class="btn btn-xs btn-light border px-2"
-                                                                    data-bs-toggle="collapse"
-                                                                    :data-bs-target="'#editReply' + reply.id">Cancel</button>
-                                                                <button type="submit"
-                                                                    class="btn btn-xs btn-primary px-2">Update</button>
-                                                            </div>
-                                                        </form>
-                                                    </div>
-                                                    <div v-if="replyingTo === reply.id"
-                                                        class="mt-2 p-2 bg-white rounded border shadow-sm animate__animated animate__fadeIn">
-                                                        <label class="small fw-bold text-primary mb-1 d-block">Reply to
-                                                            @[[ reply.user_name ]]</label>
-                                                        <textarea class="form-control form-control-sm mb-2"
-                                                            v-model="replyContent"
-                                                            :placeholder="'Reply to @' + reply.user_name + '...'"></textarea>
-                                                        <div class="d-flex justify-content-end gap-2">
-                                                            <button @click="replyingTo = null"
-                                                                class="btn btn-xs btn-light border">Cancel</button>
-                                                            <button @click="submitComment(comment.id)"
-                                                                class="btn btn-xs btn-primary px-2">Reply</button>
-                                                        </div>
-                                                    </div>
-
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <!-- Comment section -->
+        <div class="mt-5">
+            <h4 class="fw-bold mb-4 border-start border-primary border-4 ps-3">Community Discussion</h4>
+            <comment-thread
+                object-type="bundle"
+                :object-id="{{ bundle_id }}"
+                :can-create="{{ current_user.is_authenticated | tojson }}"
+                :can-edit-own="{{ current_user.is_authenticated | tojson }}"
+                :can-delete-own="{{ current_user.is_authenticated | tojson }}"
+                :can-moderate="{{ current_user.is_admin() | tojson }}"
+                :current-user-id="{{ current_user.id if current_user.is_authenticated else 0 }}">
+            </comment-thread>
         </div>
     </template>
 
@@ -894,8 +546,8 @@
     const bundle_id = document.getElementById('bundle-info').dataset.bundleId;
     const { createApp, ref, onMounted, nextTick, computed } = Vue;
     import { message_list, create_message } from '/static/js/toaster.js';
-    import { emodji_picker } from '/static/emodji/emodji_picker.js';
     import TagDisplay from '/static/js/tags/tagDisplay.js';
+    import CommentThread from '/static/js/components/comments/comment-thread.js';
     import VulnerabilityDisplay from '/static/js/vulnerability/vulnerabilityDisplay.js';
     import UserChip from '/static/js/components/UserChip.js';
     import FileTree from '/static/js/components/file-tree.js';
@@ -908,10 +560,10 @@
         components: {
             'file-tree': FileTree,
             'code-viewer': CodeViewer,
-            'emodji-picker': emodji_picker,
             'tag-display': TagDisplay,
             'vulnerability-display': VulnerabilityDisplay,
             'user-chip': UserChip,
+            'comment-thread': CommentThread,
         },
         setup() {
             /**
@@ -927,7 +579,6 @@
                 await Promise.all([
                     fetchCurrentUser(),
                     fetchBundle(),
-                    fetchComments(1),
                     fetchBundleTags(),
                     fetchBundleVulnerabilities()
                 ])
@@ -1267,164 +918,6 @@
                 this.rules[index].showContent = !this.rules[index].showContent;
             }
             // --------------------------------------------
-            // COMMENTS SECTION
-            // --------------------------------------------
-
-            const comments_list = ref([]);
-            const highlightBundleCommentId = ref(null);
-            const current_page = ref(1);
-            const total_comments = ref(0);
-            const total_pages = ref(0);
-            const newCommentContent = ref("");
-            const replyingTo = ref(null);
-            const replyContent = ref("");
-
-            // FETCH COMMENTS
-
-            async function fetchComments(page) {
-                current_page.value = page;
-                const params = new URLSearchParams({
-                    bundle_id: bundle_id,
-                    page: page
-                });
-                const res = await fetch('/bundle/get_comments?' + params.toString());
-                const data = await res.json();
-                if (res.ok) {
-                    comments_list.value = data.comments || [];
-                    total_comments.value = data.total_comments;
-                    total_pages.value = data.total_pages;
-                }
-            }
-
-            // SHOW / HIDE REPLIES
-
-            const visibleReplies = ref({});
-            const toggleReplies = (commentId) => {
-                visibleReplies.value[commentId] = !visibleReplies.value[commentId];
-            };
-
-            // SUBMIT COMMENT
-
-            async function submitComment(parentId = null) {
-                const content = parentId ? replyContent.value : newCommentContent.value;
-                if (!content || !content.trim()) {
-                    create_message("Comment content cannot be empty", "warning-subtle");
-                    return;
-                }
-
-                const params = new URLSearchParams({
-                    bundle_id: bundle_id,
-                    content: content.trim(),
-                });
-
-                if (parentId) {
-                    params.append('parent_comment_id', parentId);
-                }
-
-                const response = await fetch('/bundle/add_comment?' + params.toString());
-                const data = await response.json();
-
-                if (response.ok) {
-                    newCommentContent.value = "";
-                    replyContent.value = "";
-                    replyingTo.value = null;
-
-                    await fetchComments(current_page.value);
-
-                    if (parentId) {
-                        visibleReplies.value[parentId] = true;
-                    }
-                }
-                if (response.status === 401) {
-                    newCommentContent.value = "";
-                }
-                create_message(data.message, data.toast_class);
-            }
-
-            // LOAD MORE/SHOW LESS COMMENTS
-
-            async function loadMore() {
-                if (current_page.value < total_pages.value) {
-                    current_page.value++;
-                    const params = new URLSearchParams({ bundle_id, page: current_page.value });
-                    const res = await fetch('/bundle/get_comments?' + params.toString());
-                    const data = await res.json();
-                    if (res.ok) {
-                        comments_list.value = [...comments_list.value, ...data.comments];
-                    }
-                }
-            }
-
-            function showLess() {
-                fetchComments(1);
-            }
-
-            // DELETE COMMENT
-
-            async function deleteComment(commentId) {
-                const params = new URLSearchParams({ comment_id: commentId });
-                const res = await fetch('/bundle/delete_comment?' + params.toString());
-                const data = await res.json();
-                if (res.ok) {
-                    await fetchComments(current_page.value);
-                }
-                create_message(data.message, data.toast_class);
-            }
-
-            // EDIT COMMENT
-            async function editComment(item) {
-                if (!item.editContent || !item.editContent.trim()) return;
-
-                const params = new URLSearchParams({
-                    comment_id: item.id,
-                    content: item.editContent.trim()
-                });
-
-                const res = await fetch('/bundle/edit_comment?' + params.toString());
-                const data = await res.json();
-
-                if (res.ok) {
-                    await fetchComments(current_page.value);
-
-                    const collapseId = item.parent_comment_id ? 'editReply' + item.id : 'editForm' + item.id;
-                    const collapseEl = document.getElementById(collapseId);
-                    if (collapseEl) {
-                        const bsCollapse = bootstrap.Collapse.getInstance(collapseEl) || new bootstrap.Collapse(collapseEl);
-                        bsCollapse.hide();
-                    }
-                }
-                create_message(data.message, data.toast_class);
-            }
-
-            // ADD REACTIONS
-
-            async function addReaction(commentId, reaction) {
-                if (current_user_is_connected.value == false) {
-                    window.location.href = `/account/login`;
-                    return;
-                }
-
-                if (reaction != 'like' && reaction != 'dislike') {
-                    const reactionType = emodji_picker.getSlug(reaction);
-                    if (!reactionType) {
-                        create_message("Invalid reaction", "warning-subtle");
-                        return;
-                    }
-                    reaction = reactionType;
-
-                }
-
-
-                const params = new URLSearchParams({ comment_id: commentId, reaction_type: reaction, bundle_id: bundle_id });
-                const res = await fetch('/bundle/add_reaction?' + params.toString());
-                const data = await res.json();
-                if (res.ok) {
-                    await fetchComments(current_page.value);
-                }
-                create_message(data.message, data.toast_class);
-            }
-
-            // --------------------------------------------
             // STRUCTURE VIEWS (tree / graph / misp)
             // --------------------------------------------
 
@@ -1495,23 +988,6 @@
             onMounted(async () => {
                 await init();
 
-                // Scroll + highlight ?comment=<id> from activity logs redirect
-                const targetCommentId = new URLSearchParams(window.location.search).get('comment');
-                if (targetCommentId) {
-                    highlightBundleCommentId.value = parseInt(targetCommentId);
-                    let attempts = 0;
-                    const tryScroll = () => {
-                        const el = document.getElementById('bcomment-' + targetCommentId);
-                        if (el) {
-                            const top = el.getBoundingClientRect().top + window.pageYOffset - 100;
-                            window.scrollTo({ top, behavior: 'smooth' });
-                        } else if (attempts++ < 8) {
-                            setTimeout(tryScroll, 200);
-                        }
-                    };
-                    setTimeout(tryScroll, 400);
-                }
-
                 const el = document.getElementById('bundle-info');
                 if (el) {
                     bundleId.value = el.dataset.bundleId;
@@ -1548,8 +1024,7 @@
                 treeData, fileTreeNodes,
                 selectedFileNode, handleFileTreeSelect, mispJson, mispLoading, mispError, toggleContent,
 
-                comments_list, highlightBundleCommentId, fetchComments, current_page, total_comments, total_pages, newCommentContent, submitComment, replyingTo, replyContent, visibleReplies, toggleReplies,
-                loadMore, showLess, deleteComment, editComment, addReaction, emodji_picker, current_user_is_admin,
+                current_user_is_admin,
 
                 // tags
                 displayTags, loadingDisplayTags, fetchBundleTags, loadingDisplayVulnerabilities, displayVulnerabilities, fetchBundleVulnerabilities,

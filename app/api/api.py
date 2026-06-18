@@ -110,3 +110,7 @@ api.add_namespace(sync_ns, path="/sync")
 # Instance registry (phone-home)
 from .instance.instance_api import instance_ns  # noqa
 api.add_namespace(instance_ns, path="/instance")
+
+# Unified comment thread
+from .comment.comment_api import comment_ns  # noqa
+api.add_namespace(comment_ns, path="/comments")
