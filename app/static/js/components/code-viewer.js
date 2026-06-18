@@ -133,9 +133,29 @@ function build_json_tree(json_str) {
 
 // ── Auto language detection ────────────────────────────────────────────────────
 
+const KNOWN_HLJS_LANGS = new Set([
+    'bash','c','cpp','css','diff','go','html','http','java','javascript','json',
+    'kotlin','lua','markdown','nginx','php','plaintext','python','ruby','rust',
+    'shell','sql','swift','typescript','xml','yaml','text',
+])
+
+const LANG_ALIASES = {
+    nse: 'lua',       // Nmap Script Engine = Lua
+    sigma: 'yaml',    // Sigma rules are YAML
+    wazuh: 'xml',     // Wazuh rules are XML
+    yara: 'text',     // no hljs yara grammar
+    suricata: 'text',
+    zeek: 'text',
+    crs: 'text',
+    nova: 'text',
+}
+
 function detect_language(code, hint) {
-    if (hint && hint !== 'auto') return hint
-    const t = code.trimStart()
+    if (hint && hint !== 'auto') {
+        const mapped = LANG_ALIASES[hint] || hint
+        return KNOWN_HLJS_LANGS.has(mapped) ? mapped : 'text'
+    }
+    const t = String(code || '').trimStart()
     if (/^[\[{]/.test(t)) {
         try { JSON.parse(code); return 'json' } catch { }
     }
@@ -318,7 +338,7 @@ export default {
 
         const line_count = computed(() => {
             if (!props.code) return 0
-            return props.code.split('\n').length
+            return String(props.code).split('\n').length
         })
 
         // Highlight.js output (raw, no search marks)

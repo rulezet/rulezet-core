@@ -12,17 +12,19 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
 
-<link rel="stylesheet" id="hljs-theme-light"
-    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-light.min.css">
-<link rel="stylesheet" id="hljs-theme-dark"
-    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css" disabled>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/idea.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+
+<script>
+window.__rule_json   = {{ rule_to_json | tojson | safe }};
+{% if rule_misp_object %}window.__misp_object = {{ rule_misp_object | tojson | safe }};{% endif %}
+{% if rule_misp_event  %}window.__misp_event  = {{ rule_misp_event  | tojson | safe }};{% endif %}
+</script>
 
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 {% endblock %}
@@ -302,71 +304,47 @@
 
                                 <div class="tab-content" id="ruleTabsContent">
                                     <div class="tab-pane fade show active" id="normal" role="tabpanel">
-                                        <div class="position-relative">
-                                            <button
-                                                class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm position-absolute top-0 end-0 m-2"
-                                                @click="copyContent('normal')" title="Copy content"
-                                                style="z-index: 10;">
-                                                <i class="fas fa-copy me-1"></i>
-                                                <span class="small fw-bold">Copy</span>
-                                            </button>
-                                            <pre class="custom-pre m-0 p-3"
-                                                style="max-height: 600px; overflow-y: auto;"><code class="javascript" >[[ currentRule.to_string ]]</code></pre>
-                                        </div>
+                                        <code-viewer
+                                            :code="currentRule.to_string || ''"
+                                            :language="currentRule.format || 'auto'"
+                                            max-height="600px">
+                                        </code-viewer>
                                     </div>
                                     <div class="tab-pane fade" id="json" role="tabpanel">
-                                        <div class="position-relative">
-                                            <button
-                                                class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm position-absolute top-0 end-0 m-2"
-                                                @click="copyContent('json')" title="Copy content" style="z-index: 10;">
-                                                <i class="fas fa-copy me-1"></i>
-                                                <span class="small fw-bold">Copy</span>
-                                            </button>
-                                            <pre class="custom-pre m-0 p-3"
-                                                style="max-height: 600px; overflow-y: auto;"><code class="json" v-text="{{rule_to_json}}"></code></pre>
-                                        </div>
+                                        <code-viewer
+                                            :code="ruleJsonData"
+                                            language="json"
+                                            title="rule.json"
+                                            max-height="600px">
+                                        </code-viewer>
                                     </div>
                                     {% if rule_misp_object %}
                                     <div class="tab-pane fade" id="misp_object" role="tabpanel">
-                                        <div class="position-relative">
-                                            <button
-                                                class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm position-absolute top-0 end-0 m-2"
-                                                @click="copyContent('misp_object')" title="Copy content"
-                                                style="z-index: 10;">
-                                                <i class="fas fa-copy me-1"></i>
-                                                <span class="small fw-bold">Copy</span>
-                                            </button>
-                                            <pre class="custom-pre m-0 p-3"
-                                                style="max-height: 600px; overflow-y: auto;"><code class="json" v-text="{{rule_misp_object}}"></code></pre>
-                                        </div>
+                                        <code-viewer
+                                            :code="mispObjectData"
+                                            language="json"
+                                            title="misp-object.json"
+                                            max-height="600px">
+                                        </code-viewer>
                                     </div>
                                     {% endif %}
                                     {% if rule_misp_event %}
                                     <div class="tab-pane fade" id="misp_event" role="tabpanel">
-                                        <div class="position-relative">
-                                            <button
-                                                class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm position-absolute top-0 end-0 m-2"
-                                                @click="copyContent('misp_event')" title="Copy content"
-                                                style="z-index: 10;">
-                                                <i class="fas fa-copy me-1"></i>
-                                                <span class="small fw-bold">Copy</span>
-                                            </button>
-                                            <pre class="custom-pre m-0 p-3"
-                                                style="max-height: 600px; overflow-y: auto;"><code class="json" v-text="{{rule_misp_event}}"></code></pre>
-                                        </div>
+                                        <code-viewer
+                                            :code="mispEventData"
+                                            language="json"
+                                            title="misp-event.json"
+                                            max-height="600px">
+                                        </code-viewer>
                                     </div>
                                     {% endif %}
                                     <div class="tab-pane fade" id="stix" role="tabpanel">
-                                        <div class="position-relative">
-                                            <button
-                                                class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm position-absolute top-0 end-0 m-2"
-                                                @click="copyContent('stix')" title="Copy content" style="z-index: 10;">
-                                                <i class="fas fa-copy me-1"></i>
-                                                <span class="small fw-bold">Copy</span>
-                                            </button>
-                                            <pre class="custom-pre m-0 p-3"
-                                                style="max-height: 600px; overflow-y: auto;"><code class="json" v-text="rule_stix"></code></pre>
-                                        </div>
+                                        <code-viewer
+                                            :code="rule_stix || ''"
+                                            language="json"
+                                            title="stix.json"
+                                            max-height="600px">
+                                        </code-viewer>
                                     </div>
                                 </div>
                             </div>
@@ -1323,19 +1301,11 @@
     import { emodji_picker } from '/static/emodji/emodji_picker.js';
     const rule_id = document.getElementById('rule_id').dataset.ruleId;
 
-    function highlightJSON() {
-        nextTick(() => {
-            document.querySelectorAll('pre code').forEach(block => {
-                block.removeAttribute('data-highlighted');
-                hljs.highlightElement(block);
-            });
-        });
-    }
-
     import VulnerabilityDisplay from '/static/js/vulnerability/vulnerabilityDisplay.js';
     import TagDisplay from '/static/js/tags/tagDisplay.js';
     import SimilarRulesDisplay from '/static/js/rule/similarity/similarRulesDisplay.js';
     import UserChip from '/static/js/components/UserChip.js';
+    import CodeViewer from '/static/js/components/code-viewer.js';
 
 
     createApp({
@@ -1346,6 +1316,7 @@
             'tag-display': TagDisplay,
             'similar-rules-display': SimilarRulesDisplay,
             'user-chip': UserChip,
+            'code-viewer': CodeViewer,
         },
         setup() {
             /**
@@ -1357,6 +1328,12 @@
              * */
 
             const csrf_token = '{{ csrf_token() }}';
+
+            // ── Server-side data passed via window.__ vars ──────────────
+            const ruleJsonData   = ref(window.__rule_json   || '');  // already a JSON string from json.dumps
+            const mispObjectData = ref(window.__misp_object ? JSON.stringify(window.__misp_object, null, 4) : '');
+            const mispEventData  = ref(window.__misp_event  ? JSON.stringify(window.__misp_event,  null, 4) : '');
+
             const detail_page_1_is_loading = ref(false);
             const detail_sinilar_is_loading = ref(false);
             const handleSimilarRulesFound = ref(false);
@@ -1379,7 +1356,6 @@
                 detail_page_1_is_loading.value = true
 
                 await nextTick();
-                highlightJSON();
                 detail_sinilar_is_loading.value = false
 
                 // await Promise.all([
@@ -1861,7 +1837,6 @@
             onMounted(async () => {
                 init()
                 await fetchCurrentRule();
-                highlightJSON();
                 await nextTick();
 
                 document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
@@ -2092,7 +2067,6 @@
 
                 contributor_list,
                 fetch_similar_rules_list,
-                // rule_format,
                 download_rule,
                 csrf_token,
                 favoriteSimilar,
@@ -2100,8 +2074,6 @@
                 init,
                 detail_page_1_is_loading,
                 animateClick,
-                highlightJSON,
-                getRandomColor,
                 switchTab,
                 goToRuleDetail,
                 autoResize,
@@ -2119,7 +2091,11 @@
                 refreshSimilarRules,
                 handleSimilarRulesFound,
                 rule_stix,
-                copyContent,
+
+                // CodeViewer data
+                ruleJsonData,
+                mispObjectData,
+                mispEventData,
 
                 // Scope
                 SCOPE_KEYS,
@@ -2130,24 +2106,6 @@
             };
         }
     }).mount('#main-container');
-
-</script>
-<script>
-    function applyHljsTheme() {
-        const isDark = document.body.classList.contains('dark-mode');
-        document.getElementById('hljs-theme-light').disabled = isDark;
-        document.getElementById('hljs-theme-dark').disabled = !isDark;
-
-        document.querySelectorAll('pre code').forEach(block => {
-            block.removeAttribute('data-highlighted');
-            hljs.highlightElement(block);
-        });
-    }
-
-    applyHljsTheme();
-
-    const observer = new MutationObserver(() => applyHljsTheme());
-    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
 </script>
 {% endblock %}
