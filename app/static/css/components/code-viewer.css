@@ -263,30 +263,34 @@ body.dark-mode,
 /*---SEARCH_MARKS---*/
 
 .cv-match {
-    background: rgba(255, 200, 0, 0.30);
+    background: rgba(255, 210, 0, 0.55);
     border-radius: 2px;
     padding: 0 1px;
+    color: inherit;
 }
 
 .cv-match--focus {
-    background: rgba(255, 160, 0, 0.65);
-    outline: 1px solid rgba(255, 120, 0, 0.6);
+    background: rgba(255, 150, 0, 0.85);
+    outline: 2px solid rgba(255, 100, 0, 0.7);
     border-radius: 2px;
+    color: #000;
 }
 
 [data-bs-theme="dark"] .cv-match,
 [data-theme="forest"]  .cv-match,
 [data-theme="midnight"].cv-match,
 [data-theme="slate"]   .cv-match {
-    background: rgba(255, 220, 80, 0.25);
+    background: rgba(255, 220, 50, 0.45);
+    color: inherit;
 }
 
 [data-bs-theme="dark"] .cv-match--focus,
 [data-theme="forest"]  .cv-match--focus,
 [data-theme="midnight"].cv-match--focus,
 [data-theme="slate"]   .cv-match--focus {
-    background: rgba(255, 200, 50, 0.50);
-    outline-color: rgba(255, 180, 30, 0.8);
+    background: rgba(255, 190, 0, 0.80);
+    outline-color: rgba(255, 150, 0, 0.9);
+    color: #000;
 }
 
 /*---JSON_TREE---*/

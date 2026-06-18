@@ -63,7 +63,7 @@ function inject_search_marks(html, term, matches_map, focus_key) {
         const marked = text.replace(re, m => {
             const key = match_n++
             const cls = key === focus_key ? 'cv-match cv-match--focus' : 'cv-match'
-            return `<mark class="${cls}" data-match="${key}">${esc(m)}</mark>`
+            return `<mark class="${cls}" data-match="${key}">${m}</mark>`
         })
         return `>${marked}<`
     })
@@ -179,6 +179,7 @@ export default {
         maxHeight: { type: String, default: '520px' },
         foldable: { type: Boolean, default: true },
         showLines: { type: Boolean, default: true },
+        initialSearch: { type: String, default: '' },
     },
 
     template: `
@@ -322,8 +323,10 @@ export default {
         const json_mode = ref(false)
 
         // ── Search ────────────────────────────────────────────────────
-        const search_term = ref('')
+        const search_term = ref(props.initialSearch || '')
         const cur_match = ref(0)
+
+        watch(() => props.initialSearch, v => { search_term.value = v || ''; cur_match.value = 0 })
 
         // ── JSON fold ─────────────────────────────────────────────────
         const collapsed = ref(new Set())
@@ -365,12 +368,22 @@ export default {
         // Highlighted HTML with search marks injected
         const highlighted_with_search = computed(() => {
             if (!search_term.value) return highlighted_html.value
-            return inject_search_marks(
-                highlighted_html.value,
-                search_term.value,
-                null,
-                cur_match.value
-            )
+            const html = highlighted_html.value
+            // Plain-text mode: highlighted_html is just escaped text with no HTML tags.
+            // inject_search_marks relies on >text< patterns; none exist here.
+            // Instead, search directly on the escaped text using the escaped term.
+            if (!html.includes('<')) {
+                const term = search_term.value
+                const escapedTerm = esc(term)
+                const re = new RegExp(escapedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+                let match_n = 0
+                return html.replace(re, m => {
+                    const key = match_n++
+                    const cls = key === cur_match.value ? 'cv-match cv-match--focus' : 'cv-match'
+                    return `<mark class="${cls}" data-match="${key}">${m}</mark>`
+                })
+            }
+            return inject_search_marks(html, search_term.value, null, cur_match.value)
         })
 
         // JSON tree lines
@@ -496,6 +509,7 @@ export default {
             } catch (e) {
                 hljs_ready.value = true // degrade gracefully: show plain text
             }
+            if (search_term.value) scroll_to_match()
         })
 
         return {

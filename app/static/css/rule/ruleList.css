@@ -335,8 +335,9 @@
 .rl-meta-item--source > span,
 .rl-meta-item--uuid > span {
     white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
     overflow: visible;
-    word-break: break-all;
 }
 .rl-meta-item--uuid { font-family: monospace; font-size: .68rem; opacity: .75; }
 
@@ -405,7 +406,7 @@
 }
 
 /* ── Rule content collapse ── */
-.rl-rule-collapse { background: var(--light-bg-color); }
+.rl-rule-collapse { position: relative; z-index: 1; background: var(--card-bg-color); }
 .rl-rule-content {
     background: var(--code-bg-color, #1e1e1e);
     color: #d4d4d4;

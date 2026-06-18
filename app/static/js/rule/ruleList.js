@@ -157,6 +157,15 @@ export default {
                     </ul>
                 </div>
 
+                <!-- Expand / collapse all -->
+                <button class="dt-toolbar-btn"
+                        :class="{ 'dt-toolbar-btn--active': allExpanded }"
+                        :title="allExpanded ? 'Collapse all' : 'Expand all'"
+                        @click="allExpanded ? collapseAll() : expandAll()">
+                    <i :class="allExpanded ? 'fas fa-compress-alt' : 'fas fa-expand-alt'"></i>
+                    <span>{{ allExpanded ? 'Collapse' : 'Expand' }}</span>
+                </button>
+
                 <!-- Filters toggle -->
                 <button v-if="showFilters"
                         class="dt-toolbar-btn"
@@ -354,7 +363,7 @@ export default {
                  :class="{ 'rl-rule-card--selected': isSelected(rule) }">
 
                 <div class="premium-accent-line"></div>
-                <div class="card-watermark-list">
+                <div class="card-watermark-list" v-show="!expandedIds.has(rule.id)">
                     <i class="fa-solid fa-shield-halved"></i>
                 </div>
 
@@ -476,9 +485,9 @@ export default {
                             <!-- Collapse toggle -->
                             <button class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
                                     style="width:32px;height:32px;border:1px solid #eee;"
-                                    :title="expandedId === rule.id ? 'Hide content' : 'Show content'"
+                                    :title="expandedIds.has(rule.id) ? 'Hide content' : 'Show content'"
                                     @click="toggleExpand(rule)">
-                                <i class="fas" :class="expandedId === rule.id ? 'fa-code-slash' : 'fa-code'"
+                                <i :class="expandedIds.has(rule.id) ? 'fas fa-eye-slash' : 'fas fa-code'"
                                    style="font-size:.72rem;"></i>
                             </button>
 
@@ -534,11 +543,12 @@ export default {
                 </div>
 
                 <!-- Collapse: rule content -->
-                <div v-if="expandedId === rule.id" class="rl-rule-collapse border-top">
+                <div v-if="expandedIds.has(rule.id)" class="rl-rule-collapse border-top">
                     <code-viewer v-if="rule.to_string"
                         :code="rule.to_string"
                         :language="ruleLanguage(rule.format)"
                         :title="rule.title"
+                        :initial-search="searchField === 'content' ? search : ''"
                         max-height="380px">
                     </code-viewer>
                     <p v-else class="text-muted text-center py-3 mb-0 small">No content available.</p>
@@ -606,7 +616,7 @@ export default {
                         <tr class="dt-row"
                             :class="{
                                 'dt-row--selected':  isSelected(rule),
-                                'dt-row--expanded':  expandedId === rule.id,
+                                'dt-row--expanded':  expandedIds.has(rule.id),
                                 'dt-row--favorited': rule.is_favorited,
                             }">
 
@@ -617,9 +627,8 @@ export default {
                                        :aria-label="'Select ' + rule.title" />
                             </td>
 
-                            <td class="dt-td dt-td--truncate" style="max-width:180px;">
+                            <td class="dt-td" style="max-width:200px;word-break:break-word;">
                                 <a :href="'/rule/detail_rule/' + rule.id" class="dt-rule-title"
-                                   :title="rule.title"
                                    v-html="highlight(rule.title)">
                                 </a>
                             </td>
@@ -726,7 +735,7 @@ export default {
 
                                     <!-- Expand : toujours en dernier -->
                                     <button class="dt-action-btn dt-action-btn--expand"
-                                            :class="{ 'is-expanded': expandedId === rule.id }"
+                                            :class="{ 'is-expanded': expandedIds.has(rule.id) }"
                                             title="Expand" @click="toggleExpand(rule)">
                                         <i class="fas fa-chevron-down dt-expand-chevron"
                                            style="font-size:.65rem;"></i>
@@ -736,7 +745,7 @@ export default {
                         </tr>
 
                         <!-- Expanded row -->
-                        <tr v-if="expandedId === rule.id"
+                        <tr v-if="expandedIds.has(rule.id)"
                             :key="'expand-' + rule.id" class="dt-row-expand">
                             <td :colspan="tableColspan" class="dt-expand-cell p-0">
                                 <div class="rl-expand-wrap">
@@ -837,6 +846,7 @@ export default {
                                                 :code="rule.to_string"
                                                 :language="ruleLanguage(rule.format)"
                                                 :title="rule.title"
+                                                :initial-search="searchField === 'content' ? search : ''"
                                                 max-height="300px">
                                             </code-viewer>
                                             <div v-else
@@ -965,7 +975,7 @@ export default {
         // ── UI state ──────────────────────────────────────────────────────
         const viewMode    = ref(props.defaultView)
         const filtersOpen = ref(false)
-        const expandedId  = ref(null)
+        const expandedIds = reactive(new Set())
 
         // ── Column visibility (table mode) ────────────────────────────────
         const TOGGLEABLE_COLS = [
@@ -1208,15 +1218,35 @@ export default {
         // ── Expand / collapse ─────────────────────────────────────────────
         const cvesMap = Vue.reactive({}) // ruleId → boolean (has CVEs)
 
+        async function _loadCves(rule) {
+            if (rule.id in cvesMap) return
+            try {
+                const res  = await fetch(`/rule/get_rule_vulnerabilities_display/${rule.id}`)
+                const data = await res.json()
+                cvesMap[rule.id] = !!(data.total_vulnerabilities > 0)
+            } catch { cvesMap[rule.id] = false }
+        }
+
         async function toggleExpand(rule) {
-            expandedId.value = expandedId.value === rule.id ? null : rule.id
-            if (expandedId.value === rule.id && !(rule.id in cvesMap)) {
-                try {
-                    const res  = await fetch(`/rule/get_rule_vulnerabilities_display/${rule.id}`)
-                    const data = await res.json()
-                    cvesMap[rule.id] = !!(data.total_vulnerabilities > 0)
-                } catch { cvesMap[rule.id] = false }
+            if (expandedIds.has(rule.id)) {
+                expandedIds.delete(rule.id)
+            } else {
+                expandedIds.add(rule.id)
+                _loadCves(rule)
             }
+        }
+
+        const allExpanded = computed(() => items.value.length > 0 && items.value.every(r => expandedIds.has(r.id)))
+
+        async function expandAll() {
+            items.value.forEach(r => {
+                expandedIds.add(r.id)
+                _loadCves(r)
+            })
+        }
+
+        function collapseAll() {
+            expandedIds.clear()
         }
 
         // ── Vote / favorite ───────────────────────────────────────────────
@@ -1402,6 +1432,17 @@ export default {
         // Re-fetch when switching views (per-page may have changed)
         watch(viewMode, () => { page.value = 1; fetchData() })
 
+        // Auto-expand all items when search field is "content"
+        watch(items, (newItems) => {
+            if (searchField.value === 'content') {
+                newItems.forEach(r => { expandedIds.add(r.id); _loadCves(r) })
+            }
+        })
+
+        watch(searchField, (val) => {
+            if (val !== 'content') collapseAll()
+        })
+
         return {
             // Data
             items, total, totalPages, loading, page, perPage, perPageModel,
@@ -1411,7 +1452,8 @@ export default {
             selectedTags, selectedSources, selectedLicenses, selectedVulns,
             rulesFormats, activeFilterCount,
             // UI
-            viewMode, expandedId, cvesMap,
+            viewMode, expandedIds, cvesMap,
+            allExpanded, expandAll, collapseAll,
             // Columns
             TOGGLEABLE_COLS, colVisible, toggleColumn,
             // Selection
