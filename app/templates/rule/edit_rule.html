@@ -1,18 +1,38 @@
 {% extends 'base.html' %}
 {% block title %}Edit Rule — Rulezet{% endblock %}
 {% block head %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/idea.min.css">
-
-<link rel="stylesheet" id="hljs-theme-light"
-    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-light.min.css">
-<link rel="stylesheet" id="hljs-theme-dark"
-    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css" disabled>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<style>
+.rf-label-hint {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1rem; height: 1rem; border-radius: 50%;
+    background: var(--light-bg-color, #f1f1f1);
+    border: 1px solid var(--border-color, #dee2e6);
+    color: var(--subtle-text-color, #6c757d);
+    font-size: .6rem; cursor: help; position: relative; z-index: 10;
+    font-weight: 700; font-style: normal; transition: background .15s, color .15s;
+    flex-shrink: 0; text-decoration: none;
+}
+.rf-label-hint:hover { background: rgba(13,110,253,.08); color: #0d6efd; border-color: #0d6efd; z-index: 9998; }
+.rf-label-hint::after {
+    content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + .5rem);
+    transform: translateX(-50%);
+    background: var(--card-bg-color, #fff); border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    padding: .5rem .7rem; font-size: .75rem; font-weight: 400; letter-spacing: 0;
+    text-transform: none; color: var(--text-color, #1e1e1e);
+    white-space: pre-wrap; width: max-content; max-width: 280px; line-height: 1.5;
+    pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 9999;
+}
+.rf-label-hint::before {
+    content: ''; position: absolute; left: 50%; bottom: calc(100% + .15rem);
+    transform: translateX(-50%); border: 5px solid transparent;
+    border-top-color: var(--border-color, #dee2e6);
+    pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 9999;
+}
+.rf-label-hint:hover::after, .rf-label-hint:hover::before { opacity: 1; }
+</style>
 {% endblock %}
 {% import 'macros/form_macros.html' as f %}
 
@@ -49,11 +69,13 @@
                         <div class="row g-3 mb-4">
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label class="form-label fw-bold text-dark">
-                                        {{ form.title.label.text }} <span class="text-danger">*</span>
-                                    </label>
-                                    {{ form.title(class_="form-control rounded-3", placeholder="Enter the rule
-                                    title...") }}
+                                    <div class="d-flex align-items-center gap-1 mb-1">
+                                        <label class="form-label fw-bold text-dark mb-0">
+                                            {{ form.title.label.text }} <span class="text-danger">*</span>
+                                        </label>
+                                        <i class="rf-label-hint" data-tip="Unique name that identifies this rule across the platform.">?</i>
+                                    </div>
+                                    {{ form.title(class_="form-control rounded-3", placeholder="Enter the rule title...") }}
                                     {% if form.title.errors %}
                                     <div class="invalid-feedback d-block">{{ form.title.errors[0] | safe }}</div>
                                     {% endif %}
@@ -62,10 +84,15 @@
 
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label class="form-label fw-bold text-dark">
-                                        {{ form.format.label.text }} <span class="text-danger">*</span>
-                                    </label>
-                                    {{ form.format(class_="form-select rounded-3") }}
+                                    <div class="d-flex align-items-center gap-1 mb-1">
+                                        <label class="form-label fw-bold text-dark mb-0">
+                                            {{ form.format.label.text }} <span class="text-danger">*</span>
+                                        </label>
+                                        <i class="rf-label-hint" data-tip="Detection format — defines which parser validates the rule content.&#10;YARA for malware, Sigma for SIEM, Suricata for network traffic, etc.">?</i>
+                                    </div>
+                                    <select v-model="editFormat" name="format" class="form-select rounded-3">
+                                        <option v-for="fmt in rules_formats" :key="fmt.id" :value="fmt.name">[[ fmt.name ]]</option>
+                                    </select>
                                     {% if form.format.errors %}
                                     <div class="invalid-feedback d-block">{{ form.format.errors[0] | safe }}</div>
                                     {% endif %}
@@ -76,13 +103,19 @@
                         <div class="row g-3 mb-4">
                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label class="form-label fw-bold text-dark">{{ form.license.label.text }}</label>
+                                    <div class="d-flex align-items-center gap-1 mb-1">
+                                        <label class="form-label fw-bold text-dark mb-0">{{ form.license.label.text }}</label>
+                                        <i class="rf-label-hint" data-tip="Legal license for this rule (e.g. MIT, GPL-3.0).">?</i>
+                                    </div>
                                     {{ form.license(class_="form-control rounded-3", id="license-select") }}
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label class="form-label fw-bold text-dark">{{ form.source.label.text }}</label>
+                                    <div class="d-flex align-items-center gap-1 mb-1">
+                                        <label class="form-label fw-bold text-dark mb-0">{{ form.source.label.text }}</label>
+                                        <i class="rf-label-hint" data-tip="URL or name of the original source.">?</i>
+                                    </div>
                                     {{ form.source(class_="form-control rounded-3", placeholder="Source URL...") }}
                                 </div>
                             </div>
@@ -133,17 +166,23 @@
 
                         <div class="mb-4 text-start">
                             <div class="form-group">
-                                <label class="form-label fw-bold text-dark">
-                                    {{ form.to_string.label.text }} <span class="text-danger">*</span>
-                                </label>
-                                <div class="border rounded-3 overflow-hidden shadow-sm">
-                                    <codemirror-editor v-model="currentRule.to_string" mode="yaml" height="500px">
-                                    </codemirror-editor>
+                                <div class="d-flex align-items-center gap-1 mb-1">
+                                    <label class="form-label fw-bold text-dark mb-0">
+                                        {{ form.to_string.label.text }} <span class="text-danger">*</span>
+                                    </label>
+                                    <i class="rf-label-hint" data-tip="Full rule content. Syntax is validated against&#10;the selected format before saving.">?</i>
                                 </div>
-                                <input type="hidden" name="to_string" :value="currentRule.to_string">
+                                <smart-editor
+                                    v-model="currentRule.to_string"
+                                    mode="code"
+                                    :language="editFormat || 'text'"
+                                    name="to_string"
+                                    placeholder="Rule content…"
+                                    min-height="500px"
+                                    max-height="80vh">
+                                </smart-editor>
                                 {% if form.to_string.errors %}
-                                <div class="invalid-feedback d-block fw-bold mt-2">{{ form.to_string.errors[0] | safe }}
-                                </div>
+                                <div class="invalid-feedback d-block fw-bold mt-2">{{ form.to_string.errors[0] | safe }}</div>
                                 {% endif %}
                             </div>
                         </div>
@@ -170,7 +209,7 @@
     const { createApp, ref, reactive, onMounted, watch } = Vue
     import { message_list, create_message } from '/static/js/toaster.js'
     import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js';
-    import CodeMirrorEditor from '/static/js/codeMirror/codeMirrorEditor.js';
+    import SmartEditor from '/static/js/components/smart-editor.js';
     import TagInput from '/static/js/tags/tagInput.js';
     import VersionPicker from '/static/js/tags/utils/versionPicker.js';
 
@@ -178,7 +217,7 @@
         delimiters: ['[[', ']]'],
         components: {
             'vulnerability-input': VulnerabilityInput,
-            'codemirror-editor': CodeMirrorEditor,
+            'smart-editor': SmartEditor,
             'tag-input': TagInput,
             'version-picker': VersionPicker
         },
@@ -186,6 +225,8 @@
 
             const ruleId = ref("{{ rule.id | safe }}");
             const currentRule = ref({ title: '', to_string: '' });
+            const editFormat   = ref('{{ rule.format | e }}');
+            const rules_formats = ref([]);
 
 
             const detectedVulnerabilities = ref([]);
@@ -215,12 +256,18 @@
                     if (response.ok) {
                         const data = await response.json();
                         currentRule.value = data.rule;
-                        if (data.rule.to_string) {
-                            currentRule.value.to_string = data.rule.to_string;
-                        }
+                        if (data.rule.format) editFormat.value = data.rule.format;
                     }
                 } catch (e) {
                     console.error("Error fetching rule info:", e);
+                }
+            }
+
+            async function fetchFormats() {
+                const res = await fetch('/rule/get_rules_formats');
+                if (res.ok) {
+                    const data = await res.json();
+                    rules_formats.value = data.formats || [];
                 }
             }
 
@@ -228,7 +275,8 @@
 
                 await Promise.all([
                     fetchCurrentRule(),
-                    initRuleTags()
+                    initRuleTags(),
+                    fetchFormats()
                 ]);
 
 
@@ -247,32 +295,12 @@
                 detectedVulnerabilities,
                 ruleId,
                 currentRule,
+                editFormat,
+                rules_formats,
                 selectedTags,
                 formData,
-                VersionPicker,
-                TagInput,
-                CodeMirrorEditor,
-                VulnerabilityInput
             }
         },
     }).mount('#main-container');
-</script>
-<script>
-    function applyCodeMirrorTheme() {
-        const isDark = document.body.classList.contains('dark-mode');
-        // Met à jour tous les éditeurs CodeMirror actifs
-        document.querySelectorAll('.CodeMirror').forEach(cm => {
-            if (cm.CodeMirror) {
-                cm.CodeMirror.setOption('theme', isDark ? 'dracula' : 'idea');
-            }
-        });
-    }
-
-    // Applique au chargement
-    applyCodeMirrorTheme();
-
-    // Observe les changements de classe sur body (toggle dark mode)
-    const observer = new MutationObserver(() => applyCodeMirrorTheme());
-    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 </script>
 {% endblock %}
