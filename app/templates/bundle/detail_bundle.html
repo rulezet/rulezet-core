@@ -348,7 +348,7 @@
 
                                                     <div class="d-flex flex-wrap gap-3 mb-2 small text-muted">
                                                         <span class="d-flex align-items-center gap-1">
-                                                            <user-chip :user-id="item.rule.user_id" :username="item.rule.author !== 'Unknown' ? item.rule.author : item.rule.editor" :avatar="item.rule.editor_avatar" size="xs"></user-chip>
+                                                            <user-chip :user-id="item.rule.user_id" :username="item.rule.editor" :avatar="item.rule.editor_avatar" size="xs"></user-chip>
                                                         </span>
                                                         <span><i class="fas fa-balance-scale me-1 text-secondary"></i>[[
                                                             item.rule.license || 'Proprietary' ]]</span>

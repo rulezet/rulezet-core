@@ -507,6 +507,8 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     rule.source = form_dict["source"]
     rule.version = form_dict["version"]
     rule.to_string = form_dict["to_string"]
+    rule.author = form_dict["author"]
+    rule.original_uuid = form_dict["original_uuid"]
     def _resolve_vuln(v):
         if isinstance(v, list):
             return v

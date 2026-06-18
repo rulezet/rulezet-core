@@ -126,7 +126,7 @@
                             <div class="d-flex align-items-center gap-2 mt-2">
                                 <user-chip
                                     :user-id="currentRule.user_id"
-                                    :username="currentRule.author !== 'Unknown' ? currentRule.author : currentRule.editor"
+                                    :username="currentRule.editor"
                                     :avatar="currentRule.editor_avatar"
                                     size="xs"
                                 ></user-chip>
@@ -148,7 +148,12 @@
                                     <div class="d-flex align-items-center mb-2">
                                         <i class="fas fa-file-code me-2 text-secondary w-20px"></i>
                                         <small class="text-muted me-2">Original UUID:</small>
-                                        <small class="text-break fw-mono"> {{ rule.original_uuid }} </small>
+                                        <template v-if="currentRule.original_uuid === null || currentRule.original_uuid === '' || currentRule.original_uuid === 'Unknown'">
+                                            <small class="text-muted">Unknown</small>
+                                        </template>
+                                        <template v-else>
+                                            <small class="text-break fw-mono"> {{ rule.original_uuid }} </small>
+                                        </template>
                                     </div>
                                     <div class="d-flex align-items-center mb-2">
                                         <i class="fas fa-key me-2 text-secondary w-20px"></i>
@@ -203,9 +208,10 @@
                                         </small>
                                     </div>
                                     <div class="d-flex align-items-center gap-1">
-                                        <i class="fas fa-user-edit me-2 text-secondary w-20px"></i>
-                                        <small class="text-muted me-1">Editor:</small>
-                                        <user-chip :user-id="currentRule.user_id" :username="currentRule.editor" :avatar="currentRule.editor_avatar" size="xs"></user-chip>
+                                        <i class="fas fa-user-edit text-secondary w-20px"></i>
+                                        <small class="text-muted">Author:</small>
+                                        <small v-if="currentRule.author && currentRule.author !== 'Unknown'">[[ currentRule.author ]]</small>
+                                        <small v-else class="text-muted">Unknown</small>
                                     </div>
                                 </div>
                             </div>

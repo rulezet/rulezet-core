@@ -101,7 +101,7 @@ const RulesCarousel = {
                                         <div class="d-flex align-items-center gap-2 mt-2">
                                             <user-chip
                                                 :user-id="rule.user_id"
-                                                :username="rule.author !== 'Unknown' ? rule.author : rule.editor"
+                                                :username="rule.editor"
                                                 :avatar="rule.editor_avatar"
                                                 size="xs"
                                             ></user-chip>
