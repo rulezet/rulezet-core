@@ -1,5 +1,9 @@
 {% extends 'base.html' %}
 {% block title %}Update Rule Similarities — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+{% endblock %}
 {% block content %}
 <div class="container my-4" id="main-container" v-cloak>
     <template v-if="fetch_all_pages">
@@ -269,13 +273,11 @@
     import { create_message, message_list } from '/static/js/toaster.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
     import RuleSelectionTable from '/static/js/rule/ruleSelectionTable.js';
-    import DiffDisplay from '/static/js/codeMirror/diffDisplay.js';
     import SimilarRuleCard from '/static/js/rule/similarity/similarRulesCard.js';
     import SimilarRulesFilter from '/static/js/rule/similarity/similarRulesFilter.js';
     createApp({
         delimiters: ['[[', ']]'],
         components: {
-            'diff-display': DiffDisplay,
             'pagination-component': PaginationComponent,
             'similar-rule-card': SimilarRuleCard,
             'rule-selection-table': RuleSelectionTable,

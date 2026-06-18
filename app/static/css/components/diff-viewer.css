@@ -375,6 +375,7 @@
     display: flex;
     align-items: stretch;
     min-height: 21px;
+    min-width: max-content;
     transition: filter 0.08s;
 }
 

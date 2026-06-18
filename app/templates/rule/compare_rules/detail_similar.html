@@ -1,4 +1,8 @@
 {% extends 'base.html' %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+{% endblock %}
 {% block content %}
 <div id="main-container" class="container py-5" v-cloak>
     <div class="row justify-content-center mb-5">
@@ -96,7 +100,6 @@
 {% block script %}
 <script type="module">
     const { createApp, ref, onMounted } = Vue;
-    import DiffDisplay from '/static/js/codeMirror/diffDisplay.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
     import SimilarRuleCard from '/static/js/rule/similarity/similarRulesCard.js';
     import SimilarRulesFilter from '/static/js/rule/similarity/similarRulesFilter.js';
@@ -104,7 +107,6 @@
     createApp({
         delimiters: ['[[', ']]'],
         components: {
-            DiffDisplay,
             PaginationComponent,
             SimilarRuleCard,
             SimilarRulesFilter

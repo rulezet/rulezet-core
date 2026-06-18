@@ -108,8 +108,10 @@
     flex-shrink: 0;
 }
 
-.se-tb-btn:hover   { background: var(--bg-surface); color: var(--text-main); }
-.se-tb-btn.is-active { background: var(--brand-dim); color: var(--brand); }
+.se-tb-btn:hover         { background: var(--bg-surface); color: var(--text-main); }
+.se-tb-btn.is-active     { background: var(--brand-dim); color: var(--brand); }
+.se-tb-btn:disabled      { opacity: 0.3; cursor: not-allowed; }
+.se-tb-btn:disabled:hover{ background: transparent; color: var(--text-muted); }
 
 .se-toolbar-sep {
     width: 1px;

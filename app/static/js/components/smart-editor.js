@@ -149,6 +149,18 @@ export default {
         <span v-if="mode === 'code'" class="se-lang-badge">{{ language }}</span>
 
         <div class="se-toolbar-spacer"></div>
+
+        <!-- Undo / Redo buttons -->
+        <button class="se-tb-btn" type="button" title="Undo (Ctrl+Z)"
+            :disabled="undo_count === 0" @click="btn_undo">
+            <i class="fas fa-rotate-left"></i>
+        </button>
+        <button class="se-tb-btn" type="button" title="Redo (Ctrl+Y)"
+            :disabled="redo_count === 0" @click="btn_redo">
+            <i class="fas fa-rotate-right"></i>
+        </button>
+        <div class="se-toolbar-sep"></div>
+
         <span class="se-char-count">{{ stat_label }}</span>
     </div>
 
@@ -161,7 +173,7 @@ export default {
                 ref="ta_ref"
                 class="se-ta"
                 :value="inner_value"
-                @input="inner_value = $event.target.value"
+                @input="on_input"
                 :placeholder="placeholder"
                 :readonly="readonly"
                 spellcheck="true"
@@ -176,7 +188,7 @@ export default {
                 ref="ta_ref"
                 class="se-ta se-ta--md"
                 :value="inner_value"
-                @input="inner_value = $event.target.value"
+                @input="on_input"
                 :placeholder="placeholder"
                 :readonly="readonly"
                 spellcheck="false"
@@ -202,7 +214,7 @@ export default {
                         ref="ta_ref"
                         class="se-ta se-ta--code"
                         :value="inner_value"
-                        @input="inner_value = $event.target.value"
+                        @input="on_input"
                         :placeholder="placeholder"
                         :readonly="readonly"
                         spellcheck="false"
@@ -233,6 +245,14 @@ export default {
         const ta_ref       = ref(null)
         const overlay_ref  = ref(null)
         const gutter_ref   = ref(null)
+
+        // ── Undo / redo history ─────────────────────────────────────────
+        const _undo = []   // stack of past string values
+        const _redo = []
+        let _undo_t    = null   // debounce timer handle
+        let _prev_snap = null   // value captured at start of current typing burst
+        const undo_count = ref(0)
+        const redo_count = ref(0)
 
         // Sync with parent v-model
         watch(() => props.modelValue, v => { if (v !== inner_value.value) inner_value.value = v })
@@ -335,9 +355,18 @@ export default {
             const val = inner_value.value
             const key = e.key
 
+            // ── Undo / Redo ──────────────────────────────────────────
+            if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === 'z') {
+                e.preventDefault(); do_undo(ta); return
+            }
+            if ((e.ctrlKey || e.metaKey) && (key === 'y' || (e.shiftKey && key === 'z'))) {
+                e.preventDefault(); do_redo(ta); return
+            }
+
             // ── Auto-close pairs ─────────────────────────────────────
             if (PAIRS[key] && !e.ctrlKey && !e.metaKey) {
                 e.preventDefault()
+                _save_now()
                 const selected = val.slice(s, sel)
                 const close = PAIRS[key]
                 const nv = val.slice(0, s) + key + selected + close + val.slice(sel)
@@ -357,6 +386,7 @@ export default {
                 const prev = val[s - 1], next = val[s]
                 if (PAIRS[prev] === next) {
                     e.preventDefault()
+                    _save_now()
                     set_value(ta, val.slice(0, s - 1) + val.slice(s + 1), s - 1)
                     return
                 }
@@ -365,6 +395,7 @@ export default {
             // ── Tab: indent / dedent ─────────────────────────────────
             if (key === 'Tab') {
                 e.preventDefault()
+                _save_now()
                 if (s === sel) {
                     // No selection: insert 2 spaces at cursor
                     set_value(ta, val.slice(0, s) + '  ' + val.slice(sel), s + 2)
@@ -393,6 +424,7 @@ export default {
 
                 if (indent || is_open) {
                     e.preventDefault()
+                    _save_now()
                     const extra      = is_open ? '  ' : ''
                     const close_line = is_open ? '\n' + indent : ''
                     const nv = val.slice(0, s) + '\n' + indent + extra + close_line + val.slice(sel)
@@ -408,6 +440,61 @@ export default {
                 ta.selectionEnd   = cursor_end ?? cursor_start
             })
         }
+
+        // ── Undo/redo functions ─────────────────────────────────────────
+
+        // Called on every regular @input — captures the pre-burst state debounced.
+        function on_input(e) {
+            if (_prev_snap === null) _prev_snap = inner_value.value
+            inner_value.value = e.target.value
+            clearTimeout(_undo_t)
+            _undo_t = setTimeout(() => {
+                const v = _prev_snap
+                _prev_snap = null
+                if (_undo[_undo.length - 1] !== v) {
+                    _undo.push(v)
+                    if (_undo.length > 200) _undo.shift()
+                    _redo.length = 0
+                }
+                undo_count.value = _undo.length
+                redo_count.value = _redo.length
+            }, 600)
+        }
+
+        // Push current value immediately (called before each smart edit).
+        function _save_now() {
+            clearTimeout(_undo_t); _prev_snap = null
+            const v = inner_value.value
+            if (_undo[_undo.length - 1] !== v) {
+                _undo.push(v)
+                if (_undo.length > 200) _undo.shift()
+                _redo.length = 0
+            }
+            undo_count.value = _undo.length
+            redo_count.value = _redo.length
+        }
+
+        function do_undo(ta) {
+            clearTimeout(_undo_t); _prev_snap = null
+            if (!_undo.length) return
+            _redo.push(inner_value.value)
+            inner_value.value = _undo.pop()
+            undo_count.value = _undo.length
+            redo_count.value = _redo.length
+            nextTick(() => { if (ta) { ta.selectionStart = ta.selectionEnd = inner_value.value.length } })
+        }
+
+        function do_redo(ta) {
+            if (!_redo.length) return
+            _undo.push(inner_value.value)
+            inner_value.value = _redo.pop()
+            undo_count.value = _undo.length
+            redo_count.value = _redo.length
+            nextTick(() => { if (ta) { ta.selectionStart = ta.selectionEnd = inner_value.value.length } })
+        }
+
+        function btn_undo() { do_undo(ta_ref.value) }
+        function btn_redo() { do_redo(ta_ref.value) }
 
         // ── Code overlay scroll sync ────────────────────────────────────
         function sync_scroll(e) {
@@ -481,7 +568,8 @@ export default {
             MD_ACTIONS,
             mode_label, mode_icon,
             line_count, stat_label, body_style, code_wrap_style,
-            on_keydown, sync_scroll, md_action, toggle_preview,
+            undo_count, redo_count, btn_undo, btn_redo,
+            on_input, on_keydown, sync_scroll, md_action, toggle_preview,
         }
     }
 }
