@@ -94,26 +94,103 @@ export default {
     template: `
     <div class="rl-wrapper">
 
-        <!-- ── Filter panel ── -->
-        <div v-if="showFilters" class="mb-3">
-            <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+        <!-- ── Toolbar: search + sort + view toggle ── -->
+        <div class="rl-toolbar">
+            <div class="rl-toolbar-left">
+                <!-- Search -->
+                <div class="dt-search">
+                    <i class="fas fa-search dt-search-icon"></i>
+                    <input class="dt-search-input" type="text" placeholder="Search rules…"
+                           v-model="search" @input="onSearchInput" aria-label="Search rules" />
+                    <button v-if="search" class="dt-search-clear" @click="clearSearch"
+                            aria-label="Clear search">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
 
-                <button class="rl-filter-toggle" :class="{ 'is-active': filtersOpen }"
-                        @click="filtersOpen = !filtersOpen">
-                    <i class="fas fa-sliders" style="font-size:.7rem;"></i>
-                    Filters
-                    <span v-if="activeFilterCount > 0" class="rl-filter-badge">{{ activeFilterCount }}</span>
-                    <i class="fas ms-1" :class="filtersOpen ? 'fa-chevron-up' : 'fa-chevron-down'"
-                       style="font-size:.6rem;"></i>
+            <div class="rl-toolbar-right">
+                <!-- Sort dropdown (card mode) -->
+                <select v-if="viewMode === 'card'" v-model="cardSort" class="rl-sort-select"
+                        @change="onCardSortChange" aria-label="Sort rules">
+                    <option value="newest">Newest</option>
+                    <option value="oldest">Oldest</option>
+                    <option value="most_likes">Most liked</option>
+                    <option value="title_asc">A → Z</option>
+                </select>
+
+                <!-- View toggle -->
+                <div class="dt-view-toggle" title="Switch view">
+                    <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'card' }"
+                            @click="viewMode = 'card'" aria-label="Card view">
+                        <i class="fas fa-rectangle-list"></i>
+                    </button>
+                    <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'table' }"
+                            @click="viewMode = 'table'" aria-label="Table view">
+                        <i class="fas fa-table-cells-large"></i>
+                    </button>
+                </div>
+
+                <!-- Column picker (table mode) -->
+                <div v-if="viewMode === 'table'" class="dropdown">
+                    <button class="dt-toolbar-btn dropdown-toggle" data-bs-toggle="dropdown"
+                            aria-expanded="false" aria-label="Toggle columns">
+                        <i class="fas fa-table-columns"></i>
+                        <span>Columns</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-2"
+                        style="border-radius:12px;min-width:165px;" @click.stop>
+                        <li v-for="col in TOGGLEABLE_COLS" :key="col.key">
+                            <label class="dropdown-item rounded-2 d-flex align-items-center gap-2"
+                                   style="cursor:pointer;font-size:.84rem;user-select:none;">
+                                <input type="checkbox"
+                                       :checked="colVisible[col.key]"
+                                       @change="toggleColumn(col.key)" />
+                                {{ col.label }}
+                            </label>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Filters toggle -->
+                <button v-if="showFilters"
+                        class="dt-toolbar-btn"
+                        :class="{ 'dt-toolbar-btn--active': filtersOpen }"
+                        @click="filtersOpen = !filtersOpen"
+                        :aria-expanded="filtersOpen">
+                    <i class="fas fa-sliders"></i>
+                    <span>Filters</span>
+                    <span v-if="activeFilterCount > 0" class="rl-filter-badge ms-1">{{ activeFilterCount }}</span>
                 </button>
 
+                <!-- New Rule -->
                 <button v-if="showCreate" class="dt-toolbar-btn dt-toolbar-btn--primary"
                         @click="$emit('create')">
                     <i class="fas fa-file-circle-plus"></i>
                     <span>New Rule</span>
                 </button>
-            </div>
 
+                <!-- Select-all / send (mode=select) -->
+                <button v-if="mode === 'select'"
+                        class="dt-toolbar-btn dt-toolbar-btn--primary"
+                        :disabled="selectionCount === 0"
+                        @click="emitSend">
+                    <i class="fas fa-check"></i>
+                    <span>Confirm{{ selectionCount > 0 ? ' (' + selectionCount + ')' : '' }}</span>
+                </button>
+
+                <!-- Per-page (table mode) -->
+                <div v-if="viewMode === 'table'" class="rl-per-page">
+                    <span>Rows</span>
+                    <select v-model="perPageModel" aria-label="Rows per page">
+                        <option v-for="n in [10, 25, 50, 100]" :key="n" :value="n">{{ n }}</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Filter panel (below toolbar) ── -->
+        <template v-if="showFilters">
             <div v-show="filtersOpen" class="rl-filter-panel">
 
                 <!-- Row 1: quick options -->
@@ -204,84 +281,7 @@ export default {
                 </div>
 
             </div>
-        </div>
-
-        <!-- ── Toolbar: search + sort + view toggle ── -->
-        <div class="rl-toolbar">
-            <div class="rl-toolbar-left">
-                <!-- Search -->
-                <div class="dt-search">
-                    <i class="fas fa-search dt-search-icon"></i>
-                    <input class="dt-search-input" type="text" placeholder="Search rules…"
-                           v-model="search" @input="onSearchInput" aria-label="Search rules" />
-                    <button v-if="search" class="dt-search-clear" @click="clearSearch"
-                            aria-label="Clear search">
-                        <i class="fas fa-xmark"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div class="rl-toolbar-right">
-                <!-- Sort dropdown (card mode) -->
-                <select v-if="viewMode === 'card'" v-model="cardSort" class="rl-sort-select"
-                        @change="onCardSortChange" aria-label="Sort rules">
-                    <option value="newest">Newest</option>
-                    <option value="oldest">Oldest</option>
-                    <option value="most_likes">Most liked</option>
-                    <option value="title_asc">A → Z</option>
-                </select>
-
-                <!-- View toggle -->
-                <div class="dt-view-toggle" title="Switch view">
-                    <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'card' }"
-                            @click="viewMode = 'card'" aria-label="Card view">
-                        <i class="fas fa-rectangle-list"></i>
-                    </button>
-                    <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'table' }"
-                            @click="viewMode = 'table'" aria-label="Table view">
-                        <i class="fas fa-table-cells-large"></i>
-                    </button>
-                </div>
-
-                <!-- Column picker (table mode) -->
-                <div v-if="viewMode === 'table'" class="dropdown">
-                    <button class="dt-toolbar-btn dropdown-toggle" data-bs-toggle="dropdown"
-                            aria-expanded="false" aria-label="Toggle columns">
-                        <i class="fas fa-table-columns"></i>
-                        <span>Columns</span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-2"
-                        style="border-radius:12px;min-width:165px;" @click.stop>
-                        <li v-for="col in TOGGLEABLE_COLS" :key="col.key">
-                            <label class="dropdown-item rounded-2 d-flex align-items-center gap-2"
-                                   style="cursor:pointer;font-size:.84rem;user-select:none;">
-                                <input type="checkbox"
-                                       :checked="colVisible[col.key]"
-                                       @change="toggleColumn(col.key)" />
-                                {{ col.label }}
-                            </label>
-                        </li>
-                    </ul>
-                </div>
-
-                <!-- Select-all / send (mode=select) -->
-                <button v-if="mode === 'select'"
-                        class="dt-toolbar-btn dt-toolbar-btn--primary"
-                        :disabled="selectionCount === 0"
-                        @click="emitSend">
-                    <i class="fas fa-check"></i>
-                    <span>Confirm{{ selectionCount > 0 ? ' (' + selectionCount + ')' : '' }}</span>
-                </button>
-
-                <!-- Per-page (table mode) -->
-                <div v-if="viewMode === 'table'" class="rl-per-page">
-                    <span>Rows</span>
-                    <select v-model="perPageModel" aria-label="Rows per page">
-                        <option v-for="n in [10, 25, 50, 100]" :key="n" :value="n">{{ n }}</option>
-                    </select>
-                </div>
-            </div>
-        </div>
+        </template>
 
         <!-- ── Select-all-pages banner ── -->
         <div v-if="showSelectBanner" class="rl-select-banner">
@@ -358,8 +358,8 @@ export default {
                     <div class="mb-3 pe-5">
                         <h5 class="fw-bold mb-1">
                             <a :href="'/rule/detail_rule/' + rule.id"
-                               class="fw-bold h5 border-start border-primary border-4 ps-3 custom-rule-link text-decoration-none d-block">
-                                {{ rule.title }}
+                               class="fw-bold h5 border-start border-primary border-4 ps-3 custom-rule-link text-decoration-none d-block"
+                               v-html="highlight(rule.title)">
                             </a>
                         </h5>
                         <div class="d-flex align-items-center gap-2 mt-2">
@@ -378,7 +378,7 @@ export default {
                     <p class="text-muted small lh-base mb-3"
                        style="-webkit-line-clamp:3;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden;">
                         <i class="fas fa-quote-left me-2 opacity-50 text-primary"></i>
-                        {{ rule.description || 'No description.' }}
+                        <span v-html="highlight(rule.description || 'No description.')"></span>
                     </p>
 
                     <!-- CVEs -->
@@ -532,7 +532,7 @@ export default {
                                    @change="togglePageSelection"
                                    aria-label="Select all on page" />
                         </th>
-                        <th class="dt-th dt-th--sortable"
+                        <th class="dt-th dt-th--sortable" style="width:180px;"
                             :class="{ 'dt-th--sorted': sortKey === 'title' }"
                             @click="setSort('title')">
                             <div class="dt-th-inner">
@@ -540,28 +540,21 @@ export default {
                             </div>
                         </th>
                         <th v-show="colVisible.format"
-                            class="dt-th dt-th--sortable"
-                            style="width:90px;"
+                            class="dt-th dt-th--sortable" style="width:80px;"
                             :class="{ 'dt-th--sorted': sortKey === 'format' }"
                             @click="setSort('format')">
                             <div class="dt-th-inner">
                                 Format <i class="fas dt-sort-icon" :class="sortIcon('format')"></i>
                             </div>
                         </th>
-                        <th v-show="colVisible.author"
-                            class="dt-th dt-th--sortable"
-                            style="width:130px;"
-                            :class="{ 'dt-th--sorted': sortKey === 'author' }"
-                            @click="setSort('author')">
-                            <div class="dt-th-inner">
-                                Author <i class="fas dt-sort-icon" :class="sortIcon('author')"></i>
-                            </div>
+                        <th v-show="colVisible.editor" class="dt-th" style="width:140px;">
+                            Editor
                         </th>
                         <th v-show="colVisible.description" class="dt-th">Description</th>
-                        <th v-show="colVisible.tags" class="dt-th" style="width:170px;">Tags</th>
+                        <th v-show="colVisible.tags" class="dt-th" style="width:160px;">Tags</th>
+                        <th v-show="colVisible.cves" class="dt-th" style="width:130px;">CVEs</th>
                         <th v-show="colVisible.created"
-                            class="dt-th dt-th--sortable"
-                            style="width:120px;"
+                            class="dt-th dt-th--sortable" style="width:110px;"
                             :class="{ 'dt-th--sorted': sortKey === 'creation_date' }"
                             @click="setSort('creation_date')">
                             <div class="dt-th-inner">
@@ -569,15 +562,14 @@ export default {
                             </div>
                         </th>
                         <th v-show="colVisible.votes"
-                            class="dt-th dt-th--sortable"
-                            style="width:90px;"
+                            class="dt-th dt-th--sortable" style="width:120px;"
                             :class="{ 'dt-th--sorted': sortKey === 'vote_up' }"
                             @click="setSort('vote_up')">
                             <div class="dt-th-inner">
                                 Votes <i class="fas dt-sort-icon" :class="sortIcon('vote_up')"></i>
                             </div>
                         </th>
-                        <th class="dt-th dt-th--actions" style="width:110px;">Actions</th>
+                        <th class="dt-th dt-th--actions" style="width:100px;">Actions</th>
                     </tr>
                 </thead>
 
@@ -585,8 +577,9 @@ export default {
                     <template v-for="rule in items" :key="rule.id">
                         <tr class="dt-row"
                             :class="{
-                                'dt-row--selected': isSelected(rule),
-                                'dt-row--expanded': expandedId === rule.id,
+                                'dt-row--selected':  isSelected(rule),
+                                'dt-row--expanded':  expandedId === rule.id,
+                                'dt-row--favorited': rule.is_favorited,
                             }">
 
                             <td v-if="isSelectable" class="dt-td dt-td--checkbox">
@@ -596,9 +589,11 @@ export default {
                                        :aria-label="'Select ' + rule.title" />
                             </td>
 
-                            <td class="dt-td dt-td--truncate" style="max-width:240px;">
+                            <td class="dt-td dt-td--truncate" style="max-width:180px;">
                                 <a :href="'/rule/detail_rule/' + rule.id" class="dt-rule-title"
-                                   :title="rule.title">{{ rule.title }}</a>
+                                   :title="rule.title"
+                                   v-html="highlight(rule.title)">
+                                </a>
                             </td>
 
                             <td v-show="colVisible.format" class="dt-td">
@@ -608,13 +603,19 @@ export default {
                                 </span>
                             </td>
 
-                            <td v-show="colVisible.author"
-                                class="dt-td dt-td--truncate" style="max-width:130px;">
-                                {{ rule.author || '—' }}
+                            <td v-show="colVisible.editor" class="dt-td" style="max-width:140px;"
+                                @click.stop>
+                                <user-chip
+                                    :user-id="rule.user_id"
+                                    :username="rule.editor"
+                                    :avatar="rule.editor_avatar"
+                                    size="xs">
+                                </user-chip>
                             </td>
 
                             <td v-show="colVisible.description" class="dt-td dt-td--truncate">
-                                <span class="text-muted">{{ rule.description || '—' }}</span>
+                                <span class="text-muted"
+                                      v-html="highlight(rule.description || '—')"></span>
                             </td>
 
                             <td v-show="colVisible.tags" class="dt-td" @click.stop>
@@ -624,36 +625,78 @@ export default {
                                 <span v-else class="text-muted small">—</span>
                             </td>
 
+                            <td v-show="colVisible.cves" class="dt-td" @click.stop>
+                                <vulnerability-displays-list
+                                    object-type="rule" :object-id="rule.id" :max-visible="2">
+                                </vulnerability-displays-list>
+                            </td>
+
                             <td v-show="colVisible.created" class="dt-td"
                                 style="white-space:nowrap;font-size:.78rem;">
                                 {{ formatDate(rule.creation_date) }}
                             </td>
 
                             <td v-show="colVisible.votes" class="dt-td">
-                                <span class="text-success me-2" style="font-size:.82rem;">
-                                    <i class="fas fa-thumbs-up me-1"></i>{{ rule.vote_up }}
-                                </span>
-                                <span class="text-danger" style="font-size:.82rem;">
-                                    <i class="fas fa-thumbs-down me-1"></i>{{ rule.vote_down }}
-                                </span>
+                                <div class="rl-vote-row">
+                                    <button class="rl-vote-btn rl-vote-btn--up"
+                                            :class="{ 'rl-vote-disabled': !canVote }"
+                                            :title="canVote ? 'Upvote' : 'Login to vote'"
+                                            @click.stop="handleVote('up', rule)">
+                                        <i class="fas fa-thumbs-up"></i>
+                                        <span>{{ rule.vote_up }}</span>
+                                    </button>
+                                    <button class="rl-vote-btn rl-vote-btn--down"
+                                            :class="{ 'rl-vote-disabled': !canVote }"
+                                            :title="canVote ? 'Downvote' : 'Login to vote'"
+                                            @click.stop="handleVote('down', rule)">
+                                        <i class="fas fa-thumbs-down"></i>
+                                        <span>{{ rule.vote_down }}</span>
+                                    </button>
+                                </div>
                             </td>
 
                             <td class="dt-td dt-td--actions">
                                 <div class="dt-actions">
-                                    <a :href="'/rule/detail_rule/' + rule.id"
-                                       class="dt-action-btn" title="View">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <a v-if="canEdit && (isOwner(rule) || currentUserIsAdmin)"
-                                       :href="'/rule/edit_rule/' + rule.id"
-                                       class="dt-action-btn" title="Edit">
-                                        <i class="fas fa-pencil"></i>
-                                    </a>
-                                    <button v-if="canDelete && (isOwner(rule) || currentUserIsAdmin)"
-                                            class="dt-action-btn dt-action-btn--danger" title="Delete"
-                                            @click="$emit('delete', rule)">
-                                        <i class="fas fa-trash"></i>
+                                    <!-- Favori : toujours visible -->
+                                    <button v-if="canFavorite"
+                                            class="dt-action-btn"
+                                            :class="{ 'rl-fav-active': rule.is_favorited }"
+                                            :title="rule.is_favorited ? 'Remove from favorites' : 'Add to favorites'"
+                                            @click.stop="handleFavorite(rule)">
+                                        <i class="fa-star" :class="rule.is_favorited ? 'fas' : 'far'"></i>
                                     </button>
+
+                                    <!-- Dropdown secondaire -->
+                                    <div class="rl-action-dropdown" @click.stop>
+                                        <button class="dt-action-btn rl-action-dropdown-toggle" title="More actions">
+                                            <i class="fas fa-ellipsis-v" style="font-size:.7rem;"></i>
+                                        </button>
+                                        <div class="rl-action-menu">
+                                            <a :href="'/rule/detail_rule/' + rule.id"
+                                               class="rl-action-item">
+                                                <i class="fas fa-eye"></i> View
+                                            </a>
+                                            <a :href="'/rule/report/' + rule.id"
+                                               class="rl-action-item rl-action-item--muted">
+                                                <i class="fas fa-flag"></i> Report
+                                            </a>
+                                            <template v-if="canEdit && (isOwner(rule) || currentUserIsAdmin)">
+                                                <div class="rl-action-divider"></div>
+                                                <a :href="'/rule/edit_rule/' + rule.id"
+                                                   class="rl-action-item">
+                                                    <i class="fas fa-pencil"></i> Edit
+                                                </a>
+                                            </template>
+                                            <template v-if="canDelete && (isOwner(rule) || currentUserIsAdmin)">
+                                                <button class="rl-action-item rl-action-item--danger"
+                                                        @click="$emit('delete', rule)">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <!-- Expand : toujours en dernier -->
                                     <button class="dt-action-btn dt-action-btn--expand"
                                             :class="{ 'is-expanded': expandedId === rule.id }"
                                             title="Expand" @click="toggleExpand(rule)">
@@ -667,51 +710,115 @@ export default {
                         <!-- Expanded row -->
                         <tr v-if="expandedId === rule.id"
                             :key="'expand-' + rule.id" class="dt-row-expand">
-                            <td :colspan="tableColspan" class="dt-expand-cell">
-                                <div class="dt-expand-grid mb-2">
-                                    <div class="dt-expand-field">
-                                        <label>Author</label><span>{{ rule.author || '—' }}</span>
-                                    </div>
-                                    <div class="dt-expand-field">
-                                        <label>License</label><span>{{ rule.license || '—' }}</span>
-                                    </div>
-                                    <div class="dt-expand-field">
-                                        <label>Created</label><span>{{ rule.creation_date || '—' }}</span>
-                                    </div>
-                                    <div class="dt-expand-field">
-                                        <label>Last modified</label><span>{{ rule.last_modif || '—' }}</span>
-                                    </div>
-                                    <div v-if="rule.source" class="dt-expand-field">
-                                        <label>Source</label>
-                                        <span>
+                            <td :colspan="tableColspan" class="dt-expand-cell p-0">
+                                <div class="rl-expand-wrap">
+
+                                    <!-- ① Meta strip -->
+                                    <div class="rl-expand-meta">
+                                        <div class="rl-expand-kv">
+                                            <span class="rl-expand-k">Author</span>
+                                            <span class="rl-expand-v">{{ rule.author && rule.author !== 'Unknown' ? rule.author : '—' }}</span>
+                                        </div>
+                                        <div class="rl-expand-kv" @click.stop>
+                                            <span class="rl-expand-k">Editor</span>
+                                            <span class="rl-expand-v">
+                                                <user-chip
+                                                    :user-id="rule.user_id"
+                                                    :username="rule.editor"
+                                                    :avatar="rule.editor_avatar"
+                                                    size="xs">
+                                                </user-chip>
+                                            </span>
+                                        </div>
+                                        <div class="rl-expand-kv">
+                                            <span class="rl-expand-k">Format</span>
+                                            <span class="rl-expand-v">
+                                                <span v-if="rule.format" class="badge rounded-pill bg-dark">
+                                                    {{ rule.format.toUpperCase() }}
+                                                </span>
+                                                <span v-else>—</span>
+                                            </span>
+                                        </div>
+                                        <div class="rl-expand-kv">
+                                            <span class="rl-expand-k">License</span>
+                                            <span class="rl-expand-v">
+                                                {{ rule.license && rule.license !== 'Unknown' ? rule.license : 'No license' }}
+                                            </span>
+                                        </div>
+                                        <div class="rl-expand-kv">
+                                            <span class="rl-expand-k">Version</span>
+                                            <span class="rl-expand-v">
+                                                <span class="badge text-bg-light border px-1">
+                                                    {{ rule.version && rule.version !== 'Unknown' ? rule.version : '1.0' }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div class="rl-expand-kv">
+                                            <span class="rl-expand-k">Created</span>
+                                            <span class="rl-expand-v">{{ formatDate(rule.creation_date) }}</span>
+                                        </div>
+                                        <div class="rl-expand-kv">
+                                            <span class="rl-expand-k">Modified</span>
+                                            <span class="rl-expand-v">{{ fromNow(rule.last_modif) }}</span>
+                                        </div>
+                                        <div v-if="rule.source" class="rl-expand-kv rl-expand-kv--source">
+                                            <span class="rl-expand-k">
+                                                <i class="fas fa-link me-1"></i>Source
+                                            </span>
                                             <a :href="rule.source" target="_blank" rel="noreferrer"
-                                               class="text-primary">{{ rule.source }}</a>
-                                        </span>
+                                               class="rl-expand-v text-primary rl-expand-source-link">
+                                                {{ rule.source }}
+                                            </a>
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div v-if="rule.description" class="dt-expand-field mb-2">
-                                    <label>Description</label><span>{{ rule.description }}</span>
-                                </div>
+                                    <!-- ② Description -->
+                                    <div v-if="rule.description" class="rl-expand-desc">
+                                        <span class="rl-expand-k">
+                                            <i class="fas fa-quote-left me-1 opacity-50"></i>Description
+                                        </span>
+                                        <p class="mb-0 text-muted" style="font-size:.83rem;line-height:1.5;">
+                                            {{ rule.description }}
+                                        </p>
+                                    </div>
 
-                                <div v-if="rule.tags && rule.tags.length" class="mb-2" @click.stop>
-                                    <tags-displays-list object-type="rule" :object-id="rule.id"
-                                        :max-visible="10">
-                                    </tags-displays-list>
-                                </div>
+                                    <!-- ③ Tags + CVEs (left) / Code (right) -->
+                                    <div class="rl-expand-bottom">
+                                        <div class="rl-expand-taxonomy" @click.stop>
+                                            <div class="rl-expand-taxonomy-section">
+                                                <span class="rl-expand-k mb-1">
+                                                    <i class="fas fa-tags text-primary me-1"></i>Tags
+                                                </span>
+                                                <tags-displays-list object-type="rule" :object-id="rule.id"
+                                                    :max-visible="15">
+                                                </tags-displays-list>
+                                            </div>
+                                            <div v-if="cvesMap[rule.id]"
+                                                 class="rl-expand-taxonomy-section mt-2">
+                                                <span class="rl-expand-k mb-1">
+                                                    <i class="fas fa-shield-virus text-danger me-1"></i>CVEs
+                                                </span>
+                                                <vulnerability-displays-list object-type="rule"
+                                                    :object-id="rule.id" :max-visible="8">
+                                                </vulnerability-displays-list>
+                                            </div>
+                                        </div>
 
-                                <div v-if="rule.cves && rule.cves.length" class="mb-2" @click.stop>
-                                    <vulnerability-displays-list object-type="rule" :object-id="rule.id"
-                                        :max-visible="4">
-                                    </vulnerability-displays-list>
-                                </div>
+                                        <div class="rl-expand-code">
+                                            <code-viewer v-if="rule.to_string"
+                                                :code="rule.to_string"
+                                                :language="ruleLanguage(rule.format)"
+                                                :title="rule.title"
+                                                max-height="300px">
+                                            </code-viewer>
+                                            <div v-else
+                                                 class="rl-expand-no-content text-muted small fst-italic">
+                                                No content available.
+                                            </div>
+                                        </div>
+                                    </div>
 
-                                <code-viewer v-if="rule.to_string"
-                                    :code="rule.to_string"
-                                    :language="ruleLanguage(rule.format)"
-                                    :title="rule.title"
-                                    max-height="380px">
-                                </code-viewer>
+                                </div>
                             </td>
                         </tr>
                     </template>
@@ -817,9 +924,10 @@ export default {
         // ── Column visibility (table mode) ────────────────────────────────
         const TOGGLEABLE_COLS = [
             { key: 'format',      label: 'Format' },
-            { key: 'author',      label: 'Author' },
+            { key: 'editor',      label: 'Editor' },
             { key: 'description', label: 'Description' },
             { key: 'tags',        label: 'Tags' },
+            { key: 'cves',        label: 'CVEs' },
             { key: 'created',     label: 'Created' },
             { key: 'votes',       label: 'Votes' },
         ]
@@ -1027,8 +1135,17 @@ export default {
         )
 
         // ── Expand / collapse ─────────────────────────────────────────────
-        function toggleExpand(rule) {
+        const cvesMap = Vue.reactive({}) // ruleId → boolean (has CVEs)
+
+        async function toggleExpand(rule) {
             expandedId.value = expandedId.value === rule.id ? null : rule.id
+            if (expandedId.value === rule.id && !(rule.id in cvesMap)) {
+                try {
+                    const res  = await fetch(`/rule/get_rule_vulnerabilities_display/${rule.id}`)
+                    const data = await res.json()
+                    cvesMap[rule.id] = !!(data.total_vulnerabilities > 0)
+                } catch { cvesMap[rule.id] = false }
+            }
         }
 
         // ── Vote / favorite ───────────────────────────────────────────────
@@ -1081,6 +1198,25 @@ export default {
             const end   = Math.min(page.value * perPage.value, total.value)
             return `${start}–${end} of ${total.value}`
         })
+
+        // ── Search highlight ──────────────────────────────────────────────
+        function highlight(text) {
+            if (!text) return ''
+            const q = search.value.trim()
+            if (!q || q.length < 2) return _esc(text)
+            const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            return _esc(text).replace(
+                new RegExp(escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+                m => `<mark class="rl-highlight">${m}</mark>`
+            )
+        }
+        function _esc(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+        }
 
         // ── Date formatting ───────────────────────────────────────────────
         function fromNow(dateStr) {
@@ -1137,7 +1273,7 @@ export default {
             selectedTags, selectedSources, selectedLicenses, selectedVulns,
             rulesFormats, activeFilterCount,
             // UI
-            viewMode, expandedId,
+            viewMode, expandedId, cvesMap,
             // Columns
             TOGGLEABLE_COLS, colVisible, toggleColumn,
             // Selection
@@ -1156,7 +1292,7 @@ export default {
             toggleExpand,
             handleVote, handleFavorite,
             emitBulkAction, emitSend,
-            fromNow, formatDate, ruleLanguage,
+            fromNow, formatDate, ruleLanguage, highlight,
         }
     },
 }
