@@ -1,14 +1,8 @@
 {% extends 'base.html' %}
 {% block head %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/external_library/codemirror/codemirror.min.css') }}">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/idea.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/yaml/yaml.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/closebrackets.js"></script>
-
-
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 {% endblock %}
 {% block content %}
 <div class="container mt-4" v-cloak >
@@ -121,7 +115,9 @@
                 <label class="form-label-styled mb-0" for="format">{{ form.format.label.text }}<span class="req-badge">required</span></label>
                 <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Detection format — defines which parser validates the rule content.">?</button>
               </div>
-              {{ form.format(class_="form-select") }}
+              <select v-model="manualFormat" name="format" class="form-select">
+                <option v-for="fmt in rules_formats" :key="fmt.id" :value="fmt.name">[[ fmt.name ]]</option>
+              </select>
               {% if form.format.errors %}
               <div class="invalid-feedback d-block">{{ form.format.errors[0] | safe }}</div>
               {% endif %}
@@ -194,9 +190,15 @@
               <label class="form-label-styled mb-0" for="editor">{{ form.to_string.label.text }}<span class="req-badge">required</span></label>
               <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Paste the full rule content. Syntax is validated against the selected format before saving.">?</button>
             </div>
-            <div class="border rounded-3 overflow-hidden shadow-sm">
-              <textarea id="editor" name="to_string">{{ (form.to_string.data or '') | e }}</textarea>
-            </div>
+            <smart-editor
+              v-model="manualContent"
+              mode="code"
+              :language="manualFormat || 'text'"
+              name="to_string"
+              placeholder="Paste your rule content here…"
+              min-height="400px"
+              max-height="80vh">
+            </smart-editor>
             {% if form.to_string.errors %}
             <div class="invalid-feedback d-block mt-1">{{ form.to_string.errors[0] | safe }}</div>
             {% endif %}
@@ -256,9 +258,15 @@
               <label class="form-label-styled mb-0" for="content">Rule content<span class="req-badge">required</span></label>
               <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Supports YARA, Sigma, Suricata, Zeek, CRS, Wazuh, Nova, NSE, Elastic.">?</button>
             </div>
-            <div class="border rounded-3 overflow-hidden shadow-sm">
-              <textarea id="content" name="content" rows="6" placeholder="Paste your rule content here..." required></textarea>
-            </div>
+            <smart-editor
+              v-model="parseContent"
+              mode="code"
+              :language="ruleType || 'text'"
+              name="content"
+              placeholder="Paste your rule content here…"
+              min-height="300px"
+              max-height="60vh">
+            </smart-editor>
           </div>
 
           <div class="mb-4">
@@ -470,19 +478,17 @@
 
 
 {% block script %}
+<script>
+window.__manual_content = {{ (form.to_string.data or '') | tojson }};
+window.__manual_format  = {{ (form.format.data  or '') | tojson }};
+</script>
 <script type="module">
 
-      /**
-       * 
-       *    #######################################
-       *    #     Redirect to the good pannel     #
-       *    #######################################
-       * 
-       * */
-
-
-
       document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
+                  new bootstrap.Tooltip(el, { trigger: 'hover' })
+            );
+
             const params = new URLSearchParams(window.location.search);
             const tab = params.get('tab');
 
@@ -508,61 +514,10 @@
             }
       });
 
-
-
-      $(document).ready(function () {
-            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
-                  new bootstrap.Tooltip(el, { trigger: 'hover' })
-            );
-
-            const getTheme = () => document.body.classList.contains('dark-mode') ? 'dracula' : 'idea';
-            const CM_CONFIG = { lineNumbers: true, mode: 'yaml', autoCloseBrackets: true, lineWrapping: true };
-
-            let editor  = null;  // Manual tab  (#editor)
-            let editor2 = null;  // Parse tab   (#content)
-
-            function initManual() {
-                  if (editor) return;
-                  const el = document.getElementById('editor');
-                  if (!el) return;
-                  editor = CodeMirror.fromTextArea(el, { ...CM_CONFIG, theme: getTheme() });
-            }
-
-            function initParse() {
-                  if (editor2) return;
-                  const el = document.getElementById('content');
-                  if (!el) return;
-                  editor2 = CodeMirror.fromTextArea(el, { ...CM_CONFIG, theme: getTheme() });
-            }
-
-            // Init only the editor whose tab is currently active on page load
-            const activePane = document.querySelector('#createTabs .nav-link.active');
-            const activeHref = activePane ? activePane.getAttribute('href') : '#chap1-pane';
-            if (activeHref === '#chap1-pane') initManual();
-            if (activeHref === '#chap2-pane') initParse();
-
-            // Lazy init on tab switch
-            document.querySelectorAll('#createTabs [data-bs-toggle="tab"]').forEach(tab => {
-                  tab.addEventListener('shown.bs.tab', function (e) {
-                        const target = e.target.getAttribute('href');
-                        if (target === '#chap1-pane') initManual();
-                        if (target === '#chap2-pane') initParse();
-                  });
-            });
-
-            // Keep theme in sync with dark mode toggle
-            new MutationObserver(() => {
-                  const theme = getTheme();
-                  if (editor)  editor.setOption('theme', theme);
-                  if (editor2) editor2.setOption('theme', theme);
-            }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
-      });
-
-
       const { createApp, ref, onMounted, watch } = Vue;
       import { message_list, create_message } from '/static/js/toaster.js';
       import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js';
-      import CodeMirrorEditor from '/static/js/codeMirror/codeMirrorEditor.js';
+      import SmartEditor from '/static/js/components/smart-editor.js';
       import TagInput from '/static/js/tags/tagInput.js';
       import VersionPicker from '/static/js/tags/utils/versionPicker.js';
 
@@ -570,11 +525,15 @@
             delimiters: ['[[', ']]'],
             components: {
                   'vulnerability-input': VulnerabilityInput,
-                  'codemirror-editor': CodeMirrorEditor,
+                  'smart-editor': SmartEditor,
                   'tag-input': TagInput,
                   'version-picker': VersionPicker
             },
             setup() {
+                  const manualContent = ref(window.__manual_content || '');
+                  const manualFormat  = ref(window.__manual_format  || '');
+                  const parseContent  = ref('');
+
                   const license = ref([]);
                   const selectedLicense = ref("");
                   const url              = ref("");
@@ -645,6 +604,7 @@
 
                               if (rules_formats.value.length > 0) {
                                     ruleType.value = rules_formats.value[0].name;
+                                    if (!manualFormat.value) manualFormat.value = rules_formats.value[0].name;
                               }
                         }
                   }
@@ -747,12 +707,11 @@
                         is_loading_zip,
                         import_zip,
 
+                        manualContent,
+                        manualFormat,
+                        parseContent,
                         detectedVulnerabilities,
-                        VulnerabilityInput,
-                        CodeMirrorEditor,
                         selectedTags,
-                        TagInput,
-                        VersionPicker,
                         formData
                   };
             }
