@@ -38,6 +38,8 @@ Rulezet is available as an online service at [https://rulezet.org/](https://rule
 | Workers | Python `threading` — daemon background job queue |
 | Similarity | TF-IDF + FAISS + rapidfuzz |
 
+---Here is the updated documentation in English, harmonized with your `manage.py` structure.
+
 ---
 
 ## Installation
@@ -45,47 +47,73 @@ Rulezet is available as an online service at [https://rulezet.org/](https://rule
 > A Python virtual environment is strongly recommended.
 
 ```bash
-./install.sh
-```
+# 1. Create a virtual environment
+python3 -m venv env
+source env/bin/activate
 
-This installs Python dependencies inside `env/` and sets up the project.
+# 2. Install dependencies and initialize the database
+python3 manage.py init
+
+```
 
 ---
 
-## First Run
+## Quick Start
 
-### 1. Initialize the database
+### 1. Initialize the Database
+
+If you have already run `init`, this step is likely complete. If you need to initialize or re-initialize tables:
 
 ```bash
 source env/bin/activate
-python3 app.py -i
-```
-
-The output will show the generated admin credentials:
+python3 manage.py db-init
 
 ```
-====================================================================================================
-✅ Admin account created successfully!
-🔑 API Key     : xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-👤 Username    : admin@admin.admin
-🔐 Password    : xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   (⚠️ Change after first login)
-====================================================================================================
-```
 
-### 2. Launch the application
+*Note: This will display your temporary administrator credentials.*
+
+### 2. Launch the Application
+
+For local development:
 
 ```bash
-./launch.sh -l
-# or manually:
-FLASKENV=development python3 app.py
+python3 manage.py start
+
 ```
 
-The app runs on `http://127.0.0.1:7009` by default.
+The application runs on `http://127.0.0.1:7009` by default.
 
-### 3. Production (Gunicorn)
+---
+
+## Maintenance & Production
+
+### Update after `git pull`
+
+After pulling the latest code changes, use the following command to synchronize your dependencies and database:
 
 ```bash
-gunicorn -w 4 wsgi:app
+python3 manage.py update
+
+```
+
+### Production Deployment
+
+Use the dedicated command to automate the backup, update, and service restart process:
+
+```bash
+python3 manage.py deploy
+
+```
+
+---
+
+## Help
+
+To view all available options at any time:
+
+```bash
+python3 manage.py --help
+
 ```
 
 ---
