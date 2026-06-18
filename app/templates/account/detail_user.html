@@ -40,7 +40,7 @@
                     title="Online" style="margin-bottom:5px;margin-right:5px;"></span>
             </div>
             <h1 class="mb-2 text-primary fw-bold text-uppercase tracking-wider" style="letter-spacing: 2px;">
-                {{ user.username }}
+                {{ user.first_name }} {{ user.last_name }}
             </h1>
 
             <p class="text-muted mb-0 fw-medium">
@@ -136,11 +136,11 @@
                                 <img src="{{ user.profile_picture }}"
                                     style="width:100%;height:100%;object-fit:cover;">
                             {% else %}
-                                {{ user.first_name[0] + user.last_name[0] }}
+                                {{ user.first_name[0]  }}
                             {% endif %}
                         </div>
                         <div class="avatar-info">
-                            <div class="avatar-name">{{ user.username }}</div>
+                            <div class="avatar-name">{{ user.first_name }} {{ user.last_name }}</div>
                         </div>
                     </div>
                     <!-- Main Info Grid -->
@@ -199,6 +199,12 @@
                             <label class="info-item-label">Last seen</label>
                             <div class="info-item-value">
                                 {{ user.last_seen if user.last_seen else '—' }}
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label class="info-item-label">Username</label>
+                            <div class="info-item-value">
+                                {{ user.username if user.username else '—' }}
                             </div>
                         </div>
                         {% if user.bio %}
