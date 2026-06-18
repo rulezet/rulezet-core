@@ -518,7 +518,7 @@ export default {
                                             <i class="fas fa-flag me-2 text-muted"></i>Report Issue
                                         </a>
                                     </li>
-                                    <template v-if="canEdit && (isOwner(rule) || currentUserIsAdmin)">
+                                    <template v-if="numericCurrentUserId && (isOwner(rule) || currentUserIsAdmin)">
                                         <li><hr class="dropdown-divider"></li>
                                         <li>
                                             <a class="dropdown-item rounded-2"
@@ -527,7 +527,7 @@ export default {
                                             </a>
                                         </li>
                                     </template>
-                                    <template v-if="canDelete && (isOwner(rule) || currentUserIsAdmin)">
+                                    <template v-if="numericCurrentUserId && (isOwner(rule) || currentUserIsAdmin)">
                                         <li>
                                             <button class="dropdown-item rounded-2 text-danger"
                                                     @click="$emit('delete', rule)">
@@ -716,14 +716,14 @@ export default {
                                                class="rl-action-item rl-action-item--muted">
                                                 <i class="fas fa-flag"></i> Report
                                             </a>
-                                            <template v-if="canEdit && (isOwner(rule) || currentUserIsAdmin)">
+                                            <template v-if="numericCurrentUserId && (isOwner(rule) || currentUserIsAdmin)">
                                                 <div class="rl-action-divider"></div>
                                                 <a :href="'/rule/edit_rule/' + rule.id"
                                                    class="rl-action-item">
                                                     <i class="fas fa-pencil"></i> Edit
                                                 </a>
                                             </template>
-                                            <template v-if="canDelete && (isOwner(rule) || currentUserIsAdmin)">
+                                            <template v-if="numericCurrentUserId && (isOwner(rule) || currentUserIsAdmin)">
                                                 <button class="rl-action-item rl-action-item--danger"
                                                         @click="$emit('delete', rule)">
                                                     <i class="fas fa-trash"></i> Delete
@@ -1428,7 +1428,7 @@ export default {
             selectionCount, showSelectBanner, showBulkBar,
             selectedRulesList, showAllPicked, removeFromSelection,
             // Computed
-            numericUserId, tableColspan, footerInfo,
+            numericUserId, numericCurrentUserId, tableColspan, footerInfo,
             // Methods
             isOwner, isFilterHidden,
             fetchData, onFilterChange, resetFilters,
