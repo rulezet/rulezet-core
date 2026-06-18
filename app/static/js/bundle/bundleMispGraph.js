@@ -18,30 +18,65 @@ const BUNDLE_PROP_ATTRS = ['author', 'description', 'date']
 const META_PROP_ATTRS   = ['format', 'author', 'version', 'license', 'source', 'description']
 
 export const GRAPH_CONFIG = {
-    // Maximum nodes before the graph is trimmed to the most-connected ones.
     maxNodes: 2000,
-
-    // Pivotick layout algorithm.
     layout: { type: 'force' },
-
-    // Pivotick UI options (mode, sidebar initial state).
-    pivotickUI: {
-        mode: 'full',
-        sidebar: { collapsed: 'auto' },
-    },
-
-    // Node style map — keyed by the "type" field set on each node.
-    // Supported shapes: circle | square | hexagon | triangle.
-    nodeStyles: {
-        'bundle':        { shape: 'hexagon',  color: '#2563eb', size: 42 },
-        'metadata':      { shape: 'square',   color: '#16a34a', size: 28 },
-        'rule':          { shape: 'circle',   color: '#ea580c', size: 22 },
-        'property':      { shape: 'circle',   color: '#94a3b8', size: 12 },
-        'vulnerability': { shape: 'triangle', color: '#dc2626', size: 20 },
-        'tag':           { shape: 'circle',   color: '#9333ea', size: 16 },
-        '_default':      { shape: 'circle',   color: '#64748b', size: 14 },
-    },
+    pivotickUI: { mode: 'full', sidebar: { collapsed: 'auto' } },
 }
+
+// Node shapes stay the same in both themes; only colors change.
+const _SHAPES = {
+    'bundle':        'hexagon',
+    'metadata':      'square',
+    'rule':          'circle',
+    'property':      'circle',
+    'vulnerability': 'triangle',
+    'tag':           'circle',
+    '_default':      'circle',
+}
+
+const _COLORS_LIGHT = {
+    'bundle':        '#2563eb',
+    'metadata':      '#16a34a',
+    'rule':          '#ea580c',
+    'property':      '#94a3b8',
+    'vulnerability': '#dc2626',
+    'tag':           '#9333ea',
+    '_default':      '#64748b',
+}
+
+const _COLORS_DARK = {
+    'bundle':        '#60a5fa',
+    'metadata':      '#4ade80',
+    'rule':          '#fb923c',
+    'property':      '#475569',
+    'vulnerability': '#f87171',
+    'tag':           '#c084fc',
+    '_default':      '#94a3b8',
+}
+
+const _SIZES = {
+    'bundle': 42, 'metadata': 28, 'rule': 22,
+    'property': 12, 'vulnerability': 20, 'tag': 16, '_default': 14,
+}
+
+function _isDark() {
+    return document.documentElement.classList.contains('dark-mode')
+}
+
+function _nodeStyles() {
+    const colors = _isDark() ? _COLORS_DARK : _COLORS_LIGHT
+    return Object.fromEntries(
+        Object.keys(_SHAPES).map(type => [type, {
+            shape: _SHAPES[type],
+            color: colors[type],
+            size:  _SIZES[type],
+        }])
+    )
+}
+
+// Track live Pivotick instances and the theme observer so we can clean up.
+const _instances = new Map()  // containerId → { pivotick, jsonText }
+let _themeObserver = null
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Parsing helpers
@@ -269,11 +304,18 @@ export function initBundleGraph(containerId, jsonText) {
     const container = document.getElementById(containerId)
     if (!container) return
 
+    // Destroy any existing Pivotick instance for this container.
+    const prev = _instances.get(containerId)
+    if (prev?.destroy) { try { prev.destroy() } catch {} }
+    _instances.delete(containerId)
+
+    // Disconnect any running theme observer before setting a new one.
+    if (_themeObserver) { _themeObserver.disconnect(); _themeObserver = null }
+
     // Load pivotick.iife.js if not yet present, then poll until window.Pivotick is ready.
     if (typeof window.Pivotick !== 'function') {
         _showSpinner(container, 'Loading Pivotick…')
 
-        // Inject the script tag once (guard against double-inject)
         if (!document.querySelector('script[data-pivotick]')) {
             const s = document.createElement('script')
             s.src = '/static/js/pivotick.iife.js'
@@ -297,7 +339,6 @@ export function initBundleGraph(containerId, jsonText) {
 
     _showSpinner(container, 'Parsing MISP event…')
 
-    // Yield to the browser so the spinner actually paints before heavy work
     setTimeout(() => {
         let parsed
         try {
@@ -312,9 +353,9 @@ export function initBundleGraph(containerId, jsonText) {
             return
         }
 
-        const { maxNodes, layout, pivotickUI, nodeStyles } = GRAPH_CONFIG
+        const { maxNodes, layout, pivotickUI } = GRAPH_CONFIG
+        const nodeStyles = _nodeStyles()
 
-        // Trim to most-connected nodes on very large bundles
         if (parsed.nodes.length > maxNodes) {
             const degree = {}
             for (const e of parsed.edges) {
@@ -329,7 +370,7 @@ export function initBundleGraph(containerId, jsonText) {
 
         container.innerHTML = ''
 
-        new window.Pivotick(container, parsed, {
+        const instance = new window.Pivotick(container, parsed, {
             isDirected: true,
             layout,
             simulation: {
@@ -397,6 +438,19 @@ export function initBundleGraph(containerId, jsonText) {
                     },
                 },
             },
+        })
+
+        _instances.set(containerId, instance)
+
+        // Re-render with new colors whenever the user toggles dark/light mode.
+        _themeObserver = new MutationObserver(() => {
+            _themeObserver.disconnect()
+            _themeObserver = null
+            initBundleGraph(containerId, jsonText)
+        })
+        _themeObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class'],
         })
     }, 0)
 }

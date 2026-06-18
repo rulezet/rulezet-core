@@ -1,0 +1,33 @@
+/* Dark mode overrides for Pivotick graph component.
+   Rulezet uses html.dark-mode (class-based), not prefers-color-scheme,
+   so we remap all --pvt-bg-color-* and --pvt-text-color-* here. */
+
+html.dark-mode {
+    /* Canvas and panel backgrounds */
+    --pvt-bg-color-0: #1a1a1a;
+    --pvt-bg-color-1: #212121;
+    --pvt-bg-color-2: #2a2a2a;
+    --pvt-bg-color-3: #303030;
+    --pvt-bg-color-4: #363636;
+    --pvt-bg-color-5: #3c3c3c;
+    --pvt-bg-color-6: #444444;
+    --pvt-bg-color-7: #505050;
+    --pvt-bg-color-8: #5a5a5a;
+
+    /* Text — scale from dark to light */
+    --pvt-text-color-3: #aaaaaa;
+    --pvt-text-color-4: #bbbbbb;
+    --pvt-text-color-5: #cccccc;
+    --pvt-text-color-6: #e0e0e0;
+
+    /* Graph canvas grid */
+    --pvt-graph-grid-color: #242424;
+
+    /* Node stroke (ring around nodes) — use dark bg so it blends */
+    --pvt-node-stroke: #1a1a1a;
+    --pvt-node-dash-stroke: #aaaaaa;
+
+    /* Edge labels */
+    --pvt-edge-label-bg: #303030;
+    --pvt-edge-label-color: #cccccc;
+}
