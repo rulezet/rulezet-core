@@ -606,3 +606,67 @@ Remove any `TELEMETRY_URL`, `TELEMETRY_STARTUP_DELAY`, `TELEMETRY_INTERVAL` over
 - `conftest.py` — creates a fresh SQLite DB per test session with `create_user_test()`, `create_admin_test()`, `create_rule_test()`.
 - Tests use `FLASKENV=testing` which uses `TestingConfig` (SQLite, no CSRF).
 - Test files: `tests/account/test_user.py`, `tests/bundle/test_bundle.py`, `tests/rules/test_rule.py`, `tests/rules/test_search_rules.py`.
+
+---
+
+### Shared UI Components (`app/static/js/components/`)
+
+Reusable Vue 3 components ported from the flask-launchpad template project. All are ES modules — import with a `<script type="module">` tag.
+
+#### Dependencies (already in `app/static/js/`)
+
+| File | Purpose |
+|------|---------|
+| `hljs.min.js` | Syntax highlighting — lazy-loaded by `SmartEditor` and `CodeViewer` |
+| `marked.min.js` | Markdown rendering — lazy-loaded by `SmartEditor` |
+| `pivotick.iife.js` | Graph visualization library — lazy-loaded by `GraphViewer` |
+
+#### Submodule (`modules/pivotick`)
+
+Pivotick source is tracked as a Git submodule at `modules/pivotick` (https://github.com/Pivotick/Pivotick). The built file `pivotick.iife.js` is committed directly to `app/static/js/` and does **not** need to be rebuilt unless the submodule is updated. After cloning the repo, init submodules with:
+
+```bash
+git submodule update --init --recursive
+```
+
+#### Component catalogue
+
+| Component | File | CSS | Description |
+|-----------|------|-----|-------------|
+| `SmartEditor` | `smart-editor.js` | `smart-editor.css` | Multi-mode editor: `code`, `markdown`, `text`. Syntax highlighting (hljs) + markdown preview (marked). |
+| `CodeViewer` | `code-viewer.js` | `code-viewer.css` | Read-only code display with syntax highlighting. Props: `code`, `language`, `filename`. |
+| `DiffViewer` | `diff-viewer.js` | `diff-viewer.css` | Side-by-side or unified diff between two strings. Props: `old_content`, `new_content`. |
+| `AnsiTerminal` | `ansi-terminal.js` | `ansi-terminal.css` | Renders ANSI escape codes as colored terminal output. Prop: `content`. |
+| `ChartViewer` | `chart-viewer.js` | `chart-viewer.css` | Wrapper for ApexCharts-style charts. Sub-charts in `charts/` subfolder. Props: `type`, `data`, `options`. |
+| `FileTree` | `file-tree.js` | `file-tree.css` | Recursive file/folder tree. Emits `select` on node click. Prop: `node` (tree object). |
+| `GraphViewer` | `graph-viewer.js` | `graph-viewer.css` + `pivotick.css` | Network graph powered by Pivotick. Modes: `simple` (viewer) / `dev` (full UI). Props: `nodes`, `edges`. |
+| `RequestBuilder` | `request-builder.js` | `request-builder.css` | HTTP request builder UI — method, URL, headers, body. Emits `send`. |
+| `Timeline` | `timeline.js` | `timeline.css` | Vertical event timeline. Prop: `events` (array of `{date, label, icon, color}`). |
+
+#### Usage pattern
+
+```html
+<!-- In a Jinja template — include the CSS -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+
+<!-- Import and register the component in a <script type="module"> block -->
+<script type="module">
+import { createApp } from '/static/js/vue.global.js'
+import SmartEditor from '/static/js/components/smart-editor.js'
+
+createApp({
+    components: { SmartEditor },
+    // ...
+}).mount('#app')
+</script>
+```
+
+For `GraphViewer`, also include `pivotick.css`:
+```html
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/graph-viewer.css') }}">
+```
+
+#### `charts/` subfolder
+
+`chart-viewer.js` lazy-imports individual chart types from `app/static/js/components/charts/`. Available types: `line`, `area`, `bar`, `bar-h`, `pie`, `donut`, `scatter`, and more. Add new chart types there following the same pattern as existing ones.

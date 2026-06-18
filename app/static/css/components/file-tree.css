@@ -1,0 +1,331 @@
+/*
+  file-tree.css — Interactive collapsible file/directory tree.
+  All classes prefixed .ft-
+*/
+
+/*---FT_BASE---*/
+
+.ft {
+    font-family: var(--font-mono);
+    font-size: .79rem;
+    line-height: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/*---FT_TOOLBAR---*/
+
+.ft-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 4px;
+}
+
+.ft-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 100px;
+    display: flex;
+    align-items: center;
+}
+
+.ft-search-icon {
+    position: absolute;
+    left: 8px;
+    color: var(--text-muted);
+    font-size: .65rem;
+    pointer-events: none;
+}
+
+.ft-search-input {
+    width: 100%;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 24px 4px 26px;
+    font-size: .74rem;
+    font-family: var(--font-mono);
+    color: var(--text-main);
+    outline: none;
+    transition: border-color .15s;
+}
+
+.ft-search-input:focus { border-color: var(--brand); }
+.ft-search-input::placeholder { color: var(--text-muted); }
+
+.ft-search-clear {
+    position: absolute;
+    right: 5px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: .6rem;
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    line-height: 1;
+    transition: color .12s;
+}
+
+.ft-search-clear:hover { color: var(--text-main); }
+
+.ft-toolbar-actions {
+    display: flex;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.ft-toolbar-btn {
+    width: 27px;
+    height: 27px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: .65rem;
+    cursor: pointer;
+    transition: color .12s, border-color .12s, background .12s;
+    flex-shrink: 0;
+}
+
+.ft-toolbar-btn:hover {
+    color: var(--brand);
+    border-color: var(--brand);
+    background: var(--brand-dim);
+}
+
+.ft-toolbar-btn--download:hover {
+    color: #22c55e;
+    border-color: #22c55e;
+    background: rgba(34,197,94,.08);
+}
+
+/*---FT_BODY---*/
+
+.ft-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/*---FT_ROW---*/
+
+.ft-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-right: 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--transition);
+}
+
+.ft-row:hover { background: var(--bg-elevated); }
+
+.ft-row--dir  { color: var(--text-main); }
+.ft-row--file { color: var(--text-secondary); }
+.ft-row--file:hover { color: var(--text-main); }
+
+.ft-row--selected {
+    background: var(--brand-dim) !important;
+    color: var(--brand) !important;
+}
+
+/*---FT_CHEVRON---*/
+
+.ft-chevron {
+    flex-shrink: 0;
+    font-size: .55rem;
+    color: var(--text-muted);
+    width: 10px;
+    text-align: center;
+}
+
+/*---FT_ICON---*/
+
+.ft-icon {
+    flex-shrink: 0;
+    font-size: .72rem;
+    width: 13px;
+    text-align: center;
+}
+
+/*---FT_NAME---*/
+
+.ft-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/*---FT_COUNT---*/
+
+.ft-count {
+    flex-shrink: 0;
+    font-size: .62rem;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 99px;
+    padding: 0 5px;
+    font-family: var(--font-sans);
+}
+
+/*---FT_NO_MATCH---*/
+
+.ft-no-match {
+    font-size: .68rem;
+    color: var(--text-muted);
+    padding-top: 3px;
+    padding-bottom: 3px;
+    font-style: italic;
+    font-family: var(--font-sans);
+}
+
+/*---FT_EMPTY---*/
+
+.ft-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 32px 16px;
+    color: var(--text-muted);
+    font-size: .8rem;
+    font-family: var(--font-sans);
+}
+
+.ft-empty i { font-size: 1rem; }
+
+/*---FT_SKELETON---*/
+
+.ft-skeleton {
+    height: 13px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    margin: 5px 8px;
+    animation: ft-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ft-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .35; }
+}
+
+/*---FT_PREVIEW---*/
+
+.ft-preview {
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.ft-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: .75rem;
+    overflow: hidden;
+}
+
+.ft-preview-icon {
+    color: var(--brand);
+    font-size: .72rem;
+    flex-shrink: 0;
+}
+
+.ft-preview-name {
+    font-family: var(--font-mono);
+    color: var(--text-main);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.ft-preview-path {
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1;
+}
+
+.ft-preview-actions {
+    display: flex;
+    gap: 3px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.ft-preview-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: .65rem;
+    cursor: pointer;
+    transition: color .12s, border-color .12s;
+}
+
+.ft-preview-btn:hover { color: var(--text-main); border-color: var(--border); }
+
+.ft-preview-body {
+    position: relative;
+    max-height: 340px;
+    overflow-y: auto;
+    background: #0d1117;
+}
+
+.ft-preview-code {
+    margin: 0;
+    padding: 14px 16px;
+    font-size: .76rem;
+    font-family: var(--font-mono);
+    color: #c9d1d9;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.65;
+    scrollbar-width: thin;
+    scrollbar-color: #30363d #0d1117;
+}
+
+.ft-preview-loading,
+.ft-preview-error,
+.ft-preview-no-fn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 20px 16px;
+    font-size: .78rem;
+    font-family: var(--font-sans);
+    color: #7d8590;
+}
+
+.ft-preview-error { color: #f87171; }
