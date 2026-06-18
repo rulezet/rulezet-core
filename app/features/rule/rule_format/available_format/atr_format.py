@@ -57,7 +57,7 @@ class ATRRule(RuleType):
     model-security, privilege-escalation.
 
     Upstream: https://github.com/Agent-Threat-Rule/agent-threat-rules
-    npm:      `agent-threat-rules` (MIT, currently v2.1.2 / 338 rules).
+    npm:      `agent-threat-rules` (MIT, currently v3.5.0 / 652 rules).
     """
 
     @property
