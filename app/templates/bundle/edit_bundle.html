@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Edit Bundle — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+{% endblock %}
 {% block content %}
 <div class="container-fluid mt-3" id="page-app" v-cloak>
     <div class="mx-3 mb-4 d-flex align-items-center justify-content-between border-bottom pb-3">
@@ -306,50 +311,64 @@
                 </div>
             </div>
             <!-- Preview & Editor -->
-            <div class="row px-2 mt-3" style="height: 35vh;">
-                <div class="col-12 h-100">
-                    <div class="card shadow-sm  h-100 overflow-hidden bg-dark">
-                        <div v-if="!selectedNode && !previewContent" class="m-auto text-center opacity-50 text-light">
+            <div class="row px-2 mt-3" style="min-height: 35vh;">
+                <div class="col-12">
+                    <div class="card shadow-sm overflow-hidden border">
+                        <div v-if="!selectedNode && !previewContent" class="text-center py-5 opacity-50">
                             <i class="fas fa-terminal fa-3x mb-2 text-secondary"></i>
-                            <h5 class="text-white">Preview & Editor</h5>
-                            <p class="text-white">Select a file from the explorer or a rule from the database.</p>
+                            <h5>Preview & Editor</h5>
+                            <p class="text-muted small">Select a file from the explorer or a rule from the database.</p>
                         </div>
-                        <div v-else class="d-flex flex-column h-100">
-                            <div class="card-header text-white  d-flex justify-content-between align-items-center ">
-                                <span class="small font-monospace">
+                        <div v-else>
+                            <div class="card-header d-flex justify-content-between align-items-center border-bottom py-2">
+                                <span class="small font-monospace text-muted">
                                     <i v-if="selectedNode"
-                                        :class="selectedNode.type === 'folder' ? 'fas fa-folder text-warning' : 'fas fa-file-code text-info'"
+                                        :class="selectedNode.type === 'folder' ? 'fas fa-folder text-warning' : 'fas fa-file-code text-primary'"
                                         class="me-2"></i>
                                     <i v-else class="fas fa-eye text-success me-2"></i>
-                                    [[ selectedNode ? truncateText(selectedNode.name, 90) : 'Preview: ' +
-                                    previewName.substring(0, 80) ]]
+                                    [[ selectedNode ? truncateText(selectedNode.name, 90) : 'Preview: ' + previewName.substring(0, 80) ]]
                                 </span>
                                 <div class="d-flex gap-2 align-items-center">
-                                    <span v-if="!selectedNode || isRule(selectedNode)"
-                                        class="badge bg-secondary">Read-Only</span>
-                                    <span v-else class="badge bg-primary text-uppercase"
-                                        style="font-size: 9px;">Editable</span>
-                                    <button class="btn btn-xs btn-outline-light " @click="clearDisplay"><i
-                                            class="fas fa-times"></i></button>
+                                    <span v-if="!selectedNode || isRule(selectedNode)" class="badge bg-secondary" style="font-size:9px;">Read-Only</span>
+                                    <span v-else class="badge bg-primary" style="font-size:9px;">Editable</span>
+                                    <button class="btn btn-sm btn-outline-secondary" @click="clearDisplay">
+                                        <i class="fas fa-times"></i>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="flex-grow-1 overflow-hidden">
-                                <textarea v-if="selectedNode && selectedNode.type === 'file'"
-                                    v-model="selectedNode.content" :readonly="isRule(selectedNode)" wrap="off"
-                                    class="form-control  h-100 font-monospace p-3 bg-dark text-success custom-textarea-scroll"
-                                    style="resize:none; font-size: 13px; line-height: 1.6; overflow: auto; white-space: pre;"></textarea>
 
-                                <textarea v-else-if="previewContent" :value="previewContent" readonly wrap="off"
-                                    class="form-control  h-100 font-monospace p-3 bg-dark text-success custom-textarea-scroll"
-                                    style="resize:none; font-size: 13px; overflow: auto; white-space: pre;"></textarea>
+                            <!-- Editable custom file (not a rule from DB) -->
+                            <smart-editor
+                                v-if="selectedNode && selectedNode.type === 'file' && !isRule(selectedNode)"
+                                v-model="selectedNode.content"
+                                mode="code"
+                                language="text"
+                                min-height="32vh"
+                                max-height="32vh">
+                            </smart-editor>
 
-                                <div v-else
-                                    class="p-5 text-center text-muted h-100 d-flex flex-column justify-content-center">
-                                    <i class="fas fa-folder-open fa-2x mb-2 opacity-25 text-light"></i>
-                                    <p class="text-light opacity-50">Folder <strong>[[
-                                            truncateText(selectedNode.name, 50) ]]</strong>
-                                        is selected.<br><small>Click a file to edit or add a rule here.</small></p>
-                                </div>
+                            <!-- Read-only rule node from tree -->
+                            <code-viewer
+                                v-else-if="selectedNode && isRule(selectedNode)"
+                                :code="selectedNode.content || ''"
+                                :language="selectedNode.format || 'text'"
+                                :filename="selectedNode.name"
+                                max-height="32vh">
+                            </code-viewer>
+
+                            <!-- Rule preview from the database panel -->
+                            <code-viewer
+                                v-else-if="previewContent"
+                                :code="previewContent"
+                                :language="previewFormat || 'text'"
+                                :filename="previewName"
+                                max-height="32vh">
+                            </code-viewer>
+
+                            <!-- Folder selected -->
+                            <div v-else class="p-5 text-center text-muted d-flex flex-column justify-content-center" style="min-height:32vh;">
+                                <i class="fas fa-folder-open fa-2x mb-2 opacity-25"></i>
+                                <p class="small mb-0">Folder <strong>[[ truncateText(selectedNode.name, 50) ]]</strong> is selected.<br>Click a file to edit or add a rule here.</p>
                             </div>
                         </div>
                     </div>
@@ -625,6 +644,8 @@
     import { } from '/static/js/bundle/jsdelivr_vuedraggable.js';
     import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js';
     import TagCreateModal from '/static/js/tags/tagCreateModal.js';
+    import SmartEditor from '/static/js/components/smart-editor.js';
+    import CodeViewer from '/static/js/components/code-viewer.js';
     const TreeItem = {
         name: 'tree-item',
         props: ['node', 'selectedId'],
@@ -641,7 +662,7 @@
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'tree-item': TreeItem, 'draggable': window.vuedraggable, 'vulnerability-input': VulnerabilityInput, 'tag-create-modal': TagCreateModal },
+        components: { 'tree-item': TreeItem, 'draggable': window.vuedraggable, 'vulnerability-input': VulnerabilityInput, 'tag-create-modal': TagCreateModal, 'smart-editor': SmartEditor, 'code-viewer': CodeViewer },
 
         setup() {
 
@@ -894,6 +915,7 @@
                 selectedNode.value = null;
                 previewContent.value = rule.to_string;
                 previewName.value = rule.title;
+                previewFormat.value = rule.format || '';
             };
 
             // add a rule to the bundle
@@ -909,6 +931,7 @@
                     rule_id: rule.id,
                     name: rule.title + ext,
                     type: 'file',
+                    format: rule.format || '',
                     content: rule.to_string,
                     children: []
                 };
@@ -925,11 +948,12 @@
 
             // select a node
 
-            const selectNode = (n) => { previewContent.value = ""; selectedNode.value = n; };
-            const clearDisplay = () => { selectedNode.value = null; previewContent.value = ""; };
+            const selectNode = (n) => { previewContent.value = ""; previewFormat.value = ""; selectedNode.value = n; };
+            const clearDisplay = () => { selectedNode.value = null; previewContent.value = ""; previewFormat.value = ""; };
             const selectedNode = ref(null);
             const previewContent = ref("");
             const previewName = ref("");
+            const previewFormat = ref("");
 
             // rename a node
 
@@ -1165,7 +1189,7 @@
             };
 
             return {
-                treeData, selectedNode, previewContent, previewName, rules_list, searchQuery, ruleType, current_page, total_pages, message_list,
+                treeData, selectedNode, previewContent, previewName, previewFormat, rules_list, searchQuery, ruleType, current_page, total_pages, message_list,
                 fetchRules, addRuleToBundle, importFile, addFolder, addFile, selectNode, setPreview, clearDisplay, saveStructure, isRule, renameNode, addFolderText,
                 bundleId, truncateText, prepareAddFolder, save_loading, prepareDelete, confirmDelete, nodeToDelete, prepareDelete, confirmDelete,
                 prepareAddTarget, addFileText, addFileFormat, triggerDisabledMessage, renameText, confirmRename, nodeToRename, onEnterKey, onSearchInput, is_loading,
