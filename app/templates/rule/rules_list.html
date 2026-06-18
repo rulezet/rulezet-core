@@ -88,22 +88,12 @@
                             </a>
                         </h5>
                         <div class="d-flex align-items-center gap-2 mt-2">
-                            <div class="avatar-circle-xs" title="Author of the rule">
-                                <template v-if="rule.author === 'Unknown'">
-                                    [[ rule.editor[0].toUpperCase() ]]
-                                </template>
-                                <template v-else>
-                                    [[ rule.author[0].toUpperCase() ]]
-                                </template>
-                            </div>
-                            <small class="text-muted fw-medium" title="Author of the rule"> <template
-                                    v-if="rule.author === 'Unknown'">
-                                    [[ rule.editor ]]
-                                </template>
-                                <template v-else>
-                                    [[ rule.author ]]
-                                </template>
-                            </small>
+                            <user-chip
+                                :user-id="rule.user_id"
+                                :username="rule.author !== 'Unknown' ? rule.author : rule.editor"
+                                :avatar="rule.editor_avatar"
+                                size="xs"
+                            ></user-chip>
                             <span class="text-muted opacity-50">|</span>
                             <small class="text-muted"> [[ dayjs.utc(rule.last_modif).fromNow() ]]</small>
                         </div>
@@ -137,12 +127,9 @@
                             <div class="mb-1"><i class="fas fa-code-branch me-2"></i><strong>Version:</strong> <span
                                     class="badge text-bg-light border px-1">[[ rule.version && rule.version !==
                                     'Unknown' ? rule.version : '1.0' ]]</span></div>
-                            <div class="mb-1">
-                                <a :href="`/account/detail_user/${rule.user_id}`"
-                                    class="text-decoration-none text-muted">
-                                    <i class="fas fa-user-edit me-2"></i><strong>Editor:</strong> <span
-                                        class="text-primary">[[ rule.editor ]]</span>
-                                </a>
+                            <div class="mb-1 d-flex align-items-center gap-1">
+                                <i class="fas fa-user-edit me-1 opacity-50"></i><strong class="me-1">Editor:</strong>
+                                <user-chip :user-id="rule.user_id" :username="rule.editor" :avatar="rule.editor_avatar" size="xs"></user-chip>
                             </div>
                         </div>
                     </div>
@@ -257,6 +244,7 @@
     import RuleFilterBar from '/static/js/rule/ruleFilterBar.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
+    import UserChip from '/static/js/components/UserChip.js';
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -265,6 +253,7 @@
             'rule-filter-bar': RuleFilterBar,
             'pagination-component': PaginationComponent,
             'tags-displays-list': TagsDisplaysList,
+            'user-chip': UserChip,
         },
         setup() {
 

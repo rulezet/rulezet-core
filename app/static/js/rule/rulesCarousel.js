@@ -1,5 +1,6 @@
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
 import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js'
+import UserChip from '/static/js/components/UserChip.js'
 
 const { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } = Vue
 import { message_list, create_message } from '/static/js/toaster.js'
@@ -11,6 +12,7 @@ const RulesCarousel = {
     components: {
         'vulnerability-displays-list': VulnerabilityDisplaysList,
         'tags-displays-list': TagsDisplaysList,
+        'user-chip': UserChip,
     },
 
     props: {
@@ -97,12 +99,12 @@ const RulesCarousel = {
                                             </a>
                                         </h5>
                                         <div class="d-flex align-items-center gap-2 mt-2">
-                                            <div class="avatar-circle-xs" title="Author of the rule">
-                                                [[ rule.author === 'Unknown' ? rule.editor[0].toUpperCase() : rule.author[0].toUpperCase() ]]
-                                            </div>
-                                            <small class="text-muted fw-medium" title="Author of the rule">
-                                                [[ rule.author === 'Unknown' ? rule.editor : rule.author ]]
-                                            </small>
+                                            <user-chip
+                                                :user-id="rule.user_id"
+                                                :username="rule.author !== 'Unknown' ? rule.author : rule.editor"
+                                                :avatar="rule.editor_avatar"
+                                                size="xs"
+                                            ></user-chip>
                                             <span class="text-muted opacity-50">|</span>
                                             <small class="text-muted" title="Last modification of the rule">
                                                 [[ fromNow(rule.last_modif) ]]

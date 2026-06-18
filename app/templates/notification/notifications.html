@@ -1,0 +1,276 @@
+{% extends 'base.html' %}
+
+{% block title %}Notifications — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/notification/notification.css') }}">
+{% endblock %}
+
+{% block content %}
+<div id="notif-page-app" v-cloak>
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-bell banner-watermark"></i>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-bell"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Notifications</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+            All your notifications — job completions, followed authors, rule updates.
+        </p>
+    </div>
+
+    <!-- Filters + toolbar -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-4">
+
+        <!-- Type filter -->
+        <div class="d-flex gap-2 flex-wrap">
+            <button v-for="tab in tabs" :key="tab.key"
+                    :class="['btn btn-sm', activeType === tab.key ? 'btn-primary' : 'btn-outline-secondary']"
+                    style="border-radius:20px;"
+                    @click="activeType = tab.key; loadPage(1)">
+                <i :class="tab.icon + ' me-1'"></i>[[ tab.label ]]
+            </button>
+        </div>
+
+        <div class="ms-auto d-flex gap-2 align-items-center">
+            <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                <input class="form-check-input" type="checkbox" id="unreadSwitch"
+                       v-model="unreadOnly" @change="loadPage(1)" style="cursor:pointer;">
+                <label class="form-check-label small fw-semibold" for="unreadSwitch">Unread only</label>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" @click="markAllRead" v-if="unreadCount > 0">
+                <i class="fa-solid fa-check-double me-1"></i>Mark all read
+            </button>
+        </div>
+    </div>
+
+    <!-- List card -->
+    <div class="notif-page-card">
+
+        <!-- Loading -->
+        <template v-if="loading">
+            <div v-for="i in 6" :key="i" class="notif-skeleton" style="border-bottom:1px solid var(--border-color);">
+                <div class="notif-skeleton__bubble"></div>
+                <div class="notif-skeleton__lines">
+                    <div class="notif-skeleton__line"></div>
+                    <div class="notif-skeleton__line"></div>
+                </div>
+            </div>
+        </template>
+
+        <!-- Empty -->
+        <template v-else-if="notifications.length === 0">
+            <div class="notif-empty" style="padding:80px 24px;">
+                <div class="notif-empty__icon"><i class="fa-solid fa-bell-slash"></i></div>
+                <div class="notif-empty__title">No notifications</div>
+                <div class="notif-empty__sub">Nothing here yet — follow some users to get started!</div>
+            </div>
+        </template>
+
+        <!-- Notifications -->
+        <template v-else>
+            <div v-for="notif in notifications" :key="notif.id"
+                 :class="['notif-page-item', !notif.is_read ? 'unread' : '']">
+
+                <!-- Icon bubble -->
+                <div :class="['notif-icon-bubble', `notif-icon-bubble--${notif.notif_type}`]"
+                     style="width:42px;height:42px;flex-shrink:0;">
+                    <i :class="notif.icon || 'fa-solid fa-bell'"></i>
+                </div>
+
+                <!-- Content -->
+                <div class="flex-grow-1 min-width-0">
+                    <div class="d-flex align-items-start gap-2">
+                        <span class="notif-page-title">[[ notif.title ]]</span>
+                        <span v-if="!notif.is_read"
+                              class="badge rounded-pill ms-auto flex-shrink-0"
+                              style="background:#0d6efd;font-size:.6rem;padding:3px 7px;">NEW</span>
+                    </div>
+                    <div class="notif-page-body" v-if="notif.body">[[ notif.body ]]</div>
+
+                    <!-- Job progress -->
+                    <template v-if="notif.notif_type?.startsWith('job')">
+                        <div class="notif-progress mt-2" style="max-width:320px;">
+                            <div :class="['notif-progress__fill', progressFillClass(notif)]"
+                                 :style="progressWidth(notif) ? `width:${progressWidth(notif)}` : ''">
+                            </div>
+                        </div>
+                        <div style="font-size:.73rem;color:var(--subtle-text-color);margin-top:4px;">
+                            <span v-if="notif.job_status === 'done'" class="text-success fw-semibold">
+                                <i class="fa-solid fa-circle-check me-1"></i>Completed — 100%
+                            </span>
+                            <span v-else-if="notif.job_status === 'failed'" class="text-danger fw-semibold">
+                                <i class="fa-solid fa-circle-xmark me-1"></i>Failed
+                            </span>
+                            <span v-else-if="notif.job_status === 'cancelled'" class="text-muted">
+                                <i class="fa-solid fa-ban me-1"></i>Cancelled
+                            </span>
+                            <span v-else class="text-primary">
+                                <i class="fa-solid fa-circle-notch fa-spin me-1"></i>
+                                [[ notif.job_progress ? notif.job_progress + '%' : 'Running…' ]]
+                            </span>
+                        </div>
+                    </template>
+
+                    <div class="notif-page-time">
+                        <i class="fa-regular fa-clock me-1"></i>[[ relativeTime(notif.created_at) ]]
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="notif-page-actions">
+                    <a v-if="notif.link" :href="notif.link"
+                       class="btn btn-sm btn-outline-primary"
+                       style="font-size:.75rem;border-radius:8px;"
+                       @click="markRead(notif)">
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </a>
+                    <button v-if="!notif.is_read"
+                            class="btn btn-sm btn-outline-success"
+                            style="font-size:.75rem;border-radius:8px;"
+                            title="Mark as read"
+                            @click="markRead(notif)">
+                        <i class="fa-solid fa-check"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger"
+                            style="font-size:.75rem;border-radius:8px;"
+                            title="Delete"
+                            @click="deleteNotif(notif)">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Pagination -->
+    <div v-if="totalPages > 1" class="d-flex justify-content-center gap-2 mt-4">
+        <button class="btn btn-sm btn-outline-secondary" :disabled="currentPage === 1"
+                @click="loadPage(currentPage - 1)">
+            <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <span class="btn btn-sm disabled bg-transparent border-0"
+              style="color:var(--subtle-text-color);">
+            Page [[ currentPage ]] / [[ totalPages ]]
+        </span>
+        <button class="btn btn-sm btn-outline-secondary" :disabled="currentPage === totalPages"
+                @click="loadPage(currentPage + 1)">
+            <i class="fa-solid fa-chevron-right"></i>
+        </button>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+const { createApp, ref, computed, onMounted } = Vue
+
+function csrf() { return document.getElementById('csrf_token')?.value || '' }
+
+async function apiFetch(url, opts = {}) {
+    const res = await fetch(url, {
+        headers: { 'X-CSRFToken': csrf() },
+        ...opts,
+    })
+    if (!res.ok) return null
+    return res.json()
+}
+
+function relativeTime(isoStr) {
+    if (!isoStr) return ''
+    try {
+        if (window.dayjs) return dayjs.utc(isoStr).fromNow()
+        const diff = Math.floor((Date.now() - new Date(isoStr + 'Z').getTime()) / 1000)
+        if (diff < 60)    return 'just now'
+        if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+        return `${Math.floor(diff / 86400)}d ago`
+    } catch { return '' }
+}
+
+const TABS = [
+    { key: '',                   label: 'All',           icon: 'fa-solid fa-inbox' },
+    { key: 'new_rule',           label: 'New Rules',     icon: 'fa-solid fa-shield-halved' },
+    { key: 'rule_update_found',  label: 'Updates',       icon: 'fa-solid fa-rotate' },
+    { key: 'job_created',        label: 'Jobs',          icon: 'fa-solid fa-tasks' },
+]
+
+createApp({
+    delimiters: ['[[', ']]'],
+    setup() {
+        const notifications = ref([])
+        const loading       = ref(true)
+        const currentPage   = ref(1)
+        const totalPages    = ref(1)
+        const unreadCount   = ref(0)
+        const unreadOnly    = ref(false)
+        const activeType    = ref('')
+        const tabs          = ref(TABS)
+
+        async function loadPage(page = 1) {
+            loading.value = true
+            currentPage.value = page
+            const params = new URLSearchParams({
+                page,
+                per_page: 25,
+                unread_only: unreadOnly.value,
+            })
+            if (activeType.value) params.set('type', activeType.value)
+            const data = await apiFetch(`/notifications/list?${params}`)
+            if (data) {
+                notifications.value = data.notifications
+                totalPages.value    = data.pages
+                unreadCount.value   = data.unread_count
+            }
+            loading.value = false
+        }
+
+        async function markRead(notif) {
+            if (notif.is_read) return
+            await apiFetch(`/notifications/${notif.id}/read`, { method: 'POST' })
+            notif.is_read = true
+            if (unreadCount.value > 0) unreadCount.value--
+        }
+
+        async function markAllRead() {
+            await apiFetch('/notifications/read_all', { method: 'POST' })
+            notifications.value.forEach(n => { n.is_read = true })
+            unreadCount.value = 0
+        }
+
+        async function deleteNotif(notif) {
+            await apiFetch(`/notifications/${notif.id}`, { method: 'DELETE' })
+            notifications.value = notifications.value.filter(n => n.id !== notif.id)
+            if (!notif.is_read && unreadCount.value > 0) unreadCount.value--
+        }
+
+        function progressFillClass(notif) {
+            if (notif.job_status === 'done')   return 'notif-progress__fill--done'
+            if (notif.job_status === 'failed') return 'notif-progress__fill--failed'
+            if (!notif.job_progress)           return 'notif-progress__fill--indeterminate'
+            return ''
+        }
+        function progressWidth(notif) {
+            if (notif.job_status === 'done') return '100%'
+            if (!notif.job_progress)         return null
+            return `${notif.job_progress}%`
+        }
+
+        onMounted(() => loadPage(1))
+
+        return {
+            notifications, loading, currentPage, totalPages,
+            unreadCount, unreadOnly, activeType, tabs,
+            loadPage, markRead, markAllRead, deleteNotif,
+            progressFillClass, progressWidth, relativeTime,
+        }
+    },
+}).mount('#notif-page-app')
+</script>
+{% endblock %}

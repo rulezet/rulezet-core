@@ -23,12 +23,8 @@
 
             <div class="card-body">
                 <ul class="list-group mb-4">
-                    <li class="list-group-item"><strong>Analyzed By: </strong>
-                        <a :href="`/account/detail_user/${owner_rule.analyzed_by_user_id}`" class="stretched-link"></a>
-                        <span class="badge text-bg-secondary ">[[
-                            owner_rule.analyzed_by_user_name ]]
-                        </span></a>
-
+                    <li class="list-group-item d-flex align-items-center gap-2"><strong>Analyzed By:</strong>
+                        <user-chip :user-id="owner_rule.analyzed_by_user_id" :username="owner_rule.analyzed_by_user_name" size="xs"></user-chip>
                     </li>
                     <li class="list-group-item"><strong>Format:</strong> <span class="badge text-bg-primary ">[[
                             owner_rule.rule_format ]] </span></li>
@@ -115,9 +111,11 @@
     const { createApp, ref, nextTick } = Vue
     import { message_list } from '/static/js/toaster.js'
     import { renderDiff } from "/static/js/diff_macro.js";
+    import UserChip from '/static/js/components/UserChip.js';
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { 'user-chip': UserChip },
         setup() {
             const owner_rule = ref(null)
             const rule_id = "{{ history_id }}"

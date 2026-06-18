@@ -188,58 +188,13 @@
                </a>
 
                <!-- Notifications bell -->
-               <div class="dropdown">
-                  <a class="position-relative nav-icon-btn" href="#" role="button" data-bs-toggle="dropdown">
-                     <i class="fa-solid fa-bell fs-5"></i>
-                     <span v-if="total_notifications > 0"
-                        class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-white rounded-circle pulse-alert"></span>
-                  </a>
-                  <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 p-2 mt-3" style="min-width: 280px;">
-                     <li class="dropdown-header fw-bold text-dark px-3 py-2">Quick Actions</li>
-                     <li><hr class="dropdown-divider"></li>
-                     <template v-if="total_notifications === 0">
-                        <li class="text-center text-muted small py-3">All caught up!</li>
-                     </template>
-                     <template v-else>
-                        <li v-if="requests_to_validate > 0">
-                           <a href="/admin/request" class="dropdown-item rounded d-flex justify-content-between align-items-center py-2">
-                              <span class="small"><i class="fa-solid fa-envelope me-2 text-primary"></i>Requests</span>
-                              <span class="badge bg-danger rounded-pill">[[ requests_to_validate ]]</span>
-                           </a>
-                        </li>
-                        <li v-if="changes_to_validate > 0">
-                           <a href="/rule/rule_propose_edit" class="dropdown-item rounded d-flex justify-content-between align-items-center py-2">
-                              <span class="small"><i class="fa-solid fa-lightbulb me-2 text-warning"></i>Changes</span>
-                              <span class="badge bg-danger rounded-pill">[[ changes_to_validate ]]</span>
-                           </a>
-                        </li>
-                        <li v-if="repport_to_validate > 0">
-                           <a href="/rule/admin/rules_reported" class="dropdown-item rounded d-flex justify-content-between align-items-center py-2">
-                              <span class="small"><i class="fa-solid fa-triangle-exclamation me-2 text-danger"></i>Reports</span>
-                              <span class="badge bg-danger rounded-pill">[[ repport_to_validate ]]</span>
-                           </a>
-                        </li>
-                        <li v-if="update_to_validate > 0">
-                           <a href="/rule/update_github/update_rules_from_github" class="dropdown-item rounded d-flex justify-content-between align-items-center py-2">
-                              <span class="small"><i class="fa-solid fa-rotate me-2 text-info"></i>Updates</span>
-                              <span class="badge bg-danger rounded-pill">[[ update_to_validate ]]</span>
-                           </a>
-                        </li>
-                        <li v-if="update_import_to_validate > 0">
-                           <a href="/rule/history_github_importer" class="dropdown-item rounded d-flex justify-content-between align-items-center py-2">
-                              <span class="small"><i class="fa-solid fa-bars-progress me-2 text-dark"></i>Imports in progress</span>
-                              <span class="badge bg-danger rounded-pill">[[ update_import_to_validate ]]</span>
-                           </a>
-                        </li>
-                        <li v-if="running_jobs_count > 0">
-                           <a href="/jobs/list" class="dropdown-item rounded d-flex justify-content-between align-items-center py-2">
-                              <span class="small"><i class="fa-solid fa-tasks me-2 text-primary"></i>Background Jobs</span>
-                              <span class="badge bg-primary rounded-pill">[[ running_jobs_count ]]</span>
-                           </a>
-                        </li>
-                     </template>
-                  </ul>
-               </div>
+               {% if current_user.is_authenticated %}
+               <div id="notif-bell-app"></div>
+               {% else %}
+               <a class="nav-icon-btn" href="/account/login" title="Sign in to see notifications">
+                  <i class="fa-solid fa-bell fs-5"></i>
+               </a>
+               {% endif %}
 
                <!-- Profile -->
                <div class="dropdown">
@@ -272,6 +227,8 @@
                            <i class="fa-solid fa-tags me-2 text-muted"></i>My Tags</a></li>
                      <li><a href="/jobs/list" class="dropdown-item rounded py-2">
                            <i class="fa-solid fa-tasks me-2 text-muted"></i>My Jobs</a></li>
+                     <li><a href="/notifications/" class="dropdown-item rounded py-2">
+                           <i class="fa-solid fa-bell me-2 text-muted"></i>Notifications</a></li>
                      <li><a href="/account/contributor" class="dropdown-item rounded py-2">
                            <i class="fa-solid fa-user-group fa-fw me-2 text-muted"></i>Contributors</a></li>
                      <li><hr class="dropdown-divider"></li>
@@ -288,6 +245,14 @@
          </div>
       </div>
    </nav>
+
+   <!-- ── Notification offcanvas ── -->
+   {% if current_user.is_authenticated %}
+   <div class="offcanvas offcanvas-end border-0 shadow-lg" tabindex="-1" id="notifOffcanvas"
+        style="width:420px;background-color:var(--card-bg-color);">
+      <div id="notif-panel-app" class="d-flex flex-column h-100"></div>
+   </div>
+   {% endif %}
 
    <!-- ── Search offcanvas ── -->
    <div class="offcanvas offcanvas-end border-0 shadow-lg" tabindex="-1" id="offcanvasSearch"
@@ -396,46 +361,29 @@
       },
       setup() {
 
-         // ── Notification counters ───────────────────────────────────────────
-         const requests_to_validate      = ref(0)
-         const update_import_to_validate = ref(0)
-         const changes_to_validate       = ref(0)
-         const repport_to_validate       = ref(0)
-         const update_to_validate        = ref(0)
-         const running_jobs_count        = ref(0)
-
-         const total_notifications = computed(() =>
-            Number(requests_to_validate.value      || 0) +
-            Number(changes_to_validate.value       || 0) +
-            Number(repport_to_validate.value       || 0) +
-            Number(update_to_validate.value        || 0) +
-            Number(update_import_to_validate.value || 0) +
-            Number(running_jobs_count.value        || 0)
-         )
+         // ── Admin counters (kept for admin badge indicators in nav) ────────
+         const requests_to_validate = ref(0)
+         const changes_to_validate  = ref(0)
+         const update_to_validate   = ref(0)
+         const running_jobs_count   = ref(0)
 
          async function getNbRequestAdmin() {
-            const res = await fetch('/request_to_check')
-            requests_to_validate.value = (await res.json()).count || 0
+            try {
+               const res = await fetch('/request_to_check')
+               requests_to_validate.value = (await res.json()).count || 0
+            } catch {}
          }
          async function getNbChanges() {
-            const res = await fetch('/rule/change_to_check')
-            changes_to_validate.value = (await res.json()).count || 0
-         }
-         async function getNbRepport() {
-            const res = await fetch('/rule/repport_to_check')
-            repport_to_validate.value = (await res.json()).count || 0
+            try {
+               const res = await fetch('/rule/change_to_check')
+               changes_to_validate.value = (await res.json()).count || 0
+            } catch {}
          }
          async function getNbUpdate() {
-            const res = await fetch('/rule/update_to_check')
-            update_to_validate.value = (await res.json()).count || 0
-         }
-         async function getNbUpdateImport() {
             try {
-               const res  = await fetch('/rule/import_get_session_running')
-               const data = await res.json()
-               update_import_to_validate.value =
-                  (data.import_sessions?.length || 0) + (data.update_sessions?.length || 0)
-            } catch { update_import_to_validate.value = 0 }
+               const res = await fetch('/rule/update_to_check')
+               update_to_validate.value = (await res.json()).count || 0
+            } catch {}
          }
          async function getRunningJobs() {
             try {
@@ -483,17 +431,13 @@
          onMounted(() => {
             getNbRequestAdmin()
             getNbChanges()
-            getNbRepport()
             getNbUpdate()
-            getNbUpdateImport()
             getRunningJobs()
-            // setInterval(getRunningJobs, 10000)  // refresh jobs every 10s
          })
 
          return {
-            requests_to_validate, changes_to_validate, repport_to_validate,
-            update_to_validate, update_import_to_validate, running_jobs_count,
-            total_notifications,
+            requests_to_validate, changes_to_validate,
+            update_to_validate, running_jobs_count,
             search_is_loading, filterBar, rules_list, total_rules_liste,
             current_page, total_pages, showSearchContent,
             onRulesUpdated, changePage, initSearch,

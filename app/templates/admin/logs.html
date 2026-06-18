@@ -157,15 +157,10 @@
               </td>
               <td class="text-nowrap small" style="color: var(--subtle-text-color);">[[ log.created_at ]]</td>
               <td class="small" @click.stop>
-                <template v-if="log.user_id">
-                  <a :href="`/account/detail_user/${log.user_id}`" class="text-decoration-none fw-semibold"
-                     :class="{ blurred: !sensitiveVisible }"
-                     @click.stop :title="sensitiveVisible ? '' : 'Click eye icon to reveal'"
-                     style="color: var(--text-color);">
-                    [[ log.username ]]
-                  </a>
-                </template>
-                <span v-else style="color: var(--subtle-text-color);">System</span>
+                <span :class="{ blurred: !sensitiveVisible }" :title="sensitiveVisible ? '' : 'Click eye icon to reveal'">
+                  <user-chip v-if="log.user_id" :user-id="log.user_id" :username="log.username" size="xs"></user-chip>
+                  <span v-else style="color: var(--subtle-text-color);">System</span>
+                </span>
               </td>
               <td>
                 <span :class="['badge', 'action-badge', actionColor(log.action)]">
@@ -272,12 +267,13 @@
 <script type="module">
 import PaginationComponent from '/static/js/rule/paginationComponent.js'
 import { create_message } from '/static/js/toaster.js'
+import UserChip from '/static/js/components/UserChip.js'
 
 const { createApp, ref, computed, onMounted } = Vue
 
 createApp({
   delimiters: ['[[', ']]'],
-  components: { 'pagination-component': PaginationComponent },
+  components: { 'pagination-component': PaginationComponent, 'user-chip': UserChip },
   setup() {
     const logs             = ref([])
     const total            = ref(0)

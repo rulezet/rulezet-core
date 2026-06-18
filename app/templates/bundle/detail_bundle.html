@@ -100,22 +100,7 @@
                         </a>
                     </h3>
                     <div class="d-flex align-items-center gap-2 mt-3 flex-wrap">
-                        <a :href="'/account/detail_user/' + bundle.user_id" class="text-decoration-none">
-                            <div class="avatar-circle-xs bg-primary text-white d-flex align-items-center justify-content-center rounded-circle"
-                                style="width:28px;height:28px;font-weight:bold;flex-shrink:0;overflow:hidden;">
-                                <img v-if="bundle.author_avatar"
-                                    :src="bundle.author_avatar"
-                                    class="rounded-circle w-100 h-100"
-                                    style="object-fit:cover;">
-                                <template v-else>
-                                    [[ bundle.user_name[0].toUpperCase() ]]
-                                </template>
-                            </div>
-                        </a>
-                        <a :href="'/account/detail_user/' + bundle.user_id"
-                        class="small fw-bold text-primary text-decoration-none">
-                            [[ bundle.user_name ]]
-                        </a>
+                        <user-chip :user-id="bundle.user_id" :username="bundle.user_name" :avatar="bundle.author_avatar" size="xs"></user-chip>
                         <span class="text-muted opacity-50">|</span>
                         <small class="text-muted"><i class="far fa-calendar-alt me-1"></i> [[ dayjs(bundle.last_modif).fromNow() ]]</small>
                     </div>
@@ -362,8 +347,9 @@
                                                     </div>
 
                                                     <div class="d-flex flex-wrap gap-3 mb-2 small text-muted">
-                                                        <span><i class="fas fa-user-edit me-1 text-secondary"></i>[[
-                                                            item.rule.author ]]</span>
+                                                        <span class="d-flex align-items-center gap-1">
+                                                            <user-chip :user-id="item.rule.user_id" :username="item.rule.author !== 'Unknown' ? item.rule.author : item.rule.editor" :avatar="item.rule.editor_avatar" size="xs"></user-chip>
+                                                        </span>
                                                         <span><i class="fas fa-balance-scale me-1 text-secondary"></i>[[
                                                             item.rule.license || 'Proprietary' ]]</span>
                                                         <span><i class="fas fa-clock me-1 text-secondary"></i>[[
@@ -503,12 +489,7 @@
             <div class="d-flex mb-5">
                 {% if current_user.is_authenticated %}
                 <div class="flex-shrink-0 me-3">
-                    <div class="position-relative">
-                        <img :src="'https://ui-avatars.com/api/?name=' + '{{current_user.get_username()}}' + '&background=random&color=fff&bold=true'"
-                            class="rounded-circle shadow-sm border border-2 border-white" width="45" height="45">
-                        <span
-                            class="position-absolute bottom-0 end-0 p-1 bg-success border border-light rounded-circle"></span>
-                    </div>
+                    <user-chip :user-id="{{ current_user.id }}" username="{{ current_user.get_username() }}" {% if current_user.get_avatar_url() %}avatar="{{ current_user.get_avatar_url() }}"{% endif %} size="md" :show-name="false"></user-chip>
                 </div>
 
                 <div class="flex-grow-1">
@@ -560,16 +541,14 @@
                                     class="card border shadow-none comment-card p-3 rounded-3 hover-shadow-light transition-all mb-2">
                                     <div class="d-flex">
                                         <div class="flex-shrink-0 me-3">
-                                            <img :src="'https://ui-avatars.com/api/?name=' + comment.user_name + '&background=random&color=fff&bold=true'"
-                                                class="rounded-circle shadow-sm border border-2 border-white" width="45"
-                                                height="45">
+                                            <user-chip :user-id="comment.user_id" :username="comment.user_name" size="md" :show-name="false"></user-chip>
                                         </div>
 
                                         <div class="flex-grow-1 min-w-0">
                                             <div class="d-flex justify-content-between align-items-start mb-1">
                                                 <div>
                                                     <div class="d-flex align-items-center gap-2 mb-1">
-                                                        <span class="fw-bold text-dark">@[[ comment.user_name ]]</span>
+                                                        <user-chip :user-id="comment.user_id" :username="comment.user_name" size="xs"></user-chip>
                                                         <span v-if="comment.is_admin"><i
                                                                 class="fas fa-star text-warning"
                                                                 style="font-size: 0.8rem;"></i></span>
@@ -717,14 +696,13 @@
                                     <div v-for="reply in comment.replies" :key="reply.id" class="mb-3">
                                         <div class="p-3 rounded-3 bg-white border transition-all shadow-sm">
                                             <div class="d-flex align-items-start">
-                                                <img :src="'https://ui-avatars.com/api/?name=' + reply.user_name + '&background=6c757d&color=fff&bold=true'"
-                                                    class="rounded-circle me-2 border border-2 border-white shadow-sm"
-                                                    width="35" height="35">
+                                                <div class="me-2">
+                                                    <user-chip :user-id="reply.user_id" :username="reply.user_name" size="sm" :show-name="false"></user-chip>
+                                                </div>
                                                 <div class="flex-grow-1 min-w-0">
                                                     <div class="d-flex justify-content-between align-items-start mb-1">
                                                         <div>
-                                                            <span class="fw-bold small text-dark">@[[ reply.user_name
-                                                                ]]</span>
+                                                            <user-chip :user-id="reply.user_id" :username="reply.user_name" size="xs"></user-chip>
                                                             <small class="text-muted d-block"
                                                                 style="font-size: 0.7rem;">[[
                                                                 dayjs.utc(reply.created_at).fromNow() ]]</small>
@@ -916,6 +894,7 @@
     import { emodji_picker } from '/static/emodji/emodji_picker.js';
     import TagDisplay from '/static/js/tags/tagDisplay.js';
     import VulnerabilityDisplay from '/static/js/vulnerability/vulnerabilityDisplay.js';
+    import UserChip from '/static/js/components/UserChip.js';
     /* ============================================================
         TREE COMPONENT
     ============================================================ */
@@ -952,7 +931,8 @@
             'tree-item-view': TreeItemView,
             'emodji-picker': emodji_picker,
             'tag-display': TagDisplay,
-            'vulnerability-display': VulnerabilityDisplay
+            'vulnerability-display': VulnerabilityDisplay,
+            'user-chip': UserChip,
         },
         setup() {
             /**

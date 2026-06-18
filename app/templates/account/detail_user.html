@@ -49,6 +49,56 @@
             </p>
 
             <div class="mx-auto mt-3 bg-primary opacity-25" style="width: 60px; height: 4px; border-radius: 2px;"></div>
+
+            <!-- Follow button (only for authenticated users viewing someone else's profile) -->
+            {% if current_user.is_authenticated and current_user.id != user.id %}
+            <div id="follow-btn-{{ user.id }}" class="mt-3 d-inline-block">
+                <button id="follow-toggle-{{ user.id }}"
+                        class="btn btn-sm btn-follow"
+                        onclick="toggleFollow({{ user.id }}, this)">
+                    <i class="fa-solid fa-user-plus me-1"></i>Follow
+                </button>
+                <span id="follow-count-{{ user.id }}" class="text-muted small ms-2"></span>
+            </div>
+            <script>
+            (function() {
+                const userId = {{ user.id }};
+                const btn    = document.getElementById('follow-toggle-' + userId);
+                const cnt    = document.getElementById('follow-count-' + userId);
+
+                fetch('/notifications/follow/' + userId + '/status')
+                    .then(r => r.json())
+                    .then(d => {
+                        btn.innerHTML = d.is_following
+                            ? '<i class="fa-solid fa-user-check me-1"></i>Following'
+                            : '<i class="fa-solid fa-user-plus me-1"></i>Follow';
+                        btn.className = 'btn btn-sm btn-follow' + (d.is_following ? ' btn-follow--following' : ' btn-primary');
+                        cnt.textContent = d.followers + ' follower' + (d.followers !== 1 ? 's' : '');
+                    }).catch(() => {});
+            })();
+
+            function toggleFollow(userId, btn) {
+                const csrf = document.getElementById('csrf_token')?.value || '';
+                const isFollowing = btn.classList.contains('btn-follow--following');
+                const url    = isFollowing ? '/notifications/unfollow/' + userId : '/notifications/follow/' + userId;
+                const method = 'POST';
+                fetch(url, { method, headers: { 'X-CSRFToken': csrf } })
+                    .then(r => r.json())
+                    .then(d => {
+                        fetch('/notifications/follow/' + userId + '/status')
+                            .then(r => r.json())
+                            .then(s => {
+                                btn.innerHTML = s.is_following
+                                    ? '<i class="fa-solid fa-user-check me-1"></i>Following'
+                                    : '<i class="fa-solid fa-user-plus me-1"></i>Follow';
+                                btn.className = 'btn btn-sm btn-follow' + (s.is_following ? ' btn-follow--following' : ' btn-primary');
+                                const cnt = document.getElementById('follow-count-' + userId);
+                                if (cnt) cnt.textContent = s.followers + ' follower' + (s.followers !== 1 ? 's' : '');
+                            });
+                    }).catch(() => {});
+            }
+            </script>
+            {% endif %}
         </div>
 
         <!-- Tabs -->

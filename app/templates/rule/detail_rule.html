@@ -124,22 +124,12 @@
                                 </a>
                             </h3>
                             <div class="d-flex align-items-center gap-2 mt-2">
-                                <div class="avatar-circle-xs" title="Author of the rule">
-                                    <template v-if="currentRule.author === 'Unknown'">
-                                        [[ currentRule.editor[0].toUpperCase() ]]
-                                    </template>
-                                    <template v-else>
-                                        [[ currentRule.author[0].toUpperCase() ]]
-                                    </template>
-                                </div>
-                                <small class="text-muted fw-medium" title="Author of the rule"> <template
-                                        v-if="currentRule.author === 'Unknown'">
-                                        [[ currentRule.editor ]]
-                                    </template>
-                                    <template v-else>
-                                        [[ currentRule.author ]]
-                                    </template>
-                                </small>
+                                <user-chip
+                                    :user-id="currentRule.user_id"
+                                    :username="currentRule.author !== 'Unknown' ? currentRule.author : currentRule.editor"
+                                    :avatar="currentRule.editor_avatar"
+                                    size="xs"
+                                ></user-chip>
                                 <span class="text-muted opacity-50">|</span>
                                 <small class="text-muted"> [[ dayjs.utc(currentRule.last_modif).fromNow() ]]</small>
                             </div>
@@ -212,13 +202,10 @@
                                             </a>
                                         </small>
                                     </div>
-                                    <div class="d-flex align-items-center">
+                                    <div class="d-flex align-items-center gap-1">
                                         <i class="fas fa-user-edit me-2 text-secondary w-20px"></i>
-                                        <small class="text-muted me-2">Editor:</small>
-                                        <a href="/account/detail_user/{{ rule.user_id }}"
-                                            class="small fw-bold text-primary text-decoration-none">
-                                            {{ rule.get_rule_user_first_name_by_id() }}
-                                        </a>
+                                        <small class="text-muted me-1">Editor:</small>
+                                        <user-chip :user-id="currentRule.user_id" :username="currentRule.editor" :avatar="currentRule.editor_avatar" size="xs"></user-chip>
                                     </div>
                                 </div>
                             </div>
@@ -515,34 +502,14 @@
                                         </div>
 
                                         <div class="d-flex flex-wrap gap-4 justify-content-start">
-                                            <div v-for="contributor in contributor_list" :key="contributor.id">
-                                                <a :href="`/account/detail_user/${contributor.user_id}`"
-                                                    class="text-decoration-none contributor-link"
-                                                    :title="contributor.user_name">
-
-                                                    <div class="d-flex flex-column align-items-center">
-                                                        <div class="avatar-circle d-flex align-items-center justify-content-center text-white fw-bold rounded-circle shadow-sm mb-2"
-                                                            :style="{ 
-                                                                width: '48px', 
-                                                                height: '48px', 
-                                                                fontSize: '1.2rem', 
-                                                                backgroundColor: contributor.user_avatar ? 'transparent' : getRandomColor(contributor.user_name || 'System')
-                                                            }">
-                                                            <img v-if="contributor.user_avatar"
-                                                                :src="contributor.user_avatar"
-                                                                class="rounded-circle w-100 h-100"
-                                                                style="object-fit:cover;">
-                                                            <template v-else>
-                                                                [[ (contributor.user_name || '?')[0].toUpperCase() ]]
-                                                            </template>
-                                                        </div>
-
-                                                        <span class="small fw-bold text-dark text-center text-truncate"
-                                                            style="max-width: 85px; font-size: 0.75rem;">
-                                                            [[ contributor.user_name || 'Unknown' ]]
-                                                        </span>
-                                                    </div>
-                                                </a>
+                                            <div v-for="contributor in contributor_list" :key="contributor.id" class="d-flex flex-column align-items-center">
+                                                <user-chip
+                                                    :user-id="contributor.user_id"
+                                                    :username="contributor.user_name"
+                                                    :avatar="contributor.user_avatar"
+                                                    size="md"
+                                                    :show-name="true"
+                                                ></user-chip>
                                             </div>
                                         </div>
                                     </div>
@@ -747,11 +714,7 @@
                     <div class="d-flex mb-5">
                         {% if current_user.is_authenticated %}
                         <div class="flex-shrink-0 me-3">
-                            <div class="position-relative">
-                                <img :src="'https://ui-avatars.com/api/?name={{ current_user.get_username() }}&background=random&color=fff&bold=true'"
-                                    class="rounded-circle shadow-sm border border-2 border-white" width="45" height="45">
-                                <span class="position-absolute bottom-0 end-0 p-1 bg-success border border-light rounded-circle"></span>
-                            </div>
+                            <user-chip :user-id="{{ current_user.id }}" username="{{ current_user.get_username() }}" {% if current_user.get_avatar_url() %}avatar="{{ current_user.get_avatar_url() }}"{% endif %} size="md" :show-name="false"></user-chip>
                         </div>
                         <div class="flex-grow-1">
                             <form @submit.prevent="submitComment(null)">
@@ -801,15 +764,14 @@
                                         <div class="card border shadow-none comment-card p-3 rounded-3 hover-shadow-light transition-all mb-2">
                                             <div class="d-flex">
                                                 <div class="flex-shrink-0 me-3">
-                                                    <img :src="'https://ui-avatars.com/api/?name=' + comment.user_name + '&background=random&color=fff&bold=true'"
-                                                        class="rounded-circle shadow-sm border border-2 border-white" width="45" height="45">
+                                                    <user-chip :user-id="comment.user_id" :username="comment.user_name" size="md" :show-name="false"></user-chip>
                                                 </div>
 
                                                 <div class="flex-grow-1 min-w-0">
                                                     <div class="d-flex justify-content-between align-items-start mb-1">
                                                         <div>
                                                             <div class="d-flex align-items-center gap-2 mb-1">
-                                                                <span class="fw-bold text-dark">@[[ comment.user_name ]]</span>
+                                                                <user-chip :user-id="comment.user_id" :username="comment.user_name" size="xs"></user-chip>
                                                                 <span v-if="comment.is_admin"><i class="fas fa-star text-warning" style="font-size: 0.8rem;"></i></span>
                                                                 <span v-else-if="parseInt('{{current_user.id}}') == comment.user_id"
                                                                     class="badge bg-light text-primary border px-2" style="font-size: 0.6rem;">YOU</span>
@@ -931,12 +893,13 @@
                                                      :class="['p-3 rounded-3 bg-white border transition-all shadow-sm',
                                                               highlightCommentId == reply.id ? 'comment-highlight' : '']">
                                                     <div class="d-flex align-items-start">
-                                                        <img :src="'https://ui-avatars.com/api/?name=' + reply.user_name + '&background=6c757d&color=fff&bold=true'"
-                                                            class="rounded-circle me-2 border border-2 border-white shadow-sm" width="35" height="35">
+                                                        <div class="me-2">
+                                                            <user-chip :user-id="reply.user_id" :username="reply.user_name" size="sm" :show-name="false"></user-chip>
+                                                        </div>
                                                         <div class="flex-grow-1 min-w-0">
                                                             <div class="d-flex justify-content-between align-items-start mb-1">
                                                                 <div>
-                                                                    <span class="fw-bold small text-dark">@[[ reply.user_name ]]</span>
+                                                                    <user-chip :user-id="reply.user_id" :username="reply.user_name" size="xs"></user-chip>
                                                                     <small class="text-muted d-block" style="font-size: 0.7rem;">[[ dayjs.utc(reply.created_at).fromNow() ]]</small>
                                                                 </div>
                                                                 <div class="d-flex gap-1">
@@ -1314,13 +1277,11 @@
                              :class="{'opacity-50': s.user_id === {{ current_user.id or 0 }} && myScope}">
 
                             <!-- Avatar -->
-                            <div class="avatar-circle-xs flex-shrink-0" style="width:30px;height:30px;font-size:.75rem;">
-                                [[ s.username[0].toUpperCase() ]]
-                            </div>
+                            <user-chip :user-id="s.user_id" :username="s.username" size="sm" :show-name="false"></user-chip>
 
                             <div class="flex-grow-1 min-w-0">
                                 <div class="d-flex align-items-center gap-2 mb-1">
-                                    <span class="fw-semibold small">[[ s.username ]]</span>
+                                    <user-chip :user-id="s.user_id" :username="s.username" size="xs" :show-name="true"></user-chip>
                                     <span :class="['badge rounded-pill', s.works ? 'bg-success' : 'bg-danger']" style="font-size:.65rem;">
                                         [[ s.works ? '✓ works' : '✗ no' ]]
                                     </span>
@@ -1368,6 +1329,7 @@
     import VulnerabilityDisplay from '/static/js/vulnerability/vulnerabilityDisplay.js';
     import TagDisplay from '/static/js/tags/tagDisplay.js';
     import SimilarRulesDisplay from '/static/js/rule/similarity/similarRulesDisplay.js';
+    import UserChip from '/static/js/components/UserChip.js';
 
 
     createApp({
@@ -1376,7 +1338,8 @@
         components: {
             'vulnerability-display': VulnerabilityDisplay,
             'tag-display': TagDisplay,
-            'similar-rules-display': SimilarRulesDisplay
+            'similar-rules-display': SimilarRulesDisplay,
+            'user-chip': UserChip,
         },
         setup() {
             /**

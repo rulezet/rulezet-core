@@ -189,10 +189,7 @@
                                 <!-- Content -->
                                 <div class="flex-grow-1 min-width-0">
                                     <div class="d-flex align-items-baseline gap-1 flex-wrap">
-                                        <a v-if="item.user_id"
-                                           :href="'/account/detail_user/' + item.user_id"
-                                           class="feed-username small"
-                                           @click.stop>[[ item.username ]]</a>
+                                        <user-chip v-if="item.user_id" :user-id="item.user_id" :username="item.username" size="xs" @click.stop></user-chip>
                                         <span v-else class="feed-username small text-muted">Someone</span>
                                         <span class="text-muted small">[[ friendlyAction(item.action) ]]</span>
                                     </div>
@@ -268,6 +265,7 @@
     const { createApp, ref, onMounted } = Vue
     import { message_list, create_message } from '/static/js/toaster.js'
     import RulesCarousel from '/static/js/rule/rulesCarousel.js'
+    import UserChip from '/static/js/components/UserChip.js'
 
     // ── Action → friendly label ──────────────────────────────────────────────
     const ACTION_LABELS = {
@@ -338,7 +336,7 @@
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'rules-carousel': RulesCarousel },
+        components: { 'rules-carousel': RulesCarousel, 'user-chip': UserChip },
         setup() {
             const is_loading              = ref(false)
             const current_user_is_admin   = ref(false)

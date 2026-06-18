@@ -27,6 +27,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/base/toaster.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/jobWidget.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/verify_email.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/notification/notification.css') }}">
 
     {% block head %}
     {% endblock %}
@@ -204,6 +205,7 @@
     {% if current_user.is_authenticated %}
     <div id="job-widget"></div>
     <script type="module" src="{{ url_for('static', filename='js/jobs/jobWidget.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/notification/notificationBell.js') }}"></script>
     {% endif %}
 </body>
 
