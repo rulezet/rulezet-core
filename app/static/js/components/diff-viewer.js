@@ -54,8 +54,16 @@ function lcs_diff(a, b) {
     const n = a.length, m = b.length
     if (n === 0 && m === 0) return []
 
-    // Safety cap to avoid O(n*m) on huge inputs
-    if (n * m > 500000) {
+    // Hash elements to integers so DP comparisons are O(1) regardless of string length.
+    // This also lets us raise the safety cap comfortably to ~3000×3000 lines.
+    const _id_map = new Map()
+    let _next = 0
+    const _id = v => { if (!_id_map.has(v)) _id_map.set(v, _next++); return _id_map.get(v) }
+    const ia = a.map(_id)
+    const ib = b.map(_id)
+
+    // Hard fallback for extremely large files (>3000×3000)
+    if (n * m > 9_000_000) {
         return [
             ...a.map(v => ({ type: 'delete', v })),
             ...b.map(v => ({ type: 'insert', v })),
@@ -66,14 +74,14 @@ function lcs_diff(a, b) {
     for (let i = 0; i <= n; i++) dp[i] = new Int32Array(m + 1)
     for (let i = 1; i <= n; i++)
         for (let j = 1; j <= m; j++)
-            dp[i][j] = a[i - 1] === b[j - 1]
+            dp[i][j] = ia[i - 1] === ib[j - 1]
                 ? dp[i - 1][j - 1] + 1
                 : Math.max(dp[i - 1][j], dp[i][j - 1])
 
     const ops = []
     let i = n, j = m
     while (i > 0 || j > 0) {
-        if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+        if (i > 0 && j > 0 && ia[i - 1] === ib[j - 1]) {
             ops.unshift({ type: 'equal', v: a[i - 1] })
             i--; j--
         } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
@@ -88,8 +96,9 @@ function lcs_diff(a, b) {
 }
 
 function diff_lines(text_a, text_b, ignore_ws) {
-    const a = text_a === '' ? [] : text_a.split('\n')
-    const b = text_b === '' ? [] : text_b.split('\n')
+    const norm = s => s.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    const a = text_a === '' ? [] : norm(text_a).split('\n')
+    const b = text_b === '' ? [] : norm(text_b).split('\n')
     if (ignore_ws) {
         const na = a.map(l => l.trim())
         const nb = b.map(l => l.trim())
@@ -268,7 +277,7 @@ export default {
         <div class="dv-toolbar">
 
             <div class="dv-toolbar-left">
-                <button class="dv-btn dv-btn--icon" :class="{ 'is-active': show_input }"
+                <button v-if="modes.includes('input')" class="dv-btn dv-btn--icon" :class="{ 'is-active': show_input }"
                     @click="show_input = !show_input" title="Toggle input panes">
                     <i class="fas fa-keyboard"></i>
                 </button>

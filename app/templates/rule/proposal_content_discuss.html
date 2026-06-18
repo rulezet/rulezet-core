@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Proposal Discussion — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+{% endblock %}
+
 {% block content %}
 <div v-if="proposal">
     <div class="container my-4" id="main-container">
@@ -11,9 +17,9 @@
                 <li class="breadcrumb-item active text-muted" aria-current="page">[[ proposal.rule_name ]]</li>
             </ol>
         </nav>
-        <h2 class="mb-4 ">
+        <h2 class="mb-4">
             <a :href="`detail_rule/${proposal.rule_id}`">
-                <i class="fas fa-code-branch  me-2 "></i>
+                <i class="fas fa-code-branch me-2"></i>
                 Proposal [[ proposal.rule_name ]]
             </a>
         </h2>
@@ -26,28 +32,33 @@
                 </h5>
                 <p class="card-text">
                     <i class="fas fa-comment-dots me-2"></i>
-                    <strong>Message:</strong> <template v-if="proposal.message != '' ">[[ proposal.message ]]
-                    </template> <template v-else> no message</template>
+                    <strong>Message:</strong>
+                    <template v-if="proposal.message != ''">[[ proposal.message ]]</template>
+                    <template v-else>no message</template>
                 </p>
                 <p class="card-text">
                     <i class="fas fa-clock me-2"></i>
                     <strong>Submitted:</strong> [[ proposal.timestamp ]]
                 </p>
-                <p class="card-text">
+                <p class="card-text mb-0">
                     <i class="fas fa-flag me-2"></i>
                     <strong>Status:</strong>
-                    <span class="badge bg-success" v-if="proposal.status === 'accepted'">Accepted</span>
+                    <span class="badge bg-success"           v-if="proposal.status === 'accepted'">Accepted</span>
                     <span class="badge bg-warning text-dark" v-else-if="proposal.status === 'pending'">Pending</span>
-                    <span class="badge bg-danger" v-else>Rejected</span>
+                    <span class="badge bg-danger"            v-else>Rejected</span>
                 </p>
             </div>
         </div>
-        <div class="row mt-4">
-            <div id="myDiffElement"></div>
+
+        <div class="mb-4">
+            <diff-viewer
+                :initial-left="proposal.old_content"
+                :initial-right="proposal.proposed_content"
+                left-label="Current rule"
+                right-label="Proposed change"
+                mode="read">
+            </diff-viewer>
         </div>
-
-
-
 
         <div v-if="comments.length === 0" class="alert alert-secondary">
             No comments yet.
@@ -58,7 +69,7 @@
                 class="list-group-item d-flex justify-content-between align-items-start">
                 <div>
                     <h6 class="mb-1">
-                        <i class="fas fa-user-circle  me-2"></i>
+                        <i class="fas fa-user-circle me-2"></i>
                         [[ comment.user_name ]]
                     </h6>
                     <p class="mb-1">[[ comment.content ]]</p>
@@ -71,6 +82,7 @@
                 </template>
             </li>
         </ul>
+
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title">Add a Comment</h5>
@@ -83,165 +95,66 @@
         </div>
     </div>
 </div>
-<div v-else class="text-center text-muted">
+<div v-else class="text-center text-muted py-5">
     <i class="fas fa-spinner fa-spin me-2"></i> Loading proposal...
 </div>
-
 {% endblock %}
 
 {% block script %}
-
 <script type="module">
-    const { createApp, ref, nextTick } = Vue;
+    const { createApp, ref } = Vue;
     import { message_list, create_message } from '/static/js/toaster.js';
-    import { renderDiff } from "/static/js/diff_macro.js";
     import UserChip from '/static/js/components/UserChip.js';
+    import DiffViewer from '/static/js/components/diff-viewer.js';
+
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'user-chip': UserChip },
+        components: {
+            'user-chip': UserChip,
+            'diff-viewer': DiffViewer,
+        },
         setup() {
-
-            /**
-             *          ##########################
-             *          #  Fetch current user    #
-             *          ##########################
-             * */
-
-            const current_user_is_admin = ref()
-
-            async function fetchCurrentUser() {
-                const res = await fetch('get_current_user')
-                const data = await res.json()
-                current_user_is_admin.value = data.user
-            }
-
-            /**
-             *          ##########################
-             *          #     Fetch proposal     #
-             *          ##########################
-             * */
-
             const proposalId = parseInt("{{ rule_edit_id }}");
-            const proposal = ref(null)
+            const proposal   = ref(null);
+            const comments   = ref([]);
+            const newComment = ref('');
 
             async function fetchRuleProposal() {
-                const res = await fetch('/rule/get_proposal?id=' + proposalId)
+                const res = await fetch('/rule/get_proposal?id=' + proposalId);
                 if (res.ok) {
                     const data = await res.json();
                     proposal.value = data.proposal;
-
-                    if (proposal.value) {
-                        await nextTick(() => {
-                            renderDiff(
-                                proposal.value.old_content,
-                                proposal.value.proposed_content,
-                                "myDiffElement",
-                                "twoText"
-                            );
-                        });
-                    }
                 }
-
             }
-
-            fetchRuleProposal();
-
-            /**
-             *          ##########################
-             *          #       Fetch comment    #
-             *          ##########################
-             * */
-
-            const comments = ref([]);
-            const newComment = ref('');
 
             async function fetchComments() {
                 try {
-                    const res = await fetch(`/rule/discuss?id=` + proposalId);
-                    if (res.ok) {
-                        comments.value = await res.json();
-                    }
+                    const res = await fetch('/rule/discuss?id=' + proposalId);
+                    if (res.ok) comments.value = await res.json();
                 } catch (err) {
                     create_message('Error loading comments: ' + err, 'danger-subtle');
                 }
             }
 
-            fetchComments();
-
             async function submitComment() {
-                const content = newComment.value.trim()
-                if (content != "") {
-                    const res = await fetch(`/rule/add_comment_discuss?id=` + proposalId + '&content=' + content)
-                    if (res.ok) {
-                        const comment = await res.json();
-                        comments.value.push(comment);
-                        newComment.value = '';
-                    }
+                const content = newComment.value.trim();
+                if (!content) return;
+                const res = await fetch('/rule/add_comment_discuss?id=' + proposalId + '&content=' + content);
+                if (res.ok) {
+                    comments.value.push(await res.json());
+                    newComment.value = '';
                 }
             }
 
             async function deleteComment(commentId) {
-                const res = await fetch('/rule/delete_comment?id=' + commentId)
-                if (res.ok) {
-                    comments.value = comments.value.filter(c => c.id !== commentId);
-                } else {
-                    const data = await res.json();
-                }
+                const res = await fetch('/rule/delete_comment?id=' + commentId);
+                if (res.ok) comments.value = comments.value.filter(c => c.id !== commentId);
             }
 
-            /**         
-             *          #############################
-             *          #   color lines for changes  #
-             *          #############################
-             * */
+            fetchRuleProposal();
+            fetchComments();
 
-            function getOldContentLines(content) {
-                return content.split('\n');
-            }
-
-            function getProposedContentLines(content) {
-                return content.split('\n');
-            }
-
-            function isLineNew(line, oldContent) {
-                const normalizedLine = line.trim();
-                const normalizedOldContent = oldContent.split('\n').map(l => l.trim());
-
-                return !normalizedOldContent.includes(normalizedLine);
-            }
-
-            function isLineDeleted(line, proposedContent) {
-                const normalizedLine = line.trim();
-                const normalizedProposedContent = proposedContent.split('\n').map(l => l.trim());
-
-                return !normalizedProposedContent.includes(normalizedLine);
-            }
-
-            function isLineIdentical(line, content) {
-                const normalizedLine = line.trim();
-                const normalizedContent = content.split('\n').map(l => l.trim());
-
-                return normalizedContent.includes(normalizedLine);
-            }
-
-
-            return {
-                comments,
-                newComment,
-                proposalId,
-                fetchComments,
-                submitComment,
-                fetchCurrentUser,
-                current_user_is_admin,
-                deleteComment,
-                fetchRuleProposal,
-                proposal,
-                getOldContentLines,
-                getProposedContentLines,
-                isLineNew,
-                isLineDeleted,
-                isLineIdentical
-            };
+            return { proposal, comments, newComment, submitComment, deleteComment };
         }
     }).mount('#main-container');
 </script>
