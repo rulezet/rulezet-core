@@ -10,6 +10,3 @@
 [submodule "app/modules/pivotick"]
 	path = app/modules/pivotick
 	url = https://github.com/Pivotick/Pivotick.git
-[submodule "modules/pivotick"]
-	path = modules/pivotick
-	url = https://github.com/Pivotick/Pivotick.git

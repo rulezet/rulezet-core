@@ -1,6 +1,14 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block title %}{{ bundle_name if bundle_name is defined else 'Bundle' }} — Rulezet{% endblock %}
 {% block head %}
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/file-tree.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/graph-viewer.css') }}">
+
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <style>
 @keyframes comment-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(255,193,7,.7); outline: 2px solid #ffc107; }
@@ -8,33 +16,18 @@
   100% { box-shadow: 0 0 0 0 rgba(255,193,7,0); outline: 2px solid transparent; }
 }
 .comment-highlight { animation: comment-pulse 1.4s ease 3; background: rgba(255,193,7,.07) !important; border-radius: .5rem; }
+
+/* FileTree — larger rows for bundle structure */
+.ft                  { font-size: .93rem !important; }
+.ft-row              { padding-top: 7px !important; padding-bottom: 7px !important; gap: 8px !important; }
+.ft-icon             { font-size: .88rem !important; width: 16px !important; }
+.ft-chevron          { font-size: .68rem !important; width: 12px !important; }
+.ft-count            { font-size: .72rem !important; padding: 1px 7px !important; }
+.ft-search-input     { font-size: .84rem !important; padding-top: 6px !important; padding-bottom: 6px !important; }
 </style>
 {% endblock %}
 {% block content %}
-<div class="container py-5" id="main-containers">
-    <!-- Toasts error if not main-container-->
-    <div aria-live="polite" aria-atomic="true" class="">
-        <div class="toast-container start-50 translate-middle-x top-0 p-3" style="position: fixed;">
-            <template v-if="message_list">
-                <template v-for="message in message_list" v-key="message.id">
-                    <div :id="`liveToast-${message.id}`" :class="`toast bg-${message.toast_class}`" role="alert"
-                        aria-live="assertive" data-bs-delay="5000" aria-atomic="true"
-                        style="--bs-toast-spacing: 0.5rem;">
-                        <div class="d-flex">
-                            <div class="toast-body">
-                                <template v-if="message.message">
-                                    <i :class="message.icon" style="margin-right: 5px;"></i>
-                                    [[message.message]]
-                                </template>
-                            </div>
-                            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"
-                                aria-label="Close"></button>
-                        </div>
-                    </div>
-                </template>
-            </template>
-        </div>
-    </div>
+<div class="container py-5">
     <div id="bundle-info" data-bundle-id="{{ bundle_id }}"></div>
 
     <template v-if="detail_page_1_is_loading">
@@ -430,50 +423,86 @@
                     </div>
                 </template>
 
-                <!--Folder and file from structure wiew-->
-                <div v-if="rules.length > 0">
-                    <div class="mb-4 border-bottom pb-3 d-flex align-items-center justify-content-between">
+                <!--Structure section-->
+                <div v-if="rules.length > 0" class="mt-5">
+                    <div class="mb-3">
                         <h4 class="fw-bold mb-0 text-dark">
                             <span class="text-primary me-2">|</span>Structure
                         </h4>
-                        <button class="btn btn-sm shadow-sm"
-                            :class="isAllExpanded ? 'btn-outline-secondary' : 'btn-outline-primary'" @click="toggleAll">
-                            <i class="fas me-1" :class="isAllExpanded ? 'fa-folder' : 'fa-folder-open'"></i>
-                            [[ isAllExpanded ? 'Close all' : 'Open all' ]]
-                        </button>
                     </div>
-                    <div class="card-body p-2 overflow-auto bg-light border rounded shadow-sm mb-4"
-                        style="max-height: 500px;">
-                        <ul class="list-unstyled ps-0 mb-0">
-                            <tree-item-view v-for="item in treeData" :key="item.id" :node="item"
-                                :selected-id="selectedNode?.id" :open-nodes="openNodes"
-                                @toggle-folder="handleToggleFolder" @select="handleSelect" />
-                        </ul>
-                    </div>
-
-
-                    <div v-if="selectedNode && selectedNode.type === 'file'">
-                        <div
-                            class="border-bottom border-secondary d-flex justify-content-between align-items-center p-2">
-                            <span>
-                                <i :class="[
-                                        selectedNode.type === 'folder' ? 'fas fa-folder text-warning' : 
-                                        (isRule(selectedNode) ? 'fas fa-file-code text-secondary' : 'fas fa-file-signature text-success')
-                                    ]" class="me-2"></i>
-
-                                <span class="fw-bold">[[ selectedNode.name ]]</span>
+                    <file-tree :nodes="fileTreeNodes" mode="read" @select="handleFileTreeSelect"></file-tree>
+                    <div v-if="selectedFileNode" class="mt-3">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="small fw-bold" style="color: var(--subtle-text-color)">
+                                <i class="fas fa-file-code me-1 text-primary"></i>[[ selectedFileNode.name ]]
                             </span>
-
-                            <button class="btn btn-sm btn-outline-dark border-0 fw-bold"
-                                style="color: var(--color-text)" @click="clearDisplay">
+                            <button class="btn btn-sm btn-outline-secondary rounded-pill" @click="selectedFileNode = null">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
+                        <code-viewer :code="selectedFileNode.content || ''" language="text" max-height="400px"></code-viewer>
+                    </div>
+                </div>
 
-                        <div class="flex-grow-1 overflow-hidden">
-                            <textarea v-if="selectedNode.type === 'file'" :value="selectedNode.content" readonly
-                                class="form-control border-0 font-monospace p-3 bg-dark text-success custom-textarea-scroll"
-                                style="min-height: 400px; resize: none;"></textarea>
+
+                <!--MISP Event section-->
+                <div v-if="rules.length > 0" class="mt-5">
+                    
+                    <div class="mb-3 d-flex align-items-center justify-content-between">
+                        <h4 class="fw-bold mb-0 text-dark">
+                            <span class="text-primary me-2">|</span>MISP Event
+                        </h4>
+                        <button class="btn btn-sm btn-outline-secondary rounded-pill" @click="DownloadMISP" :disabled="!mispJson">
+                            <i class="fas fa-download me-1"></i> Download
+                        </button>
+                    </div>
+
+                    <div class="border rounded-3 overflow-hidden shadow-sm">
+                        <ul class="nav nav-tabs nav-fill border-bottom" id="ruleTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active small fw-bold py-2 border-0" id="misp-graph-tab"
+                                    data-bs-toggle="tab" data-bs-target="#misp-graph" type="button" role="tab">
+                                    <i class="fas fa-graph me-1"></i>Graph
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link small fw-bold py-2 border-0" id="misp-json-tab"
+                                    data-bs-toggle="tab" data-bs-target="#misp-json" type="button" role="tab">
+                                    <i class="fas fa-code me-1"></i> JSON
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="mispTabsContent">
+                            <!-- Graph tab -->
+                            <div class="tab-pane fade show active" id="misp-graph" role="tabpanel">
+                                <div v-if="mispLoading" class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <div class="text-muted mt-2 small">Loading MISP event…</div>
+                                </div>
+                                <div v-else-if="mispError" class="text-center py-4" style="color: var(--subtle-text-color)">
+                                    <i class="fas fa-exclamation-circle me-2"></i>Could not load MISP event
+                                </div>
+                                <!-- Plain div — Pivotick initialized directly by bundleMispGraph.js -->
+                                <div v-else id="misp-graph-container" style="height:660px;width:100%;"></div>
+                            </div>
+
+                            <!-- JSON tab -->
+                            <div class="tab-pane fade" id="misp-json" role="tabpanel">
+                                <div v-if="mispLoading" class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <div class="text-muted mt-2 small">Loading MISP event…</div>
+                                </div>
+                                <div v-else-if="mispError" class="text-center py-4" style="color: var(--subtle-text-color)">
+                                    <i class="fas fa-exclamation-circle me-2"></i>Could not load MISP event
+                                </div>
+                                <code-viewer v-else
+                                    :code="mispJson || ''"
+                                    language="json"
+                                    title="misp-event.json"
+                                    max-height="600px">
+                                </code-viewer>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -853,37 +882,6 @@
     </template>
 
 </div>
-<!-- Template to fetch folder and file from structure-->
-<template id="tree-item-view-template">
-    <li class="mb-1" v-if="node">
-        <div class="d-flex align-items-center p-1 rounded cursor-pointer transition-all item-row"
-            :style="selectedId === node.id ? 'background-color: var(--selected-color)' : 'hover-bg border-bottom border-light'"
-            @click.stop="handleClick">
-
-            <i v-if="node.type === 'folder'" class="fas fa-chevron-right me-2 transition-all"
-                :class="{'fa-rotate-90': isOpen, 'text-primary': selectedId === node.id}"
-                style="font-size: 0.7rem;"></i>
-
-            <i :class="[
-                node.type === 'folder' ? 'fas fa-folder text-warning' : 
-                (isRule(node) ? 'fas fa-file-code text-secondary' : 'fas fa-file-signature text-success'),
-                {'text-primary': selectedId === node.id}
-            ]" class="me-2"></i>
-
-            <span class="flex-grow-1 small fw-bold text-truncate">(( node.name ))</span>
-        </div>
-
-        <div v-if="node.type === 'folder' && node.children && node.children.length > 0" v-show="isOpen"
-            class="ps-3 border-start ms-2 mt-1">
-            <ul class="list-unstyled mb-0">
-                <tree-item-view v-for="child in node.children" :key="child.id" :node="child" :selected-id="selectedId"
-                    :open-nodes="openNodes" @toggle-folder="(id) => $emit('toggle-folder', id)"
-                    @select="(n) => $emit('select', n)" />
-            </ul>
-        </div>
-    </li>
-</template>
-
 {% endblock %}
 
 {% block script %}
@@ -895,40 +893,16 @@
     import TagDisplay from '/static/js/tags/tagDisplay.js';
     import VulnerabilityDisplay from '/static/js/vulnerability/vulnerabilityDisplay.js';
     import UserChip from '/static/js/components/UserChip.js';
-    /* ============================================================
-        TREE COMPONENT
-    ============================================================ */
-    const TreeItemView = {
-        name: 'tree-item-view',
-        props: ['node', 'selectedId', 'openNodes'],
-        template: '#tree-item-view-template',
-        delimiters: ['((', '))'],
-        emits: ['select', 'toggle-folder'],
-        methods: {
-            isRule(node) {
-                return node && node.id && String(node.id).startsWith('rule_');
-            }
-        },
-        setup(props, { emit }) {
-
-            const isOpen = Vue.computed(() => props.openNodes[props.node.id]);
-
-            const handleClick = () => {
-                if (props.node.type === 'folder') {
-                    emit('toggle-folder', props.node.id);
-                }
-                emit('select', props.node);
-            };
-
-            return { isOpen, handleClick };
-        }
-    };
+    import FileTree from '/static/js/components/file-tree.js';
+    import CodeViewer from '/static/js/components/code-viewer.js';
+    import { initBundleGraph } from '/static/js/bundle/bundleMispGraph.js';
 
     createApp({
         delimiters: ['[[', ']]'],
 
         components: {
-            'tree-item-view': TreeItemView,
+            'file-tree': FileTree,
+            'code-viewer': CodeViewer,
             'emodji-picker': emodji_picker,
             'tag-display': TagDisplay,
             'vulnerability-display': VulnerabilityDisplay,
@@ -1446,43 +1420,72 @@
             }
 
             // --------------------------------------------
-            // FOLDERS / FILES
+            // STRUCTURE VIEWS (tree / graph / misp)
             // --------------------------------------------
 
             const treeData = ref([]);
-            const selectedNode = ref(null);
             const bundleId = ref(null);
-            const openNodes = ref({});
-            const isAllExpanded = ref(true);
-            const isRule = (node) => node && node.id && String(node.id).startsWith('rule_');
-            const clearDisplay = () => { selectedNode.value = null; };
 
-            const setAllFoldersStatus = (nodes, status) => {
-                const list = Array.isArray(nodes) ? nodes : [nodes];
-                list.forEach(node => {
-                    if (node.type === 'folder') {
-                        openNodes.value[node.id] = status;
-                        if (node.children) setAllFoldersStatus(node.children, status);
-                    }
-                });
-            };
+            // FileTree: convert API format to FileTree component format
+            function _toFileTree(nodes) {
+                return (nodes || []).map(node => ({
+                    name: node.name,
+                    type: node.type === 'folder' ? 'dir' : 'file',
+                    path: String(node.id),
+                    ext: node.type === 'file' ? node.name.split('.').pop() : undefined,
+                    content: node.content,
+                    children: node.children ? _toFileTree(node.children) : undefined
+                }));
+            }
+            const fileTreeNodes = computed(() => _toFileTree(treeData.value));
 
-            const toggleAll = () => {
-                isAllExpanded.value = !isAllExpanded.value;
-                setAllFoldersStatus(treeData.value, isAllExpanded.value);
-            };
-
-            const handleToggleFolder = (id) => {
-                openNodes.value[id] = !openNodes.value[id];
-            };
-
-            const handleSelect = (node) => {
-                if (selectedNode.value && selectedNode.value.id === node.id) {
-                    selectedNode.value = null;
-                } else {
-                    selectedNode.value = node;
+            const selectedFileNode = ref(null);
+            const handleFileTreeSelect = (node) => {
+                if (node.type === 'file') {
+                    selectedFileNode.value = selectedFileNode.value?.path === node.path ? null : node;
                 }
             };
+
+            // Shared MISP data — used by both Graph and MISP views
+            const _mispParsed = ref(null);
+            const mispError   = ref(false);
+            const mispLoading = ref(false);
+
+            // Computed string for CodeViewer
+            const mispJson = computed(() =>
+                _mispParsed.value !== null ? JSON.stringify(_mispParsed.value, null, 2) : null
+            );
+
+            async function _loadMisp() {
+                if (_mispParsed.value !== null || mispError.value) return;
+                mispLoading.value = true;
+                try {
+                    const params = new URLSearchParams({ bundle_id });
+                    const res = await fetch('/bundle/download_misp?' + params.toString());
+                    if (res.ok) {
+                        _mispParsed.value = JSON.parse(await res.text());
+                    } else {
+                        mispError.value = true;
+                    }
+                } catch {
+                    mispError.value = true;
+                } finally {
+                    mispLoading.value = false;
+                }
+            }
+
+
+            // Graph is initialized lazily: only once, when the container is visible.
+            // Triggers either when MISP data arrives (if tab already open)
+            // or when the tab is first shown (if data already loaded).
+            let _graphInited = false;
+            function _maybeInitGraph() {
+                if (_graphInited || !_mispParsed.value) return;
+                const container = document.getElementById('misp-graph-container');
+                if (!container) return;
+                _graphInited = true;
+                initBundleGraph('misp-graph-container', JSON.stringify(_mispParsed.value));
+            }
 
             onMounted(async () => {
                 await init();
@@ -1511,11 +1514,16 @@
                     const data = await res.json();
                     if (data.success && data.structure) {
                         treeData.value = Array.isArray(data.structure) ? data.structure : [data.structure];
-
-
-                        setAllFoldersStatus(treeData.value, true);
-                        isAllExpanded.value = true;
                     }
+                }
+
+                // Load MISP data then try to init graph (graph tab may already be visible)
+                _loadMisp().then(() => nextTick(_maybeInitGraph));
+
+                // Also init when the graph tab is first shown (data may not be ready yet above)
+                const graphTabEl = document.getElementById('misp-graph-tab');
+                if (graphTabEl) {
+                    graphTabEl.addEventListener('shown.bs.tab', _maybeInitGraph);
                 }
             });
 
@@ -1532,7 +1540,8 @@
                 vote, edit_access, deleteBundle, saveNewDescription, DownloadBundle, DownloadBundleStructure, current_user_is_connected,
                 goToRule, showFullDesc, truncateText, stats, update,
 
-                treeData, selectedNode, handleSelect, openNodes, handleToggleFolder, toggleAll, isAllExpanded, isRule, clearDisplay, toggleContent,
+                treeData, fileTreeNodes,
+                selectedFileNode, handleFileTreeSelect, mispJson, mispLoading, mispError, toggleContent,
 
                 comments_list, highlightBundleCommentId, fetchComments, current_page, total_comments, total_pages, newCommentContent, submitComment, replyingTo, replyContent, visibleReplies, toggleReplies,
                 loadMore, showLess, deleteComment, editComment, addReaction, emodji_picker, current_user_is_admin,
@@ -1543,6 +1552,6 @@
                 currentPage, totalPages, changePage, visiblePages, DownloadMISP
             };
         }
-    }).mount('#main-containers');
+    }).mount('#main-container');
 </script>
 {% endblock %}

@@ -67,7 +67,9 @@ async function parse_input(val) {
 }
 
 function detect_theme() {
-    return document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light'
+    if (document.documentElement.getAttribute('data-bs-theme') === 'dark') return 'dark'
+    if (document.body.classList.contains('dark-mode')) return 'dark'
+    return 'light'
 }
 
 function fmt_json(obj) {
@@ -217,11 +219,12 @@ export default {
         const edit_dat_str    = ref('')
         const edit_error      = ref('')
 
-        let pvt_instance    = null
-        let theme_observer  = null
-        let _raw_data       = null
-        let _raw_cfg        = null
-        let _debounce_timer = null
+        let pvt_instance      = null
+        let theme_observer    = null
+        let body_observer     = null
+        let _raw_data         = null
+        let _raw_cfg          = null
+        let _debounce_timer   = null
 
         // ── Pivotick lifecycle ────────────────────────────────────
 
@@ -466,12 +469,22 @@ export default {
                 }
             })
             theme_observer.observe(document.documentElement, { attributes: true })
+
+            // Also observe body.dark-mode (Rulezet's theme class)
+            body_observer = new MutationObserver(muts => {
+                for (const m of muts) {
+                    if (m.attributeName === 'class') { on_theme_change(); break }
+                }
+            })
+            body_observer.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+
             document.addEventListener('keydown', on_keydown)
         })
 
         onBeforeUnmount(() => {
             destroy_instance()
             theme_observer?.disconnect()
+            body_observer?.disconnect()
             document.removeEventListener('keydown', on_keydown)
             if (_debounce_timer) clearTimeout(_debounce_timer)
         })
