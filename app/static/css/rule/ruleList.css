@@ -205,6 +205,93 @@
     padding: 0;
 }
 
+/* ── Selected rules panel ── */
+.rl-picked-panel {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: .6rem .85rem;
+    margin-bottom: .75rem;
+    background: var(--card-bg-color);
+}
+.rl-picked-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .5rem;
+}
+.rl-picked-title {
+    font-size: .78rem;
+    font-weight: 700;
+    color: #0d6efd;
+    letter-spacing: .01em;
+}
+.rl-picked-clear {
+    border: none;
+    background: transparent;
+    font-size: .73rem;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    padding: 0;
+}
+.rl-picked-clear:hover { color: #dc3545; }
+.rl-picked-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+.rl-picked-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .22rem .5rem .22rem .4rem;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    font-size: .72rem;
+    max-width: 260px;
+    min-width: 0;
+}
+.rl-picked-chip-fmt {
+    font-size: .62rem;
+    font-weight: 700;
+    background: #0d6efd;
+    color: #fff;
+    border-radius: 999px;
+    padding: .05rem .35rem;
+    flex-shrink: 0;
+    letter-spacing: .03em;
+}
+.rl-picked-chip-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-color);
+    font-weight: 500;
+    min-width: 0;
+}
+.rl-picked-chip-rm {
+    border: none;
+    background: transparent;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    padding: 0;
+    font-size: .65rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+.rl-picked-chip-rm:hover { color: #dc3545; }
+.rl-picked-more {
+    border: 1px dashed var(--border-color);
+    background: transparent;
+    color: #0d6efd;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 600;
+    padding: .22rem .65rem;
+    cursor: pointer;
+}
+.rl-picked-more:hover { background: rgba(13,110,253,.06); }
+
 /* ── Card grid ── */
 .rl-cards { display: flex; flex-direction: column; gap: 0; }
 

@@ -50,8 +50,10 @@ import TagsDisplaysList         from '/static/js/tags/tagsDisplaysList.js'
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
 import UserChip                 from '/static/js/components/UserChip.js'
 import CodeViewer               from '/static/js/components/code-viewer.js'
+import RuleExportAction         from '/static/js/rule/ruleExportAction.js'
+import { create_message }       from '/static/js/toaster.js'
 
-const { ref, reactive, computed, watch, onMounted, onUnmounted } = Vue
+const { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue
 
 export default {
     name: 'RuleList',
@@ -65,6 +67,7 @@ export default {
         VulnerabilityDisplaysList,
         UserChip,
         CodeViewer,
+        RuleExportAction,
     },
 
     props: {
@@ -85,6 +88,8 @@ export default {
         initialPerPage:     { type: Number,           default: 12 },
         hiddenFilters:      { type: Array,            default: () => [] },
         initialFilters:     { type: Object,           default: () => ({}) },
+        csrfToken:          { type: String,           default: '' },
+        currentUserIsAuthenticated: { type: Boolean,  default: false },
     },
 
     emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send'],
@@ -293,6 +298,37 @@ export default {
                 Select all {{ total }} rules
             </button>
             <button class="rl-select-banner-btn" @click="clearSelection">Clear selection</button>
+        </div>
+
+        <!-- ── Selected rules panel ── -->
+        <div v-if="!allPagesSelected && selectedRulesList.length" class="rl-picked-panel">
+            <div class="rl-picked-header">
+                <span class="rl-picked-title">
+                    <i class="fas fa-check-square me-1"></i>
+                    {{ selectedRulesList.length }} rule{{ selectedRulesList.length !== 1 ? 's' : '' }} selected
+                </span>
+                <button class="rl-picked-clear" @click="clearSelection">
+                    <i class="fas fa-xmark me-1"></i>Clear all
+                </button>
+            </div>
+            <div class="rl-picked-chips">
+                <span v-for="rule in showAllPicked ? selectedRulesList : selectedRulesList.slice(0, 8)"
+                      :key="rule.id" class="rl-picked-chip">
+                    <span v-if="rule.format" class="rl-picked-chip-fmt">{{ rule.format.toUpperCase() }}</span>
+                    <span class="rl-picked-chip-title">{{ rule.title }}</span>
+                    <button class="rl-picked-chip-rm" @click="removeFromSelection(rule.id)" title="Remove">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </span>
+                <button v-if="selectedRulesList.length > 8 && !showAllPicked"
+                        class="rl-picked-more" @click="showAllPicked = true">
+                    +{{ selectedRulesList.length - 8 }} more
+                </button>
+                <button v-if="showAllPicked && selectedRulesList.length > 8"
+                        class="rl-picked-more" @click="showAllPicked = false">
+                    Show less
+                </button>
+            </div>
         </div>
 
         <!-- ── Loading ── -->
@@ -868,6 +904,24 @@ export default {
             </div>
         </transition>
 
+        <!-- ── Export / Bundle bar ── -->
+        <rule-export-action
+            v-if="showExportBar"
+            :search-query="search"
+            :sort-by="sortKey"
+            :rule-type="ruleType"
+            :selected-sources="selectedSources"
+            :selected-vulnerabilities="selectedVulns"
+            :selected-licenses="selectedLicenses"
+            :selected-tags="selectedTags"
+            :total-rules="exportTotalRules"
+            :rule-ids="exportRuleIds"
+            :csrf-token="csrfToken"
+            :current-user-is-authenticated="currentUserIsAuthenticated ? 'True' : 'False'"
+            :start-view="exportActionView"
+            modal-id="rl-export-modal">
+        </rule-export-action>
+
     </div>
     `,
 
@@ -935,7 +989,9 @@ export default {
         function toggleColumn(key) { colVisible[key] = !colVisible[key] }
 
         // ── Selection ─────────────────────────────────────────────────────
-        const selectedIds     = reactive(new Set())
+        const selectedIds       = reactive(new Set())
+        const selectedRulesMap  = reactive(new Map()) // id → {id, title, format}
+        const showAllPicked     = ref(false)
         const allPagesSelected = ref(false)
 
         let searchTimer = null
@@ -1015,7 +1071,8 @@ export default {
         // ── Filter change handlers ────────────────────────────────────────
         function onFilterChange() {
             page.value = 1
-            clearSelection()
+            // only reset "select all pages" — individual picks survive the filter change
+            allPagesSelected.value = false
             fetchData()
         }
 
@@ -1088,14 +1145,26 @@ export default {
             return allPagesSelected.value || selectedIds.has(rule.id)
         }
 
+        function _mapAdd(rule) {
+            selectedRulesMap.set(rule.id, { id: rule.id, title: rule.title, format: rule.format })
+        }
+        function _mapDel(id) { selectedRulesMap.delete(id) }
+
         function toggleItem(rule) {
             if (allPagesSelected.value) {
                 allPagesSelected.value = false
-                items.value.forEach(r => { if (r.id !== rule.id) selectedIds.add(r.id) })
+                items.value.forEach(r => {
+                    if (r.id !== rule.id) { selectedIds.add(r.id); _mapAdd(r) }
+                })
                 return
             }
-            if (selectedIds.has(rule.id)) selectedIds.delete(rule.id)
-            else                           selectedIds.add(rule.id)
+            if (selectedIds.has(rule.id)) { selectedIds.delete(rule.id); _mapDel(rule.id) }
+            else                           { selectedIds.add(rule.id);    _mapAdd(rule) }
+        }
+
+        function removeFromSelection(id) {
+            selectedIds.delete(id)
+            _mapDel(id)
         }
 
         const allOnPageSelected = computed(() => {
@@ -1111,16 +1180,26 @@ export default {
 
         function togglePageSelection() {
             if (allPagesSelected.value) { clearSelection(); return }
-            if (allOnPageSelected.value) items.value.forEach(r => selectedIds.delete(r.id))
-            else                         items.value.forEach(r => selectedIds.add(r.id))
+            if (allOnPageSelected.value) {
+                items.value.forEach(r => { selectedIds.delete(r.id); _mapDel(r.id) })
+            } else {
+                items.value.forEach(r => { selectedIds.add(r.id); _mapAdd(r) })
+            }
         }
 
-        function selectAllPages() { allPagesSelected.value = true }
+        function selectAllPages() {
+            allPagesSelected.value = true
+            // don't populate map — "all" mode doesn't track individually
+        }
 
         function clearSelection() {
             selectedIds.clear()
+            selectedRulesMap.clear()
             allPagesSelected.value = false
+            showAllPicked.value = false
         }
+
+        const selectedRulesList = computed(() => [...selectedRulesMap.values()])
 
         const selectionCount = computed(() =>
             allPagesSelected.value ? total.value : selectedIds.size
@@ -1173,9 +1252,49 @@ export default {
         }
 
         // ── Bulk ──────────────────────────────────────────────────────────
+        // ── Export modal view ──────────────────────────────────────────────
+        const exportActionView = ref('main')
+
+        async function _openExportModal(view) {
+            exportActionView.value = view
+            await nextTick()
+            const el = document.getElementById('rl-export-modal')
+            if (el) bootstrap.Modal.getOrCreateInstance(el).show()
+        }
+
+        async function _bulkDelete(ids) {
+            if (ids === 'ALL') {
+                create_message('Select specific rules to delete (ALL not supported here).', 'warning')
+                return
+            }
+            try {
+                const res  = await fetch('/rule/delete_rule_list', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
+                    body:    JSON.stringify({ ids }),
+                })
+                const data = await res.json()
+                create_message(data.message, data.toast_class)
+                if (res.ok) { clearSelection(); fetchData() }
+            } catch (e) {
+                create_message('Delete failed.', 'danger')
+            }
+        }
+
         function emitBulkAction(action) {
-            const ids = allPagesSelected.value ? 'ALL' : Array.from(selectedIds)
-            emit('bulk-action', { action, ids, count: selectionCount.value })
+            const ids   = allPagesSelected.value ? 'ALL' : Array.from(selectedIds)
+            const count = selectionCount.value
+
+            if (action === 'delete') {
+                _bulkDelete(ids)
+            } else if (action === 'download') {
+                _openExportModal('download')
+            } else if (action === 'bundle' || action === 'export') {
+                _openExportModal(action === 'bundle' ? 'bundle' : 'main')
+            } else {
+                emit('bulk-action', { action, ids, count })
+                clearSelection()
+            }
         }
 
         function emitSend() {
@@ -1253,6 +1372,33 @@ export default {
             return map[format.toLowerCase()] || 'auto'
         }
 
+        // ── Export bar ────────────────────────────────────────────────────
+        const hasActiveFilters = computed(() =>
+            search.value.trim() !== '' ||
+            ruleType.value !== '' ||
+            selectedTags.value.length > 0 ||
+            selectedSources.value.length > 0 ||
+            selectedLicenses.value.length > 0 ||
+            selectedVulns.value.length > 0
+        )
+
+        // IDs to pass to RuleExportAction:
+        //   - null → filter-based export (all pages selected, or filters active but no manual pick)
+        //   - array → export exactly those IDs
+        const exportRuleIds = computed(() => {
+            if (allPagesSelected.value) return null
+            if (selectedIds.size > 0) return [...selectedIds]
+            return null
+        })
+
+        const showExportBar = computed(() =>
+            hasActiveFilters.value || selectedIds.size > 0
+        )
+
+        const exportTotalRules = computed(() =>
+            allPagesSelected.value ? total.value : selectedIds.size || total.value
+        )
+
         // ── Lifecycle ─────────────────────────────────────────────────────
         onMounted(() => {
             fetchData()
@@ -1280,6 +1426,7 @@ export default {
             selectedIds, allPagesSelected, isSelectable,
             allOnPageSelected, someOnPageSelected,
             selectionCount, showSelectBanner, showBulkBar,
+            selectedRulesList, showAllPicked, removeFromSelection,
             // Computed
             numericUserId, tableColspan, footerInfo,
             // Methods
@@ -1293,6 +1440,9 @@ export default {
             handleVote, handleFavorite,
             emitBulkAction, emitSend,
             fromNow, formatDate, ruleLanguage, highlight,
+            // Export
+            hasActiveFilters, exportRuleIds, showExportBar, exportTotalRules,
+            exportActionView,
         }
     },
 }

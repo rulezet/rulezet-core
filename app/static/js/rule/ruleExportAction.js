@@ -23,12 +23,16 @@ const RuleExportAction = {
         // Hide the trigger button (modal opened programmatically by the host)
         showButton: { type: Boolean, default: true },
         modalId: { type: String, default: 'exportActionModal' },
+        // Open modal at a specific view (programmatic trigger from host)
+        startView: { type: String, default: 'main' },
     },
     delimiters: ['[[', ']]'],
     setup(props) {
         const MAX_LIMIT = 100;
         const isProcessing = Vue.ref(false);
         const currentView = Vue.ref('main');
+
+        Vue.watch(() => props.startView, v => { if (v) currentView.value = v });
         const csrfToken = Vue.ref(props.csrfToken);
         const isOverLimit = Vue.computed(() => props.totalRules > MAX_LIMIT);
         const hasIdSelection = Vue.computed(() => !!(props.ruleIds && props.ruleIds.length));

@@ -80,6 +80,8 @@
                         :current-user-id="currentUserId"
                         :current-user-is-admin="isAdmin"
                         :initial-per-page="6"
+                        :csrf-token="csrfToken"
+                        :current-user-is-authenticated="isAuthenticated"
                         @vote="onEvent('vote', $event)"
                         @favorite="onEvent('favorite', $event)">
                     </rule-list>
@@ -103,7 +105,9 @@
                         :can-favorite="isAuthenticated"
                         :current-user-id="currentUserId"
                         :current-user-is-admin="isAdmin"
-                        :initial-per-page="25">
+                        :initial-per-page="25"
+                        :csrf-token="csrfToken"
+                        :current-user-is-authenticated="isAuthenticated">
                     </rule-list>
                 </div>
             </div>
@@ -146,6 +150,8 @@
                         :current-user-is-admin="isAdmin"
                         :bulk-actions="bulkActions"
                         :initial-per-page="6"
+                        :csrf-token="csrfToken"
+                        :current-user-is-authenticated="isAuthenticated"
                         @bulk-action="onBulkAction"
                         @delete="onDelete"
                         @vote="onEvent('vote', $event)"
@@ -181,6 +187,8 @@
                         :show-filters="true"
                         :current-user-id="currentUserId"
                         :initial-per-page="10"
+                        :csrf-token="csrfToken"
+                        :current-user-is-authenticated="isAuthenticated"
                         @send="onSend">
                     </rule-list>
                 </div>
@@ -227,6 +235,7 @@ const { createApp, ref } = Vue
 const isAuthenticated = {{ current_user.is_authenticated | tojson }}
 const isAdmin         = {{ current_user.is_admin()        | tojson }}
 const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
+const csrfToken       = '{{ csrf_token() }}'
 
 const sharedComponents = {
     'rule-list':                    RuleList,
@@ -246,7 +255,7 @@ createApp({
     components: sharedComponents,
     setup() {
         function onEvent(type, payload) { console.log(`[RuleList] ${type}`, payload) }
-        return { isAuthenticated, isAdmin, currentUserId, onEvent }
+        return { isAuthenticated, isAdmin, currentUserId, csrfToken, onEvent }
     },
 }).mount('#app-read')
 
@@ -254,7 +263,7 @@ createApp({
 createApp({
     components: sharedComponents,
     setup() {
-        return { isAuthenticated, isAdmin, currentUserId }
+        return { isAuthenticated, isAdmin, currentUserId, csrfToken }
     },
 }).mount('#app-table')
 
@@ -265,25 +274,21 @@ createApp({
         const eventLog = ref([])
 
         function onEvent(type, payload) {
-            console.log(`[RuleList] ${type}`, payload)
             eventLog.value.unshift({ type, detail: JSON.stringify(payload) })
             if (eventLog.value.length > 30) eventLog.value.pop()
         }
 
         function onBulkAction({ action, ids, count }) {
+            // delete/download/bundle are handled internally by ruleList
+            // only custom actions arrive here
             onEvent('bulk-action', { action, ids: Array.isArray(ids) ? `[${ids.join(',')}]` : ids, count })
-            create_message(
-                `Bulk "${action}" — ${ids === 'ALL' ? 'ALL rules' : count + ' rule(s)'}`,
-                'success-subtle',
-            )
         }
 
         function onDelete(rule) {
             onEvent('delete', { id: rule.id, title: rule.title })
-            create_message(`Delete requested: ${rule.title}`, 'warning-subtle')
         }
 
-        return { isAuthenticated, isAdmin, currentUserId, bulkActions, eventLog, onBulkAction, onDelete, onEvent }
+        return { isAuthenticated, isAdmin, currentUserId, csrfToken, bulkActions, eventLog, onBulkAction, onDelete, onEvent }
     },
 }).mount('#app-manage')
 
@@ -294,7 +299,6 @@ createApp({
         const selectedIds = ref([])
 
         function onSend(ids) {
-            console.log('[RuleList] send', ids)
             selectedIds.value = ids === 'ALL' ? ['ALL'] : ids
             create_message(
                 ids === 'ALL'
@@ -304,7 +308,7 @@ createApp({
             )
         }
 
-        return { isAuthenticated, isAdmin, currentUserId, selectedIds, onSend }
+        return { isAuthenticated, isAdmin, currentUserId, csrfToken, selectedIds, onSend }
     },
 }).mount('#app-select')
 
@@ -312,7 +316,7 @@ createApp({
 createApp({
     components: sharedComponents,
     setup() {
-        return { isAuthenticated, isAdmin, currentUserId }
+        return { isAuthenticated, isAdmin, currentUserId, csrfToken }
     },
 }).mount('#app-nofilter')
 </script>
