@@ -63,6 +63,7 @@ class Update_class:
         self.found = 0
         self.skipped = 0
         self.total = 0
+        self.processed = 0
 
         self.query_date = datetime.datetime.now(tz=datetime.timezone.utc)
         self.rule_status_list = []
@@ -120,7 +121,7 @@ class Update_class:
                                     self.jobs.put((cp, file, os.path.join(root, file), rule_instance))
                                     break
                
-            # self.total = cp
+            self.total = cp
         elif self.mode == "by_rule":
             
             # get all the rules from Rulezet with the ids
@@ -211,7 +212,7 @@ class Update_class:
             self.stop()
 
         remaining = max(self.jobs.qsize(), len(self.threads))
-        complete = self.total - remaining
+        complete = self.processed
 
         rules_json = [
             {
@@ -291,6 +292,8 @@ class Update_class:
         while not self.jobs.empty():
             with loc_app.app_context():
                 work = self.jobs.get()
+                with self.lock:
+                    self.processed += 1
 
                 if self.mode == "by_url":
 
@@ -603,6 +606,17 @@ class Update_class:
             db.session.add(nr)
 
         db.session.commit()
+
+        try:
+            from app.features.notification.notification_core import notify_github_update_done
+            notify_github_update_done(
+                user_id   = self.current_user.id,
+                updated   = self.updated,
+                found     = self.found,
+                result_id = s.id,
+            )
+        except Exception as e:
+            print(f"[update_class] notify_github_update_done error: {e}")
 
 
 # ------------------ RULE UPDATE CHECKER ------------------

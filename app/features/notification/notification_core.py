@@ -8,6 +8,8 @@ Public surface:
   update_job_notification(job)
   notify_followers_new_rule(rule, author_user_id)
   notify_rule_update_found(user_id, count, update_result_id)
+  notify_github_import_done(user_id, imported, skipped, bad_rules, result_uuid)
+  notify_github_update_done(user_id, updated, found, result_id)
 
   get_notifications(user_id, page, per_page, unread_only)
   get_unread_count(user_id)
@@ -32,11 +34,13 @@ from app.core.db_class.db import Notification, UserFollow, BackgroundJob
 # ── Icons per notification type ────────────────────────────────────────────────
 
 _TYPE_ICON = {
-    'new_rule':           'fa-solid fa-shield-halved',
-    'rule_update_found':  'fa-solid fa-rotate',
-    'job_created':        'fa-solid fa-clock',
-    'job_finished':       'fa-solid fa-circle-check',
-    'job_failed':         'fa-solid fa-circle-xmark',
+    'new_rule':            'fa-solid fa-shield-halved',
+    'rule_update_found':   'fa-solid fa-rotate',
+    'job_created':         'fa-solid fa-clock',
+    'job_finished':        'fa-solid fa-circle-check',
+    'job_failed':          'fa-solid fa-circle-xmark',
+    'github_import_done':  'fa-brands fa-github',
+    'github_update_done':  'fa-solid fa-code-branch',
 }
 
 
@@ -154,6 +158,39 @@ def notify_rule_update_found(user_id, count, update_result_id=None):
         body       = 'New versions detected for your imported GitHub rules.',
         link       = link,
         icon       = _TYPE_ICON['rule_update_found'],
+    )
+
+
+def notify_github_import_done(user_id, imported, skipped, bad_rules, result_uuid=None):
+    """Notification sent when a GitHub / ZIP import session finishes."""
+    total = imported + skipped + bad_rules
+    link = f'/rule/import_history?uuid={result_uuid}' if result_uuid else '/rule/import_history'
+    return create_notification(
+        user_id    = user_id,
+        notif_type = 'github_import_done',
+        title      = f'Import finished — {imported} rule{"s" if imported != 1 else ""} imported',
+        body       = f'{imported} imported · {skipped} skipped · {bad_rules} invalid (total {total})',
+        link       = link,
+        icon       = _TYPE_ICON['github_import_done'],
+    )
+
+
+def notify_github_update_done(user_id, updated, found, result_id=None):
+    """Notification sent when a GitHub update check session finishes."""
+    link = '/rule/github/update_github/update_rules_from_github'
+    if result_id:
+        link += f'?result_id={result_id}'
+    if updated:
+        title = f'{updated} rule update{"s" if updated != 1 else ""} available'
+    else:
+        title = 'Update check finished — rules are up to date'
+    return create_notification(
+        user_id    = user_id,
+        notif_type = 'github_update_done',
+        title      = title,
+        body       = f'{found} rule{"s" if found != 1 else ""} checked · {updated} update{"s" if updated != 1 else ""} found',
+        link       = link,
+        icon       = _TYPE_ICON['github_update_done'],
     )
 
 

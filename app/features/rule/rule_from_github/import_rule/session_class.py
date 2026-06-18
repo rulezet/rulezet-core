@@ -172,4 +172,17 @@ class Session_class:
         )
         db.session.add(result_entry)
         db.session.commit()
+
+        try:
+            from app.features.notification.notification_core import notify_github_import_done
+            notify_github_import_done(
+                user_id    = self.current_user.id,
+                imported   = self.imported,
+                skipped    = self.skipped,
+                bad_rules  = self.bad_rules,
+                result_uuid = self.uuid,
+            )
+        except Exception as e:
+            print(f"[session_class] notify_github_import_done error: {e}")
+
         return result_entry

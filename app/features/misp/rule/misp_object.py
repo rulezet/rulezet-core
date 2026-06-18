@@ -19,7 +19,10 @@ def get_rule_misp_event(rule_id: int):
     event = get_rule_misp_object_base(rule_id)
     event.info = f"Rule {rule_id} - {rule_.title}"
 
-    rule_object = event.objects[1] 
+    if len(event.objects) < 2:
+        return json.loads(event.to_json())
+
+    rule_object = event.objects[1]
 
     if rule_.cve_id:
         vuln_list = json.loads(rule_.cve_id)
@@ -121,12 +124,18 @@ def create_rulezet_metadata_misp_object(rule_id: int) -> MISPObject:
 
 
 def get_rule_misp_object_base(rule_id: int):
-    """Get a MISP object for a specific rule, including metadata and content. (list of objects)"""
+    """Get a MISP object for a specific rule, including metadata and content."""
 
     event = MISPEvent()
-    metadata_object_rule = event.add_object(create_rulezet_metadata_misp_object(rule_id))
-    content_object_rule = event.add_object(content_convert_to_misp_object(rule_id))
 
+    metadata = create_rulezet_metadata_misp_object(rule_id)
+    content  = content_convert_to_misp_object(rule_id)
+
+    if not isinstance(metadata, MISPObject) or not isinstance(content, MISPObject):
+        return event
+
+    metadata_object_rule = event.add_object(metadata)
+    content_object_rule  = event.add_object(content)
     metadata_object_rule.add_reference(content_object_rule.uuid, 'related-to')
 
     return event
@@ -181,20 +190,17 @@ def create_yara_misp_object(rule) -> MISPObject:
     """
     try:
         misp_object = MISPObject(name='yara', ignore_warning=False)
-        # "meta-category": "misc",
         misp_object['meta-category'] = "misc"
 
-        # Required: YARA rule content
         if rule.to_string:
             misp_object.add_attribute('yara', value=rule.to_string)
 
-        # Required: Rule name
         if rule.title:
             misp_object.add_attribute('yara-rule-name', value=rule.title)
 
         return misp_object
-    except Exception as e:
-        return None , str(e)
+    except Exception:
+        return None
 
 def create_sigma_misp_object(rule) -> MISPObject:
     """

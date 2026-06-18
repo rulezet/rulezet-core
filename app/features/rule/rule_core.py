@@ -404,6 +404,8 @@ def add_rule_core(form_dict, user) -> tuple[bool, str] | tuple[Rule, str]:
         tags_list = form_dict.get("tags")
         if tags_list and isinstance(tags_list, list):
             for tag_data in tags_list:
+                if not isinstance(tag_data, dict):
+                    continue
                 tag_id = tag_data.get('id')
                 if tag_id:
                     assoc = RuleTagAssociation(
