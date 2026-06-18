@@ -9,16 +9,8 @@
 }
 .comment-highlight { animation: comment-pulse 1.4s ease 3; background: rgba(255,193,7,.07) !important; border-radius: .5rem; }
 </style>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
-
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/idea.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 
 <script>
 window.__rule_json   = {{ rule_to_json | tojson | safe }};
@@ -1027,10 +1019,16 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 
                     <div class="form-group mb-4">
-                        <label for="rule_content" class="fw-bold">Rule Content</label><span style="color:red">
-                            *</span>
-                        <div id="editor" rows="15"></div>
-                        <input type="hidden" name="rule_content" id="rule_content_hidden">
+                        <label class="fw-bold mb-2">Rule Content <span style="color:red">*</span></label>
+                        <smart-editor
+                            v-model="proposalContent"
+                            mode="code"
+                            :language="currentRule.format || 'text'"
+                            name="rule_content"
+                            placeholder="Paste or write the corrected rule here…"
+                            min-height="400px"
+                            max-height="700px">
+                        </smart-editor>
                     </div>
 
                     <div class="form-group mb-4">
@@ -1306,6 +1304,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
     import SimilarRulesDisplay from '/static/js/rule/similarity/similarRulesDisplay.js';
     import UserChip from '/static/js/components/UserChip.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
+    import SmartEditor from '/static/js/components/smart-editor.js';
 
 
     createApp({
@@ -1317,6 +1316,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
             'similar-rules-display': SimilarRulesDisplay,
             'user-chip': UserChip,
             'code-viewer': CodeViewer,
+            'smart-editor': SmartEditor,
         },
         setup() {
             /**
@@ -1330,6 +1330,8 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
             const csrf_token = '{{ csrf_token() }}';
 
             // ── Server-side data passed via window.__ vars ──────────────
+            const proposalContent = ref('');
+
             const ruleJsonData   = ref(window.__rule_json   || '');  // already a JSON string from json.dumps
             const mispObjectData = ref(window.__misp_object ? JSON.stringify(window.__misp_object, null, 4) : '');
             const mispEventData  = ref(window.__misp_event  ? JSON.stringify(window.__misp_event,  null, 4) : '');
@@ -1471,6 +1473,9 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                 if (response.ok) {
                     const data = await response.json();
                     currentRule.value = data.rule;
+                    if (!proposalContent.value && data.rule?.to_string) {
+                        proposalContent.value = data.rule.to_string;
+                    }
                 }
             }
 
@@ -1828,12 +1833,6 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
 
 
 
-            /**
-             *          ###############
-             *          #   editor    #
-             *          ###############
-             * */
-
             onMounted(async () => {
                 init()
                 await fetchCurrentRule();
@@ -1842,44 +1841,10 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                 document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
                     tab.addEventListener("shown.bs.tab", async (e) => {
                         const target = e.target.getAttribute("href");
-
                         if (target === "#chap4-pane") {
                             if (scopeList.value.length === 0) fetchScopes();
                         }
-
-                        if (target === "#chap2-pane") {
-                            const editorDiv = document.getElementById("editor");
-                            if (!editorDiv) return;
-
-                            if (editor.value == null) {
-                                const isDark = document.body.classList.contains('dark-mode');
-                                editor.value = CodeMirror(editorDiv, {
-                                    value: currentRule.value?.to_string || "",
-                                    mode: "javascript",
-                                    theme: isDark ? "dracula" : "idea",
-                                    lineNumbers: true,
-                                    autoCloseBrackets: true,
-                                    lineWrapping: true
-                                });
-                                editor.value.focus();
-
-                                const cmObserver = new MutationObserver(() => {
-                                    const dark = document.body.classList.contains('dark-mode');
-                                    editor.value.setOption('theme', dark ? 'dracula' : 'idea');
-                                });
-                                cmObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-                            }
-                        }
                     });
-                });
-
-                const form = document.getElementById('proposalForm');
-                if (!form) return;
-                form.addEventListener('submit', (e) => {
-                    if (editor.value) {
-                        const hiddenField = document.getElementById('rule_content_hidden');
-                        hiddenField.value = editor.value.getValue();
-                    }
                 });
             });
 
@@ -2096,6 +2061,9 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                 ruleJsonData,
                 mispObjectData,
                 mispEventData,
+
+                // SmartEditor — propose edit
+                proposalContent,
 
                 // Scope
                 SCOPE_KEYS,

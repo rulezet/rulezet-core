@@ -30,6 +30,17 @@
 const PAIRS   = { '{': '}', '[': ']', '(': ')', '"': '"', "'": "'", '`': '`' }
 const CLOSERS = new Set([')', ']', '}', '"', "'", '`'])
 
+const _KNOWN_HLJS = new Set([
+    'bash','c','cpp','css','diff','go','html','http','java','javascript','json',
+    'kotlin','lua','markdown','nginx','php','plaintext','python','ruby','rust',
+    'shell','sql','swift','typescript','xml','yaml','text',
+])
+const _LANG_ALIASES = { nse:'lua', sigma:'yaml', wazuh:'xml', yara:'text', suricata:'text', zeek:'text', crs:'text', nova:'text' }
+function _resolve_lang(lang) {
+    const mapped = _LANG_ALIASES[lang] || lang
+    return _KNOWN_HLJS.has(mapped) ? mapped : 'text'
+}
+
 let _hljs_p   = null
 let _marked_p = null
 
@@ -275,10 +286,11 @@ export default {
             const code = inner_value.value
             if (!code) { highlighted.value = ''; return }
             try {
-                if (props.language === 'plaintext') {
+                const lang = _resolve_lang(props.language)
+                if (lang === 'text' || lang === 'plaintext') {
                     highlighted.value = escaped_code.value
                 } else {
-                    highlighted.value = window.hljs.highlight(code, { language: props.language }).value
+                    highlighted.value = window.hljs.highlight(code, { language: lang }).value
                 }
             } catch {
                 highlighted.value = window.hljs.highlightAuto(code).value
