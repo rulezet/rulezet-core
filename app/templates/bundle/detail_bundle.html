@@ -30,25 +30,30 @@
 <div class="container py-5">
     <div id="bundle-info" data-bundle-id="{{ bundle_id }}"></div>
 
-    <template v-if="detail_page_1_is_loading">
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-box-archive banner-watermark"></i>
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">[[ truncateText(bundle.name, 40) ]]</li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">{% if bundle_name|length > 40 %}{{ bundle_name[:40] }}…{% else %}{{ bundle_name }}{% endif %}</li>
             </ol>
         </nav>
-        <div class="text-center mb-4">
-            <h2 class="fw-bold mb-1 text-primary text-truncate d-block mx-auto" style="max-width: 80%;">
-                <i class="fas fa-shield-alt me-2"></i> [[ bundle.name ]]
-            </h2>
-            <div class="mx-auto mb-4" style="width: 60px; height: 4px; background-color: #0d6efd; border-radius: 2px;">
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon">
+                <i class="fa-solid fa-box-archive"></i>
             </div>
-            <p class="text-muted mt-2 px-3">
-                Details for bundle "<strong>[[ truncateText(bundle.name, 40) ]]</strong>". Propose edits and engage with
-                the community.
-            </p>
+            <div>
+                <h2 class="fw-bold mb-1">{% if bundle_name|length > 60 %}{{ bundle_name[:60] }}…{% else %}{{ bundle_name }}{% endif %}</h2>
+                <div class="banner-accent"></div>
+            </div>
         </div>
+        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+            Propose edits, share your bundle, and engage with the community.
+        </p>
+    </div>
+
+    <template v-if="detail_page_1_is_loading">
         <!-- Main Card -->
         <div class="card h-100 border-0 card-security-premium-detail mb-4 card_detail border-top shadow-lg position-relative"
             style="border-radius: 12px; min-height: 400px;">
@@ -450,7 +455,7 @@
                     
                     <div class="mb-3 d-flex align-items-center justify-content-between">
                         <h4 class="fw-bold mb-0 text-dark">
-                            <span class="text-primary me-2">|</span>MISP Event
+                            <span class="text-primary me-2">|</span>Visualized Bundle
                         </h4>
                         <button class="btn btn-sm btn-outline-secondary rounded-pill" @click="DownloadMISP" :disabled="!mispJson">
                             <i class="fas fa-download me-1"></i> Download
