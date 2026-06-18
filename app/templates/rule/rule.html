@@ -3,6 +3,74 @@
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/rule.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<style>
+.rf-label-hint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: var(--light-bg-color, #f1f1f1);
+    border: 1px solid var(--border-color, #dee2e6);
+    color: var(--subtle-text-color, #6c757d);
+    font-size: .6rem;
+    cursor: help;
+    position: relative;
+    z-index: 10;
+    font-weight: 700;
+    font-style: normal;
+    transition: background .15s, color .15s;
+    flex-shrink: 0;
+    text-decoration: none;
+}
+.rf-label-hint:hover {
+    background: rgba(13,110,253,.08);
+    color: #0d6efd;
+    border-color: #0d6efd;
+    z-index: 9998;
+}
+.rf-label-hint::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + .5rem);
+    transform: translateX(-50%);
+    background: var(--card-bg-color, #fff);
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    padding: .5rem .7rem;
+    font-size: .75rem;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-color, #1e1e1e);
+    white-space: pre-wrap;
+    width: max-content;
+    max-width: 280px;
+    line-height: 1.5;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s;
+    z-index: 9999;
+}
+.rf-label-hint::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + .15rem);
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--border-color, #dee2e6);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s;
+    z-index: 9999;
+}
+.rf-label-hint:hover::after,
+.rf-label-hint:hover::before { opacity: 1; }
+</style>
 {% endblock %}
 {% block content %}
 <div class="container mt-4" v-cloak >
@@ -102,8 +170,7 @@
             <div class="col-md-6">
               <div class="d-flex align-items-center gap-1 mb-1">
                 <label class="form-label-styled mb-0" for="title">{{ form.title.label.text }}<span class="req-badge">required</span></label>
-                <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" 
-                data-bs-title="Unique name that identifies this rule across the platform.">?</button>
+                <i class="rf-label-hint" data-tip="Unique name that identifies this rule across the platform.">?</i>
               </div>
               {{ form.title(class_="form-control", placeholder="e.g. Detect_Mimikatz_Sekurlsa") }}
               {% if form.title.errors %}
@@ -113,7 +180,7 @@
             <div class="col-md-6">
               <div class="d-flex align-items-center gap-1 mb-1">
                 <label class="form-label-styled mb-0" for="format">{{ form.format.label.text }}<span class="req-badge">required</span></label>
-                <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Detection format — defines which parser validates the rule content.">?</button>
+                <i class="rf-label-hint" data-tip="Detection format — defines which parser validates the rule content.">?</i>
               </div>
               <select v-model="manualFormat" name="format" class="form-select">
                 <option v-for="fmt in rules_formats" :key="fmt.id" :value="fmt.name">[[ fmt.name ]]</option>
@@ -130,14 +197,14 @@
             <div class="col-md-4">
               <div class="d-flex align-items-center gap-1 mb-1">
                 <label class="form-label-styled mb-0" for="license-select">{{ form.license.label.text }}<span class="opt-badge">optional</span></label>
-                <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Legal license for this rule (e.g. MIT, GPL-3.0).">?</button>
+                <i class="rf-label-hint" data-tip="Legal license for this rule (e.g. MIT, GPL-3.0).">?</i>
               </div>
               {{ form.license(class_="form-select", id="license-select") }}
             </div>
             <div class="col-md-4">
               <div class="d-flex align-items-center gap-1 mb-1">
                 <label class="form-label-styled mb-0" for="source">{{ form.source.label.text }}<span class="opt-badge">optional</span></label>
-                <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="URL or name of the original source.">?</button>
+                <i class="rf-label-hint" data-tip="URL or name of the original source.">?</i>
               </div>
               {{ form.source(class_="form-control", placeholder="https://github.com/org/repo") }}
             </div>
@@ -170,14 +237,14 @@
             <div class="col-md-12">
               <div class="d-flex align-items-center gap-1 mb-1">
                 <label class="form-label-styled mb-0" for="description">{{ form.description.label.text }}<span class="opt-badge">optional</span></label>
-                <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Explain the threat scenario this rule covers. Markdown is not rendered.">?</button>
+                <i class="rf-label-hint" data-tip="Explain the threat scenario this rule covers. Markdown is not rendered.">?</i>
               </div>
               {{ form.description(class_="form-control", rows=3, placeholder="Describe what this rule detects and why it matters...") }}
             </div>
             <div class="col-md-12">
               <div class="d-flex align-items-center gap-1 mb-1">
                 <label class="form-label-styled mb-0" for="original_uuid">{{ form.original_uuid.label.text }}<span class="opt-badge">optional</span></label>
-                <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Preserve the UUID from the original source system. Leave blank to auto-generate.">?</button>
+                <i class="rf-label-hint" data-tip="Preserve the UUID from the original source system. Leave blank to auto-generate.">?</i>
               </div>
               {{ form.original_uuid(class_="form-control", placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000") }}
             </div>
@@ -188,7 +255,7 @@
           <div class="mb-4">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="editor">{{ form.to_string.label.text }}<span class="req-badge">required</span></label>
-              <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Paste the full rule content. Syntax is validated against the selected format before saving.">?</button>
+              <i class="rf-label-hint" data-tip="Paste the full rule content. Syntax is validated against the selected format before saving.">?</i>
             </div>
             <smart-editor
               v-model="manualContent"
@@ -256,7 +323,7 @@
           <div class="mb-3">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="content">Rule content<span class="req-badge">required</span></label>
-              <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Supports YARA, Sigma, Suricata, Zeek, CRS, Wazuh, Nova, NSE, Elastic.">?</button>
+              <i class="rf-label-hint" data-tip="Supports YARA, Sigma, Suricata, Zeek, CRS, Wazuh, Nova, NSE, Elastic.">?</i>
             </div>
             <smart-editor
               v-model="parseContent"
@@ -272,7 +339,7 @@
           <div class="mb-4">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="format">Rule format<span class="req-badge">required</span></label>
-              <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Select the format that matches the pasted content.">?</button>
+              <i class="rf-label-hint" data-tip="Select the format that matches the pasted content.">?</i>
             </div>
             <select v-model="ruleType" name="format" id="format" class="form-select" required>
               <option v-for="format in rules_formats" :value="format.name" :key="format.id">[[ format.name ]]</option>
@@ -319,7 +386,7 @@
           <div class="mb-3">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="url">Repository URL<span class="req-badge">required</span></label>
-              <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Must be a public GitHub repository URL ending in .git.">?</button>
+              <i class="rf-label-hint" data-tip="Must be a public GitHub repository URL ending in .git.">?</i>
             </div>
             <div class="input-group">
               <span class="input-group-text" style="background:var(--light-bg-color);border-color:var(--border-color);color:var(--muted-text-color,#6c757d);">
@@ -334,7 +401,7 @@
           <div class="mb-3">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="branch">Branch<span class="opt-badge">optional</span></label>
-              <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Leave empty to use the repository's default branch.">?</button>
+              <i class="rf-label-hint" data-tip="Leave empty to use the repository's default branch.">?</i>
             </div>
             <div class="input-group">
               <span class="input-group-text" style="background:var(--light-bg-color);border-color:var(--border-color);color:var(--muted-text-color,#6c757d);">
@@ -363,7 +430,7 @@
           <div class="mb-4">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="license-select">License<span class="opt-badge">optional</span></label>
-              <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Applied to every imported rule. Leave blank if not applicable.">?</button>
+              <i class="rf-label-hint" data-tip="Applied to every imported rule. Leave blank if not applicable.">?</i>
             </div>
             <select id="license-select" name="license" class="form-select" v-model="selectedLicense">
               <option disabled value="">Select a license…</option>
@@ -432,7 +499,7 @@
           <div class="mb-3">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="zipfile">ZIP Archive<span class="req-badge">required</span></label>
-              <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Only .zip files are accepted. Max recommended size: 50 MB.">?</button>
+              <i class="rf-label-hint" data-tip="Only .zip files are accepted. Max recommended size: 50 MB.">?</i>
             </div>
             <input type="file" name="zipfile" id="zipfile" class="form-control"
               accept=".zip" @change="fileZip = $event.target.files[0]">
@@ -442,7 +509,7 @@
           <div class="mb-4">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="license-select-zip">License<span class="opt-badge">optional</span></label>
-              <button type="button" class="btn btn-secondary btn-sm tooltip-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="Applied to every rule extracted from the archive.">?</button>
+              <i class="rf-label-hint" data-tip="Applied to every rule extracted from the archive.">?</i>
             </div>
             <select id="license-select-zip" name="license" class="form-select" v-model="selectedLicenseZip">
               <option disabled value="">Select a license…</option>
@@ -485,10 +552,6 @@ window.__manual_format  = {{ (form.format.data  or '') | tojson }};
 <script type="module">
 
       document.addEventListener('DOMContentLoaded', function () {
-            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
-                  new bootstrap.Tooltip(el, { trigger: 'hover' })
-            );
-
             const params = new URLSearchParams(window.location.search);
             const tab = params.get('tab');
 
