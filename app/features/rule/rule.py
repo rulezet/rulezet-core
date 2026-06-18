@@ -3738,3 +3738,9 @@ def permanent_delete_bulk():
     log_activity('rule.permanent_delete_bulk', f"Permanently deleted {deleted} rule(s)",
                  extra={'count': deleted})
     return jsonify({'success': True, 'deleted': deleted}), 200
+
+
+@rule_blueprint.route('/rulelist_test', methods=['GET'])
+def rulelist_test():
+    """Dev/test page for the RuleList component — showcases all modes."""
+    return render_template('rule/rulelist_test.html')

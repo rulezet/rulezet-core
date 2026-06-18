@@ -1,0 +1,319 @@
+{% extends 'base.html' %}
+{% block title %}RuleList — Dev Sandbox{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4 px-4" id="main-container">
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-flask banner-watermark"></i>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-flask"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">RuleList — Dev Sandbox</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            Test page for the <code>RuleList</code> component. Each tab demonstrates a different
+            mode or configuration. Open the browser console to see emitted events.
+        </p>
+    </div>
+
+    <!-- Mode tabs -->
+    <ul class="nav nav-tabs mb-4" id="modeTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-read" data-bs-toggle="tab"
+                    data-bs-target="#pane-read" type="button">
+                <i class="fas fa-eye me-1"></i>Read — cards
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-table" data-bs-toggle="tab"
+                    data-bs-target="#pane-table" type="button">
+                <i class="fas fa-table-cells-large me-1"></i>Read — table
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-manage" data-bs-toggle="tab"
+                    data-bs-target="#pane-manage" type="button">
+                <i class="fas fa-sliders me-1"></i>Manage + bulk
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-select" data-bs-toggle="tab"
+                    data-bs-target="#pane-select" type="button">
+                <i class="fas fa-check-double me-1"></i>Select mode
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-nofilter" data-bs-toggle="tab"
+                    data-bs-target="#pane-nofilter" type="button">
+                <i class="fas fa-minus-circle me-1"></i>No filters
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+
+        <!-- ── READ — card view ── -->
+        <div class="tab-pane fade show active" id="pane-read" role="tabpanel">
+            <div class="card border-0 shadow-sm p-4" style="border-radius:15px;">
+                <p class="text-muted small mb-3">
+                    Mode <code>read</code>, view <strong>card</strong> — no selection,
+                    votes and favorites enabled, edit/delete hidden.
+                    Click the <i class="fas fa-code"></i> button on a card to preview rule content
+                    with syntax highlighting.
+                </p>
+                <div id="app-read">
+                    <rule-list
+                        mode="read"
+                        default-view="card"
+                        :can-vote="isAuthenticated"
+                        :can-favorite="isAuthenticated"
+                        :current-user-id="currentUserId"
+                        :current-user-is-admin="isAdmin"
+                        :initial-per-page="6"
+                        @vote="onEvent('vote', $event)"
+                        @favorite="onEvent('favorite', $event)">
+                    </rule-list>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── READ — table view ── -->
+        <div class="tab-pane fade" id="pane-table" role="tabpanel">
+            <div class="card border-0 shadow-sm p-4" style="border-radius:15px;">
+                <p class="text-muted small mb-3">
+                    Mode <code>read</code>, view <strong>table</strong> — sortable columns,
+                    expand a row with the <i class="fas fa-chevron-down"></i> button to see
+                    rule content in <code>CodeViewer</code>.
+                </p>
+                <div id="app-table">
+                    <rule-list
+                        mode="read"
+                        default-view="table"
+                        :can-vote="isAuthenticated"
+                        :can-favorite="isAuthenticated"
+                        :current-user-id="currentUserId"
+                        :current-user-is-admin="isAdmin"
+                        :initial-per-page="25">
+                    </rule-list>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── MANAGE + bulk ── -->
+        <div class="tab-pane fade" id="pane-manage" role="tabpanel">
+            <div class="card border-0 shadow-sm p-4" style="border-radius:15px;">
+                <p class="text-muted small mb-3">
+                    Mode <code>manage</code> — checkboxes, sticky bulk action bar,
+                    edit and delete available for owners/admins.
+                </p>
+
+                <!-- Live event log -->
+                <div id="event-log-manage" class="mb-3 p-3 rounded font-monospace"
+                     style="background:var(--light-bg-color);border:1px solid var(--border-color);
+                            font-size:.78rem;max-height:110px;overflow-y:auto;">
+                    <div class="text-muted mb-1"
+                         style="font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;">
+                        Live event log
+                    </div>
+                    <div v-for="(ev, i) in eventLog" :key="i">
+                        <span class="text-primary fw-semibold">{% raw %}{{ ev.type }}{% endraw %}</span>
+                        &nbsp;—&nbsp;{% raw %}{{ ev.detail }}{% endraw %}
+                    </div>
+                    <div v-if="!eventLog.length" class="text-muted fst-italic">
+                        No events yet — try selecting rules or using bulk actions.
+                    </div>
+                </div>
+
+                <div id="app-manage">
+                    <rule-list
+                        mode="manage"
+                        default-view="card"
+                        :can-vote="isAuthenticated"
+                        :can-favorite="isAuthenticated"
+                        :can-edit="isAuthenticated"
+                        :can-delete="isAdmin"
+                        :current-user-id="currentUserId"
+                        :current-user-is-admin="isAdmin"
+                        :bulk-actions="bulkActions"
+                        :initial-per-page="6"
+                        @bulk-action="onBulkAction"
+                        @delete="onDelete"
+                        @vote="onEvent('vote', $event)"
+                        @favorite="onEvent('favorite', $event)">
+                    </rule-list>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── SELECT mode ── -->
+        <div class="tab-pane fade" id="pane-select" role="tabpanel">
+            <div class="card border-0 shadow-sm p-4" style="border-radius:15px;">
+                <p class="text-muted small mb-3">
+                    Mode <code>select</code> — checkboxes + <strong>Confirm</strong> button
+                    in the toolbar emits the selected rule IDs. Useful for picker modals.
+                </p>
+
+                <div v-if="selectedIds.length"
+                     class="alert alert-success d-flex align-items-center gap-2 mb-3">
+                    <i class="fas fa-check-circle"></i>
+                    <span>
+                        Selected IDs:
+                        <strong>{% raw %}{{ selectedIds.join(', ') }}{% endraw %}</strong>
+                    </span>
+                    <button class="btn btn-sm btn-outline-secondary ms-auto rounded-pill"
+                            @click="selectedIds = []">Clear</button>
+                </div>
+
+                <div id="app-select">
+                    <rule-list
+                        mode="select"
+                        default-view="table"
+                        :show-filters="true"
+                        :current-user-id="currentUserId"
+                        :initial-per-page="10"
+                        @send="onSend">
+                    </rule-list>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── No filters ── -->
+        <div class="tab-pane fade" id="pane-nofilter" role="tabpanel">
+            <div class="card border-0 shadow-sm p-4" style="border-radius:15px;">
+                <p class="text-muted small mb-3">
+                    Filters hidden (<code>:show-filters="false"</code>) — only the toolbar
+                    (search + sort + view toggle). Suitable for secondary panels or sidebars.
+                </p>
+                <div id="app-nofilter">
+                    <rule-list
+                        mode="read"
+                        default-view="card"
+                        :show-filters="false"
+                        :can-vote="isAuthenticated"
+                        :can-favorite="isAuthenticated"
+                        :current-user-id="currentUserId"
+                        :initial-per-page="6">
+                    </rule-list>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /tab-content -->
+
+</div>
+{% endblock %}
+
+
+{% block script %}
+<script type="module">
+import RuleList                  from '/static/js/rule/ruleList.js'
+import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
+import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
+import { create_message }        from '/static/js/toaster.js'
+
+const { createApp, ref } = Vue
+
+// ── Shared values injected by Flask ──────────────────────────────────────────
+const isAuthenticated = {{ current_user.is_authenticated | tojson }}
+const isAdmin         = {{ current_user.is_admin()        | tojson }}
+const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
+
+const sharedComponents = {
+    'rule-list':                    RuleList,
+    'tags-displays-list':           TagsDisplaysList,
+    'vulnerability-displays-list':  VulnerabilityDisplaysList,
+}
+
+const bulkActions = [
+    { key: 'bundle',   label: 'Add to bundle', icon: 'fa-layer-group' },
+    { key: 'export',   label: 'Export',         icon: 'fa-file-export' },
+    { key: 'download', label: 'Download',        icon: 'fa-download' },
+    { key: 'delete',   label: 'Delete',          icon: 'fa-trash', variant: 'danger' },
+]
+
+// ── App: Read — cards ─────────────────────────────────────────────────────────
+createApp({
+    components: sharedComponents,
+    setup() {
+        function onEvent(type, payload) { console.log(`[RuleList] ${type}`, payload) }
+        return { isAuthenticated, isAdmin, currentUserId, onEvent }
+    },
+}).mount('#app-read')
+
+// ── App: Read — table ─────────────────────────────────────────────────────────
+createApp({
+    components: sharedComponents,
+    setup() {
+        return { isAuthenticated, isAdmin, currentUserId }
+    },
+}).mount('#app-table')
+
+// ── App: Manage + bulk ────────────────────────────────────────────────────────
+createApp({
+    components: sharedComponents,
+    setup() {
+        const eventLog = ref([])
+
+        function onEvent(type, payload) {
+            console.log(`[RuleList] ${type}`, payload)
+            eventLog.value.unshift({ type, detail: JSON.stringify(payload) })
+            if (eventLog.value.length > 30) eventLog.value.pop()
+        }
+
+        function onBulkAction({ action, ids, count }) {
+            onEvent('bulk-action', { action, ids: Array.isArray(ids) ? `[${ids.join(',')}]` : ids, count })
+            create_message(
+                `Bulk "${action}" — ${ids === 'ALL' ? 'ALL rules' : count + ' rule(s)'}`,
+                'success-subtle',
+            )
+        }
+
+        function onDelete(rule) {
+            onEvent('delete', { id: rule.id, title: rule.title })
+            create_message(`Delete requested: ${rule.title}`, 'warning-subtle')
+        }
+
+        return { isAuthenticated, isAdmin, currentUserId, bulkActions, eventLog, onBulkAction, onDelete, onEvent }
+    },
+}).mount('#app-manage')
+
+// ── App: Select ───────────────────────────────────────────────────────────────
+createApp({
+    components: sharedComponents,
+    setup() {
+        const selectedIds = ref([])
+
+        function onSend(ids) {
+            console.log('[RuleList] send', ids)
+            selectedIds.value = ids === 'ALL' ? ['ALL'] : ids
+            create_message(
+                ids === 'ALL'
+                    ? 'All rules selected'
+                    : `${ids.length} rule(s) selected`,
+                'success-subtle',
+            )
+        }
+
+        return { isAuthenticated, isAdmin, currentUserId, selectedIds, onSend }
+    },
+}).mount('#app-select')
+
+// ── App: No filters ───────────────────────────────────────────────────────────
+createApp({
+    components: sharedComponents,
+    setup() {
+        return { isAuthenticated, isAdmin, currentUserId }
+    },
+}).mount('#app-nofilter')
+</script>
+{% endblock %}

@@ -1,0 +1,1162 @@
+/**
+ * ruleList.js — Reusable rule list component (card + table views)
+ *
+ * Modes:
+ *   read    — view only, no selection
+ *   select  — checkboxes + confirm button emitting send(ids)
+ *   manage  — checkboxes + sticky bulk bar with configurable actions
+ *
+ * Both views include integrated filter panel and pagination.
+ * Card style matches /rule/rules_list exactly.
+ *
+ * Props:
+ *   mode                String   'read'|'select'|'manage'      default:'read'
+ *   defaultView         String   'card'|'table'                default:'card'
+ *   fetchUrl            String   paginated API endpoint        default:'/rule/data_table'
+ *   source              String   GitHub source URL filter
+ *   userId              Number   filter by owner
+ *   currentUserId       Number   for OWNER badge
+ *   currentUserIsAdmin  Boolean
+ *   showFilters         Boolean  show filter panel             default:true
+ *   showCreate          Boolean  show "New Rule" button        default:false
+ *   canVote             Boolean                                default:false
+ *   canFavorite         Boolean                                default:false
+ *   canEdit             Boolean                                default:false
+ *   canDelete           Boolean                                default:false
+ *   bulkActions         Array    [{key,label,icon?,variant?}]  default:[]
+ *   initialPerPage      Number                                 default:12
+ *   hiddenFilters       Array    field keys to hide            default:[]
+ *   initialFilters      Object   pre-filled filter values      default:{}
+ *
+ * Events:
+ *   create
+ *   edit(rule)
+ *   delete(rule)
+ *   vote({ ruleId, type })           — voted; local state updated automatically
+ *   favorite({ ruleId, isFavorited}) — toggled; local state updated automatically
+ *   bulk-action({ action, ids, count })
+ *   send(ids)
+ *
+ * Exposed:
+ *   fetchData() — re-fetch current page from the outside
+ */
+
+import PaginationComponent      from '/static/js/rule/paginationComponent.js'
+import MultiVulnerabilityFilter from '/static/js/vulnerability/multiVulnerabilityFilter.js'
+import MultiSourceFilter        from '/static/js/rule/multiSourceFilter.js'
+import MultiLicenseFilter       from '/static/js/rule/multiLicenseFilter.js'
+import MultiTagFilter           from '/static/js/tags/multiTagFIlter.js'
+import TagsDisplaysList         from '/static/js/tags/tagsDisplaysList.js'
+import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
+import UserChip                 from '/static/js/components/UserChip.js'
+import CodeViewer               from '/static/js/components/code-viewer.js'
+
+const { ref, reactive, computed, watch, onMounted, onUnmounted } = Vue
+
+export default {
+    name: 'RuleList',
+    components: {
+        PaginationComponent,
+        MultiVulnerabilityFilter,
+        MultiSourceFilter,
+        MultiLicenseFilter,
+        MultiTagFilter,
+        TagsDisplaysList,
+        VulnerabilityDisplaysList,
+        UserChip,
+        CodeViewer,
+    },
+
+    props: {
+        mode:               { type: String,           default: 'read' },
+        defaultView:        { type: String,           default: 'card' },
+        fetchUrl:           { type: String,           default: '/rule/data_table' },
+        source:             { type: String,           default: null },
+        userId:             { type: [Number, String], default: null },
+        currentUserId:      { type: [Number, String], default: null },
+        currentUserIsAdmin: { type: Boolean,          default: false },
+        showFilters:        { type: Boolean,          default: true },
+        showCreate:         { type: Boolean,          default: false },
+        canVote:            { type: Boolean,          default: false },
+        canFavorite:        { type: Boolean,          default: false },
+        canEdit:            { type: Boolean,          default: false },
+        canDelete:          { type: Boolean,          default: false },
+        bulkActions:        { type: Array,            default: () => [] },
+        initialPerPage:     { type: Number,           default: 12 },
+        hiddenFilters:      { type: Array,            default: () => [] },
+        initialFilters:     { type: Object,           default: () => ({}) },
+    },
+
+    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send'],
+
+    expose: ['fetchData'],
+
+    template: `
+    <div class="rl-wrapper">
+
+        <!-- ── Filter panel ── -->
+        <div v-if="showFilters" class="mb-3">
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+
+                <button class="rl-filter-toggle" :class="{ 'is-active': filtersOpen }"
+                        @click="filtersOpen = !filtersOpen">
+                    <i class="fas fa-sliders" style="font-size:.7rem;"></i>
+                    Filters
+                    <span v-if="activeFilterCount > 0" class="rl-filter-badge">{{ activeFilterCount }}</span>
+                    <i class="fas ms-1" :class="filtersOpen ? 'fa-chevron-up' : 'fa-chevron-down'"
+                       style="font-size:.6rem;"></i>
+                </button>
+
+                <button v-if="showCreate" class="dt-toolbar-btn dt-toolbar-btn--primary"
+                        @click="$emit('create')">
+                    <i class="fas fa-file-circle-plus"></i>
+                    <span>New Rule</span>
+                </button>
+            </div>
+
+            <div v-show="filtersOpen" class="rl-filter-panel">
+
+                <!-- Row 1: quick options -->
+                <div class="rl-fp-row">
+                    <div class="rl-fp-item" v-if="!isFilterHidden('format')">
+                        <select v-model="ruleType" class="rl-fp-select" @change="onFilterChange"
+                                aria-label="Format">
+                            <option value="">All formats</option>
+                            <option v-for="f in rulesFormats" :key="f.id" :value="f.name">
+                                {{ f.name.toUpperCase() }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="rl-fp-item" v-if="!isFilterHidden('search_field')">
+                        <select v-model="searchField" class="rl-fp-select" @change="onFilterChange"
+                                aria-label="Search in">
+                            <option value="all">All fields</option>
+                            <option value="title">Title only</option>
+                            <option value="content">Content only</option>
+                        </select>
+                    </div>
+
+                    <label v-if="!isFilterHidden('exact_match')"
+                           class="rl-fp-switch" title="Exact match">
+                        <input type="checkbox" v-model="exactMatch" @change="onFilterChange" />
+                        <span>Exact</span>
+                    </label>
+
+                    <button v-if="activeFilterCount > 0"
+                            class="rl-fp-reset" @click="resetFilters">
+                        <i class="fas fa-rotate-left"></i> Reset
+                    </button>
+                </div>
+
+                <!-- Row 2: multi-selects (sources, vulns, licenses, tags) -->
+                <div class="rl-fp-row rl-fp-row--multi">
+                    <div class="rl-fp-multi-item" v-if="!isFilterHidden('sources') && !source">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-code-branch text-primary"></i> Sources
+                        </span>
+                        <multi-source-filter v-model="selectedSources"
+                            api-endpoint="/rule/get_rules_sources_usage"
+                            placeholder="Filter sources…"
+                            :userId="numericUserId"
+                            @change="onFilterChange">
+                        </multi-source-filter>
+                    </div>
+
+                    <div class="rl-fp-multi-item" v-if="!isFilterHidden('vulnerabilities')">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-shield-virus text-danger"></i> Vulnerabilities
+                        </span>
+                        <multi-vulnerability-filter v-model="selectedVulns"
+                            api-endpoint="/rule/get_all_rules_vulnerabilities_usage"
+                            placeholder="CVE, GHSA…"
+                            :user-id="numericUserId"
+                            :source-rules="source || ''"
+                            @change="onFilterChange">
+                        </multi-vulnerability-filter>
+                    </div>
+
+                    <div class="rl-fp-multi-item" v-if="!isFilterHidden('licenses')">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-scale-balanced text-info"></i> Licenses
+                        </span>
+                        <multi-license-filter v-model="selectedLicenses"
+                            api-endpoint="/rule/get_rules_licenses_usage"
+                            placeholder="Filter licenses…"
+                            :user-id="numericUserId"
+                            :source-rules="source || ''"
+                            @change="onFilterChange">
+                        </multi-license-filter>
+                    </div>
+
+                    <div class="rl-fp-multi-item" v-if="!isFilterHidden('tags')">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-tags text-primary"></i> Tags
+                        </span>
+                        <multi-tag-filter v-model="selectedTags"
+                            api-endpoint="/rule/get_all_tags_usage"
+                            placeholder="Filter tags…"
+                            :user-id="numericUserId"
+                            target-type="rule"
+                            @change="onFilterChange">
+                        </multi-tag-filter>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ── Toolbar: search + sort + view toggle ── -->
+        <div class="rl-toolbar">
+            <div class="rl-toolbar-left">
+                <!-- Search -->
+                <div class="dt-search">
+                    <i class="fas fa-search dt-search-icon"></i>
+                    <input class="dt-search-input" type="text" placeholder="Search rules…"
+                           v-model="search" @input="onSearchInput" aria-label="Search rules" />
+                    <button v-if="search" class="dt-search-clear" @click="clearSearch"
+                            aria-label="Clear search">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="rl-toolbar-right">
+                <!-- Sort dropdown (card mode) -->
+                <select v-if="viewMode === 'card'" v-model="cardSort" class="rl-sort-select"
+                        @change="onCardSortChange" aria-label="Sort rules">
+                    <option value="newest">Newest</option>
+                    <option value="oldest">Oldest</option>
+                    <option value="most_likes">Most liked</option>
+                    <option value="title_asc">A → Z</option>
+                </select>
+
+                <!-- View toggle -->
+                <div class="dt-view-toggle" title="Switch view">
+                    <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'card' }"
+                            @click="viewMode = 'card'" aria-label="Card view">
+                        <i class="fas fa-rectangle-list"></i>
+                    </button>
+                    <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'table' }"
+                            @click="viewMode = 'table'" aria-label="Table view">
+                        <i class="fas fa-table-cells-large"></i>
+                    </button>
+                </div>
+
+                <!-- Column picker (table mode) -->
+                <div v-if="viewMode === 'table'" class="dropdown">
+                    <button class="dt-toolbar-btn dropdown-toggle" data-bs-toggle="dropdown"
+                            aria-expanded="false" aria-label="Toggle columns">
+                        <i class="fas fa-table-columns"></i>
+                        <span>Columns</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-2"
+                        style="border-radius:12px;min-width:165px;" @click.stop>
+                        <li v-for="col in TOGGLEABLE_COLS" :key="col.key">
+                            <label class="dropdown-item rounded-2 d-flex align-items-center gap-2"
+                                   style="cursor:pointer;font-size:.84rem;user-select:none;">
+                                <input type="checkbox"
+                                       :checked="colVisible[col.key]"
+                                       @change="toggleColumn(col.key)" />
+                                {{ col.label }}
+                            </label>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Select-all / send (mode=select) -->
+                <button v-if="mode === 'select'"
+                        class="dt-toolbar-btn dt-toolbar-btn--primary"
+                        :disabled="selectionCount === 0"
+                        @click="emitSend">
+                    <i class="fas fa-check"></i>
+                    <span>Confirm{{ selectionCount > 0 ? ' (' + selectionCount + ')' : '' }}</span>
+                </button>
+
+                <!-- Per-page (table mode) -->
+                <div v-if="viewMode === 'table'" class="rl-per-page">
+                    <span>Rows</span>
+                    <select v-model="perPageModel" aria-label="Rows per page">
+                        <option v-for="n in [10, 25, 50, 100]" :key="n" :value="n">{{ n }}</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Select-all-pages banner ── -->
+        <div v-if="showSelectBanner" class="rl-select-banner">
+            <span v-if="!allPagesSelected">
+                All {{ items.length }} rules on this page are selected.
+            </span>
+            <span v-else>All {{ total }} rules are selected.</span>
+            <button v-if="!allPagesSelected" class="rl-select-banner-btn" @click="selectAllPages">
+                Select all {{ total }} rules
+            </button>
+            <button class="rl-select-banner-btn" @click="clearSelection">Clear selection</button>
+        </div>
+
+        <!-- ── Loading ── -->
+        <div v-if="loading" class="rl-loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading…</span>
+            </div>
+        </div>
+
+        <!-- ── Empty ── -->
+        <div v-else-if="items.length === 0 && !loading" class="rl-empty">
+            <div class="rl-empty-icon"><i class="fas fa-search"></i></div>
+            <p class="mb-0">No rules found matching your search.</p>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             CARD VIEW
+             ══════════════════════════════════════════════ -->
+        <div v-else-if="viewMode === 'card'" class="rl-cards">
+
+            <div class="card h-100 shadow-sm border-0 mb-4 rl-rule-card"
+                 v-for="rule in items" :key="rule.id"
+                 :class="{ 'rl-rule-card--selected': isSelected(rule) }">
+
+                <div class="premium-accent-line"></div>
+                <div class="card-watermark-list">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+
+                <!-- Badges top-right -->
+                <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+                    <span v-if="isOwner(rule)" class="badge bg-success shadow-sm pt-1" title="You own this rule">
+                        <i class="fa-solid fa-crown me-1"></i>OWNER
+                    </span>
+                    <span v-if="currentUserIsAdmin" class="badge bg-warning shadow-sm pt-1">
+                        <i class="fa-solid fa-crown me-1"></i>ADMIN
+                    </span>
+                    <span class="badge rounded-pill bg-dark pt-1 shadow-sm">
+                        {{ rule.format ? rule.format.toUpperCase() : '?' }}
+                    </span>
+                </div>
+
+                <div class="card-body d-flex flex-column p-4" style="z-index:1;">
+
+                    <!-- Selection row -->
+                    <div v-if="isSelectable"
+                         class="rl-card-check-row mb-3"
+                         :class="{ 'rl-card-check-row--on': isSelected(rule) }"
+                         @click.stop="toggleItem(rule)">
+                        <input type="checkbox" class="rl-card-check-input"
+                               :checked="isSelected(rule)"
+                               @change.stop @click.stop
+                               :aria-label="'Select ' + rule.title" />
+                        <span class="rl-card-check-text">
+                            {{ isSelected(rule) ? 'Selected' : 'Select this rule' }}
+                        </span>
+                        <i v-if="isSelected(rule)"
+                           class="fas fa-check ms-auto text-primary"
+                           style="font-size:.78rem;"></i>
+                    </div>
+
+                    <!-- Title + author + date -->
+                    <div class="mb-3 pe-5">
+                        <h5 class="fw-bold mb-1">
+                            <a :href="'/rule/detail_rule/' + rule.id"
+                               class="fw-bold h5 border-start border-primary border-4 ps-3 custom-rule-link text-decoration-none d-block">
+                                {{ rule.title }}
+                            </a>
+                        </h5>
+                        <div class="d-flex align-items-center gap-2 mt-2">
+                            <user-chip
+                                :user-id="rule.user_id"
+                                :username="rule.author && rule.author !== 'Unknown' ? rule.author : rule.editor"
+                                :avatar="rule.editor_avatar"
+                                size="xs">
+                            </user-chip>
+                            <span class="text-muted opacity-50">|</span>
+                            <small class="text-muted">{{ fromNow(rule.last_modif) }}</small>
+                        </div>
+                    </div>
+
+                    <!-- Description -->
+                    <p class="text-muted small lh-base mb-3"
+                       style="-webkit-line-clamp:3;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden;">
+                        <i class="fas fa-quote-left me-2 opacity-50 text-primary"></i>
+                        {{ rule.description || 'No description.' }}
+                    </p>
+
+                    <!-- CVEs -->
+                    <div class="mb-3" @click.stop>
+                        <vulnerability-displays-list object-type="rule" :object-id="rule.id" :max-visible="3">
+                        </vulnerability-displays-list>
+                    </div>
+
+                    <!-- Tags -->
+                    <div class="mb-3" @click.stop>
+                        <tags-displays-list object-type="rule" :object-id="rule.id" :max-visible="3">
+                        </tags-displays-list>
+                    </div>
+
+                    <!-- Metadata grid -->
+                    <div class="row g-2 mb-4 pt-3 small text-muted">
+                        <div class="col-6">
+                            <div class="mb-1 text-truncate" :title="rule.source">
+                                <i class="fas fa-link me-2"></i>
+                                <strong>Source:</strong> {{ rule.source || '—' }}
+                            </div>
+                            <div class="mb-1">
+                                <i class="fas fa-balance-scale me-2"></i>
+                                <strong>License:</strong>
+                                {{ rule.license && rule.license !== 'Unknown' ? rule.license : 'No license' }}
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-1">
+                                <i class="fas fa-code-branch me-2"></i>
+                                <strong>Version:</strong>
+                                <span class="badge text-bg-light border px-1">
+                                    {{ rule.version && rule.version !== 'Unknown' ? rule.version : '1.0' }}
+                                </span>
+                            </div>
+                            <div class="mb-1 d-flex align-items-center gap-1">
+                                <i class="fas fa-user-edit me-1 opacity-50"></i>
+                                <strong class="me-1">Editor:</strong>
+                                <user-chip :user-id="rule.user_id" :username="rule.editor"
+                                           :avatar="rule.editor_avatar" size="xs">
+                                </user-chip>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer: votes + actions -->
+                    <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto">
+
+                        <!-- Votes -->
+                        <div class="btn-group shadow-sm border rounded-pill overflow-hidden">
+                            <button @click="handleVote('up', rule)"
+                                    class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn"
+                                    :class="{ 'rl-vote-disabled': !canVote }"
+                                    :title="canVote ? 'Upvote' : 'Login to vote'">
+                                <i class="fas fa-thumbs-up text-primary me-1"></i>{{ rule.vote_up }}
+                            </button>
+                            <button @click="handleVote('down', rule)"
+                                    class="btn btn-sm px-3 border-0 shadow-none btn-animate home-btn"
+                                    :class="{ 'rl-vote-disabled': !canVote }"
+                                    :title="canVote ? 'Downvote' : 'Login to vote'">
+                                <i class="fas fa-thumbs-down text-danger me-1"></i>{{ rule.vote_down }}
+                            </button>
+                        </div>
+
+                        <div class="d-flex gap-2 align-items-center">
+
+                            <!-- Collapse toggle -->
+                            <button class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
+                                    style="width:32px;height:32px;border:1px solid #eee;"
+                                    :title="expandedId === rule.id ? 'Hide content' : 'Show content'"
+                                    @click="toggleExpand(rule)">
+                                <i class="fas" :class="expandedId === rule.id ? 'fa-code-slash' : 'fa-code'"
+                                   style="font-size:.72rem;"></i>
+                            </button>
+
+                            <!-- Favorite -->
+                            <button v-if="canFavorite"
+                                    @click="handleFavorite(rule)"
+                                    class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
+                                    style="width:32px;height:32px;border:1px solid #eee;"
+                                    title="Add to favorites">
+                                <i class="fa-star" :class="rule.is_favorited ? 'fas text-warning' : 'far'"></i>
+                            </button>
+
+                            <!-- More dropdown -->
+                            <div class="dropup">
+                                <button class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
+                                        style="width:32px;height:32px;border:1px solid #eee;"
+                                        data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-ellipsis-v text-muted" style="font-size:.75rem;"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 mb-2"
+                                    style="border-radius:12px;">
+                                    <li>
+                                        <a class="dropdown-item rounded-2" :href="'/rule/detail_rule/' + rule.id">
+                                            <i class="fas fa-eye me-2 text-muted"></i>View Detail
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item rounded-2" :href="'/rule/report/' + rule.id">
+                                            <i class="fas fa-flag me-2 text-muted"></i>Report Issue
+                                        </a>
+                                    </li>
+                                    <template v-if="canEdit && (isOwner(rule) || currentUserIsAdmin)">
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <a class="dropdown-item rounded-2"
+                                               :href="'/rule/edit_rule/' + rule.id">
+                                                <i class="fas fa-pen me-2 text-primary"></i>Edit Rule
+                                            </a>
+                                        </li>
+                                    </template>
+                                    <template v-if="canDelete && (isOwner(rule) || currentUserIsAdmin)">
+                                        <li>
+                                            <button class="dropdown-item rounded-2 text-danger"
+                                                    @click="$emit('delete', rule)">
+                                                <i class="fa-solid fa-trash me-2"></i>Delete Rule
+                                            </button>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Collapse: rule content -->
+                <div v-if="expandedId === rule.id" class="rl-rule-collapse border-top">
+                    <code-viewer v-if="rule.to_string"
+                        :code="rule.to_string"
+                        :language="ruleLanguage(rule.format)"
+                        :title="rule.title"
+                        max-height="380px">
+                    </code-viewer>
+                    <p v-else class="text-muted text-center py-3 mb-0 small">No content available.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             TABLE VIEW
+             ══════════════════════════════════════════════ -->
+        <div v-else class="dt-table-wrap rl-table-wrap">
+            <table class="dt-table" role="grid">
+                <thead class="dt-thead">
+                    <tr>
+                        <th v-if="isSelectable" class="dt-th dt-th--checkbox">
+                            <input type="checkbox" class="dt-checkbox"
+                                   :checked="allOnPageSelected"
+                                   :indeterminate="someOnPageSelected"
+                                   @change="togglePageSelection"
+                                   aria-label="Select all on page" />
+                        </th>
+                        <th class="dt-th dt-th--sortable"
+                            :class="{ 'dt-th--sorted': sortKey === 'title' }"
+                            @click="setSort('title')">
+                            <div class="dt-th-inner">
+                                Title <i class="fas dt-sort-icon" :class="sortIcon('title')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.format"
+                            class="dt-th dt-th--sortable"
+                            style="width:90px;"
+                            :class="{ 'dt-th--sorted': sortKey === 'format' }"
+                            @click="setSort('format')">
+                            <div class="dt-th-inner">
+                                Format <i class="fas dt-sort-icon" :class="sortIcon('format')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.author"
+                            class="dt-th dt-th--sortable"
+                            style="width:130px;"
+                            :class="{ 'dt-th--sorted': sortKey === 'author' }"
+                            @click="setSort('author')">
+                            <div class="dt-th-inner">
+                                Author <i class="fas dt-sort-icon" :class="sortIcon('author')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.description" class="dt-th">Description</th>
+                        <th v-show="colVisible.tags" class="dt-th" style="width:170px;">Tags</th>
+                        <th v-show="colVisible.created"
+                            class="dt-th dt-th--sortable"
+                            style="width:120px;"
+                            :class="{ 'dt-th--sorted': sortKey === 'creation_date' }"
+                            @click="setSort('creation_date')">
+                            <div class="dt-th-inner">
+                                Created <i class="fas dt-sort-icon" :class="sortIcon('creation_date')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.votes"
+                            class="dt-th dt-th--sortable"
+                            style="width:90px;"
+                            :class="{ 'dt-th--sorted': sortKey === 'vote_up' }"
+                            @click="setSort('vote_up')">
+                            <div class="dt-th-inner">
+                                Votes <i class="fas dt-sort-icon" :class="sortIcon('vote_up')"></i>
+                            </div>
+                        </th>
+                        <th class="dt-th dt-th--actions" style="width:110px;">Actions</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <template v-for="rule in items" :key="rule.id">
+                        <tr class="dt-row"
+                            :class="{
+                                'dt-row--selected': isSelected(rule),
+                                'dt-row--expanded': expandedId === rule.id,
+                            }">
+
+                            <td v-if="isSelectable" class="dt-td dt-td--checkbox">
+                                <input type="checkbox" class="dt-checkbox"
+                                       :checked="isSelected(rule)"
+                                       @change="toggleItem(rule)"
+                                       :aria-label="'Select ' + rule.title" />
+                            </td>
+
+                            <td class="dt-td dt-td--truncate" style="max-width:240px;">
+                                <a :href="'/rule/detail_rule/' + rule.id" class="dt-rule-title"
+                                   :title="rule.title">{{ rule.title }}</a>
+                            </td>
+
+                            <td v-show="colVisible.format" class="dt-td">
+                                <span v-if="rule.format"
+                                      class="badge rounded-pill bg-dark pt-1 shadow-sm">
+                                    {{ rule.format.toUpperCase() }}
+                                </span>
+                            </td>
+
+                            <td v-show="colVisible.author"
+                                class="dt-td dt-td--truncate" style="max-width:130px;">
+                                {{ rule.author || '—' }}
+                            </td>
+
+                            <td v-show="colVisible.description" class="dt-td dt-td--truncate">
+                                <span class="text-muted">{{ rule.description || '—' }}</span>
+                            </td>
+
+                            <td v-show="colVisible.tags" class="dt-td" @click.stop>
+                                <tags-displays-list v-if="rule.tags && rule.tags.length"
+                                    object-type="rule" :object-id="rule.id" :max-visible="2">
+                                </tags-displays-list>
+                                <span v-else class="text-muted small">—</span>
+                            </td>
+
+                            <td v-show="colVisible.created" class="dt-td"
+                                style="white-space:nowrap;font-size:.78rem;">
+                                {{ formatDate(rule.creation_date) }}
+                            </td>
+
+                            <td v-show="colVisible.votes" class="dt-td">
+                                <span class="text-success me-2" style="font-size:.82rem;">
+                                    <i class="fas fa-thumbs-up me-1"></i>{{ rule.vote_up }}
+                                </span>
+                                <span class="text-danger" style="font-size:.82rem;">
+                                    <i class="fas fa-thumbs-down me-1"></i>{{ rule.vote_down }}
+                                </span>
+                            </td>
+
+                            <td class="dt-td dt-td--actions">
+                                <div class="dt-actions">
+                                    <a :href="'/rule/detail_rule/' + rule.id"
+                                       class="dt-action-btn" title="View">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a v-if="canEdit && (isOwner(rule) || currentUserIsAdmin)"
+                                       :href="'/rule/edit_rule/' + rule.id"
+                                       class="dt-action-btn" title="Edit">
+                                        <i class="fas fa-pencil"></i>
+                                    </a>
+                                    <button v-if="canDelete && (isOwner(rule) || currentUserIsAdmin)"
+                                            class="dt-action-btn dt-action-btn--danger" title="Delete"
+                                            @click="$emit('delete', rule)">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    <button class="dt-action-btn dt-action-btn--expand"
+                                            :class="{ 'is-expanded': expandedId === rule.id }"
+                                            title="Expand" @click="toggleExpand(rule)">
+                                        <i class="fas fa-chevron-down dt-expand-chevron"
+                                           style="font-size:.65rem;"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Expanded row -->
+                        <tr v-if="expandedId === rule.id"
+                            :key="'expand-' + rule.id" class="dt-row-expand">
+                            <td :colspan="tableColspan" class="dt-expand-cell">
+                                <div class="dt-expand-grid mb-2">
+                                    <div class="dt-expand-field">
+                                        <label>Author</label><span>{{ rule.author || '—' }}</span>
+                                    </div>
+                                    <div class="dt-expand-field">
+                                        <label>License</label><span>{{ rule.license || '—' }}</span>
+                                    </div>
+                                    <div class="dt-expand-field">
+                                        <label>Created</label><span>{{ rule.creation_date || '—' }}</span>
+                                    </div>
+                                    <div class="dt-expand-field">
+                                        <label>Last modified</label><span>{{ rule.last_modif || '—' }}</span>
+                                    </div>
+                                    <div v-if="rule.source" class="dt-expand-field">
+                                        <label>Source</label>
+                                        <span>
+                                            <a :href="rule.source" target="_blank" rel="noreferrer"
+                                               class="text-primary">{{ rule.source }}</a>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div v-if="rule.description" class="dt-expand-field mb-2">
+                                    <label>Description</label><span>{{ rule.description }}</span>
+                                </div>
+
+                                <div v-if="rule.tags && rule.tags.length" class="mb-2" @click.stop>
+                                    <tags-displays-list object-type="rule" :object-id="rule.id"
+                                        :max-visible="10">
+                                    </tags-displays-list>
+                                </div>
+
+                                <div v-if="rule.cves && rule.cves.length" class="mb-2" @click.stop>
+                                    <vulnerability-displays-list object-type="rule" :object-id="rule.id"
+                                        :max-visible="4">
+                                    </vulnerability-displays-list>
+                                </div>
+
+                                <code-viewer v-if="rule.to_string"
+                                    :code="rule.to_string"
+                                    :language="ruleLanguage(rule.format)"
+                                    :title="rule.title"
+                                    max-height="380px">
+                                </code-viewer>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- ── Footer: pagination + per-page (card) + count ── -->
+        <div v-if="!loading && items.length > 0" class="rl-footer">
+            <div v-if="viewMode === 'card'" class="rl-per-page">
+                <span>Per page</span>
+                <select v-model="perPageModel" aria-label="Items per page">
+                    <option v-for="n in [6, 12, 24, 48]" :key="n" :value="n">{{ n }}</option>
+                </select>
+            </div>
+            <div v-else style="width:1px;"></div>
+
+            <div style="flex-grow:1;display:flex;justify-content:center;">
+                <pagination-component
+                    :current-page="page"
+                    :total-pages="totalPages"
+                    @change-page="goToPage">
+                </pagination-component>
+            </div>
+
+            <div class="rl-footer-info">{{ footerInfo }}</div>
+        </div>
+
+        <!-- ── Bulk bar (sticky bottom) ── -->
+        <transition name="rl-bulk-slide">
+            <div v-if="showBulkBar" class="rl-bulk-bar">
+                <span class="rl-bulk-count">
+                    {{ selectionCount }} {{ selectionCount === 1 ? 'rule' : 'rules' }} selected
+                </span>
+                <div class="rl-bulk-actions">
+                    <button v-for="action in bulkActions" :key="action.key"
+                            class="rl-bulk-btn"
+                            :class="{ 'rl-bulk-btn--danger': action.variant === 'danger' }"
+                            @click="emitBulkAction(action.key)">
+                        <i v-if="action.icon" :class="'fas ' + action.icon"></i>
+                        {{ action.label }}
+                    </button>
+                </div>
+                <button class="rl-bulk-clear" @click="clearSelection">
+                    <i class="fas fa-xmark"></i> Clear
+                </button>
+            </div>
+        </transition>
+
+    </div>
+    `,
+
+    setup(props, { emit }) {
+        const init = props.initialFilters
+
+        // ── Data ─────────────────────────────────────────────────────────
+        const items      = ref([])
+        const total      = ref(0)
+        const totalPages = ref(1)
+        const loading    = ref(false)
+
+        // ── Pagination / sort ─────────────────────────────────────────────
+        const page         = ref(1)
+        const cardPerPage  = ref(props.initialPerPage)
+        const tablePerPage = ref(25)
+        const sortKey      = ref('')
+        const sortDir      = ref('asc')
+
+        // Active per-page depends on the current view (set after viewMode is declared)
+        const perPage = computed(() =>
+            viewMode.value === 'table' ? tablePerPage.value : cardPerPage.value
+        )
+
+        const perPageModel = computed({
+            get: () => perPage.value,
+            set: val => {
+                if (viewMode.value === 'table') tablePerPage.value = Number(val)
+                else cardPerPage.value = Number(val)
+                page.value = 1
+                fetchData()
+            },
+        })
+
+        // ── Filter state ─────────────────────────────────────────────────
+        const search          = ref(init.search || '')
+        const searchField     = ref(init.search_field || 'all')
+        const exactMatch      = ref(init.exact_match === 'true' || false)
+        const ruleType        = ref(init.format || '')
+        const selectedTags    = ref(init.tags ? init.tags.split(',') : [])
+        const selectedSources = ref(init.sources ? init.sources.split(',') : [])
+        const selectedLicenses = ref(init.licenses ? init.licenses.split(',') : [])
+        const selectedVulns   = ref(init.vulnerabilities ? init.vulnerabilities.split(',') : [])
+        const rulesFormats    = ref([])
+
+        // Card sort shorthand (maps to sortKey/sortDir)
+        const cardSort = ref('newest')
+
+        // ── UI state ──────────────────────────────────────────────────────
+        const viewMode    = ref(props.defaultView)
+        const filtersOpen = ref(false)
+        const expandedId  = ref(null)
+
+        // ── Column visibility (table mode) ────────────────────────────────
+        const TOGGLEABLE_COLS = [
+            { key: 'format',      label: 'Format' },
+            { key: 'author',      label: 'Author' },
+            { key: 'description', label: 'Description' },
+            { key: 'tags',        label: 'Tags' },
+            { key: 'created',     label: 'Created' },
+            { key: 'votes',       label: 'Votes' },
+        ]
+        const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, true])))
+        function toggleColumn(key) { colVisible[key] = !colVisible[key] }
+
+        // ── Selection ─────────────────────────────────────────────────────
+        const selectedIds     = reactive(new Set())
+        const allPagesSelected = ref(false)
+
+        let searchTimer = null
+
+        // ── Helpers ───────────────────────────────────────────────────────
+        const numericUserId = computed(() =>
+            props.userId !== null && props.userId !== '' ? Number(props.userId) : null
+        )
+
+        const numericCurrentUserId = computed(() =>
+            props.currentUserId !== null && props.currentUserId !== ''
+                ? Number(props.currentUserId) : null
+        )
+
+        function isOwner(rule) {
+            return numericCurrentUserId.value !== null &&
+                   numericCurrentUserId.value === rule.user_id
+        }
+
+        function isFilterHidden(key) {
+            return props.hiddenFilters.includes(key)
+        }
+
+        const activeFilterCount = computed(() =>
+            (ruleType.value ? 1 : 0) +
+            (exactMatch.value ? 1 : 0) +
+            (searchField.value !== 'all' ? 1 : 0) +
+            selectedTags.value.length +
+            selectedSources.value.length +
+            selectedLicenses.value.length +
+            selectedVulns.value.length
+        )
+
+        // ── Fetch ─────────────────────────────────────────────────────────
+        async function fetchData() {
+            loading.value = true
+            try {
+                const params = new URLSearchParams()
+                params.set('page', page.value)
+                params.set('per_page', perPage.value)
+                if (search.value)                    params.set('search', search.value)
+                if (searchField.value !== 'all')     params.set('search_field', searchField.value)
+                if (exactMatch.value)                params.set('exact_match', 'true')
+                if (ruleType.value)                  params.set('rule_type', ruleType.value)
+                if (sortKey.value)                   params.set('sort', sortKey.value)
+                if (sortKey.value)                   params.set('dir', sortDir.value)
+                if (props.source)                    params.set('source', props.source)
+                if (numericUserId.value)             params.set('user_id', numericUserId.value)
+                if (selectedTags.value.length)       params.set('tags', selectedTags.value.join(','))
+                if (selectedSources.value.length)    params.set('sources', selectedSources.value.join(','))
+                if (selectedLicenses.value.length)   params.set('licenses', selectedLicenses.value.join(','))
+                if (selectedVulns.value.length)      params.set('vulnerabilities', selectedVulns.value.join(','))
+
+                const sep = props.fetchUrl.includes('?') ? '&' : '?'
+                const res = await fetch(`${props.fetchUrl}${sep}${params}`)
+                if (!res.ok) return
+                const data = await res.json()
+                items.value      = data.items ?? []
+                total.value      = data.total ?? 0
+                totalPages.value = data.total_pages ?? 1
+                if (page.value > totalPages.value && totalPages.value > 0) {
+                    page.value = totalPages.value
+                }
+            } finally {
+                loading.value = false
+            }
+        }
+
+        async function fetchFormats() {
+            try {
+                const res = await fetch('/rule/get_rules_formats')
+                const data = await res.json()
+                rulesFormats.value = data.formats || []
+            } catch { /* silently skip */ }
+        }
+
+        // ── Filter change handlers ────────────────────────────────────────
+        function onFilterChange() {
+            page.value = 1
+            clearSelection()
+            fetchData()
+        }
+
+        function resetFilters() {
+            ruleType.value       = ''
+            searchField.value    = 'all'
+            exactMatch.value     = false
+            selectedTags.value   = []
+            selectedSources.value = []
+            selectedLicenses.value = []
+            selectedVulns.value  = []
+            onFilterChange()
+        }
+
+        // ── Search ────────────────────────────────────────────────────────
+        function onSearchInput() {
+            clearTimeout(searchTimer)
+            searchTimer = setTimeout(() => { page.value = 1; fetchData() }, 360)
+        }
+
+        function clearSearch() {
+            search.value = ''
+            page.value = 1
+            fetchData()
+        }
+
+        // ── Sort ─────────────────────────────────────────────────────────
+        function setSort(key) {
+            if (sortKey.value === key) {
+                sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+            } else {
+                sortKey.value = key
+                sortDir.value = 'asc'
+            }
+            page.value = 1
+            fetchData()
+        }
+
+        function sortIcon(key) {
+            if (sortKey.value !== key) return 'fa-sort'
+            return sortDir.value === 'asc' ? 'fa-sort-up' : 'fa-sort-down'
+        }
+
+        function onCardSortChange() {
+            const map = {
+                newest:     { key: 'creation_date', dir: 'desc' },
+                oldest:     { key: 'creation_date', dir: 'asc'  },
+                most_likes: { key: 'vote_up',        dir: 'desc' },
+                title_asc:  { key: 'title',           dir: 'asc'  },
+            }
+            const s = map[cardSort.value]
+            if (s) { sortKey.value = s.key; sortDir.value = s.dir }
+            else   { sortKey.value = ''; sortDir.value = 'asc' }
+            page.value = 1
+            fetchData()
+        }
+
+        // ── Pagination ────────────────────────────────────────────────────
+        function goToPage(p) {
+            page.value = p
+            fetchData()
+        }
+
+        // ── Selection ────────────────────────────────────────────────────
+        const isSelectable = computed(() =>
+            props.mode === 'select' || props.mode === 'manage'
+        )
+
+        function isSelected(rule) {
+            return allPagesSelected.value || selectedIds.has(rule.id)
+        }
+
+        function toggleItem(rule) {
+            if (allPagesSelected.value) {
+                allPagesSelected.value = false
+                items.value.forEach(r => { if (r.id !== rule.id) selectedIds.add(r.id) })
+                return
+            }
+            if (selectedIds.has(rule.id)) selectedIds.delete(rule.id)
+            else                           selectedIds.add(rule.id)
+        }
+
+        const allOnPageSelected = computed(() => {
+            if (!isSelectable.value || !items.value.length) return false
+            return items.value.every(r => selectedIds.has(r.id))
+        })
+
+        const someOnPageSelected = computed(() => {
+            if (!isSelectable.value) return false
+            const n = items.value.filter(r => selectedIds.has(r.id)).length
+            return n > 0 && n < items.value.length
+        })
+
+        function togglePageSelection() {
+            if (allPagesSelected.value) { clearSelection(); return }
+            if (allOnPageSelected.value) items.value.forEach(r => selectedIds.delete(r.id))
+            else                         items.value.forEach(r => selectedIds.add(r.id))
+        }
+
+        function selectAllPages() { allPagesSelected.value = true }
+
+        function clearSelection() {
+            selectedIds.clear()
+            allPagesSelected.value = false
+        }
+
+        const selectionCount = computed(() =>
+            allPagesSelected.value ? total.value : selectedIds.size
+        )
+
+        const showSelectBanner = computed(() =>
+            isSelectable.value && allOnPageSelected.value && total.value > items.value.length
+        )
+
+        const showBulkBar = computed(() =>
+            props.mode === 'manage' && (selectedIds.size > 0 || allPagesSelected.value)
+        )
+
+        // ── Expand / collapse ─────────────────────────────────────────────
+        function toggleExpand(rule) {
+            expandedId.value = expandedId.value === rule.id ? null : rule.id
+        }
+
+        // ── Vote / favorite ───────────────────────────────────────────────
+        async function handleVote(type, rule) {
+            if (!props.canVote) return
+            try {
+                const res = await fetch(`/rule/vote_rule?id=${rule.id}&vote_type=${type}`)
+                const data = await res.json()
+                rule.vote_up   = data.vote_up
+                rule.vote_down = data.vote_down
+                emit('vote', { ruleId: rule.id, type })
+            } catch { /* ignore */ }
+        }
+
+        async function handleFavorite(rule) {
+            if (!props.canFavorite) return
+            try {
+                const res = await fetch(`/rule/favorite/${rule.id}`)
+                const data = await res.json()
+                if (res.ok) {
+                    rule.is_favorited = data.is_favorited
+                    emit('favorite', { ruleId: rule.id, isFavorited: data.is_favorited })
+                }
+            } catch { /* ignore */ }
+        }
+
+        // ── Bulk ──────────────────────────────────────────────────────────
+        function emitBulkAction(action) {
+            const ids = allPagesSelected.value ? 'ALL' : Array.from(selectedIds)
+            emit('bulk-action', { action, ids, count: selectionCount.value })
+        }
+
+        function emitSend() {
+            const ids = allPagesSelected.value ? 'ALL' : Array.from(selectedIds)
+            emit('send', ids)
+        }
+
+        // ── Table colspan ─────────────────────────────────────────────────
+        const tableColspan = computed(() => {
+            let n = 2 // title + actions always visible
+            if (isSelectable.value) n++
+            for (const col of TOGGLEABLE_COLS) if (colVisible[col.key]) n++
+            return n
+        })
+
+        // ── Footer info ───────────────────────────────────────────────────
+        const footerInfo = computed(() => {
+            if (total.value === 0) return 'No results'
+            const start = (page.value - 1) * perPage.value + 1
+            const end   = Math.min(page.value * perPage.value, total.value)
+            return `${start}–${end} of ${total.value}`
+        })
+
+        // ── Date formatting ───────────────────────────────────────────────
+        function fromNow(dateStr) {
+            if (!dateStr) return ''
+            try {
+                if (window.dayjs) return window.dayjs.utc(dateStr).fromNow()
+                return formatDate(dateStr)
+            } catch { return dateStr }
+        }
+
+        function formatDate(val) {
+            if (!val) return '—'
+            try {
+                return new Date(val).toLocaleDateString(undefined, {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                })
+            } catch { return val }
+        }
+
+        // ── Rule format → hljs language ───────────────────────────────────
+        function ruleLanguage(format) {
+            if (!format) return 'auto'
+            const map = {
+                yara:     'yara',
+                sigma:    'yaml',
+                suricata: 'text',
+                zeek:     'zeek',
+                elastic:  'json',
+                wazuh:    'xml',
+                nova:     'text',
+                nse:      'lua',
+                crs:      'text',
+            }
+            return map[format.toLowerCase()] || 'auto'
+        }
+
+        // ── Lifecycle ─────────────────────────────────────────────────────
+        onMounted(() => {
+            fetchData()
+            fetchFormats()
+        })
+
+        onUnmounted(() => clearTimeout(searchTimer))
+
+        // Re-fetch when switching views (per-page may have changed)
+        watch(viewMode, () => { page.value = 1; fetchData() })
+
+        return {
+            // Data
+            items, total, totalPages, loading, page, perPage, perPageModel,
+            sortKey, sortDir, search,
+            // Filters
+            filtersOpen, ruleType, searchField, exactMatch, cardSort,
+            selectedTags, selectedSources, selectedLicenses, selectedVulns,
+            rulesFormats, activeFilterCount,
+            // UI
+            viewMode, expandedId,
+            // Columns
+            TOGGLEABLE_COLS, colVisible, toggleColumn,
+            // Selection
+            selectedIds, allPagesSelected, isSelectable,
+            allOnPageSelected, someOnPageSelected,
+            selectionCount, showSelectBanner, showBulkBar,
+            // Computed
+            numericUserId, tableColspan, footerInfo,
+            // Methods
+            isOwner, isFilterHidden,
+            fetchData, onFilterChange, resetFilters,
+            onSearchInput, clearSearch,
+            setSort, sortIcon, onCardSortChange,
+            goToPage,
+            isSelected, toggleItem, togglePageSelection, selectAllPages, clearSelection,
+            toggleExpand,
+            handleVote, handleFavorite,
+            emitBulkAction, emitSend,
+            fromNow, formatDate, ruleLanguage,
+        }
+    },
+}
