@@ -390,7 +390,7 @@ export default {
                            style="font-size:.78rem;"></i>
                     </div>
 
-                    <!-- Title + author + date -->
+                    <!-- Title + editor + date -->
                     <div class="mb-3 pe-5">
                         <h5 class="fw-bold mb-1">
                             <a :href="'/rule/detail_rule/' + rule.id"
@@ -401,7 +401,7 @@ export default {
                         <div class="d-flex align-items-center gap-2 mt-2">
                             <user-chip
                                 :user-id="rule.user_id"
-                                :username="rule.author && rule.author !== 'Unknown' ? rule.author : rule.editor"
+                                :username="rule.editor"
                                 :avatar="rule.editor_avatar"
                                 size="xs">
                             </user-chip>
@@ -411,14 +411,13 @@ export default {
                     </div>
 
                     <!-- Description -->
-                    <p class="text-muted small lh-base mb-3"
+                    <p class="rl-card-desc mb-3"
                        style="-webkit-line-clamp:3;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden;">
-                        <i class="fas fa-quote-left me-2 opacity-50 text-primary"></i>
                         <span v-html="highlight(rule.description || 'No description.')"></span>
                     </p>
 
                     <!-- CVEs -->
-                    <div class="mb-3" @click.stop>
+                    <div class="mb-2" @click.stop>
                         <vulnerability-displays-list object-type="rule" :object-id="rule.id" :max-visible="3">
                         </vulnerability-displays-list>
                     </div>
@@ -429,35 +428,28 @@ export default {
                         </tags-displays-list>
                     </div>
 
-                    <!-- Metadata grid -->
-                    <div class="row g-2 mb-4 pt-3 small text-muted">
-                        <div class="col-6">
-                            <div class="mb-1 text-truncate" :title="rule.source">
-                                <i class="fas fa-link me-2"></i>
-                                <strong>Source:</strong> {{ rule.source || '—' }}
-                            </div>
-                            <div class="mb-1">
-                                <i class="fas fa-balance-scale me-2"></i>
-                                <strong>License:</strong>
-                                {{ rule.license && rule.license !== 'Unknown' ? rule.license : 'No license' }}
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="mb-1">
-                                <i class="fas fa-code-branch me-2"></i>
-                                <strong>Version:</strong>
-                                <span class="badge text-bg-light border px-1">
-                                    {{ rule.version && rule.version !== 'Unknown' ? rule.version : '1.0' }}
-                                </span>
-                            </div>
-                            <div class="mb-1 d-flex align-items-center gap-1">
-                                <i class="fas fa-user-edit me-1 opacity-50"></i>
-                                <strong class="me-1">Editor:</strong>
-                                <user-chip :user-id="rule.user_id" :username="rule.editor"
-                                           :avatar="rule.editor_avatar" size="xs">
-                                </user-chip>
-                            </div>
-                        </div>
+                    <!-- Metadata strip -->
+                    <div class="rl-card-meta">
+                        <span class="rl-meta-item rl-meta-item--source" :title="rule.source">
+                            <i class="fas fa-link"></i>
+                            <span>{{ rule.source || '—' }}</span>
+                        </span>
+                        <span class="rl-meta-item">
+                            <i class="fas fa-scale-balanced"></i>
+                            <span>{{ rule.license && rule.license !== 'Unknown' ? rule.license : 'No license' }}</span>
+                        </span>
+                        <span class="rl-meta-item">
+                            <i class="fas fa-code-branch"></i>
+                            <span>v{{ rule.version && rule.version !== 'Unknown' ? rule.version : '1.0' }}</span>
+                        </span>
+                        <span v-if="rule.author && rule.author !== 'Unknown'" class="rl-meta-item">
+                            <i class="fas fa-user"></i>
+                            <span>{{ rule.author }}</span>
+                        </span>
+                        <span class="rl-meta-item rl-meta-item--uuid" :title="rule.uuid">
+                            <i class="fas fa-fingerprint"></i>
+                            <span>{{ rule.uuid }}</span>
+                        </span>
                     </div>
 
                     <!-- Footer: votes + actions -->

@@ -295,6 +295,51 @@
 /* ── Card grid ── */
 .rl-cards { display: flex; flex-direction: column; gap: 0; }
 
+/* ── Card description ── */
+.rl-card-desc {
+    font-size: .82rem;
+    line-height: 1.55;
+    color: var(--subtle-text-color);
+    margin: 0;
+}
+
+/* ── Card metadata strip ── */
+.rl-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem .8rem;
+    padding-top: .65rem;
+    border-top: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+}
+.rl-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .73rem;
+    color: var(--subtle-text-color);
+    min-width: 0;
+}
+.rl-meta-item i {
+    font-size: .68rem;
+    width: .9rem;
+    text-align: center;
+    flex-shrink: 0;
+    opacity: .7;
+}
+.rl-meta-item > span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rl-meta-item--source > span,
+.rl-meta-item--uuid > span {
+    white-space: normal;
+    overflow: visible;
+    word-break: break-all;
+}
+.rl-meta-item--uuid { font-family: monospace; font-size: .68rem; opacity: .75; }
+
 /* ── Rule card ── */
 .rl-rule-card {
     position: relative;
