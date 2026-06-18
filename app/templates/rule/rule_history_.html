@@ -1,5 +1,10 @@
 {% extends 'base.html' %}
 {% block title %}Rules Audit Trail — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+{% endblock %}
 {% block content %}
 <div class="container-fluid mt-4 pb-5" v-cloak id="main-container">
     <nav aria-label="breadcrumb" class="mb-4">
@@ -184,26 +189,21 @@
                                 View</b> to see a single version.</p>
                     </div>
 
-                    <div v-if="contentLoaded && viewMode === 'diff'"
-                        class="d-flex border-bottom bg-light bg-opacity-50">
-                        <div class="flex-grow-1 p-2 text-center border-end x-small fw-bold text-indigo">SOURCE A: #[[
-                            slotA.id ]]</div>
-                        <div class="flex-grow-1 p-2 text-center x-small fw-bold text-pink">SOURCE B: #[[ slotB.id ]]
-                        </div>
-                    </div>
+                    <diff-viewer v-if="contentLoaded && viewMode === 'diff'"
+                        :key="diffKey"
+                        :initial-left="diffLeft"
+                        :initial-right="diffRight"
+                        :left-label="'Version #' + (slotA ? slotA.id : '')"
+                        :right-label="'Version #' + (slotB ? slotB.id : '')"
+                        mode="read">
+                    </diff-viewer>
 
-                    <div class="position-relative">
-                        <div v-if="noChangeDetected && viewMode === 'diff'"
-                            class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-                            style="z-index: 10; background: rgba(255,255,255,0.7); backdrop-filter: blur(1px);">
-                            <div
-                                class="badge bg-success shadow-lg p-3 rounded-pill border border-2 border-white animate__animated animate__fadeInDown">
-                                <i class="fas fa-check-circle me-2"></i> Identical content: No changes found
-                            </div>
-                        </div>
-
-                        <div id="diff-container" class="diff-modern-ui custom-scrollbar"></div>
-                    </div>
+                    <code-viewer v-else-if="contentLoaded && viewMode === 'solo'"
+                        :key="'solo-' + diffKey"
+                        :code="soloContent"
+                        language="auto"
+                        max-height="80vh">
+                    </code-viewer>
                 </div>
             </div>
         </div>
@@ -213,12 +213,17 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed, nextTick } = Vue;
-    import { renderDiff } from "/static/js/diff_macro.js";
+    const { createApp, ref, computed } = Vue;
     import { message_list, create_message } from '/static/js/toaster.js';
+    import DiffViewer from '/static/js/components/diff-viewer.js';
+    import CodeViewer from '/static/js/components/code-viewer.js';
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: {
+            'diff-viewer': DiffViewer,
+            'code-viewer': CodeViewer,
+        },
         setup() {
             const rules_list_history = ref([]);
             const current_page = ref(1);
@@ -233,6 +238,11 @@
             const contentLoaded = ref(false);
             const viewMode = ref('diff');
             const noChangeDetected = ref(false);
+
+            const diffLeft    = ref('');
+            const diffRight   = ref('');
+            const soloContent = ref('');
+            const diffKey     = ref(0);
 
             async function fetchRules(page) {
                 const params = new URLSearchParams({ page, rule_id: "{{ rule_id }}", per_page: per_page.value });
@@ -281,37 +291,28 @@
                 }
             }
 
-            async function viewSolo(entry) {
+            function viewSolo(entry) {
                 viewMode.value = 'solo';
                 contentLoaded.value = true;
                 noChangeDetected.value = false;
-                const container = document.getElementById('diff-container');
-                container.innerHTML = `<div class="p-5 text-center"><div class="spinner-border text-indigo"></div></div>`;
-
-                await nextTick();
-                container.innerHTML = "";
-                renderDiff(entry.new_content, entry.new_content, 'diff-container', "twoText");
+                soloContent.value = entry.new_content || '';
+                diffKey.value++;
             }
 
-            async function compare() {
+            function compare() {
                 if (!slotA.value || !slotB.value) return;
                 viewMode.value = 'diff';
                 contentLoaded.value = true;
                 noChangeDetected.value = (slotA.value.content === slotB.value.content);
-
-                const container = document.getElementById('diff-container');
-                container.innerHTML = `<div class="p-5 text-center"><div class="spinner-border text-indigo"></div></div>`;
-
-                await nextTick();
-                container.innerHTML = "";
-                renderDiff(slotA.value.content, slotB.value.content, 'diff-container', "twoText");
+                diffLeft.value  = slotA.value.content || '';
+                diffRight.value = slotB.value.content || '';
+                diffKey.value++;
             }
 
             function resetView() {
                 slotA.value = null; slotB.value = null;
                 contentLoaded.value = false; noChangeDetected.value = false;
-                const container = document.getElementById('diff-container');
-                if (container) container.innerHTML = "";
+                diffLeft.value = ''; diffRight.value = ''; soloContent.value = '';
             }
 
             function isSelected(id, type) {
@@ -352,6 +353,7 @@
                 rules_list_history, current_page, total_pages, per_page,
                 searchQuery, isDescending, filteredHistory, latestId,
                 slotA, slotB, contentLoaded, viewMode, noChangeDetected,
+                diffLeft, diffRight, soloContent, diffKey,
                 fetchRules, toggleSort, selectSlot, isSelected, isItemInSlot, resetView, compare, viewSolo, getRandomColor,
                 is_lock, toggleLock,
                 message_list
