@@ -670,3 +670,137 @@ For `GraphViewer`, also include `pivotick.css`:
 #### `charts/` subfolder
 
 `chart-viewer.js` lazy-imports individual chart types from `app/static/js/components/charts/`. Available types: `line`, `area`, `bar`, `bar-h`, `pie`, `donut`, `scatter`, and more. Add new chart types there following the same pattern as existing ones.
+
+---
+
+### RuleList component (`app/static/js/rule/ruleList.js`)
+
+A self-contained, paginated rule browser with card and table views, integrated filters, selection, and bulk actions. Test page: `/rule/rulelist_test`.
+
+**CSS dependencies** (include all three in `{% block head %}`):
+```html
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+```
+
+**Required companion components** — register all of these alongside `RuleList` in every `createApp()` that mounts it:
+
+```javascript
+import RuleList                  from '/static/js/rule/ruleList.js'
+import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
+import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
+
+const sharedComponents = {
+    'rule-list':                   RuleList,
+    'tags-displays-list':          TagsDisplaysList,
+    'vulnerability-displays-list': VulnerabilityDisplaysList,
+}
+```
+
+#### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `mode` | String | `'read'` | `'read'` view-only · `'select'` checkboxes + Confirm · `'manage'` checkboxes + bulk bar |
+| `default-view` | String | `'card'` | Initial view: `'card'` or `'table'` |
+| `fetch-url` | String | `'/rule/data_table'` | Paginated API endpoint |
+| `source` | String | — | Filter by GitHub source URL |
+| `user-id` | Number | — | Filter rules by owner (not the connected user) |
+| `current-user-id` | Number | — | ID of the logged-in user (for OWNER badge and edit/delete visibility) |
+| `current-user-is-admin` | Boolean | `false` | Whether the logged-in user is admin |
+| `show-filters` | Boolean | `true` | Show/hide filter panel |
+| `show-create` | Boolean | `false` | Show "New Rule" button in toolbar |
+| `can-vote` | Boolean | `false` | Enable up/down vote buttons |
+| `can-favorite` | Boolean | `false` | Enable favorite star |
+| `bulk-actions` | Array | `[]` | Custom bulk actions: `[{ key, label, icon?, variant? }]` |
+| `initial-per-page` | Number | `12` | Cards per page (table always defaults to 25) |
+| `hidden-filters` | Array | `[]` | Filter field keys to hide: `'format'`, `'sources'`, `'tags'`, `'licenses'`, `'vulnerabilities'` |
+| `initial-filters` | Object | `{}` | Pre-filled filter values: `{ search, format, tags, sources, licenses, vulnerabilities }` |
+| `csrf-token` | String | `''` | CSRF token — required for delete bulk action |
+| `current-user-is-authenticated` | Boolean | `false` | Whether user is logged in — controls Export/Bundle "Add to Bundle" option |
+
+**Edit / Delete visibility** is automatic: buttons appear only when `current-user-id` is set AND the user is either the rule owner OR `current-user-is-admin` is `true`. No extra prop needed.
+
+#### Events
+
+| Event | Payload | When |
+|-------|---------|------|
+| `vote` | `{ ruleId, type }` | User voted — local vote counts update automatically |
+| `favorite` | `{ ruleId, isFavorited }` | User toggled favorite — local state updates automatically |
+| `delete` | `rule` | User clicked Delete on a rule (single row action) |
+| `bulk-action` | `{ action, ids, count }` | Custom bulk action fired (delete/download/bundle are handled internally) |
+| `send` | `ids` | Mode `select` — user clicked Confirm; `ids` is an array of IDs or `'ALL'` |
+
+**Internally handled bulk actions** (no `@bulk-action` handler needed for these):
+- `delete` → calls `/rule/delete_rule_list` (soft-delete/trash), shows toast, refreshes
+- `download` → opens Export modal at Download view with selected IDs
+- `bundle` / `export` → opens Export modal at Bundle view with selected IDs
+
+#### Exposed method
+
+`fetchData()` — programmatically refresh the current page (use a `ref` on the component).
+
+#### Minimal usage (read-only)
+
+```html
+<div id="app">
+    <rule-list
+        mode="read"
+        default-view="card"
+        :can-vote="isAuthenticated"
+        :can-favorite="isAuthenticated"
+        :current-user-id="currentUserId"
+        :current-user-is-admin="isAdmin"
+        :csrf-token="csrfToken"
+        :current-user-is-authenticated="isAuthenticated">
+    </rule-list>
+</div>
+<script type="module">
+import RuleList                  from '/static/js/rule/ruleList.js'
+import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
+import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
+
+const isAuthenticated = {{ current_user.is_authenticated | tojson }}
+const isAdmin         = {{ current_user.is_admin()        | tojson }}
+const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
+const csrfToken       = '{{ csrf_token() }}'
+
+createApp({
+    components: {
+        'rule-list': RuleList,
+        'tags-displays-list': TagsDisplaysList,
+        'vulnerability-displays-list': VulnerabilityDisplaysList,
+    },
+    setup() { return { isAuthenticated, isAdmin, currentUserId, csrfToken } }
+}).mount('#app')
+</script>
+```
+
+#### Manage mode with bulk actions
+
+```html
+<rule-list
+    mode="manage"
+    default-view="card"
+    :can-vote="isAuthenticated"
+    :can-favorite="isAuthenticated"
+    :current-user-id="currentUserId"
+    :current-user-is-admin="isAdmin"
+    :csrf-token="csrfToken"
+    :current-user-is-authenticated="isAuthenticated"
+    :bulk-actions="[
+        { key: 'bundle',   label: 'Add to bundle', icon: 'fa-layer-group' },
+        { key: 'download', label: 'Download',        icon: 'fa-download' },
+        { key: 'delete',   label: 'Delete',          icon: 'fa-trash', variant: 'danger' },
+    ]"
+    @delete="onDeleteSingleRule"
+    @bulk-action="onCustomBulkAction">
+</rule-list>
+```
+
+`delete`/`download`/`bundle` keys are reserved and handled internally. Add only custom keys to `@bulk-action`.
+
+#### Selection persistence
+
+Checked rules are stored in a `Map` keyed by rule ID and **survive filter changes and page navigation**. Applying a filter resets "Select all pages" but keeps individual picks. A panel below the toolbar lists the picked rules as removable chips (max 8 visible, expandable).
