@@ -18,6 +18,7 @@ from app.features.misp.misp_core import  convert_misp_to_stix
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, get_github_branches, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
+from app import db
 from . import rule_core as RuleModel
 from ..bundle import bundle_core as BundleModel
 from .rule_from_github.import_rule import session_class as SessionModel
@@ -1361,6 +1362,7 @@ def update_github_rule() -> render_template:
             if rule:
                 rule.to_string = history.new_content
                 history.message = "accepted"
+                db.session.commit()
                 flash('Rule content modified !', 'success')
                 return redirect(f"/rule/detail_rule/{rule.id}")
 
@@ -1370,6 +1372,7 @@ def update_github_rule() -> render_template:
             rule = RuleModel.get_rule(history.rule_id)
             if rule:
                 history.message = "rejected"
+                db.session.commit()
         flash('No change for the rule !', 'success')
         return redirect('/rule/update_github/update_rules_from_github')
     else:
@@ -1418,7 +1421,7 @@ def decision_rule() -> jsonify:
             if rule:
                 rule.to_string = history.new_content
                 history.message = "accepted"
-        
+                db.session.commit()
                 return jsonify({
                     "message": "Rule content modified !",
                     "success": True,
@@ -1434,6 +1437,7 @@ def decision_rule() -> jsonify:
             rule = RuleModel.get_rule(history.rule_id)
             if rule:
                 history.message = "rejected"
+                db.session.commit()
 
         return jsonify({
             "message": "Rule content rejected !",

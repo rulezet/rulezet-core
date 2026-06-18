@@ -489,66 +489,69 @@ class Update_class:
 
                 else:
                     # by rule: work = (cp, rule_id, repo_dir, rule_type_instance, rule_title)
-                    
-                    rule_id = work[1] 
+
+                    rule_id = work[1]
                     repo_dir = work[2]
                     rule_instance = work[3]
-                    rule_title = work[4]
 
-                    # 1. Check for rule updates using the specialized function
-                    # Check_for_rule_updates expects rule ID (int) and repo dir (str)
-                    message_dict, success, new_rule_content = Check_for_rule_updates(rule_id, repo_dir)
-                    
-                    # 2. Handle results and update status
-                    
                     existing_rule = RuleModel.get_rule(rule_id)
                     if not existing_rule:
                         self.jobs.task_done()
                         continue
-                        
-                    msg = message_dict.get("message", "") or ""
-                    # syntax_valid means the rule was found (success=True) AND the update was not invalid
-                    syntax_valid = success and not ("Update found but invalid:" in msg)
-                    
-                    # Try to retrieve the raw rule content from the repo for history if found
-                    rule_text_in_repo = None
-                    if success:
-                         try:
-                            # find_rule_in_repo is a method of the RuleType instance (rule_instance)
-                            # it needs the repo_dir and the rule_id to locate the file content
-                            found_rule_text, find_success = rule_instance.find_rule_in_repo(repo_dir, existing_rule.id)
-                            if find_success:
-                                rule_text_in_repo = found_rule_text
-                         except Exception as e:
-                            continue
-                    
-                    # --- Create History (if an update or failure to find in repo) ---
-                    history_id = None
-                    if new_rule_content or not syntax_valid or not success:
-                        
-                        # Use new valid content, or the invalid content if found, or the old content as fallback
-                        new_content_for_history = new_rule_content or rule_text_in_repo or existing_rule.to_string
 
+                    # 1. Retrieve the rule content from the local repo clone
+                    try:
+                        found_rule_text, find_success = rule_instance.find_rule_in_repo(repo_dir, existing_rule.id)
+                    except Exception:
+                        self.jobs.task_done()
+                        continue
+
+                    if not find_success:
+                        with self.lock:
+                            self.rule_status_list.append({
+                                "update_result_uuid": self.uuid,
+                                "name_rule": existing_rule.title,
+                                "rule_id": existing_rule.id,
+                                "message": found_rule_text or "Rule not found in repository.",
+                                "found": False,
+                                "update_available": False,
+                                "rule_syntax_valid": False,
+                                "error": True,
+                                "history_id": None
+                            })
+                        self.remove_processed_rule(existing_rule.title)
+                        self.jobs.task_done()
+                        continue
+
+                    # 2. Compare existing content against repo content
+                    message_dict, success, new_rule_content = Check_for_rule_updates(
+                        existing_rule.to_string, found_rule_text, existing_rule.id
+                    )
+
+                    msg = message_dict.get("message", "") or ""
+                    syntax_valid = success and ("Update found but invalid:" not in msg)
+
+                    # 3. Create history if there is a change or an invalid update
+                    history_id = None
+                    if new_rule_content or not syntax_valid:
+                        new_content_for_history = new_rule_content or found_rule_text
                         history_id = RuleModel.create_rule_history({
                             "id": existing_rule.id,
                             "title": existing_rule.title,
-                            # Success only if valid content was found AND applied
                             "success": success and bool(new_rule_content),
-                            "message": message_dict.get("message", ""),
+                            "message": msg,
                             "new_content": new_content_for_history,
                             "old_content": existing_rule.to_string
                         })
 
-                    # --- Update Status ---
+                    # 4. Record status
                     with self.lock:
                         self.rule_status_list.append({
                             "update_result_uuid": self.uuid,
                             "name_rule": existing_rule.title,
                             "rule_id": existing_rule.id,
-                            "message": message_dict.get("message", ""),
-                            # success from Check_for_rule_updates means it was FOUND and processed
+                            "message": msg,
                             "found": success,
-                            # Update available if we have new valid content OR if the message indicates an invalid update was found
                             "update_available": bool(new_rule_content) or ("Update found but invalid:" in msg),
                             "rule_syntax_valid": syntax_valid,
                             "error": not success or not syntax_valid,

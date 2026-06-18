@@ -712,6 +712,16 @@ def get_rule_by_title(title) -> Rule | None:
     """Return the rule from the title"""
     return Rule.query.filter_by(title=title).first()
 
+def _normalize_github_url(url: str) -> str:
+    """Strip trailing slash and .git suffix for consistent URL comparison."""
+    if not url:
+        return url
+    url = url.rstrip('/')
+    if url.endswith('.git'):
+        url = url[:-4]
+    return url.rstrip('/')
+
+
 def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uuid) -> tuple[Rule | None, str]:
     clean_uuid = str(original_uuid).strip().lower()
     forbidden = ["none", "null", "unknown", "n/a", "undefined", ""]
@@ -721,12 +731,16 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
         if rule:
             return rule, "Rule found in Rulezet with this original_uuid"
 
+    # Build a set of equivalent URLs to handle .git suffix mismatches
+    norm_source = _normalize_github_url(repo_source)
+    source_variants = list({repo_source, norm_source}) if norm_source != repo_source else [repo_source]
+
     # check by github_path first — most reliable for NSE/formats without uuid
     if filepath_in_the_repo:
         # normalize: use only the filename as fallback
         normalized = os.path.basename(filepath_in_the_repo)
         rule = Rule.query.filter(
-            Rule.source == repo_source
+            Rule.source.in_(source_variants)
         ).filter(
             db.or_(
                 Rule.github_path == filepath_in_the_repo,
@@ -738,18 +752,27 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
             return rule, "Rule found in Rulezet with this github_path"
 
     # check by title + source
-    query = Rule.query.filter(Rule.title == title, Rule.source == repo_source)
+    query = Rule.query.filter(Rule.title == title, Rule.source.in_(source_variants))
     count_title = query.count()
 
     if count_title == 0:
         return None, "[new rule]"
     if count_title == 1:
         rule = query.first()
-        if rule.github_path != filepath_in_the_repo:
-            return None, "[new rule]"
+        # Compare normalized paths to avoid absolute-vs-relative mismatches
+        stored_basename = os.path.basename(rule.github_path) if rule.github_path else None
+        repo_basename = os.path.basename(filepath_in_the_repo) if filepath_in_the_repo else None
+        if rule.github_path and filepath_in_the_repo:
+            if rule.github_path != filepath_in_the_repo and stored_basename != repo_basename:
+                return None, "[new rule]"
         return rule, "Rule found in Rulezet with this title"
 
-    query_path = query.filter(Rule.github_path == filepath_in_the_repo)
+    query_path = query.filter(
+        db.or_(
+            Rule.github_path == filepath_in_the_repo,
+            Rule.github_path.like(f"%{os.path.basename(filepath_in_the_repo)}") if filepath_in_the_repo else False
+        )
+    )
     count_path = query_path.count()
 
     if count_path == 1:
