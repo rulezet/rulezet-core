@@ -1,8 +1,24 @@
-# RULEZET [![Release](https://img.shields.io/badge/release-v1.5.0-blue)](https://github.com/ngsoti/rulezet-core/releases/tag/1.5.0)
+<div align="center">
+  <img width="524" height="524" alt="Rulezet Logo" src="https://github.com/user-attachments/assets/8f583c28-8138-40b4-b532-371bb45622f4" />
+  
+  <br>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/ngsoti/rulezet-core/main/doc/logo.png" width="300" alt="Rulezet logo">
-</p>
+
+  <p>
+    <a href="https://github.com/ngsoti/rulezet-core/releases/tag/1.5.0">
+      <img src="https://img.shields.io/badge/release-v1.5.0-blue?style=for-the-badge&logo=github" alt="Release" />
+    </a>
+    <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License" />
+    <img src="https://img.shields.io/badge/platform-cybersecurity-red?style=for-the-badge" alt="Cybersecurity" />
+  </p>
+
+  <p>
+    <img src="https://img.shields.io/badge/engine-YARA-informational?style=flat&logo=yara&logoColor=white" alt="YARA" />
+    <img src="https://img.shields.io/badge/engine-Sigma-orange?style=flat&logo=sigma&logoColor=white" alt="Sigma" />
+    <img src="https://img.shields.io/badge/engine-Suricata-yellow?style=flat&logo=suricata&logoColor=black" alt="Suricata" />
+    <img src="https://img.shields.io/badge/integration-MISP-purple?style=flat&logo=misp&logoColor=white" alt="MISP" />
+  </p>
+</div>
 
 ## Community-Driven Detection Rules Platform
 
