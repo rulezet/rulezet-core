@@ -1,5 +1,5 @@
 /**
- * timeline.js — Vertical event timeline with day grouping.
+ * timeline.js — Vertical tree timeline with collapse/expand per item.
  *
  * Props:
  *   items        Array   Required. Each item: { uuid, title, description, level,
@@ -9,11 +9,7 @@
  *   max-desc     Number  Max chars shown in description before truncation (default: 180)
  *
  * Events:
- *   select(item)  — item clicked (for detail panels, modals, etc.)
- *
- * Usage:
- *   import Timeline from '/static/js/components/timeline.js'
- *   <timeline :items="logs" :loading="fetching" @select="openDetail"></timeline>
+ *   select(item)  — item clicked
  */
 
 const { computed, ref } = Vue
@@ -34,6 +30,7 @@ const CATEGORY_ICONS = {
     admin:    'fa-crown',
     api:      'fa-code',
     database: 'fa-database',
+    rule:     'fa-file-shield',
     connectors: 'fa-plug',
 }
 
@@ -93,27 +90,38 @@ export default {
     name: 'Timeline',
 
     props: {
-        items:      { type: Array,   default: () => [] },
-        loading:    { type: Boolean, default: false },
-        groupByDay: { type: Boolean, default: true },
-        maxDesc:    { type: Number,  default: 180 },
+        items:     { type: Array,   default: () => [] },
+        loading:   { type: Boolean, default: false },
+        groupByDay:{ type: Boolean, default: true },
+        maxDesc:   { type: Number,  default: 180 },
+        canDelete: { type: Boolean, default: false },
     },
 
-    emits: ['select'],
+    emits: ['select', 'delete'],
 
     setup(props, { emit }) {
-        const expanded = ref(new Set())
+        // collapsed = items whose body is hidden (default: all collapsed)
+        const collapsed = ref(new Set())
 
-        function toggle_expand(uuid) {
-            if (expanded.value.has(uuid)) {
-                expanded.value.delete(uuid)
-            } else {
-                expanded.value.add(uuid)
-            }
-            expanded.value = new Set(expanded.value)
+        function toggle(uuid) {
+            const s = new Set(collapsed.value)
+            if (s.has(uuid)) s.delete(uuid)
+            else s.add(uuid)
+            collapsed.value = s
+        }
+
+        function isCollapsed(uuid) { return collapsed.value.has(uuid) }
+
+        // After items load, collapse all by default
+        const _seeded = ref(false)
+        function seedCollapsed(items) {
+            if (_seeded.value || !items.length) return
+            collapsed.value = new Set(items.map(i => i.uuid))
+            _seeded.value = true
         }
 
         const grouped = computed(() => {
+            seedCollapsed(props.items)
             if (!props.groupByDay) {
                 return [{ day: null, items: props.items }]
             }
@@ -126,15 +134,31 @@ export default {
             return Array.from(map.entries()).map(([day, items]) => ({ day, items }))
         })
 
+        function expandAll()   { collapsed.value = new Set() }
+        function collapseAll() { collapsed.value = new Set(props.items.map(i => i.uuid)) }
+
         return {
-            grouped, expanded, toggle_expand,
+            grouped, collapsed, toggle, isCollapsed,
+            expandAll, collapseAll,
             levelConfig, categoryIcon, initials,
             formatRelative, formatFull, truncate,
         }
     },
 
+    expose: ['expandAll', 'collapseAll'],
+
     template: `
 <div class="tl">
+
+    <!-- Global controls -->
+    <div v-if="!loading && items.length" class="tl-controls">
+        <button class="tl-ctrl-btn" @click="expandAll">
+            <i class="fas fa-chevron-down"></i> Expand all
+        </button>
+        <button class="tl-ctrl-btn" @click="collapseAll">
+            <i class="fas fa-chevron-right"></i> Collapse all
+        </button>
+    </div>
 
     <!-- Skeleton -->
     <template v-if="loading">
@@ -160,24 +184,24 @@ export default {
                 <span>{{ group.day }}</span>
             </div>
 
-            <div class="tl-items">
+            <!-- Tree trunk wraps all items in the group -->
+            <div class="tl-trunk">
                 <div
-                    v-for="item in group.items"
+                    v-for="(item, idx) in group.items"
                     :key="item.uuid"
-                    class="tl-item"
-                    @click="$emit('select', item)">
+                    :class="['tl-item', idx === group.items.length - 1 ? 'tl-item--last' : '']">
 
-                    <!-- Dot -->
-                    <div :class="['tl-dot', levelConfig(item.level).color]">
-                        <i :class="'fas ' + levelConfig(item.level).icon"></i>
+                    <!-- Branch connector + dot -->
+                    <div class="tl-branch">
+                        <div :class="['tl-dot', levelConfig(item.level).color]">
+                            <i :class="item.icon || ('fas ' + levelConfig(item.level).icon)"></i>
+                        </div>
                     </div>
 
-                    <!-- Line -->
-                    <div class="tl-line"></div>
-
-                    <!-- Content -->
+                    <!-- Content card -->
                     <div class="tl-content">
-                        <div class="tl-header">
+                        <!-- Header row: title + badges + chevron + delete -->
+                        <div class="tl-header" @click.stop="toggle(item.uuid); $emit('select', item)">
                             <span class="tl-title">{{ item.title }}</span>
                             <div class="tl-badges">
                                 <span class="tl-cat-badge">
@@ -188,42 +212,46 @@ export default {
                                     {{ item.level }}
                                 </span>
                             </div>
+                            <button v-if="canDelete"
+                                    class="tl-delete-btn"
+                                    @click.stop="$emit('delete', item)"
+                                    title="Delete this entry">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            <button class="tl-chevron" :class="{ 'tl-chevron--open': !isCollapsed(item.uuid) }">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
                         </div>
 
-                        <div class="tl-meta">
-                            <span v-if="item.actor_name" class="tl-actor">
-                                <span class="tl-actor-avatar">{{ initials(item.actor_name) }}</span>
-                                {{ item.actor_name }}
-                            </span>
-                            <span v-else class="tl-actor tl-actor--system">
-                                <i class="fas fa-gear"></i> System
-                            </span>
-                            <span class="tl-sep">·</span>
-                            <span class="tl-time" :title="formatFull(item.created_at)">
-                                {{ formatRelative(item.created_at) }}
-                            </span>
-                            <span v-if="item.action" class="tl-sep">·</span>
-                            <span v-if="item.action" class="tl-action">{{ item.action }}</span>
-                        </div>
-
-                        <!-- Description (collapsible) -->
-                        <template v-if="item.description">
-                            <div
-                                v-if="!expanded.has(item.uuid)"
-                                class="tl-desc">
-                                {{ truncate(item.description, maxDesc) }}
-                                <button
-                                    v-if="item.description.length > maxDesc"
-                                    class="tl-expand-btn"
-                                    @click.stop="toggle_expand(item.uuid)">
-                                    more
-                                </button>
+                        <!-- Collapsible body -->
+                        <div v-show="!isCollapsed(item.uuid)" class="tl-body">
+                            <div class="tl-meta">
+                                <span v-if="item.actor_name" class="tl-actor">
+                                    <span class="tl-actor-avatar">{{ initials(item.actor_name) }}</span>
+                                    {{ item.actor_name }}
+                                </span>
+                                <span v-else class="tl-actor tl-actor--system">
+                                    <i class="fas fa-gear"></i> System
+                                </span>
+                                <span class="tl-sep">·</span>
+                                <span class="tl-time" :title="formatFull(item.created_at)">
+                                    {{ formatRelative(item.created_at) }}
+                                </span>
+                                <span v-if="item.action" class="tl-sep">·</span>
+                                <span v-if="item.action" class="tl-action">{{ item.action }}</span>
                             </div>
-                            <div v-else class="tl-desc">
+
+                            <div v-if="item.description" class="tl-desc">
                                 {{ item.description }}
-                                <button class="tl-expand-btn" @click.stop="toggle_expand(item.uuid)">less</button>
                             </div>
-                        </template>
+
+                            <!-- Slot indicator for version events -->
+                            <div v-if="item.type === 'update' && (item.old_content || item.new_content)"
+                                 class="tl-diff-hint">
+                                <i class="fas fa-code-compare me-1"></i>
+                                Click to compare versions
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

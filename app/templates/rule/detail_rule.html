@@ -52,26 +52,30 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
 
     <ul class="nav nav-underline justify-content-center w-100 mb-3" id="exampleTabs" role="tablist">
         <li class="nav-item flex-fill text-center">
-            <a class="nav-link active" id="chap1-tab" data-bs-toggle="tab" href="#chap1-pane" role="tab"
-                aria-controls="chap1-pane" aria-selected="true" style="color: var(--text-color);">
+            <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}"
+               id="chap1-tab" data-bs-toggle="tab" href="#chap1-pane" role="tab"
+               aria-controls="chap1-pane" style="color: var(--text-color);">
                 Detail Rule
             </a>
         </li>
         <li class="nav-item flex-fill text-center">
-            <a class="nav-link" id="chap2-tab" data-bs-toggle="tab" href="#chap2-pane" role="tab"
-                aria-controls="chap2-pane" aria-selected="false" style="color: var(--text-color);">
+            <a class="nav-link {% if active_tab == 'edit' %}active{% endif %}"
+               id="chap2-tab" data-bs-toggle="tab" href="#chap2-pane" role="tab"
+               aria-controls="chap2-pane" style="color: var(--text-color);">
                 Suggest an Edit
             </a>
         </li>
         <li class="nav-item flex-fill text-center">
-            <a class="nav-link" id="chap3-tab" data-bs-toggle="tab" href="#chap3-pane" role="tab"
-                aria-controls="chap3-pane" aria-selected="false" style="color: var(--text-color);">
+            <a class="nav-link {% if active_tab == 'proposals' %}active{% endif %}"
+               id="chap3-tab" data-bs-toggle="tab" href="#chap3-pane" role="tab"
+               aria-controls="chap3-pane" style="color: var(--text-color);">
                 Pull Request
             </a>
         </li>
         <li class="nav-item flex-fill text-center">
-            <a class="nav-link" id="chap4-tab" data-bs-toggle="tab" href="#chap4-pane" role="tab"
-                aria-controls="chap4-pane" aria-selected="false" style="color: var(--text-color);">
+            <a class="nav-link {% if active_tab == 'scope' %}active{% endif %}"
+               id="chap4-tab" data-bs-toggle="tab" href="#chap4-pane" role="tab"
+               aria-controls="chap4-pane" style="color: var(--text-color);">
                 <i class="fa-solid fa-globe me-1"></i>Scope
                 <span v-if="scopeWorksCount + scopeNworksCount > 0"
                       class="badge rounded-pill bg-primary ms-1" style="font-size:.6rem;">
@@ -79,11 +83,30 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                 </span>
             </a>
         </li>
+        <li class="nav-item flex-fill text-center">
+            <a class="nav-link" href="/rule/detail_rule/{{ rule.id }}/history"
+               style="color: var(--text-color);">
+                <i class="fa-solid fa-clock-rotate-left me-1"></i>History
+            </a>
+        </li>
     </ul>
+
+    <script>
+    // Activate the correct tab pane on load based on server-provided active_tab
+    document.addEventListener('DOMContentLoaded', function () {
+        const activeTab = '{{ active_tab }}';
+        const map = { detail: 'chap1-tab', edit: 'chap2-tab', proposals: 'chap3-tab', scope: 'chap4-tab' };
+        const tabId = map[activeTab];
+        if (tabId && activeTab !== 'detail') {
+            const el = document.getElementById(tabId);
+            if (el) bootstrap.Tab.getOrCreateInstance(el).show();
+        }
+    });
+    </script>
 
 
     <div class="tab-content" id="exampleTabsContent">
-        <div class="tab-pane fade show active" id="chap1-pane" role="tabpanel" aria-labelledby="chap1-tab">
+        <div class="tab-pane fade {% if active_tab == 'detail' %}show active{% endif %}" id="chap1-pane" role="tabpanel" aria-labelledby="chap1-tab">
             <template v-if="detail_page_1_is_loading">
                 <div class="card h-100  border-0 card-security-premium-detail mb-4 card_detail border-top shadow-lg"
                     style="border-radius: 12px;">
@@ -1012,7 +1035,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
 
             <div id="rule_id" data-rule-id="{{ rule.id }}"></div>
         </div>
-        <div class="tab-pane fade" id="chap2-pane" role="tabpanel" aria-labelledby="chap2-tab">
+        <div class="tab-pane fade {% if active_tab == 'edit' %}show active{% endif %}" id="chap2-pane" role="tabpanel" aria-labelledby="chap2-tab">
             <div class="card card-body shadow-sm" id="main-container">
                 {% if current_user.is_authenticated %}
                 <form id="proposalForm" action="{{ url_for('rule.propose_edit', rule_id=rule.id) }}" method="post">
@@ -1056,7 +1079,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
             </div>
 
         </div>
-        <div class="tab-pane fade" id="chap3-pane" role="tabpanel" aria-labelledby="chap3-tab">
+        <div class="tab-pane fade {% if active_tab == 'proposals' %}show active{% endif %}" id="chap3-pane" role="tabpanel" aria-labelledby="chap3-tab">
             <div class="card card-body shadow-sm" id="main-container">
                 <div v-if="pull_request_list.length === 0">
                     <p> <i class="fas fa-info-circle"></i> No edit proposals found for this rule.</p>
@@ -1114,7 +1137,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
         </div>
 
         <!-- ── SCOPE TAB ── -->
-        <div class="tab-pane fade" id="chap4-pane" role="tabpanel" aria-labelledby="chap4-tab">
+        <div class="tab-pane fade {% if active_tab == 'scope' %}show active{% endif %}" id="chap4-pane" role="tabpanel" aria-labelledby="chap4-tab">
             <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
 
                 <!-- Stats bar -->

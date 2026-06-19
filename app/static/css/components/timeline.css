@@ -1,5 +1,5 @@
 /*
-  timeline.css — Vertical event timeline component.
+  timeline.css — Tree-style vertical timeline with collapse per item.
 */
 
 /*---TIMELINE_BASE---*/
@@ -10,9 +10,37 @@
     gap: 0;
 }
 
+/*---TIMELINE_CONTROLS---*/
+
+.tl-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.tl-ctrl-btn {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 99px;
+    padding: 3px 10px;
+    font-size: .7rem;
+    font-family: var(--font-sans);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background var(--transition), color var(--transition);
+}
+
+.tl-ctrl-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-main);
+}
+
 /*---TIMELINE_GROUP---*/
 
-.tl-group { margin-bottom: 8px; }
+.tl-group { margin-bottom: 4px; }
 
 .tl-day-header {
     display: flex;
@@ -34,39 +62,72 @@
     background: var(--border-subtle);
 }
 
-/*---TIMELINE_ITEMS---*/
+/*---TIMELINE_TRUNK (tree connector)---*/
 
-.tl-items { display: flex; flex-direction: column; gap: 0; }
+.tl-trunk {
+    position: relative;
+    padding-left: 36px;
+}
+
+/* Continuous vertical trunk line */
+.tl-trunk::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 10px;
+    bottom: 12px;
+    width: 2px;
+    background: var(--border);
+    border-radius: 1px;
+}
 
 /*---TIMELINE_ITEM---*/
 
 .tl-item {
-    display: grid;
-    grid-template-columns: 20px 16px 1fr;
-    grid-template-rows: auto 1fr;
-    gap: 0 10px;
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    padding: 4px 6px 4px 0;
-    transition: background var(--transition);
+    position: relative;
+    padding-bottom: 2px;
 }
 
-.tl-item:hover { background: var(--bg-elevated); }
+.tl-item:last-child {
+    padding-bottom: 0;
+}
+
+/*---TIMELINE_BRANCH (dot + horizontal connector)---*/
+
+.tl-branch {
+    position: absolute;
+    left: -36px;
+    top: 0;
+    width: 36px;
+    height: 22px;
+    pointer-events: none;
+}
+
+/* Horizontal connector from dot to content */
+.tl-branch::after {
+    content: '';
+    position: absolute;
+    left: 22px;
+    top: 10px;
+    width: 14px;
+    height: 2px;
+    background: var(--border-subtle);
+}
 
 /*---TIMELINE_DOT---*/
 
 .tl-dot {
-    grid-column: 1;
-    grid-row: 1;
-    width: 20px; height: 20px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 22px; height: 22px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: .52rem;
+    font-size: .5rem;
     flex-shrink: 0;
     border: 2px solid var(--bg-body);
-    margin-top: 2px;
     z-index: 1;
 }
 
@@ -75,35 +136,28 @@
 .tl-dot--warning { background: #f59e0b; color: #fff; }
 .tl-dot--error   { background: #ef4444; color: #fff; }
 
-/*---TIMELINE_LINE---*/
-
-.tl-line {
-    grid-column: 1;
-    grid-row: 2;
-    width: 2px;
-    background: var(--border);
-    margin: 2px auto 0;
-    min-height: 12px;
-}
-
-.tl-item:last-child .tl-line { display: none; }
-
 /*---TIMELINE_CONTENT---*/
 
 .tl-content {
-    grid-column: 3;
-    grid-row: 1 / 3;
-    padding: 0 0 14px;
+    padding: 0 0 12px;
     min-width: 0;
 }
+
+/*---TIMELINE_HEADER (clickable)---*/
 
 .tl-header {
     display: flex;
     align-items: flex-start;
     flex-wrap: wrap;
     gap: 6px;
-    margin-bottom: 4px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition);
+    margin-bottom: 0;
 }
+
+.tl-header:hover { background: var(--bg-elevated); }
 
 .tl-title {
     font-size: .82rem;
@@ -120,6 +174,43 @@
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
+}
+
+/*---TIMELINE_DELETE---*/
+
+.tl-delete-btn {
+    background: none;
+    border: none;
+    padding: 2px 5px;
+    color: var(--text-muted);
+    font-size: .6rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    opacity: 0;
+    transition: opacity .15s, color .15s, background .15s;
+}
+
+.tl-header:hover .tl-delete-btn { opacity: 1; }
+.tl-delete-btn:hover { color: #ef4444; background: rgba(239,68,68,.08); }
+
+/*---TIMELINE_CHEVRON---*/
+
+.tl-chevron {
+    background: none;
+    border: none;
+    padding: 0 2px;
+    color: var(--text-muted);
+    font-size: .65rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform .18s ease, color .18s ease;
+    margin-top: 2px;
+}
+
+.tl-chevron--open {
+    transform: rotate(90deg);
+    color: var(--brand);
 }
 
 /*---TIMELINE_BADGES---*/
@@ -156,6 +247,12 @@
 .tl-level-badge--success { background: rgba(34,197,94,.12);   color: #22c55e; }
 .tl-level-badge--warning { background: rgba(245,158,11,.12);  color: #f59e0b; }
 .tl-level-badge--error   { background: rgba(239,68,68,.12);   color: #ef4444; }
+
+/*---TIMELINE_BODY (collapsible)---*/
+
+.tl-body {
+    padding: 2px 6px 4px;
+}
 
 /*---TIMELINE_META---*/
 
@@ -222,18 +319,20 @@
     margin-top: 2px;
 }
 
-.tl-expand-btn {
-    display: inline;
-    background: none;
-    border: none;
-    padding: 0 2px;
-    font-size: .72rem;
-    color: var(--brand);
-    cursor: pointer;
-    font-family: var(--font-sans);
-}
+/*---TIMELINE_DIFF_HINT---*/
 
-.tl-expand-btn:hover { text-decoration: underline; }
+.tl-diff-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .7rem;
+    color: #3b82f6;
+    margin-top: 6px;
+    padding: 2px 8px;
+    background: rgba(59,130,246,.08);
+    border: 1px solid rgba(59,130,246,.2);
+    border-radius: 99px;
+}
 
 /*---TIMELINE_EMPTY---*/
 
@@ -262,7 +361,7 @@
 
 .tl-skeleton-dot {
     flex-shrink: 0;
-    width: 20px; height: 20px;
+    width: 22px; height: 22px;
     border-radius: 50%;
     background: var(--bg-elevated);
 }

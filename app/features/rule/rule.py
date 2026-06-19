@@ -596,9 +596,139 @@ def detail_rule(rule_id)-> render_template:
 
     if not rule_to_json:
         rule_to_json = "No json format for this rule"
+    active_tab = request.args.get('tab', 'detail')
     if rule:
-        return render_template("rule/detail_rule.html", rule=rule, rule_content=rule.to_string, rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event, rule_to_json=rule_to_json, )
+        return render_template("rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
+                               rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
+                               rule_to_json=rule_to_json, active_tab=active_tab)
     return render_template("404.html")
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/history", methods=['GET'])
+def detail_rule_history(rule_id):
+    """History sub-page for a rule."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule_history.html", rule=rule)
+
+
+@rule_blueprint.route("/history_activity_delete/<string:log_uuid>", methods=['DELETE'])
+@login_required
+def history_activity_delete(log_uuid):
+    """Delete a single ActivityLog entry — rule creator or admin only."""
+    from app.core.db_class.db import ActivityLog
+    log = ActivityLog.query.filter_by(uuid=log_uuid).first()
+    if not log:
+        return jsonify({"success": False, "message": "Entry not found."}), 404
+
+    rule = RuleModel.get_rule(log.target_id) if log.target_id else None
+    is_owner = rule and rule.user_id == current_user.id
+    if not (current_user.is_admin() or is_owner):
+        return jsonify({"success": False, "message": "Permission denied."}), 403
+
+    db.session.delete(log)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Activity deleted."}), 200
+
+
+@rule_blueprint.route("/history_update_delete/<int:update_id>", methods=['DELETE'])
+@login_required
+def history_update_delete(update_id):
+    """Delete a RuleUpdateHistory entry — rule creator or admin only."""
+    from app.core.db_class.db import RuleUpdateHistory
+    entry = RuleUpdateHistory.query.get(update_id)
+    if not entry:
+        return jsonify({"success": False, "message": "Entry not found."}), 404
+
+    rule = RuleModel.get_rule(entry.rule_id)
+    is_owner = rule and rule.user_id == current_user.id
+    if not (current_user.is_admin() or is_owner):
+        return jsonify({"success": False, "message": "Permission denied."}), 403
+
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Version entry deleted."}), 200
+
+
+@rule_blueprint.route("/history_data/<int:rule_id>", methods=['GET'])
+@login_required
+def rule_history_data(rule_id):
+    """Combined timeline: ActivityLog entries + RuleUpdateHistory for a rule."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return jsonify({"items": []})
+
+    from app.core.db_class.db import ActivityLog, RuleUpdateHistory, User
+    events = []
+
+    # ── Activity logs targeting this rule ────────────────────────────────────
+    logs = ActivityLog.query.filter(
+        ActivityLog.target_type == 'rule',
+        ActivityLog.target_id == rule_id,
+    ).order_by(ActivityLog.created_at.desc()).limit(200).all()
+
+    EXCLUDED_ACTIONS = {'rule.vote_up', 'rule.vote_down', 'rule.favorite', 'rule.unfavorite'}
+
+    action_labels = {
+        'rule.create':       ('Rule created',   'success', 'fa-solid fa-file-shield'),
+        'rule.edit':         ('Rule edited',    'info',    'fa-solid fa-pen-to-square'),
+        'rule.delete':       ('Rule deleted',   'error',   'fa-solid fa-trash'),
+        'rule.restore':      ('Rule restored',  'success', 'fa-solid fa-rotate-left'),
+        'rule.scope_add':    ('Scope declared', 'info',    'fa-solid fa-globe'),
+        'rule.scope_update': ('Scope updated',  'info',    'fa-solid fa-globe'),
+        'rule.scope_delete': ('Scope removed',  'warning', 'fa-solid fa-globe'),
+        'comment.add':       ('Comment added',  'info',    'fa-solid fa-comment'),
+    }
+
+    for log in logs:
+        if log.action in EXCLUDED_ACTIONS:
+            continue
+        label, level, icon = action_labels.get(log.action, (log.action, 'info', log.icon or 'fa-solid fa-circle'))
+        actor = log.user.first_name if log.user else 'System'
+        events.append({
+            'uuid':        log.uuid,
+            'type':        'activity',
+            'action':      log.action,
+            'title':       label,
+            'description': log.description or '',
+            'level':       level,
+            'category':    'rule',
+            'icon':        icon,
+            'actor_name':  actor,
+            'actor_id':    log.user_id,
+            'created_at':  log.created_at.isoformat(),
+        })
+
+    # ── RuleUpdateHistory ─────────────────────────────────────────────────────
+    updates = RuleUpdateHistory.query.filter_by(rule_id=rule_id) \
+        .order_by(RuleUpdateHistory.analyzed_at.desc()).all()
+
+    for upd in updates:
+        has_diff = bool(upd.new_content and upd.old_content and upd.new_content != upd.old_content)
+        events.append({
+            'uuid':        f'upd-{upd.id}',
+            'type':        'update',
+            'action':      'rule.update',
+            'title':       'Content updated' if has_diff else ('Checked — no change' if upd.success else 'Update failed'),
+            'description': upd.message or '',
+            'level':       'success' if (upd.success and has_diff) else ('info' if upd.success else 'error'),
+            'category':    'system',
+            'icon':        'fa-solid fa-code-compare' if has_diff else ('fa-solid fa-check' if upd.success else 'fa-solid fa-xmark'),
+            'actor_name':  upd.analyzed_by.first_name if upd.analyzed_by else 'System',
+            'actor_id':    upd.analyzed_by_user_id,
+            'created_at':  upd.analyzed_at.isoformat() if upd.analyzed_at else None,
+            'old_content': upd.old_content if has_diff else None,
+            'new_content': upd.new_content if has_diff else None,
+            'rule_format': upd.get_rule_format(),
+            'manual':      bool(upd.manuel_submit),
+        })
+
+    # Sort all events by date desc
+    events.sort(key=lambda e: e['created_at'] or '', reverse=True)
+    return jsonify({"items": events})
 
 
 @rule_blueprint.route("/get_stix/<int:rule_id>")
