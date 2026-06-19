@@ -959,3 +959,17 @@
     opacity: .7;
     margin-top: 2px;
 }
+
+/* ── Folder collapse ──────────────────────────────────────────────── */
+
+.bse-chevron {
+    width: 10px;
+    text-align: center;
+    transition: transform .15s ease;
+    flex-shrink: 0;
+}
+
+/* Smooth collapse transition */
+.bse-tree-item > div[v-show] {
+    overflow: hidden;
+}

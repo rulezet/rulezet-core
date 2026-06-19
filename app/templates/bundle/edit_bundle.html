@@ -8,60 +8,57 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-3" id="page-app" v-cloak>
+<div class="container-fluid px-4" id="page-app" v-cloak>
 
-    <!-- ── Header ── -->
-    <div class="mx-3 mb-4 d-flex align-items-center justify-content-between border-bottom pb-3">
-        <div class="d-flex align-items-center">
-            <a :href="'/bundle/detail/' + bundleId"
-               class="btn btn-outline-secondary btn-sm rounded-circle me-3 shadow-sm" title="Back">
-                <i class="fas fa-arrow-left"></i>
-            </a>
+    <!-- ── Banner ── -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-layer-group banner-watermark"></i>
+
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
+                <li class="breadcrumb-item">
+                    <a href="{{ url_for('bundle.detail', bundle_id=bundle.id) }}"
+                       class="text-decoration-none text-muted">{{ bundle.name | truncate(35) }}</a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Edit</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex align-items-center gap-3 mb-2">
+            <div class="banner-icon"><i class="fa-solid fa-layer-group"></i></div>
             <div>
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb mb-1" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
-                        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                        <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
-                        <li class="breadcrumb-item">
-                            <a :href="'/bundle/detail/' + bundleId" class="text-decoration-none text-muted">
-                                {{ bundle.name | truncate(40) }}
-                            </a>
-                        </li>
-                        <li class="breadcrumb-item active text-muted" aria-current="page">Edit</li>
-                    </ol>
-                </nav>
-                <h3 class="fw-bold mb-0">
-                    <i class="fas fa-box-open text-primary me-2"></i>{{ bundle.name | truncate(40) }}
-                </h3>
-                <div class="text-muted font-monospace" style="font-size:11px;">UUID: {{ bundle.uuid }}</div>
+                <h2 class="fw-bold mb-1">{{ bundle.name | truncate(50) }}</h2>
+                <div class="banner-accent"></div>
             </div>
+            
         </div>
+        <code class="ms-auto text-muted" style="font-size:.7rem;opacity:.6;">{{ bundle.uuid }}</code>
+            <p class="text-muted mb-0" style="font-size:.9rem;">
+                Edit the structure, settings and tags of this bundle.
+            </p>
     </div>
 
     <!-- ── Tabs ── -->
-    <ul class="nav nav-underline justify-content-center w-100 mb-4" id="editTabs" role="tablist">
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link active fw-bold px-4" data-bs-toggle="tab" href="#structure-pane"
-               style="color:var(--text-color);">
-                <i class="fas fa-sitemap me-2"></i>Edit Structure
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link fw-bold px-4" data-bs-toggle="tab" href="#settings-pane"
-               style="color:var(--text-color);">
-                <i class="fas fa-cog me-2"></i>Bundle Settings
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link fw-bold px-4" data-bs-toggle="tab" href="#tags-pane"
-               style="color:var(--text-color);">
-                <i class="fas fa-tags me-2"></i>Add Tags
-            </a>
-        </li>
-    </ul>
+    <nav class="dr-nav" id="editTabs" role="tablist">
+        <a class="dr-nav__item active" data-bs-toggle="tab" href="#structure-pane" role="tab">
+            <i class="fa-solid fa-sitemap"></i>
+            <span>Edit Structure</span>
+        </a>
+        <a class="dr-nav__item" data-bs-toggle="tab" href="#settings-pane" role="tab">
+            <i class="fa-solid fa-cog"></i>
+            <span>Bundle Settings</span>
+        </a>
+        <a class="dr-nav__item" data-bs-toggle="tab" href="#tags-pane" role="tab">
+            <i class="fa-solid fa-tags"></i>
+            <span>Tags</span>
+        </a>
+    </nav>
 
     <div class="tab-content">
 
@@ -69,7 +66,7 @@
              TAB 1 — Edit Structure
              ══════════════════════════════════════════════ -->
         <div class="tab-pane fade show active" id="structure-pane" role="tabpanel">
-            <div class="card border-0 shadow-lg p-3 mb-4" style="border-radius:12px;">
+            <div>
 
                 <!-- BundleStructureEditor with BundleRuleSelector in the rule-selector slot -->
                 <bundle-structure-editor
@@ -99,10 +96,10 @@
              TAB 2 — Bundle Settings
              ══════════════════════════════════════════════ -->
         <div class="tab-pane fade" id="settings-pane" role="tabpanel">
-            <div class="card border-0 shadow-lg p-3 mb-4" style="border-radius:12px;">
-                <h4 class="fw-bold mb-4">
-                    <i class="fas fa-info-circle text-primary me-2"></i>General Bundle Details
-                </h4>
+            <div class="card border-0 shadow-sm p-4 mb-4" style="border-radius:12px;border:1px solid var(--border-color)!important;">
+                <h5 class="fw-bold mb-4 d-flex align-items-center gap-2">
+                    <i class="fas fa-info-circle text-primary"></i>General Bundle Details
+                </h5>
                 <form method="POST" action="">
                     {{ form.hidden_tag() }}
                     <div class="mb-4">
@@ -145,13 +142,13 @@
              TAB 3 — Add Tags
              ══════════════════════════════════════════════ -->
         <div class="tab-pane fade" id="tags-pane" role="tabpanel">
-            <div class="card border-0 shadow-lg p-4 mb-4" style="border-radius:12px;">
+            <div class="card border-0 shadow-sm p-4 mb-4" style="border-radius:12px;border:1px solid var(--border-color)!important;">
 
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h4 class="fw-bold mb-0">
-                        <i class="fas fa-tags text-primary me-2"></i>Manage Tags
-                        <span class="badge bg-secondary ms-2" style="font-size:.5em;">[[ total_tags ]]</span>
-                    </h4>
+                    <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+                        <i class="fas fa-tags text-primary"></i>Manage Tags
+                        <span class="badge bg-secondary ms-1" style="font-size:.55em;">[[ total_tags ]]</span>
+                    </h5>
                     <div class="d-flex align-items-center gap-3">
                         <button class="btn btn-primary shadow-sm fw-bold rounded-pill px-4"
                                 data-bs-toggle="modal" data-bs-target="#add_tag_modal_">

@@ -34,25 +34,29 @@ const TREE_ITEM_TEMPLATE = `
             'bse-node-row--selected': selectedId === node.id,
             'bse-node-row--drop-target': localDropTarget && node.type === 'folder',
         }"
-        @click.stop="$emit('select', node)"
+        @click.stop="node.type === 'folder' ? toggleCollapse() : $emit('select', node)"
         @dragover="onDragOver($event, node)"
         @dragleave="onDragLeave($event)"
         @drop="onDrop($event, node)"
     >
-        <!-- Drag handle — SortableJS grabs the whole <li>,
-             but the handle icon gives a clear visual affordance -->
         <span class="bse-node-drag-handle" title="Drag to move">
             <i class="fas fa-grip-vertical"></i>
         </span>
 
-        <i
-            :class="[
-                node.type === 'folder'
-                    ? 'fas fa-folder text-warning'
-                    : (isRule(node) ? 'fas fa-file-code text-primary' : 'fas fa-file-signature text-success'),
-            ]"
-            style="font-size:.78rem;flex-shrink:0;"
-        ></i>
+        <!-- Folder: chevron + folder icon -->
+        <template v-if="node.type === 'folder'">
+            <i class="fas bse-chevron"
+               :class="collapsed ? 'fa-chevron-right' : 'fa-chevron-down'"
+               style="font-size:.65rem;flex-shrink:0;color:var(--subtle-text-color);">
+            </i>
+            <i :class="collapsed ? 'fas fa-folder text-warning' : 'fas fa-folder-open text-warning'"
+               style="font-size:.78rem;flex-shrink:0;"></i>
+        </template>
+        <!-- File: single icon -->
+        <i v-else
+            :class="isRule(node) ? 'fas fa-file-code text-primary' : 'fas fa-file-signature text-success'"
+            style="font-size:.78rem;flex-shrink:0;">
+        </i>
 
         <span class="bse-node-name" :title="node.name">{{ node.name }}</span>
 
@@ -80,7 +84,8 @@ const TREE_ITEM_TEMPLATE = `
         </div>
     </div>
 
-    <div v-if="node.type === 'folder'" class="ps-3 border-start ms-2 mt-1">
+    <div v-if="node.type === 'folder'" v-show="!collapsed"
+         class="ps-3 border-start ms-2 mt-1">
         <draggable v-model="node.children" group="bse-tree" :item-key="n => n.id" tag="ul"
             class="ps-0 mb-0 bse-folder-drop-zone" :animation="150" ghost-class="bse-ghost">
             <template #item="{ element }">
@@ -105,9 +110,10 @@ const TreeItem = {
     template: TREE_ITEM_TEMPLATE,
     emits: ['select', 'rename', 'add-sub', 'remove', 'external-drop'],
     components: { draggable: window.vuedraggable },
-    data() { return { localDropTarget: false, _leaveTimer: null } },
+    data() { return { localDropTarget: false, _leaveTimer: null, collapsed: false } },
     methods: {
         isRule(node) { return node && String(node.id).startsWith('rule_') },
+        toggleCollapse() { this.collapsed = !this.collapsed },
 
         // Only intercept dragover when an external rule is being dragged.
         // For internal tree reordering (SortableJS), let events propagate freely.
@@ -278,7 +284,8 @@ export default {
                 <!-- Editable custom file -->
                 <smart-editor
                     v-if="selectedNode && selectedNode.type === 'file' && !isRule(selectedNode)"
-                    v-model="selectedNode.content"
+                    :model-value="selectedNode.content ?? ''"
+                    @update:model-value="onContentChange"
                     mode="code"
                     language="text"
                     min-height="300px"
@@ -572,6 +579,24 @@ export default {
             saveStructure()
         }
 
+        // Traverse treeData and set content on the node matching id
+        function _setNodeContent(nodes, id, val) {
+            for (const n of nodes) {
+                if (n.id === id) { n.content = val; return true }
+                if (n.children?.length && _setNodeContent(n.children, id, val)) return true
+            }
+            return false
+        }
+
+        // Called on every SmartEditor keystroke (debounced 800ms for auto-save)
+        function onContentChange(val) {
+            if (!selectedNode.value) return
+            _setNodeContent(treeData.value, selectedNode.value.id, val)
+            if (!treeLoaded.value) return
+            clearTimeout(autoSaveTimer)
+            autoSaveTimer = setTimeout(() => saveStructure(), 800)
+        }
+
         // ── Node actions ───────────────────────────────────────────
         function selectNode(node) {
             previewContent.value = ''
@@ -760,7 +785,7 @@ export default {
             folderText, fileNameText, fileExt, renameText, renameExt, nodeToDelete,
             isRule, hlxLang, selectNode, clearDisplay, setPreview, prepareTarget,
             confirmAddFolder, confirmAddFile, beginRename, confirmRename,
-            beginDelete, confirmDelete, saveStructure, saveNow,
+            beginDelete, confirmDelete, saveStructure, saveNow, onContentChange,
             addRules, setPreview,
             onExternalDropOnFolder, onRootDragOver, onRootDragLeave, onRootDrop,
         }

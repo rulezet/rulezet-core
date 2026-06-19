@@ -37,7 +37,7 @@
 {% import 'macros/form_macros.html' as f %}
 
 {% block content %}
-<div class="container mt-4 mb-5" id="main-container">
+<div class="container mt-4 mb-5"  v-cloak>
     <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
             <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
@@ -50,10 +50,11 @@
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon"><i class="fa-solid fa-pen-to-square"></i></div>
             <div>
-                <h2 class="fw-bold mb-1">[[ currentRule.title || 'Edit Rule' ]]</h2>
+                <h2 class="fw-bold mb-1">Edit [[ currentRule.title ]]</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
+        <code class="ms-auto text-muted" style="font-size: 0.7rem; opacity: 0.6;" >[[ currentRule.uuid ]]</code>
         <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
             Modify the details of your rule below. Ensure all required fields are completed.
         </p>
