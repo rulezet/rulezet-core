@@ -13,7 +13,7 @@ from app.features.misp.rule.misp_object import content_convert_to_misp_object, g
 from .rule_form import AddNewRuleForm, CreateFormatRuleForm, EditRuleForm
 from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_side_diff_html
 
-from app.features.account.account_core import add_favorite, remove_favorite
+from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, get_github_branches, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
@@ -1304,7 +1304,16 @@ def manage_proposals() -> jsonify:
 def proposal_content_discuss() -> render_template:
     """Redirect to porposal content discuss"""
     rule_edit_id = request.args.get('id', type=int)
-    return render_template("rule/proposal_content_discuss.html" , rule_edit_id = rule_edit_id)
+    proposal = RuleModel.get_rule_proposal(rule_edit_id)
+    if not proposal:
+        return render_template("404.html")
+    rule = RuleModel.get_rule(proposal.rule_id)
+    if not rule:
+        return render_template("404.html")
+    return render_template("rule/proposal_content_discuss.html",
+                           rule_edit_id=rule_edit_id,
+                           rule=rule,
+                           **_nav_counts(rule.id))
 
 @rule_blueprint.route('/get_contributor', methods=['GET'])
 def get_contributor() -> render_template:
@@ -1455,6 +1464,7 @@ def get_proposal() -> jsonify:
     d = proposal.to_json()
     d['old_diff_html'] = old_html
     d['new_diff_html'] = new_html
+    d['is_favorited'] = is_rule_favorited_by_user(user_id=current_user.id, rule_id=proposal.rule_id)
 
     return {
         "proposal": d,

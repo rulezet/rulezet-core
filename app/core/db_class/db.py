@@ -663,6 +663,9 @@ class RuleEditProposal(db.Model):
             'comment_count': self.comments.count() if hasattr(self, 'comments') else 0,
             'timestamp': self.timestamp.isoformat(),
             'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
+            'reviewed_by_id': self.reviewed_by_id,
+            'reviewed_by_name': f"{self.reviewer.first_name} {self.reviewer.last_name}" if self.reviewer else None,
+            'reviewed_by_avatar': self.reviewer.get_avatar_url() if self.reviewer else None,
             'rejection_reason': self.rejection_reason,
             'comments': [comment.to_json() for comment in self.comments.order_by(RuleEditComment.created_at.asc())] if hasattr(self, 'comments') else []
         }
