@@ -1,8 +1,14 @@
 {% extends 'base.html' %}
 {% block title %}Rules Explorer — Rulezet{% endblock %}
-{% block content %}
 
-<div class="container mt-4">
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
 
     {% with messages = get_flashed_messages(with_categories=True) %}
     {% if messages %}
@@ -15,7 +21,6 @@
     {% endif %}
     {% endwith %}
 
-
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-shield-halved banner-watermark"></i>
         <nav aria-label="breadcrumb" class="mb-3">
@@ -24,7 +29,6 @@
                 <li class="breadcrumb-item active text-muted" aria-current="page">Rules</li>
             </ol>
         </nav>
-
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon">
                 <i class="fa-solid fa-magnifying-glass-chart"></i>
@@ -34,347 +38,48 @@
                 <div class="banner-accent"></div>
             </div>
         </div>
-
-        <p class="text-muted mb-3" style="max-width: 600px; font-size: 0.95rem;">
+        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
             Explore and discover rules from our extensive collection. Use the filters and search options to find the perfect rule for your needs.
         </p>
-
     </div>
 
-    <rule-filter-bar ref="filterBar" api-endpoint="/rule/get_rules_page_filter" @update:results="onRulesUpdated"
-        :current-user-is-authenticated="'{{current_user.is_authenticated}}'" :csrf-token="'{{ csrf_token() }}'"
-        :initial-filters='{{ url_filters | tojson | safe }}' @loading="search_is_loading = $event">
-    </rule-filter-bar>
+    <rule-list
+        mode="read"
+        default-view="card"
+        fetch-url="/rule/data_table"
+        :can-vote="{{ current_user.is_authenticated | tojson }}"
+        :can-favorite="{{ current_user.is_authenticated | tojson }}"
+        :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
+        :current-user-is-admin="{{ current_user.is_admin() | tojson }}"
+        :show-create="{{ current_user.is_authenticated | tojson }}"
+        :current-user-is-authenticated="{{ current_user.is_authenticated | tojson }}"
+        :csrf-token="csrfToken"
+        :sync-url="true"
+        @create="goToAddRule">
+    </rule-list>
 
-    <template v-if="!search_is_loading">
-        <template v-if="rules_list && rules_list.length > 0">
-            <pagination-component :current-page="current_page" :total-pages="total_pages" @change-page="changePage">
-            </pagination-component>
-
-            <div class="mb-4 d-flex align-items-center text-muted small fw-bold">
-                <div class=" opacity-10 rounded-circle p-2 me-2 d-flex align-items-center justify-content-center"
-                    style="width: 30px; height: 30px;">
-                    <i class="fas fa-database text-primary"></i>
-                </div>
-                [[ total_rules_liste ]] RULES FOUND
-            </div>
-
-            <div class="card h-100 shadow-sm  border-0 mb-4" v-for="(rule, index) in rules_list" :key="rule.uuid">
-
-                <div class="premium-accent-line"></div>
-
-                <div class="card-watermark-list">
-                    <i class="fa-solid fa-shield-halved"></i>
-                </div>
-
-                <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2 z-index-2">
-                    <span v-if="parseInt('{{current_user.id}}') == rule.user_id" class="badge bg-success shadow-sm pt-1"
-                        title="You are the owner">
-                        <i class="fa-solid fa-crown me-1"></i> OWNER
-                    </span>
-                    <span v-if="current_user_is_admin" class="badge bg-warning   shadow-sm pt-1"
-                        title="You are an admin, you have all the rights on this rule">
-                        <i class="fa-solid fa-crown me-1"></i> ADMIN
-                    </span>
-                    <span class="badge rounded-pill bg-dark pt-1 shadow-sm">[[ rule.format.toUpperCase() ]]</span>
-                </div>
-
-                <div class="card-body d-flex flex-column p-4 z-index-1">
-                    <div class="mb-3 pe-5">
-                        <h5 class="fw-bold mb-1">
-                            <a :href="`/rule/detail_rule/${rule.id}`"
-                                class="fw-bold h5  border-start border-primary border-4 ps-3 custom-rule-link text-decoration-none d-block">
-                                [[ rule.title ]]
-                            </a>
-                        </h5>
-                        <div class="d-flex align-items-center gap-2 mt-2">
-                            <user-chip
-                                :user-id="rule.user_id"
-                                :username="rule.author !== 'Unknown' ? rule.author : rule.editor"
-                                :avatar="rule.editor_avatar"
-                                size="xs"
-                            ></user-chip>
-                            <span class="text-muted opacity-50">|</span>
-                            <small class="text-muted"> [[ dayjs.utc(rule.last_modif).fromNow() ]]</small>
-                        </div>
-                    </div>
-
-                    <div>
-                        <p class="text-muted small lh-base mb-2">
-                            <i class="fas fa-quote-left me-2 opacity-50 text-primary"></i>
-                            [[ rule.description ]]
-                        </p>
-                    </div>
-
-
-                    <div class="mb-3" @click.stop>
-                        <vulnerability-displays-list object-type="rule" :object-id="rule.id" :max-visible="3">
-                        </vulnerability-displays-list>
-                    </div>
-                    <div class="mb-3" @click.stop>
-                        <tags-displays-list object-type="rule" :object-id="rule.id" :max-visible="3">
-                        </tags-displays-list>
-                    </div>
-
-                    <div class="row g-2 mb-4 pt-3  small text-muted">
-                        <div class="col-6">
-                            <div class="mb-1"><i class="fas fa-link me-2"></i><strong>Source:</strong> [[ rule.source ]]
-                            </div>
-                            <div class="mb-1"><i class="fas fa-balance-scale me-2"></i><strong>License:</strong> [[
-                                rule.license && rule.license !== 'Unknown' ? rule.license : 'No license' ]]</div>
-                        </div>
-                        <div class="col-6">
-                            <div class="mb-1"><i class="fas fa-code-branch me-2"></i><strong>Version:</strong> <span
-                                    class="badge text-bg-light border px-1">[[ rule.version && rule.version !==
-                                    'Unknown' ? rule.version : '1.0' ]]</span></div>
-                            <div class="mb-1 d-flex align-items-center gap-1">
-                                <i class="fas fa-user-edit me-1 opacity-50"></i><strong class="me-1">Editor:</strong>
-                                <user-chip :user-id="rule.user_id" :username="rule.editor" :avatar="rule.editor_avatar" size="xs"></user-chip>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto">
-                        <div class="btn-group shadow-sm border rounded-pill overflow-hidden">
-                            <button @click="vote('up', rule.id); animateClick($event)"
-                                class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn"
-                                title="Like this rule">
-                                <i class="fas fa-thumbs-up text-primary me-1"></i> [[ rule.vote_up ]]
-                            </button>
-                            <button @click="vote('down', rule.id); animateClick($event)"
-                                class="btn btn-sm px-3 border-0 shadow-none btn-animate home-btn"
-                                title="Dislike this rule">
-                                <i class="fas fa-thumbs-down text-danger me-1"></i> [[ rule.vote_down ]]
-                            </button>
-                        </div>
-
-                        <div class="d-flex gap-2">
-                            <button @click="favorite(rule.id); $event.currentTarget.classList.add('star-animate')"
-                                @animationend="$event.currentTarget.classList.remove('star-animate')"
-                                class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center transition-all home-btn"
-                                style="width: 32px; height: 32px; border: 1px solid #eee;">
-                                <i class="fa-star" :class="rule.is_favorited ? 'fas text-warning' : 'far'"></i>
-                            </button>
-
-                            <div class="dropup"> <button
-                                    class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
-                                    style="width: 32px; height: 32px; border: 1px solid #eee;" data-bs-toggle="dropdown"
-                                    aria-expanded="false">
-                                    <i class="fas fa-ellipsis-v text-muted"></i>
-                                </button>
-
-                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 mb-2"
-                                    style="border-radius: 12px;">
-                                    <li><a class="dropdown-item rounded-2" :href="`/rule/detail_rule/${rule.id}`">
-                                            <i class="fas fa-eye me-2 text-muted"></i> View Detail</a>
-                                    </li>
-                                    <li><a class="dropdown-item rounded-2" :href="`/rule/report/${rule.id}`">
-                                            <i class="fas fa-flag me-2 text-muted"></i> Report Issue</a>
-                                    </li>
-
-                                    <template
-                                        v-if="parseInt('{{current_user.id}}') == rule.user_id || current_user_is_admin">
-                                        <li>
-                                            <hr class="dropdown-divider">
-                                        </li>
-                                        <li><a class="dropdown-item rounded-2" :href="`/rule/edit_rule/${rule.id}`">
-                                                <i class="fas fa-pen me-2 text-primary"></i> Edit Rule</a>
-                                        </li>
-                                        <li>
-                                            <button class="dropdown-item rounded-2 text-danger" data-bs-toggle="modal"
-                                                :data-bs-target="'#delete_rule_modal_'+rule.id">
-                                                <i class="fa-solid fa-trash me-2"></i> Delete Rule
-                                            </button>
-                                        </li>
-                                    </template>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal fade" :id="'delete_rule_modal_'+rule.id" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog modal-dialog-centered">
-                        <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
-                            <div class="modal-header border-0 pb-0">
-                                <h5 class="modal-title fw-bold">Confirm Deletion</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body py-4 text-center">
-                                <div class="text-danger mb-3"><i class="fas fa-exclamation-triangle fa-3x"></i></div>
-                                <p class="mb-0">Are you sure you want to delete <br><strong>[[ rule.title ]]</strong> ?
-                                </p>
-                            </div>
-                            <div class="modal-footer border-0 pt-0">
-                                <button type="button" class="btn btn-light rounded-pill px-4"
-                                    data-bs-dismiss="modal">Cancel</button>
-                                <button class="btn btn-danger rounded-pill px-4" @click="deleteRule(rule.id, index)"
-                                    data-bs-dismiss="modal">
-                                    Confirm Delete
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <pagination-component :current-page="current_page" :total-pages="total_pages" @change-page="changePage">
-            </pagination-component>
-        </template>
-        <div v-else class="text-center py-5">
-            <i class="fas fa-search fa-3x text-muted opacity-20 mb-3"></i>
-            <p class="text-muted">No rules found matches your search.</p>
-        </div>
-    </template>
-    <template v-else>
-        <div class="col-12 text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-        </div>
-    </template>
-</div>
 </div>
 {% endblock %}
 
-
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed, onMounted } = Vue
-    import { message_list, create_message } from '/static/js/toaster.js'
-    import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
-    import RuleFilterBar from '/static/js/rule/ruleFilterBar.js';
-    import PaginationComponent from '/static/js/rule/paginationComponent.js';
-    import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
-    import UserChip from '/static/js/components/UserChip.js';
+    const { createApp } = Vue
+    import RuleList                  from '/static/js/rule/ruleList.js'
+    import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
+    import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
+
+    const csrfToken = '{{ csrf_token() }}'
 
     createApp({
         delimiters: ['[[', ']]'],
         components: {
+            'rule-list':                   RuleList,
+            'tags-displays-list':          TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
-            'rule-filter-bar': RuleFilterBar,
-            'pagination-component': PaginationComponent,
-            'tags-displays-list': TagsDisplaysList,
-            'user-chip': UserChip,
         },
         setup() {
-
-            const rules_list = ref([]);
-            const total_rules_liste = ref(0);
-            const current_page = ref(1);
-            const total_pages = ref(1);
-
-
-            const filterBar = ref(null);
-            const search_is_loading = ref(true);
-            const current_user_is_admin = ref(false);
-            const current_user_is_connected = ref(false);
-
-
-            const onRulesUpdated = (results) => {
-                rules_list.value = results.rules.rule || [];
-                total_pages.value = results.total_pages || 1;
-                current_page.value = results.current_page || 1;
-                total_rules_liste.value = results.total_rules || 0;
-            };
-
-            const changePage = (page) => {
-                if (filterBar.value) {
-                    filterBar.value.fetchRules(page);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-            };
-
-
-            async function checkIfUserIsConnected() {
-                const res = await fetch('/get_current_user_connected');
-                const data = await res.json();
-                current_user_is_connected.value = data.is_authenticated;
-                if (data.is_authenticated) fetchCurrentUser();
-            }
-
-            async function fetchCurrentUser() {
-                const res = await fetch('get_current_user')
-                if (res) {
-                    const data = await res.json()
-                    current_user_is_admin.value = data.user
-                }
-            }
-
-            async function deleteRule(id, index) {
-                const res = await fetch(`/rule/delete_rule?id=${id}`);
-                const data = await res.json();
-                if (res.status === 200) {
-                    rules_list.value.splice(index, 1);
-                    total_rules_liste.value--;
-
-                    const modalEl = document.getElementById('delete_rule_modal_' + id);
-                    const modal = bootstrap.Modal.getInstance(modalEl);
-                    if (modal) modal.hide();
-                }
-                create_message(data.message, data.toast_class);
-            }
-
-            async function vote(voteType, ruleId) {
-                if (!current_user_is_connected.value) {
-                    window.location.href = `/account/login`;
-                    return;
-                }
-                const res = await fetch(`/rule/vote_rule?id=${ruleId}&vote_type=${voteType}`);
-                const data = await res.json();
-                const rule = rules_list.value.find(r => r.id === ruleId);
-                if (rule) {
-                    rule.vote_up = data.vote_up;
-                    rule.vote_down = data.vote_down;
-                }
-            }
-
-            async function favorite(rule_id) {
-                if (!current_user_is_connected.value) {
-                    window.location.href = `/account/login`;
-                    return;
-                }
-                const res = await fetch(`/rule/favorite/${rule_id}`);
-                const data = await res.json();
-                if (res.ok) {
-                    const rule = rules_list.value.find(r => r.id === rule_id);
-                    if (rule) rule.is_favorited = data.is_favorited;
-                }
-                create_message(data.message, data.toast_class, false, null, "/rule/owner_rules");
-            }
-
-            function animateClick(event) {
-                const btn = event.currentTarget;
-                btn.classList.add('click-pop');
-                setTimeout(() => btn.classList.remove('click-pop'), 300);
-            }
-
-            onMounted(() => {
-                checkIfUserIsConnected();
-            });
-
-            return {
-                // Data
-                rules_list,
-                current_page,
-                total_pages,
-                total_rules_liste,
-                current_user_is_admin,
-                current_user_is_connected,
-                search_is_loading,
-
-                // Methods
-                onRulesUpdated,
-                changePage,
-                deleteRule,
-                vote,
-                favorite,
-                animateClick,
-
-                // Utils / Refs
-                filterBar,
-                dayjs,
-                message_list,
-                TagsDisplaysList,
-            }
+            function goToAddRule() { window.location.href = '/rule/create_rule' }
+            return { csrfToken, goToAddRule }
         }
     }).mount('#main-container')
 </script>

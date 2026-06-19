@@ -45,6 +45,7 @@ import PaginationComponent      from '/static/js/rule/paginationComponent.js'
 import MultiVulnerabilityFilter from '/static/js/vulnerability/multiVulnerabilityFilter.js'
 import MultiSourceFilter        from '/static/js/rule/multiSourceFilter.js'
 import MultiLicenseFilter       from '/static/js/rule/multiLicenseFilter.js'
+import MultiPersonFilter        from '/static/js/rule/multiPersonFilter.js'
 import MultiTagFilter           from '/static/js/tags/multiTagFIlter.js'
 import TagsDisplaysList         from '/static/js/tags/tagsDisplaysList.js'
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
@@ -63,6 +64,7 @@ export default {
         MultiSourceFilter,
         MultiLicenseFilter,
         MultiTagFilter,
+        MultiPersonFilter,
         TagsDisplaysList,
         VulnerabilityDisplaysList,
         UserChip,
@@ -90,6 +92,7 @@ export default {
         initialFilters:     { type: Object,           default: () => ({}) },
         csrfToken:          { type: String,           default: '' },
         currentUserIsAuthenticated: { type: Boolean,  default: false },
+        syncUrl:            { type: Boolean,          default: true },
     },
 
     emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send'],
@@ -112,6 +115,9 @@ export default {
                         <i class="fas fa-xmark"></i>
                     </button>
                 </div>
+                <span v-if="!loading" class="text-muted small ms-2 text-nowrap">
+                    <strong>{{ total }}</strong> rule<span v-if="total !== 1">s</span>
+                </span>
             </div>
 
             <div class="rl-toolbar-right">
@@ -234,6 +240,18 @@ export default {
                         <span>Exact</span>
                     </label>
 
+                    <div v-if="currentUserIsAuthenticated && !numericUserId"
+                         class="rl-scope-toggle">
+                        <button :class="['rl-scope-btn', !scopeMine ? 'rl-scope-btn--active' : '']"
+                                @click="scopeMine = false; onFilterChange()">
+                            <i class="fa-solid fa-globe"></i> All
+                        </button>
+                        <button :class="['rl-scope-btn', scopeMine ? 'rl-scope-btn--active' : '']"
+                                @click="scopeMine = true; onFilterChange()">
+                            <i class="fa-solid fa-user"></i> Mine
+                        </button>
+                    </div>
+
                     <button v-if="activeFilterCount > 0"
                             class="rl-fp-reset" @click="resetFilters">
                         <i class="fas fa-rotate-left"></i> Reset
@@ -291,6 +309,17 @@ export default {
                             target-type="rule"
                             @change="onFilterChange">
                         </multi-tag-filter>
+                    </div>
+
+                    <div class="rl-fp-multi-item" v-if="!isFilterHidden('person')">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-person-circle-check text-warning"></i> Author / Editor
+                        </span>
+                        <multi-person-filter v-model="personFilter"
+                            :user-id="numericUserId"
+                            :source-rules="source || ''"
+                            @change="onPersonFilterChange">
+                        </multi-person-filter>
                     </div>
                 </div>
 
@@ -930,6 +959,12 @@ export default {
     setup(props, { emit }) {
         const init = props.initialFilters
 
+        // ── URL param helpers ─────────────────────────────────────────────
+        const _url = new URLSearchParams(window.location.search)
+        const _p   = (key, fallback = '') => _url.get(key) ?? fallback
+        const _arr = (key, fallback = '') =>
+            (_p(key) || fallback).split(',').filter(Boolean)
+
         // ── Data ─────────────────────────────────────────────────────────
         const items      = ref([])
         const total      = ref(0)
@@ -937,11 +972,11 @@ export default {
         const loading    = ref(false)
 
         // ── Pagination / sort ─────────────────────────────────────────────
-        const page         = ref(1)
-        const cardPerPage  = ref(props.initialPerPage)
+        const page         = ref(Number(_p('page', '1')) || 1)
+        const cardPerPage  = ref(Number(_p('per_page', String(props.initialPerPage))) || props.initialPerPage)
         const tablePerPage = ref(25)
-        const sortKey      = ref('')
-        const sortDir      = ref('asc')
+        const sortKey      = ref(_p('sort', ''))
+        const sortDir      = ref(_p('dir', 'asc'))
 
         // Active per-page depends on the current view (set after viewMode is declared)
         const perPage = computed(() =>
@@ -959,22 +994,30 @@ export default {
         })
 
         // ── Filter state ─────────────────────────────────────────────────
-        const search          = ref(init.search || '')
-        const searchField     = ref(init.search_field || 'all')
-        const exactMatch      = ref(init.exact_match === 'true' || false)
-        const ruleType        = ref(init.format || '')
-        const selectedTags    = ref(init.tags ? init.tags.split(',') : [])
-        const selectedSources = ref(init.sources ? init.sources.split(',') : [])
-        const selectedLicenses = ref(init.licenses ? init.licenses.split(',') : [])
-        const selectedVulns   = ref(init.vulnerabilities ? init.vulnerabilities.split(',') : [])
+        const search           = ref(_p('search', init.search || ''))
+        const searchField      = ref(_p('search_field', init.search_field || 'all'))
+        const exactMatch       = ref(_p('exact_match') === 'true' || init.exact_match === 'true' || false)
+        const ruleType         = ref(_p('rule_type', init.format || ''))
+        const selectedTags     = ref(_arr('tags',            init.tags || ''))
+        const selectedSources  = ref(_arr('sources',         init.sources || ''))
+        const selectedLicenses = ref(_arr('licenses',        init.licenses || ''))
+        const selectedVulns    = ref(_arr('vulnerabilities', init.vulnerabilities || ''))
+        const personFilter     = ref({
+            mode:   _p('person_mode', 'author'),
+            values: _arr(_url.has('editors') ? 'editors' : 'authors'),
+        })
+        const scopeMine        = ref(_p('scope') === 'mine')
         const rulesFormats    = ref([])
 
         // Card sort shorthand (maps to sortKey/sortDir)
         const cardSort = ref('newest')
 
         // ── UI state ──────────────────────────────────────────────────────
-        const viewMode    = ref(props.defaultView)
-        const filtersOpen = ref(false)
+        const viewMode    = ref(_p('view', props.defaultView))
+        const _hasUrlFilters = ['tags','sources','licenses','vulnerabilities','authors','editors',
+                                'rule_type','search_field','exact_match','person_mode','scope']
+                               .some(k => _url.has(k))
+        const filtersOpen = ref(_hasUrlFilters)
         const expandedIds = reactive(new Set())
 
         // ── Column visibility (table mode) ────────────────────────────────
@@ -1017,15 +1060,47 @@ export default {
             return props.hiddenFilters.includes(key)
         }
 
+        function onPersonFilterChange(payload) {
+            personFilter.value = payload
+            onFilterChange()
+        }
+
         const activeFilterCount = computed(() =>
             (ruleType.value ? 1 : 0) +
             (exactMatch.value ? 1 : 0) +
             (searchField.value !== 'all' ? 1 : 0) +
+            (scopeMine.value ? 1 : 0) +
             selectedTags.value.length +
             selectedSources.value.length +
             selectedLicenses.value.length +
-            selectedVulns.value.length
+            selectedVulns.value.length +
+            personFilter.value.values.length
         )
+
+        // ── URL sync ──────────────────────────────────────────────────────
+        function syncToUrl() {
+            if (!props.syncUrl) return
+            const p = new URLSearchParams()
+            if (search.value)                      p.set('search', search.value)
+            if (page.value > 1)                    p.set('page', page.value)
+            if (searchField.value !== 'all')        p.set('search_field', searchField.value)
+            if (exactMatch.value)                   p.set('exact_match', 'true')
+            if (ruleType.value)                     p.set('rule_type', ruleType.value)
+            if (sortKey.value)                    { p.set('sort', sortKey.value); p.set('dir', sortDir.value) }
+            if (viewMode.value !== props.defaultView) p.set('view', viewMode.value)
+            if (selectedTags.value.length)          p.set('tags',            selectedTags.value.join(','))
+            if (selectedSources.value.length)       p.set('sources',         selectedSources.value.join(','))
+            if (selectedLicenses.value.length)      p.set('licenses',        selectedLicenses.value.join(','))
+            if (selectedVulns.value.length)         p.set('vulnerabilities', selectedVulns.value.join(','))
+            if (personFilter.value.values.length) {
+                const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
+                p.set(pKey, personFilter.value.values.join(','))
+                if (personFilter.value.mode !== 'author') p.set('person_mode', personFilter.value.mode)
+            }
+            if (scopeMine.value) p.set('scope', 'mine')
+            const qs = p.toString()
+            history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+        }
 
         // ── Fetch ─────────────────────────────────────────────────────────
         async function fetchData() {
@@ -1042,10 +1117,15 @@ export default {
                 if (sortKey.value)                   params.set('dir', sortDir.value)
                 if (props.source)                    params.set('source', props.source)
                 if (numericUserId.value)             params.set('user_id', numericUserId.value)
+                else if (scopeMine.value && numericCurrentUserId.value) params.set('user_id', numericCurrentUserId.value)
                 if (selectedTags.value.length)       params.set('tags', selectedTags.value.join(','))
                 if (selectedSources.value.length)    params.set('sources', selectedSources.value.join(','))
                 if (selectedLicenses.value.length)   params.set('licenses', selectedLicenses.value.join(','))
                 if (selectedVulns.value.length)      params.set('vulnerabilities', selectedVulns.value.join(','))
+                if (personFilter.value.values.length) {
+                    const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
+                    params.set(pKey, personFilter.value.values.join(','))
+                }
 
                 const sep = props.fetchUrl.includes('?') ? '&' : '?'
                 const res = await fetch(`${props.fetchUrl}${sep}${params}`)
@@ -1057,6 +1137,7 @@ export default {
                 if (page.value > totalPages.value && totalPages.value > 0) {
                     page.value = totalPages.value
                 }
+                syncToUrl()
             } finally {
                 loading.value = false
             }
@@ -1082,10 +1163,12 @@ export default {
             ruleType.value       = ''
             searchField.value    = 'all'
             exactMatch.value     = false
+            scopeMine.value      = false
             selectedTags.value   = []
             selectedSources.value = []
             selectedLicenses.value = []
             selectedVulns.value  = []
+            personFilter.value   = { mode: 'author', values: [] }
             onFilterChange()
         }
 
@@ -1401,7 +1484,8 @@ export default {
             selectedTags.value.length > 0 ||
             selectedSources.value.length > 0 ||
             selectedLicenses.value.length > 0 ||
-            selectedVulns.value.length > 0
+            selectedVulns.value.length > 0 ||
+            personFilter.value.values.length > 0
         )
 
         // IDs to pass to RuleExportAction:
@@ -1450,6 +1534,8 @@ export default {
             // Filters
             filtersOpen, ruleType, searchField, exactMatch, cardSort,
             selectedTags, selectedSources, selectedLicenses, selectedVulns,
+            personFilter, onPersonFilterChange,
+            scopeMine,
             rulesFormats, activeFilterCount,
             // UI
             viewMode, expandedIds, cvesMap,

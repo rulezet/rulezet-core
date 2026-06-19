@@ -1342,7 +1342,7 @@ def process_vote(rule_id, user_id, vote_type):
 #   Filter  #
 #############
 
-def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False) -> Rule:
+def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None) -> Rule:
     """Filter the rules with specific field targeting"""
     query = _active()
     
@@ -1425,11 +1425,18 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
         query = query.filter(or_(*[Rule.license.ilike(f"%{l}%") for l in license_list]))
 
     if author:
-        query = query.filter(Rule.author.ilike(f"%{author.lower()}%"))
+        author_list = author if isinstance(author, list) else [author]
+        query = query.filter(or_(*[Rule.author.ilike(f"%{a}%") for a in author_list]))
+
+    if editor_names:
+        editor_col = func.coalesce(User.username, func.concat(User.first_name, ' ', User.last_name))
+        query = (query
+                 .join(User, User.id == Rule.user_id)
+                 .filter(or_(*[editor_col.ilike(f"%{e}%") for e in editor_names])))
 
     if rule_type:
-        query = query.filter(Rule.format.ilike(f"%{rule_type.lower()}%"))  
-        
+        query = query.filter(Rule.format.ilike(f"%{rule_type.lower()}%"))
+
     if sort_by == "newest":
         query = query.order_by(Rule.creation_date.desc())
     elif sort_by == "oldest":
@@ -2205,7 +2212,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          direction='asc', source=None, user_id=None,
                          search_field='all', exact_match=False, rule_type=None,
                          author=None, vulnerabilities=None, licenses=None,
-                         tags=None):
+                         tags=None, editor_names=None):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -2222,6 +2229,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         license=licenses,
         tags=tags,
         exact_match=exact_match,
+        editor_names=editor_names,
     )
 
     col = _DATA_TABLE_SORT_KEYS.get(sort)
@@ -3085,6 +3093,42 @@ def get_licenses_usage_with_filter(search_query, user_id=None, source_scope=None
 
     # Return grouped results ordered by the most frequent license
     return query.group_by(Rule.license).order_by(func.count(Rule.id).desc()).all()
+
+
+def get_authors_usage_with_filter(search_query=None, user_id=None, source_scope=None):
+    """Distinct rule authors with usage counts, optionally filtered."""
+    query = db.session.query(
+        Rule.author.label('author'),
+        func.count(Rule.id).label('count')
+    ).filter(Rule.author.isnot(None), Rule.author != '', Rule.author != 'Unknown',
+             Rule.is_deleted == False)
+
+    if search_query:
+        query = query.filter(Rule.author.ilike(f'%{search_query}%'))
+    if user_id:
+        query = query.filter(Rule.user_id == user_id)
+    if source_scope:
+        query = query.filter(Rule.source == source_scope)
+
+    return query.group_by(Rule.author).order_by(func.count(Rule.id).desc()).all()
+
+
+def get_editors_usage_with_filter(search_query=None, source_scope=None):
+    """Distinct Rulezet editors (uploaders) with usage counts."""
+    editor_col = func.coalesce(User.username, func.concat(User.first_name, ' ', User.last_name))
+    query = (db.session.query(
+        editor_col.label('name'),
+        func.count(Rule.id).label('count')
+    )
+    .join(User, User.id == Rule.user_id)
+    .filter(Rule.is_deleted == False))
+
+    if search_query:
+        query = query.filter(editor_col.ilike(f'%{search_query}%'))
+    if source_scope:
+        query = query.filter(Rule.source == source_scope)
+
+    return query.group_by(editor_col).order_by(func.count(Rule.id).desc()).all()
 
 
 def get_tags_for_rule(rule_id: int) -> List[Tag]:

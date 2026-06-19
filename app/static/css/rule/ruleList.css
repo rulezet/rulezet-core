@@ -684,3 +684,31 @@
 
 [data-bs-theme="dark"] .rl-rule-content,
 .dark-mode .rl-rule-content { background: #0d1117; color: #c9d1d9; }
+
+
+/* ── Scope toggle (All / Mine) ── */
+.rl-scope-toggle {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--light-bg-color);
+}
+.rl-scope-btn {
+    padding: .28rem .75rem;
+    font-size: .75rem;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+}
+.rl-scope-btn:hover { background: var(--border-color); color: var(--text-color); }
+.rl-scope-btn--active { background: #0d6efd; color: #fff; }
+.rl-scope-btn--active:hover { background: #0a58ca; color: #fff; }

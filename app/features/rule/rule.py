@@ -198,9 +198,8 @@ def get_rules_page_filter() -> jsonify:
     if exact_match == "true":
         exact_match = True
     
-    author = request.args.get("author", None)
     sort_by = request.args.get("sort_by", "newest")
-    rule_type = request.args.get("rule_type", None) 
+    rule_type = request.args.get("rule_type", None)
     source = request.args.get("sources", None)
     user_id = request.args.get("user_id", None)
     license = request.args.get("licenses", None)
@@ -209,22 +208,29 @@ def get_rules_page_filter() -> jsonify:
     vuln_list = [v.strip() for v in vuln_raw.split(',') if v.strip()] if vuln_raw else []
 
     tag_raw = request.args.get("tags", type=str)
-    
     tag_list = [t.strip() for t in tag_raw.split(',') if t.strip()] if tag_raw else []
 
-  
+    authors_raw = request.args.get("authors", type=str)
+    authors_list = [v.strip() for v in authors_raw.split(',') if v.strip()] if authors_raw else None
+    single_author = request.args.get("author", None)
+    author_filter = authors_list or ([single_author] if single_author else None)
+
+    editors_raw = request.args.get("editors", type=str)
+    editor_names = [v.strip() for v in editors_raw.split(',') if v.strip()] if editors_raw else None
+
     query = RuleModel.filter_rules(
-        search=search, 
-        search_field=search_field, 
-        author=author, 
-        sort_by=sort_by, 
-        rule_type=rule_type, 
-        vulnerabilities=vuln_list, 
-        source=source, 
-        user_id=user_id, 
-        license=license, 
+        search=search,
+        search_field=search_field,
+        author=author_filter,
+        sort_by=sort_by,
+        rule_type=rule_type,
+        vulnerabilities=vuln_list,
+        source=source,
+        user_id=user_id,
+        license=license,
         tags=tag_list,
-        exact_match=exact_match
+        exact_match=exact_match,
+        editor_names=editor_names,
     )
     
     total_rules = query.count()
@@ -2683,6 +2689,10 @@ def rules_data_table():
     if source:
         sources = (sources or []) + [source]
 
+    authors_list  = _csv_arg('authors')
+    single_author = request.args.get('author', None, type=str)
+    author_filter = authors_list or ([single_author] if single_author else None)
+
     pagination = RuleModel.get_rules_data_table(
         page=request.args.get('page', 1, type=int),
         per_page=request.args.get('per_page', 10, type=int),
@@ -2694,10 +2704,11 @@ def rules_data_table():
         search_field=request.args.get('search_field', 'all', type=str),
         exact_match=request.args.get('exact_match', 'false', type=str) == 'true',
         rule_type=request.args.get('rule_type', None, type=str),
-        author=request.args.get('author', None, type=str),
+        author=author_filter,
         vulnerabilities=_csv_arg('vulnerabilities'),
         licenses=_csv_arg('licenses'),
         tags=_csv_arg('tags'),
+        editor_names=_csv_arg('editors'),
     )
 
     items = []
@@ -3026,6 +3037,35 @@ def get_rules_licenses_usage():
     )
     
     return jsonify([{"name": s.license, "count": s.count} for s in licenses])
+
+
+@rule_blueprint.route('/get_rules_authors_usage')
+def get_rules_authors_usage():
+    """Returns distinct rule authors with their rule count."""
+    user_id      = request.args.get('user_id', type=int)
+    search_query = request.args.get('q', '').strip()
+    source_scope = request.args.get('sources', '').strip()
+
+    authors = RuleModel.get_authors_usage_with_filter(
+        search_query=search_query,
+        user_id=user_id,
+        source_scope=source_scope,
+    )
+    return jsonify([{"name": a.author, "count": a.count} for a in authors])
+
+
+@rule_blueprint.route('/get_rules_editors_usage')
+def get_rules_editors_usage():
+    """Returns distinct Rulezet editors (uploaders) with their rule count."""
+    search_query = request.args.get('q', '').strip()
+    source_scope = request.args.get('sources', '').strip()
+
+    editors = RuleModel.get_editors_usage_with_filter(
+        search_query=search_query,
+        source_scope=source_scope,
+    )
+    return jsonify([{"name": e.name, "count": e.count} for e in editors])
+
 
 
 @rule_blueprint.route('/get_tags/<int:rule_id>')
