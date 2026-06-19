@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Similarity — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-code-compare banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+                        {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Similarity</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-code-compare"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Similar Rules</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+            Rules that share significant structural or semantic overlap with this one. Useful for identifying duplicates and consolidating your detection library.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'similarity', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
+
+    <!-- Loading -->
+    <div v-if="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading…</span>
+        </div>
+    </div>
+
+    <template v-else>
+
+        <template v-if="similar_rules.length > 0">
+
+            <!-- Controls bar -->
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <p class="mb-0 small" style="color: var(--subtle-text-color);">
+                    <strong>[[ total_count ]]</strong> similar rule[[ total_count === 1 ? '' : 's' ]] found
+                </p>
+                {% if current_user.is_authenticated %}
+                <button @click="refreshSimilarity" :disabled="refreshing"
+                        class="btn btn-sm btn-outline-secondary rounded-pill">
+                    <i class="fa-solid fa-rotate me-1" :class="{ 'fa-spin': refreshing }"></i>
+                    [[ refreshing ? 'Computing…' : 'Refresh similarity' ]]
+                </button>
+                {% endif %}
+            </div>
+
+            <pagination-component v-if="total_pages > 1"
+                :current-page="current_page"
+                :total-pages="total_pages"
+                @change-page="(p) => fetchSimilar(p)">
+            </pagination-component>
+
+            <similar-rule-card
+                v-for="rule_item in similar_rules"
+                :key="'spec-' + rule_item.rule_id"
+                :rule-a="rule_item.rule_a_data"
+                :rule-b="rule_item.rule_b_data"
+                :score="rule_item.score"
+                type="specific"
+                :unique-id="'spec-' + rule_item.rule_id"
+                @refresh-list="fetchSimilar(1)"
+                :rule="rule_item"
+                :is-admin="{{ 'true' if current_user.is_admin() else 'false' }}">
+            </similar-rule-card>
+
+            <pagination-component v-if="total_pages > 1"
+                :current-page="current_page"
+                :total-pages="total_pages"
+                @change-page="(p) => fetchSimilar(p)">
+            </pagination-component>
+
+        </template>
+
+        <template v-else>
+            <div class="card border-0 shadow-sm rounded-4 p-5 text-center">
+                <i class="fa-solid fa-code-compare fa-2x mb-3 d-block opacity-25"></i>
+                <p class="mb-2" style="color: var(--subtle-text-color);">No similar rules have been computed for this rule yet.</p>
+                {% if current_user.is_authenticated %}
+                <button @click="refreshSimilarity" :disabled="refreshing"
+                        class="btn btn-sm btn-primary rounded-pill mt-2">
+                    <i class="fa-solid fa-rotate me-1" :class="{ 'fa-spin': refreshing }"></i>
+                    [[ refreshing ? 'Computing…' : 'Compute similarity now' ]]
+                </button>
+                {% endif %}
+            </div>
+        </template>
+
+    </template>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, onMounted } = Vue;
+    import PaginationComponent from '/static/js/rule/paginationComponent.js';
+    import SimilarRuleCard from '/static/js/rule/similarity/similarRulesCard.js';
+    import { create_message } from '/static/js/toaster.js';
+
+    const rule_id = {{ rule.id }};
+    const csrf_token = '{{ csrf_token() }}';
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { PaginationComponent, SimilarRuleCard },
+        setup() {
+            const similar_rules   = ref([]);
+            const current_page    = ref(1);
+            const total_pages     = ref(1);
+            const total_count     = ref(0);
+            const loading         = ref(true);
+            const refreshing      = ref(false);
+
+            async function fetchSimilar(page = 1) {
+                loading.value = true;
+                try {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const compareWithId = urlParams.get('compare_with');
+
+                    const res = await fetch(`/rule/similar_detail/${rule_id}?page=${page}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        similar_rules.value = data.items.map(r => ({
+                            ...r,
+                            startOpen: compareWithId && String(r.rule_b_data?.id) === String(compareWithId)
+                        }));
+                        current_page.value  = data.current_page || page;
+                        total_pages.value   = Math.ceil(data.total / 10);
+                        total_count.value   = data.total || 0;
+
+                        if (compareWithId) {
+                            setTimeout(() => {
+                                const el = document.getElementById('spec-' + compareWithId);
+                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 800);
+                        }
+                    }
+                } finally {
+                    loading.value = false;
+                }
+            }
+
+            async function refreshSimilarity() {
+                refreshing.value = true;
+                try {
+                    const response = await fetch('/rule/similar_rules/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
+                        body: JSON.stringify({ mode: 'partial', selected_ids: [rule_id] }),
+                    });
+                    const result = await response.json();
+                    if (response.status === 201 && result.session_uuid) {
+                        window.location.href = '/rule/similar_loading/' + result.session_uuid;
+                    } else {
+                        create_message(result.message || 'Similarity update launched', 'success-subtle');
+                        setTimeout(() => fetchSimilar(1), 2000);
+                    }
+                } catch (e) {
+                    create_message('Error launching similarity update', 'danger-subtle');
+                } finally {
+                    refreshing.value = false;
+                }
+            }
+
+            onMounted(() => fetchSimilar(1));
+
+            return {
+                similar_rules, current_page, total_pages, total_count,
+                loading, refreshing, fetchSimilar, refreshSimilarity,
+            };
+        }
+    }).mount('#main-container');
+</script>
+{% endblock %}

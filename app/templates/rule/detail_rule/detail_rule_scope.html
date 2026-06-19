@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Scope — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-globe banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+                        {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Scope</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-globe"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Scope Declarations</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+            Declare whether this rule works in your specific environment and browse community compatibility reports.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'scope', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
+
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+
+        <!-- Stats bar -->
+        <div class="d-flex align-items-center gap-4 px-4 py-3" style="background:var(--light-bg-color); border-bottom:1px solid var(--border-color);">
+            <span class="fw-semibold" style="font-size:.85rem; color:var(--text-color);">
+                <i class="fa-solid fa-globe me-1 text-primary"></i>
+                Environment Compatibility
+            </span>
+            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                <i class="fa-solid fa-check me-1"></i>[[ scopeWorksCount ]] works
+            </span>
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2">
+                <i class="fa-solid fa-xmark me-1"></i>[[ scopeNworksCount ]] don't work
+            </span>
+            {% if current_user.is_authenticated %}
+            <button v-if="!myScope && !showScopeForm" @click="showScopeForm = true"
+                    class="btn btn-sm btn-primary rounded-pill ms-auto">
+                <i class="fa-solid fa-plus me-1"></i>Add my scope
+            </button>
+            {% endif %}
+        </div>
+
+        <div class="card-body p-4">
+
+            <!-- Add / Edit form -->
+            {% if current_user.is_authenticated %}
+            <div v-if="showScopeForm" class="card border-0 shadow-sm rounded-4 mb-4" style="background:var(--card-bg-color);">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-3">
+                        <i class="fa-solid fa-pen me-2 text-primary"></i>
+                        [[ myScope ? 'Edit my scope declaration' : 'Declare my scope' ]]
+                    </h6>
+
+                    <div class="d-flex gap-2 mb-3">
+                        <button @click="scopeForm.works = true"
+                                :class="['btn btn-sm rounded-pill px-3', scopeForm.works ? 'btn-success' : 'btn-outline-secondary']">
+                            <i class="fa-solid fa-check me-1"></i>Works for me
+                        </button>
+                        <button @click="scopeForm.works = false"
+                                :class="['btn btn-sm rounded-pill px-3', !scopeForm.works ? 'btn-danger' : 'btn-outline-secondary']">
+                            <i class="fa-solid fa-xmark me-1"></i>Doesn't work
+                        </button>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Environment criteria</label>
+                        <div v-for="(entry, idx) in scopeForm.entries" :key="idx"
+                             class="d-flex gap-2 mb-2 align-items-center">
+                            <select v-model="entry.key" class="form-select form-select-sm" style="max-width:180px;">
+                                <option v-for="k in SCOPE_KEYS" :value="k.key">[[ k.label ]]</option>
+                            </select>
+                            <template v-if="scopeKeyOptions(entry.key)">
+                                <select v-model="entry.value" class="form-select form-select-sm" style="max-width:160px;">
+                                    <option v-for="opt in scopeKeyOptions(entry.key)" :value="opt">[[ opt ]]</option>
+                                </select>
+                            </template>
+                            <template v-else>
+                                <input v-model="entry.value" class="form-control form-control-sm" style="max-width:160px;" placeholder="value…">
+                            </template>
+                            <button @click="scopeForm.entries.splice(idx, 1)" class="btn btn-sm btn-outline-danger rounded-circle" style="width:28px;height:28px;padding:0;">
+                                <i class="fa-solid fa-xmark" style="font-size:.7rem;"></i>
+                            </button>
+                        </div>
+                        <button @click="scopeForm.entries.push({key:'os', value:''})"
+                                class="btn btn-sm btn-outline-primary rounded-pill mt-1">
+                            <i class="fa-solid fa-plus me-1"></i>Add criterion
+                        </button>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Comment <span class="text-muted fw-normal">(optional)</span></label>
+                        <textarea v-model="scopeForm.comment" class="form-control form-control-sm" rows="2"
+                                  placeholder="e.g. NTLM still active in our legacy AD environment…" maxlength="500"></textarea>
+                        <div class="text-end" style="font-size:.7rem; color:var(--subtle-text-color);">[[ (scopeForm.comment||'').length ]] / 500</div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button @click="submitScope" class="btn btn-sm btn-primary rounded-pill px-4">
+                            <i class="fa-solid fa-floppy-disk me-1"></i>Save
+                        </button>
+                        <button @click="showScopeForm = false" class="btn btn-sm btn-outline-secondary rounded-pill px-4">Cancel</button>
+                        <button v-if="myScope" @click="deleteScope" class="btn btn-sm btn-outline-danger rounded-pill px-3 ms-auto">
+                            <i class="fa-solid fa-trash me-1"></i>Remove my declaration
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- My current declaration (when not editing) -->
+            {% if current_user.is_authenticated %}
+            <div v-if="myScope && !showScopeForm" class="card mb-4 border-0 rounded-4 shadow-sm"
+                 style="border-left: 4px solid #0d6efd !important; background:var(--card-bg-color);">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="fw-semibold small">
+                            <i class="fa-solid fa-user me-1 text-primary"></i>My declaration
+                        </span>
+                        <div class="d-flex gap-2">
+                            <span :class="['badge rounded-pill', myScope.works ? 'bg-success' : 'bg-danger']">
+                                <i :class="myScope.works ? 'fa-solid fa-check me-1' : 'fa-solid fa-xmark me-1'"></i>
+                                [[ myScope.works ? 'Works' : "Doesn't work" ]]
+                            </span>
+                            <button @click="editMyScope" class="btn btn-xs btn-outline-secondary px-2 py-0">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="myScope.entries.length" class="d-flex flex-wrap gap-1 mb-2">
+                        <span v-for="e in myScope.entries" :key="e.key"
+                              class="badge rounded-pill px-2 py-1"
+                              style="background:var(--light-bg-color); color:var(--text-color); border:1px solid var(--border-color); font-size:.72rem;">
+                            <span style="opacity:.6;">[[ e.key ]]:</span> [[ e.value ]]
+                        </span>
+                    </div>
+                    <p v-if="myScope.comment" class="text-muted small mb-0">
+                        <i class="fa-solid fa-quote-left me-1 opacity-50"></i>[[ myScope.comment ]]
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Loading -->
+            <div v-if="scopeLoading" class="text-center py-4">
+                <div class="spinner-border spinner-border-sm text-primary"></div>
+            </div>
+
+            <!-- All declarations -->
+            <div v-else-if="scopeList.length === 0" class="text-center py-5" style="color:var(--subtle-text-color);">
+                <i class="fa-solid fa-globe fa-2x mb-2 d-block opacity-25"></i>
+                No scope declarations yet. Be the first to declare whether this rule works in your environment.
+            </div>
+
+            <div v-else>
+                <p class="small fw-semibold mb-3" style="color:var(--subtle-text-color);">All declarations ([[ scopeList.length ]])</p>
+                <div v-for="s in scopeList" :key="s.id"
+                     class="d-flex gap-3 p-3 mb-2 rounded-3"
+                     style="background:var(--card-bg-color); border:1px solid var(--border-color);"
+                     :class="{'opacity-50': s.user_id === {{ current_user.id or 0 }} && myScope}">
+
+                    <user-chip :user-id="s.user_id" :username="s.username" size="sm" :show-name="false"></user-chip>
+
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <user-chip :user-id="s.user_id" :username="s.username" size="xs" :show-name="true"></user-chip>
+                            <span :class="['badge rounded-pill', s.works ? 'bg-success' : 'bg-danger']" style="font-size:.65rem;">
+                                [[ s.works ? '✓ works' : '✗ no' ]]
+                            </span>
+                            <span style="color:var(--subtle-text-color); font-size:.72rem;" class="ms-auto">[[ s.updated_at ]]</span>
+                        </div>
+                        <div v-if="s.entries.length" class="d-flex flex-wrap gap-1 mb-1">
+                            <span v-for="e in s.entries" :key="e.key"
+                                  class="badge rounded-pill px-2"
+                                  style="background:var(--light-bg-color); color:var(--text-color); border:1px solid var(--border-color); font-size:.7rem;">
+                                <span style="opacity:.55;">[[ e.key ]]:</span> [[ e.value ]]
+                            </span>
+                        </div>
+                        <p v-if="s.comment" class="mb-0 small" style="color:var(--subtle-text-color);">
+                            <i class="fa-solid fa-quote-left me-1 opacity-50"></i>[[ s.comment ]]
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, onMounted } = Vue;
+    import UserChip from '/static/js/components/UserChip.js';
+    import { create_message } from '/static/js/toaster.js';
+
+    const rule_id = {{ rule.id }};
+    const csrf_token = '{{ csrf_token() }}';
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'user-chip': UserChip },
+        setup() {
+            const SCOPE_KEYS = [
+                { key: 'os',                label: 'Operating System',  options: ['windows', 'linux', 'macos', 'freebsd', 'android', 'ios', 'any'] },
+                { key: 'os::arch',          label: 'Architecture',      options: ['x86_64', 'aarch64', 'i386', 'arm32', 'any'] },
+                { key: 'os::version',       label: 'OS Version',        options: null },
+                { key: 'protocol',          label: 'Protocol',          options: ['http', 'https', 'smb', 'ssh', 'dns', 'ftp', 'rdp', 'ldap', 'kerberos', 'ntlm', 'tls', 'any'] },
+                { key: 'protocol::version', label: 'Protocol Version',  options: null },
+                { key: 'network',           label: 'Network Type',      options: ['lan', 'wan', 'cloud', 'on-premise', 'hybrid', 'any'] },
+                { key: 'environment',       label: 'Environment',       options: ['production', 'staging', 'development', 'testing', 'any'] },
+                { key: 'software',          label: 'Software',          options: null },
+                { key: 'software::version', label: 'Software Version',  options: null },
+            ];
+
+            const scopeList      = ref([]);
+            const myScope        = ref(null);
+            const scopeWorksCount  = ref(0);
+            const scopeNworksCount = ref(0);
+            const scopeLoading   = ref(false);
+            const showScopeForm  = ref(false);
+            const scopeForm      = ref({ works: true, entries: [], comment: '' });
+
+            function scopeKeyOptions(key) {
+                const k = SCOPE_KEYS.find(s => s.key === key);
+                return k ? k.options : null;
+            }
+
+            async function fetchScopes() {
+                scopeLoading.value = true;
+                try {
+                    const res  = await fetch(`/rule/get_scopes/${rule_id}`);
+                    const data = await res.json();
+                    if (data.success) {
+                        scopeList.value        = data.scopes;
+                        scopeWorksCount.value  = data.works_count;
+                        scopeNworksCount.value = data.nworks_count;
+                        myScope.value          = data.my_scope;
+                    }
+                } finally {
+                    scopeLoading.value = false;
+                }
+            }
+
+            function editMyScope() {
+                if (!myScope.value) return;
+                scopeForm.value = {
+                    works:   myScope.value.works,
+                    entries: JSON.parse(JSON.stringify(myScope.value.entries)),
+                    comment: myScope.value.comment || '',
+                };
+                showScopeForm.value = true;
+            }
+
+            async function submitScope() {
+                const res  = await fetch(`/rule/scope/${rule_id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
+                    body: JSON.stringify(scopeForm.value),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showScopeForm.value = false;
+                    await fetchScopes();
+                    create_message('Scope declaration saved', 'success-subtle');
+                } else {
+                    create_message(data.message || 'Error', 'danger-subtle');
+                }
+            }
+
+            async function deleteScope() {
+                if (!confirm('Remove your scope declaration?')) return;
+                const res = await fetch(`/rule/scope/${rule_id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrf_token },
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showScopeForm.value = false;
+                    await fetchScopes();
+                    create_message('Declaration removed', 'success-subtle');
+                }
+            }
+
+            onMounted(() => fetchScopes());
+
+            return {
+                SCOPE_KEYS, scopeList, myScope,
+                scopeWorksCount, scopeNworksCount,
+                scopeLoading, showScopeForm, scopeForm,
+                scopeKeyOptions, fetchScopes, editMyScope, submitScope, deleteScope,
+            };
+        }
+    }).mount('#main-container');
+</script>
+{% endblock %}

@@ -570,8 +570,37 @@ def detail_rule_by_uuid(rule_uuid):
     if not rule_to_json:
         rule_to_json = "No json format for this rule"
     if rule:
-        return render_template("rule/detail_rule.html", rule=rule, rule_content=rule.to_string, rule_misp=rule_misp, rule_to_json=rule_to_json, )
+        return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string, rule_misp=rule_misp, rule_to_json=rule_to_json, )
     return render_template("404.html")
+
+
+def _rule_similarity_count(rule_id):
+    from app.core.db_class.db import RuleSimilarity
+    return RuleSimilarity.query.filter_by(rule_id=rule_id).count()
+
+
+def _rule_history_count(rule_id):
+    from app.core.db_class.db import RuleUpdateHistory
+    return RuleUpdateHistory.query.filter_by(rule_id=rule_id).count()
+
+
+def _rule_proposal_count(rule_id):
+    from app.core.db_class.db import RuleEditProposal
+    return RuleEditProposal.query.filter_by(rule_id=rule_id).count()
+
+
+def _rule_scope_count(rule_id):
+    from app.core.db_class.db import RuleScope
+    return RuleScope.query.filter_by(rule_id=rule_id).count()
+
+
+def _nav_counts(rule_id):
+    return {
+        'similarity_count': _rule_similarity_count(rule_id),
+        'history_count':    _rule_history_count(rule_id),
+        'proposal_count':   _rule_proposal_count(rule_id),
+        'scope_count':      _rule_scope_count(rule_id),
+    }
 
 
 @rule_blueprint.route("/detail_rule/<int:rule_id>", methods=['GET'])
@@ -598,9 +627,10 @@ def detail_rule(rule_id)-> render_template:
         rule_to_json = "No json format for this rule"
     active_tab = request.args.get('tab', 'detail')
     if rule:
-        return render_template("rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
+        return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
-                               rule_to_json=rule_to_json, active_tab=active_tab)
+                               rule_to_json=rule_to_json, active_tab=active_tab,
+                               **_nav_counts(rule.id))
     return render_template("404.html")
 
 
@@ -612,7 +642,56 @@ def detail_rule_history(rule_id):
         return render_template("404.html")
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
-    return render_template("rule/detail_rule_history.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_history.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/propose_edit", methods=['GET'])
+def detail_rule_propose_edit(rule_id):
+    """Suggest an Edit sub-page for a rule."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_propose_edit.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/pull_request", methods=['GET'])
+def detail_rule_pull_request(rule_id):
+    """Edit Proposals sub-page for a rule."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_pull_request.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/scope", methods=['GET'])
+def detail_rule_scope(rule_id):
+    """Scope declarations sub-page for a rule."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_scope.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/similarity", methods=['GET'])
+def detail_rule_similarity(rule_id):
+    """Similarity sub-page for a rule."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_similarity.html", rule=rule,
+                           **_nav_counts(rule.id))
 
 
 @rule_blueprint.route("/history_activity_delete/<string:log_uuid>", methods=['DELETE'])
@@ -1068,7 +1147,7 @@ def propose_edit(rule_id) -> redirect:
     if not proposed_content:
         flash("Proposed content cannot be empty.", "error")
         # return redirect(url_for('rule.detail_rule', rule_id=rule_id))
-        return redirect(url_for('rule.detail_rule', rule_id=rule_id) + "#chap2-pane")
+        return redirect(url_for('rule.detail_rule_propose_edit', rule_id=rule_id))
     
     # verify if the proposed content is different from the current content and verify the syntax
 
@@ -1080,14 +1159,14 @@ def propose_edit(rule_id) -> redirect:
     
     if current_normalized == proposed_normalized:
         flash("Proposed content is the same as the current content (ignoring formatting).", "warning")
-        return redirect(url_for('rule.detail_rule', rule_id=rule_id) + "#chap2-pane")
+        return redirect(url_for('rule.detail_rule_propose_edit', rule_id=rule_id))
     
     rule_dict = rule.to_json()
     rule_dict['to_string'] = proposed_content
     valide , error = verify_syntax_rule_by_format(rule_dict)
     if not valide:
         flash(f"Syntax error in proposed content: {error}", "error")
-        return redirect(url_for('rule.detail_rule', rule_id=rule_id) + "#chap2-pane")
+        return redirect(url_for('rule.detail_rule_propose_edit', rule_id=rule_id))
     
     form = {
         "rule_id": rule_id,
@@ -3634,7 +3713,7 @@ def similar_global_duplicates():
 @rule_blueprint.route("/similar_detail_page/<int:rule_id>")
 @login_required
 def similar_detail_page(rule_id):
-    return render_template("rule/compare_rules/detail_similar.html", rule_id=rule_id)
+    return redirect(url_for('rule.detail_rule_similarity', rule_id=rule_id))
 
 @rule_blueprint.route("/history_updater/list", methods=['GET'])
 @login_required

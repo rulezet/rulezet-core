@@ -4,11 +4,13 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
 {% endblock %}
 
 {% block content %}
-<div v-if="proposal">
-    <div class="container my-4" id="main-container">
+<div class="container my-4" id="main-container">
+
+    <div v-if="proposal">
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
@@ -17,31 +19,32 @@
                 <li class="breadcrumb-item active text-muted" aria-current="page">[[ proposal.rule_name ]]</li>
             </ol>
         </nav>
+
         <h2 class="mb-4">
-            <a :href="`detail_rule/${proposal.rule_id}`">
+            <a :href="`/rule/detail_rule/${proposal.rule_id}`" class="text-decoration-none">
                 <i class="fas fa-code-branch me-2"></i>
-                Proposal [[ proposal.rule_name ]]
+                Proposal — [[ proposal.rule_name ]]
             </a>
         </h2>
 
-        <div class="card mb-4 shadow-sm">
-            <div class="card-body">
-                <h5 class="card-title d-flex align-items-center gap-2 flex-wrap">
+        <div class="card mb-4 shadow-sm border-0 rounded-4">
+            <div class="card-body p-4">
+                <h5 class="card-title d-flex align-items-center gap-2 flex-wrap mb-3">
                     <i class="fas fa-user me-1 text-secondary"></i> Proposed by:
                     <user-chip :user-id="proposal.user_id" :username="proposal.user_name" size="sm"></user-chip>
                 </h5>
-                <p class="card-text">
-                    <i class="fas fa-comment-dots me-2"></i>
+                <p class="card-text mb-2">
+                    <i class="fas fa-comment-dots me-2 text-muted"></i>
                     <strong>Message:</strong>
-                    <template v-if="proposal.message != ''">[[ proposal.message ]]</template>
-                    <template v-else>no message</template>
+                    <template v-if="proposal.message">[[ proposal.message ]]</template>
+                    <template v-else><span class="text-muted">no message</span></template>
                 </p>
-                <p class="card-text">
-                    <i class="fas fa-clock me-2"></i>
+                <p class="card-text mb-2">
+                    <i class="fas fa-clock me-2 text-muted"></i>
                     <strong>Submitted:</strong> [[ proposal.timestamp ]]
                 </p>
                 <p class="card-text mb-0">
-                    <i class="fas fa-flag me-2"></i>
+                    <i class="fas fa-flag me-2 text-muted"></i>
                     <strong>Status:</strong>
                     <span class="badge bg-success"           v-if="proposal.status === 'accepted'">Accepted</span>
                     <span class="badge bg-warning text-dark" v-else-if="proposal.status === 'pending'">Pending</span>
@@ -50,7 +53,7 @@
             </div>
         </div>
 
-        <div class="mb-4">
+        <div class="mb-5">
             <diff-viewer
                 :initial-left="proposal.old_content"
                 :initial-right="proposal.proposed_content"
@@ -60,101 +63,61 @@
             </diff-viewer>
         </div>
 
-        <div v-if="comments.length === 0" class="alert alert-secondary">
-            No comments yet.
-        </div>
+        <h4 class="fw-bold mb-4 border-start border-primary border-4 ps-3">Community Discussion</h4>
+        <comment-thread
+            object-type="proposal"
+            :object-id="{{ rule_edit_id }}"
+            :can-create="{{ current_user.is_authenticated | tojson }}"
+            :can-edit-own="{{ current_user.is_authenticated | tojson }}"
+            :can-delete-own="{{ current_user.is_authenticated | tojson }}"
+            :can-moderate="{{ current_user.is_admin() | tojson }}"
+            :current-user-id="{{ current_user.id if current_user.is_authenticated else 0 }}">
+        </comment-thread>
+    </div>
 
-        <ul class="list-group mb-4" v-else>
-            <li v-for="comment in comments" :key="comment.id"
-                class="list-group-item d-flex justify-content-between align-items-start">
-                <div>
-                    <h6 class="mb-1">
-                        <i class="fas fa-user-circle me-2"></i>
-                        [[ comment.user_name ]]
-                    </h6>
-                    <p class="mb-1">[[ comment.content ]]</p>
-                    <small class="text-muted">[[ comment.created_at ]]</small>
-                </div>
-                <template v-if="parseInt('{{current_user.id}}') == comment.user_id">
-                    <button class="btn btn-sm btn-outline-danger ms-3" @click="deleteComment(comment.id)">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </template>
-            </li>
-        </ul>
-
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Add a Comment</h5>
-                <textarea v-model="newComment" class="form-control" rows="3"
-                    placeholder="Write your comment here..."></textarea>
-                <button @click="submitComment" class="btn btn-primary mt-2">
-                    <i class="fas fa-paper-plane"></i> Submit
-                </button>
-            </div>
+    <div v-else class="text-center text-muted py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading…</span>
         </div>
     </div>
-</div>
-<div v-else class="text-center text-muted py-5">
-    <i class="fas fa-spinner fa-spin me-2"></i> Loading proposal...
+
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
     const { createApp, ref } = Vue;
-    import { message_list, create_message } from '/static/js/toaster.js';
-    import UserChip from '/static/js/components/UserChip.js';
-    import DiffViewer from '/static/js/components/diff-viewer.js';
+    import { create_message } from '/static/js/toaster.js';
+    import UserChip    from '/static/js/components/UserChip.js';
+    import DiffViewer  from '/static/js/components/diff-viewer.js';
+    import CommentThread from '/static/js/components/comments/comment-thread.js';
 
     createApp({
         delimiters: ['[[', ']]'],
         components: {
-            'user-chip': UserChip,
-            'diff-viewer': DiffViewer,
+            'user-chip':      UserChip,
+            'diff-viewer':    DiffViewer,
+            'comment-thread': CommentThread,
         },
         setup() {
-            const proposalId = parseInt("{{ rule_edit_id }}");
+            const proposalId = {{ rule_edit_id }};
             const proposal   = ref(null);
-            const comments   = ref([]);
-            const newComment = ref('');
 
             async function fetchRuleProposal() {
-                const res = await fetch('/rule/get_proposal?id=' + proposalId);
-                if (res.ok) {
-                    const data = await res.json();
-                    proposal.value = data.proposal;
-                }
-            }
-
-            async function fetchComments() {
                 try {
-                    const res = await fetch('/rule/discuss?id=' + proposalId);
-                    if (res.ok) comments.value = await res.json();
-                } catch (err) {
-                    create_message('Error loading comments: ' + err, 'danger-subtle');
+                    const res = await fetch('/rule/get_proposal?id=' + proposalId);
+                    if (res.ok) {
+                        const data = await res.json();
+                        proposal.value = data.proposal;
+                    }
+                } catch (e) {
+                    create_message('Error loading proposal', 'danger-subtle');
                 }
-            }
-
-            async function submitComment() {
-                const content = newComment.value.trim();
-                if (!content) return;
-                const res = await fetch('/rule/add_comment_discuss?id=' + proposalId + '&content=' + content);
-                if (res.ok) {
-                    comments.value.push(await res.json());
-                    newComment.value = '';
-                }
-            }
-
-            async function deleteComment(commentId) {
-                const res = await fetch('/rule/delete_comment?id=' + commentId);
-                if (res.ok) comments.value = comments.value.filter(c => c.id !== commentId);
             }
 
             fetchRuleProposal();
-            fetchComments();
 
-            return { proposal, comments, newComment, submitComment, deleteComment };
+            return { proposal };
         }
     }).mount('#main-container');
 </script>

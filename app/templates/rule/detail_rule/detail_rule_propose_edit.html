@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Suggest an Edit — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-pen-to-square banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+                        {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Suggest an Edit</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-pen-to-square"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Suggest an Edit</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+            Propose a correction or improvement to this rule. Your suggestion will be reviewed by the community.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'propose_edit', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
+
+    {% if current_user.is_authenticated %}
+    <div class="card border-0 shadow-sm rounded-4 p-4">
+        <form id="proposalForm" action="{{ url_for('rule.propose_edit', rule_id=rule.id) }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+            <div class="form-group mb-4">
+                <label class="fw-bold mb-2">Rule Content <span style="color:red">*</span></label>
+                <smart-editor
+                    v-model="proposalContent"
+                    mode="code"
+                    :language="ruleFormat"
+                    name="rule_content"
+                    placeholder="Paste or write the corrected rule here…"
+                    min-height="400px"
+                    max-height="700px">
+                </smart-editor>
+            </div>
+
+            <div class="form-group mb-4">
+                <label for="message" class="fw-bold">Message or Justification</label>
+                <input id="message" type="text" name="message" class="form-control"
+                    placeholder="Explain the changes you made or provide any additional context">
+            </div>
+
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-warning">
+                    <i class="fas fa-paper-plane me-1"></i> Submit Proposal
+                </button>
+            </div>
+        </form>
+    </div>
+    {% else %}
+    <div class="card border-0 shadow-sm rounded-4 p-4 text-center">
+        <i class="fa-solid fa-lock fa-2x mb-3 text-muted"></i>
+        <p class="mb-0">Please <a href="{{ url_for('account.login') }}" class="text-primary">log in</a> to propose an edit.</p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, onMounted } = Vue;
+    import SmartEditor from '/static/js/components/smart-editor.js';
+    import { create_message } from '/static/js/toaster.js';
+
+    const rule_id = {{ rule.id }};
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'smart-editor': SmartEditor },
+        setup() {
+            const proposalContent = ref('');
+            const ruleFormat = ref('{{ rule.format or "text" }}');
+
+            onMounted(async () => {
+                try {
+                    const res = await fetch('/rule/get_current_rule?rule_id=' + rule_id);
+                    const data = await res.json();
+                    if (data.rule) {
+                        proposalContent.value = data.rule.to_string || '';
+                        ruleFormat.value = data.rule.format || '{{ rule.format or "text" }}';
+                    }
+                } catch (e) {
+                    create_message('Could not load rule content', 'danger');
+                }
+            });
+
+            return { proposalContent, ruleFormat };
+        }
+    }).mount('#main-container');
+</script>
+{% endblock %}

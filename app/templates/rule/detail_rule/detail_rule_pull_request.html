@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Proposals — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-code-pull-request banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+                        {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Proposals</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-code-pull-request"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Proposals</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+            Community edit proposals for this rule. Review, discuss, and vote on suggested changes.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'pull_request', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
+
+    <div class="card border-0 shadow-sm rounded-4 p-4">
+
+        <div v-if="loading" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading…</span>
+            </div>
+        </div>
+
+        <template v-else>
+            <div v-if="pull_request_list.length === 0" class="text-center py-5" style="color: var(--subtle-text-color);">
+                <i class="fa-solid fa-code-pull-request fa-2x mb-3 d-block opacity-25"></i>
+                <p class="mb-2">No edit proposals yet for this rule.</p>
+                <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-primary rounded-pill">
+                    <i class="fa-solid fa-pen-to-square me-1"></i>Be the first to suggest an edit
+                </a>
+            </div>
+
+            <div v-else>
+                <p class="small fw-semibold mb-3" style="color: var(--subtle-text-color);">
+                    [[ pull_request_list.length ]] proposal[[ pull_request_list.length === 1 ? '' : 's' ]]
+                </p>
+
+                <div class="list-group">
+                    <a v-for="proposal in pull_request_list" :key="proposal.id"
+                        :href="'/rule/proposal_content_discuss?id=' + proposal.id"
+                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center shadow-sm mb-2 rounded-3 transition"
+                        style="background-color: var(--code-bg-color);">
+                        <div class="d-flex flex-column flex-grow-1 p-2">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-user-edit text-primary me-2"></i>
+                                <strong class="me-1">[[ proposal.user_name ]]</strong>
+                                <span class="text-muted">submitted a change</span>
+                            </div>
+                            <div class="text-muted small">
+                                <i class="fas fa-clock me-1"></i> [[ proposal.timestamp ]]
+                            </div>
+                            <div class="text-secondary mt-1">
+                                <i class="fas fa-pen me-1"></i>
+                                [[ proposal.message || 'No message' ]]
+                            </div>
+                        </div>
+
+                        <span class="badge fs-6 px-3 py-2 text-capitalize shadow-sm" :class="{
+                            'bg-success text-light': proposal.status === 'accepted',
+                            'bg-danger text-light': proposal.status === 'rejected',
+                            'bg-warning text-dark': proposal.status !== 'accepted' && proposal.status !== 'rejected'
+                        }">
+                            <i class="fas fa-info-circle me-1"></i> [[ proposal.status ]]
+                        </span>
+                    </a>
+                </div>
+
+                <nav v-if="total_pages > 1" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item" :class="{ disabled: current_page === 1 }">
+                            <a class="page-link" href="#" @click.prevent="fetchPullRequest(current_page - 1)">Previous</a>
+                        </li>
+                        <li class="page-item disabled">
+                            <span class="page-link">[[ current_page ]] / [[ total_pages ]]</span>
+                        </li>
+                        <li class="page-item" :class="{ disabled: current_page === total_pages }">
+                            <a class="page-link" href="#" @click.prevent="fetchPullRequest(current_page + 1)">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </template>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, onMounted } = Vue;
+
+    const rule_id = {{ rule.id }};
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        setup() {
+            const pull_request_list = ref([]);
+            const current_page = ref(1);
+            const total_pages = ref(1);
+            const loading = ref(true);
+
+            async function fetchPullRequest(page) {
+                loading.value = true;
+                try {
+                    const res = await fetch('/rule/get_rules_propose_page?page=' + page + '&rule_id=' + rule_id);
+                    const data = await res.json();
+                    if (data) {
+                        pull_request_list.value = data.rules_list;
+                        total_pages.value = data.total_pages_pending;
+                        current_page.value = page;
+                    }
+                } finally {
+                    loading.value = false;
+                }
+            }
+
+            onMounted(() => fetchPullRequest(1));
+
+            return { pull_request_list, current_page, total_pages, loading, fetchPullRequest };
+        }
+    }).mount('#main-container');
+</script>
+{% endblock %}

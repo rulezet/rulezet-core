@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ rule.title }} — History — Rulezet{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/timeline.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
@@ -37,6 +38,7 @@
 .slot-pill--b { background: rgba(220,53,69,.08);  border: 1px solid rgba(220,53,69,.2); }
 </style>
 {% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav %}
 
 {% block content %}
 <div class="container mt-4" id="main-container" v-cloak>
@@ -70,28 +72,7 @@
         </p>
     </div>
 
-    <!-- Nav tabs -->
-    <ul class="nav nav-underline justify-content-center w-100 mb-4" role="tablist">
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link" href="/rule/detail_rule/{{ rule.id }}" style="color: var(--text-color);">Detail Rule</a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link" href="/rule/detail_rule/{{ rule.id }}?tab=edit" style="color: var(--text-color);">Suggest an Edit</a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link" href="/rule/detail_rule/{{ rule.id }}?tab=proposals" style="color: var(--text-color);">Pull Request</a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link" href="/rule/detail_rule/{{ rule.id }}?tab=scope" style="color: var(--text-color);">
-                <i class="fa-solid fa-globe me-1"></i>Scope
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link active" href="/rule/detail_rule/{{ rule.id }}/history" style="color: var(--text-color);">
-                <i class="fa-solid fa-clock-rotate-left me-1"></i>History
-            </a>
-        </li>
-    </ul>
+    {{ nav.detail_rule_nav(rule, 'history', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
 
     <!-- ── ROW 1: Timeline + Stats ── -->
     <div class="row g-4 mb-4">
