@@ -62,6 +62,7 @@ class Similarity_class:
         self.min_score = 0.50
         self.total = 0
         self.similar_pairs_found = 0
+        self.watched = False  # set True when user visits the progress page
         
         # Percentage management
         self.indexing_progress = 0  
@@ -264,3 +265,21 @@ class Similarity_class:
                 db.session.commit()
         except Exception:
             db.session.rollback()
+
+        try:
+            from app.features.notification.notification_core import (
+                update_admin_session_notifications, notify_similarity_done
+            )
+            update_admin_session_notifications(
+                session_uuid = self.uuid,
+                summary      = f'{self.total} rules processed · {self.similar_pairs_found} similar pairs found',
+            )
+            if self.watched:
+                notify_similarity_done(
+                    user_id      = self.user_id,
+                    session_uuid = self.uuid,
+                    total        = self.total,
+                    pairs_found  = self.similar_pairs_found,
+                )
+        except Exception as e:
+            print(f"[similarity_class] notify done error: {e}")

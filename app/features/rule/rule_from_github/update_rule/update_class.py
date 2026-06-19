@@ -611,15 +611,19 @@ class Update_class:
         db.session.commit()
 
         try:
-            from app.features.notification.notification_core import notify_github_update_done
+            from app.features.notification.notification_core import notify_github_update_done, update_admin_session_notifications
             notify_github_update_done(
                 user_id   = self.current_user.id,
                 updated   = self.updated,
                 found     = self.found,
                 result_id = s.id,
             )
+            update_admin_session_notifications(
+                session_uuid = self.uuid,
+                summary      = f'{self.found} checked · {self.updated} update(s) found',
+            )
         except Exception as e:
-            print(f"[update_class] notify_github_update_done error: {e}")
+            print(f"[update_class] notify error: {e}")
 
 
 # ------------------ RULE UPDATE CHECKER ------------------

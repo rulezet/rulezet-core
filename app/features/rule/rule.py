@@ -1184,6 +1184,15 @@ def propose_edit(rule_id) -> redirect:
         _ = AccountModel.update_propose_edit_gamification(gamification.id , "add_one_to_suggested")
 
 
+        try:
+            from app.features.notification.notification_core import notify_proposal_submitted
+            from app.core.db_class.db import RuleEditProposal as ProposalModel
+            proposal_obj = ProposalModel.query.get(proposal_id)
+            if proposal_obj:
+                notify_proposal_submitted(proposal_obj, rule)
+        except Exception as _e:
+            print(f"[rule] notify_proposal_submitted error: {_e}")
+
         flash("Request sended.", "success", f"/rule/proposal_content_discuss?id={proposal_id}")
     else:
         flash("Request sended but fail.", "error")
@@ -1929,13 +1938,20 @@ def get_rule() -> jsonify:
 def report_rule():
     """Create a report for a specific rule (delegated to service)."""
     data = request.get_json()
-    result = RuleModel.create_repport(current_user.id,data.get('rule_id'),data.get('message', ''),data.get('reason'))
-    
+    result, is_new = RuleModel.create_repport(current_user.id, data.get('rule_id'), data.get('message', ''), data.get('reason'))
+
     if result:
+        if is_new:
+            try:
+                from app.features.notification.notification_core import notify_admins_report_created
+                rule_obj = RuleModel.get_rule(data.get('rule_id'))
+                notify_admins_report_created(result, rule_obj, current_user)
+            except Exception as _e:
+                print(f"[rule] notify_admins_report_created error: {_e}")
         return {
             "message": "Report created successfully.",
             "toast_class": "success-subtle",
-            "success": True}, 200 
+            "success": True}, 200
     else:
         return {"success": False,
                 "message": "Error to create the report",
@@ -2337,6 +2353,18 @@ def import_rules_from_github():
         session_th = SessionModel.Session_class(repo_dir, current_user, info)
         session_th.start()
         SessionModel.sessions.append(session_th)
+
+        try:
+            from app.features.notification.notification_core import notify_admins_session_started
+            notify_admins_session_started(
+                user         = current_user,
+                session_type = 'github_import',
+                session_uuid = session_th.uuid,
+                label        = f'GitHub import running — {repo_url}',
+                link         = '/rule/github/history_github_importer',
+            )
+        except Exception as _e:
+            print(f"[rule] notify_admins_session_started (import) error: {_e}")
 
         branch_label = f" (branch: {branch})" if branch else ""
         log_activity("github.import_started",
@@ -2745,6 +2773,18 @@ def check_updates_by_url():
     update_session.start()
     UpdateModel.sessions.append(update_session)
 
+    try:
+        from app.features.notification.notification_core import notify_admins_session_started
+        notify_admins_session_started(
+            user         = current_user,
+            session_type = 'github_update',
+            session_uuid = update_session.uuid,
+            label        = f'GitHub update check running — {len(valid_urls)} repo(s)',
+            link         = '/rule/github/history_github_importer',
+        )
+    except Exception as _e:
+        print(f"[rule] notify_admins_session_started (update_by_url) error: {_e}")
+
     log_activity("github.update_started",
                  f"Started GitHub update check on {len(valid_urls)} repo(s)",
                  target_type="github_update",
@@ -2790,6 +2830,18 @@ def check_updates_by_rule():
     update_session = UpdateModel.Update_class(rule_ids, current_user, info, mode="by_rule")
     update_session.start()
     UpdateModel.sessions.append(update_session)
+
+    try:
+        from app.features.notification.notification_core import notify_admins_session_started
+        notify_admins_session_started(
+            user         = current_user,
+            session_type = 'github_update',
+            session_uuid = update_session.uuid,
+            label        = f'GitHub update check running — {len(rule_ids)} rule(s)',
+            link         = '/rule/github/history_github_importer',
+        )
+    except Exception as _e:
+        print(f"[rule] notify_admins_session_started (update_by_rule) error: {_e}")
 
     log_activity("github.update_started",
                  f"Started rule update check on {len(rule_ids)} rule(s)",
@@ -3585,6 +3637,7 @@ def similar_loading_status(sid):
     if not is_finished == 'true':
         for s in SimilarityModel.sessions:
             if s.uuid == sid:
+                s.watched = True
                 return jsonify(s.status())
         
     r = RuleModel.get_similarity_result(sid)
@@ -3606,12 +3659,25 @@ def similar_loading_status(sid):
 @rule_blueprint.route("/similar_rules/update", methods=['GET' ,'POST'])
 @login_required
 def similar_update():
+    def _notify_similarity(session):
+        try:
+            from app.features.notification.notification_core import notify_admins_session_started
+            notify_admins_session_started(
+                user         = current_user,
+                session_type = 'similarity',
+                session_uuid = session.uuid,
+                label        = 'Similarity analysis running',
+                link         = f'/rule/similar_loading/{session.uuid}',
+            )
+        except Exception as _e:
+            print(f"[rule] notify_admins_session_started (similarity) error: {_e}")
+
     if request.method == "POST":
-        # same but we want to pass the params
         data = request.json
         similar_session = SimilarityModel.Similarity_class(current_user, "Update similar rules", mode="filter", params=data)
         similar_session.start()
         SimilarityModel.sessions.append(similar_session)
+        _notify_similarity(similar_session)
 
         return {
             "message": "Update check started successfully. Processing repositories...",
@@ -3622,6 +3688,7 @@ def similar_update():
         similar_session = SimilarityModel.Similarity_class(current_user, "Update similar rules", mode="global")
         similar_session.start()
         SimilarityModel.sessions.append(similar_session)
+        _notify_similarity(similar_session)
 
         return {
             "message": "Update check started successfully. Processing repositories...",

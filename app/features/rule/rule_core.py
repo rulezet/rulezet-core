@@ -1767,8 +1767,9 @@ def get_all_contributions_with_rule_id(rule_id) -> list:
 
 # Create
 
-def create_repport(user_id, rule_id, message, reason) -> RepportRule:
-    """Create a new report, unless an identical one already exists"""
+def create_repport(user_id, rule_id, message, reason):
+    """Create a new report, unless an identical one already exists.
+    Returns (report, is_new): is_new=False when a duplicate was found."""
 
     existing = RepportRule.query.filter_by(
         user_id=user_id,
@@ -1778,7 +1779,7 @@ def create_repport(user_id, rule_id, message, reason) -> RepportRule:
     ).first()
 
     if existing:
-        return existing  
+        return existing, False
 
     repport = RepportRule(
         user_id=user_id,
@@ -1789,7 +1790,7 @@ def create_repport(user_id, rule_id, message, reason) -> RepportRule:
     )
     db.session.add(repport)
     db.session.commit()
-    return repport
+    return repport, True
 
 
 

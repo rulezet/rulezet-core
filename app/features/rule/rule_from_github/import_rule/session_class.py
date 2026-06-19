@@ -174,7 +174,7 @@ class Session_class:
         db.session.commit()
 
         try:
-            from app.features.notification.notification_core import notify_github_import_done
+            from app.features.notification.notification_core import notify_github_import_done, update_admin_session_notifications
             notify_github_import_done(
                 user_id    = self.current_user.id,
                 imported   = self.imported,
@@ -182,7 +182,11 @@ class Session_class:
                 bad_rules  = self.bad_rules,
                 result_uuid = self.uuid,
             )
+            update_admin_session_notifications(
+                session_uuid = self.uuid,
+                summary      = f'{self.imported} imported · {self.skipped} skipped · {self.bad_rules} invalid',
+            )
         except Exception as e:
-            print(f"[session_class] notify_github_import_done error: {e}")
+            print(f"[session_class] notify error: {e}")
 
         return result_entry

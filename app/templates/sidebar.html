@@ -69,8 +69,12 @@
                      {% else %}
                      <li><a href="/admin/similar_rules" class="dropdown-item py-2">
                            <i class="fa-solid fa-link fa-fw me-2 text-muted"></i>Similar Rules</a></li>
-                     <li><a href="/rule/admin/rules_reported" class="dropdown-item py-2">
-                           <i class="fa-solid fa-triangle-exclamation fa-fw me-2 text-muted"></i>Reported Rules</a></li>
+                     <li>
+                        <a href="/rule/admin/rules_reported" class="dropdown-item py-2 d-flex justify-content-between align-items-center">
+                           <span><i class="fa-solid fa-triangle-exclamation fa-fw me-2 text-muted"></i>Reported Rules</span>
+                           <span v-if="reports_to_check > 0" class="badge rounded-pill bg-danger ms-2">[[ reports_to_check ]]</span>
+                        </a>
+                     </li>
                      {% endif %}
                      {% endif %}
                   </ul>
@@ -366,6 +370,7 @@
          const changes_to_validate  = ref(0)
          const update_to_validate   = ref(0)
          const running_jobs_count   = ref(0)
+         const reports_to_check     = ref(0)
 
          async function getNbRequestAdmin() {
             try {
@@ -391,6 +396,12 @@
                const data = await res.json()
                running_jobs_count.value = Array.isArray(data) ? data.length : 0
             } catch { running_jobs_count.value = 0 }
+         }
+         async function getReportsToCheck() {
+            try {
+               const res = await fetch('/rule/repport_to_check')
+               reports_to_check.value = (await res.json()).count || 0
+            } catch {}
          }
 
          // ── Search ──────────────────────────────────────────────────────────
@@ -433,11 +444,12 @@
             getNbChanges()
             getNbUpdate()
             getRunningJobs()
+            getReportsToCheck()
          })
 
          return {
             requests_to_validate, changes_to_validate,
-            update_to_validate, running_jobs_count,
+            update_to_validate, running_jobs_count, reports_to_check,
             search_is_loading, filterBar, rules_list, total_rules_liste,
             current_page, total_pages, showSearchContent,
             onRulesUpdated, changePage, initSearch,
