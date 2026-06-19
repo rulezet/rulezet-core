@@ -188,31 +188,20 @@
                                 </ul>
                             </div>
 
-                            <div class="dropdown"
-                                v-if="parseInt('{{ current_user.id }}') === bundle.user_id || current_user_is_admin">
-                                <button
-                                    class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn border"
-                                    style="width: 32px; height: 32px;" data-bs-toggle="dropdown">
-                                    <i class="fas fa-ellipsis-v text-muted"></i>
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 p-2"
-                                    style="border-radius: 12px;">
-                                    <li><a class="dropdown-item rounded-2" :href="'/bundle/edit/'+bundle_id"><i
-                                                class="fas fa-pen me-2"></i> Edit</a></li>
-                                    <li>
-                                        <button class="dropdown-item rounded-2 small text-danger" data-bs-toggle="modal"
-                                            :data-bs-target="'#delete_bundle_modal_'+bundle.id"><i
-                                                class="fa-solid fa-trash me-2"></i> Delete </button>
-                                    </li>
-
-                                    {% if current_user.is_admin() %}
-                                    <!-- <li><button class="dropdown-item rounded-2 text-dark" @click="update(bundle.id)"><i
-                                                class="fa-solid fa-upload me-2"></i>
-                                            Update
-                                        </button></li> -->
-                                    {% endif %}
-                                </ul>
-                            </div>
+                            <template v-if="parseInt('{{ current_user.id }}') === bundle.user_id || is_admin">
+                            <a :href="'/bundle/edit/' + bundle_id"
+                               class="btn btn-sm rounded-pill px-3"
+                               style="background:transparent; border:1px solid #0d6efd55; color:#0d6efd;"
+                               title="Edit this bundle">
+                                <i class="fas fa-pen me-1"></i>Edit
+                            </a>
+                            <button class="btn btn-sm rounded-pill px-3"
+                                    style="background:transparent; border:1px solid #dc354555; color:#dc3545;"
+                                    data-bs-toggle="modal" :data-bs-target="'#delete_bundle_modal_'+bundle.id"
+                                    title="Delete this bundle">
+                                <i class="fa-solid fa-trash me-1"></i>Delete
+                            </button>
+                            </template>
                             <!-- Modal-->
                             <div class="modal fade" :id="'delete_bundle_modal_'+bundle.id" tabindex="-1"
                                 aria-hidden="true" style="z-index: 2000;">
