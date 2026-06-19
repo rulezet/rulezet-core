@@ -426,13 +426,20 @@ const CommentThread = {
             let rootId = null
 
             if (targetId) {
-                const res = await apiFetch(`/api/comments/resolve/${targetId}`)
-                if (res.ok) {
-                    const info = await res.json()
-                    DEEP_LINK.targetId    = targetId
-                    DEEP_LINK.ancestorIds = new Set(info.ancestors || [])
-                    rootId = info.root_id || targetId
-                }
+                // Always set targetId so CommentItem can scroll/highlight even if
+                // resolve fails (e.g. comment exists but ancestors are unknown).
+                DEEP_LINK.targetId    = targetId
+                DEEP_LINK.ancestorIds = new Set()
+                rootId = targetId  // fallback: treat the comment itself as root
+
+                try {
+                    const res = await apiFetch(`/api/comments/resolve/${targetId}`)
+                    if (res.ok) {
+                        const info = await res.json()
+                        DEEP_LINK.ancestorIds = new Set(info.ancestors || [])
+                        rootId = info.root_id || targetId
+                    }
+                } catch (_) { /* network error — keep fallback */ }
             }
 
             // Load first page of comments
