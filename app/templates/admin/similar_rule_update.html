@@ -3,6 +3,9 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 {% endblock %}
 {% block content %}
 <div class="container my-4" id="main-container" v-cloak>
@@ -87,10 +90,17 @@
                 <div class="card border-0 shadow-sm p-4">
                     <h5 class="fw-bold mb-4">Batch Processing Interface</h5>
 
-                    <rule-selection-table api-endpoint="/rule/get_rules_page_filter"
-                        submit-endpoint="/rule/similar_rules/update" is-similarity-update="true"
-                        csrf-token="{{ csrf_token() }}">
-                    </rule-selection-table>
+                    <rule-list
+                        mode="select"
+                        default-view="table"
+                        fetch-url="/rule/data_table"
+                        :sync-url="false"
+                        :show-filters="true"
+                        :csrf-token="csrfToken"
+                        :current-user-is-authenticated="true"
+                        :current-user-is-admin="true"
+                        @send="submitSimilarity">
+                    </rule-list>
 
                 </div>
             </div>
@@ -272,16 +282,23 @@
     const { createApp, ref, onMounted, computed, nextTick } = Vue;
     import { create_message, message_list } from '/static/js/toaster.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
-    import RuleSelectionTable from '/static/js/rule/ruleSelectionTable.js';
     import SimilarRuleCard from '/static/js/rule/similarity/similarRulesCard.js';
     import SimilarRulesFilter from '/static/js/rule/similarity/similarRulesFilter.js';
+    import RuleList from '/static/js/rule/ruleList.js';
+    import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
+    import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
+
+    const csrfToken = '{{ csrf_token() }}';
+
     createApp({
         delimiters: ['[[', ']]'],
         components: {
             'pagination-component': PaginationComponent,
             'similar-rule-card': SimilarRuleCard,
-            'rule-selection-table': RuleSelectionTable,
-            'similar-rules-filter': SimilarRulesFilter
+            'similar-rules-filter': SimilarRulesFilter,
+            'rule-list': RuleList,
+            'tags-displays-list': TagsDisplaysList,
+            'vulnerability-displays-list': VulnerabilityDisplaysList,
         },
         setup() {
             const fetch_all_pages = ref(false);
@@ -425,12 +442,30 @@
             const formatDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
             const formatTime = (d) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
+            async function submitSimilarity(ids) {
+                const payload = {
+                    mode: ids === 'ALL' ? 'all' : 'partial',
+                    selected_ids: ids === 'ALL' ? [] : ids,
+                }
+                const res = await fetch('/rule/similar_rules/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify(payload),
+                })
+                const data = await res.json()
+                if (res.status === 201 && data.session_uuid) {
+                    window.location.href = `/rule/similar_loading/${data.session_uuid}`
+                } else {
+                    create_message(data.message || 'Error launching analysis', data.toast_class || 'danger-subtle')
+                }
+            }
+
             return {
                 history_list, current_page, total_pages,
                 formatDate, formatTime, fetchHistory, changePage, goto,
                 prepDelete, confirmDelete, itemToDelete,
                 message_list, fetch_all_pages, running_sessions, fetchInProgress,
-                RuleSelectionTable,
+                csrfToken, submitSimilarity,
 
                 global_duplicates, global_page, global_total_pages, loading_global, fetchGlobalDuplicates,
                 SimilarRuleCard, global_min_score, SimilarRulesFilter, global_format, global_source_mode, global_author_mode
