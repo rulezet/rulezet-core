@@ -3153,11 +3153,43 @@ def get_tags_for_rule(rule_id: int) -> List[Tag]:
                 )
             )
     else:
-        query = query.filter(Tag.visibility.ilike('public'))    
-
+        query = query.filter(Tag.visibility.ilike('public'))
 
     return query.all()
 
+
+def get_tags_for_rules_batch(rule_ids: List[int]) -> dict:
+    """Return {rule_id: [Tag, ...]} for all given rule IDs in one query."""
+    if not rule_ids:
+        return {}
+
+    query = (
+        db.session.query(RuleTagAssociation.rule_id, Tag)
+        .join(Tag, RuleTagAssociation.tag_id == Tag.id)
+        .filter(
+            RuleTagAssociation.rule_id.in_(rule_ids),
+            Tag.is_active == True,
+        )
+    )
+
+    if current_user.is_authenticated:
+        if not current_user.is_admin():
+            query = query.filter(
+                or_(
+                    Tag.visibility.ilike('public'),
+                    and_(
+                        Tag.visibility.ilike('private'),
+                        Tag.created_by == current_user.id,
+                    ),
+                )
+            )
+    else:
+        query = query.filter(Tag.visibility.ilike('public'))
+
+    result: dict = {}
+    for rule_id, tag in query.all():
+        result.setdefault(rule_id, []).append(tag)
+    return result
 
 
 def get_all_used_tags_with_counts():

@@ -14,13 +14,18 @@ const TagsDisplaysList = {
         sectionTitle: { type: String, default: '' },
         userId: { type: Number, default: null },
         showNamespace: { type: Boolean, default: true },
+        initialTags: { type: Array, default: null },
     },
     delimiters: ['[[', ']]'],
     setup(props) {
-        const tags = Vue.ref([]);
+        const tags = Vue.ref(props.initialTags ?? []);
         const loading = Vue.ref(false);
 
         async function fetchTags() {
+            if (props.initialTags !== null) {
+                tags.value = props.initialTags;
+                return;
+            }
             loading.value = true;
             try {
                 let url = `/${props.objectType}/get_tags/${props.objectId}`;
@@ -39,6 +44,7 @@ const TagsDisplaysList = {
 
         Vue.onMounted(fetchTags);
         Vue.watch(() => props.objectId, fetchTags);
+        Vue.watch(() => props.initialTags, (v) => { if (v !== null) tags.value = v; });
 
         return { tags, loading };
     },

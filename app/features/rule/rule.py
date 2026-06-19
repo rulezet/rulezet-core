@@ -3051,10 +3051,13 @@ def rules_data_table():
         bundle_id=request.args.get('bundle_id', None, type=int),
     )
 
+    rule_ids = [r.id for r in pagination.items]
+    tags_by_rule = RuleModel.get_tags_for_rules_batch(rule_ids)
+
     items = []
     for r in pagination.items:
         d = r.to_json()
-        d['tags'] = [t.to_json() for t in RuleModel.get_tags_for_rule(r.id)]
+        d['tags'] = [t.to_json() for t in tags_by_rule.get(r.id, [])]
         try:
             cves = json.loads(r.cve_id) if r.cve_id else []
             d['cves'] = cves if isinstance(cves, list) else []

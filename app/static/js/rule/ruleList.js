@@ -457,13 +457,15 @@ export default {
 
                     <!-- CVEs -->
                     <div class="mb-2" @click.stop>
-                        <vulnerability-displays-list object-type="rule" :object-id="rule.id" :max-visible="3">
+                        <vulnerability-displays-list object-type="rule" :object-id="rule.id" :max-visible="3"
+                            :initial-vulnerabilities="rule.cves || []">
                         </vulnerability-displays-list>
                     </div>
 
                     <!-- Tags -->
                     <div class="mb-3" @click.stop>
-                        <tags-displays-list object-type="rule" :object-id="rule.id" :max-visible="3">
+                        <tags-displays-list object-type="rule" :object-id="rule.id" :max-visible="3"
+                            :initial-tags="rule.tags || []">
                         </tags-displays-list>
                     </div>
 
@@ -687,14 +689,16 @@ export default {
 
                             <td v-show="colVisible.tags" class="dt-td" @click.stop>
                                 <tags-displays-list v-if="rule.tags && rule.tags.length"
-                                    object-type="rule" :object-id="rule.id" :max-visible="2">
+                                    object-type="rule" :object-id="rule.id" :max-visible="2"
+                                    :initial-tags="rule.tags">
                                 </tags-displays-list>
                                 <span v-else class="text-muted small">—</span>
                             </td>
 
                             <td v-show="colVisible.cves" class="dt-td" @click.stop>
                                 <vulnerability-displays-list
-                                    object-type="rule" :object-id="rule.id" :max-visible="2">
+                                    object-type="rule" :object-id="rule.id" :max-visible="2"
+                                    :initial-vulnerabilities="rule.cves || []">
                                 </vulnerability-displays-list>
                             </td>
 
@@ -857,16 +861,18 @@ export default {
                                                     <i class="fas fa-tags text-primary me-1"></i>Tags
                                                 </span>
                                                 <tags-displays-list object-type="rule" :object-id="rule.id"
-                                                    :max-visible="15">
+                                                    :max-visible="15"
+                                                    :initial-tags="rule.tags || []">
                                                 </tags-displays-list>
                                             </div>
-                                            <div v-if="cvesMap[rule.id]"
+                                            <div v-if="rule.cves && rule.cves.length"
                                                  class="rl-expand-taxonomy-section mt-2">
                                                 <span class="rl-expand-k mb-1">
                                                     <i class="fas fa-shield-virus text-danger me-1"></i>CVEs
                                                 </span>
                                                 <vulnerability-displays-list object-type="rule"
-                                                    :object-id="rule.id" :max-visible="8">
+                                                    :object-id="rule.id" :max-visible="8"
+                                                    :initial-vulnerabilities="rule.cves">
                                                 </vulnerability-displays-list>
                                             </div>
                                         </div>
@@ -1300,33 +1306,19 @@ export default {
         )
 
         // ── Expand / collapse ─────────────────────────────────────────────
-        const cvesMap = Vue.reactive({}) // ruleId → boolean (has CVEs)
 
-        async function _loadCves(rule) {
-            if (rule.id in cvesMap) return
-            try {
-                const res  = await fetch(`/rule/get_rule_vulnerabilities_display/${rule.id}`)
-                const data = await res.json()
-                cvesMap[rule.id] = !!(data.total_vulnerabilities > 0)
-            } catch { cvesMap[rule.id] = false }
-        }
-
-        async function toggleExpand(rule) {
+        function toggleExpand(rule) {
             if (expandedIds.has(rule.id)) {
                 expandedIds.delete(rule.id)
             } else {
                 expandedIds.add(rule.id)
-                _loadCves(rule)
             }
         }
 
         const allExpanded = computed(() => items.value.length > 0 && items.value.every(r => expandedIds.has(r.id)))
 
-        async function expandAll() {
-            items.value.forEach(r => {
-                expandedIds.add(r.id)
-                _loadCves(r)
-            })
+        function expandAll() {
+            items.value.forEach(r => expandedIds.add(r.id))
         }
 
         function collapseAll() {
@@ -1520,7 +1512,7 @@ export default {
         // Auto-expand all items when search field is "content"
         watch(items, (newItems) => {
             if (searchField.value === 'content') {
-                newItems.forEach(r => { expandedIds.add(r.id); _loadCves(r) })
+                newItems.forEach(r => expandedIds.add(r.id))
             }
         })
 
@@ -1539,7 +1531,7 @@ export default {
             scopeMine,
             rulesFormats, activeFilterCount,
             // UI
-            viewMode, expandedIds, cvesMap,
+            viewMode, expandedIds,
             allExpanded, expandAll, collapseAll,
             // Columns
             TOGGLEABLE_COLS, colVisible, toggleColumn,
