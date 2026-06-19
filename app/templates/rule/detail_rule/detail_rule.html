@@ -319,7 +319,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                         </div>
 
                         <!-- Actions bar -->
-                        <div class="mt-4 mb-3 rounded-3 border overflow-hidden" style="background: var(--light-bg-color);">
+                        <div class="mt-4 mb-3 rounded-3 border" style="background: var(--light-bg-color);">
                             <div class="px-3 pt-3 pb-2 d-flex align-items-center gap-2" style="border-bottom:1px solid var(--border-color);">
                                 <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
                                 <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
@@ -379,6 +379,16 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                                         <li><button class="dropdown-item small" @click="download_rule('all')" style="color:var(--text-color);"><i class="fas fa-download me-2 opacity-50"></i>Download all</button></li>
                                     </ul>
                                 </div>
+
+                                <!-- GitHub source -->
+                                <a v-if="currentRule.github_path"
+                                   :href="currentRule.source.replace(/\.git$/, '') + '/blob/HEAD/' + currentRule.github_path"
+                                   target="_blank" rel="noopener noreferrer"
+                                   class="btn btn-sm rounded-pill px-3"
+                                   style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                   title="View source file on GitHub">
+                                    <i class="fab fa-github me-1"></i>GitHub
+                                </a>
 
                                 <!-- Report -->
                                 <a :href="`/rule/report/${currentRule.id}`"

@@ -2,6 +2,138 @@
 {% block title %}{{ rule.title }} — Proposals — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<style>
+.proposal-card {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+.proposal-card:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: inherit;
+}
+.proposal-card__stripe {
+    height: 4px;
+    width: 100%;
+}
+.proposal-card__body {
+    padding: 1rem 1.25rem;
+}
+.proposal-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+}
+.proposal-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+.proposal-card__status-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.28rem 0.65rem;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.proposal-card__message {
+    font-size: 0.875rem;
+    color: var(--text-color);
+    background: var(--light-bg-color);
+    border-left: 3px solid var(--border-color);
+    border-radius: 0 6px 6px 0;
+    padding: 0.5rem 0.75rem;
+    margin: 0.5rem 0 0.75rem;
+    line-height: 1.5;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+.proposal-card__footer {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border-color);
+}
+.proposal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 0.2rem 0.55rem;
+    border-radius: 20px;
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+    border: 1px solid var(--border-color);
+}
+.proposal-score {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    color: var(--subtle-text-color);
+}
+.proposal-score__bar {
+    width: 60px;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 99px;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: middle;
+}
+.proposal-score__fill {
+    display: block;
+    height: 6px;
+    border-radius: 99px;
+    transition: width 0.3s ease;
+}
+.proposal-card__time {
+    font-size: 0.72rem;
+    color: var(--subtle-text-color);
+    white-space: nowrap;
+}
+.proposal-comments-badge {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--subtle-text-color);
+    font-weight: 500;
+}
+.proposal-comments-badge.has-comments {
+    color: #0d6efd;
+}
+/* Status stripe colors */
+.stripe-pending  { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+.stripe-approved,
+.stripe-accepted { background: linear-gradient(90deg, #198754, #20c997); }
+.stripe-rejected { background: linear-gradient(90deg, #dc3545, #c71f37); }
+
+/* Status badge colors */
+.status-pending  { background: #ffc107; color: #000; border: none; }
+.status-approved,
+.status-accepted { background: #198754; color: #fff; border: none; }
+.status-rejected { background: #dc3545; color: #fff; border: none; }
+</style>
 {% endblock %}
 {% import 'macros/detail_rule_nav.html' as nav %}
 
@@ -54,37 +186,102 @@
             </div>
 
             <div v-else>
-                <p class="small fw-semibold mb-3" style="color: var(--subtle-text-color);">
-                    [[ pull_request_list.length ]] proposal[[ pull_request_list.length === 1 ? '' : 's' ]]
-                </p>
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <p class="small fw-semibold mb-0" style="color: var(--subtle-text-color);">
+                        [[ pull_request_list.length ]] proposal[[ pull_request_list.length === 1 ? '' : 's' ]]
+                    </p>
+                    <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-outline-primary rounded-pill">
+                        <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
+                    </a>
+                </div>
 
-                <div class="list-group">
+                <div class="d-flex flex-column gap-3">
                     <a v-for="proposal in pull_request_list" :key="proposal.id"
                         :href="'/rule/proposal_content_discuss?id=' + proposal.id"
-                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center shadow-sm mb-2 rounded-3 transition"
-                        style="background-color: var(--code-bg-color);">
-                        <div class="d-flex flex-column flex-grow-1 p-2">
-                            <div class="d-flex align-items-center mb-1">
-                                <i class="fas fa-user-edit text-primary me-2"></i>
-                                <strong class="me-1">[[ proposal.user_name ]]</strong>
-                                <span class="text-muted">submitted a change</span>
-                            </div>
-                            <div class="text-muted small">
-                                <i class="fas fa-clock me-1"></i> [[ proposal.timestamp ]]
-                            </div>
-                            <div class="text-secondary mt-1">
-                                <i class="fas fa-pen me-1"></i>
-                                [[ proposal.message || 'No message' ]]
-                            </div>
+                        class="proposal-card">
+
+                        <!-- Status stripe -->
+                        <div class="proposal-card__stripe"
+                            :class="'stripe-' + proposal.status">
                         </div>
 
-                        <span class="badge fs-6 px-3 py-2 text-capitalize shadow-sm" :class="{
-                            'bg-success text-light': proposal.status === 'accepted',
-                            'bg-danger text-light': proposal.status === 'rejected',
-                            'bg-warning text-dark': proposal.status !== 'accepted' && proposal.status !== 'rejected'
-                        }">
-                            <i class="fas fa-info-circle me-1"></i> [[ proposal.status ]]
-                        </span>
+                        <div class="proposal-card__body">
+
+                            <!-- Header: user + status badge -->
+                            <div class="proposal-card__header">
+                                <div class="proposal-card__meta">
+                                    <!-- Avatar -->
+                                    <div style="width:32px;height:32px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--light-bg-color);display:flex;align-items:center;justify-content:center;">
+                                        <img v-if="proposal.user_avatar"
+                                            :src="proposal.user_avatar"
+                                            :alt="proposal.user_name"
+                                            style="width:100%;height:100%;object-fit:cover;">
+                                        <span v-else style="font-size:0.8rem;font-weight:600;color:var(--subtle-text-color);">
+                                            [[ proposal.user_name ? proposal.user_name[0].toUpperCase() : '?' ]]
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span class="fw-semibold" style="font-size:0.875rem;">[[ proposal.user_name ]]</span>
+                                        <span style="font-size:0.8rem;color:var(--subtle-text-color);margin-left:4px;">proposed an edit</span>
+                                    </div>
+                                </div>
+
+                                <span class="proposal-card__status-badge"
+                                    :class="'status-' + proposal.status">
+                                    <i class="fas me-1"
+                                        :class="{
+                                            'fa-clock': proposal.status === 'pending',
+                                            'fa-check': proposal.status === 'approved' || proposal.status === 'accepted',
+                                            'fa-xmark': proposal.status === 'rejected'
+                                        }"></i>[[ proposal.status ]]
+                                </span>
+                            </div>
+
+                            <!-- Message -->
+                            <div class="proposal-card__message" v-if="proposal.message">
+                                <i class="fa-solid fa-quote-left fa-xs me-1 opacity-50"></i>[[ proposal.message ]]
+                            </div>
+                            <div class="proposal-card__message" v-else style="color:var(--subtle-text-color);font-style:italic;">
+                                No description provided.
+                            </div>
+
+                            <!-- Footer: meta chips -->
+                            <div class="proposal-card__footer">
+
+                                <!-- Edit type -->
+                                <span v-if="proposal.edit_type" class="proposal-badge">
+                                    <i class="fas fa-xs"
+                                        :class="{
+                                            'fa-spell-check':   proposal.edit_type === 'typo',
+                                            'fa-code':          proposal.edit_type === 'content_update',
+                                            'fa-scale-balanced': proposal.edit_type === 'legal',
+                                            'fa-pen':           !['typo','content_update','legal'].includes(proposal.edit_type)
+                                        }"></i>
+                                    [[ proposal.edit_type ]]
+                                </span>
+
+                                <!-- Change score -->
+                                <span v-if="proposal.change_score !== null && proposal.change_score !== undefined" class="proposal-score">
+                                    <span style="color:var(--subtle-text-color)">diff</span>
+                                    <span class="proposal-score__bar">
+                                        <span class="proposal-score__fill" :style="{ width: proposal.change_score + '%', backgroundColor: scoreColor(proposal.change_score) }"></span>
+                                    </span>
+                                    <span>[[ Math.round(proposal.change_score) ]]%</span>
+                                </span>
+
+                                <!-- Timestamp -->
+                                <span class="proposal-card__time">
+                                    <i class="fa-regular fa-clock me-1"></i>[[ formatDate(proposal.timestamp) ]]
+                                </span>
+
+                                <!-- Comments -->
+                                <span class="proposal-comments-badge" :class="{ 'has-comments': proposal.comment_count > 0 }">
+                                    <i class="fa-regular fa-comment"></i>
+                                    [[ proposal.comment_count ]]
+                                </span>
+
+                            </div>
+                        </div>
                     </a>
                 </div>
 
@@ -123,6 +320,18 @@
             const total_pages = ref(1);
             const loading = ref(true);
 
+            function formatDate(iso) {
+                if (!iso) return '';
+                const d = new Date(iso);
+                const now = new Date();
+                const diff = Math.floor((now - d) / 1000);
+                if (diff < 60)   return 'just now';
+                if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+                if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+                if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
+                return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            }
+
             async function fetchPullRequest(page) {
                 loading.value = true;
                 try {
@@ -138,9 +347,15 @@
                 }
             }
 
+            function scoreColor(score) {
+                if (score <= 30) return '#198754';
+                if (score <= 60) return '#fd7e14';
+                return '#dc3545';
+            }
+
             onMounted(() => fetchPullRequest(1));
 
-            return { pull_request_list, current_page, total_pages, loading, fetchPullRequest };
+            return { pull_request_list, current_page, total_pages, loading, fetchPullRequest, formatDate, scoreColor };
         }
     }).mount('#main-container');
 </script>

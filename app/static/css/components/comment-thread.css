@@ -370,3 +370,29 @@
     display: block;
     opacity: .4;
 }
+
+/*---DARK_MODE---*/
+
+body.dark-mode .cm-item {
+    background: var(--card-bg-color);
+    border-color: var(--border-color);
+}
+
+body.dark-mode .cm-new-form {
+    background: var(--light-bg-color);
+    border-color: var(--border-color);
+}
+
+body.dark-mode .cm-new-form .form-control,
+body.dark-mode .cm-reply-form .form-control,
+body.dark-mode .cm-edit-form .form-control {
+    background-color: var(--light-bg-color) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+body.dark-mode .cm-new-form .form-control::placeholder,
+body.dark-mode .cm-reply-form .form-control::placeholder,
+body.dark-mode .cm-edit-form .form-control::placeholder {
+    color: var(--subtle-text-color);
+}

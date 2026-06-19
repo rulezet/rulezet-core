@@ -1,7 +1,9 @@
 {% extends 'base.html' %}
 {% block title %}GitHub Rules Dashboard — Rulezet{% endblock %}
 {% block head %}
-<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -80,20 +82,27 @@
         </div>
     </div>
 
-    <!-- ── Rules table / cards (search, filters, sort, select & export) ── -->
-    <rule-data-table
+    <!-- ── Rule list ── -->
+    <rule-list
+        mode="manage"
+        default-view="card"
+        fetch-url="/rule/data_table"
         source="{{ url }}"
-        :initial-per-page="25"
-        :exportable="true"
-        :csrf-token="'{{ csrf_token() }}'"
-        :current-user-is-authenticated="'{{ current_user.is_authenticated }}'">
-    </rule-data-table>
+        :can-vote="isAuthenticated"
+        :can-favorite="isAuthenticated"
+        :current-user-id="currentUserId"
+        :current-user-is-admin="isAdmin"
+        :csrf-token="csrfToken"
+        :current-user-is-authenticated="isAuthenticated"
+        :show-create="false"
+        :hidden-filters="['sources']"
+        :bulk-actions="[{ key: 'download', label: 'Download selected', icon: 'fa-download' }]">
+    </rule-list>
 
     <div class="d-flex justify-content-center gap-3 mt-4 mb-3">
-        <a href="javascript:history.back()" style="width: auto;"
+        <a href="javascript:history.back()"
            class="btn btn-secondary btn-sm d-inline-flex align-items-center shadow-sm px-3 py-2 rounded-pill">
-            <i class="fas fa-arrow-left me-2"></i>
-            Back
+            <i class="fas fa-arrow-left me-2"></i>Back
         </a>
     </div>
 
@@ -102,27 +111,36 @@
 
 {% block script %}
 <script type="module">
-  const { createApp, ref, onMounted } = Vue
-  import { message_list } from '/static/js/toaster.js'
-  import RuleDataTable from '/static/js/rule/ruleDataTable.js';
+    const { createApp, ref, onMounted } = Vue
+    import { message_list } from '/static/js/toaster.js'
+    import RuleList                  from '/static/js/rule/ruleList.js'
+    import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
+    import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
 
-  createApp({
-    delimiters: ['[[', ']]'],
-    components: {
-      'rule-data-table': RuleDataTable,
-    },
-    setup() {
-      const stats = ref(null)
+    const isAuthenticated = {{ current_user.is_authenticated | tojson }}
+    const isAdmin         = {{ current_user.is_admin()        | tojson }}
+    const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
+    const csrfToken       = '{{ csrf_token() }}'
 
-      onMounted(async () => {
-        try {
-          const res = await fetch('/rule/github_source_stats?url=' + encodeURIComponent('{{ url }}'))
-          if (res.ok) stats.value = await res.json()
-        } catch { /* banner stats stay hidden */ }
-      })
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: {
+            'rule-list':                   RuleList,
+            'tags-displays-list':          TagsDisplaysList,
+            'vulnerability-displays-list': VulnerabilityDisplaysList,
+        },
+        setup() {
+            const stats = ref(null)
 
-      return { message_list, stats }
-    }
-  }).mount('#main-container')
+            onMounted(async () => {
+                try {
+                    const res = await fetch('/rule/github_source_stats?url=' + encodeURIComponent('{{ url }}'))
+                    if (res.ok) stats.value = await res.json()
+                } catch { /* banner stats stay hidden */ }
+            })
+
+            return { message_list, stats, isAuthenticated, isAdmin, currentUserId, csrfToken }
+        }
+    }).mount('#main-container')
 </script>
 {% endblock %}
