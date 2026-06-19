@@ -64,7 +64,7 @@ export default {
 
     emits: ['create', 'edit', 'delete', 'view', 'bulk-action', 'send'],
 
-    expose: ['fetchData'],
+    expose: ['fetchData', 'clearSelection'],
 
     template: `
         <div class="dt-wrapper">
@@ -310,6 +310,8 @@ export default {
                                             @click="$emit('delete', item)">
                                             <i class="fas fa-trash"></i>
                                         </button>
+                                        <!-- Custom per-row actions slot -->
+                                        <slot name="row-actions" :item="item"></slot>
                                         <!-- Expand chevron -->
                                         <button
                                             class="dt-action-btn dt-action-btn--expand"
@@ -408,6 +410,7 @@ export default {
                             @click="$emit('delete', item)">
                             <i class="fas fa-trash"></i>
                         </button>
+                        <slot name="row-actions" :item="item"></slot>
                     </div>
                 </div>
             </div>

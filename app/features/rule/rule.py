@@ -1741,6 +1741,76 @@ def repport_to_check() -> jsonify:
 
 
 
+@rule_blueprint.route("/reports_datatable", methods=['GET'])
+@login_required
+def reports_datatable():
+    """DataTable-compatible endpoint for reported rules."""
+    if not current_user.is_admin():
+        return jsonify({"message": "Forbidden"}), 403
+    page     = request.args.get('page',     1,   type=int)
+    per_page = request.args.get('per_page', 20,  type=int)
+    search   = request.args.get('search',   '',  type=str).strip()
+    sort     = request.args.get('sort',     'created_at', type=str)
+    dir_     = request.args.get('dir',      'desc', type=str)
+
+    from app.core.db_class.db import RepportRule, Rule, User
+    q = RepportRule.query.join(Rule, RepportRule.rule_id == Rule.id, isouter=True) \
+                         .join(User, RepportRule.user_id == User.id, isouter=True)
+    if search:
+        like = f'%{search}%'
+        q = q.filter(db.or_(
+            RepportRule.reason.ilike(like),
+            RepportRule.message.ilike(like),
+            Rule.title.ilike(like),
+            User.first_name.ilike(like),
+        ))
+    sort_col = {'created_at': RepportRule.created_at, 'reason': RepportRule.reason,
+                'rule_name': Rule.title}.get(sort, RepportRule.created_at)
+    q = q.order_by(sort_col.desc() if dir_ == 'desc' else sort_col.asc())
+    pag = q.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        "items":       [r.to_json() for r in pag.items],
+        "total":       pag.total,
+        "total_pages": pag.pages,
+    })
+
+
+@rule_blueprint.route("/reports_bulk_action", methods=['POST'])
+@login_required
+def reports_bulk_action():
+    """Bulk delete reports or their rules. Body: {action, report_ids}."""
+    if not current_user.is_admin():
+        return jsonify({"message": "Forbidden"}), 403
+    data       = request.get_json(silent=True) or {}
+    action     = data.get('action')
+    report_ids = data.get('report_ids', [])
+    if not report_ids or action not in ('delete_reports', 'delete_rules'):
+        return jsonify({"message": "Invalid payload"}), 400
+
+    from app.core.db_class.db import RepportRule
+    ok = fail = 0
+    for rid in report_ids:
+        report = RepportRule.query.get(rid)
+        if not report:
+            fail += 1
+            continue
+        if action == 'delete_reports':
+            if RuleModel.delete_report(rid):
+                ok += 1
+            else:
+                fail += 1
+        else:
+            rule_id = report.rule_id
+            result  = RuleModel.soft_delete_rule(rule_id, current_user.id)
+            if result:
+                ok += 1
+            else:
+                fail += 1
+    return jsonify({"ok": ok, "fail": fail,
+                    "message": f"{ok} deleted" + (f", {fail} errors" if fail else ""),
+                    "toast_class": "warning-subtle" if fail else "success-subtle"})
+
+
 @rule_blueprint.route("/get_rules_reported", methods=['GET'])
 def   get_rules_reported() -> jsonify:
     """Get all the rules repported on a page"""

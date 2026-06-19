@@ -1,6 +1,9 @@
-<!-- Get the list of all the user for action (delete, view profil)-->
 {% extends 'base.html' %}
 {% block title %}Reported Rules — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+{% endblock %}
 {% block content %}
 {% if current_user.is_admin() %}
 <div class="container my-4" id="main-container" v-cloak>
@@ -14,9 +17,7 @@
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon">
-                <i class="fa-solid fa-triangle-exclamation"></i>
-            </div>
+            <div class="banner-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
             <div>
                 <h2 class="fw-bold mb-1">Reported Rules</h2>
                 <div class="banner-accent"></div>
@@ -27,117 +28,144 @@
         </p>
     </div>
 
-    <div v-if="rules_reported && rules_reported.length > 0">
-        <div class="card mb-3" v-for="(rep , index) in rules_reported" :key="rep.id">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <div>
-                    <strong>Rule:</strong> [[ rep.rule_name ]] (ID: [[ rep.rule_id ]])<br>
-                    <strong>Reported by:</strong> [[ rep.user_name ]] (User ID: [[ rep.user_id ]])
+    <data-table
+        ref="tableRef"
+        fetch-url="/rule/reports_datatable"
+        mode="manage"
+        :columns="columns"
+        :can-view="true"
+        :initial-per-page="20"
+        :bulk-actions="bulkActions"
+        @view="onView"
+        @bulk-action="onBulkAction">
+
+        <!-- Rule name cell -->
+        <template #cell-rule_name="{ item }">
+            <a :href="'/rule/detail_rule/' + item.rule_id"
+               class="fw-semibold text-decoration-none text-truncate d-block"
+               style="max-width:200px" :title="item.rule_name">
+                [[ item.rule_name || '—' ]]
+            </a>
+            <span class="text-muted" style="font-size:.72rem">ID: [[ item.rule_id ]]</span>
+        </template>
+
+        <!-- Reporter cell -->
+        <template #cell-user_name="{ item }">
+            <a :href="'/account/detail_user/' + item.user_id" class="text-decoration-none small">
+                [[ item.user_name ]]
+            </a>
+        </template>
+
+        <!-- Reason cell -->
+        <template #cell-reason="{ item }">
+            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small">
+                [[ item.reason || '—' ]]
+            </span>
+        </template>
+
+        <!-- Owner cell -->
+        <template #cell-rule_user_owner="{ item }">
+            <a v-if="item.rule_owner_id" :href="'/account/detail_user/' + item.rule_owner_id"
+               class="text-decoration-none small">
+                [[ item.rule_user_owner ]]
+            </a>
+            <span v-else class="text-muted small">[[ item.rule_user_owner || '—' ]]</span>
+        </template>
+
+        <!-- Expand: full message + CodeViewer for rule content -->
+        <template #expand="{ item }">
+            <div class="p-3" style="font-size:.85rem">
+                <div class="mb-3">
+                    <span class="fw-semibold text-muted" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">Message</span>
+                    <p class="mb-0 mt-1" style="white-space:pre-wrap">[[ item.message || 'No message provided.' ]]</p>
                 </div>
-                <span class="text-muted">[[ rep.created_at ]]</span>
+                <div v-if="item.content">
+                    <span class="fw-semibold text-muted" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">Rule preview</span>
+                    <div class="mt-2">
+                        <code-viewer :code="item.content" :language="item.rule_format || 'text'" :filename="item.rule_name"></code-viewer>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <p><strong>Reason:</strong> [[ rep.reason ]]</p>
-                <p><strong>Message:</strong><br> [[ rep.message || 'No message provided.' ]]</p>
-                <p>
-                    <strong>Owner of the rule:</strong>
-                    <a :href="'/account/detail_user/' + rep.user_id" title="View more about this user" class="m-2">
-                        [[ rep.rule_user_owner ]]
-                    </a>
-                </p>
+        </template>
 
+        <!-- Per-row actions: Delete Report + Delete Rule -->
+        <template #row-actions="{ item }">
+            <button class="dt-action-btn dt-action-btn--danger" title="Delete report"
+                    @click="promptDeleteReport(item)">
+                <i class="fa-solid fa-flag"></i>
+            </button>
+            <button class="dt-action-btn dt-action-btn--danger" title="Delete rule"
+                    @click="promptDeleteRule(item)">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </template>
+    </data-table>
 
-
-                <div class="mt-3">
-                    <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="collapse"
-                        :data-bs-target="`#ruleContent${rep.id}`" aria-expanded="false"
-                        :aria-controls="`ruleContent${rep.id}`">
-                        <i class="fas fa-code"></i> Show Rule Preview
-                    </button>
-
-                    <div class="collapse mt-2" :id="`ruleContent${rep.id}`">
-                        <div class="bg-light p-3 rounded border">
-                            <strong>Rule Preview:</strong><br>
-                            <code style="white-space: pre-wrap;">[[ rep.content ]]</code>
-                        </div>
-                    </div>
+    <!-- Modal: delete report (single) -->
+    <div class="modal fade" id="modal-del-report" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title">Delete report?</h6>
+                    <button class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-
-                <div class="mt-3 d-flex flex-wrap gap-2">
-                    <a class="btn btn-primary btn-sm d-flex align-items-center"
-                        :href="`/rule/detail_rule/${rep.rule_id}`" title="View the complete rule">
-                        <i class="fas fa-eye me-2"></i> View Rule
-                    </a>
-
-                    <!-- <button @click="deleteReport(rep.rule_id, index)" title="Remove this report" class="btn btn-outline-danger btn-sm d-flex align-items-center">
-                            <i class="fas fa-flag me-2"></i> Delete Report
-                        </button> -->
-
-
-                    <button type="button" title="Remove this report"
-                        class="btn btn-danger btn-sm d-flex align-items-center" data-bs-toggle="modal"
-                        :data-bs-target="'#delete_repport_modal_'+rep.id">
-                        <i class="fa-solid fa-trash fa-fw"></i>Delete Report
-                    </button>
-                    <div class="modal fade" :id="'delete_repport_modal_'+rep.id" tabindex="-1"
-                        aria-labelledby="delete_repport_modal" aria-hidden="true">
-                        <div class="modal-dialog modal-sm">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h1 class="modal-title fs-5 text-truncate" style=" max-width: 200px;"
-                                        id="delete_repport_modal">
-                                        Delete [[rep.rule_name]]?
-                                    </h1>
-                                    <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary"
-                                        data-bs-dismiss="modal">Close</button>
-                                    <button class="btn btn-danger" @click="deleteReport(rep.id, index)">
-                                        <i class="fa-solid fa-trash"></i> Confirm
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <button type="button" title="Permanently delete this rule"
-                        class="btn btn-warning btn-sm d-flex align-items-center" data-bs-toggle="modal"
-                        :data-bs-target="'#delete_rule_modal_'+rep.rule_id">
-                        <i class="fa-solid fa-trash fa-fw"></i> Delete Rule
-                    </button>
-                    <div class="modal fade" :id="'delete_rule_modal_'+rep.rule_id" tabindex="-1"
-                        aria-labelledby="delete_rule_modal" aria-hidden="true">
-                        <div class="modal-dialog modal-sm">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h1 class="modal-title fs-5 text-truncate" style=" max-width: 200px;"
-                                        id="delete_rule_modal">
-                                        Delete [[ rep.rule_name]] ?
-                                    </h1>
-                                    <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary"
-                                        data-bs-dismiss="modal">Close</button>
-                                    <button class="btn btn-danger" @click="deleteRule(rep.rule_id, index)">
-                                        <i class="fa-solid fa-trash"></i> Confirm
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="modal-body small text-muted" v-if="activeItem">
+                    Remove this report for <strong>[[ activeItem.rule_name ]]</strong> without deleting the rule.
                 </div>
-
+                <div class="modal-footer">
+                    <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-danger btn-sm" @click="confirmDeleteReport">
+                        <i class="fa-solid fa-flag me-1"></i>Confirm
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
-    <div v-else class="alert alert-info">
-        No rules have been reported yet.
+    <!-- Modal: delete rule (single) -->
+    <div class="modal fade" id="modal-del-rule" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title text-truncate" style="max-width:200px" v-if="activeItem">
+                        Delete [[ activeItem.rule_name ]]?
+                    </h6>
+                    <button class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body small text-muted">
+                    This will permanently delete the rule and all its reports.
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-danger btn-sm" @click="confirmDeleteRule">
+                        <i class="fa-solid fa-trash me-1"></i>Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
+    <!-- Modal: bulk confirm -->
+    <div class="modal fade" id="modal-bulk-confirm" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title">[[ bulkModal.title ]]</h6>
+                    <button class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body small text-muted">
+                    [[ bulkModal.body ]]
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-danger btn-sm" :disabled="bulkModal.running" @click="executeBulk">
+                        <span v-if="bulkModal.running" class="spinner-border spinner-border-sm me-1"></span>
+                        <i v-else class="fa-solid fa-trash me-1"></i>Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 {% else %}
@@ -149,109 +177,117 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed } = Vue;
-    import { message_list, create_message } from '/static/js/toaster.js';
+    const { createApp, ref, reactive } = Vue;
+    import { create_message } from '/static/js/toaster.js';
+    import DataTable  from '/static/js/components/dataTable/dataTable.js';
+    import CodeViewer from '/static/js/components/code-viewer.js';
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { 'data-table': DataTable, 'code-viewer': CodeViewer },
         setup() {
-            /*###################################_Show_the_rule_reported_#############################*/
-            const rules_reported = ref()
-            const total_page = ref()
-            const current_page = ref()
-            /**
-             *          ####################
-             *          #   show repport   #
-             *          ####################
-             * */
+            const tableRef   = ref(null)
+            const activeItem = ref(null)
+            const csrfToken  = '{{ csrf_token() }}'
 
-            async function fetchRuleReported(page) {
-                const params = new URLSearchParams({
-                    page
-                })
-                const res = await fetch('/rule/get_rules_reported?' + params.toString())
-                if (await res.status == 200) {
-                    const data = await res.json()
-                    if (data.success) {
-                        rules_reported.value = data.rule
-                        total_page.value = data.total_pages
-                        current_page.value = page
-                    }
+            const columns = [
+                { key: 'rule_name',       label: 'Rule',        sortable: true,  truncate: true, width: '22%' },
+                { key: 'user_name',       label: 'Reported by', sortable: false, width: '12%' },
+                { key: 'reason',          label: 'Reason',      sortable: true,  width: '10%' },
+                { key: 'message',         label: 'Message',     sortable: false, truncate: true, width: '22%' },
+                { key: 'rule_user_owner', label: 'Owner',       sortable: false, width: '12%' },
+                { key: 'created_at',      label: 'Date',        sortable: true,  type: 'date',   width: '10%' },
+            ]
+
+            const bulkActions = [
+                { key: 'delete_reports', label: 'Delete reports', icon: 'fa-flag',  variant: 'danger' },
+                { key: 'delete_rules',   label: 'Delete rules',   icon: 'fa-trash', variant: 'danger' },
+            ]
+
+            // ── Bulk state ────────────────────────────────────────────────
+            const bulkModal = reactive({ title: '', body: '', running: false, action: null, ids: [] })
+
+            function onBulkAction({ action, ids, count }) {
+                bulkModal.action = action
+                bulkModal.ids    = ids
+                bulkModal.running = false
+                if (action === 'delete_reports') {
+                    bulkModal.title = `Delete ${count} report(s)?`
+                    bulkModal.body  = `The selected reports will be removed. The rules themselves will NOT be deleted.`
+                } else {
+                    bulkModal.title = `Delete ${count} rule(s)?`
+                    bulkModal.body  = `The selected rules will be permanently deleted along with all their reports.`
                 }
-            }
-            fetchRuleReported(1)
-
-            /*###################################_action_on _the_rule_reported_#############################*/
-            const csrf_token = '{{ csrf_token() }}';
-
-            /**
-             *          ####################
-             *          #   delete rule    #
-             *          ####################
-             * */
-
-            async function deleteRule(id, index) {
-                const params = new URLSearchParams({
-                    id
-                })
-                const res = await fetch('/rule/delete_rule?' + params.toString())
-                const data = await res.json();
-                if (await res.status == 200) {
-                    if (data.success) {
-                        var myModalEl = document.getElementById('delete_rule_modal_' + id);
-                        var modal = bootstrap.Modal.getInstance(myModalEl)
-                        modal.hide();
-                        //rules_reported.value.splice(index, 1);
-                        if (rules_reported.value.length === 0 && current_page.value > 1) {
-                            fetchRuleReported(current_page.value - 1);
-                        } else {
-                            fetchRuleReported(current_page.value);
-                        }
-                    }
-                }
-                create_message(data.message, data.toast_class);
+                new bootstrap.Modal(document.getElementById('modal-bulk-confirm')).show()
             }
 
-            /**
-             *          ####################
-             *          #   delete report  #
-             *          ####################
-             * */
+            async function executeBulk() {
+                if (bulkModal.running) return
+                bulkModal.running = true
 
-            async function deleteReport(id, index) {
-                const params = new URLSearchParams({
-                    id
-                })
-                const res = await fetch('/rule/delete_report?' + params.toString())
-                const data = await res.json();
-                if (await res.status == 200) {
-
-                    var myModalEl = document.getElementById('delete_repport_modal_' + id);
-                    var modal = bootstrap.Modal.getInstance(myModalEl)
-                    modal.hide();
-
-
-                    if (data.success) {
-                        rules_reported.value.splice(index, 1);
-                        if (rules_reported.value.length === 0 && current_page.value > 1) {
-                            fetchRuleReported(current_page.value - 1);
-                        } else {
-                            fetchRuleReported(current_page.value);
-                        }
-                    }
+                const ids = bulkModal.ids
+                if (ids === 'ALL') {
+                    create_message('Select specific rows to use bulk actions.', 'warning-subtle')
+                    bulkModal.running = false
+                    return
                 }
-                create_message(data.message, data.toast_class);
+
+                const res  = await fetch('/rule/reports_bulk_action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ action: bulkModal.action, report_ids: ids }),
+                })
+                const data = await res.json()
+                create_message(data.message, data.toast_class)
+
+                bulkModal.running = false
+                bootstrap.Modal.getInstance(document.getElementById('modal-bulk-confirm'))?.hide()
+                tableRef.value?.clearSelection()
+                tableRef.value?.fetchData()
             }
 
+            // ── Single-row actions ────────────────────────────────────────
+            function onView(item) {
+                window.open('/rule/detail_rule/' + item.rule_id, '_blank')
+            }
 
+            function promptDeleteReport(item) {
+                activeItem.value = item
+                new bootstrap.Modal(document.getElementById('modal-del-report')).show()
+            }
+
+            function promptDeleteRule(item) {
+                activeItem.value = item
+                new bootstrap.Modal(document.getElementById('modal-del-rule')).show()
+            }
+
+            async function confirmDeleteReport() {
+                if (!activeItem.value) return
+                const res  = await fetch('/rule/delete_report?' + new URLSearchParams({ id: activeItem.value.id }))
+                const data = await res.json()
+                bootstrap.Modal.getInstance(document.getElementById('modal-del-report'))?.hide()
+                create_message(data.message, data.toast_class)
+                if (res.ok && data.success) tableRef.value?.fetchData()
+                activeItem.value = null
+            }
+
+            async function confirmDeleteRule() {
+                if (!activeItem.value) return
+                const res  = await fetch('/rule/delete_rule?' + new URLSearchParams({ id: activeItem.value.rule_id }))
+                const data = await res.json()
+                bootstrap.Modal.getInstance(document.getElementById('modal-del-rule'))?.hide()
+                create_message(data.message, data.toast_class)
+                if (res.ok && data.success) tableRef.value?.fetchData()
+                activeItem.value = null
+            }
 
             return {
-                message_list,
-                rules_reported,
-                deleteRule,
-                deleteReport
-            };
+                tableRef, activeItem, csrfToken, columns, bulkActions, bulkModal,
+                onView, onBulkAction, executeBulk,
+                promptDeleteReport, promptDeleteRule,
+                confirmDeleteReport, confirmDeleteRule,
+            }
         }
-    }).mount('#main-container');
+    }).mount('#main-container')
 </script>
 {% endblock %}
