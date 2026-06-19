@@ -43,7 +43,6 @@ const RuleBundleManager = {
             emit('processing', true);
             isLoading.value = true;
 
-            // Si ruleId fourni → payload simplifié pour une seule règle
             const payload = props.ruleId
                 ? {
                     existing_bundle_id: bundleMode.value === 'existing' ? selectedBundleId.value : null,

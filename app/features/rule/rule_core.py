@@ -1,7 +1,6 @@
 
 import json
 from collections import Counter
-import math
 import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -17,7 +16,6 @@ from sqlalchemy.orm import joinedload
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import aliased
-from app.features.rule.rule_format.abstract_rule_type import rule_type_abstract
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult, load_all_rule_formats
 
 from ... import db
@@ -441,11 +439,8 @@ def get_rule_by_content(content):
     if not content:
         return None
         
-    # 1. Normalisation en Python : supprime TOUT (espaces, \n, \r, \t)
-    # et met tout en minuscule pour éviter les doublons de casse
     clean_content = "".join(content.split()).lower()
 
-    # 2. Comparaison SQL avec gestion des Tabulations (\t)
     query = _active().filter(
         func.lower(
             func.replace(
@@ -454,7 +449,7 @@ def get_rule_by_content(content):
                         func.replace(Rule.to_string, ' ', ''),
                     '\n', ''),
                 '\r', ''),
-            '\t', '') # Ajout du remplacement des tabulations
+            '\t', '')
         ) == clean_content
     )
     
@@ -607,7 +602,6 @@ def get_sources_from_ids(rule_ids: List[int]) -> List[str]:
     if not rule_ids:
         return []
 
-    # Récupère toutes les règles d'un seul coup
     rules = Rule.query.filter(Rule.id.in_(rule_ids)).all()
 
     sources = []
@@ -2045,11 +2039,6 @@ def get_rule_format_with_id(id):
     return FormatRule.query.get(id)
 
 def add_format_rule(format_name: str, user_id: int, can_be_execute: bool) -> tuple[bool, str]:
-        """Ajoute un format de règle si non existant.
-
-        Returns:
-            (success: bool, message: str)
-        """
         existing_format = FormatRule.query.filter_by(name=format_name).first()
         if existing_format:
             return False, "This format name already exists."

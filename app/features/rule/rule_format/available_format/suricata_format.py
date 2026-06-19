@@ -98,7 +98,6 @@ class SuricataRule(RuleType):
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
-                # parse_rules gère nativement les fichiers avec plusieurs règles
                 parsed_rules = parse_rules(content)
                 for rule in parsed_rules:
                     if rule.raw:
@@ -113,7 +112,6 @@ class SuricataRule(RuleType):
             return rule_files
 
         for root, dirs, files in os.walk(repo_dir):
-            # Ignorer les dossiers cachés
             dirs[:] = [d for d in dirs if not d.startswith('.') and not d.startswith('_')]
             for file in files:
                 if not file.startswith('.') and not file.startswith('_'):
@@ -137,7 +135,6 @@ class SuricataRule(RuleType):
                     content = f.read()
                     parsed_rules = parse_rules(content)
                     for parsed_rule in parsed_rules:
-                        # Comparaison des SIDs
                         if str(parsed_rule.sid) == str(rule_db.original_uuid):
                             return parsed_rule.raw, True
             except Exception:

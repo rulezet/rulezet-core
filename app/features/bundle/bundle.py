@@ -1033,18 +1033,6 @@ def get_bundle_page():
 @bundle_blueprint.route("/bundle/add-single-rule", methods=['POST'])
 @login_required
 def add_single_rule_to_bundle():
-    """
-    Ajoute une règle unique à un bundle existant ou en crée un nouveau.
-    
-    Body JSON attendu :
-    {
-        "rule_id": int,
-        "existing_bundle_id": int | null,
-        "new_bundle_name": str,
-        "new_bundle_description": str,
-        "is_public": bool
-    }
-    """
     data = request.get_json()
     if not data:
         return {"success": False, "message": "Missing JSON body", "toast_class": "danger-subtle"}, 400
@@ -1055,7 +1043,6 @@ def add_single_rule_to_bundle():
     new_bundle_description = data.get("new_bundle_description", "").strip()
     is_public = data.get("is_public", True)
 
-    # --- Validation de base ---
     if not rule_id:
         return {"success": False, "message": "Missing rule_id", "toast_class": "danger-subtle"}, 400
 
@@ -1070,7 +1057,6 @@ def add_single_rule_to_bundle():
             "toast_class": "danger-subtle"
         }, 400
 
-    # --- Mode : bundle existant ---
     if existing_bundle_id:
         bundle = BundleModel.get_bundle_by_id(existing_bundle_id)
         if not bundle:
@@ -1090,7 +1076,6 @@ def add_single_rule_to_bundle():
             "uuid": bundle.uuid
         }, 200
 
-    # --- Mode : nouveau bundle ---
     form_dict = {
         "name": new_bundle_name,
         "description": new_bundle_description,

@@ -223,7 +223,6 @@ const RulesCarousel = {
     `,
 
     setup(props) {
-        /* ── données ── */
         const loading = ref(true)
         const rules_list = ref([])
 

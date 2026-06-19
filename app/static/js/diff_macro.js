@@ -1,5 +1,4 @@
 export function createSimpleDiffLines(oldText, newText) {
-    // Normaliser les retours chariots et retirer les espaces de fin
     oldText = oldText.replace(/\r\n/g, "\n");
     newText = newText.replace(/\r\n/g, "\n");
 
@@ -13,7 +12,6 @@ export function createSimpleDiffLines(oldText, newText) {
         const oldLine = oldLines[i] ?? "";
         const newLine = newLines[i] ?? "";
 
-        // Comparaison en ignorant les espaces de début/fin
         if (oldLine === newLine) {
             diffLines += " " + oldLine + "\n";
         } else {

@@ -2205,7 +2205,6 @@ def get_last_cve_rules() -> dict:
 @rule_blueprint.route("/admin/manage_format_rule", methods=["GET", "POST"])
 @login_required
 def manage_format_rule() -> render_template:
-    """Afficher ou créer un nouveau format de règle"""
     if not current_user.is_admin():
         return render_template("access_denied.html")
 
