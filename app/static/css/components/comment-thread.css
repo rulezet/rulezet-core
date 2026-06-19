@@ -70,6 +70,16 @@
     border-color: var(--cm-brand-dim);
 }
 
+@keyframes cm-highlight-pulse {
+    0%   { border-color: var(--cm-brand); box-shadow: 0 0 0 3px var(--cm-brand-dim); background: rgba(13,110,253,.08); }
+    60%  { border-color: var(--cm-brand); box-shadow: 0 0 0 5px rgba(13,110,253,.12); background: rgba(13,110,253,.12); }
+    100% { border-color: var(--cm-border); box-shadow: none; background: var(--cm-bg-card); }
+}
+
+.cm-item--highlighted {
+    animation: cm-highlight-pulse 2.4s ease forwards;
+}
+
 .cm-item--deleted {
     opacity: .65;
 }

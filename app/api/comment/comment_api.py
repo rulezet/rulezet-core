@@ -17,6 +17,7 @@ from flask_login import current_user
 from flask_restx import Namespace, Resource, fields
 
 from app.core.db_class.db import UnifiedComment, UnifiedCommentReaction
+from app.core.utils.activity_log import log_activity
 from app import db
 
 comment_ns = Namespace('comments', description='Unified comment thread API')
@@ -123,6 +124,23 @@ class CommentList(Resource):
         db.session.add(comment)
         db.session.commit()
 
+        # Activity log
+        if object_type == 'rule':
+            from app.core.db_class.db import Rule
+            rule = Rule.query.get(object_id)
+            log_activity("comment.add",
+                         f"Added comment on rule '{rule.title if rule else object_id}'",
+                         target_type="comment", target_id=comment.id,
+                         extra={"rule_id": object_id, "rule_uuid": rule.uuid if rule else None})
+        elif object_type == 'bundle':
+            from app.core.db_class.db import Bundle
+            bundle = Bundle.query.get(object_id)
+            log_activity("bundle_comment.add",
+                         f"Added comment on bundle id={object_id}",
+                         target_type="bundle_comment", target_id=comment.id,
+                         extra={"bundle_id": object_id, "bundle_uuid": bundle.uuid if bundle else None},
+                         is_public=bool(bundle.access) if bundle else False)
+
         return {'message': 'Comment posted', 'comment': comment.to_json(current_user_id=current_user.id)}, 201
 
 
@@ -197,6 +215,33 @@ class CommentRestore(Resource):
         db.session.commit()
 
         return {'message': 'Comment restored', 'comment': comment.to_json(current_user_id=current_user.id)}
+
+
+# ── Resolve (deep-link helper) ────────────────────────────────────────────────
+
+@comment_ns.route('/resolve/<int:comment_id>')
+class CommentResolve(Resource):
+
+    def get(self, comment_id):
+        """Return a comment's root_id and ordered ancestor chain for deep-link navigation."""
+        c = UnifiedComment.query.get(comment_id)
+        if not c or not c.is_active:
+            return {'message': 'Comment not found'}, 404
+
+        ancestors = []
+        cur = c
+        while cur.parent_id:
+            parent = UnifiedComment.query.get(cur.parent_id)
+            if not parent:
+                break
+            ancestors.insert(0, parent.id)
+            cur = parent
+
+        return {
+            'id':       c.id,
+            'root_id':  c.root_id,
+            'ancestors': ancestors,
+        }
 
 
 # ── React ──────────────────────────────────────────────────────────────────────

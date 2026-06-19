@@ -1,12 +1,22 @@
 /**
  * comment-thread.js — Recursive comment thread component.
  * Uses Vue 3 Composition API, ES modules, delimiters [[...]].
+ *
+ * Deep-link: pass ?comment=<id> in the URL to auto-scroll, expand ancestors,
+ * and highlight the target comment.
  */
-const { ref, computed } = Vue
+const { ref, computed, onMounted, nextTick } = Vue
 import { apiFetch } from '/static/js/constants.js'
 import { create_message } from '/static/js/toaster.js'
 
 const TOAST = { SUCCESS: 'success', WARNING: 'warning', ERROR: 'danger', INFO: 'info' }
+
+// ── Deep-link shared state ─────────────────────────────────────────────────
+// Populated by CommentThread on mount; read by every CommentItem on mount.
+const DEEP_LINK = Vue.reactive({
+    targetId:    null,       // integer ID of the comment to highlight
+    ancestorIds: new Set(),  // IDs of comments that need auto-expand (ancestors of target)
+})
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 
@@ -24,34 +34,34 @@ const CommentItem = {
     name: 'CommentItem',
     delimiters: ['[[', ']]'],
     props: {
-        comment: { type: Object, required: true },
-        canCreate: { type: Boolean, default: false },
-        canEditOwn: { type: Boolean, default: false },
+        comment:      { type: Object,  required: true },
+        canCreate:    { type: Boolean, default: false },
+        canEditOwn:   { type: Boolean, default: false },
         canDeleteOwn: { type: Boolean, default: false },
-        canModerate: { type: Boolean, default: false },
-        currentUserId: { type: Number, default: 0 },
+        canModerate:  { type: Boolean, default: false },
+        currentUserId:{ type: Number,  default: 0 },
     },
     setup(props) {
-        const collapsed = ref(false)
-        const showReplyForm = ref(false)
-        const showEditForm = ref(false)
-        const replyContent = ref('')
-        const editContent = ref(props.comment.content)
-        const submitting = ref(false)
+        const collapsed      = ref(false)
+        const showReplyForm  = ref(false)
+        const showEditForm   = ref(false)
+        const replyContent   = ref('')
+        const editContent    = ref(props.comment.content)
+        const submitting     = ref(false)
+        const highlighted    = ref(false)
 
-        const replies = ref([])
-        const repliesPage = ref(1)
-        const repliesTotal = ref(props.comment.reply_count || 0)
-        const repliesLoaded = ref(false)
+        const replies        = ref([])
+        const repliesPage    = ref(1)
+        const repliesTotal   = ref(props.comment.reply_count || 0)
+        const repliesLoaded  = ref(false)
         const repliesLoading = ref(false)
 
-        // Local reactive copy of counts/reaction so UI updates immediately
-        const likeCount = ref(props.comment.like_count || 0)
+        const likeCount    = ref(props.comment.like_count    || 0)
         const dislikeCount = ref(props.comment.dislike_count || 0)
         const userReaction = ref(props.comment.user_reaction || null)
-        const isDeleted = ref(props.comment.is_deleted || false)
-        const content = ref(props.comment.content)
-        const isPublic = ref(props.comment.is_public)
+        const isDeleted    = ref(props.comment.is_deleted    || false)
+        const content      = ref(props.comment.content)
+        const isPublic     = ref(props.comment.is_public)
 
         const canEdit = computed(() =>
             !isDeleted.value && (
@@ -70,7 +80,7 @@ const CommentItem = {
         async function loadReplies(reset = false) {
             if (repliesLoading.value) return
             if (reset) {
-                replies.value = []
+                replies.value    = []
                 repliesPage.value = 1
                 repliesLoaded.value = false
             }
@@ -93,17 +103,17 @@ const CommentItem = {
             submitting.value = true
             const res = await apiFetch('/api/comments', 'POST', {
                 object_type: props.comment.object_type,
-                object_id: props.comment.object_id,
-                content: replyContent.value,
-                parent_id: props.comment.id,
+                object_id:   props.comment.object_id,
+                content:     replyContent.value,
+                parent_id:   props.comment.id,
             })
             const d = await res.json()
             if (res.ok) {
-                replyContent.value = ''
-                showReplyForm.value = false
-                repliesTotal.value += 1
+                replyContent.value    = ''
+                showReplyForm.value   = false
+                repliesTotal.value   += 1
                 replies.value.push(d.comment)
-                repliesLoaded.value = true
+                repliesLoaded.value  = true
                 create_message(d.message, TOAST.SUCCESS)
             } else {
                 create_message(d.message || 'Failed', TOAST.ERROR)
@@ -119,8 +129,8 @@ const CommentItem = {
             })
             const d = await res.json()
             if (res.ok) {
-                content.value = d.comment.content
-                showEditForm.value = false
+                content.value       = d.comment.content
+                showEditForm.value  = false
                 create_message(d.message, TOAST.SUCCESS)
             } else {
                 create_message(d.message || 'Failed', TOAST.ERROR)
@@ -134,7 +144,7 @@ const CommentItem = {
             const d = await res.json()
             if (res.ok) {
                 isDeleted.value = true
-                content.value = '[deleted]'
+                content.value   = '[deleted]'
                 create_message(d.message, TOAST.WARNING)
             } else {
                 create_message(d.message || 'Failed', TOAST.ERROR)
@@ -146,7 +156,7 @@ const CommentItem = {
             const d = await res.json()
             if (res.ok) {
                 isDeleted.value = false
-                content.value = d.comment.content
+                content.value   = d.comment.content
                 create_message(d.message, TOAST.SUCCESS)
             } else {
                 create_message(d.message || 'Failed', TOAST.ERROR)
@@ -157,7 +167,7 @@ const CommentItem = {
             const res = await apiFetch(`/api/comments/${props.comment.uuid}/react`, 'POST', { reaction })
             const d = await res.json()
             if (res.ok) {
-                likeCount.value = d.like_count
+                likeCount.value    = d.like_count
                 dislikeCount.value = d.dislike_count
                 userReaction.value = d.user_reaction
             } else {
@@ -166,7 +176,7 @@ const CommentItem = {
         }
 
         function startEdit() {
-            editContent.value = content.value
+            editContent.value  = content.value
             showEditForm.value = true
         }
 
@@ -174,9 +184,32 @@ const CommentItem = {
             repliesLoaded.value && replies.value.length < repliesTotal.value
         )
 
+        // ── Deep-link: auto-expand ancestors / highlight target ────────────
+        onMounted(async () => {
+            if (!DEEP_LINK.targetId) return
+
+            if (DEEP_LINK.targetId === props.comment.id) {
+                // This IS the target comment — highlight and scroll
+                await nextTick()
+                const el = document.getElementById(`comment-${props.comment.id}`)
+                if (el) {
+                    collapsed.value = false
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }
+                highlighted.value = true
+                // Remove class after animation so re-navigation works
+                setTimeout(() => { highlighted.value = false }, 3000)
+
+            } else if (DEEP_LINK.ancestorIds.has(props.comment.id)) {
+                // This comment is an ancestor — auto-expand its replies
+                collapsed.value = false
+                await loadReplies()
+            }
+        })
+
         return {
             collapsed, showReplyForm, showEditForm,
-            replyContent, editContent, submitting,
+            replyContent, editContent, submitting, highlighted,
             replies, repliesTotal, repliesLoaded, repliesLoading,
             likeCount, dislikeCount, userReaction,
             isDeleted, content, isPublic,
@@ -186,10 +219,11 @@ const CommentItem = {
         }
     },
     template: `
-<div class="cm-item" :class="{
-    'cm-item--deleted': isDeleted,
-    'cm-item--private': !isPublic,
-    'cm-item--collapsed': collapsed,
+<div class="cm-item" :id="'comment-' + comment.id" :class="{
+    'cm-item--deleted':     isDeleted,
+    'cm-item--private':     !isPublic,
+    'cm-item--collapsed':   collapsed,
+    'cm-item--highlighted': highlighted,
 }">
     <div class="cm-header">
         <a :href="comment.author?.id ? '/account/profile/' + comment.author.id : '#'"
@@ -210,8 +244,6 @@ const CommentItem = {
         <span v-if="comment.created_by === currentUserId" class="cm-you-badge" title="This comment was posted by you">
             <i class="fas fa-user"></i>You
         </span>
-
-
 
         <span class="cm-date">[[ fmt_date(comment.created_at) ]]</span>
         <span v-if="!isPublic" class="cm-private-badge">
@@ -282,7 +314,6 @@ const CommentItem = {
 
     <!-- Replies -->
     <div v-if="!collapsed" class="cm-indent">
-        <!-- Show replies button (lazy load) -->
         <button v-if="!repliesLoaded && repliesTotal > 0" class="cm-load-more"
                 @click="loadReplies()">
             <i class="fas fa-comments me-1"></i>
@@ -298,7 +329,6 @@ const CommentItem = {
             :can-moderate="canModerate"
             :current-user-id="currentUserId" />
 
-        <!-- Load more replies -->
         <button v-if="hasMoreReplies" class="cm-load-more" @click="loadReplies()"
                 :disabled="repliesLoading">
             <span v-if="repliesLoading"><i class="fas fa-spinner fa-spin me-1"></i>Loading…</span>
@@ -319,30 +349,30 @@ const CommentThread = {
     delimiters: ['[[', ']]'],
     components: { CommentItem },
     props: {
-        objectType: { type: String, required: true },
-        objectId: { type: Number, required: true },
-        canCreate: { type: Boolean, default: false },
-        canEditOwn: { type: Boolean, default: false },
-        canDeleteOwn: { type: Boolean, default: false },
-        canModerate: { type: Boolean, default: false },
-        currentUserId: { type: Number, default: 0 },
+        objectType:    { type: String,  required: true },
+        objectId:      { type: Number,  required: true },
+        canCreate:     { type: Boolean, default: false },
+        canEditOwn:    { type: Boolean, default: false },
+        canDeleteOwn:  { type: Boolean, default: false },
+        canModerate:   { type: Boolean, default: false },
+        currentUserId: { type: Number,  default: 0 },
     },
     setup(props) {
-        const comments = ref([])
-        const page = ref(1)
-        const total = ref(0)
-        const loading = ref(false)
-        const newContent = ref('')
-        const submitting = ref(false)
+        const comments    = ref([])
+        const page        = ref(1)
+        const total       = ref(0)
+        const loading     = ref(false)
+        const newContent  = ref('')
+        const submitting  = ref(false)
         const sentinelRef = ref(null)
-        const hasNext = ref(false)
+        const hasNext     = ref(false)
 
         async function loadComments(reset = false) {
             if (loading.value) return
             if (reset) {
                 comments.value = []
-                page.value = 1
-                hasNext.value = false
+                page.value     = 1
+                hasNext.value  = false
             }
             loading.value = true
             const res = await apiFetch(
@@ -351,8 +381,8 @@ const CommentThread = {
             if (res.ok) {
                 const d = await res.json()
                 comments.value = [...comments.value, ...d.items]
-                total.value = d.total
-                hasNext.value = d.has_next
+                total.value    = d.total
+                hasNext.value  = d.has_next
                 page.value++
             }
             loading.value = false
@@ -363,8 +393,8 @@ const CommentThread = {
             submitting.value = true
             const res = await apiFetch('/api/comments', 'POST', {
                 object_type: props.objectType,
-                object_id: props.objectId,
-                content: newContent.value,
+                object_id:   props.objectId,
+                content:     newContent.value,
             })
             const d = await res.json()
             if (res.ok) {
@@ -378,7 +408,6 @@ const CommentThread = {
             submitting.value = false
         }
 
-        // Infinite scroll via IntersectionObserver
         function setupSentinel() {
             if (!sentinelRef.value) return
             const observer = new IntersectionObserver((entries) => {
@@ -389,15 +418,45 @@ const CommentThread = {
             observer.observe(sentinelRef.value)
         }
 
+        onMounted(async () => {
+            // ── Deep-link: resolve BEFORE loading comments so CommentItem
+            // mounted hooks see DEEP_LINK already populated ────────────────
+            const urlParams = new URLSearchParams(window.location.search)
+            const targetId  = parseInt(urlParams.get('comment'))
+            let rootId = null
+
+            if (targetId) {
+                const res = await apiFetch(`/api/comments/resolve/${targetId}`)
+                if (res.ok) {
+                    const info = await res.json()
+                    DEEP_LINK.targetId    = targetId
+                    DEEP_LINK.ancestorIds = new Set(info.ancestors || [])
+                    rootId = info.root_id || targetId
+                }
+            }
+
+            // Load first page of comments
+            await loadComments()
+
+            // Keep loading pages until the root ancestor is in the list
+            if (rootId) {
+                let found = comments.value.some(c => c.id === rootId)
+                while (!found && hasNext.value && !loading.value) {
+                    await loadComments()
+                    found = comments.value.some(c => c.id === rootId)
+                }
+            }
+
+            await nextTick()
+            setupSentinel()
+            // CommentItem onMounted hooks trigger scroll/highlight/expand from here
+        })
+
         return {
             comments, total, loading, newContent, submitting,
             sentinelRef, hasNext,
             loadComments, submitComment, setupSentinel,
         }
-    },
-    mounted() {
-        this.loadComments()
-        this.$nextTick(() => this.setupSentinel())
     },
     template: `
 <div>
