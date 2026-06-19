@@ -92,6 +92,7 @@ export default {
         initialFilters:     { type: Object,           default: () => ({}) },
         csrfToken:          { type: String,           default: '' },
         currentUserIsAuthenticated: { type: Boolean,  default: false },
+        showExport:         { type: Boolean,          default: true },
         syncUrl:            { type: Boolean,          default: true },
     },
 
@@ -937,7 +938,7 @@ export default {
 
         <!-- ── Export / Bundle bar ── -->
         <rule-export-action
-            v-if="showExportBar"
+            v-if="showExportBar && showExport"
             :search-query="search"
             :sort-by="sortKey"
             :rule-type="ruleType"

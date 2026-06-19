@@ -1342,7 +1342,7 @@ def process_vote(rule_id, user_id, vote_type):
 #   Filter  #
 #############
 
-def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None) -> Rule:
+def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None) -> Rule:
     """Filter the rules with specific field targeting"""
     query = _active()
     
@@ -1450,7 +1450,12 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
 
     if user_id:
         query = query.filter(Rule.user_id == user_id)
-        
+
+    if bundle_id:
+        query = query.join(BundleRuleAssociation, BundleRuleAssociation.rule_id == Rule.id).filter(
+            BundleRuleAssociation.bundle_id == bundle_id
+        )
+
     return query
 
 
@@ -2212,7 +2217,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          direction='asc', source=None, user_id=None,
                          search_field='all', exact_match=False, rule_type=None,
                          author=None, vulnerabilities=None, licenses=None,
-                         tags=None, editor_names=None):
+                         tags=None, editor_names=None, bundle_id=None):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -2230,6 +2235,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         tags=tags,
         exact_match=exact_match,
         editor_names=editor_names,
+        bundle_id=bundle_id,
     )
 
     col = _DATA_TABLE_SORT_KEYS.get(sort)

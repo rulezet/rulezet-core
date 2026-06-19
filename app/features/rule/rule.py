@@ -2709,6 +2709,7 @@ def rules_data_table():
         licenses=_csv_arg('licenses'),
         tags=_csv_arg('tags'),
         editor_names=_csv_arg('editors'),
+        bundle_id=request.args.get('bundle_id', None, type=int),
     )
 
     items = []
