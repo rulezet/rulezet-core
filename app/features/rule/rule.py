@@ -411,9 +411,8 @@ def update_lock(rule_id):
 #################
 
 @rule_blueprint.route("/history/<int:rule_id>", methods=['GET'])
-def rules_history(rule_id)-> render_template:
-    """Redirect to rule history"""    
-    return render_template("rule/rule_history_.html" , rule_id=rule_id)
+def rules_history(rule_id):
+    return redirect(url_for('rule.detail_rule_history', rule_id=rule_id))
 
 @rule_blueprint.route("/get_rules_page_history", methods=['GET'])
 def get_rules_page_history()-> render_template:

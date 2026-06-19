@@ -313,7 +313,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                             </div>
 
                             <div class="mt-2 d-flex justify-content-end">
-                                <a :href="'/rule/history/' + currentRule.id"
+                                <a :href="'/rule/detail_rule/' + currentRule.id + '/history'"
                                     class="btn btn-link btn-sm text-decoration-none text-muted p-0"
                                     title="View all changes of the rule">
                                     <i class="fas fa-clock me-1"></i>
@@ -323,107 +323,100 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                             </div>
                         </div>
 
-                        <!-- Actions Card -->
-                        <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto mb-3">
+                        <!-- Actions bar -->
+                        <div class="mt-4 mb-3 p-3 rounded-3 border d-flex flex-wrap align-items-center gap-2"
+                             style="background: var(--light-bg-color);">
 
-                            <div class="btn-group shadow-sm border rounded-pill overflow-hidden ">
+                            <!-- Votes -->
+                            <div class="btn-group rounded-pill overflow-hidden" style="border:1px solid var(--border-color);">
                                 <button @click="vote('up', currentRule.id); animateClick($event)"
-                                    class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn">
-                                    <i class="fas fa-thumbs-up text-primary me-1"></i> [[ currentRule.vote_up ]]
+                                        class="btn btn-sm px-3 border-0 border-end shadow-none btn-animate"
+                                        style="background:transparent; color:var(--text-color);">
+                                    <i class="fas fa-thumbs-up text-primary me-1"></i>[[ currentRule.vote_up ]]
                                 </button>
                                 <button @click="vote('down', currentRule.id); animateClick($event)"
-                                    class="btn btn-sm px-3 border-0 shadow-none btn-animate home-btn">
-                                    <i class="fas fa-thumbs-down text-danger me-1"></i> [[ currentRule.vote_down ]]
+                                        class="btn btn-sm px-3 border-0 shadow-none btn-animate"
+                                        style="background:transparent; color:var(--text-color);">
+                                    <i class="fas fa-thumbs-down text-danger me-1"></i>[[ currentRule.vote_down ]]
                                 </button>
                             </div>
 
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="dropdown">
-                                    <button
-                                        class="btn btn-sm btn-success rounded-pill px-3 shadow-sm fw-bold dropdown-toggle d-flex align-items-center"
-                                        type="button" id="downloadMenuButton" data-bs-toggle="dropdown"
-                                        aria-expanded="false" style="height: 32px;">
-                                        <i class="fas fa-download me-1"></i> Download
-                                    </button>
-                                    <ul class="dropdown-menu shadow border-0" aria-labelledby="downloadMenuButton"
-                                        style="border-radius: 12px;">
-                                        <li><button class="dropdown-item small" @click="download_rule('txt')"><i
-                                                    class="fas fa-file-alt me-2 opacity-50"></i>Download Rule</button>
-                                        </li>
-                                        {% if rule_misp_object %}
-                                        <li><button class="dropdown-item small" @click="download_rule('misp')"><i
-                                                    class="fas fa-project-diagram me-2 opacity-50"></i>Download MISP
-                                                Object</button></li>
-                                        {% endif %}
-                                        {% if rule_misp_event %}
-                                        <li><button class="dropdown-item small" @click="download_rule('misp_event')"><i
-                                                    class="fas fa-project-diagram me-2 opacity-50"></i>Download MISP
-                                                Event</button></li>
-                                        {% endif %}
-                                        <li><button class="dropdown-item small" @click="download_rule('json')"><i
-                                                    class="fas fa-code me-2 opacity-50"></i>Download JSON</button></li>
-                                        <template v-if="rule_stix">
-                                            <li><button class="dropdown-item small" @click="download_rule('stix')"><i
-                                                        class="fas fa-street-view me-2 opacity-50"></i>Download
-                                                    STIX</button></li>
-                                        </template>
-                                        <li><button class="dropdown-item small" @click="download_rule('all')"><i
-                                                    class="fas fa-download me-2 opacity-50"></i>Download
-                                                All</button>
-                                        </li>
+                            <!-- Favorite -->
+                            <button @click="favorite(currentRule.id)"
+                                    class="btn btn-sm rounded-pill px-3"
+                                    :style="currentRule.is_favorited
+                                        ? 'background:transparent; border:1px solid var(--border-color); color:var(--text-color);'
+                                        : 'background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);'">
+                                <i class="me-1" :class="currentRule.is_favorited ? 'fas fa-star text-warning' : 'far fa-star'"></i>
+                                [[ currentRule.is_favorited ? 'Favorited' : 'Favorite' ]]
+                            </button>
 
-                                    </ul>
-                                </div>
+                            <!-- Download -->
+                            <div class="dropdown">
+                                <button class="btn btn-sm rounded-pill px-3 dropdown-toggle"
+                                        style="background:transparent; border:1px solid var(--border-color); color:var(--text-color);"
+                                        data-bs-toggle="dropdown">
+                                    <i class="fas fa-download me-1"></i>Download
+                                </button>
+                                <ul class="dropdown-menu shadow border-0" style="border-radius:12px; background:var(--card-bg-color);">
+                                    <li><button class="dropdown-item small" @click="download_rule('txt')" style="color:var(--text-color);"><i class="fas fa-file-alt me-2 opacity-50"></i>Rule file</button></li>
+                                    {% if rule_misp_object %}
+                                    <li><button class="dropdown-item small" @click="download_rule('misp')" style="color:var(--text-color);"><i class="fas fa-project-diagram me-2 opacity-50"></i>MISP Object</button></li>
+                                    {% endif %}
+                                    {% if rule_misp_event %}
+                                    <li><button class="dropdown-item small" @click="download_rule('misp_event')" style="color:var(--text-color);"><i class="fas fa-project-diagram me-2 opacity-50"></i>MISP Event</button></li>
+                                    {% endif %}
+                                    <li><button class="dropdown-item small" @click="download_rule('json')" style="color:var(--text-color);"><i class="fas fa-code me-2 opacity-50"></i>JSON</button></li>
+                                    <template v-if="rule_stix">
+                                        <li><button class="dropdown-item small" @click="download_rule('stix')" style="color:var(--text-color);"><i class="fas fa-street-view me-2 opacity-50"></i>STIX</button></li>
+                                    </template>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><button class="dropdown-item small" @click="download_rule('all')" style="color:var(--text-color);"><i class="fas fa-download me-2 opacity-50"></i>Download all</button></li>
+                                </ul>
+                            </div>
 
-                                {% if current_user.is_authenticated and rule.user_id != current_user.id %}
-                                <button
-                                    class="btn btn-sm btn-warning rounded-pill px-3 shadow-sm fw-bold d-flex align-items-center"
-                                    data-bs-toggle="modal" :data-bs-target="'#ownershipModal' + currentRule.id"
-                                    title="Ask to become the owner of this rule" style="height: 32px;">
-                                    <i class="fas fa-user-shield me-1"></i> Ownership
+                            <!-- Report -->
+                            <a :href="`/rule/report/${currentRule.id}`"
+                               class="btn btn-sm rounded-pill px-3"
+                               style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);">
+                                <i class="fas fa-flag me-1"></i>Report
+                            </a>
+
+                            {% if current_user.is_authenticated and rule.user_id != current_user.id %}
+                            <button class="btn btn-sm rounded-pill px-3"
+                                    style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                    data-bs-toggle="modal" :data-bs-target="'#ownershipModal' + currentRule.id">
+                                <i class="fas fa-user-shield me-1"></i>Ownership
+                            </button>
+                            {% endif %}
+
+                            {% if current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}
+                            <button @click="toggleLock"
+                                    class="btn btn-sm rounded-pill px-3"
+                                    :style="is_lock
+                                        ? 'background:transparent; border:1px solid #0d6efd55; color:var(--text-color);'
+                                        : 'background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);'"
+                                    :title="is_lock ? 'Unlock — allow auto-updates from source' : 'Lock — prevent auto-updates from source'">
+                                <i class="fas me-1" :class="is_lock ? 'fa-lock text-primary' : 'fa-lock-open'"></i>
+                                [[ is_lock ? 'Locked' : 'Unlocked' ]]
+                            </button>
+                            {% endif %}
+
+                            <div class="ms-auto d-flex gap-2">
+                                {% if current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}
+                                <a :href="`/rule/edit_rule/${currentRule.id}`"
+                                   class="btn btn-sm rounded-pill px-3"
+                                   style="background:transparent; border:1px solid #0d6efd55; color:#0d6efd;">
+                                    <i class="fas fa-pen me-1"></i>Edit
+                                </a>
+                                <button class="btn btn-sm rounded-pill px-3"
+                                        style="background:transparent; border:1px solid #dc354555; color:#dc3545;"
+                                        data-bs-toggle="modal" :data-bs-target="'#delete_rule_modal_'+currentRule.id">
+                                    <i class="fa-solid fa-trash me-1"></i>Delete
                                 </button>
                                 {% endif %}
                             </div>
 
-                            <div class="d-flex gap-2 align-items-center">
-                                <button
-                                    @click="favorite(currentRule.id); $event.currentTarget.classList.add('star-animate')"
-                                    class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center transition-all home-btn border"
-                                    style="width: 32px; height: 32px;">
-                                    <i class="fa-star"
-                                        :class="currentRule.is_favorited ? 'fas text-warning' : 'far'"></i>
-                                </button>
-
-                                <div class="dropup">
-                                    <button
-                                        class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn border"
-                                        style="width: 32px; height: 32px;" data-bs-toggle="dropdown">
-                                        <i class="fas fa-ellipsis-v text-muted"></i>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 mb-2"
-                                        style="border-radius: 12px;">
-                                        <li><a class="dropdown-item rounded-2 small"
-                                                :href="`/rule/detail_rule/${currentRule.id}`"><i
-                                                    class="fas fa-eye me-2 text-muted"></i> View Detail</a></li>
-                                        <li><a class="dropdown-item rounded-2 small"
-                                                :href="`/rule/report/${currentRule.id}`"><i
-                                                    class="fas fa-flag me-2 text-muted"></i> Report Issue</a></li>
-                                        <template
-                                            v-if="parseInt('{{current_user.id}}') == currentRule.user_id || current_user_is_admin">
-                                            <li>
-                                                <hr class="dropdown-divider">
-                                            </li>
-                                            <li><a class="dropdown-item rounded-2 small"
-                                                    :href="`/rule/edit_rule/${currentRule.id}`"><i
-                                                        class="fas fa-pen me-2 text-primary"></i> Edit Rule</a></li>
-                                            <li><button class="dropdown-item rounded-2 small text-danger"
-                                                    data-bs-toggle="modal"
-                                                    :data-bs-target="'#delete_rule_modal_'+currentRule.id"><i
-                                                        class="fa-solid fa-trash me-2"></i> Delete Rule</button></li>
-                                        </template>
-                                    </ul>
-                                </div>
-                            </div>
                         </div>
                         <!-- Contributors Card -->
                         <div class="mb-2 mt-3">
@@ -969,6 +962,24 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                 create_message(data.message, data.toast_class, false, null, "/rule/owner_rules");
             }
 
+            // ── Update lock ──────────────────────────────────────────────────
+            const is_lock = ref(false);
+            async function fetchLockState() {
+                const res  = await fetch('/rule/is_lock_for_update?rule_id=' + rule_id);
+                const data = await res.json();
+                is_lock.value = data.is_locked;
+            }
+            fetchLockState();
+
+            async function toggleLock() {
+                const res  = await fetch(`/rule/update_lock/${rule_id}?manuel_submit=${!is_lock.value}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    is_lock.value = data.is_locked;
+                    create_message(data.message, data.toast_class);
+                }
+            }
+
             onMounted(async () => {
                 init()
                 await fetchCurrentRule();
@@ -1071,6 +1082,8 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                 ruleJsonData,
                 mispObjectData,
                 mispEventData,
+                is_lock,
+                toggleLock,
             };
         }
     }).mount('#main-container');

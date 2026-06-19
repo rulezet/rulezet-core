@@ -107,9 +107,9 @@
             </div>
         </div>
 
-        <!-- Stats + lock -->
+        <!-- Stats -->
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-body p-4">
                     <h6 class="fw-bold mb-3 text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">Summary</h6>
                     <div class="d-flex flex-column gap-2">
@@ -130,19 +130,6 @@
                             <strong>[[ commentCount ]]</strong>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div class="card border-0 shadow-sm rounded-4">
-                <div class="card-body p-4">
-                    <h6 class="fw-bold mb-3 text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">Update lock</h6>
-                    <p class="small text-muted mb-3">When locked, this rule won't be updated from its source repository.</p>
-                    <button @click="toggleLock"
-                            class="btn btn-sm w-100 d-flex align-items-center justify-content-center gap-2"
-                            :class="is_lock ? 'btn-warning' : 'btn-outline-secondary'">
-                        <i class="fas" :class="is_lock ? 'fa-lock' : 'fa-lock-open'"></i>
-                        <span>[[ is_lock ? 'Locked' : 'Unlocked' ]]</span>
-                    </button>
                 </div>
             </div>
         </div>
@@ -368,24 +355,6 @@
                 }
             }
 
-            // ── Lock toggle ───────────────────────────────────────────────────
-            const is_lock = ref(false)
-            async function fetchLockState() {
-                const res  = await fetch('/rule/is_lock_for_update?rule_id=' + ruleId)
-                const data = await res.json()
-                is_lock.value = data.is_locked
-            }
-            fetchLockState()
-
-            async function toggleLock() {
-                const res = await fetch(`/rule/update_lock/${ruleId}?manuel_submit=${!is_lock.value}`)
-                if (res.ok) {
-                    const data = await res.json()
-                    is_lock.value = data.is_locked
-                    create_message(data.message, data.toast_class)
-                }
-            }
-
             // ── Compare versions ──────────────────────────────────────────────
             const allVersions   = ref([])
             const versionsLoading = ref(false)
@@ -497,8 +466,6 @@
                 canDelete, deleteActivity, deleteVersion,
                 // inline diff
                 inlineDiff, inlineDiffKey,
-                // lock
-                is_lock, toggleLock,
                 // compare
                 allVersions, versionsLoading, latestVersionId,
                 cmpSlotA, cmpSlotB, cmpLoaded, cmpLeft, cmpRight, cmpKey,
