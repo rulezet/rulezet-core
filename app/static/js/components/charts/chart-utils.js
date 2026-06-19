@@ -6,14 +6,14 @@
 export function get_theme() {
     const s = getComputedStyle(document.documentElement);
     const g = k => s.getPropertyValue(k).trim();
-    const is_dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+    const is_dark = document.documentElement.classList.contains('dark-mode');
     return {
-        text_main:  g('--text-main')  || (is_dark ? '#F2EFEA' : '#1A1714'),
-        text_muted: g('--text-muted') || (is_dark ? '#6B6663' : '#9A9390'),
-        bg_surface: g('--bg-surface') || (is_dark ? '#242129' : '#FFFFFF'),
-        bg_body:    g('--bg-body')    || (is_dark ? '#1A171D' : '#F5F1EC'),
-        border:     g('--border')     || (is_dark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)'),
-        brand:      g('--brand')      || '#D4522A',
+        text_main:  g('--text-color')        || (is_dark ? '#e2e8f0' : '#1e1e1e'),
+        text_muted: g('--subtle-text-color') || (is_dark ? '#94a3b8' : '#6c757d'),
+        bg_surface: g('--card-bg-color')     || (is_dark ? '#1e2433' : '#ffffff'),
+        bg_body:    g('--light-bg-color')    || (is_dark ? '#151922' : '#f8f9fa'),
+        border:     g('--border-color')      || (is_dark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)'),
+        brand:      '#0d6efd',
         is_dark,
         palette: [
             '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',

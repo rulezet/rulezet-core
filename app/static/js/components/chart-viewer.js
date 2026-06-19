@@ -174,6 +174,7 @@ export default defineComponent({
 
             const theme = get_theme();
             const option = build_option(props.data, theme);
+            option.backgroundColor = 'transparent';
 
             if (_chart) {
                 _chart.setOption(option, { notMerge: true });
@@ -219,7 +220,7 @@ export default defineComponent({
             }
             /* Theme change */
             _mo = new MutationObserver(() => render());
-            _mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+            _mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
         }
 
         /* ── Watchers ── */

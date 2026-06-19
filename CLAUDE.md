@@ -515,6 +515,57 @@ Classes: `.explorer-banner` (card wrapper with blue top accent line), `.banner-i
 
 The gradient uses only blue tones: `#0d6efd → #0a58ca`.
 
+#### General UI style reference — `detail_user` page
+
+The user detail page (`app/templates/account/detail_user.html` + `app/static/css/account/user_detail.css`) is the **canonical style reference** for all new feature pages. When building any new page or component, follow these patterns from that page:
+
+**Info cells with icons** (`.ud-info-cell`) — the preferred way to display labeled fields:
+```html
+<div class="ud-info-cell">
+    <div class="ud-info-cell-icon" style="background:rgba(13,110,253,.1);color:#0d6efd;">
+        <i class="fas fa-user"></i>
+    </div>
+    <div class="ud-info-cell-body">
+        <div class="ud-info-cell-label">Field Label</div>
+        <div class="ud-info-cell-value">Field value</div>
+    </div>
+</div>
+```
+Place these in a `.ud-info-grid` container (CSS grid, auto-fill `minmax(220px,1fr)`).
+
+**KPI cards** (`.ud-kpi-card`) — for numeric summary stats at the top of a section:
+```html
+<div class="ud-kpi-card ud-kpi-card--blue">
+    <div class="ud-kpi-icon"><i class="fas fa-shield-halved"></i></div>
+    <div class="ud-kpi-body">
+        <div class="ud-kpi-value">42</div>
+        <div class="ud-kpi-label">Rules Published</div>
+    </div>
+</div>
+```
+Colour variants: `--blue`, `--teal`, `--green`, `--gold`, `--purple`, `--orange`.
+
+**Section headers** (`.ud-section-header`) — separator between content blocks:
+```html
+<div class="ud-section-header mb-3">
+    <i class="fas fa-chart-bar ud-section-icon"></i>
+    <div>
+        <div class="ud-section-title">Section Title</div>
+        <div class="ud-section-sub">Short description</div>
+    </div>
+</div>
+```
+
+**Chart cards** (`.ud-chart-card`) — wrapper for `<chart-viewer>` with a coloured top accent:
+```html
+<div class="ud-chart-card ud-chart-card--accent-blue">
+    <chart-viewer :data="chartData" views="bar" height="320px"></chart-viewer>
+</div>
+```
+Accent variants: `--accent-blue`, `--accent-teal`, `--accent-purple`, `--accent-orange`, `--accent-green`, `--accent-gold`.
+
+All these classes are defined in `app/static/css/account/user_detail.css`.
+
 #### Tag tooltips (`app/static/js/tags/singleTagDisplay.js`)
 
 Tag tooltips use Vue 3 `<teleport to="body">` with `position: fixed` computed at `mouseenter`. This bypasses `overflow: hidden` on parent containers (e.g. carousels). A 120ms debounce on `mouseleave` allows the mouse to move from the tag to the tooltip without it closing.
