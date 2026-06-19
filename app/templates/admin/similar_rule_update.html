@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Update Rule Similarities — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
@@ -32,6 +33,8 @@
                 Compute and refresh similarity scores between rules using TF-IDF and fuzzy matching.
             </p>
         </div>
+
+        {{ anav.admin_nav('similar') }}
 
         <ul class="nav nav-underline justify-content-center w-100 mb-4" id="updateTabs" role="tablist">
             <li class="nav-item flex-fill text-center"><a class="nav-link active" data-bs-toggle="tab"

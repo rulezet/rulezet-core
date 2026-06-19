@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Instance Registry — Rulezet{% endblock %}
 
 {% block content %}
@@ -27,6 +28,8 @@
             ping containing its UUID, public URL (if configured), version, and rule/bundle counts.
         </p>
     </div>
+
+    {{ anav.admin_nav('instances') }}
 
     <!-- Stats strip -->
     <div class="row g-3 mb-4">

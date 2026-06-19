@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}User Management — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/users_list.css') }}">
@@ -30,6 +31,8 @@
             Manage all registered users in the system. View user details, filter by admin status or connection status, and perform administrative actions.
         </p>
     </div>
+
+    {{ anav.admin_nav('users') }}
 
     <!-- Filters & Search -->
     <div class="filters-container mb-4">

@@ -64,7 +64,16 @@
     box-shadow: 0 1px 4px rgba(220,53,69,.4);
 }
 
+.dr-nav__sep {
+    width: 1px;
+    height: 22px;
+    background: var(--border-color);
+    margin: 0 4px;
+    flex-shrink: 0;
+}
+
 @media (max-width: 600px) {
     .dr-nav__item span { display: none; }
     .dr-nav__item { padding: 9px 13px; }
+    .dr-nav__sep { display: none; }
 }

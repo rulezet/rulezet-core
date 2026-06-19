@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Reported Rules — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
@@ -27,6 +28,8 @@
             Review rules reported by users. View the reason for each report and take appropriate action — delete the report or remove the problematic rule.
         </p>
     </div>
+
+    {{ anav.admin_nav('reports') }}
 
     <data-table
         ref="tableRef"

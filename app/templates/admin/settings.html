@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Admin Settings — Rulezet{% endblock %}
 
 {% block head %}
@@ -31,6 +32,8 @@
             Changes to secrets require a server restart to take effect.
         </p>
     </div>
+
+    {{ anav.admin_nav('settings') }}
 
     <!-- ── Tabs ── -->
     <ul class="nav nav-underline justify-content-center w-100 mb-4" id="settingsTabs" role="tablist">

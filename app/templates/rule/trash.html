@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Deleted Rules — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" id="hljs-theme"
@@ -51,6 +52,8 @@
       Deleted rules are hidden everywhere on the platform. Restore them to make them visible again, or permanently delete them to free up space. Rules deleted from the same GitHub source share a batch and can be restored together.
     </p>
   </div>
+
+  {{ anav.admin_nav('trash') }}
 
   <!-- Filters -->
   <div class="card border-0 shadow-sm rounded-4 mb-4">

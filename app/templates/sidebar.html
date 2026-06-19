@@ -117,60 +117,11 @@
 
                <!-- ── Admin ── -->
                {% if current_user.is_authenticated and current_user.is_admin() %}
-               <li class="nav-item dropdown px-2">
-                  <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if '/admin' in request.path or request.path.startswith('/tags/admin') or request.path.startswith('/jobs') %}active{% endif %}"
-                     href="#" data-bs-toggle="dropdown">
+               <li class="nav-item">
+                  <a class="nav-link custom-nav-link fw-bold {% if '/admin' in request.path or request.path.startswith('/tags/admin') or request.path.startswith('/jobs') or request.path == '/rule/bulk_tag' or request.path == '/rule/trash' %}active{% endif %}"
+                     href="/account/admin/all_users">
                      <i class="fa-solid fa-lock fa-fw me-1 text-danger"></i>Admin
                   </a>
-                  <ul class="dropdown-menu border-0 shadow-lg animate slideIn">
-
-                     <!-- Users & Requests -->
-                     <li><a href="/account/admin/all_users" class="dropdown-item py-2 {% if request.path == '/account/admin/all_users' %}active{% endif %}">
-                           <i class="fa-solid fa-users fa-fw me-2 text-muted"></i>Users</a></li>
-                     <li>
-                        <a href="/admin/request" class="dropdown-item py-2 d-flex justify-content-between align-items-center {% if request.path == '/admin/request' %}active{% endif %}">
-                           <span><i class="fa-solid fa-envelope fa-fw me-2 text-muted"></i>Ownership Requests</span>
-                           <span v-if="requests_to_validate > 0" class="badge rounded-pill bg-danger">[[ requests_to_validate ]]</span>
-                        </a>
-                     </li>
-
-                     <li><hr class="dropdown-divider"></li>
-
-                     <!-- Rules management -->
-                     <li><a class="dropdown-item py-2 {% if request.path == '/rule/admin/manage_format_rule' %}active{% endif %}"
-                           href="/rule/admin/manage_format_rule"><i class="fa-solid fa-file-code fa-fw me-2 text-muted"></i>Manage Formats</a></li>
-                     <li><a href="/tags/admin/list" class="dropdown-item py-2 {% if request.path.startswith('/tags/admin') %}active{% endif %}">
-                           <i class="fa-solid fa-tags fa-fw me-2 text-muted"></i>Manage Tags</a></li>
-
-                     <li><hr class="dropdown-divider"></li>
-
-                     <!-- Bulk & Jobs -->
-                     <li><a href="/rule/bulk_tag" class="dropdown-item py-2 {% if request.path == '/rule/bulk_tag' %}active{% endif %}">
-                           <i class="fa-solid fa-tag fa-fw me-2 text-muted"></i>Bulk Tag Rules</a></li>
-                     <li>
-                        <a href="/jobs/list" class="dropdown-item py-2 d-flex justify-content-between align-items-center {% if request.path == '/jobs/list' %}active{% endif %}">
-                           <span><i class="fa-solid fa-tasks fa-fw me-2 text-muted"></i>Background Jobs</span>
-                           <span v-if="running_jobs_count > 0" class="badge rounded-pill bg-primary ms-2">[[ running_jobs_count ]]</span>
-                        </a>
-                     </li>
-                     <li><a href="/admin/logs" class="dropdown-item py-2 {% if request.path == '/admin/logs' %}active{% endif %}">
-                           <i class="fa-solid fa-scroll fa-fw me-2 text-muted"></i>Activity Logs</a></li>
-                     {% if is_official %}
-                     <li><a href="/account/admin/instances" class="dropdown-item py-2 {% if request.path == '/account/admin/instances' %}active{% endif %}">
-                           <i class="fa-solid fa-earth-americas fa-fw me-2 text-muted"></i>Instance Registry</a></li>
-                     {% endif %}
-                     <li>
-                        <a href="/rule/trash" class="dropdown-item py-2 d-flex justify-content-between align-items-center {% if request.path == '/rule/trash' %}active{% endif %}">
-                           <span><i class="fa-solid fa-trash-can-arrow-up fa-fw me-2 "></i>Trash</span>
-                        </a>
-                     </li>
-
-                     <li><hr class="dropdown-divider"></li>
-
-                     <li><a href="/admin/settings" class="dropdown-item py-2 {% if request.path.startswith('/admin/settings') %}active{% endif %}">
-                           <i class="fa-solid fa-sliders fa-fw me-2 text-muted"></i>Settings</a></li>
-
-                  </ul>
                </li>
                {% endif %}
 

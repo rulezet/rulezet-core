@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Rule Formats — Rulezet{% endblock %}
 {% block content %}
 {% if current_user.is_admin() %}
@@ -26,6 +27,8 @@
             Create, modify and delete rule formats used in the system. Proceed with caution — changes may affect existing rules.
         </p>
     </div>
+
+    {{ anav.admin_nav('formats') }}
 
     <ul class="nav nav-underline justify-content-center w-100 mb-3" id="exampleTabs" role="tablist">
         <li class="nav-item flex-fill text-center">

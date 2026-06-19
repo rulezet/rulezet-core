@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Ownership Requests — Rulezet{% endblock %}
 {% block content %}
 <div class="container my-4" id="main-container" v-cloak>
@@ -26,6 +27,7 @@
         </p>
     </div>
 
+    {{ anav.admin_nav('requests') }}
 
     <ul class="nav nav-underline justify-content-center w-100 mb-3" id="exampleTabs" role="tablist">
         <li class="nav-item flex-fill text-center">

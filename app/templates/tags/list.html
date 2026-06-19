@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Tag Management — Rulezet{% endblock %}
 {% block content %}
 <div class="container-fluid mt-3 px-4" id="main-container">
@@ -25,6 +26,8 @@
             Manage tags, taxonomies, and galaxies used across all detection rules.
         </p>
     </div>
+
+    {{ anav.admin_nav('tags') }}
 
     <div v-if="!ready" class="text-center py-5">
         <div class="spinner-border text-primary mb-3" role="status"></div>
