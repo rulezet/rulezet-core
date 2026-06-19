@@ -51,9 +51,7 @@
 
         <!-- Reporter cell -->
         <template #cell-user_name="{ item }">
-            <a :href="'/account/detail_user/' + item.user_id" class="text-decoration-none small">
-                [[ item.user_name ]]
-            </a>
+            <user-chip :user-id="item.user_id" :username="item.user_name" :avatar="item.user_avatar" size="xs"></user-chip>
         </template>
 
         <!-- Reason cell -->
@@ -65,11 +63,8 @@
 
         <!-- Owner cell -->
         <template #cell-rule_user_owner="{ item }">
-            <a v-if="item.rule_owner_id" :href="'/account/detail_user/' + item.rule_owner_id"
-               class="text-decoration-none small">
-                [[ item.rule_user_owner ]]
-            </a>
-            <span v-else class="text-muted small">[[ item.rule_user_owner || '—' ]]</span>
+            <user-chip v-if="item.rule_owner_id" :user-id="item.rule_owner_id" :username="item.rule_user_owner" :avatar="item.rule_owner_avatar" size="xs"></user-chip>
+            <span v-else class="text-muted small">—</span>
         </template>
 
         <!-- Expand: full message + CodeViewer for rule content -->
@@ -181,10 +176,11 @@
     import { create_message } from '/static/js/toaster.js';
     import DataTable  from '/static/js/components/dataTable/dataTable.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
+    import UserChip   from '/static/js/components/UserChip.js';
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'data-table': DataTable, 'code-viewer': CodeViewer },
+        components: { 'data-table': DataTable, 'code-viewer': CodeViewer, 'user-chip': UserChip },
         setup() {
             const tableRef   = ref(null)
             const activeItem = ref(null)
