@@ -1,9 +1,9 @@
+import ChartViewer from '/static/js/components/chart-viewer.js';
+
 const UserContributionStatsComponent = {
+    components: { ChartViewer },
     props: {
-        userId: {
-            type: [String, Number],
-            required: true
-        }
+        userId: { type: [String, Number], required: true }
     },
     delimiters: ['[[', ']]'],
     setup(props) {
@@ -17,38 +17,33 @@ const UserContributionStatsComponent = {
             consecutive_days_active: 0,
             global_rank: null
         });
-
         const loading = Vue.ref(true);
 
-        // --- CONSTANTS ---
         const LEVEL_THRESHOLDS = {
             1: 0, 2: 500, 3: 15000, 4: 30000, 5: 50000, 10: 150000, 20: 300000, 100: 1500000
         };
-
         const BADGE_POINTS = {
             'Bronze Contributor': 1000,
             'Silver Contributor': 10000,
             'Gold Contributor': 50000,
-            'Curator Rookie': { metric: 'suggestions_accepted', min: 5 },
-            'Quality Master': { metric: 'suggestions_accepted', min: 25 }
+            'Curator Rookie':   { metric: 'suggestions_accepted', min: 5 },
+            'Quality Master':   { metric: 'suggestions_accepted', min: 25 }
         };
 
-        // --- METHODS ---
-        const getBadgeClass = (badgeName) => {
-            if (badgeName.includes('Master')) return 'bg-danger text-white border border-light';
-            if (badgeName.includes('Gold')) return 'bg-warning text-dark border border-dark';
-            if (badgeName.includes('Silver')) return 'bg-secondary text-white border border-light';
-            if (badgeName.includes('Bronze')) return 'bg-bronze text-white border border-dark';
-            if (badgeName.includes('Curator')) return 'bg-info text-white';
-            if (badgeName.includes('Quality')) return 'bg-success text-white';
+        const getBadgeClass = (name) => {
+            if (name.includes('Master'))      return 'bg-danger text-white border border-light';
+            if (name.includes('Gold'))        return 'bg-warning text-dark border border-dark';
+            if (name.includes('Silver'))      return 'bg-secondary text-white border border-light';
+            if (name.includes('Bronze'))      return 'bg-bronze text-white border border-dark';
+            if (name.includes('Curator'))     return 'bg-info text-white';
+            if (name.includes('Quality'))     return 'bg-success text-white';
             return 'bg-dark text-white';
         };
-
-        const getBadgeIcon = (badgeName) => {
-            if (badgeName.includes('Contributor')) return 'fas fa-star';
-            if (badgeName.includes('Master')) return 'fas fa-brain';
-            if (badgeName.includes('Curator')) return 'fas fa-glasses';
-            if (badgeName.includes('Quality')) return 'fas fa-cogs';
+        const getBadgeIcon = (name) => {
+            if (name.includes('Contributor')) return 'fas fa-star';
+            if (name.includes('Master'))      return 'fas fa-brain';
+            if (name.includes('Curator'))     return 'fas fa-glasses';
+            if (name.includes('Quality'))     return 'fas fa-cogs';
             return 'fas fa-certificate';
         };
 
@@ -56,220 +51,267 @@ const UserContributionStatsComponent = {
             loading.value = true;
             try {
                 const res = await fetch(`/account/user_contributions/${props.userId}`);
-                if (!res.ok) {
-                    console.error('Failed to fetch user contributions:', res.statusText);
-                    loading.value = false;
-                    return;
-                }
+                if (!res.ok) return;
                 const data = await res.json();
                 userStats.value = data.user_stats;
-            } catch (error) {
-                console.error('API Fetch Error:', error);
-            } finally {
-                loading.value = false;
-            }
+            } catch {}
+            finally { loading.value = false; }
         };
 
-        // --- COMPUTED PROPERTIES ---
         const computedBadges = Vue.computed(() => {
             if (userStats.value.total_points === undefined) return [];
-
             const badges = [];
             const stats = userStats.value;
-
-            for (const [badgeName, threshold] of Object.entries(BADGE_POINTS)) {
+            for (const [name, threshold] of Object.entries(BADGE_POINTS)) {
                 if (typeof threshold === 'number') {
-                    if (stats.total_points >= threshold) {
-                        badges.push({
-                            name: badgeName,
-                            description: `Awarded for reaching ${threshold.toLocaleString()} total points.`
-                        });
-                    }
-                } else if (typeof threshold === 'object' && threshold.metric) {
-                    const value = stats[threshold.metric] || 0;
-                    if (value >= threshold.min) {
-                        badges.push({
-                            name: badgeName,
-                            description: `Awarded for having ${threshold.min} or more accepted suggestions.`
-                        });
-                    }
+                    if (stats.total_points >= threshold) badges.push({ name, description: `Reached ${threshold.toLocaleString()} pts.` });
+                } else if (stats[threshold.metric] >= threshold.min) {
+                    badges.push({ name, description: `${threshold.min}+ ${threshold.metric}.` });
                 }
             }
-
-            if (stats.current_level >= 5) {
-                badges.push({
-                    name: 'Veteran Contributor',
-                    description: 'Achieved level 5 or higher.'
-                });
-            }
-
+            if (stats.current_level >= 5) badges.push({ name: 'Veteran Contributor', description: 'Level 5+.' });
             return badges.sort((a, b) => a.name.localeCompare(b.name));
         });
 
         const nextLevelThreshold = Vue.computed(() => {
-            const currentLevel = userStats.value.current_level;
-            const sortedLevels = Object.keys(LEVEL_THRESHOLDS).map(Number).sort((a, b) => a - b);
-            const nextLevelIndex = sortedLevels.findIndex(lvl => lvl > currentLevel);
-
-            if (nextLevelIndex !== -1) {
-                const nextLevel = sortedLevels[nextLevelIndex];
-                return {
-                    level: nextLevel,
-                    points: LEVEL_THRESHOLDS[nextLevel]
-                };
-            }
-
-            return { level: currentLevel, points: userStats.value.total_points || 0 };
+            const lvl = userStats.value.current_level;
+            const sorted = Object.keys(LEVEL_THRESHOLDS).map(Number).sort((a, b) => a - b);
+            const idx = sorted.findIndex(l => l > lvl);
+            if (idx !== -1) return { level: sorted[idx], points: LEVEL_THRESHOLDS[sorted[idx]] };
+            return { level: lvl, points: userStats.value.total_points || 0 };
         });
 
         const progressPercentage = Vue.computed(() => {
-            const currentPoints = userStats.value.total_points;
-            const currentLevel = userStats.value.current_level;
-
-            if (currentPoints === undefined) return 0;
-
-            const previousLevelPoints = LEVEL_THRESHOLDS[currentLevel] || 0;
-            const nextLevelPoints = nextLevelThreshold.value.points;
-
-            if (nextLevelPoints === currentPoints && nextLevelThreshold.value.level === currentLevel) {
-                return 100;
-            }
-
-            const levelSpan = nextLevelPoints - previousLevelPoints;
-            const pointsInLevel = currentPoints - previousLevelPoints;
-
-            if (levelSpan <= 0) return 0;
-
-            return Math.min(100, (pointsInLevel / levelSpan) * 100).toFixed(2);
+            const pts = userStats.value.total_points;
+            const lvl = userStats.value.current_level;
+            if (pts === undefined) return 0;
+            const prevPts = LEVEL_THRESHOLDS[lvl] || 0;
+            const nextPts = nextLevelThreshold.value.points;
+            if (nextPts === pts && nextLevelThreshold.value.level === lvl) return 100;
+            const span = nextPts - prevPts;
+            if (span <= 0) return 0;
+            return Math.min(100, ((pts - prevPts) / span) * 100);
         });
 
-        // --- LIFECYCLE ---
-        Vue.onMounted(() => {
-            fetchUserStats();
+        /* ── Chart data ──────────────────────────────────────────────── */
+
+        const levelGaugeData = Vue.computed(() => ({
+            title:    `Level ${userStats.value.current_level}`,
+            subtitle: `Progress to level ${nextLevelThreshold.value.level}`,
+            series: [{ name: 'Level Progress', values: [Math.round(progressPercentage.value)] }],
+            meta:   { unit: '%' }
+        }));
+
+        const radarData = Vue.computed(() => {
+            const s = userStats.value;
+            const normalize = (v, max) => max > 0 ? Math.min(100, Math.round((v / max) * 100)) : 0;
+            return {
+                title:      'Contribution Profile',
+                subtitle:   'Normalised multi-axis score',
+                categories: ['Rules', 'Suggestions', 'Popularity', 'Streak', 'Liked'],
+                series: [{
+                    name:   'Score',
+                    values: [
+                        normalize(s.rules_owned, 100),
+                        normalize(s.suggestions_accepted, 50),
+                        normalize(s.rules_popular_score, 5000),
+                        normalize(s.consecutive_days_active, 30),
+                        normalize(s.rules_liked, 50)
+                    ]
+                }]
+            };
         });
+
+        const pointsBarData = Vue.computed(() => ({
+            title:      'Contribution Metrics',
+            subtitle:   'Raw counts per activity type',
+            categories: ['Rules Owned', 'Accepted Suggestions', 'Rules Liked', 'Streak (days)'],
+            series: [{
+                name:   'Count',
+                values: [
+                    userStats.value.rules_owned,
+                    userStats.value.suggestions_accepted,
+                    userStats.value.rules_liked,
+                    userStats.value.consecutive_days_active
+                ]
+            }]
+        }));
+
+        Vue.onMounted(fetchUserStats);
 
         return {
-            userStats,
-            loading,
-            computedBadges,
-            nextLevelThreshold,
-            progressPercentage,
-            getBadgeClass,
-            getBadgeIcon
+            userStats, loading, computedBadges, nextLevelThreshold, progressPercentage,
+            getBadgeClass, getBadgeIcon, levelGaugeData, radarData, pointsBarData
         };
     },
     template: `
-    <div class=" p-1">
-        <div v-if="!loading && userStats.total_points !== undefined" class="row">
-            <!-- Core Stats Card -->
-            <div class="col-lg-5 mb-4">
-                <div class="card shadow h-100">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">
-                            <i class="fas fa-chart-bar me-2"></i> Core Stats (Level [[ userStats.current_level ]])
-                            <i class="fas fa-question-circle text-dark ms-1"
-                               title="Current contribution level. Earn points to reach the next one!"></i>
-                        </h5>
+<div class="ud-charts-root">
+
+    <div v-if="loading" class="ud-charts-loader">
+        <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
+        <span class="ms-3 text-muted fw-medium">Loading contribution data…</span>
+    </div>
+
+    <div v-else-if="userStats.total_points !== undefined">
+
+        <!-- KPI row -->
+        <div class="row g-3 mb-4">
+            <div class="col-sm-3">
+                <div class="ud-kpi-card ud-kpi-card--gold">
+                    <div class="ud-kpi-icon"><i class="fas fa-trophy"></i></div>
+                    <div class="ud-kpi-body">
+                        <div class="ud-kpi-value">[[ userStats.total_points.toLocaleString() ]]</div>
+                        <div class="ud-kpi-label">Reputation Points</div>
                     </div>
-                    <div class="card-body p-4">
-                        <div class="text-center mb-4 p-3 rounded-3" style="background: linear-gradient(135deg, rgba(40, 167, 69, 0.1) 0%, rgba(40, 167, 69, 0.05) 100%); border: 1px solid rgba(40, 167, 69, 0.2);">
-                            <small class="text-uppercase fw-bold text-muted" style="letter-spacing: 1px;">Reputation Score</small>
-                            <p class="h2 fw-bold text-success mb-0">
-                                <i class="fas fa-trophy me-2"></i>[[ userStats.total_points.toLocaleString() ]]
-                            </p>
+                </div>
+            </div>
+            <div class="col-sm-3">
+                <div class="ud-kpi-card ud-kpi-card--blue">
+                    <div class="ud-kpi-icon"><i class="fas fa-ranking-star"></i></div>
+                    <div class="ud-kpi-body">
+                        <div class="ud-kpi-value">#[[ userStats.global_rank || '—' ]]</div>
+                        <div class="ud-kpi-label">Global Rank</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-3">
+                <div class="ud-kpi-card ud-kpi-card--purple">
+                    <div class="ud-kpi-icon"><i class="fas fa-fire-flame-curved"></i></div>
+                    <div class="ud-kpi-body">
+                        <div class="ud-kpi-value">[[ userStats.consecutive_days_active ]]d</div>
+                        <div class="ud-kpi-label">Active Streak</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-3">
+                <div class="ud-kpi-card ud-kpi-card--green">
+                    <div class="ud-kpi-icon"><i class="fas fa-check-double"></i></div>
+                    <div class="ud-kpi-body">
+                        <div class="ud-kpi-value">[[ userStats.suggestions_accepted ]]</div>
+                        <div class="ud-kpi-label">Accepted Edits</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section header -->
+        <div class="ud-section-header mb-3">
+            <i class="fas fa-bolt ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">Level & Profile</div>
+                <div class="ud-section-sub">XP progress and multi-dimensional contribution score</div>
+            </div>
+        </div>
+
+        <!-- Row 1: Stats list + Level gauge -->
+        <div class="row g-3 mb-4">
+            <div class="col-lg-5">
+                <div class="ud-stat-card h-100">
+                    <div class="ud-stat-card-header">
+                        <i class="fas fa-list-check me-2"></i>
+                        Core Stats — Level [[ userStats.current_level ]]
+                    </div>
+                    <div class="ud-stat-card-body">
+                        <div class="ud-rep-score">
+                            <span class="ud-rep-label">Reputation Score</span>
+                            <span class="ud-rep-value">[[ userStats.total_points.toLocaleString() ]]</span>
                         </div>
-
-                        <ul class="list-unstyled fw-medium mb-0">
-                            <li class="d-flex justify-content-between align-items-center mb-3 p-2 rounded-2 border-start border-primary border-4 shadow-sm bg-light bg-opacity-50">
-                                <span><i class="fas fa-globe-americas me-2 text-primary"></i> Global Rank</span>
-                                <span class="badge rounded-pill bg-primary shadow-sm" style="min-width: 70px; font-size: 0.9rem; padding: 8px;">
-                                    #[[ userStats.global_rank || 'N/A' ]]
-                                </span>
+                        <ul class="ud-stat-list">
+                            <li class="ud-stat-item ud-stat-item--blue">
+                                <span><i class="fas fa-globe-americas me-2"></i>Global Rank</span>
+                                <span class="ud-stat-badge ud-stat-badge--blue">#[[ userStats.global_rank || 'N/A' ]]</span>
                             </li>
-
-                            <li class="d-flex justify-content-between align-items-center mb-3 p-2 rounded-2 border-start border-success border-4 shadow-sm bg-light bg-opacity-50">
-                                <span><i class="fas fa-check-circle me-2 text-success"></i> Accepted Suggestions</span>
-                                <span class="badge rounded-pill bg-success shadow-sm" style="min-width: 70px; padding: 8px;">
-                                    [[ userStats.suggestions_accepted ]]
-                                </span>
+                            <li class="ud-stat-item ud-stat-item--green">
+                                <span><i class="fas fa-check-circle me-2"></i>Accepted Suggestions</span>
+                                <span class="ud-stat-badge ud-stat-badge--green">[[ userStats.suggestions_accepted ]]</span>
                             </li>
-
-                            <li class="d-flex justify-content-between align-items-center mb-3 p-2 rounded-2 border-start border-info border-4 shadow-sm bg-light bg-opacity-50">
-                                <span><i class="fas fa-cloud-upload-alt me-2 text-info"></i> Rules Imported</span>
-                                <span class="badge rounded-pill bg-info text-white shadow-sm" style="min-width: 70px; padding: 8px;">
-                                    [[ userStats.rules_owned ]]
-                                </span>
+                            <li class="ud-stat-item ud-stat-item--teal">
+                                <span><i class="fas fa-cloud-upload-alt me-2"></i>Rules Owned</span>
+                                <span class="ud-stat-badge ud-stat-badge--teal">[[ userStats.rules_owned ]]</span>
                             </li>
-
-                            <li class="d-flex justify-content-between align-items-center mb-3 p-2 rounded-2 border-start border-warning border-4 shadow-sm bg-light bg-opacity-50">
-                                <span><i class="fas fa-fire-alt me-2 text-warning"></i> Activity Streak</span>
-                                <span class="badge rounded-pill bg-warning text-dark shadow-sm" style="min-width: 70px; padding: 8px;">
-                                    [[ userStats.consecutive_days_active ]] days
-                                </span>
+                            <li class="ud-stat-item ud-stat-item--orange">
+                                <span><i class="fas fa-fire-alt me-2"></i>Activity Streak</span>
+                                <span class="ud-stat-badge ud-stat-badge--orange">[[ userStats.consecutive_days_active ]]d</span>
                             </li>
-
-                            <li class="d-flex justify-content-between align-items-center mb-3 p-2 rounded-2 border-start border-danger border-4 shadow-sm bg-light bg-opacity-50">
-                                <span><i class="fas fa-heart me-2 text-danger"></i> Rules Liked</span>
-                                <span class="badge rounded-pill bg-danger shadow-sm" style="min-width: 70px; padding: 8px;">
-                                    [[ userStats.rules_liked ]]
-                                </span>
+                            <li class="ud-stat-item ud-stat-item--red">
+                                <span><i class="fas fa-heart me-2"></i>Rules Liked</span>
+                                <span class="ud-stat-badge ud-stat-badge--red">[[ userStats.rules_liked ]]</span>
                             </li>
-
-                            <li class="d-flex justify-content-between align-items-center p-2 rounded-2 border-start border-indigo border-4 shadow-sm bg-light bg-opacity-50" style="border-left-color: #6610f2 !important;">
-                                <span><i class="fas fa-star me-2" style="color: #6610f2;"></i> Popularity Score</span>
-                                <span class="badge rounded-pill shadow-sm text-white" style="min-width: 70px; padding: 8px; background-color: #6610f2;">
-                                    [[ userStats.rules_popular_score.toLocaleString() ]]
-                                </span>
+                            <li class="ud-stat-item ud-stat-item--purple">
+                                <span><i class="fas fa-star me-2"></i>Popularity Score</span>
+                                <span class="ud-stat-badge ud-stat-badge--purple">[[ userStats.rules_popular_score.toLocaleString() ]]</span>
                             </li>
                         </ul>
-                    </div>
-                    <div class="card-footer text-center">
-                        <div class="progress" role="progressbar" aria-label="Level Progress"
-                             :aria-valuenow="progressPercentage" aria-valuemin="0" aria-valuemax="100"
-                             style="height: 20px;">
-                            <div class="progress-bar bg-success" :style="{ width: progressPercentage + '%' }">
-                                Level [[ userStats.current_level ]] Progress
-                            </div>
+                        <div class="ud-next-level">
+                            Next: Level [[ nextLevelThreshold.level ]] — [[ nextLevelThreshold.points.toLocaleString() ]] pts needed
                         </div>
-                        <small class="text-muted mt-2 d-block">
-                            Next level (L[[ nextLevelThreshold.level ]]): [[ nextLevelThreshold.points.toLocaleString() ]] points
-                        </small>
                     </div>
                 </div>
             </div>
-
-            <!-- Earned Badges Card -->
-            <div class="col-lg-7 mb-4">
-                <div class="card shadow h-100">
-                    <div class="card-header bg-secondary text-white">
-                        <h5 class="mb-0">
-                            <i class="fas fa-award me-2"></i> Earned Badges ([[ computedBadges.length ]])
-                            <i class="fas fa-question-circle text-dark ms-1"
-                               title="Badges awarded based on points and contribution metrics."></i>
-                        </h5>
-                    </div>
-                    <div class="card-body d-flex flex-wrap align-content-start">
-                        <div v-if="computedBadges.length > 0">
-                            <span class="badge rounded-pill me-2 mb-2 p-2 badge-custom"
-                                  :class="getBadgeClass(badge.name)"
-                                  v-for="badge in computedBadges"
-                                  :key="badge.name"
-                                  :title="badge.description">
-                                <i :class="getBadgeIcon(badge.name) + ' me-1'"></i>
-                                [[ badge.name ]]
-                            </span>
+            <div class="col-lg-7">
+                <div class="row g-3 h-100">
+                    <div class="col-12">
+                        <div class="ud-chart-card ud-chart-card--accent-gold h-100">
+                            <chart-viewer :data="levelGaugeData" views="gauge" height="320px"></chart-viewer>
                         </div>
-                        <p v-else class="text-muted m-auto">No badges earned yet. Start contributing!</p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Loading State -->
-        <div v-else class="text-center p-5" style="color: var(--subtle-text-color);">
-            <i class="fas fa-spinner fa-spin fa-2x"></i> Loading user stats...
+        <!-- Section header -->
+        <div class="ud-section-header mb-3">
+            <i class="fas fa-spider ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">Analysis</div>
+                <div class="ud-section-sub">Contribution profile and metric breakdown</div>
+            </div>
         </div>
+
+        <!-- Row 2: Radar + Bar -->
+        <div class="row g-3 mb-4">
+            <div class="col-lg-5">
+                <div class="ud-chart-card ud-chart-card--accent-purple">
+                    <chart-viewer :data="radarData" views="radar" height="380px"></chart-viewer>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <div class="ud-chart-card ud-chart-card--accent-blue">
+                    <chart-viewer :data="pointsBarData" :views="['bar', 'bar-h']" height="380px"></chart-viewer>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section header -->
+        <div class="ud-section-header mb-3">
+            <i class="fas fa-award ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">Earned Badges</div>
+                <div class="ud-section-sub">[[ computedBadges.length ]] badge[[ computedBadges.length !== 1 ? 's' : '' ]] unlocked</div>
+            </div>
+        </div>
+
+        <!-- Badges -->
+        <div class="ud-badges-card">
+            <template v-if="computedBadges.length">
+                <span v-for="badge in computedBadges" :key="badge.name"
+                      class="badge rounded-pill p-2 fs-6 me-2 mb-2"
+                      :class="getBadgeClass(badge.name)"
+                      :title="badge.description">
+                    <i :class="getBadgeIcon(badge.name) + ' me-1'"></i>[[ badge.name ]]
+                </span>
+            </template>
+            <p v-else class="text-muted mb-0 text-center py-3">
+                <i class="fas fa-medal me-2 opacity-25"></i>No badges yet — keep contributing!
+            </p>
+        </div>
+
     </div>
+
+    <div v-else class="ud-charts-loader">
+        <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+    </div>
+</div>
     `
 };
 

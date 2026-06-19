@@ -8,63 +8,73 @@
 .cv-root {
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md, 10px);
-    overflow: hidden;
-    background: var(--bg-surface);
+    border: 1px solid var(--border-color, var(--border));
+    border-radius: 12px;
+    overflow: visible;
+    background: var(--card-bg-color, var(--bg-surface));
     min-height: 200px;
+    /* clip children except the tab row so active tabs can overlap the border */
+    clip-path: none;
 }
+
 
 /*---TABS---*/
 
 .cv-tabs {
     display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 6px 10px;
-    background: var(--bg-elevated, var(--bg-surface));
-    border-bottom: 1px solid var(--border);
+    align-items: flex-end;
+    gap: 0;
+    padding: 0 10px;
+    background: var(--card-bg-color, var(--bg-surface));
+    border-bottom: 2px solid var(--border-color, var(--border));
     flex-shrink: 0;
     flex-wrap: wrap;
-    min-height: 40px;
+    min-height: 44px;
 }
 
 .cv-tabs--single {
-    padding: 4px 8px;
-    min-height: 34px;
+    padding: 0 8px;
+    min-height: 36px;
+    border-bottom-width: 1px;
 }
 
 .cv-tab {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 4px 10px;
+    padding: 8px 14px;
     border: 1px solid transparent;
-    border-radius: var(--radius-sm, 6px);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
     background: transparent;
-    color: var(--text-muted);
-    font-size: .72rem;
-    font-weight: 500;
+    color: var(--subtle-text-color, var(--text-muted));
+    font-size: .78rem;
+    font-weight: 600;
     font-family: var(--font-sans);
     cursor: pointer;
-    transition: background .15s, color .15s, border-color .15s;
+    transition: background .14s, color .14s, border-color .14s;
     white-space: nowrap;
+    margin-bottom: -2px;
+    letter-spacing: .01em;
 }
 
 .cv-tab i {
-    font-size: .68rem;
-    opacity: .8;
+    font-size: .72rem;
+    opacity: .75;
 }
 
 .cv-tab:hover {
-    background: var(--bg-body);
-    color: var(--text-secondary);
+    background: var(--light-bg-color, var(--bg-body));
+    color: var(--text-color, var(--text-secondary));
+    border-color: var(--border-color, var(--border));
+    border-bottom-color: transparent;
 }
 
 .cv-tab.is-active {
-    background: var(--brand-dim, rgba(0,0,0,.06));
-    color: var(--brand);
-    border-color: var(--border);
+    background: var(--card-bg-color, var(--bg-surface));
+    color: #0d6efd;
+    border-color: var(--border-color, var(--border));
+    border-bottom-color: var(--card-bg-color, var(--bg-surface));
 }
 
 .cv-tab-spacer {
@@ -75,22 +85,24 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
+    padding: 4px 10px;
     height: 28px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm, 6px);
+    border: 1px solid var(--border-color, var(--border));
+    border-radius: 20px;
     background: transparent;
-    color: var(--text-muted);
+    color: var(--subtle-text-color, var(--text-muted));
     font-size: .72rem;
     cursor: pointer;
-    transition: background .15s, color .15s, border-color .15s;
+    transition: background .14s, color .14s, border-color .14s;
     flex-shrink: 0;
+    margin-bottom: 6px;
+    align-self: center;
 }
 
 .cv-action:hover {
-    background: var(--bg-body);
-    color: var(--text-main);
-    border-color: var(--border);
+    background: var(--light-bg-color, var(--bg-body));
+    color: #0d6efd;
+    border-color: #0d6efd;
 }
 
 /*---CANVAS---*/
@@ -100,6 +112,7 @@
     position: relative;
     overflow: hidden;
     min-height: 0;
+    border-radius: 0 0 11px 11px;
 }
 
 .cv-echarts {
@@ -234,5 +247,5 @@
 
 @media (max-width: 480px) {
     .cv-tab span { display: none; }
-    .cv-tab { padding: 4px 7px; }
+    .cv-tab { padding: 7px 9px; }
 }

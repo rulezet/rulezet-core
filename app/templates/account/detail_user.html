@@ -1,7 +1,11 @@
 {% extends 'base.html' %}
 {% block title %}{{ user.username }} — Rulezet{% endblock %}
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/user_detail.css') }}">
 {% endblock %}
 
@@ -15,90 +19,29 @@
 
     <div v-else class="container my-5">
 
-        <!-- Breadcrumb -->
-        <nav aria-label="breadcrumb" class="mb-4">
-            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
-                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                <li class="breadcrumb-item"><a href="/account/list_user" class="text-decoration-none text-muted">Users</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">{{ user.username }}</li>
-            </ol>
-        </nav>
+      
 
-        <!-- Header Section -->
-        <div class="mb-5 header-section text-center">
-            <div class="position-relative d-inline-block mb-3">
-                <div class="rounded-circle shadow-sm d-flex align-items-center justify-content-center bg-light border border-2 border-primary"
-                    style="width:120px;height:120px;overflow:hidden;">
-                    {% if user.profile_picture %}
-                        <img src="{{ user.profile_picture }}"
-                            style="width:100%;height:100%;object-fit:cover;">
-                    {% else %}
-                        <i class="fas fa-user fa-4x text-primary opacity-50"></i>
-                    {% endif %}
+        <!-- Banner -->
+        <div class="explorer-banner mb-4">
+            <i class="fa-solid fa-user banner-watermark"></i>
+              <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                    <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                    <li class="breadcrumb-item"><a href="/account/list_user" class="text-decoration-none text-muted">Users</a></li>
+                    <li class="breadcrumb-item active text-muted" aria-current="page">{{ user.username }}</li>
+                </ol>
+            </nav>
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="banner-icon"><i class="fa-solid fa-user"></i></div>
+                <div>
+                    <h2 class="fw-bold mb-1">{{ user.first_name }} {{ user.last_name }}</h2>
+                    <div class="banner-accent"></div>
                 </div>
-                <span class="position-absolute bottom-0 end-0 p-2 bg-success border border-2 border-white rounded-circle"
-                    title="Online" style="margin-bottom:5px;margin-right:5px;"></span>
             </div>
-            <h1 class="mb-2 text-primary fw-bold text-uppercase tracking-wider" style="letter-spacing: 2px;">
-                {{ user.first_name }} {{ user.last_name }}
-            </h1>
-
-            <p class="text-muted mb-0 fw-medium">
-                <i class="fas fa-id-badge me-2 text-secondary"></i>
-                DETAILED INFORMATION AND ACTIVITY OVERVIEW FOR USER {{ user.username }}
+            <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+                Profile and activity overview for <strong>@{{ user.username }}</strong>{% if user.location %} · <i class="fas fa-location-dot me-1"></i>{{ user.location }}{% endif %}
             </p>
-
-            <div class="mx-auto mt-3 bg-primary opacity-25" style="width: 60px; height: 4px; border-radius: 2px;"></div>
-
-            <!-- Follow button (only for authenticated users viewing someone else's profile) -->
-            {% if current_user.is_authenticated and current_user.id != user.id %}
-            <div id="follow-btn-{{ user.id }}" class="mt-3 d-inline-block">
-                <button id="follow-toggle-{{ user.id }}"
-                        class="btn btn-sm btn-follow"
-                        onclick="toggleFollow({{ user.id }}, this)">
-                    <i class="fa-solid fa-user-plus me-1"></i>Follow
-                </button>
-                <span id="follow-count-{{ user.id }}" class="text-muted small ms-2"></span>
-            </div>
-            <script>
-            (function() {
-                const userId = {{ user.id }};
-                const btn    = document.getElementById('follow-toggle-' + userId);
-                const cnt    = document.getElementById('follow-count-' + userId);
-
-                fetch('/notifications/follow/' + userId + '/status')
-                    .then(r => r.json())
-                    .then(d => {
-                        btn.innerHTML = d.is_following
-                            ? '<i class="fa-solid fa-user-check me-1"></i>Following'
-                            : '<i class="fa-solid fa-user-plus me-1"></i>Follow';
-                        btn.className = 'btn btn-sm btn-follow' + (d.is_following ? ' btn-follow--following' : ' btn-primary');
-                        cnt.textContent = d.followers + ' follower' + (d.followers !== 1 ? 's' : '');
-                    }).catch(() => {});
-            })();
-
-            function toggleFollow(userId, btn) {
-                const csrf = document.getElementById('csrf_token')?.value || '';
-                const isFollowing = btn.classList.contains('btn-follow--following');
-                const url    = isFollowing ? '/notifications/unfollow/' + userId : '/notifications/follow/' + userId;
-                const method = 'POST';
-                fetch(url, { method, headers: { 'X-CSRFToken': csrf } })
-                    .then(r => r.json())
-                    .then(d => {
-                        fetch('/notifications/follow/' + userId + '/status')
-                            .then(r => r.json())
-                            .then(s => {
-                                btn.innerHTML = s.is_following
-                                    ? '<i class="fa-solid fa-user-check me-1"></i>Following'
-                                    : '<i class="fa-solid fa-user-plus me-1"></i>Follow';
-                                btn.className = 'btn btn-sm btn-follow' + (s.is_following ? ' btn-follow--following' : ' btn-primary');
-                                const cnt = document.getElementById('follow-count-' + userId);
-                                if (cnt) cnt.textContent = s.followers + ' follower' + (s.followers !== 1 ? 's' : '');
-                            });
-                    }).catch(() => {});
-            }
-            </script>
-            {% endif %}
         </div>
 
         <!-- Tabs -->
@@ -127,175 +70,270 @@
 
             <!-- ── Tab 1 : Global Info ── -->
             <div class="tab-pane fade show active" id="chap1-pane" role="tabpanel" aria-labelledby="chap1-tab">
-                <div class="User-detail-global-info">
 
-                    <!-- Avatar -->
-                    <div class="avatar-container">
-                        <div class="user-avatar" style="overflow:hidden;">
+                <!-- ── Profile hero card ── -->
+                <div class="ud-profile-hero mb-4">
+                    <div class="ud-profile-hero-bg"></div>
+                    <div class="ud-profile-hero-body">
+
+                        <!-- Avatar -->
+                        <div class="ud-profile-avatar-wrap">
                             {% if user.profile_picture %}
-                                <img src="{{ user.profile_picture }}"
-                                    style="width:100%;height:100%;object-fit:cover;">
+                                <img src="{{ user.profile_picture }}" class="ud-profile-avatar" alt="{{ user.username }}">
                             {% else %}
-                                {{ user.first_name[0]  }}
+                                <div class="ud-profile-avatar ud-profile-avatar--initials">
+                                    {{ user.first_name[0] }}{{ user.last_name[0] }}
+                                </div>
                             {% endif %}
+                            <span class="ud-profile-online-dot" title="Status"></span>
                         </div>
-                        <div class="avatar-info">
-                            <div class="avatar-name">{{ user.first_name }} {{ user.last_name }}</div>
-                        </div>
-                    </div>
-                    <!-- Main Info Grid -->
-                    <div class="global-info-grid">
-                        <div class="info-item">
-                            <label class="info-item-label">First Name</label>
-                            <div class="info-item-value">{{ user.first_name }}</div>
-                        </div>
-                        <div class="info-item">
-                            <label class="info-item-label">Last Name</label>
-                            <div class="info-item-value">{{ user.last_name }}</div>
-                        </div>
-                        <div class="info-item">
-                            <label class="info-item-label">User ID</label>
-                            <div class="info-item-value">#{{ user.id }}</div>
-                        </div>
-                        <div class="info-item">
-                            <label class="info-item-label">Verification</label>
-                            {% if user.is_verified %}
-                            <div class="info-badge badge-verified">
-                                <i class="fas fa-check-circle"></i> Verified
+
+                        <!-- Identity -->
+                        <div class="ud-profile-identity">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <h2 class="ud-profile-name mb-0">{{ user.first_name }} {{ user.last_name }}</h2>
+                                {% if user.is_admin %}
+                                <span class="ud-profile-badge ud-profile-badge--admin">
+                                    <i class="fas fa-crown me-1"></i>Admin
+                                </span>
+                                {% endif %}
+                                {% if user.is_verified %}
+                                <span class="ud-profile-badge ud-profile-badge--verified">
+                                    <i class="fas fa-circle-check me-1"></i>Verified
+                                </span>
+                                {% endif %}
                             </div>
-                            {% else %}
-                            <div class="info-badge badge-unverified">
-                                <i class="fas fa-clock"></i> Unverified
-                            </div>
+                            {% if user.username %}
+                            <div class="ud-profile-username">@{{ user.username }}</div>
                             {% endif %}
-                        </div>
-                        <div class="info-item">
-                            <label class="info-item-label">Status</label>
-                            {% if user.is_admin %}
-                            <div class="info-badge badge-admin">
-                                <i class="fas fa-crown"></i> Administrator
-                            </div>
-                            {% else %}
-                            <div class="info-badge">
-                                <i class="fas fa-user"></i> User
-                            </div>
+                            {% if user.bio %}
+                            <p class="ud-profile-bio">{{ user.bio }}</p>
                             {% endif %}
-                        </div>
-                        {% if user.location %}
-                        <div class="info-item">
-                            <label class="info-item-label">Location</label>
-                            <div class="info-item-value">
-                                <i class="fa-solid fa-location-dot me-1 text-muted"></i>{{ user.location }}
-                            </div>
-                        </div>
-                        {% endif %}
-                        <div class="info-item">
-                            <label class="info-item-label">Member since</label>
-                            <div class="info-item-value">
-                                {{ user.created_at if user.created_at else '—' }}
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <label class="info-item-label">Last seen</label>
-                            <div class="info-item-value">
-                                {{ user.last_seen if user.last_seen else '—' }}
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <label class="info-item-label">Username</label>
-                            <div class="info-item-value">
-                                {{ user.username if user.username else '—' }}
-                            </div>
-                        </div>
-                        {% if user.bio %}
-                        <div class="info-item" style="grid-column: 1 / -1;">
-                            <label class="info-item-label">Bio</label>
-                            <div class="info-item-value">{{ user.bio }}</div>
-                        </div>
-                        {% endif %}
-                        {% if user.website_url or user.github_url or user.twitter_url %}
-                        <div class="info-item" style="grid-column: 1 / -1;">
-                            <label class="info-item-label">Links</label>
-                            <div class="d-flex gap-3 flex-wrap mt-1">
+
+                            <!-- Social links -->
+                            {% if user.website_url or user.github_url or user.twitter_url or user.location %}
+                            <div class="ud-profile-links">
+                                {% if user.location %}
+                                <span class="ud-profile-link">
+                                    <i class="fas fa-location-dot"></i>{{ user.location }}
+                                </span>
+                                {% endif %}
                                 {% if user.website_url %}
-                                <a href="{{ user.website_url }}" target="_blank" rel="noopener"
-                                class="text-muted small text-decoration-none">
-                                    <i class="fa-solid fa-globe me-1"></i>{{ user.website_url }}
+                                <a href="{{ user.website_url }}" target="_blank" rel="noopener" class="ud-profile-link ud-profile-link--clickable">
+                                    <i class="fas fa-globe"></i>{{ user.website_url }}
                                 </a>
                                 {% endif %}
                                 {% if user.github_url %}
-                                <a href="{{ user.github_url }}" target="_blank" rel="noopener"
-                                class="text-muted small text-decoration-none">
-                                    <i class="fa-brands fa-github me-1"></i>{{ user.github_url }}
+                                <a href="{{ user.github_url }}" target="_blank" rel="noopener" class="ud-profile-link ud-profile-link--clickable">
+                                    <i class="fab fa-github"></i>{{ user.github_url }}
                                 </a>
                                 {% endif %}
                                 {% if user.twitter_url %}
-                                <a href="{{ user.twitter_url }}" target="_blank" rel="noopener"
-                                class="text-muted small text-decoration-none">
-                                    <i class="fa-brands fa-x me-1"></i>{{ user.twitter_url }}
+                                <a href="{{ user.twitter_url }}" target="_blank" rel="noopener" class="ud-profile-link ud-profile-link--clickable">
+                                    <i class="fab fa-x-twitter"></i>{{ user.twitter_url }}
                                 </a>
                                 {% endif %}
                             </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Follow button -->
+                        {% if current_user.is_authenticated and current_user.id != user.id %}
+                        <div class="ud-profile-follow" id="follow-btn-{{ user.id }}">
+                            <button id="follow-toggle-{{ user.id }}"
+                                    class="btn btn-sm btn-follow"
+                                    onclick="toggleFollow({{ user.id }}, this)">
+                                <i class="fa-solid fa-user-plus me-1"></i>Follow
+                            </button>
+                            <span id="follow-count-{{ user.id }}" class="ud-follow-count"></span>
                         </div>
                         {% endif %}
+
                     </div>
+                </div>
 
-                    <!-- Admin Only Section -->
-                    {% if current_user.is_admin() %}
-                    <div class="admin-only-info">
-                        <div class="info-section-header d-flex align-items-center gap-2">
-                            <i class="fas fa-lock"></i>
-                            <h3 class="mb-0">Administrator Information</h3>
-                            <span class="admin-only-label">Admins Only</span>
-                            <!-- Toggle global blur -->
-                            <button class="btn btn-sm btn-outline-secondary ms-auto"
-                                style="font-size:0.75rem; padding:3px 10px; border-radius:20px;"
-                                @click="toggleAdminBlur">
-                                <i :class="adminBlurEnabled ? 'fas fa-eye-slash' : 'fas fa-eye'" class="me-1"></i>
-                                [[ adminBlurEnabled ? 'Reveal all' : 'Hide all' ]]
-                            </button>
+                <!-- ── Identity details ── -->
+                <div class="ud-section-header mb-3">
+                    <i class="fas fa-id-card ud-section-icon"></i>
+                    <div>
+                        <div class="ud-section-title">Profile Details</div>
+                        <div class="ud-section-sub">Account information and membership data</div>
+                    </div>
+                </div>
+
+                <div class="ud-info-grid mb-4">
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba(13,110,253,.1);color:#0d6efd;">
+                            <i class="fas fa-user"></i>
                         </div>
-
-                        <div class="global-info-grid" style="margin-top: 0;">
-
-                            <!-- Email -->
-                            <div class="info-item">
-                                <label class="info-item-label">Email Address</label>
-                                <div :class="['info-item-value', adminBlurEnabled && !revealedFields.has('email') ? 'admin-sensitive' : '']"
-                                    @click="toggleRevealField('email')"
-                                    :title="adminBlurEnabled && !revealedFields.has('email') ? 'Click to reveal' : ''"
-                                    :style="adminBlurEnabled && !revealedFields.has('email') ? 'cursor:pointer' : ''">
-                                    {{ user.email }}
-                                </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">First Name</div>
+                            <div class="ud-info-cell-value">{{ user.first_name }}</div>
+                        </div>
+                    </div>
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba(13,110,253,.1);color:#0d6efd;">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Last Name</div>
+                            <div class="ud-info-cell-value">{{ user.last_name }}</div>
+                        </div>
+                    </div>
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba(111,66,193,.1);color:#6f42c1;">
+                            <i class="fas fa-at"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Username</div>
+                            <div class="ud-info-cell-value">{{ user.username if user.username else '—' }}</div>
+                        </div>
+                    </div>
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba(108,117,125,.1);color:#6c757d;">
+                            <i class="fas fa-hashtag"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">User ID</div>
+                            <div class="ud-info-cell-value">#{{ user.id }}</div>
+                        </div>
+                    </div>
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba(25,135,84,.1);color:#198754;">
+                            <i class="fas fa-calendar-plus"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Member since</div>
+                            <div class="ud-info-cell-value">{{ user.created_at if user.created_at else '—' }}</div>
+                        </div>
+                    </div>
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba(13,202,240,.1);color:#0dcaf0;">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Last seen</div>
+                            <div class="ud-info-cell-value">{{ user.last_seen if user.last_seen else '—' }}</div>
+                        </div>
+                    </div>
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba({% if user.is_verified %}25,135,84{% else %}255,193,7{% endif %},.12);color:{% if user.is_verified %}#198754{% else %}#d4a700{% endif %};">
+                            <i class="fas fa-{% if user.is_verified %}circle-check{% else %}hourglass-half{% endif %}"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Verification</div>
+                            <div class="ud-info-cell-value">
+                                {% if user.is_verified %}
+                                <span class="ud-profile-badge ud-profile-badge--verified">
+                                    <i class="fas fa-circle-check me-1"></i>Verified
+                                </span>
+                                {% else %}
+                                <span class="ud-profile-badge ud-profile-badge--pending">
+                                    <i class="fas fa-hourglass-half me-1"></i>Unverified
+                                </span>
+                                {% endif %}
                             </div>
-
-                            <!-- Connection Status -->
-                            <div class="info-item">
-                                <label class="info-item-label">Connection Status</label>
-                                <div :class="adminBlurEnabled && !revealedFields.has('status') ? 'admin-sensitive' : ''"
-                                    @click="toggleRevealField('status')"
-                                    :title="adminBlurEnabled && !revealedFields.has('status') ? 'Click to reveal' : ''"
-                                    :style="adminBlurEnabled && !revealedFields.has('status') ? 'cursor:pointer' : ''">
-                                    {% if user.is_connected %}
-                                    <div class="info-badge badge-connected">
-                                        <i class="fas fa-circle"></i> Connected
-                                    </div>
-                                    {% else %}
-                                    <div class="info-badge badge-disconnected">
-                                        <i class="fas fa-circle"></i> Disconnected
-                                    </div>
-                                    {% endif %}
-                                </div>
+                        </div>
+                    </div>
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba({% if user.is_admin %}220,53,69{% else %}13,110,253{% endif %},.1);color:{% if user.is_admin %}#dc3545{% else %}#0d6efd{% endif %};">
+                            <i class="fas fa-{% if user.is_admin %}crown{% else %}user{% endif %}"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Role</div>
+                            <div class="ud-info-cell-value">
+                                {% if user.is_admin %}
+                                <span class="ud-profile-badge ud-profile-badge--admin">
+                                    <i class="fas fa-crown me-1"></i>Administrator
+                                </span>
+                                {% else %}
+                                <span class="ud-profile-badge ud-profile-badge--user">
+                                    <i class="fas fa-user me-1"></i>User
+                                </span>
+                                {% endif %}
                             </div>
-
+                        </div>
+                    </div>
+                    {% if user.location %}
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba(253,126,20,.1);color:#fd7e14;">
+                            <i class="fas fa-location-dot"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Location</div>
+                            <div class="ud-info-cell-value">{{ user.location }}</div>
                         </div>
                     </div>
                     {% endif %}
-
-                    <user-activity-stats-component :user-id="1"
-                        api-endpoint="/account/user_activity_stats/{{ user.id }}">
-                    </user-activity-stats-component>
                 </div>
+
+                <!-- ── Admin Only Section ── -->
+                {% if current_user.is_admin() %}
+                <div class="ud-section-header mb-3">
+                    <i class="fas fa-lock ud-section-icon" style="background:linear-gradient(135deg,#dc3545,#b02a37);"></i>
+                    <div>
+                        <div class="ud-section-title">Administrator Information</div>
+                        <div class="ud-section-sub">Sensitive data — visible to admins only</div>
+                    </div>
+                    <button class="btn btn-sm ms-auto ud-admin-reveal-btn" @click="toggleAdminBlur">
+                        <i :class="adminBlurEnabled ? 'fas fa-eye' : 'fas fa-eye-slash'" class="me-1"></i>
+                        [[ adminBlurEnabled ? 'Reveal all' : 'Hide all' ]]
+                    </button>
+                </div>
+
+                <div class="ud-info-grid ud-info-grid--admin mb-4">
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba(220,53,69,.1);color:#dc3545;">
+                            <i class="fas fa-envelope"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Email Address</div>
+                            <div :class="['ud-info-cell-value', adminBlurEnabled && !revealedFields.has('email') ? 'admin-sensitive' : '']"
+                                @click="toggleRevealField('email')"
+                                :title="adminBlurEnabled && !revealedFields.has('email') ? 'Click to reveal' : ''"
+                                :style="adminBlurEnabled && !revealedFields.has('email') ? 'cursor:pointer;user-select:none' : ''">
+                                {{ user.email }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba({% if user.is_connected %}25,135,84{% else %}108,117,125{% endif %},.1);color:{% if user.is_connected %}#198754{% else %}#6c757d{% endif %};">
+                            <i class="fas fa-circle"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Connection Status</div>
+                            <div :class="adminBlurEnabled && !revealedFields.has('status') ? 'admin-sensitive' : ''"
+                                @click="toggleRevealField('status')"
+                                :title="adminBlurEnabled && !revealedFields.has('status') ? 'Click to reveal' : ''"
+                                :style="adminBlurEnabled && !revealedFields.has('status') ? 'cursor:pointer;user-select:none' : ''">
+                                {% if user.is_connected %}
+                                <span class="ud-profile-badge ud-profile-badge--online">
+                                    <i class="fas fa-circle me-1" style="font-size:.55rem;"></i>Connected
+                                </span>
+                                {% else %}
+                                <span class="ud-profile-badge ud-profile-badge--offline">
+                                    <i class="fas fa-circle me-1" style="font-size:.55rem;"></i>Disconnected
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- ── Activity stats ── -->
+                <div class="ud-section-header mb-3">
+                    <i class="fas fa-chart-bar ud-section-icon"></i>
+                    <div>
+                        <div class="ud-section-title">Activity Overview</div>
+                        <div class="ud-section-sub">Votes, formats and contribution timeline</div>
+                    </div>
+                </div>
+
+                <user-activity-stats-component :user-id="{{ user.id }}"
+                    api-endpoint="/account/user_activity_stats/{{ user.id }}">
+                </user-activity-stats-component>
+
             </div>
 
             <!-- ── Tab 2 : Contributions ── -->
@@ -312,10 +350,19 @@
             <!-- ── Tab 3 : Rules Owned ── -->
             <div class="tab-pane fade" id="chap3-pane" role="tabpanel" aria-labelledby="chap3-tab">
                 <div class="User-detail-rule-info">
-                    <user-rules-management-component :user-id="{{ user.id }}" :view-only="true"
+                    <rule-list
+                        mode="read"
+                        default-view="table"
+                        :user-id="{{ user.id }}"
+                        :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
+                        :current-user-is-admin="{{ current_user.is_admin() | tojson }}"
+                        :can-vote="{{ current_user.is_authenticated | tojson }}"
+                        :can-favorite="{{ current_user.is_authenticated | tojson }}"
                         :csrf-token="'{{ csrf_token() }}'"
-                        :current-user-is-authenticated="'{{ current_user.is_authenticated }}'">
-                    </user-rules-management-component>
+                        :current-user-is-authenticated="{{ current_user.is_authenticated | tojson }}"
+                        :show-filters="true"
+                        :show-create="false">
+                    </rule-list>
                 </div>
             </div>
 
@@ -326,22 +373,25 @@
 
 
 {% block script %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script type="module">
     const { createApp, ref } = Vue;
     import { message_list, create_message } from '/static/js/toaster.js';
     import UserContributionStatsComponent from '/static/js/account/UserContributionStatsComponent.js';
-    import UserRulesManagementComponent from '/static/js/rule/ruleFetchTable.js';
     import UserActivityStatsComponent from '/static/js/account/UserActivityStatsComponent.js';
     import UserProposalsComponent from '/static/js/account/UserProposalsComponent.js';
+    import RuleList                  from '/static/js/rule/ruleList.js';
+    import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js';
+    import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
 
     createApp({
         delimiters: ['[[', ']]'],
         components: {
             UserContributionStatsComponent,
-            UserRulesManagementComponent,
             UserActivityStatsComponent,
-            UserProposalsComponent
+            UserProposalsComponent,
+            'rule-list':                   RuleList,
+            'tags-displays-list':          TagsDisplaysList,
+            'vulnerability-displays-list': VulnerabilityDisplaysList,
         },
         setup() {
             const isLoading = ref(false)
@@ -375,4 +425,41 @@
         }
     }).mount('#main-container')
 </script>
+
+{% if current_user.is_authenticated and current_user.id != user.id %}
+<script>
+(function() {
+    const userId = {{ user.id }};
+
+    function initFollow() {
+        const btn = document.getElementById('follow-toggle-' + userId);
+        const cnt = document.getElementById('follow-count-' + userId);
+        if (!btn) return;
+        fetch('/notifications/follow/' + userId + '/status')
+            .then(r => r.json())
+            .then(d => {
+                btn.innerHTML = d.is_following
+                    ? '<i class="fa-solid fa-user-check me-1"></i>Following'
+                    : '<i class="fa-solid fa-user-plus me-1"></i>Follow';
+                btn.className = 'btn btn-sm btn-follow' + (d.is_following ? ' btn-follow--following' : ' btn-primary');
+                if (cnt) cnt.textContent = d.followers + ' follower' + (d.followers !== 1 ? 's' : '');
+            }).catch(() => {});
+    }
+
+    window.toggleFollow = function(userId, btn) {
+        const csrf = document.getElementById('csrf_token')?.value || '';
+        const isFollowing = btn.classList.contains('btn-follow--following');
+        const url = isFollowing ? '/notifications/unfollow/' + userId : '/notifications/follow/' + userId;
+        fetch(url, { method: 'POST', headers: { 'X-CSRFToken': csrf } })
+            .then(r => r.json())
+            .then(() => initFollow())
+            .catch(() => {});
+    };
+
+    /* Run after Vue has mounted (tabs render lazily) */
+    document.addEventListener('DOMContentLoaded', initFollow);
+    setTimeout(initFollow, 300);
+})();
+</script>
+{% endif %}
 {% endblock %}
