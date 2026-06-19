@@ -222,7 +222,7 @@ export default {
                     :class="{ 'brs-rule-card--selected': isSelected(rule.id), 'brs-rule-card--dragging': draggingId === rule.id }"
                     draggable="true"
                     @dragstart="onDragStart($event, rule)"
-                    @dragend="draggingId = null"
+                    @dragend="onDragEnd"
                     @click="onCardClick(rule)"
                     style="cursor:pointer;"
                 >
@@ -308,7 +308,7 @@ export default {
                                 draggable="true"
                                 style="cursor:pointer;"
                                 @dragstart="onDragStart($event, rule)"
-                                @dragend="draggingId = null"
+                                @dragend="onDragEnd"
                                 @click="onCardClick(rule)">
                                 <td @click.stop class="brs-drag-cell" title="Drag to a folder">
                                     <i class="fas fa-grip-vertical brs-drag-icon"></i>
@@ -562,6 +562,11 @@ export default {
             ev.dataTransfer.setData('application/rulezet-rule', JSON.stringify(payload))
         }
 
+        function onDragEnd(ev) {
+            draggingId.value = null
+            if (ev.dataTransfer.dropEffect !== 'none') clearSelection()
+        }
+
         // ── Fetch ──────────────────────────────────────────────────
         let searchTimer = null
 
@@ -691,7 +696,7 @@ export default {
             selectedIds, allOnPageSelected,
             isHidden, isSelected, toggleSelect, togglePageSelection, clearSelection,
             addSingleRule, addSelected, onCardClick,
-            onDragStart, onFilterChange, onSearchInput, clearSearch, resetFilters,
+            onDragStart, onDragEnd, onFilterChange, onSearchInput, clearSearch, resetFilters,
             goToPage, setView, fetchData,
             footerInfo, fromNow, formatDate,
         }
