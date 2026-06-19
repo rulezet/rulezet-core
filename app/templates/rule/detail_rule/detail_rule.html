@@ -202,9 +202,12 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                         <div class="mb-4">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div class="d-flex align-items-center gap-2">
-                                    <h4 class="fw-bold mb-0 text-dark border-start border-primary border-4 ps-3">
-                                        Rule Content
-                                    </h4>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                                        <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                                            <i class="fa-solid fa-code me-1"></i>Rule Content
+                                        </span>
+                                    </div>
                                     <!-- badge to see the version [[currentRule.version]]-->
                                     <span class="badge bg-light text-primary rounded-pill border px-3"
                                         title="Version of the rule">
@@ -312,134 +315,140 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                                 </div>
                             </div>
 
-                            <div class="mt-2 d-flex justify-content-end">
-                                <a :href="'/rule/detail_rule/' + currentRule.id + '/history'"
-                                    class="btn btn-link btn-sm text-decoration-none text-muted p-0"
-                                    title="View all changes of the rule">
-                                    <i class="fas fa-clock me-1"></i>
-                                    <small class="fw-medium">History ([[ currentRuleHistoryCount > 0 ?
-                                        currentRuleHistoryCount : 0 ]])</small>
-                                </a>
-                            </div>
+                            
                         </div>
 
                         <!-- Actions bar -->
-                        <div class="mt-4 mb-3 p-3 rounded-3 border d-flex flex-wrap align-items-center gap-2"
-                             style="background: var(--light-bg-color);">
-
-                            <!-- Votes -->
-                            <div class="btn-group rounded-pill overflow-hidden" style="border:1px solid var(--border-color);">
-                                <button @click="vote('up', currentRule.id); animateClick($event)"
-                                        class="btn btn-sm px-3 border-0 border-end shadow-none btn-animate"
-                                        style="background:transparent; color:var(--text-color);">
-                                    <i class="fas fa-thumbs-up text-primary me-1"></i>[[ currentRule.vote_up ]]
-                                </button>
-                                <button @click="vote('down', currentRule.id); animateClick($event)"
-                                        class="btn btn-sm px-3 border-0 shadow-none btn-animate"
-                                        style="background:transparent; color:var(--text-color);">
-                                    <i class="fas fa-thumbs-down text-danger me-1"></i>[[ currentRule.vote_down ]]
-                                </button>
+                        <div class="mt-4 mb-3 rounded-3 border overflow-hidden" style="background: var(--light-bg-color);">
+                            <div class="px-3 pt-3 pb-2 d-flex align-items-center gap-2" style="border-bottom:1px solid var(--border-color);">
+                                <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                                <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                                    <i class="fa-solid fa-bolt me-1"></i>Actions
+                                </span>
                             </div>
+                            <div class="p-3 d-flex flex-wrap align-items-center gap-2">
 
-                            <!-- Favorite -->
-                            <button @click="favorite(currentRule.id)"
-                                    class="btn btn-sm rounded-pill px-3"
-                                    :style="currentRule.is_favorited
-                                        ? 'background:transparent; border:1px solid var(--border-color); color:var(--text-color);'
-                                        : 'background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);'">
-                                <i class="me-1" :class="currentRule.is_favorited ? 'fas fa-star text-warning' : 'far fa-star'"></i>
-                                [[ currentRule.is_favorited ? 'Favorited' : 'Favorite' ]]
-                            </button>
+                                <!-- Votes -->
+                                <div class="btn-group rounded-pill overflow-hidden" style="border:1px solid var(--border-color);">
+                                    <button @click="vote('up', currentRule.id); animateClick($event)"
+                                            class="btn btn-sm px-3 border-0 border-end shadow-none btn-animate"
+                                            style="background:transparent; color:var(--text-color);"
+                                            title="Vote up">
+                                        <i class="fas fa-thumbs-up text-primary me-1"></i>[[ currentRule.vote_up ]]
+                                    </button>
+                                    <button @click="vote('down', currentRule.id); animateClick($event)"
+                                            class="btn btn-sm px-3 border-0 shadow-none btn-animate"
+                                            style="background:transparent; color:var(--text-color);"
+                                            title="Vote down">
+                                        <i class="fas fa-thumbs-down text-danger me-1"></i>[[ currentRule.vote_down ]]
+                                    </button>
+                                </div>
 
-                            <!-- Download -->
-                            <div class="dropdown">
-                                <button class="btn btn-sm rounded-pill px-3 dropdown-toggle"
-                                        style="background:transparent; border:1px solid var(--border-color); color:var(--text-color);"
-                                        data-bs-toggle="dropdown">
-                                    <i class="fas fa-download me-1"></i>Download
+                                <!-- Favorite -->
+                                <button @click="favorite(currentRule.id)"
+                                        class="btn btn-sm rounded-pill px-3"
+                                        :style="currentRule.is_favorited
+                                            ? 'background:transparent; border:1px solid var(--border-color); color:var(--text-color);'
+                                            : 'background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);'"
+                                        :title="currentRule.is_favorited ? 'Remove from favorites' : 'Add to favorites'">
+                                    <i class="me-1" :class="currentRule.is_favorited ? 'fas fa-star text-warning' : 'far fa-star'"></i>
+                                    [[ currentRule.is_favorited ? 'Favorited' : 'Favorite' ]]
                                 </button>
-                                <ul class="dropdown-menu shadow border-0" style="border-radius:12px; background:var(--card-bg-color);">
-                                    <li><button class="dropdown-item small" @click="download_rule('txt')" style="color:var(--text-color);"><i class="fas fa-file-alt me-2 opacity-50"></i>Rule file</button></li>
-                                    {% if rule_misp_object %}
-                                    <li><button class="dropdown-item small" @click="download_rule('misp')" style="color:var(--text-color);"><i class="fas fa-project-diagram me-2 opacity-50"></i>MISP Object</button></li>
-                                    {% endif %}
-                                    {% if rule_misp_event %}
-                                    <li><button class="dropdown-item small" @click="download_rule('misp_event')" style="color:var(--text-color);"><i class="fas fa-project-diagram me-2 opacity-50"></i>MISP Event</button></li>
-                                    {% endif %}
-                                    <li><button class="dropdown-item small" @click="download_rule('json')" style="color:var(--text-color);"><i class="fas fa-code me-2 opacity-50"></i>JSON</button></li>
-                                    <template v-if="rule_stix">
-                                        <li><button class="dropdown-item small" @click="download_rule('stix')" style="color:var(--text-color);"><i class="fas fa-street-view me-2 opacity-50"></i>STIX</button></li>
-                                    </template>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><button class="dropdown-item small" @click="download_rule('all')" style="color:var(--text-color);"><i class="fas fa-download me-2 opacity-50"></i>Download all</button></li>
-                                </ul>
-                            </div>
 
-                            <!-- Report -->
-                            <a :href="`/rule/report/${currentRule.id}`"
-                               class="btn btn-sm rounded-pill px-3"
-                               style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);">
-                                <i class="fas fa-flag me-1"></i>Report
-                            </a>
+                                <!-- Download -->
+                                <div class="dropdown">
+                                    <button class="btn btn-sm rounded-pill px-3 dropdown-toggle"
+                                            style="background:transparent; border:1px solid var(--border-color); color:var(--text-color);"
+                                            data-bs-toggle="dropdown"
+                                            title="Download this rule in various formats">
+                                        <i class="fas fa-download me-1"></i>Download
+                                    </button>
+                                    <ul class="dropdown-menu shadow border-0" style="border-radius:12px; background:var(--card-bg-color);">
+                                        <li><button class="dropdown-item small" @click="download_rule('txt')" style="color:var(--text-color);"><i class="fas fa-file-alt me-2 opacity-50"></i>Rule file</button></li>
+                                        {% if rule_misp_object %}
+                                        <li><button class="dropdown-item small" @click="download_rule('misp')" style="color:var(--text-color);"><i class="fas fa-project-diagram me-2 opacity-50"></i>MISP Object</button></li>
+                                        {% endif %}
+                                        {% if rule_misp_event %}
+                                        <li><button class="dropdown-item small" @click="download_rule('misp_event')" style="color:var(--text-color);"><i class="fas fa-project-diagram me-2 opacity-50"></i>MISP Event</button></li>
+                                        {% endif %}
+                                        <li><button class="dropdown-item small" @click="download_rule('json')" style="color:var(--text-color);"><i class="fas fa-code me-2 opacity-50"></i>JSON</button></li>
+                                        <template v-if="rule_stix">
+                                            <li><button class="dropdown-item small" @click="download_rule('stix')" style="color:var(--text-color);"><i class="fas fa-street-view me-2 opacity-50"></i>STIX</button></li>
+                                        </template>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><button class="dropdown-item small" @click="download_rule('all')" style="color:var(--text-color);"><i class="fas fa-download me-2 opacity-50"></i>Download all</button></li>
+                                    </ul>
+                                </div>
 
-                            {% if current_user.is_authenticated and rule.user_id != current_user.id %}
-                            <button class="btn btn-sm rounded-pill px-3"
-                                    style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
-                                    data-bs-toggle="modal" :data-bs-target="'#ownershipModal' + currentRule.id">
-                                <i class="fas fa-user-shield me-1"></i>Ownership
-                            </button>
-                            {% endif %}
-
-                            {% if current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}
-                            <button @click="toggleLock"
-                                    class="btn btn-sm rounded-pill px-3"
-                                    :style="is_lock
-                                        ? 'background:transparent; border:1px solid #0d6efd55; color:var(--text-color);'
-                                        : 'background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);'"
-                                    :title="is_lock ? 'Unlock — allow auto-updates from source' : 'Lock — prevent auto-updates from source'">
-                                <i class="fas me-1" :class="is_lock ? 'fa-lock text-primary' : 'fa-lock-open'"></i>
-                                [[ is_lock ? 'Locked' : 'Unlocked' ]]
-                            </button>
-                            {% endif %}
-
-                            <div class="ms-auto d-flex gap-2">
-                                {% if current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}
-                                <a :href="`/rule/edit_rule/${currentRule.id}`"
+                                <!-- Report -->
+                                <a :href="`/rule/report/${currentRule.id}`"
                                    class="btn btn-sm rounded-pill px-3"
-                                   style="background:transparent; border:1px solid #0d6efd55; color:#0d6efd;">
-                                    <i class="fas fa-pen me-1"></i>Edit
+                                   style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                   title="Report an issue with this rule">
+                                    <i class="fas fa-flag me-1"></i>Report
                                 </a>
+
+                                {% if current_user.is_authenticated and rule.user_id != current_user.id %}
                                 <button class="btn btn-sm rounded-pill px-3"
-                                        style="background:transparent; border:1px solid #dc354555; color:#dc3545;"
-                                        data-bs-toggle="modal" :data-bs-target="'#delete_rule_modal_'+currentRule.id">
-                                    <i class="fa-solid fa-trash me-1"></i>Delete
+                                        style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                        data-bs-toggle="modal" :data-bs-target="'#ownershipModal' + currentRule.id"
+                                        title="Request to become the owner of this rule">
+                                    <i class="fas fa-user-shield me-1"></i>Ownership
                                 </button>
                                 {% endif %}
+
+                                {% if current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}
+                                <button @click="toggleLock"
+                                        class="btn btn-sm rounded-pill px-3"
+                                        :style="is_lock
+                                            ? 'background:transparent; border:1px solid #0d6efd55; color:var(--text-color);'
+                                            : 'background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);'"
+                                        :title="is_lock ? 'Unlock — allow auto-updates from source' : 'Lock — prevent auto-updates from source'">
+                                    <i class="fas me-1" :class="is_lock ? 'fa-lock text-primary' : 'fa-lock-open'"></i>
+                                    [[ is_lock ? 'Locked' : 'Unlocked' ]]
+                                </button>
+                                {% endif %}
+
+                                <div class="ms-auto d-flex gap-2">
+                                    {% if current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}
+                                    <a :href="`/rule/edit_rule/${currentRule.id}`"
+                                       class="btn btn-sm rounded-pill px-3"
+                                       style="background:transparent; border:1px solid #0d6efd55; color:#0d6efd;"
+                                       title="Edit this rule">
+                                        <i class="fas fa-pen me-1"></i>Edit
+                                    </a>
+                                    <button class="btn btn-sm rounded-pill px-3"
+                                            style="background:transparent; border:1px solid #dc354555; color:#dc3545;"
+                                            data-bs-toggle="modal" :data-bs-target="'#delete_rule_modal_'+currentRule.id"
+                                            title="Delete this rule">
+                                        <i class="fa-solid fa-trash me-1"></i>Delete
+                                    </button>
+                                    {% endif %}
+                                </div>
+
                             </div>
-
                         </div>
-                        <!-- Contributors Card -->
-                        <div class="mb-2 mt-3">
+
+                        <!-- Contributors -->
+                        <div class="mb-3 mt-3">
                             <template v-if="contributor_list.length > 0">
-                                <div
-                                    class="card border-0 shadow-sm bg-white rounded-4 overflow-hidden border position-relative">
-
-                                    <div class="contributor-watermark">
-                                        <i class="fa-solid fa-users-gear"></i>
-                                    </div>
-
-                                    <div class="card-body p-4 position-relative" style="z-index: 1;">
+                                <div class="rounded-3 border overflow-hidden position-relative" style="background:var(--light-bg-color);">
+                                    <div class="contributor-watermark"><i class="fa-solid fa-users-gear"></i></div>
+                                    <div class="p-4 position-relative" style="z-index:1;">
                                         <div class="d-flex justify-content-between align-items-center mb-4">
-                                            <h4
-                                                class="fw-bold mb-0 text-dark border-start border-primary border-4 ps-3">
-                                                Rule Contributors
-                                            </h4>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                                                <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                                                    <i class="fa-solid fa-users-gear me-1"></i>Contributors
+                                                </span>
+                                            </div>
                                             <a :href="'/rule/detail_rule/' + currentRule.id + '/propose_edit'"
-                                                class="btn btn-xs btn-outline-primary rounded-pill px-3 shadow-sm ">
-                                                <i class="fas fa-plus me-1"></i> Become a contributor
+                                               class="btn btn-sm rounded-pill px-3"
+                                               style="background:transparent; border:1px solid #0d6efd55; color:#0d6efd; font-size:.8rem;"
+                                               title="Submit an edit proposal to become a contributor">
+                                                <i class="fas fa-plus me-1"></i>Become a contributor
                                             </a>
                                         </div>
-
                                         <div class="d-flex flex-wrap gap-4 justify-content-start">
                                             <div v-for="contributor in contributor_list" :key="contributor.id" class="d-flex flex-column align-items-center">
                                                 <user-chip
@@ -456,22 +465,20 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                             </template>
                         </div>
                         <!-- Related bundles -->
-                        <div
-                            class="mt-3 card border-0 shadow-sm  rounded-4 overflow-hidden border position-relative mb-4">
+                        <div class="mt-3 rounded-4 overflow-hidden border position-relative mb-4" style="background:var(--light-bg-color);">
                             <template v-if="bundleListRule.length > 0">
-                                <div class="contributor-watermark"
-                                    style="position: absolute; top: -10px; right: 10px; font-size: 4rem; opacity: 0.03; pointer-events: none;">
-                                    <i class="fas fa-boxes-stacked"></i>
-                                </div>
                                 <div class="contributor-watermark">
                                     <i class="fa-solid fa-boxes-stacked"></i>
                                 </div>
-                                <div class="card-body p-4 position-relative" style="z-index: 1;">
+                                <div class="p-4 position-relative" style="z-index: 1;">
                                     <div class="d-flex justify-content-between align-items-center mb-4">
-                                        <h4 class="fw-bold mb-0 text-dark border-start border-primary border-4 ps-3">
-                                            Related Bundles
-                                        </h4>
-                                        <span class="badge bg-light text-primary rounded-pill border px-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                                            <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                                                <i class="fa-solid fa-layer-group me-1"></i>Related Bundles
+                                            </span>
+                                        </div>
+                                        <span class="badge rounded-pill px-3" style="background:var(--light-bg-color); color:var(--subtle-text-color); border:1px solid var(--border-color); font-size:.75rem;">
                                             [[ bundleListRule.length ]] Total
                                         </span>
                                     </div>
@@ -499,8 +506,8 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                                                             <div class="flex-grow-1 min-w-0">
                                                                 <div
                                                                     class="d-flex justify-content-between align-items-start gap-2">
-                                                                    <h6 class="fw-bold text-dark mb-1"
-                                                                        style="word-break: break-word;">
+                                                                    <h6 class="fw-bold mb-1"
+                                                                        style="word-break: break-word; color:var(--text-color);">
                                                                         [[ bundle.name ]]
                                                                     </h6>
                                                                     <span

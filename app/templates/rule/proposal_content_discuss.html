@@ -63,7 +63,12 @@
             </diff-viewer>
         </div>
 
-        <h4 class="fw-bold mb-4 border-start border-primary border-4 ps-3">Community Discussion</h4>
+        <div class="d-flex align-items-center gap-2 mb-4">
+            <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+            <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                <i class="fa-solid fa-comments me-1"></i>Community Discussion
+            </span>
+        </div>
         <comment-thread
             object-type="proposal"
             :object-id="{{ rule_edit_id }}"
