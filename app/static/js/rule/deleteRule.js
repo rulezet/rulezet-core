@@ -16,8 +16,13 @@ const DeleteRuleModal = {
             isDeleting.value = true;
             
             try {
-                const response = await fetch(`/rule/delete_rule?id=${props.rule.id}`, {
-                    method: 'GET' 
+                const response = await fetch('/rule/delete_rule', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '',
+                    },
+                    body: JSON.stringify({ id: props.rule.id }),
                 });
 
                 if (response.ok) {

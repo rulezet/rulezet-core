@@ -1326,10 +1326,16 @@ export default {
         }
 
         // ── Vote / favorite ───────────────────────────────────────────────
+        function _csrf() { return document.getElementById('csrf_token')?.value ?? '' }
+
         async function handleVote(type, rule) {
             if (!props.canVote) return
             try {
-                const res = await fetch(`/rule/vote_rule?id=${rule.id}&vote_type=${type}`)
+                const res = await fetch('/rule/vote_rule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+                    body: JSON.stringify({ id: rule.id, vote_type: type }),
+                })
                 const data = await res.json()
                 rule.vote_up   = data.vote_up
                 rule.vote_down = data.vote_down
@@ -1340,7 +1346,10 @@ export default {
         async function handleFavorite(rule) {
             if (!props.canFavorite) return
             try {
-                const res = await fetch(`/rule/favorite/${rule.id}`)
+                const res = await fetch(`/rule/favorite/${rule.id}`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': _csrf() },
+                })
                 const data = await res.json()
                 if (res.ok) {
                     rule.is_favorited = data.is_favorited

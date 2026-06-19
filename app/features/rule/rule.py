@@ -11,7 +11,7 @@ from datetime import datetime,  timezone
 
 from app.features.misp.rule.misp_object import content_convert_to_misp_object, get_rule_misp_event, get_rule_misp_event, get_rule_misp_object
 from .rule_form import AddNewRuleForm, CreateFormatRuleForm, EditRuleForm
-from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_side_diff_html
+from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_side_diff_html, safe_referrer
 
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
@@ -247,12 +247,12 @@ def get_rules_page_filter() -> jsonify:
 #   Action on Rule  # 
 #####################
 
-@rule_blueprint.route("/delete_rule", methods=['GET'])
+@rule_blueprint.route("/delete_rule", methods=['POST'])
 @login_required
 def delete_rule() -> jsonify:
     """Delete a rule"""
-   
-    rule_id  = request.args.get("id")
+    data = request.get_json() or {}
+    rule_id  = data.get("id")
     user_id = RuleModel.get_rule_user_id(rule_id)
 
     if current_user.id == user_id or current_user.is_admin():
@@ -277,12 +277,13 @@ def get_current_user() -> jsonify:
     """Is the current user admin or not for vue js"""
     return jsonify({'user': current_user.is_admin()})
 
-@rule_blueprint.route('/vote_rule', methods=['GET'])
+@rule_blueprint.route('/vote_rule', methods=['POST'])
 @login_required
 def vote_rule() -> jsonify:
     """Update the vote up or down"""
-    rule_id = request.args.get('id', 1, int)
-    vote_type = request.args.get('vote_type', '', str)
+    data = request.get_json() or {}
+    rule_id   = int(data.get('id', 0))
+    vote_type = str(data.get('vote_type', ''))
 
     if vote_type not in ('up', 'down'):
         return jsonify({"message": "Invalid vote type"}), 400
@@ -938,7 +939,7 @@ def download_rule_unified() -> Response:
 #   Favorite section    #
 #########################
 
-@rule_blueprint.route('/favorite/<int:rule_id>', methods=['GET'])
+@rule_blueprint.route('/favorite/<int:rule_id>', methods=['POST'])
 @login_required
 def add_favorite_rule(rule_id) -> redirect:
     """Add a rule to user's favorites via link."""
@@ -1582,7 +1583,7 @@ def update_github_rule() -> render_template:
             # verify if the rule has a good syntaxe
             if not rule:
                 flash('Rule not found', 'danger')
-                return redirect(request.referrer or '/')
+                return redirect(safe_referrer())
 
             # is the rule with a good syntaxe ?
             valide = RuleModel.verify_rule_syntaxe(rule , history.new_content)
@@ -1600,7 +1601,7 @@ def update_github_rule() -> render_template:
                 return redirect(f"/rule/detail_rule/{rule.id}")
 
             flash('Error , no rule found !', 'danger')
-            return redirect(request.referrer or '/')
+            return redirect(safe_referrer())
         if decision == 'rejected':
             rule = RuleModel.get_rule(history.rule_id)
             if rule:
@@ -2404,6 +2405,14 @@ def import_rules_from_zip():
         temp_dir = tempfile.mkdtemp(prefix="rules_zip_")
 
         with zipfile.ZipFile(zip_file) as z:
+            total_size = sum(m.file_size for m in z.infolist())
+            if total_size > 500 * 1024 * 1024:
+                return {"message": "ZIP too large when uncompressed (max 500 MB).", "toast_class": "danger"}, 400
+            real_temp = os.path.realpath(temp_dir)
+            for member in z.infolist():
+                dest = os.path.realpath(os.path.join(real_temp, member.filename))
+                if not dest.startswith(real_temp + os.sep) and dest != real_temp:
+                    return {"message": "Invalid ZIP: path traversal detected.", "toast_class": "danger"}, 400
             z.extractall(temp_dir)
 
         repo_dir = temp_dir  
@@ -3128,7 +3137,7 @@ def fix_new_rule(new_rule_id: int):
 
     if temp_rule.rule_syntax_valid:
         flash("This rule is already marked as valid. Use 'Add Rule' instead.", "info")
-        return redirect(request.referrer or url_for('rule.rules_summary'))
+        return redirect(safe_referrer(url_for('rule.rules_summary')))
 
     result_obj, error_message = BadRuleModel.save_invalid_rule_from_new_rule(
         new_rule_obj=temp_rule, 

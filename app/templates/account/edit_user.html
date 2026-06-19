@@ -56,7 +56,7 @@
                     {{ form.profile_picture(class_="form-control border-primary", id="avatarInput", style="max-width:320px;") }}
                     <small class="text-muted">JPG, PNG, GIF or WebP · max 2 MB</small>
                     {% if form.profile_picture.errors %}
-                        <div class="text-danger small">{{ form.profile_picture.errors[0] | safe }}</div>
+                        <div class="text-danger small">{{ form.profile_picture.errors[0] }}</div>
                     {% endif %}
                     {% if current_user.profile_picture %}
                         <button type="button" id="removeAvatarBtn"
@@ -75,7 +75,7 @@
                 <span style="color:red">*</span>
                 {{ form.first_name(class_="form-control border-primary") }}
                 {% if form.first_name.errors %}
-                    <div class="text-danger">{{ form.first_name.errors[0] | safe }}</div>
+                    <div class="text-danger">{{ form.first_name.errors[0] }}</div>
                 {% endif %}
             </div>
             <div class="col-md-6 mb-3">
@@ -83,7 +83,7 @@
                 <span style="color:red">*</span>
                 {{ form.last_name(class_="form-control border-primary") }}
                 {% if form.last_name.errors %}
-                    <div class="text-danger">{{ form.last_name.errors[0] | safe }}</div>
+                    <div class="text-danger">{{ form.last_name.errors[0] }}</div>
                 {% endif %}
             </div>
         </div>
@@ -94,7 +94,7 @@
                 <label for="{{ form.username.id }}" class="col-form-label text-primary">{{ form.username.label }}</label>
                 {{ form.username(class_="form-control border-primary", placeholder="e.g. john_doe") }}
                 {% if form.username.errors %}
-                    <div class="text-danger">{{ form.username.errors[0] | safe }}</div>
+                    <div class="text-danger">{{ form.username.errors[0] }}</div>
                 {% endif %}
             </div>
             <div class="col-md-6 mb-3">
@@ -102,7 +102,7 @@
                 <span style="color:red">*</span>
                 {{ form.email(class_="form-control border-primary") }}
                 {% if form.email.errors %}
-                    <div class="text-danger">{{ form.email.errors[0] | safe }}</div>
+                    <div class="text-danger">{{ form.email.errors[0] }}</div>
                 {% endif %}
             </div>
         </div>
@@ -117,7 +117,7 @@
                 <small class="text-muted">[[ bio.length ]] / 500</small>
             </div>
             {% if form.bio.errors %}
-                <div class="text-danger">{{ form.bio.errors[0] | safe }}</div>
+                <div class="text-danger">{{ form.bio.errors[0] }}</div>
             {% endif %}
         </div>
 
@@ -160,7 +160,7 @@
                    @click="togglePassword"></i>
             </div>
             {% if form.password.errors %}
-                <div style="color: red;">{{ form.password.errors[0] | safe }}</div>
+                <div style="color: red;">{{ form.password.errors[0] }}</div>
             {% endif %}
             <ul style="margin-top: 10px; padding-left: 20px; list-style: none;" v-if="password">
                 <li :class="password.length >= 8 ? 'text-success' : 'text-danger'">

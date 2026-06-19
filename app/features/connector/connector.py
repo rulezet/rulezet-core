@@ -69,6 +69,9 @@ def create_connector():
     instance_url = (data.get('instance_url') or '').strip()
     if not name or not instance_url:
         return jsonify({'success': False, 'error': 'Name and URL are required.'}), 400
+    _parsed_url = urlparse(instance_url)
+    if _parsed_url.scheme not in ('http', 'https') or not _parsed_url.netloc:
+        return jsonify({'success': False, 'error': 'URL must start with http:// or https://'}), 400
 
     connector = ConnectorModel.create_connector(
         owner_id=current_user.id,
@@ -97,6 +100,11 @@ def update_connector(connector_uuid):
         return jsonify({'success': False, 'error': 'System connectors cannot be modified.'}), 403
 
     data = request.get_json() or {}
+    new_url = (data.get('instance_url') or '').strip()
+    if new_url:
+        _pu = urlparse(new_url)
+        if _pu.scheme not in ('http', 'https') or not _pu.netloc:
+            return jsonify({'success': False, 'error': 'URL must start with http:// or https://'}), 400
     ok = ConnectorModel.update_connector(connector, data)
     return jsonify({'success': ok}), 200 if ok else 500
 

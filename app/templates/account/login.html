@@ -25,7 +25,7 @@
                     </label>
                     {{ form.email(class_="form-control", id="email", placeholder="Enter your email") }}
                     {% if form.email.errors %}
-                    <div class="text-danger small mt-1">{{ form.email.errors[0] | safe }}</div>
+                    <div class="text-danger small mt-1">{{ form.email.errors[0] }}</div>
                     {% endif %}
                 </div>
 

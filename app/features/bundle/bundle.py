@@ -2,7 +2,7 @@ from flask import Blueprint, flash, jsonify, redirect, render_template , request
 from flask_login import current_user, login_required
 
 from app.features.bundle.bundle_form import AddNewBundleForm, EditBundleForm
-from app.core.utils.utils import form_to_dict
+from app.core.utils.utils import form_to_dict, safe_referrer
 from app.features.misp.bundle.misp_object import get_bundle_misp_event
 from . import bundle_core as BundleModel
 from ..rule import rule_core as RuleModel
@@ -131,7 +131,7 @@ def edit(bundle_id) :
                          target_type="bundle", target_id=bundle_id, target_uuid=bundle.uuid,
                          is_public=bool(bundle.access))
             flash("Bundle modified with success!", "success")
-            return redirect(request.referrer or '/')
+            return redirect(safe_referrer())
         else:
             form.description.data = bundle.description
             form.name.data = bundle.name 

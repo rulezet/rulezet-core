@@ -3,9 +3,12 @@ import subprocess
 import os
 import re
 import uuid
-import random
+import secrets
 import string
+import hmac
 import difflib
+from urllib.parse import urlparse
+from flask import request
 from ..db_class.db import User
 
 def isUUID(uid):
@@ -16,7 +19,7 @@ def isUUID(uid):
         return False
 
 def generate_api_key(length=60):
-    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
+    return secrets.token_urlsafe(length)
 
 def get_user_api(api_key):
     """Get a user by its api key"""
@@ -27,7 +30,8 @@ def get_user_from_api(headers):
     if "MATRIX-ID" in headers:
         bot = User.query.filter_by(last_name="Bot", first_name="Matrix").first()
         if bot:
-            if bot.api_key == headers.get("X-API-KEY"):
+            incoming = headers.get("X-API-KEY", "")
+            if bot.api_key and hmac.compare_digest(bot.api_key, incoming):
                 user = User.query.filter_by(matrix_id=headers["MATRIX-ID"]).first()
                 if user:
                     return user
@@ -41,6 +45,20 @@ def verif_api_key(headers):
         return False
     user = get_user_api(key)
     return user is not None
+
+
+def safe_referrer(default='/'):
+    """Return request.referrer only when it points to the same host."""
+    ref = request.referrer
+    if not ref:
+        return default
+    try:
+        parsed = urlparse(ref)
+        if parsed.netloc and parsed.netloc.lower() != request.host.lower():
+            return default
+    except Exception:
+        return default
+    return ref
 
 
 def create_specific_dir(specific_dir):

@@ -318,9 +318,26 @@ export default {
         }
 
         // ── marked ──────────────────────────────────────────────────────
+        function _sanitize_html(html) {
+            const tmp = document.createElement('div')
+            tmp.innerHTML = html
+            tmp.querySelectorAll('script, iframe, object, embed, form').forEach(el => el.remove())
+            tmp.querySelectorAll('*').forEach(el => {
+                for (const attr of [...el.attributes]) {
+                    const n = attr.name.toLowerCase()
+                    const v = attr.value
+                    if (n.startsWith('on') ||
+                        ((n === 'href' || n === 'src' || n === 'action') && /^javascript:/i.test(v.trim()))) {
+                        el.removeAttribute(attr.name)
+                    }
+                }
+            })
+            return tmp.innerHTML
+        }
+
         function render_md() {
             if (!window.marked) return
-            try { rendered_md.value = window.marked.parse(inner_value.value) }
+            try { rendered_md.value = _sanitize_html(window.marked.parse(inner_value.value)) }
             catch { rendered_md.value = '<p><em>Render error</em></p>' }
         }
 

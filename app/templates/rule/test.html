@@ -512,10 +512,12 @@
                 if (!confirmed) return;
 
 
-                const params = new URLSearchParams({ userId, action });
-
                 try {
-                    const res = await fetch('/account/promote_remove_admin?' + params.toString());
+                    const res = await fetch('/account/promote_remove_admin', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' },
+                        body: JSON.stringify({ userId, action })
+                    });
                     if (res.status === 200) {
                         const data = await res.json();
                         if (data.success) {

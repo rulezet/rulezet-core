@@ -24,14 +24,14 @@
                     {{ form.first_name.label(class_="col-form-label") }}:  <span style="color:red">*</span>
                     {{ form.first_name(class_="form-control") }}
                     {% if form.first_name.errors %}
-                        <div style="color: red;">{{ form.first_name.errors[0] | safe }}</div>
+                        <div style="color: red;">{{ form.first_name.errors[0] }}</div>
                     {% endif %}
                 </div>
                 <div class="col">
                     {{ form.last_name.label(class_="col-form-label") }}: <span style="color:red">*</span>
                     {{ form.last_name(class_="form-control") }}
                     {% if form.last_name.errors %}
-                        <div style="color: red;">{{ form.last_name.errors[0] | safe }}</div>
+                        <div style="color: red;">{{ form.last_name.errors[0] }}</div>
                     {% endif %}
                 </div>
             </div>
@@ -40,7 +40,7 @@
                 {{ form.email.label(class_="col-form-label") }}:  <span style="color:red">*</span>
                 {{ form.email(class_="form-control") }}
                 {% if form.email.errors %}
-                    <div style="color: red;">{{ form.email.errors[0] | safe }}</div>
+                    <div style="color: red;">{{ form.email.errors[0] }}</div>
                 {% endif %}
             </div>
 
@@ -59,7 +59,7 @@
 
                 </div>
                 {% if form.password.errors %}
-                    <div style="color: red;">{{ form.password.errors[0] | safe }}</div>
+                    <div style="color: red;">{{ form.password.errors[0] }}</div>
                 {% endif %}
 
                 <!-- Password rules -->

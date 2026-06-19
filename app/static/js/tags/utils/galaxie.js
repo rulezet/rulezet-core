@@ -61,7 +61,10 @@ function mapIcon(iconName) {
         'atom': '<i class="fas fa-atom"></i>',
         'list': '<i class="fas fa-list"></i>',
     };
-    return iconMap[key] || `<i class="fas fa-${key}"></i>`;
+    if (iconMap[key]) return iconMap[key];
+    // Fallback: only allow FontAwesome icon name characters (letters, digits, hyphens)
+    const safeKey = key.replace(/[^a-z0-9-]/gi, '');
+    return `<i class="fas fa-${safeKey}"></i>`;
 }
 
 

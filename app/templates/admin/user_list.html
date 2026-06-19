@@ -318,7 +318,11 @@
                 const params = new URLSearchParams({
                     id
                 })
-                const res = await fetch('/account/delete_user?' + params.toString())
+                const res = await fetch('/account/delete_user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' },
+                    body: JSON.stringify({ id })
+                })
                 const data = await res.json()
                 if (data.status == 200) {
                     users_list.value.splice(index, 1)
@@ -340,7 +344,11 @@
                     userId: user.id,
                     action: user.admin ? 'remove' : 'promote'
                 })
-                const res = await fetch('/account/promote_remove_admin?' + params.toString())
+                const res = await fetch('/account/promote_remove_admin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' },
+                    body: JSON.stringify({ userId: user.id, action: user.admin ? 'remove' : 'promote' })
+                })
                 const data = await res.json()
 
                 const myModalEl = document.getElementById('admin_user_modal_' + user.id);

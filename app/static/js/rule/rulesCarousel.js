@@ -330,9 +330,15 @@ const RulesCarousel = {
         }
 
         /* ── vote / favorite ── */
+        function _csrf() { return document.getElementById('csrf_token')?.value ?? '' }
+
         async function doVote(voteType, ruleId) {
             if (!props.currentUserIsConnected) { window.location.href = '/account/login'; return }
-            const res = await fetch(`/rule/vote_rule?id=${ruleId}&vote_type=${voteType}`)
+            const res = await fetch('/rule/vote_rule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+                body: JSON.stringify({ id: ruleId, vote_type: voteType }),
+            })
             const data = await res.json()
             const rule = rules_list.value.find(r => r.id === ruleId)
             if (rule) { rule.vote_up = data.vote_up; rule.vote_down = data.vote_down }
@@ -340,7 +346,10 @@ const RulesCarousel = {
 
         async function doFavorite(ruleId) {
             if (!props.currentUserIsConnected) { window.location.href = '/account/login'; return }
-            const res = await fetch(`/rule/favorite/${ruleId}`)
+            const res = await fetch(`/rule/favorite/${ruleId}`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': _csrf() },
+            })
             const data = await res.json()
             if (res.ok) {
                 const rule = rules_list.value.find(r => r.id === ruleId)

@@ -174,7 +174,7 @@
               </div>
               {{ form.title(class_="form-control", placeholder="e.g. Detect_Mimikatz_Sekurlsa") }}
               {% if form.title.errors %}
-              <div class="invalid-feedback d-block">{{ form.title.errors[0] | safe }}</div>
+              <div class="invalid-feedback d-block">{{ form.title.errors[0] }}</div>
               {% endif %}
             </div>
             <div class="col-md-6">
@@ -186,7 +186,7 @@
                 <option v-for="fmt in rules_formats" :key="fmt.id" :value="fmt.name">[[ fmt.name ]]</option>
               </select>
               {% if form.format.errors %}
-              <div class="invalid-feedback d-block">{{ form.format.errors[0] | safe }}</div>
+              <div class="invalid-feedback d-block">{{ form.format.errors[0] }}</div>
               {% endif %}
             </div>
           </div>
@@ -267,7 +267,7 @@
               max-height="80vh">
             </smart-editor>
             {% if form.to_string.errors %}
-            <div class="invalid-feedback d-block mt-1">{{ form.to_string.errors[0] | safe }}</div>
+            <div class="invalid-feedback d-block mt-1">{{ form.to_string.errors[0] }}</div>
             {% endif %}
           </div>
 

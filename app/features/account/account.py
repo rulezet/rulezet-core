@@ -6,7 +6,7 @@ from .form import LoginForm, EditUserForm, AddNewUserForm
 from ..rule import rule_core as RuleModel
 from . import account_core as AccountModel
 from ..bundle import bundle_core as BundleModel
-from ...core.utils.utils import form_to_dict, generate_api_key
+from ...core.utils.utils import form_to_dict, generate_api_key, safe_referrer
 from ...core.utils.activity_log import log_activity
 from flask_login import current_user, login_required, login_user, logout_user
 from datetime import datetime, timedelta, timezone
@@ -104,7 +104,7 @@ def detail_user(user_id) -> render_template:
     if not user:
         flash("User not found.", "error")
         # redirect to the previous page
-        return redirect(request.referrer)
+        return redirect(safe_referrer())
     return render_template("account/detail_user.html" , user=user.to_json())
 
 @account_blueprint.route("/user_mini/<int:user_id>")
@@ -150,12 +150,13 @@ def get_user_donne() -> jsonify:
         return jsonify({"success": False, "message": "User not found"})
 
 
-@account_blueprint.route("/promote_remove_admin")
+@account_blueprint.route("/promote_remove_admin", methods=['POST'])
 @login_required
 def promote_remove_admin() -> jsonify:
     """Return the user activity and metadata."""
-    user_id = request.args.get('userId', type=int)
-    action = request.args.get('action', type=str)
+    data    = request.get_json() or {}
+    user_id = int(data.get('userId', 0)) or None
+    action  = str(data.get('action', ''))
 
     if current_user.is_admin():
         response = AccountModel.promote_remove_user_admin(user_id, action)
@@ -173,11 +174,12 @@ def promote_remove_admin() -> jsonify:
     else:
         return render_template("access_denied.html")
 
-@account_blueprint.route("/delete_user")
+@account_blueprint.route("/delete_user", methods=['POST'])
 @login_required
 def delete_user() -> render_template:
     """Delete an user"""
-    user_id = request.args.get('id', 1, type=int)
+    data    = request.get_json() or {}
+    user_id = int(data.get('id', 0)) or None
     if current_user.is_admin():
         delete = AccountModel.delete_user_core(user_id)
         if delete:

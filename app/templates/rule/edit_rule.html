@@ -78,7 +78,7 @@
                                     </div>
                                     {{ form.title(class_="form-control rounded-3", placeholder="Enter the rule title...") }}
                                     {% if form.title.errors %}
-                                    <div class="invalid-feedback d-block">{{ form.title.errors[0] | safe }}</div>
+                                    <div class="invalid-feedback d-block">{{ form.title.errors[0] }}</div>
                                     {% endif %}
                                 </div>
                             </div>
@@ -95,7 +95,7 @@
                                         <option v-for="fmt in rules_formats" :key="fmt.id" :value="fmt.name">[[ fmt.name ]]</option>
                                     </select>
                                     {% if form.format.errors %}
-                                    <div class="invalid-feedback d-block">{{ form.format.errors[0] | safe }}</div>
+                                    <div class="invalid-feedback d-block">{{ form.format.errors[0] }}</div>
                                     {% endif %}
                                 </div>
                             </div>
@@ -183,7 +183,7 @@
                                     max-height="80vh">
                                 </smart-editor>
                                 {% if form.to_string.errors %}
-                                <div class="invalid-feedback d-block fw-bold mt-2">{{ form.to_string.errors[0] | safe }}</div>
+                                <div class="invalid-feedback d-block fw-bold mt-2">{{ form.to_string.errors[0] }}</div>
                                 {% endif %}
                             </div>
                         </div>
@@ -224,7 +224,7 @@
         },
         setup() {
 
-            const ruleId = ref("{{ rule.id | safe }}");
+            const ruleId = ref("{{ rule.id }}");
             const currentRule = ref({ title: '', to_string: '' });
             const editFormat   = ref('{{ rule.format | e }}');
             const rules_formats = ref([]);
