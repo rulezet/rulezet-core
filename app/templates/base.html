@@ -1,10 +1,16 @@
 <!DOCTYPE html>
-<html>
+<html {% if user_config %}data-user-theme="{{ user_config.theme }}"{% endif %}>
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{% block title %}RULEZET{% endblock %}</title>
+
+    {# Inject custom themes before theme.js so applyTheme() knows about them #}
+    <script>window.__CUSTOM_THEMES__ = {{ custom_themes_for_js | tojson | safe }};</script>
+    {# theme.js — sync, runs before CSS to prevent flash #}
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.1/styles/github.min.css" />
     <link rel="stylesheet" type="text/css"
         href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css" />
@@ -22,6 +28,10 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='fontawesome-6.3.0/css/solid.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='fontawesome-6.3.0/css/brands.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/external_library/jquery-ui.css') }}">
+    {# Design tokens must load before core.css so overrides cascade correctly #}
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/variables.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/theme.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/custom-themes.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/core.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/base/sidebar.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/base/toaster.css') }}">
@@ -119,28 +129,17 @@
                 if (sec) $el.T = setTimeout(triggerRemove, sec * 1000);
             });
         });
-        (function () {
-            const html = document.documentElement;
-            function setTheme(theme) {
-                html.classList.remove("light-mode", "dark-mode");
-                html.classList.add(theme + "-mode");
-                if (document.body) {
-                    document.body.classList.remove("light-mode", "dark-mode");
-                    document.body.classList.add(theme + "-mode");
-                }
-                document.querySelectorAll('.theme-toggle__option').forEach(opt => {
-                    opt.classList.toggle('active', opt.dataset.theme === theme);
-                });
-                localStorage.setItem("theme", theme);
+
+        // theme.js (loaded in <head>) already applied the theme synchronously.
+        // Wire click events for the legacy .theme-toggle__option buttons.
+        document.addEventListener('click', function (e) {
+            const opt = e.target.closest('.theme-toggle__option');
+            if (opt && opt.dataset.theme) {
+                applyTheme(opt.dataset.theme);
+                updateThemeIcon(opt.dataset.theme);
+                _saveThemeToDb(opt.dataset.theme);
             }
-            const saved = localStorage.getItem("theme") ||
-                (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-            setTheme(saved);
-            document.addEventListener('click', function (e) {
-                const opt = e.target.closest('.theme-toggle__option');
-                if (opt && opt.dataset.theme) setTheme(opt.dataset.theme);
-            });
-        })();
+        });
 
         (function () {
             function dismissFlash(el) {
@@ -177,18 +176,6 @@
             } else {
                 initFlashes()
             }
-        })();
-
-        (function () {
-            let savedTheme = localStorage.getItem('theme');
-            if (!savedTheme) {
-                savedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            }
-            document.documentElement.classList.add(savedTheme + '-mode');
-            const style = document.createElement('style');
-            style.innerHTML = `* { transition: none !important; }`;
-            document.head.appendChild(style);
-            window.addEventListener('DOMContentLoaded', () => style.remove());
         })();
 
         document.addEventListener("DOMContentLoaded", () => {

@@ -1,0 +1,80 @@
+/*
+  theme.css — Built-in named theme overrides for Rulezet.
+  Custom themes are in custom-themes.css (auto-generated — do not edit).
+*/
+
+/* ── Ocean ─────────────────────────────────────────────────── */
+[data-theme="ocean"] {
+    --bg-color: #0d1b2a;
+    --card-bg-color: #1a2d42;
+    --light-bg-color: #1e3550;
+    --code-bg-color: #0a1520;
+    --card-header-bg-color: #1e3550;
+    --navbar-bg-color: #0d1b2a;
+    --bar-bg-color: #1a2d42;
+    --text-color: #cfe2f3;
+    --subtle-text-color: #7aaec8;
+    --navbar-text-color: #cfe2f3;
+    --border-color: rgba(79, 195, 247, 0.15);
+    --selected-color: rgba(79, 195, 247, 0.20);
+    --page-selected-color: #4fc3f7;
+    --sidebar-color: #060f1a;
+    --rule-name-color: #4fc3f7;
+}
+
+/* ── Forest ─────────────────────────────────────────────────── */
+[data-theme="forest"] {
+    --bg-color: #0d1f0e;
+    --card-bg-color: #142715;
+    --light-bg-color: #1a3020;
+    --code-bg-color: #0a1a0b;
+    --card-header-bg-color: #1a3020;
+    --navbar-bg-color: #0d1f0e;
+    --bar-bg-color: #142715;
+    --text-color: #c8e6c9;
+    --subtle-text-color: #81c784;
+    --navbar-text-color: #c8e6c9;
+    --border-color: rgba(102, 187, 106, 0.15);
+    --selected-color: rgba(102, 187, 106, 0.20);
+    --page-selected-color: #66bb6a;
+    --sidebar-color: #061008;
+    --rule-name-color: #66bb6a;
+}
+
+/* ── Midnight ───────────────────────────────────────────────── */
+[data-theme="midnight"] {
+    --bg-color: #0a0a0f;
+    --card-bg-color: #12121e;
+    --light-bg-color: #1a1a2e;
+    --code-bg-color: #07070f;
+    --card-header-bg-color: #1a1a2e;
+    --navbar-bg-color: #0a0a0f;
+    --bar-bg-color: #12121e;
+    --text-color: #d4d4f0;
+    --subtle-text-color: #7878a8;
+    --navbar-text-color: #d4d4f0;
+    --border-color: rgba(138, 99, 210, 0.15);
+    --selected-color: rgba(138, 99, 210, 0.20);
+    --page-selected-color: #8a63d2;
+    --sidebar-color: #050510;
+    --rule-name-color: #a78bfa;
+}
+
+/* ── Sunset ─────────────────────────────────────────────────── */
+[data-theme="sunset"] {
+    --bg-color: #1a0f0a;
+    --card-bg-color: #2a1810;
+    --light-bg-color: #351f14;
+    --code-bg-color: #120a06;
+    --card-header-bg-color: #351f14;
+    --navbar-bg-color: #1a0f0a;
+    --bar-bg-color: #2a1810;
+    --text-color: #f0d4b8;
+    --subtle-text-color: #c89060;
+    --navbar-text-color: #f0d4b8;
+    --border-color: rgba(251, 146, 60, 0.15);
+    --selected-color: rgba(251, 146, 60, 0.20);
+    --page-selected-color: #fb923c;
+    --sidebar-color: #0d0703;
+    --rule-name-color: #fb923c;
+}

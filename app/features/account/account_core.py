@@ -57,7 +57,13 @@ def add_user_core(form_dict) -> tuple:
  
     db.session.add(user)
     db.session.commit()
- 
+
+    try:
+        from ..config.config_core import create_default_config_core
+        create_default_config_core(user.id)
+    except Exception:
+        pass
+
     success, message = send_verify_email(user, code)
     if not success:
         return message, False

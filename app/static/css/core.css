@@ -1,7 +1,9 @@
 /**************************************************************************
  * RULEZET — Main Stylesheet
  * Sections:
- *   1. CSS Variables (Light / Dark)
+ *   1. CSS Variables → themes/variables.css (light + dark tokens)
+ *                      themes/theme.css     (named built-in overrides)
+ *                      themes/custom-themes.css (auto-generated)
  *   2. Reset & Base
  *   3. Layout & Responsive
  *   4. Typography
@@ -19,93 +21,6 @@
  *  16. Animations & Utilities
  *  17. Dark Mode Overrides
  **************************************************************************/
-
-
-/* =========================================================================
-   1. CSS VARIABLES
-   ========================================================================= */
-
-:root {
-  --sidebar-color: rgb(15, 23, 42);
-  --bg-color: #f7f7f7;
-  --text-color: #1e1e1e;
-  --subtle-text-color: #6c757d;
-  --card-bg-color: #f9f9f9;
-  --light-bg-color: #f1f1f1;
-  --code-bg-color: #f8f9fa;
-  --border-color: #dee2e6;
-  --card-header-bg-color: rgb(207, 226, 255);
-  --navbar-bg-color: #ffffff;
-  --navbar-text-color: #000000;
-  --rule-name-color: rgb(10, 88, 202);
-  --bar-bg-color: rgb(226, 231, 237);
-  --selected-color: rgb(207, 226, 255);
-  --page-selected-color: rgba(13, 110, 253, 1);
-
-  --bg-color-high-similarity: rgb(240, 145, 154);
-  --bg-diff-add: #dfd;
-  --bg-diff-add-highlight: #97f295;
-  --bg-diff-remove: #e9aeae;
-  --bg-diff-remove-highlight: #ffb6ba;
-
-  --indigo-solid: #4f46e5;
-  --indigo-soft: #eef2ff;
-  --pink-solid: #db2777;
-  --pink-soft: #fdf2f8;
-  --slate-200: #e2e8f0;
-}
-
-body.dark-mode {
-  --bg-color: #1e293b;
-  --navbar-bg-color: #1a2744;
-  --sidebar-color: #1a2744;
-  --bar-bg-color: #0f172a;
-  --card-bg-color: #2d3f55;
-  --card-header-bg-color: #2d3f55;
-  --light-bg-color: #3d5068;
-  --code-bg-color: #0f172a;
-  --border-color: #3d5068;
-
-  --text-color: #e2e8f0;
-  --subtle-text-color: #94a3b8;
-  --rule-name-color: #7eb3f8;
-
-  --selected-color: rgba(59, 130, 246, 0.2);
-  --page-selected-color: #60a5fa;
-  --navbar-text-color: #e2e8f0;
-  --bg-color-high-similarity: #7f1d1d;
-  --bg-diff-add: rgba(74, 222, 128, 0.15);
-  --bg-diff-add-highlight: rgba(74, 222, 128, 0.4);
-  --bg-diff-remove: rgba(248, 113, 113, 0.15);
-  --bg-diff-remove-highlight: rgba(248, 113, 113, 0.4);
-}
-
-
-
-
-/* body.dark-mode {
-  --sidebar-color:          #272727;
-  --bg-color:               #3a3a3a;
-  --text-color:             #f8f9fa;
-  --subtle-text-color:      #adb5bd;
-  --card-bg-color:          #2c2c2c;
-  --light-bg-color:         #343a40;
-  --code-bg-color:          #2d2d2d;
-  --border-color:           #495057;
-  --card-header-bg-color:   #333131;
-  --navbar-bg-color:        #1c1c1c;
-  --navbar-text-color:      #f1f1f1;
-  --rule-name-color:        rgb(10, 88, 202);
-  --bar-bg-color:           #1e1e1e;
-  --selected-color:         rgba(13, 110, 253, 1);
-  --page-selected-color:    rgb(13, 69, 253);
-
-  --bg-color-high-similarity:  rgb(150, 41, 52);
-  --bg-diff-add:               #4b6c4b;
-  --bg-diff-add-highlight:     #54a652;
-  --bg-diff-remove:            #a1585c;
-  --bg-diff-remove-highlight:  #8a3b3f;
-} */
 
 
 /* =========================================================================

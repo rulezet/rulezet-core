@@ -68,6 +68,9 @@ def create_app(start_worker=True):
     app.register_blueprint(api_blueprint, url_prefix="/api")
 
 
+    from app.features.config.config import config_blueprint
+    app.register_blueprint(config_blueprint, url_prefix='/')
+
     from app.features.jobs import job_handlers  # noqa
     if start_worker:
         from app.features.jobs.job_worker import start_worker as _start_worker
@@ -79,6 +82,30 @@ def create_app(start_worker=True):
             seed_official_connector()
         except Exception:
             pass
+        try:
+            from app.features.config.config_core import seed_default_themes
+            seed_default_themes()
+        except Exception:
+            pass
+
+    @app.context_processor
+    def inject_user_config():
+        from flask_login import current_user as _cu
+        from app.features.config.config_core import get_user_config, get_all_custom_themes
+        config = None
+        themes_js = []
+        if _cu.is_authenticated:
+            try:
+                config = get_user_config()
+                themes = get_all_custom_themes(admin_view=_cu.is_admin())
+                themes_js = [{'css_key': t.css_key, 'is_dark': t.is_dark, 'name': t.name} for t in themes if not t.is_builtin]
+            except Exception:
+                pass
+        return {
+            'user_config': config,
+            'custom_themes_for_js': themes_js,
+            'is_admin': _cu.is_authenticated and _cu.is_admin(),
+        }
 
     @app.context_processor
     def inject_globals():

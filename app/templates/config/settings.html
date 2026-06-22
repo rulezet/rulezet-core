@@ -1,0 +1,689 @@
+{% extends 'base.html' %}
+{% block title %}Settings — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/config/config.css') }}">
+{% endblock %}
+
+{% block content %}
+<div id="settings-app" v-cloak>
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-sliders banner-watermark"></i>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-sliders"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Settings</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
+            Personalise the interface. Your preferences are saved automatically.
+        </p>
+    </div>
+
+    <div class="row g-3">
+
+        <!-- ── Left column ────────────────────────────────── -->
+        <div class="col-12 col-lg-8">
+
+            <!-- Theme picker -->
+            <div class="card mb-3" id="section-theme">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-palette"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Theme</h6>
+                            <p class="text-muted small mb-0">Choose the colour scheme for the interface.</p>
+                        </div>
+                    </div>
+
+                    <div class="settings-theme-group">
+                        <div v-for="option in theme_options" :key="option.value"
+                             class="settings-theme-card"
+                             :class="{ active: theme === option.value }"
+                             @click="setTheme(option.value)">
+                            <div class="theme-preview"
+                                 :class="option.is_custom ? 'theme-preview--custom' : 'theme-preview--' + option.value"
+                                 :style="option.is_custom ? getPreviewStyle(option) : {}">
+                                <div class="tp-navbar">
+                                    <div class="tp-nav-logo"></div>
+                                    <div class="tp-nav-links">
+                                        <div class="tp-nav-link tp-nav-link--active"></div>
+                                        <div class="tp-nav-link"></div>
+                                        <div class="tp-nav-link"></div>
+                                    </div>
+                                    <div class="tp-nav-avatar"></div>
+                                </div>
+                                <div class="tp-content">
+                                    <div class="tp-card">
+                                        <div class="tp-line tp-line--title"></div>
+                                        <div class="tp-line"></div>
+                                        <div class="tp-line tp-line--short"></div>
+                                    </div>
+                                    <div class="tp-card tp-card--sm">
+                                        <div class="tp-line"></div>
+                                        <div class="tp-line tp-line--short"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + option.icon"></i>
+                                <span>[[ option.label ]]</span>
+                                <i v-if="theme === option.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if is_admin %}
+            <!-- Theme Studio (admin only) -->
+            <div class="card mb-3" id="section-studio">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+                        <div class="flex-1">
+                            <h6 class="settings-section-title mb-0">Theme Studio</h6>
+                            <p class="text-muted small mb-0">Create custom themes and override built-in ones.</p>
+                        </div>
+                        <button class="btn btn-sm btn-primary ms-auto" @click="openCreateModal()">
+                            <i class="fas fa-plus me-1"></i>New theme
+                        </button>
+                    </div>
+
+                    <p class="settings-sub-label">Custom themes</p>
+                    <div class="ts-theme-list mb-4" v-if="studio_themes.filter(t => !t.is_builtin).length">
+                        <div v-for="t in studio_themes.filter(t => !t.is_builtin)" :key="t.uuid"
+                             class="ts-theme-row">
+                            <div class="ts-theme-icon">
+                                <i :class="'fas ' + t.icon"></i>
+                            </div>
+                            <div class="ts-theme-info">
+                                <div class="ts-theme-name">[[ t.name ]]</div>
+                                <div class="ts-theme-meta">
+                                    <span class="badge rounded-pill"
+                                          :class="t.is_dark ? 'bg-secondary-subtle text-secondary-emphasis' : 'bg-warning-subtle text-warning-emphasis'">
+                                        [[ t.is_dark ? 'Dark' : 'Light' ]]
+                                    </span>
+                                    <span class="ms-1 font-mono small">[[ t.css_key ]]</span>
+                                </div>
+                            </div>
+                            <div class="ts-theme-actions">
+                                <button class="settings-toggle-btn me-1"
+                                        :class="{ active: t.is_public }"
+                                        :title="t.is_public ? 'Public — click to make private' : 'Private — click to publish'"
+                                        @click="toggleVisibility(t)">
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                </button>
+                                <span class="small me-2"
+                                      :class="t.is_public ? 'text-success' : 'text-muted'"
+                                      style="font-size:0.72rem;min-width:42px;">
+                                    [[ t.is_public ? 'Public' : 'Private' ]]
+                                </span>
+                                <button class="btn-icon me-1" title="Edit" @click="openEditModal(t)">
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                                <button class="btn-icon" title="Delete" @click="deleteTheme(t)">
+                                    <i class="fas fa-trash text-danger"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <p v-else class="text-muted small mb-4">No custom themes yet. Click "New theme" to create one.</p>
+
+                    <p class="settings-sub-label">Override built-in themes</p>
+                    <div class="ts-builtin-grid">
+                        <div v-for="key in builtin_keys" :key="key"
+                             class="ts-builtin-card"
+                             @click="openBuiltinModal(key)">
+                            <i :class="'fas ' + builtin_meta[key].icon"></i>
+                            <span>[[ builtin_meta[key].label ]]</span>
+                            <span v-if="studio_themes.find(t => t.css_key === key && t.is_builtin)"
+                                  class="badge bg-primary-subtle text-primary-emphasis"
+                                  style="font-size:0.6rem;">Modified</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+
+        <!-- ── Right column ───────────────────────────────── -->
+        <div class="col-12 col-lg-4">
+            <div style="position:sticky;top:80px;">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="settings-section-title mb-2">
+                            <i class="fas fa-palette me-2 text-primary"></i>Active theme
+                        </h6>
+                        <p class="text-muted small mb-3">Quick switch — new themes appear here automatically.</p>
+
+                        <select class="form-select" v-model="theme" @change="setTheme(theme)">
+                            <optgroup label="Built-in">
+                                <option value="system">System (auto)</option>
+                                <option value="light">Light</option>
+                                <option value="dark">Dark</option>
+                            </optgroup>
+                            <optgroup label="Themes" v-if="named_theme_options.length">
+                                <option v-for="t in named_theme_options" :key="t.value" :value="t.value">
+                                    [[ t.label ]]
+                                </option>
+                            </optgroup>
+                            <optgroup label="Custom" v-if="custom_theme_options.length">
+                                <option v-for="t in custom_theme_options" :key="t.value" :value="t.value">
+                                    [[ t.label ]]
+                                </option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-save-status mt-2" :class="save_status">
+                    <template v-if="save_status === 'saving'">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>Saving…
+                    </template>
+                    <template v-else-if="save_status === 'saved'">
+                        <i class="fas fa-circle-check me-2"></i>Saved
+                    </template>
+                    <template v-else-if="save_status === 'error'">
+                        <i class="fas fa-circle-xmark me-2"></i>Save failed
+                    </template>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+{% if is_admin %}
+<!-- Theme Studio modal -->
+<div class="modal fade" id="themeStudioModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" style="background:var(--card-bg-color);border-color:var(--border-color);">
+            <div class="modal-header" style="border-color:var(--border-color);">
+                <h5 class="modal-title">
+                    <i class="fas fa-wand-magic-sparkles me-2 text-primary"></i>
+                    [[ modal_title ]]
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body ts-modal-body">
+
+                <!-- Name / icon / mode — custom themes only -->
+                <div v-if="!modal_is_builtin" class="row g-3 mb-3">
+                    <div class="col-12 col-md-5">
+                        <label class="form-label">Theme name</label>
+                        <input type="text" class="form-control" v-model="modal_form.name"
+                               placeholder="My Theme" maxlength="64">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Icon</label>
+                        <div class="ip-wrapper" v-click-outside="() => show_icon_picker = false">
+                            <div class="ip-trigger" @click="show_icon_picker = !show_icon_picker">
+                                <i :class="'fas ' + (modal_form.icon || 'fa-palette')"></i>
+                                <span>[[ modal_form.icon || 'fa-palette' ]]</span>
+                                <i class="fas fa-chevron-down ip-caret"></i>
+                            </div>
+                            <div v-if="show_icon_picker" class="ip-dropdown mt-1">
+                                <input type="text" class="form-control form-control-sm ip-search"
+                                       v-model="icon_search" placeholder="Search icons…" autofocus>
+                                <div class="ip-grid">
+                                    <button v-for="ic in filteredIcons" :key="ic"
+                                            class="ip-btn"
+                                            :class="{ active: modal_form.icon === ic }"
+                                            :title="ic"
+                                            @click="pickIcon(ic)">
+                                        <i :class="'fas ' + ic"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label">Mode</label>
+                        <select class="form-select" v-model="modal_form.is_dark">
+                            <option :value="false">Light</option>
+                            <option :value="true">Dark</option>
+                        </select>
+                    </div>
+                </div>
+                <div v-else class="alert alert-info py-2 px-3 mb-3" style="font-size:0.82rem;">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Editing <strong>[[ modal_title ]]</strong>. Leave a field empty to use the default value.
+                    <button v-if="modal_editing_uuid" class="btn btn-sm btn-outline-danger ms-2" @click="resetBuiltin()">
+                        Reset to defaults
+                    </button>
+                </div>
+
+                <!-- Tabs -->
+                <ul class="nav nav-tabs mb-0">
+                    <li class="nav-item">
+                        <a class="nav-link" :class="{ active: modal_tab === 'manual' }"
+                           href="javascript:void(0)" @click="modal_tab = 'manual'">
+                            <i class="fas fa-sliders me-1"></i>Fill manually
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" :class="{ active: modal_tab === 'paste' }"
+                           href="javascript:void(0)" @click="modal_tab = 'paste'">
+                            <i class="fas fa-paste me-1"></i>Paste CSS
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- Tab: Paste CSS -->
+                <div v-if="modal_tab === 'paste'" class="tab-content pt-3">
+                    <p class="text-muted small mb-2">
+                        Paste a CSS block like <code>[data-theme="name"] {{ '{' }} ... {{ '}' }}</code>
+                        — the variables will be extracted automatically.
+                    </p>
+                    <textarea class="form-control font-mono mb-3" v-model="paste_input" rows="12"
+                              style="font-size:0.78rem;resize:vertical;"
+                              placeholder="[data-theme=&quot;my-theme&quot;] {&#10;    --bg-color: #1e293b;&#10;    --text-color: #e2e8f0;&#10;    ...&#10;}"></textarea>
+
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <button class="btn btn-sm btn-primary" @click="parsePaste()">
+                            <i class="fas fa-wand-sparkles me-1"></i>Import variables
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" @click="paste_input = ''; paste_result = null">
+                            Clear
+                        </button>
+                    </div>
+
+                    <div v-if="paste_result" class="p-3 rounded"
+                         style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="badge bg-success-subtle text-success-emphasis">
+                                <i class="fas fa-check me-1"></i>[[ paste_result.found ]] vars imported
+                            </span>
+                            <span v-if="paste_result.missing.length"
+                                  class="badge bg-warning-subtle text-warning-emphasis">
+                                <i class="fas fa-triangle-exclamation me-1"></i>[[ paste_result.missing.length ]] missing
+                            </span>
+                        </div>
+                        <div v-if="paste_result.missing.length">
+                            <p class="text-muted small mb-1">Missing — will use defaults:</p>
+                            <div class="d-flex flex-wrap gap-1">
+                                <code v-for="v in paste_result.missing" :key="v"
+                                      class="badge bg-secondary-subtle text-secondary-emphasis"
+                                      style="font-size:0.68rem;">[[ v ]]</code>
+                            </div>
+                        </div>
+                        <p v-else class="text-success small mb-0">
+                            <i class="fas fa-circle-check me-1"></i>All variables found.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Tab: Fill manually -->
+                <div v-if="modal_tab === 'manual'" class="tab-content pt-3">
+                    <div v-for="group in var_groups" :key="group.label" class="ts-var-group">
+                        <div class="ts-var-group-label">[[ group.label ]]</div>
+                        <div class="ts-vars-grid">
+                            <div v-for="v in group.vars" :key="v" class="ts-var-row">
+                                <label class="ts-var-label">[[ v ]]</label>
+                                <input type="text" class="form-control form-control-sm ts-var-input"
+                                       v-model="modal_form.css_vars[v]"
+                                       :class="{ 'border-success': modal_form.css_vars[v] }"
+                                       :placeholder="var_placeholders[v] || ''">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer" style="border-color:var(--border-color);">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" @click="saveTheme()" :disabled="modal_saving">
+                    <span v-if="modal_saving" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="fas fa-floppy-disk me-1"></i>Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+</div>{# end #settings-app #}
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, reactive, computed, onMounted } = Vue
+    import { create_message } from '/static/js/toaster.js'
+
+    const IS_ADMIN     = {{ 'true' if is_admin else 'false' }}
+    const BUILTIN_KEYS = {{ ['dark'] | tojson | safe }}
+    const BUILTIN_META = { dark: { label: 'Dark', icon: 'fa-moon' } }
+
+    const VAR_GROUPS = [
+        { label: 'Backgrounds',       vars: ['--bg-color', '--card-bg-color', '--light-bg-color', '--code-bg-color', '--card-header-bg-color', '--navbar-bg-color', '--bar-bg-color'] },
+        { label: 'Text & Links',      vars: ['--text-color', '--subtle-text-color', '--navbar-text-color', '--rule-name-color'] },
+        { label: 'Borders & States',  vars: ['--border-color', '--selected-color', '--page-selected-color'] },
+        { label: 'Sidebar',           vars: ['--sidebar-color'] },
+    ]
+    const VAR_PLACEHOLDERS = {
+        '--bg-color': '#f7f7f7', '--card-bg-color': '#f9f9f9',
+        '--light-bg-color': '#f1f1f1', '--code-bg-color': '#f8f9fa',
+        '--card-header-bg-color': 'rgb(207,226,255)', '--navbar-bg-color': '#ffffff',
+        '--bar-bg-color': 'rgb(226,231,237)', '--text-color': '#1e1e1e',
+        '--subtle-text-color': '#6c757d', '--navbar-text-color': '#000000',
+        '--rule-name-color': 'rgb(10,88,202)', '--border-color': '#dee2e6',
+        '--selected-color': 'rgb(207,226,255)', '--page-selected-color': 'rgba(13,110,253,1)',
+        '--sidebar-color': 'rgb(15,23,42)',
+    }
+    const ALL_VARS = VAR_GROUPS.flatMap(g => g.vars)
+
+    const ICON_LIST = [
+        'fa-palette','fa-paintbrush','fa-wand-magic-sparkles','fa-star','fa-moon','fa-sun',
+        'fa-water','fa-tree','fa-leaf','fa-fire','fa-snowflake','fa-cloud',
+        'fa-bolt','fa-rainbow','fa-mountain','fa-wind','fa-layer-group',
+        'fa-circle-half-stroke','fa-adjust','fa-eye','fa-heart','fa-diamond',
+        'fa-gem','fa-crown','fa-trophy','fa-medal','fa-rocket','fa-globe',
+        'fa-earth-americas','fa-map','fa-compass','fa-cube','fa-cubes',
+        'fa-shapes','fa-code','fa-terminal','fa-microchip','fa-robot','fa-brain',
+        'fa-flask','fa-atom','fa-dna','fa-infinity','fa-music','fa-headphones',
+        'fa-camera','fa-film','fa-tv','fa-gamepad','fa-chess','fa-dice',
+        'fa-coffee','fa-mug-hot','fa-utensils','fa-book','fa-bookmark',
+        'fa-pen','fa-pencil','fa-feather','fa-lock','fa-shield-halved','fa-key',
+        'fa-user','fa-users','fa-bell','fa-flag','fa-tag','fa-tags',
+        'fa-circle','fa-square','fa-chart-bar','fa-chart-line','fa-chart-pie',
+    ]
+
+    function emptyVars() {
+        const o = {}
+        ALL_VARS.forEach(v => { o[v] = '' })
+        return o
+    }
+
+    function apiFetch(url, method, body) {
+        const csrf = document.getElementById('csrf_token')
+        return fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf ? csrf.value : '' },
+            body: body ? JSON.stringify(body) : undefined,
+        })
+    }
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        setup() {
+            const theme      = ref('{{ config.theme if config else "system" }}')
+            const save_status = ref('')
+            let save_timer   = null
+
+            // Theme options — base built-ins
+            const theme_options = reactive([
+                { value: 'system', label: 'System', icon: 'fa-circle-half-stroke' },
+                { value: 'light',  label: 'Light',  icon: 'fa-sun'  },
+                { value: 'dark',   label: 'Dark',   icon: 'fa-moon' },
+            ])
+
+            // Studio state
+            const studio_themes      = ref([])
+            const modal_title        = ref('')
+            const modal_is_builtin   = ref(false)
+            const modal_editing_uuid = ref(null)
+            const modal_builtin_key  = ref(null)
+            const modal_saving       = ref(false)
+            const modal_tab          = ref('manual')
+            const paste_input        = ref('')
+            const paste_result       = ref(null)
+            const show_icon_picker   = ref(false)
+            const icon_search        = ref('')
+            const modal_form         = reactive({ name: '', icon: 'fa-palette', is_dark: false, css_vars: emptyVars() })
+
+            const builtin_keys = BUILTIN_KEYS
+            const builtin_meta = BUILTIN_META
+            const var_groups   = VAR_GROUPS
+            const var_placeholders = VAR_PLACEHOLDERS
+
+            const filteredIcons = computed(() => {
+                const q = icon_search.value.toLowerCase()
+                return q ? ICON_LIST.filter(ic => ic.includes(q)) : ICON_LIST
+            })
+
+            // Named built-in themes (CSS in theme.css — no css_vars needed for preview)
+            const BUILTIN_NAMED_KEYS = new Set(['ocean', 'forest', 'midnight', 'sunset'])
+
+            const named_theme_options = computed(() => theme_options.filter(t => t.is_named))
+            const custom_theme_options = computed(() => theme_options.filter(t => t.is_custom))
+
+            let _modal = null
+
+            // ── Helpers ──────────────────────────────────────
+            function getPreviewStyle(option) {
+                const v = option.css_vars || {}
+                const dk = option.is_dark
+                return {
+                    '--tp-navbar':    v['--navbar-bg-color'] || (dk ? '#1a2d42' : '#ffffff'),
+                    '--tp-body':      v['--bg-color']         || (dk ? '#1e293b' : '#f7f7f7'),
+                    '--tp-surface':   v['--card-bg-color']    || (dk ? '#2d3f55' : '#ffffff'),
+                    '--tp-brand':     v['--rule-name-color']  || '#0d6efd',
+                    '--tp-border':    v['--border-color']     || (dk ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.07)'),
+                    '--tp-line':      v['--light-bg-color']   || (dk ? 'rgba(255,255,255,.12)' : '#e5e7eb'),
+                    '--tp-text-dim':  dk ? 'rgba(255,255,255,.22)' : 'rgba(0,0,0,.18)',
+                }
+            }
+
+            async function loadStudioThemes() {
+                const res = await fetch('/config/themes-data', {
+                    headers: { 'Content-Type': 'application/json' },
+                })
+                if (res.ok) {
+                    const data = await res.json()
+                    if (IS_ADMIN) studio_themes.value = data.themes || []
+                    const existing = new Set(theme_options.map(t => t.value))
+                    for (const t of data.themes) {
+                        if (!t.is_builtin && !existing.has(t.css_key)) {
+                            const is_named = BUILTIN_NAMED_KEYS.has(t.css_key)
+                            theme_options.push({
+                                value:    t.css_key,
+                                label:    t.name,
+                                icon:     t.icon,
+                                is_named:  is_named,
+                                is_custom: !is_named,
+                                is_dark:   t.is_dark,
+                                css_vars:  t.css_vars || {},
+                            })
+                            existing.add(t.css_key)
+                        }
+                    }
+                }
+            }
+
+            function parsePaste() {
+                const text = paste_input.value
+                const found_vars = [], missing = []
+                for (const v of ALL_VARS) {
+                    const re = new RegExp(v.replace(/[-]/g, '\\-') + '\\s*:\\s*([^;\\n]+);')
+                    const m  = text.match(re)
+                    if (m) {
+                        modal_form.css_vars[v] = m[1].trim()
+                        found_vars.push(v)
+                    } else {
+                        missing.push(v)
+                    }
+                }
+                const sm = text.match(/\[data-theme="([^"]+)"\]/)
+                if (sm && !modal_form.name)
+                    modal_form.name = sm[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                paste_result.value = { found: found_vars.length, missing }
+            }
+
+            function buildCssBlock(cssKey, cssVars) {
+                const lines = [`[data-theme="${cssKey}"] {`]
+                for (const group of VAR_GROUPS) {
+                    lines.push('')
+                    for (const v of group.vars) {
+                        const val = (cssVars || {})[v]
+                        if (val) lines.push(`    ${v}: ${val};`)
+                    }
+                }
+                lines.push('}')
+                return lines.join('\n')
+            }
+
+            function _resetForm() {
+                modal_form.name = ''; modal_form.icon = 'fa-palette'; modal_form.is_dark = false
+                const vars = emptyVars()
+                Object.keys(modal_form.css_vars).forEach(k => { modal_form.css_vars[k] = vars[k] })
+                modal_tab.value = 'manual'; paste_input.value = ''; paste_result.value = null
+                show_icon_picker.value = false; icon_search.value = ''
+            }
+
+            function _fillForm(t) {
+                modal_form.name = t.name; modal_form.icon = t.icon; modal_form.is_dark = t.is_dark
+                const vars = emptyVars()
+                for (const k of Object.keys(vars))
+                    modal_form.css_vars[k] = (t.css_vars || {})[k] || ''
+                paste_input.value = buildCssBlock(t.css_key, t.css_vars)
+                paste_result.value = null
+            }
+
+            function pickIcon(ic) { modal_form.icon = ic; show_icon_picker.value = false; icon_search.value = '' }
+
+            function openCreateModal() {
+                _resetForm()
+                modal_title.value = 'New custom theme'; modal_is_builtin.value = false
+                modal_editing_uuid.value = null; modal_builtin_key.value = null
+                _modal.show()
+            }
+            function openEditModal(t) {
+                _fillForm(t)
+                modal_title.value = `Edit "${t.name}"`; modal_is_builtin.value = false
+                modal_editing_uuid.value = t.uuid; modal_builtin_key.value = null
+                _modal.show()
+            }
+            function openBuiltinModal(key) {
+                _resetForm()
+                const existing = studio_themes.value.find(t => t.css_key === key && t.is_builtin)
+                if (existing) {
+                    _fillForm(existing)
+                } else {
+                    paste_input.value = `[data-theme="${key}"] {\n    /* paste your overrides here */\n}`
+                }
+                modal_title.value = `Override "${BUILTIN_META[key].label}" theme`
+                modal_is_builtin.value = true
+                modal_editing_uuid.value = existing ? existing.uuid : null
+                modal_builtin_key.value = key
+                _modal.show()
+            }
+
+            async function saveTheme() {
+                modal_saving.value = true
+                const css_vars = {}
+                for (const [k, v] of Object.entries(modal_form.css_vars)) { if (v) css_vars[k] = v }
+                let res
+                if (modal_is_builtin.value) {
+                    res = await apiFetch(`/api/config/themes/builtin/${modal_builtin_key.value}`, 'PUT', { css_vars })
+                } else if (modal_editing_uuid.value) {
+                    res = await apiFetch(`/api/config/themes/${modal_editing_uuid.value}`, 'PUT',
+                        { name: modal_form.name, icon: modal_form.icon, is_dark: modal_form.is_dark, css_vars })
+                } else {
+                    res = await apiFetch('/api/config/themes', 'POST',
+                        { name: modal_form.name, icon: modal_form.icon, is_dark: modal_form.is_dark, css_vars })
+                }
+                modal_saving.value = false
+                if (res.ok) {
+                    _modal.hide()
+                    create_message('Theme saved', 'success')
+                    await loadStudioThemes()
+                    setTimeout(() => window.location.reload(), 800)
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Error saving theme', 'danger')
+                }
+            }
+
+            async function toggleVisibility(t) {
+                const next = !t.is_public
+                const res  = await apiFetch(`/api/config/themes/${t.uuid}/visibility`, 'PATCH', { is_public: next })
+                if (res.ok) {
+                    t.is_public = next
+                    create_message(next ? `"${t.name}" is now public` : `"${t.name}" is now private`, 'success')
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Error', 'danger')
+                }
+            }
+
+            async function deleteTheme(t) {
+                if (!confirm(`Delete theme "${t.name}"? This cannot be undone.`)) return
+                const res = await apiFetch(`/api/config/themes/${t.uuid}`, 'DELETE')
+                if (res.ok) {
+                    create_message('Theme deleted', 'success')
+                    await loadStudioThemes()
+                    setTimeout(() => window.location.reload(), 800)
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Error', 'danger')
+                }
+            }
+
+            async function resetBuiltin() {
+                if (!confirm('Reset this theme to default values?')) return
+                const res = await apiFetch(`/api/config/themes/builtin/${modal_builtin_key.value}`, 'DELETE')
+                if (res.ok) {
+                    _modal.hide()
+                    create_message('Theme reset to defaults', 'success')
+                    await loadStudioThemes()
+                    setTimeout(() => window.location.reload(), 800)
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Error', 'danger')
+                }
+            }
+
+            // ── Theme save ────────────────────────────────────
+            async function savePreference(payload) {
+                save_status.value = 'saving'
+                clearTimeout(save_timer)
+                const res = await apiFetch('/config/update', 'POST', payload)
+                if (res.ok) {
+                    save_status.value = 'saved'
+                    save_timer = setTimeout(() => { save_status.value = '' }, 2000)
+                } else {
+                    save_status.value = 'error'
+                    create_message('Failed to save settings', 'danger')
+                }
+            }
+
+            async function setTheme(value) {
+                theme.value = value
+                if (typeof applyTheme === 'function') applyTheme(value)
+                if (typeof updateThemeIcon === 'function') updateThemeIcon(value)
+                await savePreference({ theme: value })
+            }
+
+            onMounted(async () => {
+                const modalEl = document.getElementById('themeStudioModal')
+                if (modalEl) _modal = new bootstrap.Modal(modalEl)
+                await loadStudioThemes()
+            })
+
+            return {
+                theme, save_status, theme_options,
+                named_theme_options, custom_theme_options,
+                setTheme, getPreviewStyle,
+                // Studio
+                studio_themes, modal_title, modal_is_builtin, modal_editing_uuid,
+                modal_saving, modal_form, modal_tab, paste_input, paste_result,
+                show_icon_picker, icon_search, filteredIcons,
+                builtin_keys, builtin_meta, var_groups, var_placeholders,
+                openCreateModal, openEditModal, openBuiltinModal,
+                saveTheme, deleteTheme, resetBuiltin, getPreviewStyle, parsePaste,
+                pickIcon, toggleVisibility,
+            }
+        },
+    }).directive('click-outside', {
+        mounted(el, binding) {
+            el._clickOutside = (e) => { if (!el.contains(e.target)) binding.value(e) }
+            document.addEventListener('mousedown', el._clickOutside)
+        },
+        unmounted(el) { document.removeEventListener('mousedown', el._clickOutside) },
+    }).mount('#settings-app')
+</script>
+{% endblock %}

@@ -111,6 +111,10 @@ api.add_namespace(sync_ns, path="/sync")
 from .instance.instance_api import instance_ns  # noqa
 api.add_namespace(instance_ns, path="/instance")
 
+# User config / Theme Studio
+from .config.config_api import config_ns  # noqa
+api.add_namespace(config_ns, path="/config")
+
 # Unified comment thread
 from .comment.comment_api import comment_ns  # noqa
 api.add_namespace(comment_ns, path="/comments")
