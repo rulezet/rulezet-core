@@ -419,7 +419,7 @@ export default {
                          @click.stop="toggleItem(rule)">
                         <input type="checkbox" class="rl-card-check-input"
                                :checked="isSelected(rule)"
-                               @change.stop @click.stop
+                               @click.stop="toggleItem(rule)"
                                :aria-label="'Select ' + rule.title" />
                         <span class="rl-card-check-text">
                             {{ isSelected(rule) ? 'Selected' : 'Select this rule' }}
@@ -1085,26 +1085,34 @@ export default {
         )
 
         // ── URL sync ──────────────────────────────────────────────────────
+        // Start from the current params so external ones (e.g. ?url=...) are preserved.
         function syncToUrl() {
             if (!props.syncUrl) return
-            const p = new URLSearchParams()
-            if (search.value)                      p.set('search', search.value)
-            if (page.value > 1)                    p.set('page', page.value)
-            if (searchField.value !== 'all')        p.set('search_field', searchField.value)
-            if (exactMatch.value)                   p.set('exact_match', 'true')
-            if (ruleType.value)                     p.set('rule_type', ruleType.value)
-            if (sortKey.value)                    { p.set('sort', sortKey.value); p.set('dir', sortDir.value) }
-            if (viewMode.value !== props.defaultView) p.set('view', viewMode.value)
-            if (selectedTags.value.length)          p.set('tags',            selectedTags.value.join(','))
-            if (selectedSources.value.length)       p.set('sources',         selectedSources.value.join(','))
-            if (selectedLicenses.value.length)      p.set('licenses',        selectedLicenses.value.join(','))
-            if (selectedVulns.value.length)         p.set('vulnerabilities', selectedVulns.value.join(','))
+            const p = new URLSearchParams(window.location.search)
+
+            const _upd = (key, val) => val ? p.set(key, val) : p.delete(key)
+
+            _upd('search',       search.value || null)
+            _upd('page',         page.value > 1 ? page.value : null)
+            _upd('search_field', searchField.value !== 'all' ? searchField.value : null)
+            _upd('exact_match',  exactMatch.value ? 'true' : null)
+            _upd('rule_type',    ruleType.value || null)
+            if (sortKey.value) { p.set('sort', sortKey.value); p.set('dir', sortDir.value) }
+            else               { p.delete('sort'); p.delete('dir') }
+            _upd('view',    viewMode.value !== props.defaultView ? viewMode.value : null)
+            _upd('tags',            selectedTags.value.join(',')    || null)
+            _upd('sources',         selectedSources.value.join(',') || null)
+            _upd('licenses',        selectedLicenses.value.join(',')|| null)
+            _upd('vulnerabilities', selectedVulns.value.join(',')   || null)
             if (personFilter.value.values.length) {
                 const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
                 p.set(pKey, personFilter.value.values.join(','))
-                if (personFilter.value.mode !== 'author') p.set('person_mode', personFilter.value.mode)
+                _upd('person_mode', personFilter.value.mode !== 'author' ? personFilter.value.mode : null)
+            } else {
+                p.delete('authors'); p.delete('editors'); p.delete('person_mode')
             }
-            if (scopeMine.value) p.set('scope', 'mine')
+            _upd('scope', scopeMine.value ? 'mine' : null)
+
             const qs = p.toString()
             history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
         }
