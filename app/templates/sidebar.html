@@ -66,15 +66,6 @@
                            <span v-if="requests_to_validate > 0" class="badge rounded-pill bg-danger ms-2">[[ requests_to_validate ]]</span>
                         </a>
                      </li>
-                     {% else %}
-                     <li><a href="/admin/similar_rules" class="dropdown-item">
-                           <i class="fa-solid fa-link fa-fw me-2"></i>Similar Rules</a></li>
-                     <li>
-                        <a href="/rule/admin/rules_reported" class="dropdown-item d-flex justify-content-between align-items-center">
-                           <span><i class="fa-solid fa-triangle-exclamation fa-fw me-2"></i>Reported Rules</span>
-                           <span v-if="reports_to_check > 0" class="badge rounded-pill bg-danger ms-2">[[ reports_to_check ]]</span>
-                        </a>
-                     </li>
                      {% endif %}
                      {% endif %}
                   </ul>
@@ -113,23 +104,57 @@
                </li>
                {% endif %}
 
-               <!-- ── Connectors (admin only) ── -->
+               <!-- ── Admin (dropdown, admin only) ── -->
                {% if current_user.is_authenticated and current_user.is_admin() %}
-               <li class="nav-item">
-                  <a class="nav-link custom-nav-link fw-bold {% if request.path.startswith('/connector') %}active{% endif %}"
-                     href="/connector/list">
-                     <i class="fa-solid fa-plug fa-fw me-1 text-primary"></i>Connectors
+               <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if '/admin' in request.path or request.path.startswith('/tags/admin') or request.path.startswith('/jobs') or request.path.startswith('/connector') or request.path == '/rule/bulk_tag' or request.path == '/rule/trash' %}active{% endif %}"
+                     href="#" role="button" data-bs-toggle="dropdown">
+                     <i class="fa-solid fa-shield-halved fa-fw me-1 text-danger"></i>Admin
                   </a>
-               </li>
-               {% endif %}
+                  <ul class="dropdown-menu">
 
-               <!-- ── Admin ── -->
-               {% if current_user.is_authenticated and current_user.is_admin() %}
-               <li class="nav-item">
-                  <a class="nav-link custom-nav-link fw-bold {% if '/admin' in request.path or request.path.startswith('/tags/admin') or request.path.startswith('/jobs') or request.path == '/rule/bulk_tag' or request.path == '/rule/trash' %}active{% endif %}"
-                     href="/account/admin/all_users">
-                     <i class="fa-solid fa-lock fa-fw me-1 text-danger"></i>Admin
-                  </a>
+                     <!-- Users -->
+                     <li><h6 class="dropdown-header" style="font-size:.65rem;letter-spacing:.07em;text-transform:uppercase;">Users</h6></li>
+                     <li><a href="/account/admin/all_users" class="dropdown-item {% if request.path == '/account/admin/all_users' %}active{% endif %}">
+                           <i class="fa-solid fa-users fa-fw me-2"></i>All Users</a></li>
+                     <li>
+                        <a href="/admin/request" class="dropdown-item d-flex justify-content-between align-items-center {% if request.path == '/admin/request' %}active{% endif %}">
+                           <span><i class="fa-solid fa-envelope fa-fw me-2"></i>Ownership Requests</span>
+                           <span v-if="requests_to_validate > 0" class="badge rounded-pill bg-danger ms-2">[[ requests_to_validate ]]</span>
+                        </a>
+                     </li>
+
+                     <li><hr class="dropdown-divider"></li>
+
+                     <!-- Content -->
+                     <li><h6 class="dropdown-header" style="font-size:.65rem;letter-spacing:.07em;text-transform:uppercase;">Content</h6></li>
+                     <li>
+                        <a href="/rule/admin/rules_reported" class="dropdown-item d-flex justify-content-between align-items-center {% if request.path == '/rule/admin/rules_reported' %}active{% endif %}">
+                           <span><i class="fa-solid fa-triangle-exclamation fa-fw me-2"></i>Reported Rules</span>
+                           <span v-if="reports_to_check > 0" class="badge rounded-pill bg-danger ms-2">[[ reports_to_check ]]</span>
+                        </a>
+                     </li>
+                     <li><a href="/admin/similar_rules" class="dropdown-item {% if request.path == '/admin/similar_rules' %}active{% endif %}">
+                           <i class="fa-solid fa-code-compare fa-fw me-2"></i>Similar Rules</a></li>
+                     <li><a href="/rule/trash" class="dropdown-item {% if request.path == '/rule/trash' %}active{% endif %}">
+                           <i class="fa-solid fa-trash fa-fw me-2"></i>Trash</a></li>
+                     <li><a href="/rule/bulk_tag" class="dropdown-item {% if request.path == '/rule/bulk_tag' %}active{% endif %}">
+                           <i class="fa-solid fa-tags fa-fw me-2"></i>Bulk Tags</a></li>
+
+                     <li><hr class="dropdown-divider"></li>
+
+                     <!-- System -->
+                     <li><h6 class="dropdown-header" style="font-size:.65rem;letter-spacing:.07em;text-transform:uppercase;">System</h6></li>
+                     <li><a href="/tags/admin" class="dropdown-item {% if request.path.startswith('/tags/admin') %}active{% endif %}">
+                           <i class="fa-solid fa-tag fa-fw me-2"></i>Tags</a></li>
+                     <li><a href="/jobs/list" class="dropdown-item {% if request.path.startswith('/jobs') %}active{% endif %}">
+                           <i class="fa-solid fa-gears fa-fw me-2"></i>Jobs</a></li>
+                     <li><a href="/admin/logs" class="dropdown-item {% if request.path == '/admin/logs' %}active{% endif %}">
+                           <i class="fa-solid fa-list-ul fa-fw me-2"></i>Activity Logs</a></li>
+                     <li><a href="/connector/list" class="dropdown-item {% if request.path.startswith('/connector') %}active{% endif %}">
+                           <i class="fa-solid fa-plug fa-fw me-2"></i>Connectors</a></li>
+
+                  </ul>
                </li>
                {% endif %}
 
@@ -145,7 +170,7 @@
                </button>
 
                <!-- Settings -->
-               <a href="/config/settings" class="nav-icon-btn" title="Settings">
+               <a href="/settings" class="nav-icon-btn" title="Settings">
                   <i class="fa-solid fa-gear fs-5"></i>
                </a>
 
