@@ -112,11 +112,35 @@ body.dark-mode .settings-card-icon {
     background: var(--tp-text-dim, rgba(0,0,0,.15)); flex-shrink: 0;
 }
 
+/* Body row (sidebar + content) */
+.tp-body-row {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Sidebar strip */
+.tp-sidebar {
+    width: 22px;
+    background: var(--tp-sidebar, rgb(15,23,42));
+    flex-shrink: 0;
+    padding: 4px 3px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.tp-sb-item {
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255,255,255,.18);
+}
+.tp-sb-item--active { background: rgba(255,255,255,.5); }
+
 /* Content area (shared) */
 .tp-content {
     flex: 1;
     background: var(--tp-body, #f7f7f7);
-    padding: 5px;
+    padding: 4px;
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -170,48 +194,52 @@ body.dark-mode .settings-card-icon {
 .theme-preview--system .tp-nav-avatar,
 .theme-preview--system .tp-line { visibility: hidden; }
 
-/* Ocean */
+/* Ocean — slate-blue light */
 .theme-preview--ocean {
-    --tp-navbar:   #0d1b2a;
-    --tp-body:     #0d1b2a;
-    --tp-surface:  #1a2d42;
-    --tp-brand:    #4fc3f7;
-    --tp-border:   rgba(79,195,247,.15);
-    --tp-line:     rgba(79,195,247,.14);
-    --tp-text-dim: rgba(255,255,255,.22);
+    --tp-navbar:   #f8fbff;
+    --tp-body:     #edf4fb;
+    --tp-surface:  #f8fbff;
+    --tp-brand:    #1565c0;
+    --tp-border:   rgba(30,120,180,.16);
+    --tp-line:     rgba(30,120,180,.12);
+    --tp-text-dim: rgba(13,42,64,.22);
+    --tp-sidebar:  #0a2c45;
 }
 
-/* Forest */
+/* Forest — sage green light */
 .theme-preview--forest {
-    --tp-navbar:   #0d1f0e;
-    --tp-body:     #0d1f0e;
-    --tp-surface:  #142715;
-    --tp-brand:    #66bb6a;
-    --tp-border:   rgba(102,187,106,.15);
-    --tp-line:     rgba(102,187,106,.14);
-    --tp-text-dim: rgba(255,255,255,.22);
+    --tp-navbar:   #f7fbf7;
+    --tp-body:     #eef5ee;
+    --tp-surface:  #f7fbf7;
+    --tp-brand:    #1b6e22;
+    --tp-border:   rgba(40,130,50,.16);
+    --tp-line:     rgba(40,130,50,.12);
+    --tp-text-dim: rgba(16,34,16,.22);
+    --tp-sidebar:  #092b0b;
 }
 
-/* Midnight */
+/* Midnight — deep blue dark */
 .theme-preview--midnight {
-    --tp-navbar:   #0a0a0f;
-    --tp-body:     #0a0a0f;
-    --tp-surface:  #12121e;
-    --tp-brand:    #a78bfa;
-    --tp-border:   rgba(138,99,210,.15);
-    --tp-line:     rgba(138,99,210,.14);
+    --tp-navbar:   #0a1122;
+    --tp-body:     #080d18;
+    --tp-surface:  #0f1729;
+    --tp-brand:    #6aa0f0;
+    --tp-border:   rgba(80,130,220,.14);
+    --tp-line:     rgba(80,130,220,.15);
     --tp-text-dim: rgba(255,255,255,.22);
+    --tp-sidebar:  #040810;
 }
 
-/* Sunset */
+/* Sunset — amber warm dark */
 .theme-preview--sunset {
-    --tp-navbar:   #1a0f0a;
-    --tp-body:     #1a0f0a;
-    --tp-surface:  #2a1810;
-    --tp-brand:    #fb923c;
-    --tp-border:   rgba(251,146,60,.15);
-    --tp-line:     rgba(251,146,60,.14);
+    --tp-navbar:   #201408;
+    --tp-body:     #1c1008;
+    --tp-surface:  #281808;
+    --tp-brand:    #f09040;
+    --tp-border:   rgba(220,120,30,.18);
+    --tp-line:     rgba(220,120,30,.15);
     --tp-text-dim: rgba(255,255,255,.22);
+    --tp-sidebar:  #0e0804;
 }
 
 /* Custom (admin-created — CSS tokens injected via Vue :style) */
@@ -306,6 +334,31 @@ body.dark-mode .settings-save-status.saved { color: #4ade80; background: rgba(74
 }
 .ip-btn:hover { background: rgba(13,110,253,.1); color: #0d6efd; border-color: rgba(13,110,253,.2); }
 .ip-btn.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+
+/* ── Modal live preview ───────────────────────────── */
+.ts-preview-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.ts-preview-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--subtle-text-color);
+    flex-shrink: 0;
+    width: 52px;
+}
+.ts-live-preview {
+    width: 200px;
+    height: 88px;
+    flex-shrink: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all .2s ease;
+}
 
 /* ── Theme Studio list ────────────────────────────── */
 .ts-theme-list { display: flex; flex-direction: column; gap: 0.5rem; }

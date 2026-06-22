@@ -47,6 +47,7 @@
                             <div class="theme-preview"
                                  :class="option.is_custom ? 'theme-preview--custom' : 'theme-preview--' + option.value"
                                  :style="option.is_custom ? getPreviewStyle(option) : {}">
+                                <!-- Navbar -->
                                 <div class="tp-navbar">
                                     <div class="tp-nav-logo"></div>
                                     <div class="tp-nav-links">
@@ -56,15 +57,23 @@
                                     </div>
                                     <div class="tp-nav-avatar"></div>
                                 </div>
-                                <div class="tp-content">
-                                    <div class="tp-card">
-                                        <div class="tp-line tp-line--title"></div>
-                                        <div class="tp-line"></div>
-                                        <div class="tp-line tp-line--short"></div>
+                                <!-- Sidebar + content -->
+                                <div class="tp-body-row">
+                                    <div class="tp-sidebar">
+                                        <div class="tp-sb-item tp-sb-item--active"></div>
+                                        <div class="tp-sb-item"></div>
+                                        <div class="tp-sb-item"></div>
                                     </div>
-                                    <div class="tp-card tp-card--sm">
-                                        <div class="tp-line"></div>
-                                        <div class="tp-line tp-line--short"></div>
+                                    <div class="tp-content">
+                                        <div class="tp-card">
+                                            <div class="tp-line tp-line--title"></div>
+                                            <div class="tp-line"></div>
+                                            <div class="tp-line tp-line--short"></div>
+                                        </div>
+                                        <div class="tp-card tp-card--sm">
+                                            <div class="tp-line"></div>
+                                            <div class="tp-line tp-line--short"></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -249,6 +258,41 @@
                         </select>
                     </div>
                 </div>
+                <!-- Live preview -->
+                <div class="ts-preview-row mb-3">
+                    <div class="ts-preview-label">Preview</div>
+                    <div class="theme-preview theme-preview--custom ts-live-preview"
+                         :style="livePreviewStyle">
+                        <div class="tp-navbar">
+                            <div class="tp-nav-logo"></div>
+                            <div class="tp-nav-links">
+                                <div class="tp-nav-link tp-nav-link--active"></div>
+                                <div class="tp-nav-link"></div>
+                                <div class="tp-nav-link"></div>
+                            </div>
+                            <div class="tp-nav-avatar"></div>
+                        </div>
+                        <div class="tp-body-row">
+                            <div class="tp-sidebar">
+                                <div class="tp-sb-item tp-sb-item--active"></div>
+                                <div class="tp-sb-item"></div>
+                                <div class="tp-sb-item"></div>
+                            </div>
+                            <div class="tp-content">
+                                <div class="tp-card">
+                                    <div class="tp-line tp-line--title"></div>
+                                    <div class="tp-line"></div>
+                                    <div class="tp-line tp-line--short"></div>
+                                </div>
+                                <div class="tp-card tp-card--sm">
+                                    <div class="tp-line"></div>
+                                    <div class="tp-line tp-line--short"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div v-else class="alert alert-info py-2 px-3 mb-3" style="font-size:0.82rem;">
                     <i class="fas fa-info-circle me-1"></i>
                     Editing <strong>[[ modal_title ]]</strong>. Leave a field empty to use the default value.
@@ -451,6 +495,21 @@
             const named_theme_options = computed(() => theme_options.filter(t => t.is_named))
             const custom_theme_options = computed(() => theme_options.filter(t => t.is_custom))
 
+            const livePreviewStyle = computed(() => {
+                const v = modal_form.css_vars || {}
+                const dk = modal_form.is_dark
+                return {
+                    '--tp-navbar':   v['--navbar-bg-color'] || (dk ? '#1a2d42' : '#ffffff'),
+                    '--tp-body':     v['--bg-color']         || (dk ? '#1e293b' : '#f7f7f7'),
+                    '--tp-surface':  v['--card-bg-color']    || (dk ? '#2d3f55' : '#ffffff'),
+                    '--tp-sidebar':  v['--sidebar-color']    || 'rgb(15,23,42)',
+                    '--tp-brand':    v['--rule-name-color']  || '#0d6efd',
+                    '--tp-border':   v['--border-color']     || (dk ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.08)'),
+                    '--tp-line':     v['--light-bg-color']   || (dk ? 'rgba(255,255,255,.12)' : '#e5e7eb'),
+                    '--tp-text-dim': dk ? 'rgba(255,255,255,.22)' : 'rgba(0,0,0,.18)',
+                }
+            })
+
             let _modal = null
 
             // ── Helpers ──────────────────────────────────────
@@ -458,13 +517,14 @@
                 const v = option.css_vars || {}
                 const dk = option.is_dark
                 return {
-                    '--tp-navbar':    v['--navbar-bg-color'] || (dk ? '#1a2d42' : '#ffffff'),
-                    '--tp-body':      v['--bg-color']         || (dk ? '#1e293b' : '#f7f7f7'),
-                    '--tp-surface':   v['--card-bg-color']    || (dk ? '#2d3f55' : '#ffffff'),
-                    '--tp-brand':     v['--rule-name-color']  || '#0d6efd',
-                    '--tp-border':    v['--border-color']     || (dk ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.07)'),
-                    '--tp-line':      v['--light-bg-color']   || (dk ? 'rgba(255,255,255,.12)' : '#e5e7eb'),
-                    '--tp-text-dim':  dk ? 'rgba(255,255,255,.22)' : 'rgba(0,0,0,.18)',
+                    '--tp-navbar':   v['--navbar-bg-color'] || (dk ? '#1a2d42' : '#ffffff'),
+                    '--tp-body':     v['--bg-color']         || (dk ? '#1e293b' : '#f7f7f7'),
+                    '--tp-surface':  v['--card-bg-color']    || (dk ? '#2d3f55' : '#ffffff'),
+                    '--tp-sidebar':  v['--sidebar-color']    || 'rgb(15,23,42)',
+                    '--tp-brand':    v['--rule-name-color']  || '#0d6efd',
+                    '--tp-border':   v['--border-color']     || (dk ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.07)'),
+                    '--tp-line':     v['--light-bg-color']   || (dk ? 'rgba(255,255,255,.12)' : '#e5e7eb'),
+                    '--tp-text-dim': dk ? 'rgba(255,255,255,.22)' : 'rgba(0,0,0,.18)',
                 }
             }
 
@@ -673,6 +733,7 @@
             return {
                 theme, save_status, theme_options,
                 named_theme_options, custom_theme_options,
+                livePreviewStyle,
                 setTheme, getPreviewStyle,
                 // Studio
                 studio_themes, modal_title, modal_is_builtin, modal_editing_uuid,
