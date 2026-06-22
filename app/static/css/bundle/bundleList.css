@@ -1,0 +1,207 @@
+/* ==========================================================================
+   bundleList.css — Styles for the BundleList component (bl-* namespace)
+   Depends on: core.css variables, dataTable.css (dt-*), ruleList.css (rl-*)
+   ========================================================================== */
+
+/* ── Wrapper ── */
+.bl-wrapper { position: relative; }
+
+/* ── Toolbar ── */
+.bl-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .6rem;
+    flex-wrap: wrap;
+    margin-bottom: .85rem;
+}
+.bl-toolbar-left,
+.bl-toolbar-right { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; }
+
+/* ── Card grid ── */
+.bl-cards { display: flex; flex-direction: column; gap: 0; }
+
+/* ── Bundle card ── */
+.bl-bundle-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06) !important;
+    transition: box-shadow .18s, border-color .18s;
+}
+.bl-bundle-card:hover {
+    border-color: rgba(13,110,253,.3) !important;
+}
+.bl-bundle-card--selected {
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 2px rgba(13,110,253,.22) !important;
+}
+
+.dark-mode .bl-bundle-card {
+    border-color: rgba(255,255,255,.1) !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,.45) !important;
+    background: #1e2433 !important;
+}
+.dark-mode .bl-bundle-card:hover {
+    border-color: rgba(13,110,253,.5) !important;
+    background: #212840 !important;
+}
+.dark-mode .bl-bundle-card--selected {
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 2px rgba(13,110,253,.35), 0 4px 16px rgba(0,0,0,.5) !important;
+}
+
+/* ── Access filter toggle ── */
+.bl-access-toggle {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--light-bg-color);
+}
+.bl-acc-btn {
+    padding: .28rem .75rem;
+    font-size: .75rem;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+}
+.bl-acc-btn:hover { background: var(--border-color); color: var(--text-color); }
+.bl-acc-btn--active { background: #0d6efd; color: #fff; }
+.bl-acc-btn--active:hover { background: #0a58ca; color: #fff; }
+
+/* ── Table wrapper ── */
+.bl-table-wrap { overflow-x: auto; }
+
+/* ── Inline rules expand (card view) ── */
+.bl-rules-expand {
+    background: var(--light-bg-color);
+    padding: .65rem .9rem;
+    border-radius: 0 0 8px 8px;
+}
+.bl-rules-expand-header {
+    display: flex;
+    align-items: center;
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: .5rem;
+}
+
+/* ── Rule list inside expand ── */
+.bl-rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+.bl-rule-row {
+    border-bottom: 1px solid var(--border-color);
+    padding: .35rem 0;
+}
+.bl-rule-row:last-child { border-bottom: none; }
+.bl-rule-row-main {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+.bl-rule-fmt {
+    font-size: .6rem !important;
+    flex-shrink: 0;
+    letter-spacing: .03em;
+}
+.bl-rule-title {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text-color);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1 1 0;
+    min-width: 80px;
+}
+.bl-rule-title:hover { color: #0d6efd; text-decoration: underline; }
+.bl-rule-meta-inline {
+    flex-shrink: 0;
+}
+.bl-rule-tags-inline {
+    flex-shrink: 0;
+    display: inline-flex;
+}
+.bl-rule-expand-btn {
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--subtle-text-color);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .1s, color .1s;
+    padding: 0;
+}
+.bl-rule-expand-btn:hover { background: var(--border-color); color: var(--text-color); }
+.bl-rule-code {
+    margin-top: .4rem;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* ── Mini pagination for bundle rules ── */
+.bl-rules-pagination {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    justify-content: center;
+    margin-top: .55rem;
+    padding-top: .45rem;
+    border-top: 1px solid var(--border-color);
+}
+.bl-rules-page-btn {
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    border-radius: 6px;
+    padding: .22rem .55rem;
+    font-size: .78rem;
+    cursor: pointer;
+    transition: background .1s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.bl-rules-page-btn:hover:not(:disabled) { background: var(--light-bg-color); }
+.bl-rules-page-btn:disabled { opacity: .4; cursor: not-allowed; }
+.bl-rules-page-info {
+    font-size: .78rem;
+    color: var(--subtle-text-color);
+    min-width: 48px;
+    text-align: center;
+}
+
+/* ── Table expand panel ── */
+.bl-expand-wrap {
+    padding: .85rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .8rem;
+    border-top: 2px solid rgba(13,110,253,.15);
+    background: var(--light-bg-color);
+}
+.bl-expand-rules {
+    flex: 1 1 0;
+    min-width: 0;
+}

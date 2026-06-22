@@ -948,6 +948,19 @@ def get_all_vulnerabilities_usage():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
     
+@bundle_blueprint.route('/get_bundle_creators_usage')
+def get_bundle_creators_usage():
+    from app.core.db_class.db import Bundle, User
+    from sqlalchemy import func
+    from app import db
+    results = (db.session.query(User.first_name, func.count(Bundle.id).label('cnt'))
+               .join(Bundle, Bundle.user_id == User.id)
+               .group_by(User.id, User.first_name)
+               .order_by(func.count(Bundle.id).desc())
+               .all())
+    return jsonify([{'name': r.first_name, 'count': r.cnt} for r in results if r.first_name])
+
+
 @bundle_blueprint.route("/get_tags/<int:bundle_id>")
 def get_bundle_tags(bundle_id):
     try:
@@ -1095,3 +1108,93 @@ def add_single_rule_to_bundle():
         "toast_class": "success-subtle",
         "uuid": new_bundle.uuid
     }, 200
+
+
+# ── BundleList component endpoint ──────────────────────────────────────────
+
+@bundle_blueprint.route("/data_table", methods=['GET'])
+def bundle_data_table():
+    """Standardised paginated endpoint consumed by the BundleList Vue component."""
+    from app.core.db_class.db import Bundle, Tag, BundleTagAssociation
+    from sqlalchemy import asc, desc, or_
+
+    page     = request.args.get('page',     1,    type=int)
+    per_page = request.args.get('per_page', 12,   type=int)
+    search   = (request.args.get('search',  '',   type=str) or '').strip()
+    sort_by  = request.args.get('sort',     'created_at', type=str)
+    sort_dir = request.args.get('dir',      'desc', type=str)
+    user_id  = request.args.get('user_id',  None, type=int)
+    tags_raw     = request.args.get('tags',         '',   type=str) or ''
+    vulns_raw    = request.args.get('vulnerabilities', '', type=str) or ''
+    creators_raw = request.args.get('creators',    '',   type=str) or ''
+    access       = request.args.get('access',      '',   type=str)  # 'public' | 'private' | ''
+
+    tag_names    = [t.strip() for t in tags_raw.split(',')      if t.strip()]
+    vuln_list    = [v.strip() for v in vulns_raw.split(',')     if v.strip()]
+    creator_list = [c.strip() for c in creators_raw.split(',')  if c.strip()]
+
+    query = Bundle.query
+
+    if search:
+        like = f'%{search}%'
+        query = query.filter(or_(Bundle.name.ilike(like), Bundle.description.ilike(like)))
+
+    if tag_names:
+        query = (query
+                 .join(BundleTagAssociation, BundleTagAssociation.bundle_id == Bundle.id)
+                 .join(Tag, Tag.id == BundleTagAssociation.tag_id)
+                 .filter(Tag.name.in_(tag_names))
+                 .distinct())
+
+    if vuln_list:
+        query = query.filter(or_(
+            *[Bundle.vulnerability_identifiers.ilike(f'%"{v}"%') for v in vuln_list]
+        ))
+
+    if user_id:
+        query = query.filter(Bundle.user_id == user_id)
+
+    if creator_list:
+        from app.core.db_class.db import User
+        query = (query
+                 .join(User, User.id == Bundle.user_id, isouter=False)
+                 .filter(User.first_name.in_(creator_list)))
+
+    if access == 'public':
+        query = query.filter(Bundle.access.is_(True))
+    elif access == 'private':
+        if current_user.is_authenticated:
+            query = query.filter(Bundle.access.is_(False), Bundle.user_id == current_user.id)
+        else:
+            query = query.filter(False)
+    else:
+        if current_user.is_authenticated:
+            if not current_user.is_admin():
+                query = query.filter(or_(Bundle.access.is_(True), Bundle.user_id == current_user.id))
+        else:
+            query = query.filter(Bundle.access.is_(True))
+
+    _sort_map = {
+        'created_at': Bundle.created_at,
+        'updated_at': Bundle.updated_at,
+        'name':       Bundle.name,
+        'vote_up':    Bundle.vote_up,
+        'view_count': Bundle.view_count,
+    }
+    sort_col = _sort_map.get(sort_by, Bundle.created_at)
+    query = query.order_by(desc(sort_col) if sort_dir == 'desc' else asc(sort_col))
+
+    per_page = min(max(per_page, 1), 100)
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    items = []
+    for b in pagination.items:
+        j = b.to_json()
+        j['tags'] = BundleModel.get_tags_for_bundle_json(b.id)
+        items.append(j)
+
+    return jsonify({
+        'items':       items,
+        'total':       pagination.total,
+        'total_pages': pagination.pages,
+    })
