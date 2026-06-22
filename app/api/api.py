@@ -1,5 +1,6 @@
+import json
 import os
-from flask import Blueprint
+from flask import Blueprint, request as freq
 from flask_restx import Api
 
 # -------------------------------------------------------------
@@ -118,3 +119,82 @@ api.add_namespace(config_ns, path="/config")
 # Unified comment thread
 from .comment.comment_api import comment_ns  # noqa
 api.add_namespace(comment_ns, path="/comments")
+
+# Activity log (admin only)
+from .log.log_api import log_ns  # noqa
+api.add_namespace(log_ns, path="/log")
+
+
+# ─── API request audit hook ──────────────────────────────────────────────────
+
+# Paths excluded from API request logging (high-volume or self-referential)
+_LOG_SKIP_PREFIXES = ("/api/sync/", "/api/instance/", "/api/log/", "/api/config/",
+                      "/api/swaggerui/")
+
+@api_blueprint.after_request
+def _log_api_request(response):
+    """Log every mutating API call with its HTTP status and JSON result."""
+    from contextlib import suppress
+    with suppress(Exception):
+        path = freq.path
+        method = freq.method
+
+        # only mutating verbs; skip swagger UI and internal endpoints
+        if method not in ("POST", "PUT", "PATCH", "DELETE"):
+            return response
+        if any(path.startswith(p) for p in _LOG_SKIP_PREFIXES):
+            return response
+        # skip swagger static assets
+        if path in ("/api/", "/api/swagger.json"):
+            return response
+
+        status_code = response.status_code
+        level = "success" if status_code < 300 else ("warning" if status_code < 500 else "error")
+
+        # truncate request body
+        req_preview = None
+        with suppress(Exception):
+            body = freq.get_json(silent=True, force=True)
+            if body:
+                req_preview = json.dumps(body, default=str)[:400]
+
+        # truncate response body
+        resp_preview = None
+        with suppress(Exception):
+            if response.is_json:
+                resp_preview = response.get_data(as_text=True)[:400]
+
+        # resolve user from API key or session
+        user_id = None
+        username = None
+        with suppress(Exception):
+            from app.core.utils.utils import get_user_from_api
+            api_user = get_user_from_api(freq.headers)
+            if api_user:
+                user_id = api_user.id
+                username = api_user.get_username()
+        if not user_id:
+            with suppress(Exception):
+                from flask_login import current_user
+                if current_user.is_authenticated:
+                    user_id = current_user.id
+                    username = current_user.get_username()
+
+        from app.core.utils.activity_log import log_activity
+        log_activity(
+            "api.request",
+            f"{method} {path} → {status_code}",
+            category="system",
+            level=level,
+            title=f"API {method} {path}",
+            extra={
+                "method":    method,
+                "path":      path,
+                "status":    status_code,
+                "request":   req_preview,
+                "response":  resp_preview,
+                "user":      username,
+            },
+            is_public=False,
+        )
+    return response

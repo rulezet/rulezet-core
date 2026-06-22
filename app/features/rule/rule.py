@@ -1194,6 +1194,13 @@ def propose_edit(rule_id) -> redirect:
         except Exception as _e:
             print(f"[rule] notify_proposal_submitted error: {_e}")
 
+        log_activity(
+            "rule.propose_edit",
+            f"Submitted an edit proposal for rule '{rule.title}' (id={rule_id})",
+            target_type="rule", target_id=rule_id, target_uuid=rule.uuid,
+            extra={"proposal_id": proposal_id, "message": message or ""},
+            is_public=False,
+        )
         flash("Request sended.", "success", f"/rule/proposal_content_discuss?id={proposal_id}")
     else:
         flash("Request sended but fail.", "error")
@@ -1214,9 +1221,16 @@ def validate_proposal() -> jsonify:
 
             if decision == "accepted":
                 RuleModel.set_status(rule_proposal_id,"accepted")
-                # change the to_string part of the rule in the db 
+                # change the to_string part of the rule in the db
                 response , status_code = RuleModel.set_to_string_rule(rule_id, rule_proposal.proposed_content)
                 message = response["message"]
+                log_activity(
+                    "rule.proposal_approved",
+                    f"Approved edit proposal id={rule_proposal_id} for rule id={rule_id}",
+                    target_type="rule", target_id=rule_id,
+                    extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id},
+                    is_public=False,
+                )
                 # add to contributor
                 user_proposal_id = RuleModel.get_rule_proposal_user_id(rule_proposal_id)
                 RuleModel.create_contribution(user_proposal_id,rule_proposal_id)
@@ -1252,7 +1266,13 @@ def validate_proposal() -> jsonify:
             elif decision == "rejected":
                 RuleModel.set_status(rule_proposal_id,"rejected")
                 message = "Proposal rejected."
-
+                log_activity(
+                    "rule.proposal_rejected",
+                    f"Rejected edit proposal id={rule_proposal_id} for rule id={rule_id}",
+                    target_type="rule", target_id=rule_id,
+                    extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id},
+                    is_public=False,
+                )
                 # update gamification
                 gamification = AccountModel.get_or_create_gamification_profile(rule_proposal.user_id)
                 if gamification == None:
@@ -1298,6 +1318,13 @@ def manage_proposals() -> jsonify:
     )
 
     if result["success"]:
+        log_activity(
+            "rule.proposal_approved" if action == "accept" else "rule.proposal_rejected",
+            f"Bulk {action}ed proposals (mode={mode}, count={result.get('count', '?')})",
+            extra={"action": action, "mode": mode, "selected_ids": selected_ids,
+                   "excluded_ids": excluded_ids},
+            is_public=False,
+        )
         return jsonify({
             "message": result["message"],
             "success": True,
@@ -1822,6 +1849,13 @@ def edit_bad_rule(rule_id):
                 success, error , rule = process_and_import_fixed_rule(bad_rule, new_content )
 
                 if success:
+                    log_activity(
+                        "rule.bad_rule_edited",
+                        f"Fixed and imported invalid rule id={rule_id} as rule '{rule.title}' (id={rule.id})",
+                        target_type="rule", target_id=rule.id, target_uuid=rule.uuid,
+                        extra={"bad_rule_id": rule_id},
+                        is_public=False,
+                    )
                     flash("Rule fixed and imported successfully.", "success")
                     #return redirect(url_for('rule.bad_rules_summary'))
                     return redirect(url_for('rule.detail_rule', rule_id=rule.id))
@@ -1844,6 +1878,12 @@ def delete_bad_rule(rule_id) -> jsonify:
             if request.method == 'POST':
                 success = BadRuleModel.delete_bad_rule(rule_id)
                 if success:
+                    log_activity(
+                        "rule.bad_rule_deleted",
+                        f"Deleted invalid rule id={rule_id}",
+                        extra={"bad_rule_id": rule_id},
+                        is_public=False,
+                    )
                     return jsonify({"success": True, "message": "Rule deleted!" , "toast_class": "success-subtle"}), 200
             return render_template('rule/edit_bad_rule.html', rule=bad_rule)
         return render_template("access_denied.html")
@@ -1869,13 +1909,19 @@ def delete_all_bad_rule() -> jsonify:
         deleted_count = BadRuleModel.delete_all_bad_rules(filters)
 
         if deleted_count == 0:
-             return jsonify({ 
+             return jsonify({
                 "success": True,
                 "toast_class": 'info',
                 "message": "No rules matched the filters to delete."
             }), 200
 
-        return jsonify({ 
+        log_activity(
+            "rule.bad_rule_deleted",
+            f"Bulk deleted {deleted_count} invalid rule(s)",
+            extra={"deleted_count": deleted_count, "filters": filters},
+            is_public=False,
+        )
+        return jsonify({
             "success": True,
             "toast_class": 'success',
             "message": f"Successfully deleted {deleted_count} rules!"
@@ -1942,10 +1988,18 @@ def report_rule():
     result, is_new = RuleModel.create_repport(current_user.id, data.get('rule_id'), data.get('message', ''), data.get('reason'))
 
     if result:
+        rule_id_r = data.get('rule_id')
+        log_activity(
+            "rule.report",
+            f"Reported rule id={rule_id_r}: {data.get('reason', '')}",
+            target_type="rule", target_id=rule_id_r,
+            extra={"reason": data.get('reason'), "message": data.get('message', ''), "is_new": is_new},
+            is_public=False,
+        )
         if is_new:
             try:
                 from app.features.notification.notification_core import notify_admins_report_created
-                rule_obj = RuleModel.get_rule(data.get('rule_id'))
+                rule_obj = RuleModel.get_rule(rule_id_r)
                 notify_admins_report_created(result, rule_obj, current_user)
             except Exception as _e:
                 print(f"[rule] notify_admins_report_created error: {_e}")
@@ -2041,6 +2095,12 @@ def reports_bulk_action():
                 ok += 1
             else:
                 fail += 1
+    log_activity(
+        "rule.delete" if action == "delete_rules" else "admin.delete_reports",
+        f"Bulk reports action '{action}': {ok} succeeded, {fail} failed",
+        extra={"action": action, "report_ids": report_ids, "ok": ok, "fail": fail},
+        is_public=False,
+    )
     return jsonify({"ok": ok, "fail": fail,
                     "message": f"{ok} deleted" + (f", {fail} errors" if fail else ""),
                     "toast_class": "warning-subtle" if fail else "success-subtle"})
@@ -2187,6 +2247,12 @@ def replace_format_rule():
     if updated_count is None:
         flash("Error occurred while updating formats.", "error")
     else:
+        log_activity(
+            "admin.replace_format",
+            f"Replaced format '{current_format}' → '{new_format}' on {updated_count} rule(s)",
+            extra={"old_format": current_format, "new_format": new_format, "updated_count": updated_count},
+            is_public=False,
+        )
         flash(f"{updated_count} rule(s) updated from '{current_format}' to '{new_format}'.", "success")
     return redirect(url_for("rule.manage_format_rule"))
 
@@ -2227,6 +2293,13 @@ def create_format_json():
     if not format_name:
         return jsonify(success=False, message="Format name is required"), 400
     success, message = RuleModel.add_format_rule(format_name, current_user.id, can_be_execute)
+    if success:
+        log_activity(
+            "tag.create",
+            f"Created rule format '{format_name}'",
+            extra={"format_name": format_name, "can_be_execute": can_be_execute},
+            is_public=False,
+        )
     return jsonify(success=success, message=message), (200 if success else 409)
 
 
@@ -2244,6 +2317,12 @@ def rename_format_json():
     if current_format == new_format:
         return jsonify(success=False, message="New name must differ from the current name"), 400
     updated = RuleModel.replace_rule_format(current_format, new_format)
+    log_activity(
+        "admin.replace_format",
+        f"Renamed format '{current_format}' → '{new_format}' on {updated} rule(s)",
+        extra={"old_format": current_format, "new_format": new_format, "updated_count": updated},
+        is_public=False,
+    )
     return jsonify(success=True, message=f"{updated} rule(s) updated from '{current_format}' to '{new_format}'.", updated=updated)
 
 

@@ -418,6 +418,12 @@ def verify(user_id):
             if not success:
                 flash("Failed to verify account.", "error")
                 return redirect("/account/login")
+            log_activity(
+                "user.verified",
+                f"User '{user.get_username()}' verified their account",
+                target_type="user", target_id=user_id,
+                is_public=False,
+            )
             flash("Account verified!", "success")
             login_user(user, remember=True)
             return redirect("/")
@@ -468,6 +474,12 @@ def remove_rule_favorite() -> jsonify:
     rule_id = request.args.get('id', 1, type=int)
     rep = AccountModel.remove_favorite(current_user.id, rule_id)
     if rep:
+        log_activity(
+            "rule.unfavorite",
+            f"Removed rule id={rule_id} from favorites",
+            target_type="rule", target_id=rule_id,
+            is_public=False,
+        )
         return jsonify({"success": True, "message": "Rule deleted!"})
     return jsonify({"success": False, "message": "Access denied"}), 403
 

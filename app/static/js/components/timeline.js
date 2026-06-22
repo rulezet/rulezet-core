@@ -90,17 +90,17 @@ export default {
     name: 'Timeline',
 
     props: {
-        items:     { type: Array,   default: () => [] },
-        loading:   { type: Boolean, default: false },
-        groupByDay:{ type: Boolean, default: true },
-        maxDesc:   { type: Number,  default: 180 },
-        canDelete: { type: Boolean, default: false },
+        items:          { type: Array,   default: () => [] },
+        loading:        { type: Boolean, default: false },
+        groupByDay:     { type: Boolean, default: true },
+        maxDesc:        { type: Number,  default: 180 },
+        canDelete:      { type: Boolean, default: false },
+        startCollapsed: { type: Boolean, default: false },
     },
 
     emits: ['select', 'delete'],
 
     setup(props, { emit }) {
-        // collapsed = items whose body is hidden (default: all collapsed)
         const collapsed = ref(new Set())
 
         function toggle(uuid) {
@@ -112,11 +112,12 @@ export default {
 
         function isCollapsed(uuid) { return collapsed.value.has(uuid) }
 
-        // After items load, collapse all by default
         const _seeded = ref(false)
         function seedCollapsed(items) {
             if (_seeded.value || !items.length) return
-            collapsed.value = new Set(items.map(i => i.uuid))
+            if (props.startCollapsed) {
+                collapsed.value = new Set(items.map(i => i.uuid))
+            }
             _seeded.value = true
         }
 

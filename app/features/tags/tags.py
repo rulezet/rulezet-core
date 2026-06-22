@@ -149,6 +149,12 @@ def delete_family():
     if not family:
         return {"status": "error", "message": "Family is required."}, 400
     deleted, msg = tags_core.remove_family(family, source)
+    log_activity(
+        "tag.family_delete",
+        f"Deleted tag family '{family}' (source={source or 'all'}): {deleted} tag(s) removed",
+        extra={"family": family, "source": source, "deleted_count": deleted},
+        is_public=False,
+    )
     return {"status": "success", "deleted": deleted, "message": msg, "toast_class": "success-subtle"}, 200
 
 
@@ -188,6 +194,12 @@ def remove_tags_bulk():
 
     deleted, msg = tags_core.remove_tags_bulk(ids)
     if deleted > 0:
+        log_activity(
+            "tag.bulk_delete",
+            f"Bulk deleted {deleted} tag(s) (ids={ids[:10]}{'...' if len(ids) > 10 else ''})",
+            extra={"ids": ids, "deleted_count": deleted},
+            is_public=False,
+        )
         return {"status": "success", "deleted": deleted, "message": msg, "toast_class": "success-subtle"}, 200
     return {"status": "error", "deleted": 0, "message": msg, "toast_class": "danger-subtle"}, 500
 

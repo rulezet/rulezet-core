@@ -1724,11 +1724,15 @@ class ActivityLog(db.Model):
 
     # e.g. "rule.create", "rule.delete", "user.login", "bundle.edit", "admin.promote_user"
     action      = db.Column(db.String(64), nullable=False, index=True)
+    title       = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
+    category    = db.Column(db.String(32), nullable=True, index=True)
+    level       = db.Column(db.String(16), nullable=True, index=True)
 
     ip_address  = db.Column(db.String(45), nullable=True)   # IPv4 or IPv6
     url         = db.Column(db.String(512), nullable=True)
     method      = db.Column(db.String(8), nullable=True)
+    user_agent  = db.Column(db.String(256), nullable=True)
 
     # What entity was acted on
     target_type = db.Column(db.String(32), nullable=True, index=True)  # "rule" | "bundle" | "user" | "tag" | "job"
@@ -1758,9 +1762,14 @@ class ActivityLog(db.Model):
             "uuid":        self.uuid,
             "user_id":     self.user_id,
             "username":    username,
+            "actor_name":  username,
             "action":      self.action,
+            "title":       self.title or '',
+            "category":    self.category or 'system',
+            "level":       self.level or 'info',
             "description": self.description,
             "ip_address":  self.ip_address,
+            "user_agent":  self.user_agent,
             "url":         self.url,
             "method":      self.method,
             "target_type": self.target_type,
@@ -1769,7 +1778,7 @@ class ActivityLog(db.Model):
             "extra":       self.extra,
             "is_public":   self.is_public,
             "icon":        self.icon,
-            "created_at":  self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "created_at":  self.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
         }
     
     def to_json_public(self):

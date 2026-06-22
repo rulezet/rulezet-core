@@ -13,6 +13,7 @@ from app.features.rule.rule_format.main_format import extract_rule_from_repo, ve
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, delete_existing_repo_folder, github_repo_metadata, valider_repo_github
 from app.core.utils import utils
 from app.core.utils.decorators import api_required
+from app.core.utils.activity_log import log_activity
 from ...features.rule import rule_core as RuleModel
 from ...features.account import account_core as AccountModel
 from flask_restx import Namespace, Resource
@@ -161,6 +162,13 @@ class CreateRule(Resource):
 
         verif, msg = RuleModel.add_rule_core(form_dict, user)
         if isinstance(verif, Rule):
+            log_activity(
+                "rule.create",
+                f"Created rule '{verif.title}' [{verif.format}] via API",
+                target_type="rule", target_id=verif.id, target_uuid=verif.uuid,
+                extra={"format": verif.format, "source": "api", "user_id": user.id},
+                is_public=True,
+            )
             return {"message": msg, "rule": verif.to_json()}, 200
 
         if "already exists" in str(msg):
@@ -237,6 +245,13 @@ class DeleteRule(Resource):
         if user.id == rule_owner_id or user.is_admin():
             success = RuleModel.delete_rule_core(rule_id)
             if success:
+                log_activity(
+                    "rule.delete",
+                    f"Deleted rule id={rule_id} via API",
+                    target_type="rule", target_id=rule_id,
+                    extra={"source": "api", "user_id": user.id},
+                    is_public=False,
+                )
                 return {
                     "success": True,
                     "message": f"Rule with ID '{rule_id}' deleted successfully"
@@ -419,6 +434,13 @@ class ImportRulesFromGithub(Resource):
         try:
             bad_rules, imported, skipped = asyncio.run(extract_rule_from_repo(repo_dir, info , user))
             delete_existing_repo_folder("Rules_Github")
+            log_activity(
+                "github.import_started",
+                f"Imported rules from '{repo_url}' via API: {imported} imported, {skipped} skipped, {bad_rules} failed",
+                extra={"repo_url": repo_url, "imported": imported, "skipped": skipped,
+                       "failed": bad_rules, "source": "api"},
+                is_public=True,
+            )
             response = {
                 "success": True,
                 "imported": imported,

@@ -86,6 +86,13 @@ def owner_request() -> redirect:
         if current_user.id != rule.user_id:
             request_ = AccountModel.create_request(rule_id=rule_id, source="")
             if request_:
+                log_activity(
+                    "user.owner_request",
+                    f"Requested ownership of rule id={rule_id}",
+                    target_type="rule", target_id=int(rule_id),
+                    extra={"rule_id": rule_id, "choice": 1},
+                    is_public=False,
+                )
                 return {"success": True, "message": "Ownership request submitted successfully !" , "toast_class" : "success-subtle"}, 200
         return {"success": False, "message": "You can create a request for your own rule !" , "toast_class" : "danger-subtle"}, 200
     elif choice == 2:
@@ -97,6 +104,12 @@ def owner_request() -> redirect:
         if not rules:
             return {"success": False, "message": "No rule with this source!" , "toast_class" : "danger-subtle"}, 200
         AccountModel.create_request(rule_id=None, source=source)
+        log_activity(
+            "user.owner_request",
+            f"Requested ownership of rules from source '{source}'",
+            extra={"source": source, "choice": 2},
+            is_public=False,
+        )
         return {"success": True, "message": "Ownership request submitted successfully !" , "toast_class" : "success-subtle"}, 200
     else:
         return {"success": False, "message": "Error system" , "toast_class" : "danger-subtle"}, 500
@@ -436,29 +449,55 @@ def get_logs_page():
     from app.core.db_class.db import ActivityLog
     from app import db
 
+    from sqlalchemy import or_
     page      = request.args.get('page', 1, type=int)
-    per_page  = request.args.get('per_page', 50, type=int)
+    per_page  = min(100, request.args.get('per_page', 25, type=int))
     search    = request.args.get('search', '', type=str).strip()
     action    = request.args.get('action', '', type=str).strip()
+    category  = request.args.get('category', '', type=str).strip()
+    level     = request.args.get('level', '', type=str).strip()
     user_id_f = request.args.get('user_id', None, type=int)
+    sort_key  = request.args.get('sort', 'created_at', type=str)
+    sort_dir  = request.args.get('dir', 'desc', type=str)
+
+    _allowed_sorts = {'id', 'created_at', 'category', 'level', 'action'}
+    if sort_key not in _allowed_sorts:
+        sort_key = 'created_at'
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = 'desc'
 
     q = ActivityLog.query
     if search:
-        q = q.filter(ActivityLog.description.ilike(f'%{search}%'))
+        like = f'%{search}%'
+        q = q.filter(or_(
+            ActivityLog.title.ilike(like),
+            ActivityLog.action.ilike(like),
+            ActivityLog.description.ilike(like),
+        ))
     if action:
         q = q.filter(ActivityLog.action.ilike(f'%{action}%'))
+    if category:
+        q = q.filter(ActivityLog.category == category)
+    if level:
+        q = q.filter(ActivityLog.level == level)
     if user_id_f:
         q = q.filter(ActivityLog.user_id == user_id_f)
 
-    q = q.order_by(ActivityLog.created_at.desc())
-    paginated = q.paginate(page=page, per_page=per_page, error_out=False)
+    sort_col = getattr(ActivityLog, sort_key)
+    q = q.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())
+
+    total       = q.count()
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page        = min(page, total_pages)
+    items       = q.offset((page - 1) * per_page).limit(per_page).all()
 
     return jsonify({
-        "logs":        [l.to_json() for l in paginated.items],
-        "total":       paginated.total,
+        "items":       [l.to_json() for l in items],
+        "logs":        [l.to_json() for l in items],  # backward compat
+        "total":       total,
         "page":        page,
         "per_page":    per_page,
-        "total_pages": paginated.pages,
+        "total_pages": total_pages,
     }), 200
 
 

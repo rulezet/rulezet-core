@@ -207,6 +207,13 @@ def save_workspace(bundle_id):
     success = BundleModel.save_workspace(bundle_id, structure)
 
     if success:
+        log_activity(
+            "bundle.edit",
+            f"Saved workspace structure for bundle id={bundle_id}",
+            target_type="bundle", target_id=bundle_id,
+            extra={"action": "save_workspace"},
+            is_public=False,
+        )
         return {"success": True, "toast_class": "success", "message": "Workspace saved successfully"}, 200
     else:
         return {"success": False, "toast_class": "danger", "message": "Error saving workspace"}, 500
@@ -273,6 +280,13 @@ def update_bundle_tags(bundle_id):
 
     success = BundleModel.update_bundle_tags(bundle_id, tag_ids, current_user)
     if success:
+        log_activity(
+            "bundle.tags_updated",
+            f"Updated tags on bundle id={bundle_id} ({len(tag_ids)} tag(s))",
+            target_type="bundle", target_id=bundle_id,
+            extra={"tag_ids": tag_ids},
+            is_public=False,
+        )
         return {"success": True, "message": "Tags updated successfully"}, 200
     else:
         return {"success": False, "message": "Error updating tags"}, 500
@@ -1082,6 +1096,13 @@ def add_single_rule_to_bundle():
         if not success:
             return {"success": False, "message": "Failed to add rule to bundle", "toast_class": "danger-subtle"}, 500
 
+        log_activity(
+            "bundle.rule_added",
+            f"Added rule id={rule_id} to bundle '{bundle.name}' (id={existing_bundle_id})",
+            target_type="bundle", target_id=existing_bundle_id, target_uuid=bundle.uuid,
+            extra={"rule_id": rule_id, "bundle_id": existing_bundle_id},
+            is_public=False,
+        )
         return {
             "success": True,
             "message": f"Rule added to bundle \"{bundle.name}\"",
@@ -1102,6 +1123,13 @@ def add_single_rule_to_bundle():
     if not success:
         return {"success": False, "message": "Bundle created but failed to add rule", "toast_class": "warning-subtle"}, 500
 
+    log_activity(
+        "bundle.create",
+        f"Created bundle '{new_bundle.name}' and added rule id={rule_id}",
+        target_type="bundle", target_id=new_bundle.id, target_uuid=new_bundle.uuid,
+        extra={"rule_id": rule_id, "bundle_name": new_bundle.name},
+        is_public=True,
+    )
     return {
         "success": True,
         "message": f"Bundle \"{new_bundle.name}\" created and rule added",

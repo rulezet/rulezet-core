@@ -6,6 +6,7 @@ from flask import  request
 from app.features.bundle import bundle_core as BundleModel
 from app.core.utils import utils
 from app.core.utils.decorators import api_required
+from app.core.utils.activity_log import log_activity
 
 bundle_private_ns = Namespace(
     "Private action on Bundle 🔑 (with api key)",
@@ -84,6 +85,13 @@ class CreateBundle(Resource):
         if not my_bundle:
             return {"message": "Failed to create bundle"}, 500
 
+        log_activity(
+            "bundle.create",
+            f"Created bundle '{my_bundle.name}' via API",
+            target_type="bundle", target_id=my_bundle.id, target_uuid=my_bundle.uuid,
+            extra={"source": "api", "user_id": user.id, "public": public},
+            is_public=True,
+        )
         return {
             "message": "Bundle created successfully",
             "bundle_id": my_bundle.id
@@ -171,6 +179,13 @@ class AddRuleToBundle(Resource):
 
         success_ = BundleModel.add_rule_to_bundle(bundle_id, rule_id, description)
         if success_:
+            log_activity(
+                "bundle.rule_added",
+                f"Added rule id={rule_id} to bundle '{bundle.name}' (id={bundle_id}) via API",
+                target_type="bundle", target_id=bundle_id, target_uuid=bundle.uuid,
+                extra={"rule_id": rule_id, "source": "api"},
+                is_public=False,
+            )
             return {
                 "success": True,
                 "message": "Rule added!",
@@ -308,6 +323,14 @@ class EditBundle(Resource):
         success = BundleModel.update_bundle(bundle_id, data)
 
         if success:
+            log_activity(
+                "bundle.edit",
+                f"Edited bundle '{bundle.name}' (id={bundle_id}) via API",
+                target_type="bundle", target_id=bundle_id, target_uuid=bundle.uuid,
+                extra={"source": "api", "changes": {k: v for k, v in (data or {}).items()
+                                                     if k in ("name", "description", "public")}},
+                is_public=False,
+            )
             return {
                 "success": True,
                 "message": "Bundle updated successfully",

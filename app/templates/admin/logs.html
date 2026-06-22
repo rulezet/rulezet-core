@@ -1,231 +1,222 @@
 {% extends 'base.html' %}
 {% import 'macros/admin_nav.html' as anav %}
 {% block title %}Activity Logs — Rulezet{% endblock %}
+
 {% block head %}
-<style>
-  .log-row { cursor: pointer; transition: background .15s; }
-  .log-row:hover { background: var(--hover-color, rgba(0,0,0,.04)); }
-  .log-row.no-target { cursor: default; }
-  .action-badge { font-size: .72rem; font-family: monospace; }
-  .log-desc { max-width: 380px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .blurred { filter: blur(5px); transition: filter .2s; user-select: none; cursor: pointer; }
-  .blurred:hover { filter: blur(3px); }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/timeline.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/logs.css') }}">
 {% endblock %}
+
 {% block content %}
 {% if current_user.is_admin() %}
 <div class="container-fluid my-4" id="logs-app" v-cloak>
 
-  <!-- Header -->
+  <!-- Banner -->
   <div class="explorer-banner mb-4">
     <i class="fa-solid fa-scroll banner-watermark"></i>
     <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
-            <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-            <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
-            <li class="breadcrumb-item active text-muted" aria-current="page">Activity Logs</li>
-        </ol>
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Activity Logs</li>
+      </ol>
     </nav>
     <div class="d-flex align-items-center gap-3 mb-3">
-        <div class="banner-icon">
-            <i class="fa-solid fa-scroll"></i>
-        </div>
-        <div>
-            <h2 class="fw-bold mb-1">Activity Logs</h2>
-            <div class="banner-accent"></div>
-        </div>
+      <div class="banner-icon"><i class="fa-solid fa-scroll"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">Activity Logs</h2>
+        <div class="banner-accent"></div>
+      </div>
     </div>
-    <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">Full audit trail of every action on the platform.</p>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">Full audit trail of every action on the platform.</p>
   </div>
 
   {{ anav.admin_nav('logs') }}
 
-  <!-- Filters -->
-  <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body">
-      <div class="row g-3">
-        <div class="col-lg-4 col-md-6">
-          <label class="form-label fw-semibold small text-muted">Search description</label>
-          <input v-model="search" @input="debouncedFetch" class="form-control form-control-sm"
-                 placeholder="Search…">
-        </div>
-        <div class="col-lg-3 col-md-6">
-          <label class="form-label fw-semibold small text-muted">Action</label>
-          <select v-model="actionFilter" @change="fetchLogs(1)" class="form-select form-select-sm">
-            <option value="">All actions</option>
-            <option v-for="a in availableActions" :key="a" :value="a">[[ a ]]</option>
-          </select>
-        </div>
-        <div class="col-lg-2 col-md-4">
-          <label class="form-label fw-semibold small text-muted">Per page</label>
-          <select v-model="perPage" @change="fetchLogs(1)" class="form-select form-select-sm">
-            <option value="25">25</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-          </select>
-        </div>
-        <div class="col-lg-3 col-md-4 d-flex align-items-end gap-2 flex-wrap">
-          <button @click="fetchLogs(1)" class="btn btn-sm btn-primary">
-            <i class="fa-solid fa-magnifying-glass me-1"></i>Search
-          </button>
-          <button @click="resetFilters" class="btn btn-sm btn-outline-secondary">
-            <i class="fa-solid fa-rotate-left me-1"></i>Reset
-          </button>
-          <button @click="sensitiveVisible = !sensitiveVisible"
-                  :class="['btn btn-sm', sensitiveVisible ? 'btn-warning' : 'btn-outline-secondary']"
-                  :title="sensitiveVisible ? 'Hide sensitive data' : 'Reveal sensitive data (IP, usernames)'">
-            <i :class="sensitiveVisible ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Stats bar -->
+  <!-- Top bar: stats + view toggle + delete all -->
   <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-    <div>
+    <div class="d-flex align-items-center gap-2">
       <span class="text-muted small">Total:</span>
-      <span class="badge bg-primary ms-1">[[ total ]]</span>
+      <span class="badge bg-primary">[[ totalLogs ]]</span>
     </div>
+
+    <!-- View toggle -->
+    <div class="logs-view-toggle">
+      <button class="logs-view-btn" :class="{ 'is-active': view === 'table' }" @click="view = 'table'">
+        <i class="fas fa-table-list"></i> Table
+      </button>
+      <button class="logs-view-btn" :class="{ 'is-active': view === 'timeline' }" @click="switchToTimeline">
+        <i class="fas fa-timeline"></i> Timeline
+      </button>
+    </div>
+
     <button @click="deleteAll" class="btn btn-sm btn-outline-danger">
-      <i class="fa-solid fa-fire me-1"></i>Delete ALL logs
+      <i class="fa-solid fa-fire me-1"></i>Delete ALL
     </button>
   </div>
 
-  <!-- Selection bar -->
-  <div v-if="selectedIds.length > 0" class="selection-status-card mb-3">
-    <div class="d-flex align-items-center gap-3 flex-wrap">
-      <div class="selection-icon-box rounded-3">
-        <i class="fa-solid fa-check-square"></i>
-        <span class="selection-badge">[[ selectedIds.length ]]</span>
-      </div>
-      <span class="fw-semibold small">[[ selectedIds.length ]] log(s) selected</span>
-      <div class="d-flex gap-2 ms-auto flex-wrap">
-        <button @click="bulkSetVisibility(true)" class="selection-pill">
-          <i class="fa-solid fa-globe text-success"></i>Public
-        </button>
-        <button @click="bulkSetVisibility(false)" class="selection-pill">
-          <i class="fa-solid fa-lock text-muted"></i>Private
-        </button>
-        <button @click="bulkDelete" class="selection-pill">
-          <i class="fa-solid fa-trash text-danger"></i>Delete
-        </button>
-        <button @click="selectedIds = []" class="selection-pill global">
-          <i class="fa-solid fa-xmark"></i>Clear
-        </button>
-      </div>
-    </div>
+  <!-- ================================================================= -->
+  <!--  TABLE VIEW                                                        -->
+  <!-- ================================================================= -->
+  <div v-show="view === 'table'">
+    <log-table
+      ref="logTableRef"
+      fetch-url="/admin/get_logs_page"
+      :can-delete="true"
+      :csrf-token="csrfToken"
+      @delete="deleteOne"
+      @bulk-delete="bulkDeleteByUuids"
+      @edit="openEdit">
+    </log-table>
   </div>
 
-  <!-- Table -->
-  <div class="card border-0 shadow rounded-4 overflow-hidden mb-4">
-    <div class="table-responsive">
-      <table class="table table-sm table-hover mb-0">
-        <thead>
-          <tr style="background: var(--light-bg-color); border-bottom: 2px solid var(--border-color);">
-            <th class="py-3 ps-3" style="width:36px; color: var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
-              <input type="checkbox" class="form-check-input" @change="toggleSelectAll" :checked="allSelected">
-            </th>
-            <th class="py-3" style="color: var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">Date</th>
-            <th class="py-3" style="color: var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">User</th>
-            <th class="py-3" style="color: var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">Action</th>
-            <th class="py-3" style="color: var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">Description</th>
-            <th class="py-3" style="color: var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">Target</th>
-            <th class="py-3" style="color: var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">IP</th>
-            <th class="py-3 text-center" style="min-width:90px; color: var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">Visibility</th>
-            <th class="py-3" style="width:80px; border:none;"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-if="loading">
-            <tr><td colspan="9" class="text-center py-5">
-              <div class="spinner-border spinner-border-sm text-primary"></div>
-              <span class="ms-2 text-muted">Loading…</span>
-            </td></tr>
-          </template>
-          <template v-else-if="logs.length === 0">
-            <tr><td colspan="9" class="text-center py-5">
-              <i class="fa-solid fa-box-open fa-2x mb-2 d-block opacity-25"></i>
-              <span style="color: var(--subtle-text-color);">No logs found.</span>
-            </td></tr>
-          </template>
-          <template v-else>
-            <tr v-for="log in logs" :key="log.id"
-                :class="['log-row', targetUrl(log) ? '' : 'no-target']"
-                @click.stop="navigateLog(log, $event)"
-                style="border-bottom: 1px solid var(--border-color);">
-              <td class="ps-3" @click.stop>
-                <input type="checkbox" class="form-check-input"
-                       :value="log.id" v-model="selectedIds" @click.stop>
-              </td>
-              <td class="text-nowrap small" style="color: var(--subtle-text-color);">[[ log.created_at ]]</td>
-              <td class="small" @click.stop>
-                <span :class="{ blurred: !sensitiveVisible }" :title="sensitiveVisible ? '' : 'Click eye icon to reveal'">
-                  <user-chip v-if="log.user_id" :user-id="log.user_id" :username="log.username" size="xs"></user-chip>
-                  <span v-else style="color: var(--subtle-text-color);">System</span>
-                </span>
-              </td>
-              <td>
-                <span :class="['badge', 'action-badge', actionColor(log.action)]">
-                  [[ log.action ]]
-                </span>
-              </td>
-              <td class="log-desc small" :title="log.description" style="color: var(--text-color);">[[ log.description ]]</td>
-              <td class="small text-nowrap" style="color: var(--subtle-text-color);">
-                <span v-if="log.target_type">
-                  <i :class="targetIcon(log.target_type)" class="me-1" style="color: var(--subtle-text-color);"></i>
-                  [[ log.target_type ]]
-                  <span v-if="log.target_id" style="opacity:.6; font-size:.85em;">#[[ log.target_id ]]</span>
-                </span>
-              </td>
-              <td class="small text-nowrap" style="color: var(--subtle-text-color);">
-                <span :class="{ blurred: !sensitiveVisible }"
-                      :title="sensitiveVisible ? '' : 'Click eye icon to reveal'">
-                  [[ log.ip_address || '—' ]]
-                </span>
-              </td>
-              <td @click.stop class="text-center">
-                <span @click="toggleVisibility(log)"
-                      class="badge rounded-pill px-2 py-1"
-                      :class="log.is_public
-                        ? 'bg-success-subtle text-success border border-success-subtle'
-                        : 'bg-secondary-subtle text-secondary border border-secondary-subtle'"
-                      style="font-size:.7rem; cursor:pointer; user-select:none; transition:all .15s;"
-                      :title="log.is_public ? 'Click to make Private' : 'Click to make Public'">
-                  <i :class="log.is_public ? 'fa-solid fa-globe me-1' : 'fa-solid fa-lock me-1'"></i>
-                  [[ log.is_public ? 'Public' : 'Private' ]]
-                </span>
-              </td>
-              <td @click.stop class="text-nowrap">
-                <button @click.stop="openEdit(log)" class="btn btn-xs btn-outline-secondary px-2 py-0 me-1"
-                        title="Edit this log">
-                  <i class="fa-solid fa-pen"></i>
-                </button>
-                <button @click.stop="deleteOne(log)" class="btn btn-xs btn-outline-danger px-2 py-0"
-                        title="Delete this log">
-                  <i class="fa-solid fa-xmark"></i>
-                </button>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
+  <!-- ================================================================= -->
+  <!--  TIMELINE VIEW                                                     -->
+  <!-- ================================================================= -->
+  <div v-show="view === 'timeline'">
+
+    <!-- Toolbar -->
+    <div class="logs-tl-toolbar">
+      <div class="logs-tl-filters">
+        <button v-for="cat in tlCategories" :key="cat.value"
+                class="logs-tl-chip" :class="{ 'is-active': tlCat === cat.value }"
+                @click="setTlCat(cat.value)">
+          [[ cat.label ]]
+        </button>
+      </div>
+      <div class="logs-tl-filters">
+        <button v-for="lv in tlLevels" :key="lv.value"
+                class="logs-tl-chip" :class="{ 'is-active': tlLevel === lv.value }"
+                @click="setTlLevel(lv.value)">
+          [[ lv.label ]]
+        </button>
+      </div>
+      <div class="logs-tl-search">
+        <i class="fas fa-magnifying-glass" style="font-size:.72rem;"></i>
+        <input class="logs-tl-search-input" placeholder="Search…"
+               v-model="tlSearch" @input="debouncedTlFetch">
+      </div>
     </div>
-  </div>
 
-  <!-- Pagination component -->
-  <pagination-component
-    :current-page="page"
-    :total-pages="totalPages"
-    @change-page="fetchLogs">
-  </pagination-component>
+    <!-- Timeline + detail panel -->
+    <div class="logs-tl-main">
 
-  <!-- Edit modal -->
+      <!-- Timeline column -->
+      <div>
+        <timeline
+          ref="timelineRef"
+          :items="tlItems"
+          :loading="tlLoading"
+          @select="selectTlItem">
+        </timeline>
+        <div v-if="tlHasMore" class="logs-tl-load-more">
+          <button class="btn btn-sm btn-outline-secondary rounded-pill px-4"
+                  @click="loadMoreTl" :disabled="tlLoading">
+            <i class="fas fa-plus me-1"></i>Load more
+          </button>
+        </div>
+      </div>
+
+      <!-- Detail panel -->
+      <div class="logs-tl-detail" v-if="selectedTlItem">
+        <div class="logs-tl-detail-header">
+          <span class="logs-tl-detail-title">Event detail</span>
+          <button class="logs-tl-detail-close" @click="selectedTlItem = null" title="Close">
+            <i class="fas fa-xmark"></i>
+          </button>
+        </div>
+        <div class="logs-tl-detail-body">
+          <div class="d-flex align-items-start gap-2 mb-3 flex-wrap">
+            <span class="badge rounded-pill" style="font-size:.68rem;background:var(--brand);">
+              [[ selectedTlItem.category ]]
+            </span>
+            <span :class="['badge rounded-pill', tlLevelBadge(selectedTlItem.level)]" style="font-size:.68rem;">
+              [[ selectedTlItem.level ]]
+            </span>
+          </div>
+
+          <div class="fw-semibold mb-1" style="font-size:.9rem;">[[ selectedTlItem.title || selectedTlItem.action ]]</div>
+          <div class="text-muted mb-2" style="font-size:.75rem;font-family:var(--font-mono);">[[ selectedTlItem.action ]]</div>
+
+          <hr style="border-color:var(--border-color);margin:.75rem 0;">
+
+          <div class="logs-detail-grid">
+            <div class="logs-detail-field">
+              <span class="logs-detail-label">Actor</span>
+              <span class="logs-detail-value">[[ selectedTlItem.actor_name || 'System' ]]</span>
+            </div>
+            <div class="logs-detail-field">
+              <span class="logs-detail-label">Date</span>
+              <span class="logs-detail-value">[[ formatTlDate(selectedTlItem.created_at) ]]</span>
+            </div>
+            <div class="logs-detail-field" v-if="selectedTlItem.target_type">
+              <span class="logs-detail-label">Target</span>
+              <span class="logs-detail-value">[[ selectedTlItem.target_type ]] #[[ selectedTlItem.target_id ]]</span>
+            </div>
+            <div class="logs-detail-field" v-if="selectedTlItem.ip_address">
+              <span class="logs-detail-label">IP</span>
+              <span class="logs-detail-value">[[ selectedTlItem.ip_address ]]</span>
+            </div>
+            <div class="logs-detail-field" v-if="selectedTlItem.method">
+              <span class="logs-detail-label">Method</span>
+              <span class="logs-detail-value">[[ selectedTlItem.method ]]</span>
+            </div>
+            <div class="logs-detail-field">
+              <span class="logs-detail-label">Visibility</span>
+              <span class="logs-detail-value">[[ selectedTlItem.is_public ? 'Public' : 'Admin only' ]]</span>
+            </div>
+          </div>
+
+          <div v-if="selectedTlItem.description" class="logs-detail-desc">[[ selectedTlItem.description ]]</div>
+
+          <div v-if="selectedTlItem.url"
+               style="font-size:.72rem;color:var(--subtle-text-color);font-family:var(--font-mono);margin-top:.5rem;">
+            [[ selectedTlItem.method ]] [[ selectedTlItem.url ]]
+          </div>
+
+          <div v-if="selectedTlItem.user_agent"
+               style="font-size:.72rem;color:var(--subtle-text-color);font-family:var(--font-mono);margin-top:.25rem;word-break:break-all;">
+            [[ selectedTlItem.user_agent ]]
+          </div>
+
+          <div v-if="selectedTlItem.extra">
+            <div class="logs-detail-label mt-2 mb-1">Extra data</div>
+            <pre class="logs-detail-pre">[[ JSON.stringify(selectedTlItem.extra, null, 2) ]]</pre>
+          </div>
+
+          <div class="d-flex gap-2 mt-3">
+            <button @click="openEdit(selectedTlItem)" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+              <i class="fas fa-pen me-1"></i>Edit
+            </button>
+            <button @click="deleteOneTl(selectedTlItem)" class="btn btn-sm btn-outline-danger rounded-pill px-3">
+              <i class="fas fa-trash me-1"></i>Delete
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail panel placeholder -->
+      <div class="logs-tl-detail" v-else>
+        <div class="logs-tl-detail-empty">
+          <i class="fas fa-hand-pointer d-block mb-2 opacity-25 fa-lg"></i>
+          Click an event to see details
+        </div>
+      </div>
+
+    </div><!-- /logs-tl-main -->
+  </div><!-- /timeline view -->
+
+  <!-- ================================================================= -->
+  <!--  EDIT MODAL                                                        -->
+  <!-- ================================================================= -->
   <div v-if="editLog" class="modal fade show d-block" style="background:rgba(0,0,0,.5);" @click.self="editLog=null">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content border-0 shadow-lg rounded-4">
         <div class="modal-header border-0 pb-0">
-          <h5 class="modal-title fw-bold"><i class="fa-solid fa-pen me-2 text-primary"></i>Edit Log #[[ editLog.id ]]</h5>
+          <h5 class="modal-title fw-bold">
+            <i class="fa-solid fa-pen me-2 text-primary"></i>Edit Log #[[ editLog.id ]]
+          </h5>
           <button class="btn-close" @click="editLog=null"></button>
         </div>
         <div class="modal-body pt-2">
@@ -260,7 +251,7 @@
     </div>
   </div>
 
-</div>
+</div><!-- /logs-app -->
 {% else %}
 <div class="container my-5 text-center">
   <h4 class="text-danger">Access denied</h4>
@@ -268,275 +259,229 @@
 {% endif %}
 
 <script type="module">
-import PaginationComponent from '/static/js/rule/paginationComponent.js'
 import { create_message } from '/static/js/toaster.js'
-import UserChip from '/static/js/components/UserChip.js'
+import LogTable  from '/static/js/components/log-table.js'
+import Timeline  from '/static/js/components/timeline.js'
 
-const { createApp, ref, computed, onMounted } = Vue
+const { createApp, ref, onMounted } = Vue
 
 createApp({
-  delimiters: ['[[', ']]'],
-  components: { 'pagination-component': PaginationComponent, 'user-chip': UserChip },
-  setup() {
-    const logs             = ref([])
-    const total            = ref(0)
-    const page             = ref(1)
-    const perPage          = ref(50)
-    const totalPages       = ref(1)
-    const loading          = ref(false)
-    const search           = ref('')
-    const actionFilter     = ref('')
-    const availableActions = ref([])
-    const selectedIds      = ref([])
-    const sensitiveVisible = ref(false)
-    const editLog          = ref(null)
-    const editForm         = ref({ description: '', icon: '', is_public: false })
+    delimiters: ['[[', ']]'],
+    components: { 'log-table': LogTable, 'timeline': Timeline },
+    setup() {
 
-    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || ''
+        const csrfToken   = document.querySelector('input[name="csrf_token"]')?.value || ''
+        const logTableRef = ref(null)
+        const timelineRef = ref(null)
 
-    // ── Fetch actions list ────────────────────────────────────────────────────
-    async function fetchActions() {
-      try {
-        const res  = await fetch('/admin/logs/actions')
-        const data = await res.json()
-        availableActions.value = data.actions || []
-      } catch {}
-    }
+        // ── Shared state ──────────────────────────────────────────────────────
+        const view      = ref('table')
+        const totalLogs = ref(0)
+        const editLog   = ref(null)
+        const editForm  = ref({ description: '', icon: '', is_public: false })
 
-    // ── Fetch logs ────────────────────────────────────────────────────────────
-    async function fetchLogs(p = 1) {
-      loading.value = true
-      selectedIds.value = []
-      page.value = p
-      const params = new URLSearchParams({
-        page:     p,
-        per_page: perPage.value,
-        search:   search.value,
-        action:   actionFilter.value,
-      })
-      try {
-        const res  = await fetch(`/admin/get_logs_page?${params}`)
-        const data = await res.json()
-        logs.value       = data.logs || []
-        total.value      = data.total || 0
-        totalPages.value = data.total_pages || 1
-      } catch (e) {
-        console.error(e)
-      } finally {
-        loading.value = false
-      }
-    }
+        // ── Timeline state ────────────────────────────────────────────────────
+        const tlItems    = ref([])
+        const tlLoading  = ref(false)
+        const tlPage     = ref(1)
+        const tlHasMore  = ref(false)
+        const tlCat      = ref('')
+        const tlLevel    = ref('')
+        const tlSearch   = ref('')
+        const selectedTlItem = ref(null)
 
-    let _debounce = null
-    function debouncedFetch() {
-      clearTimeout(_debounce)
-      _debounce = setTimeout(() => fetchLogs(1), 350)
-    }
+        const TL_PER_PAGE = 30
 
-    function resetFilters() {
-      search.value = ''
-      actionFilter.value = ''
-      fetchLogs(1)
-    }
+        const tlCategories = [
+            { value: '', label: 'All' },
+            { value: 'rule',      label: 'Rule'      },
+            { value: 'bundle',    label: 'Bundle'    },
+            { value: 'user',      label: 'User'      },
+            { value: 'admin',     label: 'Admin'     },
+            { value: 'tag',       label: 'Tag'       },
+            { value: 'job',       label: 'Job'       },
+            { value: 'github',    label: 'GitHub'    },
+            { value: 'connector', label: 'Connector' },
+            { value: 'system',    label: 'System'    },
+        ]
 
-    // ── Target URL ────────────────────────────────────────────────────────────
-    function targetUrl(log) {
-      if (!log.target_type) return null
-      if (log.target_type === 'rule') {
-        if (log.target_uuid) return `/rule/detail_rule/${log.target_uuid}`
-        if (log.target_id)   return `/rule/detail_rule/${log.target_id}`
-      }
-      if (log.target_type === 'bundle') {
-        if (log.target_uuid) return `/bundle/detail/${log.target_uuid}`
-        if (log.target_id)   return `/bundle/detail/${log.target_id}`
-      }
-      if (log.target_type === 'user' && log.target_id)
-        return `/account/detail_user/${log.target_id}`
-      if (log.target_type === 'tag') return '/tags/admin/list'
-      if (log.target_type === 'job' && log.target_uuid)
-        return `/jobs/list?job=${log.target_uuid}`
-      if (log.target_type === 'job') return '/jobs/list'
-      if (log.target_type === 'github_import')
-        return log.target_uuid
-          ? `/rule/github/history_github_importer?highlight=${log.target_uuid}`
-          : '/rule/github/history_github_importer'
-      if (log.target_type === 'github_update')
-        return log.target_uuid
-          ? `/rule/github/history_github_importer?highlight_update=${log.target_uuid}`
-          : '/rule/github/history_github_importer'
-      if (log.target_type === 'comment' && log.target_id) {
-        const ruleUuid = log.extra?.rule_uuid
-        const ruleId   = log.extra?.rule_id
-        const base = ruleUuid ? `/rule/detail_rule/${ruleUuid}`
-                               : ruleId ? `/rule/detail_rule/${ruleId}` : null
-        if (base) return `${base}?comment=${log.target_id}`
-      }
-      if (log.target_type === 'bundle_comment' && log.target_id) {
-        const bundleUuid = log.extra?.bundle_uuid
-        const bundleId   = log.extra?.bundle_id
-        const base = bundleUuid ? `/bundle/detail/${bundleUuid}`
-                                 : bundleId ? `/bundle/detail/${bundleId}` : null
-        if (base) return `${base}?comment=${log.target_id}`
-      }
-      return null
-    }
+        const tlLevels = [
+            { value: '', label: 'All' },
+            { value: 'info',    label: 'Info'    },
+            { value: 'success', label: 'Success' },
+            { value: 'warning', label: 'Warning' },
+            { value: 'error',   label: 'Error'   },
+        ]
 
-    function navigateLog(log, e) {
-      if (e.target.closest('input[type=checkbox]') || e.target.closest('button')) return
-      const url = targetUrl(log)
-      if (url) window.open(url, '_blank')
-    }
-
-    function targetIcon(type) {
-      const map = {
-        rule:           'fa-solid fa-shield-halved',
-        bundle:         'fa-solid fa-box',
-        user:           'fa-solid fa-user',
-        tag:            'fa-solid fa-tag',
-        job:            'fa-solid fa-tasks',
-        comment:        'fa-solid fa-comment',
-        bundle_comment: 'fa-solid fa-comment',
-        github_import:  'fa-brands fa-github',
-        github_update:  'fa-solid fa-rotate',
-      }
-      return map[type] || 'fa-solid fa-circle-dot'
-    }
-
-    function actionColor(action) {
-      if (action.includes('delete') || action.includes('demote'))   return 'bg-danger'
-      if (action.includes('create') || action.includes('register')) return 'bg-success'
-      if (action.includes('edit')   || action.includes('update'))   return 'bg-warning text-dark'
-      if (action.includes('login')  || action.includes('logout'))   return 'bg-info text-dark'
-      if (action.includes('admin'))                                  return 'bg-dark'
-      return 'bg-secondary'
-    }
-
-    // ── Select all ────────────────────────────────────────────────────────────
-    const allSelected = computed(() =>
-      logs.value.length > 0 && selectedIds.value.length === logs.value.length
-    )
-    function toggleSelectAll(e) {
-      selectedIds.value = e.target.checked ? logs.value.map(l => l.id) : []
-    }
-
-    // ── Edit one ──────────────────────────────────────────────────────────────
-    function openEdit(log) {
-      editLog.value  = log
-      editForm.value = { description: log.description || '', icon: log.icon || '', is_public: !!log.is_public }
-    }
-    async function saveEdit() {
-      if (!editLog.value) return
-      try {
-        const res  = await fetch(`/admin/logs/edit/${editLog.value.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify(editForm.value),
-        })
-        const data = await res.json()
-        if (data.success) {
-          const idx = logs.value.findIndex(l => l.id === editLog.value.id)
-          if (idx !== -1) logs.value[idx] = data.log
-          editLog.value = null
-          create_message('Log updated successfully', 'success-subtle')
-        } else {
-          create_message(data.message || 'Failed to update', 'danger-subtle')
+        // ── Fetch total ───────────────────────────────────────────────────────
+        async function fetchTotal() {
+            try {
+                const res  = await fetch('/admin/get_logs_page?page=1&per_page=1')
+                const data = await res.json()
+                totalLogs.value = data.total || 0
+            } catch {}
         }
-      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
-    }
 
-    // ── Delete one ────────────────────────────────────────────────────────────
-    async function deleteOne(log) {
-      if (!confirm(`Delete this log entry?\n"${log.description}"`)) return
-      try {
-        await fetch(`/admin/logs/delete/${log.id}`, {
-          method: 'POST',
-          headers: { 'X-CSRFToken': csrfToken },
-        })
-        fetchLogs(page.value)
-      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
-    }
+        // ── Timeline fetch ────────────────────────────────────────────────────
+        async function fetchTlLogs(reset = true) {
+            tlLoading.value = true
+            if (reset) { tlPage.value = 1; tlItems.value = []; selectedTlItem.value = null }
 
-    // ── Toggle single visibility ──────────────────────────────────────────────
-    async function toggleVisibility(log) {
-      try {
-        const res  = await fetch(`/admin/logs/edit/${log.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify({ is_public: !log.is_public }),
-        })
-        const data = await res.json()
-        if (data.success) log.is_public = data.log.is_public
-      } catch (e) { console.error(e) }
-    }
+            const params = new URLSearchParams({
+                page:     tlPage.value,
+                per_page: TL_PER_PAGE,
+                sort:     'created_at',
+                dir:      'desc',
+            })
+            if (tlCat.value)    params.set('category', tlCat.value)
+            if (tlLevel.value)  params.set('level',    tlLevel.value)
+            if (tlSearch.value) params.set('search',   tlSearch.value)
 
-    // ── Bulk set visibility ───────────────────────────────────────────────────
-    async function bulkSetVisibility(is_public) {
-      try {
-        const res  = await fetch('/admin/logs/set_visibility', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify({ ids: selectedIds.value, is_public }),
-        })
-        const data = await res.json()
-        if (data.success) {
-          const set = new Set(selectedIds.value)
-          logs.value.forEach(l => { if (set.has(l.id)) l.is_public = is_public })
-          selectedIds.value = []
-          create_message(`${data.updated} log(s) set to ${is_public ? 'Public' : 'Private'}`, 'success-subtle')
-        } else {
-          create_message(data.message || 'Failed', 'danger-subtle')
+            try {
+                const res  = await fetch(`/admin/get_logs_page?${params}`)
+                const data = await res.json()
+                const newItems = data.items || data.logs || []
+                if (reset) tlItems.value = newItems
+                else       tlItems.value = [...tlItems.value, ...newItems]
+                tlHasMore.value = (tlPage.value * TL_PER_PAGE) < (data.total || 0)
+            } catch (e) {
+                console.error('[Timeline] fetch error:', e)
+            } finally {
+                tlLoading.value = false
+            }
         }
-      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
-    }
 
-    // ── Bulk delete ───────────────────────────────────────────────────────────
-    async function bulkDelete() {
-      if (!confirm(`Delete ${selectedIds.value.length} selected log(s)? A background job will be created.`)) return
-      try {
-        const res = await fetch('/admin/logs/delete_bulk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify({ ids: selectedIds.value }),
-        })
-        const data = await res.json()
-        if (data.success) window.dispatchEvent(new Event('rz:job-created'))
-        create_message(data.message, data.success ? 'success-subtle' : 'danger-subtle')
-        fetchLogs(1)
-      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
-    }
+        function loadMoreTl() { tlPage.value++; fetchTlLogs(false) }
 
-    async function deleteAll() {
-      if (!confirm('Delete ALL activity logs? This cannot be undone. A background job will be created.')) return
-      try {
-        const res = await fetch('/admin/logs/delete_bulk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify({ delete_all: true, action_filter: actionFilter.value }),
-        })
-        const data = await res.json()
-        if (data.success) window.dispatchEvent(new Event('rz:job-created'))
-        create_message(data.message, data.success ? 'success-subtle' : 'danger-subtle')
-        fetchLogs(1)
-      } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
-    }
+        function setTlCat(val)   { tlCat.value = val;   fetchTlLogs(true) }
+        function setTlLevel(val) { tlLevel.value = val; fetchTlLogs(true) }
 
-    onMounted(() => {
-      fetchActions()
-      fetchLogs(1)
-    })
+        let _tlTimer = null
+        function debouncedTlFetch() {
+            clearTimeout(_tlTimer)
+            _tlTimer = setTimeout(() => fetchTlLogs(true), 350)
+        }
 
-    return {
-      logs, total, page, perPage, totalPages, loading,
-      search, actionFilter, availableActions, selectedIds, sensitiveVisible,
-      editLog, editForm,
-      allSelected,
-      fetchLogs, debouncedFetch, resetFilters,
-      targetUrl, navigateLog, targetIcon, actionColor,
-      toggleSelectAll, deleteOne, bulkDelete, deleteAll,
-      toggleVisibility, bulkSetVisibility,
-      openEdit, saveEdit,
+        function switchToTimeline() {
+            view.value = 'timeline'
+            if (!tlItems.value.length) fetchTlLogs(true)
+        }
+
+        function selectTlItem(item) { selectedTlItem.value = item }
+
+        function formatTlDate(iso) {
+            if (!iso) return '—'
+            return new Date(iso).toLocaleString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+            })
+        }
+
+        function tlLevelBadge(level) {
+            const map = { info: 'bg-info text-dark', success: 'bg-success', warning: 'bg-warning text-dark', error: 'bg-danger' }
+            return map[level] || 'bg-secondary'
+        }
+
+        // ── Edit log ──────────────────────────────────────────────────────────
+        function openEdit(log) {
+            editLog.value  = log
+            editForm.value = { description: log.description || '', icon: log.icon || '', is_public: !!log.is_public }
+        }
+
+        async function saveEdit() {
+            if (!editLog.value) return
+            try {
+                const res  = await fetch(`/admin/logs/edit/${editLog.value.id}`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body:    JSON.stringify(editForm.value),
+                })
+                const data = await res.json()
+                if (data.success) {
+                    logTableRef.value?.fetchData()
+                    if (view.value === 'timeline') fetchTlLogs(true)
+                    editLog.value = null
+                    create_message('Log updated', 'success-subtle')
+                } else {
+                    create_message(data.message || 'Failed', 'danger-subtle')
+                }
+            } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
+        }
+
+        // ── Delete single ─────────────────────────────────────────────────────
+        async function deleteOne(log) {
+            if (!confirm(`Delete this log entry?\n"${log.description}"`)) return
+            try {
+                await fetch(`/admin/logs/delete/${log.id}`, {
+                    method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+                })
+                logTableRef.value?.fetchData()
+                fetchTotal()
+                create_message('Log deleted', 'success-subtle')
+            } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
+        }
+
+        async function deleteOneTl(log) {
+            if (!confirm(`Delete this log entry?\n"${log.description}"`)) return
+            try {
+                await fetch(`/admin/logs/delete/${log.id}`, {
+                    method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+                })
+                selectedTlItem.value = null
+                fetchTlLogs(true)
+                fetchTotal()
+                create_message('Log deleted', 'success-subtle')
+            } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
+        }
+
+        // ── Bulk delete (UUIDs from LogTable component) ───────────────────────
+        async function bulkDeleteByUuids(uuids) {
+            if (!uuids.length) return
+            if (!confirm(`Delete ${uuids.length} selected log(s)?`)) return
+            try {
+                const res  = await fetch('/api/log/bulk-delete', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body:    JSON.stringify({ uuids }),
+                })
+                const data = await res.json()
+                logTableRef.value?.fetchData()
+                fetchTotal()
+                create_message(data.message || 'Deleted', 'success-subtle')
+            } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
+        }
+
+        // ── Delete ALL ────────────────────────────────────────────────────────
+        async function deleteAll() {
+            if (!confirm('Delete ALL activity logs? This cannot be undone. A background job will be created.')) return
+            try {
+                const res  = await fetch('/admin/logs/delete_bulk', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body:    JSON.stringify({ delete_all: true }),
+                })
+                const data = await res.json()
+                if (data.success) window.dispatchEvent(new Event('rz:job-created'))
+                create_message(data.message, data.success ? 'success-subtle' : 'danger-subtle')
+                logTableRef.value?.fetchData()
+                fetchTotal()
+            } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
+        }
+
+        onMounted(() => fetchTotal())
+
+        return {
+            csrfToken, logTableRef, timelineRef,
+            view, totalLogs, editLog, editForm,
+            tlItems, tlLoading, tlHasMore, tlCat, tlLevel, tlSearch,
+            tlCategories, tlLevels, selectedTlItem,
+            switchToTimeline, setTlCat, setTlLevel, debouncedTlFetch,
+            loadMoreTl, selectTlItem, formatTlDate, tlLevelBadge,
+            openEdit, saveEdit,
+            deleteOne, deleteOneTl, bulkDeleteByUuids, deleteAll,
+            JSON,
+        }
     }
-  }
 }).mount('#logs-app')
 </script>
 {% endblock %}
