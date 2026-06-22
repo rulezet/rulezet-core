@@ -570,7 +570,7 @@ def detail_rule_by_uuid(rule_uuid):
     if not rule_to_json:
         rule_to_json = "No json format for this rule"
     if rule:
-        return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string, rule_misp=rule_misp, rule_to_json=rule_to_json, )
+        return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string, rule_misp=rule_misp, rule_to_json=rule_to_json, **_nav_counts(rule.id))
     return render_template("404.html")
 
 
