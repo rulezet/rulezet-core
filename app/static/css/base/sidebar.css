@@ -280,3 +280,105 @@ body.dark-mode .navbar-brand.logo img { animation: logo-glow-dark 3s infinite ea
     border-color: var(--border-color) !important;
     color: var(--text-color) !important;
 }
+
+/* ══════════════════════════════════════
+   NAV STYLE MODES
+══════════════════════════════════════ */
+
+/*
+ * The navbar has Bootstrap's sticky-top (position:sticky;top:0) by default.
+ * BUT body has overflow-x:hidden in core.css which breaks sticky globally.
+ *
+ * "default" mode  → scrolls with page (keep the broken-sticky = natural scroll behaviour)
+ * "sticky" mode   → fix body overflow so sticky-top actually sticks
+ * "collapsible"   → same fix + slide-up/down toggle
+ */
+
+/* ── Sticky: position:fixed — works regardless of parent overflow ── */
+body[data-nav-style="sticky"] .main-navbar,
+body[data-nav-style="collapsible"] .main-navbar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1040;
+}
+/* Compensate for fixed navbar taking the element out of document flow */
+body[data-nav-style="sticky"],
+body[data-nav-style="collapsible"] {
+    padding-top: var(--navbar-h, 62px);
+}
+
+/* ── Collapsible ── */
+body[data-nav-style="collapsible"] .main-navbar {
+    transition: transform .28s cubic-bezier(.4,0,.2,1), opacity .22s ease, visibility .28s;
+    will-change: transform;
+}
+body[data-nav-style="collapsible"].nav-hidden .main-navbar {
+    transform: translateY(-110%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+body[data-nav-style="collapsible"].nav-hidden {
+    padding-top: 0;
+}
+
+/* Collapse toggle button inside the navbar */
+.nav-collapse-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--subtle-text-color);
+    font-size: .65rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: 6px;
+    transition: background .14s, color .14s, border-color .14s;
+}
+body[data-nav-style="collapsible"] .nav-collapse-btn {
+    display: inline-flex;
+}
+.nav-collapse-btn:hover {
+    background: rgba(13,110,253,.08);
+    color: #0d6efd;
+    border-color: rgba(13,110,253,.25);
+}
+
+/* Peek tab — fixed tab that appears at top when navbar is hidden */
+.nav-peek-tab {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1045;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    padding: 3px 18px 6px;
+    cursor: pointer;
+    color: var(--subtle-text-color);
+    font-size: .7rem;
+    font-weight: 600;
+    gap: 5px;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,.10);
+    transition: color .14s, box-shadow .14s;
+    user-select: none;
+    letter-spacing: .02em;
+}
+.nav-peek-tab i { font-size: .6rem; }
+.nav-peek-tab:hover {
+    color: #0d6efd;
+    box-shadow: 0 4px 14px rgba(13,110,253,.15);
+}
+body[data-nav-style="collapsible"].nav-hidden .nav-peek-tab {
+    display: flex;
+}

@@ -87,6 +87,50 @@
                 </div>
             </div>
 
+            <!-- Navigation style -->
+            <div class="card mb-3" id="section-nav">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-bars"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Navigation</h6>
+                            <p class="text-muted small mb-0">Choose how the navigation bar behaves as you scroll.</p>
+                        </div>
+                    </div>
+
+                    <div class="settings-theme-group">
+                        <div v-for="opt in nav_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: nav_style === opt.value }"
+                             @click="setNavStyle(opt.value)">
+                            <!-- Mini visual preview -->
+                            <div class="nav-preview" :class="'nav-preview--' + opt.value">
+                                <div class="np-bar"></div>
+                                <div class="np-content">
+                                    <div class="np-line"></div>
+                                    <div class="np-line np-line--short"></div>
+                                    <div class="np-line"></div>
+                                </div>
+                                <div v-if="opt.value === 'collapsible'" class="np-badge">
+                                    <i class="fas fa-chevron-up" style="font-size:.45rem;"></i>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + opt.icon"></i>
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="nav_style === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0" style="font-size:.75rem;">
+                        <i class="fas fa-info-circle me-1 text-primary opacity-75"></i>
+                        <template v-if="nav_style === 'default'">The navbar scrolls with the page.</template>
+                        <template v-else-if="nav_style === 'sticky'">The navbar stays fixed at the top, always accessible while scrolling.</template>
+                        <template v-else>The navbar is fixed and can be hidden with the <i class="fas fa-chevron-up" style="font-size:.65rem;"></i> button. A floating tab brings it back.</template>
+                    </p>
+                </div>
+            </div>
+
             {% if is_admin %}
             <!-- Theme Studio (admin only) -->
             <div class="card mb-3" id="section-studio">
@@ -160,46 +204,50 @@
 
         </div>
 
-        <!-- ── Right column ───────────────────────────────── -->
+        <!-- ── Right column: settings recap ─────────────────── -->
         <div class="col-12 col-lg-4">
             <div style="position:sticky;top:80px;">
                 <div class="card">
                     <div class="card-body">
-                        <h6 class="settings-section-title mb-2">
-                            <i class="fas fa-palette me-2 text-primary"></i>Active theme
+                        <h6 class="settings-section-title mb-3">
+                            <i class="fas fa-sliders me-2 text-primary"></i>Current settings
                         </h6>
-                        <p class="text-muted small mb-3">Quick switch — new themes appear here automatically.</p>
 
-                        <select class="form-select" v-model="theme" @change="setTheme(theme)">
-                            <optgroup label="Built-in">
-                                <option value="system">System (auto)</option>
-                                <option value="light">Light</option>
-                                <option value="dark">Dark</option>
-                            </optgroup>
-                            <optgroup label="Themes" v-if="named_theme_options.length">
-                                <option v-for="t in named_theme_options" :key="t.value" :value="t.value">
-                                    [[ t.label ]]
-                                </option>
-                            </optgroup>
-                            <optgroup label="Custom" v-if="custom_theme_options.length">
-                                <option v-for="t in custom_theme_options" :key="t.value" :value="t.value">
-                                    [[ t.label ]]
-                                </option>
-                            </optgroup>
-                        </select>
+                        <!-- Theme row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-palette"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Theme</div>
+                                <div class="recap-value">
+                                    <i :class="'fas ' + (theme_options.find(t => t.value === theme)?.icon || 'fa-circle-half-stroke')" class="me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ theme_options.find(t => t.value === theme)?.label || theme ]]
+                                </div>
+                            </div>
+                            <div class="recap-status" :class="save_status">
+                                <i v-if="save_status === 'saving'" class="fas fa-spinner fa-spin text-muted"></i>
+                                <i v-else-if="save_status === 'saved'" class="fas fa-circle-check text-success"></i>
+                                <i v-else-if="save_status === 'error'" class="fas fa-circle-xmark text-danger"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Navigation row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-bars"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Navigation</div>
+                                <div class="recap-value">
+                                    <i :class="'fas ' + (nav_options.find(o => o.value === nav_style)?.icon || 'fa-minus')" class="me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ nav_options.find(o => o.value === nav_style)?.label || nav_style ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="nav_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
                     </div>
-                </div>
-
-                <div class="settings-save-status mt-2" :class="save_status">
-                    <template v-if="save_status === 'saving'">
-                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>Saving…
-                    </template>
-                    <template v-else-if="save_status === 'saved'">
-                        <i class="fas fa-circle-check me-2"></i>Saved
-                    </template>
-                    <template v-else-if="save_status === 'error'">
-                        <i class="fas fa-circle-xmark me-2"></i>Save failed
-                    </template>
                 </div>
             </div>
         </div>
@@ -457,6 +505,23 @@
             const theme      = ref('{{ config.theme if config else "system" }}')
             const save_status = ref('')
             let save_timer   = null
+
+            // ── Navigation style (localStorage only, no server round-trip) ──
+            const nav_style = ref(localStorage.getItem('rz-nav-style') || 'default')
+            const nav_saved = ref(false)
+            const nav_options = [
+                { value: 'default',     label: 'Default',     icon: 'fa-minus' },
+                { value: 'sticky',      label: 'Sticky',      icon: 'fa-thumbtack' },
+                { value: 'collapsible', label: 'Collapsible', icon: 'fa-compress-alt' },
+            ]
+            function setNavStyle(value) {
+                if (value === nav_style.value) return
+                nav_style.value = value
+                if (typeof rzSetNavStyle === 'function') rzSetNavStyle(value)
+                nav_saved.value = true
+                // Brief flash of the checkmark then reload so the new nav style is visible
+                setTimeout(() => { window.location.reload() }, 500)
+            }
 
             // Theme options — base built-ins
             const theme_options = reactive([
@@ -732,6 +797,7 @@
 
             return {
                 theme, save_status, theme_options,
+                nav_style, nav_saved, nav_options, setNavStyle,
                 named_theme_options, custom_theme_options,
                 livePreviewStyle,
                 setTheme, getPreviewStyle,

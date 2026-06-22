@@ -429,3 +429,112 @@ body.dark-mode .settings-save-status.saved { color: #4ade80; background: rgba(74
 /* ── Settings summary ─────────────────────────────── */
 .settings-summary { display: flex; flex-direction: column; gap: 0.5rem; }
 .settings-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+
+/* ── Settings recap (right column) ───────────────── */
+.recap-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .55rem 0;
+}
+.recap-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: rgba(13,110,253,.08);
+    color: #0d6efd;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .78rem;
+    flex-shrink: 0;
+}
+.recap-body { flex: 1; min-width: 0; }
+.recap-label {
+    font-size: .68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--subtle-text-color);
+    margin-bottom: 1px;
+}
+.recap-value {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+.recap-status {
+    width: 18px;
+    text-align: center;
+    font-size: .85rem;
+    flex-shrink: 0;
+    transition: opacity .2s;
+}
+.recap-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: .1rem 0;
+    opacity: .6;
+}
+
+/* ── Nav style preview cards ─────────────────────── */
+.nav-preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/2.5;
+    border-radius: 7px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    margin-bottom: 6px;
+}
+.np-bar {
+    height: 18%;
+    background: var(--card-bg-color);
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+}
+.np-bar::before {
+    content: '';
+    position: absolute;
+    left: 8px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 5px; border-radius: 3px;
+    background: #0d6efd; opacity: .6;
+}
+.np-bar::after {
+    content: '';
+    position: absolute;
+    left: 36px; top: 50%; transform: translateY(-50%);
+    width: 30px; height: 4px; border-radius: 3px;
+    background: var(--border-color);
+}
+.np-content {
+    padding: 7px 8px;
+    display: flex; flex-direction: column; gap: 5px;
+}
+.np-line {
+    height: 5px; border-radius: 3px;
+    background: var(--border-color); opacity: .7;
+}
+.np-line--short { width: 55%; }
+
+/* Default: bar fades into content (not sticky) */
+.nav-preview--default .np-bar { opacity: .5; }
+
+/* Sticky: bar has a subtle shadow */
+.nav-preview--sticky .np-bar {
+    box-shadow: 0 2px 6px rgba(13,110,253,.12);
+    border-bottom-color: rgba(13,110,253,.2);
+}
+.nav-preview--sticky .np-bar::before { opacity: 1; }
+
+/* Collapsible: bar has a small button on right */
+.nav-preview--collapsible .np-bar::after { right: 8px; left: auto; width: 10px; border-radius: 3px; background: rgba(13,110,253,.25); }
+.np-badge {
+    position: absolute;
+    top: 2px; right: 3px;
+    width: 14px; height: 9px;
+    border-radius: 3px;
+    background: rgba(13,110,253,.15);
+    border: 1px solid rgba(13,110,253,.25);
+    display: flex; align-items: center; justify-content: center;
+    color: #0d6efd;
+}
+

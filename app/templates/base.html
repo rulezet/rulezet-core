@@ -58,7 +58,67 @@
 </head>
 
 <body>
+    <!-- Apply nav style before first paint to avoid flash -->
+    <script>
+    (function(){
+        var s = localStorage.getItem('rz-nav-style') || 'default';
+        document.body.dataset.navStyle = s;
+        // Restore collapsed state: add class immediately so CSS applies on first render
+        if (s === 'collapsible' && localStorage.getItem('rz-nav-hidden') === '1')
+            document.body.classList.add('nav-hidden');
+    })();
+    </script>
+
     {% include 'sidebar.html' %}
+
+    <!-- Collapsible nav: floating tab to restore hidden navbar -->
+    <div class="nav-peek-tab" id="navPeekTab">
+        <i class="fas fa-chevron-down"></i> Navigation
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var navbar = document.querySelector('.main-navbar');
+
+        // Measure real navbar height and set CSS variable (for sticky/collapsible padding-top)
+        if (navbar && (document.body.dataset.navStyle === 'sticky' || document.body.dataset.navStyle === 'collapsible')) {
+            var h = navbar.offsetHeight;
+            if (h) document.body.style.setProperty('--navbar-h', h + 'px');
+            // Keep in sync on resize (mobile toggler changes height)
+            new ResizeObserver(function() {
+                var nh = navbar.offsetHeight;
+                if (nh) document.body.style.setProperty('--navbar-h', nh + 'px');
+            }).observe(navbar);
+        }
+
+        // Inject collapse toggle button into the navbar
+        var navbarInner = document.querySelector('.main-navbar .container-fluid') || navbar;
+        if (navbarInner) {
+            var btn = document.createElement('button');
+            btn.id = 'navCollapseBtn';
+            btn.className = 'nav-collapse-btn';
+            btn.title = 'Hide navigation';
+            btn.innerHTML = '<i class="fas fa-chevron-up"></i>';
+            btn.addEventListener('click', rzToggleNav);
+            navbarInner.appendChild(btn);
+        }
+        var peekEl = document.getElementById('navPeekTab');
+        if (peekEl) peekEl.addEventListener('click', rzToggleNav);
+    });
+
+    function rzToggleNav() {
+        var hidden = document.body.classList.toggle('nav-hidden');
+        localStorage.setItem('rz-nav-hidden', hidden ? '1' : '0');
+    }
+    function rzSetNavStyle(style) {
+        document.body.dataset.navStyle = style;
+        localStorage.setItem('rz-nav-style', style);
+        if (style !== 'collapsible') {
+            document.body.classList.remove('nav-hidden');
+            localStorage.removeItem('rz-nav-hidden');
+        }
+    }
+    </script>
 
     <!-- Toast app — standalone Vue instance, always active regardless of page app mount point -->
     <div id="rz-toast-app">
