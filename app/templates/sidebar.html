@@ -25,11 +25,11 @@
                      href="#" role="button" data-bs-toggle="dropdown">
                      <i class="fa-solid fa-box fa-fw me-1 text-primary"></i>Bundle
                   </a>
-                  <ul class="dropdown-menu border-0 shadow-lg animate slideIn">
-                     <li><a href="/bundle/list" class="dropdown-item py-2 {% if request.path == '/bundle/list' %}active{% endif %}">
+                  <ul class="dropdown-menu">
+                     <li><a href="/bundle/list" class="dropdown-item {% if request.path == '/bundle/list' %}active{% endif %}">
                            <i class="fa-solid fa-rocket me-2"></i>Explore Bundles</a></li>
                      {% if current_user.is_authenticated %}
-                     <li><a href="/bundle/create" class="dropdown-item py-2 {% if request.path == '/bundle/create' %}active{% endif %}">
+                     <li><a href="/bundle/create" class="dropdown-item {% if request.path == '/bundle/create' %}active{% endif %}">
                            <i class="fa-solid fa-folder-plus me-2"></i>Create Bundle</a></li>
                      {% endif %}
                   </ul>
@@ -41,37 +41,37 @@
                      href="#" role="button" data-bs-toggle="dropdown">
                      <i class="fa-solid fa-shield-halved fa-fw me-1 text-primary"></i>Security Rules
                   </a>
-                  <ul class="dropdown-menu border-0 shadow-lg animate slideIn">
-                     <li><a class="dropdown-item py-2 {% if request.path == '/rule/rules_list' %}active{% endif %}"
+                  <ul class="dropdown-menu">
+                     <li><a class="dropdown-item {% if request.path == '/rule/rules_list' %}active{% endif %}"
                            href="/rule/rules_list"><i class="fa-solid fa-rocket me-2"></i>Explore Rules</a></li>
-                     <li><a class="dropdown-item py-2 {% if request.path == '/rule/create_rule' %}active{% endif %}"
+                     <li><a class="dropdown-item {% if request.path == '/rule/create_rule' %}active{% endif %}"
                            href="/rule/create_rule"><i class="fa-solid fa-file-circle-plus me-2"></i>Add Rules</a></li>
 
                      {% if current_user.is_authenticated %}
                      <li><hr class="dropdown-divider"></li>
                      <li>
-                        <a class="dropdown-item py-2 d-flex justify-content-between align-items-center {% if request.path == '/rule/rule_propose_edit' %}active{% endif %}"
+                        <a class="dropdown-item d-flex justify-content-between align-items-center {% if request.path == '/rule/rule_propose_edit' %}active{% endif %}"
                            href="/rule/rule_propose_edit">
                            <span><i class="fa-solid fa-lightbulb fa-fw me-2"></i>Proposals</span>
                            <span v-if="changes_to_validate > 0" class="badge rounded-pill bg-danger ms-2">[[ changes_to_validate ]]</span>
                         </a>
                      </li>
-                     <li><a class="dropdown-item py-2 {% if request.path == '/rule/bad_rules_summary' %}active{% endif %}"
-                           href="/rule/bad_rules_summary"><i class="fa-solid fa-bug fa-fw me-2 text-muted"></i>Bad Rules</a></li>
+                     <li><a class="dropdown-item {% if request.path == '/rule/bad_rules_summary' %}active{% endif %}"
+                           href="/rule/bad_rules_summary"><i class="fa-solid fa-bug fa-fw me-2"></i>Bad Rules</a></li>
 
                      {% if not current_user.is_admin() %}
                      <li>
-                        <a href="/admin/request" class="dropdown-item py-2 d-flex justify-content-between align-items-center">
-                           <span><i class="fa-solid fa-envelope fa-fw me-2 text-muted"></i>Ownership Requests</span>
+                        <a href="/admin/request" class="dropdown-item d-flex justify-content-between align-items-center">
+                           <span><i class="fa-solid fa-envelope fa-fw me-2"></i>Ownership Requests</span>
                            <span v-if="requests_to_validate > 0" class="badge rounded-pill bg-danger ms-2">[[ requests_to_validate ]]</span>
                         </a>
                      </li>
                      {% else %}
-                     <li><a href="/admin/similar_rules" class="dropdown-item py-2">
-                           <i class="fa-solid fa-link fa-fw me-2 text-muted"></i>Similar Rules</a></li>
+                     <li><a href="/admin/similar_rules" class="dropdown-item">
+                           <i class="fa-solid fa-link fa-fw me-2"></i>Similar Rules</a></li>
                      <li>
-                        <a href="/rule/admin/rules_reported" class="dropdown-item py-2 d-flex justify-content-between align-items-center">
-                           <span><i class="fa-solid fa-triangle-exclamation fa-fw me-2 text-muted"></i>Reported Rules</span>
+                        <a href="/rule/admin/rules_reported" class="dropdown-item d-flex justify-content-between align-items-center">
+                           <span><i class="fa-solid fa-triangle-exclamation fa-fw me-2"></i>Reported Rules</span>
                            <span v-if="reports_to_check > 0" class="badge rounded-pill bg-danger ms-2">[[ reports_to_check ]]</span>
                         </a>
                      </li>
@@ -95,17 +95,17 @@
                      href="#" role="button" data-bs-toggle="dropdown">
                      <i class="fa-brands fa-github fa-fw me-1"></i>Github
                   </a>
-                  <ul class="dropdown-menu border-0 shadow-lg animate slideIn">
-                     <li><a class="dropdown-item py-2 {% if request.path == '/rule/github/list_github_url' %}active{% endif %}"
-                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2 text-muted"></i>Github List</a></li>
-                     <li><a class="dropdown-item py-2 {% if request.path == '/rule/github/history_github_importer' %}active{% endif %}"
-                           href="/rule/github/history_github_importer"><i class="fa-solid fa-bars-progress fa-fw me-2 text-muted"></i>Manage Github</a></li>
-                     <li><a class="dropdown-item py-2" href="/rule/create_rule?tab=github">
-                           <i class="fa-solid fa-file-import fa-fw me-2 text-muted"></i>Import Rules</a></li>
+                  <ul class="dropdown-menu">
+                     <li><a class="dropdown-item {% if request.path == '/rule/github/list_github_url' %}active{% endif %}"
+                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Github List</a></li>
+                     <li><a class="dropdown-item {% if request.path == '/rule/github/history_github_importer' %}active{% endif %}"
+                           href="/rule/github/history_github_importer"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Github</a></li>
+                     <li><a class="dropdown-item" href="/rule/create_rule?tab=github">
+                           <i class="fa-solid fa-file-import fa-fw me-2"></i>Import Rules</a></li>
                      <li>
-                        <a class="dropdown-item py-2 d-flex justify-content-between align-items-center"
+                        <a class="dropdown-item d-flex justify-content-between align-items-center"
                            href="/rule/github/update_github/update_rules_from_github">
-                           <span><i class="fa-solid fa-rotate fa-fw me-2 text-muted"></i>Update Rules</span>
+                           <span><i class="fa-solid fa-rotate fa-fw me-2"></i>Update Rules</span>
                            <span v-if="update_to_validate > 0" class="badge rounded-pill bg-danger ms-2">[[ update_to_validate ]]</span>
                         </a>
                      </li>
@@ -180,28 +180,28 @@
                         {% if current_user.is_authenticated %}{{ current_user.get_first_name() }}{% else %}Profile{% endif %}
                      </span>
                   </a>
-                  <ul class="dropdown-menu dropdown-menu-end border-0 shadow-lg mt-3 p-2">
+                  <ul class="dropdown-menu dropdown-menu-end">
                      {% if current_user.is_authenticated %}
-                     <li><a href="/account/" class="dropdown-item rounded py-2">
-                           <i class="fa-solid fa-user-circle me-2 text-muted"></i>Profile</a></li>
-                     <li><a href="/rule/owner_rules" class="dropdown-item rounded py-2">
-                           <i class="fa-solid fa-user-shield me-2 text-muted"></i>My Rules</a></li>
-                     <li><a href="/tags/my_tags" class="dropdown-item rounded py-2">
-                           <i class="fa-solid fa-tags me-2 text-muted"></i>My Tags</a></li>
-                     <li><a href="/jobs/list" class="dropdown-item rounded py-2">
-                           <i class="fa-solid fa-tasks me-2 text-muted"></i>My Jobs</a></li>
-                     <li><a href="/notifications/" class="dropdown-item rounded py-2">
-                           <i class="fa-solid fa-bell me-2 text-muted"></i>Notifications</a></li>
-                     <li><a href="/account/contributor" class="dropdown-item rounded py-2">
-                           <i class="fa-solid fa-user-group fa-fw me-2 text-muted"></i>Contributors</a></li>
-                     <li><a href="/settings" class="dropdown-item rounded py-2">
-                           <i class="fa-solid fa-sliders me-2 text-muted"></i>Settings</a></li>
+                     <li><a href="/account/" class="dropdown-item">
+                           <i class="fa-solid fa-user-circle me-2"></i>Profile</a></li>
+                     <li><a href="/rule/owner_rules" class="dropdown-item">
+                           <i class="fa-solid fa-user-shield me-2"></i>My Rules</a></li>
+                     <li><a href="/tags/my_tags" class="dropdown-item">
+                           <i class="fa-solid fa-tags me-2"></i>My Tags</a></li>
+                     <li><a href="/jobs/list" class="dropdown-item">
+                           <i class="fa-solid fa-tasks me-2"></i>My Jobs</a></li>
+                     <li><a href="/notifications/" class="dropdown-item">
+                           <i class="fa-solid fa-bell me-2"></i>Notifications</a></li>
+                     <li><a href="/account/contributor" class="dropdown-item">
+                           <i class="fa-solid fa-user-group fa-fw me-2"></i>Contributors</a></li>
+                     <li><a href="/settings" class="dropdown-item">
+                           <i class="fa-solid fa-sliders me-2"></i>Settings</a></li>
                      <li><hr class="dropdown-divider"></li>
-                     <li><a href="/account/logout" class="dropdown-item rounded py-2 text-danger fw-bold">
+                     <li><a href="/account/logout" class="dropdown-item text-danger fw-bold">
                            <i class="fa-solid fa-power-off me-2"></i>Logout</a></li>
                      {% else %}
-                     <li><a href="/account/register" class="dropdown-item rounded py-2 fw-bold">Register</a></li>
-                     <li><a href="/account/login" class="dropdown-item rounded py-2">Login</a></li>
+                     <li><a href="/account/register" class="dropdown-item fw-bold">Register</a></li>
+                     <li><a href="/account/login" class="dropdown-item">Login</a></li>
                      {% endif %}
                   </ul>
                </div>
