@@ -46,13 +46,66 @@ def why():
 @home_blueprint.route("/")
 def home() -> render_template:
     """Go to home page"""
+    from app.core.db_class.db import Rule, Bundle, User
     get_flashed_messages()
     show_import_hint = (
         current_user.is_authenticated
         and current_user.is_admin()
         and RuleModel.get_total_rules_count() == 0
     )
-    return render_template("home.html", show_import_hint=show_import_hint)
+    total_rules   = Rule.query.filter_by(is_deleted=False).count()
+    total_bundles = Bundle.query.count()
+    total_users   = User.query.count()
+    return render_template("home.html",
+        show_import_hint=show_import_hint,
+        total_rules=total_rules,
+        total_bundles=total_bundles,
+        total_users=total_users,
+    )
+
+@home_blueprint.route("/home_charts")
+def home_charts():
+    """Lightweight chart data for the home page (format distribution + monthly additions)."""
+    import datetime
+    from collections import defaultdict
+    from sqlalchemy import func
+    from app.core.db_class.db import Rule
+    from app import db
+
+    now = datetime.datetime.utcnow()
+
+    fmt_rows = (db.session.query(Rule.format, func.count(Rule.id))
+                .filter(Rule.is_deleted == False)
+                .group_by(Rule.format)
+                .order_by(func.count(Rule.id).desc())
+                .limit(10).all())
+    fmt_cats = [r[0] or 'Unknown' for r in fmt_rows]
+    fmt_vals = [r[1] for r in fmt_rows]
+
+    cutoff = now - datetime.timedelta(days=6 * 31)
+    rows = db.session.query(Rule.creation_date).filter(
+        Rule.is_deleted == False, Rule.creation_date >= cutoff
+    ).all()
+    bucket = defaultdict(int)
+    for (dt,) in rows:
+        if dt:
+            bucket[dt.strftime('%Y-%m')] += 1
+
+    labels, nice = [], []
+    d = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    for _ in range(6):
+        labels.append(d.strftime('%Y-%m'))
+        d = (d - datetime.timedelta(days=1)).replace(day=1)
+    labels.reverse()
+    for l in labels:
+        try: nice.append(datetime.datetime.strptime(l, '%Y-%m').strftime('%b %Y'))
+        except: nice.append(l)
+
+    return jsonify({
+        'formats':  {'title': 'Rules by Format',  'categories': fmt_cats, 'series': [{'name': 'Rules', 'values': fmt_vals}]},
+        'timeline': {'title': 'Rules Added / Month', 'subtitle': 'Last 6 months', 'categories': nice, 'series': [{'name': 'Rules Added', 'values': [bucket.get(l, 0) for l in labels]}]},
+    })
+
 
 @home_blueprint.route("/get_last_rules", methods=['GET'])
 def get_last_rules() -> dict:
