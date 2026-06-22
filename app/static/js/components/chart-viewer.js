@@ -87,6 +87,7 @@ export default defineComponent({
 
   <!-- Single-view action bar -->
   <div v-if="view_list.length === 1" class="cv-tabs cv-tabs--single">
+    <span v-if="data.title" class="cv-chart-title">{{ data.title }}</span>
     <div class="cv-tab-spacer"></div>
     <button v-if="active_view !== 'table'" class="cv-action" @click="do_export" title="Export PNG">
       <i class="fas fa-download"></i>
@@ -188,7 +189,11 @@ export default defineComponent({
             if (!build_option) return;
 
             const theme = get_theme();
-            const option = build_option(props.data, theme);
+            // Single-view: title shown in the bar above — strip it from ECharts options
+            const chart_data = view_list.value.length === 1
+                ? { ...props.data, title: undefined, subtitle: undefined }
+                : props.data;
+            const option = build_option(chart_data, theme);
             option.backgroundColor = 'transparent';
 
             if (_chart) {

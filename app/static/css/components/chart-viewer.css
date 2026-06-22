@@ -38,6 +38,15 @@
     border-bottom-width: 1px;
 }
 
+.cv-chart-title {
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--text-color);
+    padding: 0 6px;
+    white-space: nowrap;
+    letter-spacing: .01em;
+}
+
 .cv-tab {
     display: inline-flex;
     align-items: center;
