@@ -792,6 +792,160 @@ def admin_settings_instance_init():
     })
 
 
+@home_blueprint.route('/platform/insights')
+def platform_insights():
+    return render_template('platform/stats.html')
+
+
+@home_blueprint.route('/platform/insights_data')
+def platform_insights_data():
+    import datetime
+    from collections import defaultdict
+    from sqlalchemy import func
+    from app.core.db_class.db import (
+        Rule, Bundle, User, Tag, Comment, RuleVote,
+        RuleEditProposal, ActivityLog, RuleTagAssociation,
+    )
+    from app import db
+
+    now = datetime.datetime.utcnow()
+
+    # ── KPIs ──────────────────────────────────────────────────────────
+    total_rules     = Rule.query.filter_by(is_deleted=False).count()
+    total_deleted   = Rule.query.filter_by(is_deleted=True).count()
+    total_bundles   = Bundle.query.count()
+    total_users     = User.query.count()
+    online_users    = User.query.filter_by(is_connected=True).count()
+    admin_users     = User.query.filter_by(admin=True).count()
+    total_tags      = Tag.query.count()
+    total_comments  = Comment.query.count()
+    total_votes     = RuleVote.query.count()
+    total_proposals = RuleEditProposal.query.count()
+    total_activity  = ActivityLog.query.count()
+
+    # ── Monthly helper (Python-side grouping, DB-agnostic) ─────────────
+    def monthly(date_col, months=12, extra_filter=None):
+        cutoff = now - datetime.timedelta(days=months * 31)
+        q = db.session.query(date_col)
+        if extra_filter is not None:
+            q = q.filter(extra_filter)
+        q = q.filter(date_col >= cutoff)
+        rows = [r[0] for r in q.all()]
+
+        bucket = defaultdict(int)
+        for dt in rows:
+            if dt:
+                if isinstance(dt, str):
+                    try: dt = datetime.datetime.fromisoformat(dt)
+                    except: continue
+                bucket[dt.strftime('%Y-%m')] += 1
+
+        labels = []
+        d = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        for _ in range(months):
+            labels.append(d.strftime('%Y-%m'))
+            d = (d - datetime.timedelta(days=1)).replace(day=1)
+        labels.reverse()
+
+        nice = []
+        for l in labels:
+            try: nice.append(datetime.datetime.strptime(l, '%Y-%m').strftime('%b %Y'))
+            except: nice.append(l)
+        return nice, [bucket.get(l, 0) for l in labels]
+
+    rule_cats,     rule_vals     = monthly(Rule.creation_date,    extra_filter=Rule.is_deleted == False)
+    user_cats,     user_vals     = monthly(User.created_at)
+    bundle_cats,   bundle_vals   = monthly(Bundle.created_at)
+    activity_cats, activity_vals = monthly(ActivityLog.created_at)
+
+    # ── Rules by format ────────────────────────────────────────────────
+    fmt_rows = (db.session.query(Rule.format, func.count(Rule.id))
+                .filter(Rule.is_deleted == False)
+                .group_by(Rule.format)
+                .order_by(func.count(Rule.id).desc())
+                .limit(15).all())
+    fmt_cats = [r[0] or 'Unknown' for r in fmt_rows]
+    fmt_vals = [r[1] for r in fmt_rows]
+
+    # ── Top tags ───────────────────────────────────────────────────────
+    tag_rows = (db.session.query(Tag.name, func.count(RuleTagAssociation.id))
+                .join(RuleTagAssociation, RuleTagAssociation.tag_id == Tag.id)
+                .group_by(Tag.id, Tag.name)
+                .order_by(func.count(RuleTagAssociation.id).desc())
+                .limit(15).all())
+    tag_cats = [r[0] for r in tag_rows]
+    tag_vals = [r[1] for r in tag_rows]
+
+    # ── Top contributors ───────────────────────────────────────────────
+    contrib_rows = (db.session.query(User.first_name, func.count(Rule.id))
+                    .join(Rule, Rule.user_id == User.id)
+                    .filter(Rule.is_deleted == False)
+                    .group_by(User.id, User.first_name)
+                    .order_by(func.count(Rule.id).desc())
+                    .limit(10).all())
+    contrib_cats = [r[0] or 'Unknown' for r in contrib_rows]
+    contrib_vals = [r[1] for r in contrib_rows]
+
+    # ── Proposal status ────────────────────────────────────────────────
+    prop_rows = (db.session.query(RuleEditProposal.status, func.count(RuleEditProposal.id))
+                 .group_by(RuleEditProposal.status).all())
+    prop_cats = [r[0] or 'unknown' for r in prop_rows]
+    prop_vals = [r[1] for r in prop_rows]
+
+    # ── Activity heatmap (last 90 days — day-of-week × hour) ──────────
+    cutoff_90 = now - datetime.timedelta(days=90)
+    act_rows  = (db.session.query(ActivityLog.created_at)
+                 .filter(ActivityLog.created_at >= cutoff_90).all())
+    hm = defaultdict(lambda: defaultdict(int))
+    for (dt,) in act_rows:
+        if dt:
+            if isinstance(dt, str):
+                try: dt = datetime.datetime.fromisoformat(dt)
+                except: continue
+            hm[dt.weekday()][dt.hour] += 1
+
+    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    heatmap_series = [
+        {'name': days[d], 'values': [hm[d][h] for h in range(24)]}
+        for d in range(7)
+    ]
+    heatmap_cats = [f'{h:02d}h' for h in range(24)]
+
+    def chart(title, cats, vals, subtitle=None):
+        c = {'title': title, 'categories': cats, 'series': [{'name': title, 'values': vals}]}
+        if subtitle: c['subtitle'] = subtitle
+        return c
+
+    return jsonify({
+        'kpi': {
+            'total_rules':     total_rules,
+            'total_deleted':   total_deleted,
+            'total_bundles':   total_bundles,
+            'total_users':     total_users,
+            'online_users':    online_users,
+            'admin_users':     admin_users,
+            'total_tags':      total_tags,
+            'total_comments':  total_comments,
+            'total_votes':     total_votes,
+            'total_proposals': total_proposals,
+            'total_activity':  total_activity,
+        },
+        'charts': {
+            'rules_over_time':    {'title': 'Rules Added', 'subtitle': 'Last 12 months', 'categories': rule_cats,     'series': [{'name': 'Rules',    'values': rule_vals}]},
+            'users_over_time':    {'title': 'New Users',   'subtitle': 'Last 12 months', 'categories': user_cats,     'series': [{'name': 'Users',    'values': user_vals}]},
+            'bundles_over_time':  {'title': 'Bundles Created', 'subtitle': 'Last 12 months', 'categories': bundle_cats,   'series': [{'name': 'Bundles',  'values': bundle_vals}]},
+            'activity_over_time': {'title': 'Platform Events', 'subtitle': 'Last 12 months', 'categories': activity_cats, 'series': [{'name': 'Events',   'values': activity_vals}]},
+            'formats':    chart('Rules by Format',    fmt_cats,     fmt_vals),
+            'top_tags':   chart('Top Tags',           tag_cats,     tag_vals,     'by rule count'),
+            'top_contribs': chart('Top Contributors', contrib_cats, contrib_vals, 'by active rules'),
+            'proposals':  {'title': 'Edit Proposals', 'categories': prop_cats, 'series': [{'name': 'Proposals', 'values': prop_vals}]},
+            'rule_health':  {'title': 'Rule Health',  'categories': ['Active', 'Deleted'], 'series': [{'name': 'Rules', 'values': [total_rules, total_deleted]}]},
+            'user_roles':   {'title': 'User Roles',   'categories': ['Regular', 'Admins'],  'series': [{'name': 'Users', 'values': [total_users - admin_users, admin_users]}]},
+            'heatmap': {'title': 'Activity Heatmap', 'subtitle': 'Last 90 days — hour × day', 'categories': heatmap_cats, 'series': heatmap_series},
+        },
+    })
+
+
 @home_blueprint.route('/admin/logs/set_visibility', methods=['POST'])
 @login_required
 def set_logs_visibility():

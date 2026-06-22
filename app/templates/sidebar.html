@@ -80,6 +80,14 @@
                   </ul>
                </li>
 
+               <!-- ── Insights ── -->
+               <li class="nav-item">
+                  <a class="nav-link custom-nav-link fw-bold {% if request.path.startswith('/platform') %}active{% endif %}"
+                     href="/platform/insights">
+                     <i class="fa-solid fa-chart-pie fa-fw me-1 text-primary"></i>Insights
+                  </a>
+               </li>
+
                <!-- ── GitHub ── -->
                {% if current_user.is_authenticated %}
                <li class="nav-item dropdown">
