@@ -1,280 +1,203 @@
 {% extends 'base.html' %}
 {% import 'macros/admin_nav.html' as anav %}
 {% block title %}Rule Formats — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<style>
+    .fl-rename-section {
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--card-bg-color);
+    }
+    .fl-rename-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .75rem 1.1rem;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        color: var(--text-color);
+        font-size: .88rem;
+        font-weight: 600;
+        gap: .5rem;
+        transition: background .1s;
+    }
+    .fl-rename-toggle:hover { background: var(--light-bg-color); }
+    .fl-rename-toggle-left  { display: flex; align-items: center; gap: .4rem; }
+    .fl-rename-badge {
+        font-size: .65rem; font-weight: 700; padding: .15rem .5rem;
+        border-radius: 999px; background: rgba(255,193,7,.15); color: #c07000;
+        border: 1px solid rgba(255,193,7,.3); letter-spacing: .04em; text-transform: uppercase;
+    }
+    .fl-rename-body { padding: 1rem 1.1rem; border-top: 1px solid var(--border-color); }
+    .transition-icon { transition: transform .2s; }
+    .fw-600 { font-weight: 600; }
+
+    /* ── Toolbar ── */
+    .fl-wrapper { position: relative; }
+    .fl-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .6rem;
+        flex-wrap: wrap;
+        margin-bottom: .85rem;
+    }
+    .fl-toolbar-left, .fl-toolbar-right {
+        display: flex;
+        gap: .45rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    /* ── Card grid ── */
+    .fl-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: .85rem;
+        margin-bottom: 1rem;
+    }
+    .fl-format-card {
+        position: relative;
+        background: var(--card-bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        padding: 1.1rem;
+        display: flex;
+        flex-direction: column;
+        gap: .6rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,.05);
+        transition: box-shadow .15s, border-color .15s, transform .12s;
+        overflow: hidden;
+    }
+    .fl-format-card:hover {
+        box-shadow: 0 5px 18px rgba(0,0,0,.09);
+        border-color: rgba(13,110,253,.3);
+        transform: translateY(-2px);
+    }
+    .dark-mode .fl-format-card { background: #1e2433; border-color: rgba(255,255,255,.1); }
+    .dark-mode .fl-format-card:hover { border-color: rgba(13,110,253,.45); background: #212840; }
+
+    .fl-card-accent {
+        position: absolute;
+        top: 0; left: 0; right: 0; height: 3px;
+        background: linear-gradient(90deg, #0d6efd, #0a58ca);
+        border-radius: 14px 14px 0 0;
+    }
+    .fl-card-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: .4rem;
+        margin-top: .2rem;
+    }
+    .fl-card-icon {
+        width: 38px; height: 38px;
+        border-radius: 10px;
+        background: rgba(13,110,253,.1);
+        color: #0d6efd;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+    .fl-card-badges { display: flex; flex-direction: column; gap: .25rem; align-items: flex-end; }
+    .fl-card-name {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-color);
+        letter-spacing: .01em;
+    }
+    .fl-card-meta {
+        display: flex;
+        flex-direction: column;
+        gap: .2rem;
+        padding-top: .4rem;
+        border-top: 1px solid var(--border-color);
+    }
+    .fl-meta-item {
+        display: inline-flex; align-items: center; gap: .35rem;
+        font-size: .73rem; color: var(--subtle-text-color);
+    }
+    .fl-meta-item i { font-size: .65rem; width: .8rem; text-align: center; opacity: .7; }
+    .fl-card-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: auto;
+        padding-top: .4rem;
+    }
+    .fl-action-delete {
+        width: 30px; height: 30px;
+        border-radius: 50%;
+        border: 1px solid rgba(220,53,69,.3);
+        background: transparent;
+        color: #dc3545;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: .75rem;
+        cursor: pointer;
+        transition: background .1s;
+    }
+    .fl-action-delete:hover { background: rgba(220,53,69,.1); }
+</style>
+{% endblock %}
+
 {% block content %}
 {% if current_user.is_admin() %}
-<div class="container my-4" id="main-container">
+<div class="container my-4" id="main-container" v-cloak>
 
+    <!-- Banner -->
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-file-code banner-watermark"></i>
         <nav aria-label="breadcrumb" class="mb-3">
-            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">Rule Formats</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon">
-                <i class="fa-solid fa-file-code"></i>
-            </div>
+            <div class="banner-icon"><i class="fa-solid fa-file-code"></i></div>
             <div>
                 <h2 class="fw-bold mb-1">Manage Rule Formats</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
-        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-            Create, modify and delete rule formats used in the system. Proceed with caution — changes may affect existing rules.
+        <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
+            Create, delete and manage detection rule formats. Use the rename tool to bulk-update format names across all matching rules.
         </p>
     </div>
 
     {{ anav.admin_nav('formats') }}
 
-    <ul class="nav nav-underline justify-content-center w-100 mb-3" id="exampleTabs" role="tablist">
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link active" id="chap1-tab" data-bs-toggle="tab" href="#chap1-pane" role="tab"
-                aria-controls="chap1-pane" aria-selected="true" style="color: var(--text-color);">
-                Create a Format
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link" id="chap2-tab" data-bs-toggle="tab" href="#chap2-pane" role="tab"
-                aria-controls="chap2-pane" aria-selected="false" style="color: var(--text-color);">
-                Change a Format
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link" id="chap3-tab" data-bs-toggle="tab" href="#chap3-pane" role="tab"
-                aria-controls="chap3-pane" aria-selected="false" style="color: var(--text-color);">
-                List Formats
-            </a>
-        </li>
-    </ul>
+    <format-list ref="formatListRef" csrf-token="{{ csrf_token() }}"></format-list>
 
-    <!-- Tab panes for format management -->
-    <div class="tab-content" id="exampleTabsContent">
-        <!-- Create Format Tab -->
-        <div class="tab-pane fade show active" id="chap1-pane" role="tabpanel" aria-labelledby="chap1-tab">
-            <div class="card card-body shadow-sm" id="main-container">
-                <form method="POST" action="{{ url_for('rule.manage_format_rule') }}">
-                    {{ form.hidden_tag() }}
-
-                    <div class="mb-3">
-                        {{ form.name.label(class="form-label") }}
-                        {{ form.name(class="form-control", placeholder="Enter format name") }}
-                        {% for error in form.name.errors %}
-                        <div class="text-danger">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <div class="form-check mb-3">
-                        {{ form.can_be_execute(class="form-check-input") }}
-                        {{ form.can_be_execute.label(class="form-check-label") }}
-                    </div>
-
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-plus-circle me-1"></i> Create Format
-                    </button>
-                </form>
-            </div>
-        </div>
-        <!-- Change Format Tab -->
-        <div class="tab-pane fade" id="chap2-pane" role="tabpanel" aria-labelledby="chap2-tab">
-            <div class="card card-body shadow-sm" id="main-container">
-                <form method="POST" action="{{ url_for('rule.replace_format_rule') }}">
-                    {{ form.hidden_tag() }}
-
-                    <div class="mb-3">
-                        <label for="current_format" class="form-label"><strong>Current Format Name</strong></label>
-                        <input type="text" class="form-control" id="current_format" name="current_format"
-                            placeholder="Enter format to replace" required>
-                        <div class="form-text">Ex: Sigma</div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="new_format" class="form-label"><strong>New Format Name</strong></label>
-                        <input type="text" class="form-control" id="new_format" name="new_format"
-                            placeholder="Enter replacement format" required>
-                        <div class="form-text">Ex: sigma</div>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-sync-alt me-1"></i> Replace Format
-                    </button>
-                </form>
-            </div>
-        </div>
-
-        <!-- List Formats Tab -->
-        <div class="tab-pane fade" id="chap3-pane" role="tabpanel" aria-labelledby="chap3-tab">
-            <div class="card card-body shadow-sm" id="main-container">
-                <table class="table table-bordered table-hover align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th>ID</th>
-                            <th>Name</th>
-                            <th>Executable</th>
-                            <th>Creation Date</th>
-                            <th>Count of rules</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="format in rules_formats" :key="format.id">
-                            <td>[[ format.id ]]</td>
-                            <td>[[ format.name ]]</td>
-                            <td>
-                                <span class="badge bg-success" v-if="format.can_be_execute">Yes</span>
-                                <span class="badge bg-secondary" v-else>No</span>
-                            </td>
-                            <td>[[ format.creation_date ]]</td>
-                            <td> [[ format.number_of_rule_with_this_format ]]</td>
-                            <td>
-                                <button type="button" class="btn btn-danger btn-sm me-2" title="Delete the format"
-                                    data-bs-toggle="modal" :data-bs-target="'#delete_format_modal_'+format.id">
-                                    <i class="fa-solid fa-trash fa-fw"></i>
-                                </button>
-                                <div class="modal fade" :id="'delete_format_modal_'+format.id" tabindex="-1"
-                                    aria-labelledby="delete_format_modal" aria-hidden="true">
-                                    <div class="modal-dialog modal-lg">
-                                        <div class="modal-content">
-
-                                            <div class="modal-header">
-                                                <h1 class="modal-title fs-5"
-                                                    :id="'delete_format_modal_label_'+format.id">
-                                                    Delete format "<strong>[[ format.name ]]</strong>" ?
-                                                </h1>
-                                                <button class="btn-close" data-bs-dismiss="modal"
-                                                    aria-label="Close"></button>
-                                            </div>
-
-                                            <div class="modal-body">
-                                                <p>
-                                                    <i class="fa-solid fa-triangle-exclamation text-warning me-2"></i>
-                                                    This format is used by <strong>[[
-                                                        format.number_of_rule_with_this_format ]]</strong> rule<span
-                                                        v-if="format.number_of_rule_with_this_format > 1">s</span>.
-                                                </p>
-                                                <p class="text-danger fw-bold mb-0">
-                                                    Deleting this format will permanently remove the association from
-                                                    all related rules. These rules will no longer have any format
-                                                    assigned.
-                                                </p>
-                                            </div>
-
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary"
-                                                    data-bs-dismiss="modal">Cancel</button>
-                                                <button type="button" class="btn btn-danger"
-                                                    @click="deleteFormat(format.id)" data-bs-dismiss="modal">
-                                                    <i class="fa-solid fa-trash"></i> Confirm Deletion
-                                                </button>
-                                            </div>
-
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </td>
-                        </tr>
-                        <tr v-if="rules_formats.length === 0">
-                            <td colspan="5" class="text-center text-muted">No formats found.</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div v-if="total_rules_formats_page > 1">
-                    {% set current_page = 'current_page' %}
-                    {% set total_pages = 'total_rules_formats_page' %}
-                    {% set visible_pages = 'visiblePages' %}
-                    {% set fetch_function = 'fetchRulesFormat' %}
-
-                    {% include "components/pagination.html" %}
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
+
 {% else %}
-<script>
-    window.location.href = "{{ url_for('account.acces_denied') }}";
-</script>
+<script>window.location.href = "{{ url_for('account.acces_denied') }}";</script>
 {% endif %}
 {% endblock %}
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed } = Vue;
-    import { create_message, message_list } from '/static/js/toaster.js';
+    const { createApp, ref } = Vue
+    import { create_message }  from '/static/js/toaster.js'
+    import FormatList          from '/static/js/rule/formatList.js'
+    import PaginationComponent from '/static/js/rule/paginationComponent.js'
+
+    window.create_message = create_message
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { 'format-list': FormatList, 'pagination-component': PaginationComponent },
         setup() {
-            /**
-             *          ####################
-             *          #   fetch formats  #
-             *          ####################
-             * */
-
-            const rules_formats = ref([])
-            const current_page = ref(1)
-            const total_rules_formats_page = ref(0)
-
-            async function fetchRulesFormat(page) {
-                const params = new URLSearchParams({ page });
-                const res = await fetch('/rule/get_rules_formats_pages?' + params.toString());
-                const data = await res.json();
-                if (res.status === 200) {
-                    rules_formats.value = data.rules_formats;
-                    total_rules_formats_page.value = data.total_rules_formats;
-                    current_page.value = page;
-                }
-            }
-
-            async function deleteFormat(id) {
-                const params = new URLSearchParams({ id });
-                const res = await fetch('/rule/delete_format_rule?' + params.toString());
-                if (res.status === 200) {
-                    fetchRulesFormat(current_page.value);
-                    var myModalEl = document.getElementById('delete_format_modal_' + id);
-                    var modal = bootstrap.Modal.getInstance(myModalEl)
-                    modal.hide();
-                }
-                create_message(res.message, res.toast_class);
-
-            }
-
-            // Initial fetch
-            fetchRulesFormat(1)
-
-            const visiblePages = computed(() => {
-                const pages = []
-                const total = total_rules_formats_page.value
-                const current = current_page.value
-                if (total <= 7) {
-                    for (let i = 1; i <= total; i++) pages.push(i)
-                } else {
-                    if (current <= 4) {
-                        pages.push(1, 2, 3, 4, 5, '...', total)
-                    } else if (current >= total - 3) {
-                        pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total)
-                    } else {
-                        pages.push(1, '...', current - 1, current, current + 1, '...', total)
-                    }
-                }
-                return pages
-            })
-
-            return {
-                message_list,
-                rules_formats,
-                current_page,
-                total_rules_formats_page,
-                fetchRulesFormat,
-                deleteFormat,
-                visiblePages
-            };
-
+            const formatListRef = ref(null)
+            return { formatListRef }
         }
-    }).mount('#main-container');
+    }).mount('#main-container')
 </script>
 {% endblock %}

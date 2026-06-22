@@ -2191,6 +2191,62 @@ def replace_format_rule():
     return redirect(url_for("rule.manage_format_rule"))
 
 
+@rule_blueprint.route("/formats_data_table", methods=['GET'])
+def formats_data_table():
+    """Paginated + searchable format list for the admin component."""
+    from app.core.db_class.db import FormatRule
+    page     = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 20, type=int), 100)
+    search   = (request.args.get('search', '') or '').strip()
+    sort_by  = request.args.get('sort', 'creation_date')
+    sort_dir = request.args.get('dir', 'desc')
+    from sqlalchemy import asc, desc
+    query = FormatRule.query
+    if search:
+        query = query.filter(FormatRule.name.ilike(f'%{search}%'))
+    _sort_map = {'creation_date': FormatRule.creation_date, 'name': FormatRule.name, 'id': FormatRule.id}
+    sort_col  = _sort_map.get(sort_by, FormatRule.creation_date)
+    query     = query.order_by(desc(sort_col) if sort_dir == 'desc' else asc(sort_col))
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        'items': [f.to_json() for f in pagination.items],
+        'total': pagination.total,
+        'total_pages': pagination.pages,
+    })
+
+
+@rule_blueprint.route("/create_format_json", methods=['POST'])
+@login_required
+def create_format_json():
+    """JSON endpoint to create a new rule format."""
+    if not current_user.is_admin():
+        return jsonify(success=False, message="Access denied"), 403
+    data           = request.get_json(silent=True) or {}
+    format_name    = (data.get('name') or '').strip()
+    can_be_execute = bool(data.get('can_be_execute', False))
+    if not format_name:
+        return jsonify(success=False, message="Format name is required"), 400
+    success, message = RuleModel.add_format_rule(format_name, current_user.id, can_be_execute)
+    return jsonify(success=success, message=message), (200 if success else 409)
+
+
+@rule_blueprint.route("/rename_format_json", methods=['POST'])
+@login_required
+def rename_format_json():
+    """JSON endpoint to rename a format across all rules."""
+    if not current_user.is_admin():
+        return jsonify(success=False, message="Access denied"), 403
+    data           = request.get_json(silent=True) or {}
+    current_format = (data.get('current_format') or '').strip()
+    new_format     = (data.get('new_format') or '').strip()
+    if not current_format or not new_format:
+        return jsonify(success=False, message="Both fields are required"), 400
+    if current_format == new_format:
+        return jsonify(success=False, message="New name must differ from the current name"), 400
+    updated = RuleModel.replace_rule_format(current_format, new_format)
+    return jsonify(success=True, message=f"{updated} rule(s) updated from '{current_format}' to '{new_format}'.", updated=updated)
+
+
 @rule_blueprint.route("/get_rules_formats", methods=['GET'])
 def get_rules_format() -> dict:
     formats = RuleModel.get_all_rule_format()
