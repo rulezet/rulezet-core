@@ -140,6 +140,62 @@
 .lt-level-pill--warning.active { background: rgba(249, 115, 22, .12);  color: #f97316; border-color: rgba(249, 115, 22, .35); }
 .lt-level-pill--error.active   { background: rgba(239, 68, 68, .12);   color: #ef4444; border-color: rgba(239, 68, 68, .35);  }
 
+/* ── LT DATE RANGE ─────────────────────────────────────────────────────────── */
+
+.lt-date-range {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    flex-shrink: 0;
+}
+
+.lt-date-icon {
+    font-size: .75rem;
+    color: var(--text-secondary);
+}
+
+.lt-date-input {
+    padding: .28rem .5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-main);
+    font-size: .78rem;
+    cursor: pointer;
+    transition: border-color var(--transition);
+    max-width: 130px;
+}
+
+.lt-date-input:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 2px var(--brand-dim);
+}
+
+.lt-date-sep {
+    font-size: .72rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.lt-date-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 50%;
+    font-size: .65rem;
+    padding: 0;
+    transition: background var(--transition), color var(--transition);
+}
+
+.lt-date-clear:hover { background: var(--brand-dim); color: var(--brand); }
+
 /* ── LT BULK BAR ─────────────────────────────────────────────────────────────── */
 
 .lt-bulk-bar {
@@ -296,6 +352,7 @@
 .lt-category-badge--github    { color: var(--text-secondary); background: var(--bg-elevated); border-color: var(--border);         }
 .lt-category-badge--connector { color: #22c55e;        background: rgba(34, 197, 94, .1);   border-color: rgba(34, 197, 94, .2);  }
 .lt-category-badge--comment   { color: #f97316;        background: rgba(249, 115, 22, .1);  border-color: rgba(249, 115, 22, .2); }
+.lt-category-badge--api       { color: #06b6d4;        background: rgba(6, 182, 212, .1);   border-color: rgba(6, 182, 212, .2);  }
 .lt-category-badge--system    { color: var(--text-muted); background: var(--bg-elevated);   border-color: var(--border);           }
 
 /* ── LT EVENT ────────────────────────────────────────────────────────────────── */
@@ -325,6 +382,15 @@
 /* ── LT ACTOR ────────────────────────────────────────────────────────────────── */
 
 .lt-actor { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+
+.lt-actor--link {
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    padding: .1rem .25rem .1rem .1rem;
+    transition: background var(--transition);
+}
+.lt-actor--link:hover { background: var(--brand-dim); }
+.lt-actor--link:hover .lt-actor-name { color: var(--brand); }
 
 .lt-actor-avatar {
     width: 24px;

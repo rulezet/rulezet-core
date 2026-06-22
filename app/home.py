@@ -450,6 +450,7 @@ def get_logs_page():
     from app import db
 
     from sqlalchemy import or_
+    from datetime import datetime
     page      = request.args.get('page', 1, type=int)
     per_page  = min(100, request.args.get('per_page', 25, type=int))
     search    = request.args.get('search', '', type=str).strip()
@@ -459,6 +460,8 @@ def get_logs_page():
     user_id_f = request.args.get('user_id', None, type=int)
     sort_key  = request.args.get('sort', 'created_at', type=str)
     sort_dir  = request.args.get('dir', 'desc', type=str)
+    date_from = request.args.get('date_from', '', type=str).strip()
+    date_to   = request.args.get('date_to',   '', type=str).strip()
 
     _allowed_sorts = {'id', 'created_at', 'category', 'level', 'action'}
     if sort_key not in _allowed_sorts:
@@ -482,6 +485,21 @@ def get_logs_page():
         q = q.filter(ActivityLog.level == level)
     if user_id_f:
         q = q.filter(ActivityLog.user_id == user_id_f)
+    if date_from:
+        try:
+            dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+            q = q.filter(ActivityLog.created_at >= dt_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_to = datetime.strptime(date_to, '%Y-%m-%d')
+            # include the full day
+            from datetime import timedelta
+            dt_to = dt_to + timedelta(days=1)
+            q = q.filter(ActivityLog.created_at < dt_to)
+        except ValueError:
+            pass
 
     sort_col = getattr(ActivityLog, sort_key)
     q = q.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())

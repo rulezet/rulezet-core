@@ -5,6 +5,7 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/timeline.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/logs.css') }}">
 {% endblock %}
 
@@ -97,6 +98,15 @@
         <input class="logs-tl-search-input" placeholder="Search…"
                v-model="tlSearch" @input="debouncedTlFetch">
       </div>
+      <div class="lt-date-range ms-auto">
+        <i class="fas fa-calendar-days lt-date-icon"></i>
+        <input type="date" class="lt-date-input" v-model="tlDateFrom" @change="onTlDateChange" title="From date" />
+        <span class="lt-date-sep">→</span>
+        <input type="date" class="lt-date-input" v-model="tlDateTo"   @change="onTlDateChange" title="To date" />
+        <button v-if="tlDateFrom || tlDateTo" class="lt-date-clear" @click="clearTlDates" title="Clear dates">
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>
     </div>
 
     <!-- Timeline + detail panel -->
@@ -182,7 +192,12 @@
 
           <div v-if="selectedTlItem.extra">
             <div class="logs-detail-label mt-2 mb-1">Extra data</div>
-            <pre class="logs-detail-pre">[[ JSON.stringify(selectedTlItem.extra, null, 2) ]]</pre>
+            <code-viewer
+              :code="JSON.stringify(selectedTlItem.extra, null, 2)"
+              language="json"
+              max-height="340px"
+              :show-lines="false">
+            </code-viewer>
           </div>
 
           <div class="d-flex gap-2 mt-3">
@@ -260,14 +275,15 @@
 
 <script type="module">
 import { create_message } from '/static/js/toaster.js'
-import LogTable  from '/static/js/components/log-table.js'
-import Timeline  from '/static/js/components/timeline.js'
+import LogTable    from '/static/js/components/log-table.js'
+import Timeline    from '/static/js/components/timeline.js'
+import CodeViewer  from '/static/js/components/code-viewer.js'
 
 const { createApp, ref, onMounted } = Vue
 
 createApp({
     delimiters: ['[[', ']]'],
-    components: { 'log-table': LogTable, 'timeline': Timeline },
+    components: { 'log-table': LogTable, 'timeline': Timeline, 'code-viewer': CodeViewer },
     setup() {
 
         const csrfToken   = document.querySelector('input[name="csrf_token"]')?.value || ''
@@ -288,6 +304,8 @@ createApp({
         const tlCat      = ref('')
         const tlLevel    = ref('')
         const tlSearch   = ref('')
+        const tlDateFrom = ref('')
+        const tlDateTo   = ref('')
         const selectedTlItem = ref(null)
 
         const TL_PER_PAGE = 30
@@ -302,6 +320,7 @@ createApp({
             { value: 'job',       label: 'Job'       },
             { value: 'github',    label: 'GitHub'    },
             { value: 'connector', label: 'Connector' },
+            { value: 'api',       label: 'API'       },
             { value: 'system',    label: 'System'    },
         ]
 
@@ -333,9 +352,11 @@ createApp({
                 sort:     'created_at',
                 dir:      'desc',
             })
-            if (tlCat.value)    params.set('category', tlCat.value)
-            if (tlLevel.value)  params.set('level',    tlLevel.value)
-            if (tlSearch.value) params.set('search',   tlSearch.value)
+            if (tlCat.value)      params.set('category',  tlCat.value)
+            if (tlLevel.value)    params.set('level',     tlLevel.value)
+            if (tlSearch.value)   params.set('search',    tlSearch.value)
+            if (tlDateFrom.value) params.set('date_from', tlDateFrom.value)
+            if (tlDateTo.value)   params.set('date_to',   tlDateTo.value)
 
             try {
                 const res  = await fetch(`/admin/get_logs_page?${params}`)
@@ -355,6 +376,8 @@ createApp({
 
         function setTlCat(val)   { tlCat.value = val;   fetchTlLogs(true) }
         function setTlLevel(val) { tlLevel.value = val; fetchTlLogs(true) }
+        function onTlDateChange() { fetchTlLogs(true) }
+        function clearTlDates()   { tlDateFrom.value = ''; tlDateTo.value = ''; fetchTlLogs(true) }
 
         let _tlTimer = null
         function debouncedTlFetch() {
@@ -474,8 +497,10 @@ createApp({
             csrfToken, logTableRef, timelineRef,
             view, totalLogs, editLog, editForm,
             tlItems, tlLoading, tlHasMore, tlCat, tlLevel, tlSearch,
+            tlDateFrom, tlDateTo,
             tlCategories, tlLevels, selectedTlItem,
             switchToTimeline, setTlCat, setTlLevel, debouncedTlFetch,
+            onTlDateChange, clearTlDates,
             loadMoreTl, selectTlItem, formatTlDate, tlLevelBadge,
             openEdit, saveEdit,
             deleteOne, deleteOneTl, bulkDeleteByUuids, deleteAll,

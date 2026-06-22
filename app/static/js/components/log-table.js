@@ -16,6 +16,7 @@
  */
 
 import PaginationComponent from '/static/js/rule/paginationComponent.js'
+import CodeViewer         from '/static/js/components/code-viewer.js'
 
 const { ref, computed, onMounted } = Vue
 
@@ -32,6 +33,7 @@ const CATEGORIES = [
     { value: 'github',    label: 'GitHub',    icon: 'fa-brands fa-github' },
     { value: 'connector', label: 'Connector', icon: 'fa-plug'          },
     { value: 'comment',   label: 'Comment',   icon: 'fa-comment'       },
+    { value: 'api',       label: 'API',       icon: 'fa-code'          },
     { value: 'system',    label: 'System',    icon: 'fa-gear'          },
 ]
 
@@ -78,7 +80,7 @@ function formatFull(val) {
 
 export default {
     name: 'LogTable',
-    components: { 'pagination-component': PaginationComponent },
+    components: { 'pagination-component': PaginationComponent, 'code-viewer': CodeViewer },
 
     props: {
         fetchUrl:  { type: String,  required: true },
@@ -102,6 +104,8 @@ export default {
         const search       = ref('')
         const active_cat   = ref('')
         const active_level = ref('')
+        const date_from    = ref('')
+        const date_to      = ref('')
         const expanded_id  = ref(null)
         const selected     = ref(new Set())
 
@@ -115,9 +119,11 @@ export default {
                     sort:     sort_key.value,
                     dir:      sort_dir.value,
                 })
-                if (search.value)       params.set('search',   search.value)
-                if (active_cat.value)   params.set('category', active_cat.value)
-                if (active_level.value) params.set('level',    active_level.value)
+                if (search.value)       params.set('search',    search.value)
+                if (active_cat.value)   params.set('category',  active_cat.value)
+                if (active_level.value) params.set('level',     active_level.value)
+                if (date_from.value)    params.set('date_from', date_from.value)
+                if (date_to.value)      params.set('date_to',   date_to.value)
 
                 const res  = await fetch(`${props.fetchUrl}?${params}`)
                 const data = await res.json()
@@ -168,6 +174,10 @@ export default {
 
         function setLevel(val) { active_level.value = val; page.value = 1; fetchData() }
 
+        function onDateChange() { page.value = 1; fetchData() }
+
+        function clearDates() { date_from.value = ''; date_to.value = ''; page.value = 1; fetchData() }
+
         function onPerPageChange() { page.value = 1; fetchData() }
 
         // ── Pagination ────────────────────────────────────────────────────────
@@ -213,11 +223,13 @@ export default {
         return {
             items, total, total_pages, loading, page, per_page,
             sort_key, sort_dir, search, active_cat, active_level,
+            date_from, date_to,
             expanded_id, selected, all_page_selected,
             CATEGORIES, LEVELS,
             getCategoryIcon, getInitials, formatRelative, formatFull,
             fetchData, toggleSort, sortIcon,
             onSearch, clearSearch, setCategory, setLevel, onPerPageChange,
+            onDateChange, clearDates,
             handlePageChange, toggleExpand,
             toggleAll, toggleOne, clearSelection,
             requestDelete, requestBulkDelete, requestEdit,
@@ -276,6 +288,31 @@ export default {
                 :class="['lt-level-pill--' + (lv.value || 'all'), { active: active_level === lv.value }]"
                 @click="setLevel(lv.value)">
                 {{ lv.label }}
+            </button>
+        </div>
+
+        <div class="lt-filter-sep d-none d-sm-block"></div>
+
+        <!-- Date range -->
+        <div class="lt-date-range">
+            <i class="fas fa-calendar-days lt-date-icon"></i>
+            <input
+                type="date"
+                class="lt-date-input"
+                v-model="date_from"
+                @change="onDateChange"
+                title="From date"
+            />
+            <span class="lt-date-sep">→</span>
+            <input
+                type="date"
+                class="lt-date-input"
+                v-model="date_to"
+                @change="onDateChange"
+                title="To date"
+            />
+            <button v-if="date_from || date_to" class="lt-date-clear" @click="clearDates" title="Clear dates">
+                <i class="fas fa-xmark"></i>
             </button>
         </div>
 
@@ -383,10 +420,13 @@ export default {
 
                         <!-- Actor -->
                         <td class="lt-td lt-td--actor">
-                            <div v-if="log.actor_name && log.actor_name !== 'System'" class="lt-actor">
+                            <a v-if="log.actor_name && log.actor_name !== 'System' && log.user_id"
+                               :href="'/account/detail_user/' + log.user_id"
+                               class="lt-actor lt-actor--link"
+                               target="_blank">
                                 <div class="lt-actor-avatar">{{ getInitials(log.actor_name) }}</div>
                                 <span class="lt-actor-name" :title="log.actor_name">{{ log.actor_name }}</span>
-                            </div>
+                            </a>
                             <span v-else class="lt-actor-none">System</span>
                         </td>
 
@@ -480,7 +520,12 @@ export default {
 
                                 <div v-if="log.extra" class="lt-expand-field">
                                     <span class="lt-expand-label">Extra data</span>
-                                    <pre class="lt-meta-pre">{{ JSON.stringify(log.extra, null, 2) }}</pre>
+                                    <code-viewer
+                                        :code="JSON.stringify(log.extra, null, 2)"
+                                        language="json"
+                                        max-height="320px"
+                                        :show-lines="false">
+                                    </code-viewer>
                                 </div>
 
                             </div>

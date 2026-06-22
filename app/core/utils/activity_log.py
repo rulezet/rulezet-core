@@ -159,7 +159,7 @@ _TITLES: dict[str, str] = {
 # Known category prefixes (first segment of action)
 _KNOWN_CATEGORIES = frozenset({
     'rule', 'bundle', 'bundle_comment', 'user', 'tag', 'job',
-    'github', 'admin', 'comment', 'connector',
+    'github', 'admin', 'comment', 'connector', 'api',
 })
 
 # Prefix to display category mapping
