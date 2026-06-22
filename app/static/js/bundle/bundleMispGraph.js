@@ -63,13 +63,13 @@ function _isDark() {
     return document.documentElement.classList.contains('dark-mode')
 }
 
-function _nodeStyles() {
+function _nodeStyles(sizeScale = 1) {
     const colors = _isDark() ? _COLORS_DARK : _COLORS_LIGHT
     return Object.fromEntries(
         Object.keys(_SHAPES).map(type => [type, {
             shape: _SHAPES[type],
             color: colors[type],
-            size:  _SIZES[type],
+            size:  Math.round(_SIZES[type] * sizeScale),
         }])
     )
 }
@@ -299,8 +299,9 @@ function _showSpinner(container, message) {
  *
  * @param {string} containerId  DOM id of the target div
  * @param {string} jsonText     Raw JSON string of the MISP event
+ * @param {object} [opts]       Optional overrides: { sizeScale }
  */
-export function initBundleGraph(containerId, jsonText) {
+export function initBundleGraph(containerId, jsonText, opts = {}) {
     const container = document.getElementById(containerId)
     if (!container) return
 
@@ -328,7 +329,7 @@ export function initBundleGraph(containerId, jsonText) {
             attempts++
             if (typeof window.Pivotick === 'function') {
                 clearInterval(poll)
-                initBundleGraph(containerId, jsonText)
+                initBundleGraph(containerId, jsonText, opts)
             } else if (attempts > 50) {
                 clearInterval(poll)
                 container.innerHTML = '<p style="padding:2rem;text-align:center;color:#888">Could not load Pivotick.</p>'
@@ -354,7 +355,7 @@ export function initBundleGraph(containerId, jsonText) {
         }
 
         const { maxNodes, layout, pivotickUI } = GRAPH_CONFIG
-        const nodeStyles = _nodeStyles()
+        const nodeStyles = _nodeStyles(opts.sizeScale ?? 1)
 
         if (parsed.nodes.length > maxNodes) {
             const degree = {}
@@ -446,7 +447,7 @@ export function initBundleGraph(containerId, jsonText) {
         _themeObserver = new MutationObserver(() => {
             _themeObserver.disconnect()
             _themeObserver = null
-            initBundleGraph(containerId, jsonText)
+            initBundleGraph(containerId, jsonText, opts)
         })
         _themeObserver.observe(document.documentElement, {
             attributes: true,
