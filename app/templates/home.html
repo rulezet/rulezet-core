@@ -2,7 +2,8 @@
 {% block title %}Security Intelligence Repository — Rulezet{% endblock %}
 {% import 'macros/form_macros.html' as f %}
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" as="script" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" async></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rulesCarousel.css') }}">
 <style>
@@ -505,6 +506,10 @@
     import UserChip from '/static/js/components/UserChip.js'
     import ChartViewer from '/static/js/components/chart-viewer.js'
 
+    // Pre-warm the two chart renderers used on this page so get_renderer() hits the cache
+    import('/static/js/components/charts/chart-area.js').catch(() => {})
+    import('/static/js/components/charts/chart-bar-h.js').catch(() => {})
+
     const ACTION_LABELS = {
         'rule.create': 'created a rule', 'rule.edit': 'edited a rule',
         'rule.vote_up': 'upvoted a rule', 'rule.vote_down': 'downvoted a rule',
@@ -615,10 +620,11 @@
 
             async function init() {
                 is_loading.value = false
+                // Kick off data fetches immediately — don't serialize behind auth check
+                fetchCharts()
+                fetchFeed()
                 await checkIfUserIsConnected()
                 is_loading.value = true
-                fetchFeed()
-                fetchCharts()
             }
 
             onMounted(() => init())

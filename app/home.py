@@ -67,7 +67,6 @@ def home() -> render_template:
 def home_charts():
     """Lightweight chart data for the home page (format distribution + monthly additions)."""
     import datetime
-    from collections import defaultdict
     from sqlalchemy import func
     from app.core.db_class.db import Rule
     from app import db
@@ -82,15 +81,7 @@ def home_charts():
     fmt_cats = [r[0] or 'Unknown' for r in fmt_rows]
     fmt_vals = [r[1] for r in fmt_rows]
 
-    cutoff = now - datetime.timedelta(days=6 * 31)
-    rows = db.session.query(Rule.creation_date).filter(
-        Rule.is_deleted == False, Rule.creation_date >= cutoff
-    ).all()
-    bucket = defaultdict(int)
-    for (dt,) in rows:
-        if dt:
-            bucket[dt.strftime('%Y-%m')] += 1
-
+    # Build the 6 target month labels
     labels, nice = [], []
     d = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     for _ in range(6):
@@ -100,6 +91,20 @@ def home_charts():
     for l in labels:
         try: nice.append(datetime.datetime.strptime(l, '%Y-%m').strftime('%b %Y'))
         except: nice.append(l)
+
+    # GROUP BY in SQL — one row per month instead of fetching all creation_dates
+    cutoff = now - datetime.timedelta(days=186)
+    dialect = db.engine.dialect.name
+    if dialect == 'postgresql':
+        month_expr = func.to_char(Rule.creation_date, 'YYYY-MM')
+    else:
+        month_expr = func.strftime('%Y-%m', Rule.creation_date)
+
+    month_rows = (db.session.query(month_expr.label('m'), func.count(Rule.id))
+                  .filter(Rule.is_deleted == False, Rule.creation_date >= cutoff)
+                  .group_by('m')
+                  .all())
+    bucket = {row[0]: row[1] for row in month_rows if row[0]}
 
     return jsonify({
         'formats':  {'title': 'Rules by Format',  'categories': fmt_cats, 'series': [{'name': 'Rules', 'values': fmt_vals}]},

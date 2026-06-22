@@ -144,6 +144,7 @@ export default defineComponent({
         let _chart        = null;
         let _ro           = null;   /* ResizeObserver */
         let _mo           = null;   /* MutationObserver (theme) */
+        let _ew           = null;   /* ECharts-wait interval */
 
         /* Build the ordered view list */
         const view_list = computed(() => {
@@ -167,7 +168,21 @@ export default defineComponent({
                 return;
             }
             const el = chart_el.value;
-            if (!el || !window.echarts) return;
+            if (!el) return;
+
+            // ECharts CDN may still be downloading (async tag) — poll until ready
+            if (!window.echarts) {
+                if (!_ew) {
+                    _ew = setInterval(() => {
+                        if (window.echarts) {
+                            clearInterval(_ew); _ew = null;
+                            render();
+                        }
+                    }, 60);
+                }
+                return;
+            }
+            if (_ew) { clearInterval(_ew); _ew = null; }
 
             const build_option = await get_renderer(active_view.value);
             if (!build_option) return;
@@ -235,6 +250,7 @@ export default defineComponent({
         });
 
         onBeforeUnmount(() => {
+            if (_ew)     { clearInterval(_ew); _ew = null; }
             if (_chart)  { _chart.dispose(); _chart = null; }
             if (_ro)     _ro.disconnect();
             if (_mo)     _mo.disconnect();
