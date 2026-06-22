@@ -194,6 +194,63 @@ def delete_user() -> render_template:
     else:
         return render_template("access_denied.html")
 
+@account_blueprint.route("/users_data_table")
+@login_required
+def users_data_table():
+    """Paginated user list for the admin UserList component."""
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 403
+
+    from sqlalchemy import asc, desc, or_
+    from app.core.db_class.db import Rule
+
+    page     = request.args.get('page',     1,        type=int)
+    per_page = min(request.args.get('per_page', 20,   type=int), 100)
+    search   = (request.args.get('search',  '')  or '').strip()
+    f_admin  = request.args.get('admin',    '')
+    f_conn   = request.args.get('connected','')
+    f_verif  = request.args.get('verified', '')
+    sort_by  = request.args.get('sort',     'created_at')
+    sort_dir = request.args.get('dir',      'desc')
+
+    query = User.query
+
+    if search:
+        like = f'%{search}%'
+        query = query.filter(or_(
+            User.first_name.ilike(like), User.last_name.ilike(like),
+            User.email.ilike(like),      User.username.ilike(like),
+        ))
+
+    if f_admin == 'true':    query = query.filter(User.admin.is_(True))
+    elif f_admin == 'false': query = query.filter(User.admin.is_(False))
+
+    if f_conn == 'true':    query = query.filter(User.is_connected.is_(True))
+    elif f_conn == 'false': query = query.filter(User.is_connected.is_(False))
+
+    if f_verif == 'true':    query = query.filter(User.is_verified.is_(True))
+    elif f_verif == 'false': query = query.filter(User.is_verified.is_(False))
+
+    _sort_map = {
+        'created_at': User.created_at, 'last_seen': User.last_seen,
+        'first_name': User.first_name,  'id': User.id,
+    }
+    sort_col = _sort_map.get(sort_by, User.created_at)
+    query = query.order_by(desc(sort_col) if sort_dir == 'desc' else asc(sort_col))
+
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    items = []
+    for u in pagination.items:
+        j = u.to_json()
+        from app.core.db_class.db import Bundle
+        j['rule_count']   = Rule.query.filter_by(user_id=u.id, is_deleted=False).count()
+        j['bundle_count'] = Bundle.query.filter_by(user_id=u.id).count()
+        items.append(j)
+
+    return jsonify({'items': items, 'total': pagination.total, 'total_pages': pagination.pages})
+
+
 @account_blueprint.route("/get_all_users")
 @login_required
 def get_all_users() -> Union[render_template, dict]:

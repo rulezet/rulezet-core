@@ -1,421 +1,232 @@
 {% extends 'base.html' %}
 {% import 'macros/admin_nav.html' as anav %}
 {% block title %}User Management — Rulezet{% endblock %}
+
 {% block head %}
-<link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/users_list.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/userList.css') }}">
 {% endblock %}
+
 {% block content %}
 {% if current_user.is_admin() %}
 <div class="container-fluid my-4" id="main-container" v-cloak>
 
-    <!-- Header Section -->
+    <!-- Banner -->
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-users banner-watermark"></i>
         <nav aria-label="breadcrumb" class="mb-3">
-            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">Users</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon">
-                <i class="fa-solid fa-users"></i>
-            </div>
+            <div class="banner-icon"><i class="fa-solid fa-users"></i></div>
             <div>
                 <h2 class="fw-bold mb-1">User Management</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
-        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-            Manage all registered users in the system. View user details, filter by admin status or connection status, and perform administrative actions.
+        <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
+            Manage all registered users. View profiles, filter by role or status, promote admins, and perform administrative actions.
         </p>
     </div>
 
     {{ anav.admin_nav('users') }}
 
-    <!-- Filters & Search -->
-    <div class="filters-container mb-4">
-        <div class="row g-3">
-            <div class="col-lg-4 col-md-6">
-                <label class="form-label fw-semibold small text-muted mb-2">Search</label>
-                <input type="text" v-model="searchQuery" @input="onSearchInput" @keyup.enter="onEnterKey"
-                    class="form-control form-control-sm" placeholder="Search by name or email...">
-            </div>
-            <div class="col-lg-4 col-md-6">
-                <label class="form-label fw-semibold small text-muted mb-2">Admin Status</label>
-                <select v-model="isAdminFilter" class="form-select form-select-sm" @change="fetchUsers(1)">
-                    <option value="">All Users</option>
-                    <option value="true">Admins</option>
-                    <option value="false">Non-admins</option>
-                </select>
-            </div>
-            <div class="col-lg-4 col-md-6">
-                <label class="form-label fw-semibold small text-muted mb-2">Connection Status</label>
-                <select v-model="isConnectedFilter" class="form-select form-select-sm" @change="fetchUsers(1)">
-                    <option value="">All Connections</option>
-                    <option value="true">Online</option>
-                    <option value="false">Offline</option>
-                </select>
-            </div>
-        </div>
-    </div>
+    <!-- UserList component -->
+    <user-list
+        ref="userListRef"
+        fetch-url="/account/users_data_table"
+        :current-user-id="{{ current_user.id }}"
+        default-view="table"
+        :initial-per-page="16"
+        :sync-url="true"
+        @toggle-admin="onToggleAdmin"
+        @delete-user="onDeleteUser">
+    </user-list>
 
-    <!-- Users Count -->
-    <div class="mb-3">
-        <span class="text-muted">Total Users:</span>
-        <span class="badge bg-primary">[[ total_users ]]</span>
-    </div>
-
-    <!-- Users Table -->
-    <template v-if="users_list && users_list.length > 0">
-        <div class="table-responsive">
-            <table class="table table-sm table-hover users-table">
-                <thead>
-                    <tr>
-                        <th class="col-user">User</th>
-                        <th class="col-email">
-                            Email
-                            <button class="btn btn-xs btn-outline-secondary ms-2" @click="toggleBlur"
-                                title="Toggle blur">
-                                <i :class="blurEnabled ? 'fas fa-eye' : 'fas fa-eye-slash'" style="font-size:11px;"></i>
-                            </button>
-                        </th>
-                        <th class="col-role">Role</th>
-                        <th class="col-status">Status</th>
-                        <th class="col-verified">Verified</th>
-                        <th class="col-actions">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="(user, index) in users_list" :key="user.id"
-                        :class="{ 'current-user': {{current_user.id}} == user.id }">
-                        <td class="col-user">
-                            <span :class="{ 'blurred': blurEnabled && !revealedUsers.has(user.id) }"
-                                @click="toggleReveal(user.id)" style="cursor:pointer;"
-                                :title="blurEnabled && !revealedUsers.has(user.id) ? 'Click to reveal' : ''">
-                                <strong>[[ user.first_name ]] [[ user.last_name || '' ]]</strong>
-                                <template v-if="{{current_user.id}} == user.id">
-                                    <span class="badge bg-info text-dark ms-1" style="font-size: 0.65rem;">YOU</span>
-                                </template>
-                            </span>
-                        </td>
-                        <td class="col-email">
-                            <span :class="{ 'blurred': blurEnabled && !revealedUsers.has(user.id) }"
-                                @click="toggleReveal(user.id)" style="cursor:pointer;"
-                                :title="blurEnabled && !revealedUsers.has(user.id) ? 'Click to reveal' : ''">
-                                <small>[[ user.email ]]</small>
-                            </span>
-                        </td>
-                        <td class="col-role">
-                            <template v-if="user.admin">
-                                <span class="badge bg-warning text-dark">
-                                    <i class="fas fa-user-shield me-1"></i>Admin
-                                </span>
+    <!-- Toggle admin modal -->
+    <teleport to="body">
+        <div class="modal fade" id="adminModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content border-0 shadow-lg" style="border-radius:16px;">
+                    <div class="modal-header border-0 pb-0">
+                        <h6 class="modal-title fw-bold text-warning">
+                            <i class="fas fa-user-shield me-2"></i>
+                            [[ adminTarget?.admin ? 'Remove Admin Rights' : 'Promote to Admin' ]]
+                        </h6>
+                        <button class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body text-center py-3">
+                        <div class="mb-3" style="font-size:2.2rem;">
+                            <i :class="adminTarget?.admin ? 'fas fa-user-minus text-warning' : 'fas fa-user-shield text-success'"></i>
+                        </div>
+                        <p class="mb-1">
+                            <template v-if="adminTarget?.admin">
+                                Remove admin rights from <strong>[[ adminTarget?.first_name ]] [[ adminTarget?.last_name ]]</strong>?
                             </template>
                             <template v-else>
-                                <span class="text-muted small">User</span>
+                                Grant admin rights to <strong>[[ adminTarget?.first_name ]] [[ adminTarget?.last_name ]]</strong>?
                             </template>
-                        </td>
-                        <td class="col-status">
-                            <span :class="['status-indicator', user.is_connected ? 'status-online' : 'status-offline']">
-                                <i :class="user.is_connected ? 'fas fa-circle' : 'fas fa-circle'"></i>
-                                [[ user.is_connected ? 'Online' : 'Offline' ]]
-                            </span>
-                        </td>
-                        <td class="col-verified">
-                            <template v-if="user.is_verified">
-                                <span class="badge bg-success">
-                                    <i class="fas fa-check me-1"></i>Verified
-                                </span>
-                            </template>
-                            <template v-else>
-                                <span class="text-muted small">-</span>
-                            </template>
-                        </td>
-                        <td class="col-actions">
-                            <a :href="'/account/detail_user/' + user.id" title="View user profile"
-                                class="btn btn-sm btn-primary me-2">
-                                <i class="fas fa-eye"></i>
-                            </a>
-                            <button v-if="{{current_user.id}} != user.id" type="button"
-                                class="btn btn-sm btn-warning me-2"
-                                :title="user.admin ? 'Remove admin rights' : 'Promote to admin'"
-                                data-bs-toggle="modal" :data-bs-target="'#admin_user_modal_'+user.id">
-                                <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-danger" title="Delete the user"
-                                data-bs-toggle="modal" :data-bs-target="'#delete_user_modal_'+user.id">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
-
-                            <!-- Promote / Demote Admin Modal -->
-                            <div class="modal fade" :id="'admin_user_modal_'+user.id" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog modal-dialog-centered modal-sm">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h6 class="modal-title fw-bold text-warning">
-                                                <i class="fas fa-user-shield me-2"></i>
-                                                [[ user.admin ? 'Remove Admin Rights' : 'Promote to Admin' ]]
-                                            </h6>
-                                            <button class="btn-close" data-bs-dismiss="modal"
-                                                aria-label="Close"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <p class="mb-2" v-if="user.admin">
-                                                Remove admin rights from
-                                                <strong>[[ user.first_name ]] [[ user.last_name ]]</strong>?
-                                            </p>
-                                            <p class="mb-2" v-else>
-                                                Grant admin rights to
-                                                <strong>[[ user.first_name ]] [[ user.last_name ]]</strong>?
-                                            </p>
-                                            <p class="text-muted small mb-0" v-if="!user.admin">
-                                                Admins can manage users, rules, tags and all administrative sections.
-                                            </p>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-sm btn-secondary"
-                                                data-bs-dismiss="modal">
-                                                Cancel
-                                            </button>
-                                            <button class="btn btn-sm btn-warning" @click="toggleAdmin(user)">
-                                                <i :class="user.admin ? 'fas fa-user-minus me-1' : 'fas fa-user-shield me-1'"></i>
-                                                [[ user.admin ? 'Remove' : 'Promote' ]]
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Delete Modal -->
-                            <div class="modal fade" :id="'delete_user_modal_'+user.id" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog modal-dialog-centered modal-sm">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h6 class="modal-title fw-bold text-danger">
-                                                <i class="fas fa-exclamation-triangle me-2"></i>Delete User
-                                            </h6>
-                                            <button class="btn-close" data-bs-dismiss="modal"
-                                                aria-label="Close"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <p class="mb-2">
-                                                Delete <strong>[[ user.first_name ]] [[ user.last_name ]]</strong>?
-                                            </p>
-                                            <p class="text-danger small mb-0">
-                                                This action cannot be undone.
-                                            </p>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-sm btn-secondary"
-                                                data-bs-dismiss="modal">
-                                                Cancel
-                                            </button>
-                                            <button class="btn btn-sm btn-danger" @click="deleteUser(user.id, index)">
-                                                <i class="fas fa-trash me-1"></i>Delete
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                        </p>
+                        <p v-if="!adminTarget?.admin" class="text-muted small mb-0">
+                            Admins can manage users, rules, tags and all admin sections.
+                        </p>
+                    </div>
+                    <div class="modal-footer border-0 pt-0 justify-content-center gap-2">
+                        <button class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn rounded-pill px-4"
+                                :class="adminTarget?.admin ? 'btn-warning' : 'btn-success'"
+                                :disabled="adminWorking" @click="confirmToggleAdmin">
+                            <span v-if="adminWorking" class="spinner-border spinner-border-sm me-2"></span>
+                            [[ adminTarget?.admin ? 'Remove' : 'Promote' ]]
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
+    </teleport>
 
-        <!-- Pagination -->
-        <pagination-component :current-page="current_page" :total-pages="total_pages" @change-page="changePage">
-        </pagination-component>
-    </template>
+    <!-- Delete user modal -->
+    <teleport to="body">
+        <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content border-0 shadow-lg" style="border-radius:16px;">
+                    <div class="modal-header border-0 pb-0">
+                        <h6 class="modal-title fw-bold text-danger">
+                            <i class="fas fa-triangle-exclamation me-2"></i>Delete User
+                        </h6>
+                        <button class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body text-center py-3">
+                        <div class="text-danger mb-3" style="font-size:2.2rem;">
+                            <i class="fas fa-trash-can"></i>
+                        </div>
+                        <p class="mb-1">
+                            Delete <strong>[[ deleteTarget?.first_name ]] [[ deleteTarget?.last_name ]]</strong>?
+                        </p>
+                        <p class="text-danger small mb-0">This action cannot be undone.</p>
+                    </div>
+                    <div class="modal-footer border-0 pt-0 justify-content-center gap-2">
+                        <button class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-danger rounded-pill px-4"
+                                :disabled="deleteWorking" @click="confirmDeleteUser">
+                            <span v-if="deleteWorking" class="spinner-border spinner-border-sm me-2"></span>
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </teleport>
 
-    <!-- Empty State -->
-    <div v-else class="text-center py-5">
-        <p class="text-muted">No users found.</p>
-    </div>
 </div>
 
 {% else %}
-<script>
-    window.location.href = "{{ url_for('account.acces_denied') }}";
-</script>
+<script>window.location.href = "{{ url_for('account.acces_denied') }}";</script>
 {% endif %}
 {% endblock %}
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed } = Vue;
-    import { message_list, create_message } from '/static/js/toaster.js';
-    import PaginationComponent from '/static/js/rule/paginationComponent.js';
+    const { createApp, ref } = Vue
+    import { create_message }  from '/static/js/toaster.js'
+    import UserList            from '/static/js/account/userList.js'
+    import PaginationComponent from '/static/js/rule/paginationComponent.js'
+    import UserChip            from '/static/js/components/UserChip.js'
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: {
-            'pagination-component': PaginationComponent
-        },
+        components: { 'user-list': UserList, 'pagination-component': PaginationComponent, 'user-chip': UserChip },
         setup() {
-            // Fetch section
-            const users_list = ref([])
-            const total_users = ref(0)
-            const total_pages = ref(0)
-            const current_page = ref(0)
+            const userListRef   = ref(null)
 
-            // Filter
-            const isAdminFilter = ref("")
-            const isConnectedFilter = ref("")
-            const searchQuery = ref("")
+            // ── Toggle admin ──────────────────────────────────────────────
+            const adminTarget  = ref(null)
+            const adminWorking = ref(false)
+            let   _adminModal  = null
 
+            function onToggleAdmin(user) {
+                adminTarget.value = user
+                _adminModal = _adminModal || new bootstrap.Modal(document.getElementById('adminModal'))
+                _adminModal.show()
+            }
 
-            const changePage = (page) => {
-                fetchUsers(page)
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            };
-            /******************fetch users section************************/
-            async function fetchUsers(page) {
-                const params = new URLSearchParams({
-                    page,
-                    search: searchQuery.value,
-                    connected: isConnectedFilter.value,
-                    admin: isAdminFilter.value
-                })
-
-                const res = await fetch('/account/get_all_users?' + params.toString())
-                if (await res.status == 200) {
+            async function confirmToggleAdmin() {
+                if (!adminTarget.value) return
+                adminWorking.value = true
+                try {
+                    const res  = await fetch('/account/promote_remove_admin', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json',
+                                   'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' },
+                        body: JSON.stringify({ userId: adminTarget.value.id,
+                                               action: adminTarget.value.admin ? 'remove' : 'promote' }),
+                    })
                     const data = await res.json()
                     if (data.success) {
-                        users_list.value = data.user
-                        total_pages.value = data.total_pages
-                        total_users.value = data.total_users
-                        current_page.value = page
-                    }
-                } else {
-                    create_message(res, "danger-subtle");
-                }
-            }
-            fetchUsers(1)
-
-            const visiblePages = computed(() => {
-                const pages = []
-                const total = total_pages.value
-                const current = current_page.value
-                if (total <= 7) {
-                    for (let i = 1; i <= total; i++) pages.push(i)
-                } else {
-                    if (current <= 4) {
-                        pages.push(1, 2, 3, 4, 5, '...', total)
-                    } else if (current >= total - 3) {
-                        pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total)
+                        create_message(
+                            data.admin
+                                ? adminTarget.value.first_name + ' is now an admin'
+                                : 'Admin rights removed from ' + adminTarget.value.first_name,
+                            'success-subtle'
+                        )
+                        _adminModal?.hide()
+                        userListRef.value?.fetchData()
                     } else {
-                        pages.push(1, '...', current - 1, current, current + 1, '...', total)
+                        create_message(data.message || 'Failed to update admin rights', 'danger-subtle')
                     }
-                }
-                return pages
-            })
-
-            /******************delete user section************************/
-            async function deleteUser(id, index) {
-                const params = new URLSearchParams({
-                    id
-                })
-                const res = await fetch('/account/delete_user', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' },
-                    body: JSON.stringify({ id })
-                })
-                const data = await res.json()
-                if (data.status == 200) {
-                    users_list.value.splice(index, 1)
-                    total_users.value -= 1
-                }
-                var myModalEl = document.getElementById('delete_user_modal_' + id);
-                var modal = bootstrap.Modal.getInstance(myModalEl)
-                modal.hide();
-
-                create_message(data.message, data.toast_class)
-
-                fetchUsers(current_page.value)
-
-            }
-
-            /******************promote / demote admin section************************/
-            async function toggleAdmin(user) {
-                const params = new URLSearchParams({
-                    userId: user.id,
-                    action: user.admin ? 'remove' : 'promote'
-                })
-                const res = await fetch('/account/promote_remove_admin', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' },
-                    body: JSON.stringify({ userId: user.id, action: user.admin ? 'remove' : 'promote' })
-                })
-                const data = await res.json()
-
-                const myModalEl = document.getElementById('admin_user_modal_' + user.id);
-                const modal = bootstrap.Modal.getInstance(myModalEl)
-                if (modal) modal.hide();
-
-                if (data.success) {
-                    user.admin = data.admin
-                    create_message(
-                        data.admin
-                            ? user.first_name + ' is now an admin'
-                            : 'Admin rights removed from ' + user.first_name,
-                        "success-subtle"
-                    )
-                } else {
-                    create_message("Failed to update admin rights", "danger-subtle")
+                } catch {
+                    create_message('Network error', 'danger-subtle')
+                } finally {
+                    adminWorking.value = false
                 }
             }
 
-            /*************************filter section******************************/
-            async function onSearchInput() {
-                await fetchUsers(1)
+            // ── Delete user ───────────────────────────────────────────────
+            const deleteTarget  = ref(null)
+            const deleteWorking = ref(false)
+            let   _deleteModal  = null
+
+            function onDeleteUser(user) {
+                deleteTarget.value = user
+                _deleteModal = _deleteModal || new bootstrap.Modal(document.getElementById('deleteModal'))
+                _deleteModal.show()
             }
 
-            async function onEnterKey() {
-                await fetchUsers(1)
-            }
-
-
-            const blurEnabled = ref(true)
-            const revealedUsers = ref(new Set())
-
-            function toggleBlur() {
-                blurEnabled.value = !blurEnabled.value
-                revealedUsers.value = new Set()   // reset les révélations individuelles
-            }
-
-            function toggleReveal(userId) {
-                if (!blurEnabled.value) return
-                const s = new Set(revealedUsers.value)
-                if (s.has(userId)) s.delete(userId)
-                else s.add(userId)
-                revealedUsers.value = s
+            async function confirmDeleteUser() {
+                if (!deleteTarget.value) return
+                deleteWorking.value = true
+                try {
+                    const res  = await fetch('/account/delete_user', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json',
+                                   'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' },
+                        body: JSON.stringify({ id: deleteTarget.value.id }),
+                    })
+                    const data = await res.json()
+                    create_message(data.message || 'User deleted.', data.toast_class || 'success-subtle')
+                    if (data.status === 200 || res.ok) {
+                        _deleteModal?.hide()
+                        userListRef.value?.fetchData()
+                    }
+                } catch {
+                    create_message('Network error', 'danger-subtle')
+                } finally {
+                    deleteWorking.value = false
+                    deleteTarget.value  = null
+                }
             }
 
             return {
-                message_list,
-                total_users,
-                users_list,
-                deleteUser,
-                toggleAdmin,
-                visiblePages,
-                fetchUsers,
-                isAdminFilter,
-                isConnectedFilter,
-                searchQuery,
-                total_pages,
-                current_page,
-                onSearchInput,
-                onEnterKey,
-                changePage,
-                blurEnabled,
-                revealedUsers,
-                toggleBlur,
-                toggleReveal,
-            };
+                userListRef,
+                adminTarget,  adminWorking,  onToggleAdmin,  confirmToggleAdmin,
+                deleteTarget, deleteWorking, onDeleteUser,   confirmDeleteUser,
+            }
         }
-    }).mount('#main-container');
+    }).mount('#main-container')
 </script>
 {% endblock %}
