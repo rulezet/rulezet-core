@@ -508,15 +508,20 @@
                     }
                 }
                 const sm = text.match(/\[data-theme="([^"]+)"\]/)
-                if (sm && !modal_form.name)
-                    modal_form.name = sm[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                if (sm && !modal_form.name) {
+                    const key = sm[1]
+                    modal_form.name = key.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                }
                 paste_result.value = { found: found_vars.length, missing }
             }
 
             function buildCssBlock(cssKey, cssVars) {
-                const lines = [`[data-theme="${cssKey}"] {`]
+                const lines = [
+                    `html[data-theme="${cssKey}"],`,
+                    `html[data-theme="${cssKey}"] body {`,
+                ]
                 for (const group of VAR_GROUPS) {
-                    lines.push('')
+                    lines.push(`\n    /* ${group.label} */`)
                     for (const v of group.vars) {
                         const val = (cssVars || {})[v]
                         if (val) lines.push(`    ${v}: ${val};`)
@@ -541,6 +546,7 @@
                     modal_form.css_vars[k] = (t.css_vars || {})[k] || ''
                 paste_input.value = buildCssBlock(t.css_key, t.css_vars)
                 paste_result.value = null
+                modal_tab.value = 'manual'
             }
 
             function pickIcon(ic) { modal_form.icon = ic; show_icon_picker.value = false; icon_search.value = '' }

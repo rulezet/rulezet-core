@@ -1,10 +1,13 @@
 /*
-  theme.css — Built-in named theme overrides for Rulezet.
-  Custom themes are in custom-themes.css (auto-generated — do not edit).
+  theme.css — Built-in named themes for Rulezet.
+  Each theme needs TWO selectors to beat dark-mode specificity:
+    html[data-theme="X"]        → sets vars on <html> (spec 0,1,1)
+    html[data-theme="X"] body   → sets vars on <body> (spec 0,1,2, beats body.dark-mode 0,1,1)
 */
 
 /* ── Ocean ─────────────────────────────────────────────────── */
-[data-theme="ocean"] {
+html[data-theme="ocean"],
+html[data-theme="ocean"] body {
     --bg-color: #0d1b2a;
     --card-bg-color: #1a2d42;
     --light-bg-color: #1e3550;
@@ -23,7 +26,8 @@
 }
 
 /* ── Forest ─────────────────────────────────────────────────── */
-[data-theme="forest"] {
+html[data-theme="forest"],
+html[data-theme="forest"] body {
     --bg-color: #0d1f0e;
     --card-bg-color: #142715;
     --light-bg-color: #1a3020;
@@ -42,7 +46,8 @@
 }
 
 /* ── Midnight ───────────────────────────────────────────────── */
-[data-theme="midnight"] {
+html[data-theme="midnight"],
+html[data-theme="midnight"] body {
     --bg-color: #0a0a0f;
     --card-bg-color: #12121e;
     --light-bg-color: #1a1a2e;
@@ -61,7 +66,8 @@
 }
 
 /* ── Sunset ─────────────────────────────────────────────────── */
-[data-theme="sunset"] {
+html[data-theme="sunset"],
+html[data-theme="sunset"] body {
     --bg-color: #1a0f0a;
     --card-bg-color: #2a1810;
     --light-bg-color: #351f14;

@@ -24,26 +24,68 @@ _BUILTIN_META = {
 
 # Named themes shipped with the app (CSS defined in themes/theme.css).
 # These are always available regardless of the DB.
+_OCEAN_VARS = {
+    '--bg-color': '#0d1b2a', '--card-bg-color': '#1a2d42', '--light-bg-color': '#1e3550',
+    '--code-bg-color': '#0a1520', '--card-header-bg-color': '#1e3550',
+    '--navbar-bg-color': '#0d1b2a', '--bar-bg-color': '#1a2d42',
+    '--text-color': '#cfe2f3', '--subtle-text-color': '#7aaec8', '--navbar-text-color': '#cfe2f3',
+    '--border-color': 'rgba(79, 195, 247, 0.15)', '--selected-color': 'rgba(79, 195, 247, 0.20)',
+    '--page-selected-color': '#4fc3f7', '--sidebar-color': '#060f1a', '--rule-name-color': '#4fc3f7',
+}
+_FOREST_VARS = {
+    '--bg-color': '#0d1f0e', '--card-bg-color': '#142715', '--light-bg-color': '#1a3020',
+    '--code-bg-color': '#0a1a0b', '--card-header-bg-color': '#1a3020',
+    '--navbar-bg-color': '#0d1f0e', '--bar-bg-color': '#142715',
+    '--text-color': '#c8e6c9', '--subtle-text-color': '#81c784', '--navbar-text-color': '#c8e6c9',
+    '--border-color': 'rgba(102, 187, 106, 0.15)', '--selected-color': 'rgba(102, 187, 106, 0.20)',
+    '--page-selected-color': '#66bb6a', '--sidebar-color': '#061008', '--rule-name-color': '#66bb6a',
+}
+_MIDNIGHT_VARS = {
+    '--bg-color': '#0a0a0f', '--card-bg-color': '#12121e', '--light-bg-color': '#1a1a2e',
+    '--code-bg-color': '#07070f', '--card-header-bg-color': '#1a1a2e',
+    '--navbar-bg-color': '#0a0a0f', '--bar-bg-color': '#12121e',
+    '--text-color': '#d4d4f0', '--subtle-text-color': '#7878a8', '--navbar-text-color': '#d4d4f0',
+    '--border-color': 'rgba(138, 99, 210, 0.15)', '--selected-color': 'rgba(138, 99, 210, 0.20)',
+    '--page-selected-color': '#8a63d2', '--sidebar-color': '#050510', '--rule-name-color': '#a78bfa',
+}
+_SUNSET_VARS = {
+    '--bg-color': '#1a0f0a', '--card-bg-color': '#2a1810', '--light-bg-color': '#351f14',
+    '--code-bg-color': '#120a06', '--card-header-bg-color': '#351f14',
+    '--navbar-bg-color': '#1a0f0a', '--bar-bg-color': '#2a1810',
+    '--text-color': '#f0d4b8', '--subtle-text-color': '#c89060', '--navbar-text-color': '#f0d4b8',
+    '--border-color': 'rgba(251, 146, 60, 0.15)', '--selected-color': 'rgba(251, 146, 60, 0.20)',
+    '--page-selected-color': '#fb923c', '--sidebar-color': '#0d0703', '--rule-name-color': '#fb923c',
+}
+
 BUILTIN_NAMED_THEMES = {
-    'ocean':    {'label': 'Ocean',    'icon': 'fa-water',      'is_dark': True},
-    'forest':   {'label': 'Forest',   'icon': 'fa-tree',       'is_dark': True},
-    'midnight': {'label': 'Midnight', 'icon': 'fa-moon',       'is_dark': True},
-    'sunset':   {'label': 'Sunset',   'icon': 'fa-cloud-sun',  'is_dark': True},
+    'ocean':    {'label': 'Ocean',    'icon': 'fa-water',      'is_dark': True, 'css_vars': _OCEAN_VARS},
+    'forest':   {'label': 'Forest',   'icon': 'fa-tree',       'is_dark': True, 'css_vars': _FOREST_VARS},
+    'midnight': {'label': 'Midnight', 'icon': 'fa-moon',       'is_dark': True, 'css_vars': _MIDNIGHT_VARS},
+    'sunset':   {'label': 'Sunset',   'icon': 'fa-cloud-sun',  'is_dark': True, 'css_vars': _SUNSET_VARS},
 }
 
 
 def seed_default_themes():
-    """Create built-in named themes in the DB if they don't already exist."""
+    """Create/backfill built-in named themes in the DB and regenerate CSS."""
     try:
+        changed = False
         for css_key, meta in BUILTIN_NAMED_THEMES.items():
-            if not CustomTheme.query.filter_by(css_key=css_key).first():
+            theme = CustomTheme.query.filter_by(css_key=css_key).first()
+            if not theme:
                 theme = CustomTheme(
                     name=meta['label'], css_key=css_key,
                     icon=meta['icon'], is_dark=meta['is_dark'],
-                    is_builtin=False, is_public=True, created_by=None,
+                    is_builtin=False, is_public=True,
+                    css_vars=meta.get('css_vars'), created_by=None,
                 )
                 db.session.add(theme)
-        db.session.commit()
+                changed = True
+            elif theme.css_vars is None and meta.get('css_vars'):
+                theme.css_vars = meta['css_vars']
+                changed = True
+        if changed:
+            db.session.commit()
+            regenerate_custom_themes_css()
     except Exception:
         db.session.rollback()
 
@@ -65,16 +107,27 @@ def get_all_custom_themes(admin_view=True):
 
 
 def regenerate_custom_themes_css():
-    """Rewrite app/static/css/themes/custom-themes.css from the DB."""
+    """Rewrite app/static/css/themes/custom-themes.css from the DB.
+
+    Each theme uses dual selectors to beat body.dark-mode specificity:
+      html[data-theme="X"]       (0,1,1) beats [data-bs-theme="dark"] (0,1,0)
+      html[data-theme="X"] body  (0,1,2) beats body.dark-mode          (0,1,1)
+    """
     themes = CustomTheme.query.filter_by(is_active=True).order_by(CustomTheme.id).all()
     lines = ['/* Auto-generated custom themes — do not edit manually */']
     for t in themes:
         if not t.css_vars:
             continue
-        lines.append(f'\n[data-theme="{t.css_key}"] {{')
-        for var, value in t.css_vars.items():
-            if var in THEME_VAR_KEYS and value:
-                lines.append(f'    {var}: {value};')
+        var_lines = [
+            f'    {var}: {value};'
+            for var, value in t.css_vars.items()
+            if var in THEME_VAR_KEYS and value
+        ]
+        if not var_lines:
+            continue
+        lines.append(f'\nhtml[data-theme="{t.css_key}"],')
+        lines.append(f'html[data-theme="{t.css_key}"] body {{')
+        lines.extend(var_lines)
         lines.append('}')
     css = '\n'.join(lines) + '\n'
     path = os.path.join(current_app.root_path, 'static', 'css', 'themes', 'custom-themes.css')
