@@ -586,7 +586,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                                 </div>
 
                                 <div class="border rounded-3 overflow-hidden shadow-sm">
-                                    <ul class="nav nav-tabs nav-fill border-bottom" id="vizTabs" role="tablist">
+                                    <!-- <ul class="nav nav-tabs nav-fill border-bottom" id="vizTabs" role="tablist">
                                         <li class="nav-item" role="presentation">
                                             <button class="nav-link {% if rule_misp_event %}active{% endif %} small fw-bold py-2 border-0" id="viz-graph-tab"
                                                 data-bs-toggle="tab" data-bs-target="#viz-graph" type="button" role="tab">
@@ -599,7 +599,38 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                                                 <i class="fas fa-code me-1"></i>JSON
                                             </button>
                                         </li>
+                                    </ul> -->
+                                    <ul class="nav nav-tabs nav-fill border-bottom" id="ruleTabs" role="tablist">
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link active small fw-bold py-2 border-0" id="normal-tab"
+                                                data-bs-toggle="tab" data-bs-target="#viz-graph" type="button" role="tab">
+                                                <i class="fas fa-file-code"></i> Graph
+                                            </button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link small fw-bold py-2 border-0" id="json-tab"
+                                                data-bs-toggle="tab" data-bs-target="#viz-json" type="button" role="tab">
+                                                <i class="fas fa-code"></i> JSON
+                                            </button>
+                                        </li>
                                     </ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                                     <div class="tab-content">
                                         <div class="tab-pane fade {% if rule_misp_event %}show active{% endif %}" id="viz-graph" role="tabpanel">
                                             {% if rule_misp_event %}
