@@ -3708,23 +3708,40 @@ def download_rules_export():
 @rule_blueprint.route('/bundle/create-from-filters', methods=['POST'])
 @login_required
 def bundle_from_filters():
+    MAX_BUNDLE_RULES = 200
     data = request.json
-    filters = data.get('filters', {})
-    
-    query = RuleModel.filter_rules(
-        search=filters.get("search"),
-        search_field=filters.get("search_field", "all"), 
-        author=filters.get("author"),
-        sort_by=filters.get("sort_by"),
-        rule_type=filters.get("rule_type"),
-        vulnerabilities=filters.get("vulnerabilities", []),
-        source=filters.get("sources", []),
-        user_id=filters.get("user_id"),
-        license=filters.get("licenses", []),
-        tags=filters.get("tags", []),
-        exact_match=filters.get("exact_match", False)
-    )
-    rules_objects = query.all()
+
+    # Explicit ID selection takes priority over filters
+    explicit_ids = data.get('ids')
+    if explicit_ids:
+        if len(explicit_ids) > MAX_BUNDLE_RULES:
+            return jsonify({"message": f"Selection too large — maximum {MAX_BUNDLE_RULES} rules per bundle."}), 400
+        rules_objects = RuleModel.get_active_rules_by_ids(explicit_ids)
+    else:
+        filters = data.get('filters') or {}
+        if not any([
+            filters.get("search"), filters.get("rule_type"), filters.get("author"),
+            filters.get("sources"), filters.get("tags"), filters.get("vulnerabilities"),
+            filters.get("licenses"), filters.get("user_id"),
+        ]):
+            return jsonify({"message": "At least one filter must be active to create a bundle."}), 400
+
+        query = RuleModel.filter_rules(
+            search=filters.get("search"),
+            search_field=filters.get("search_field", "all"),
+            author=filters.get("author"),
+            sort_by=filters.get("sort_by"),
+            rule_type=filters.get("rule_type"),
+            vulnerabilities=filters.get("vulnerabilities", []),
+            source=filters.get("sources", []),
+            user_id=filters.get("user_id"),
+            license=filters.get("licenses", []),
+            tags=filters.get("tags", []),
+            exact_match=filters.get("exact_match", False)
+        )
+        rules_objects = query.limit(MAX_BUNDLE_RULES + 1).all()
+        if len(rules_objects) > MAX_BUNDLE_RULES:
+            return jsonify({"message": f"Too many rules match these filters — maximum {MAX_BUNDLE_RULES}. Please refine your filters."}), 400
 
     if not rules_objects:
         return jsonify({"message": "No rules found to bundle"}), 404

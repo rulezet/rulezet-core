@@ -6,7 +6,9 @@ const RuleBundleManager = {
         filters: Object,
         csrf: String,
         // Mode "single rule" — si ruleId est fourni, on ignore les filtres
-        ruleId: { type: Number, default: null }
+        ruleId: { type: Number, default: null },
+        // Mode "explicit selection" — liste d'IDs sélectionnés manuellement
+        ruleIds: { type: Array, default: null }
     },
     emits: ['processing', 'completed', 'error', 'uuid'],
     delimiters: ['[[', ']]'],
@@ -43,25 +45,27 @@ const RuleBundleManager = {
             emit('processing', true);
             isLoading.value = true;
 
-            const payload = props.ruleId
-                ? {
-                    existing_bundle_id: bundleMode.value === 'existing' ? selectedBundleId.value : null,
-                    new_bundle_name: bundleMode.value === 'create' ? bundleForm.name : '',
-                    new_bundle_description: bundleForm.description,
-                    is_public: !bundleForm.isPrivate,
-                    rule_id: props.ruleId
-                }
-                : {
-                    existing_bundle_id: bundleMode.value === 'existing' ? selectedBundleId.value : null,
-                    new_bundle_name: bundleMode.value === 'create' ? bundleForm.name : '',
-                    new_bundle_description: bundleForm.description,
-                    is_public: !bundleForm.isPrivate,
-                    filters: props.filters
-                };
+            const base = {
+                existing_bundle_id: bundleMode.value === 'existing' ? selectedBundleId.value : null,
+                new_bundle_name: bundleMode.value === 'create' ? bundleForm.name : '',
+                new_bundle_description: bundleForm.description,
+                is_public: !bundleForm.isPrivate,
+            };
 
-            const endpoint = props.ruleId
-                ? '/rule/bundle/add-single-rule'
-                : '/rule/bundle/create-from-filters';
+            let payload, endpoint;
+            if (props.ruleId) {
+                // single-rule mode
+                payload  = { ...base, rule_id: props.ruleId };
+                endpoint = '/rule/bundle/add-single-rule';
+            } else if (props.ruleIds && props.ruleIds.length) {
+                // explicit multi-selection mode — send IDs, not filters
+                payload  = { ...base, ids: props.ruleIds };
+                endpoint = '/rule/bundle/create-from-filters';
+            } else {
+                // filter-based mode
+                payload  = { ...base, filters: props.filters };
+                endpoint = '/rule/bundle/create-from-filters';
+            }
 
             try {
                 const response = await fetch(endpoint, {
@@ -258,7 +262,12 @@ const RuleBundleManager = {
                 <div v-if="!ruleId" class="text-center mt-2">
                     <small class="text-muted" style="font-size:0.75rem;">
                         <i class="fa-solid fa-info-circle me-1"></i>
-                        This will add <strong>[[ totalRules ]]</strong> rules based on your current filters.
+                        <span v-if="ruleIds && ruleIds.length">
+                            This will add <strong>[[ ruleIds.length ]]</strong> selected rule(s).
+                        </span>
+                        <span v-else>
+                            This will add <strong>[[ totalRules ]]</strong> rules based on your current filters.
+                        </span>
                     </small>
                 </div>
             </div>

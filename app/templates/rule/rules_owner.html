@@ -2,6 +2,7 @@
 {% block title %}My Workspace — Rulezet{% endblock %}
 
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/notification/notification.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
@@ -32,21 +33,26 @@
         </p>
     </div>
 
-    <!-- Tabs -->
-    <ul class="nav nav-underline justify-content-center w-100 mb-4" role="tablist">
-        <li class="nav-item flex-fill text-center">
-            <button class="nav-link w-100 fw-bold px-4" :class="activeTab === 'rules' ? 'active' : ''"
-                    @click="activeTab = 'rules'" style="color:var(--text-color);">
-                <i class="fas fa-user me-2"></i>My Rules
-            </button>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <button class="nav-link w-100 fw-bold px-4" :class="activeTab === 'favorites' ? 'active' : ''"
-                    @click="activeTab = 'favorites'; favOpened = true" style="color:var(--text-color);">
-                <i class="fas fa-star me-2"></i>My Favorites
-            </button>
-        </li>
-    </ul>
+   <!-- Tabs -->
+    <nav class="dr-nav mb-4">
+        <!-- My Rules -->
+        <a href="#" 
+           class="dr-nav__item" 
+           :class="activeTab === 'rules' ? 'active' : ''"
+           @click.prevent="activeTab = 'rules'">
+            <i class="fas fa-user"></i>
+            <span>My Rules</span>
+        </a>
+
+        <!-- My Favorites -->
+        <a href="#" 
+           class="dr-nav__item" 
+           :class="activeTab === 'favorites' ? 'active' : ''"
+           @click.prevent="activeTab = 'favorites'; favOpened = true">
+            <i class="fas fa-star"></i>
+            <span>My Favorites</span>
+        </a>
+    </nav>
 
     <!-- My Rules tab -->
     <div v-show="activeTab === 'rules'">
