@@ -2871,12 +2871,23 @@ def bulk_update_decision(sid):
     import app.features.jobs.jobs_core as JobsModel
     verb  = 'Accept' if action == 'accept' else 'Reject'
     label = f"{verb} all pending updates ({sid[:8]}…)"
+
+    # Count up-front so job.total is accurate from the first poll
+    rules_preview, preview_count = RuleModel.get_rule_update_list_filtered(
+        sid,
+        f_found=_tri('f_found'),
+        f_error=_tri('f_error'),
+        f_syntax_valid=_tri('f_syntax_valid'),
+    )
+    job_total = max(preview_count, 1)
+
     job = JobsModel.create_job(
         job_type='bulk_update_decision',
         payload={'sid': sid, 'action': action,
                  'f_found': _tri('f_found'), 'f_error': _tri('f_error'),
                  'f_syntax_valid': _tri('f_syntax_valid')},
         label=label, created_by=current_user.id,
+        total=job_total,
     )
     return {'message': f'Background job started: {label}', 'job_id': job.id, 'job_uuid': job.uuid, 'toast_class': 'success-subtle'}, 201
 
@@ -2893,9 +2904,17 @@ def bulk_new_rules_decision(sid):
         return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
     import app.features.jobs.jobs_core as JobsModel
     label = f"{'Add' if action == 'add' else 'Reject'} all new rules ({sid[:8]}…)"
+
+    # Count up-front so job.total is accurate from the first poll
+    if action == 'add':
+        job_total = max(len(RuleModel.get_valid_new_rules_by_sid(sid)), 1)
+    else:
+        job_total = max(RuleModel.count_pending_new_rules(sid), 1)
+
     job = JobsModel.create_job(job_type='bulk_new_rules_decision',
                                payload={'sid': sid, 'action': action, 'user_id': current_user.id},
-                               label=label, created_by=current_user.id)
+                               label=label, created_by=current_user.id,
+                               total=job_total)
     return {'message': f'Background job started: {label}', 'job_id': job.id, 'job_uuid': job.uuid, 'toast_class': 'success-subtle'}, 201
 
 

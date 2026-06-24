@@ -2411,7 +2411,8 @@ def get_updater_result_new_rule_page(sid: str, page: int, per_page: int = 30,
 
     q = (NewRule.query
          .filter_by(update_result_id=update_result.id)
-         .filter(NewRule.message != "imported"))
+         .filter(NewRule.message != "imported")
+         .filter(NewRule.message != "rejected"))
     if f_syntax_valid is not None:
         q = q.filter(NewRule.rule_syntax_valid == f_syntax_valid)
     if f_accept is not None:
@@ -2429,6 +2430,18 @@ def count_updates_available(sid: str) -> int:
     return RuleStatus.query.filter_by(
         update_result_id=update_result.id, update_available=True
     ).count()
+
+
+def count_pending_new_rules(sid: str) -> int:
+    """Count NewRule rows not yet imported or rejected for a session."""
+    update_result = UpdateResult.query.filter_by(uuid=sid).first()
+    if not update_result:
+        return 0
+    return (NewRule.query
+            .filter_by(update_result_id=update_result.id)
+            .filter(NewRule.message != 'imported')
+            .filter(NewRule.message != 'rejected')
+            .count())
 
 
 def get_updater_result_rule_page(sid: str, page: int, per_page: int = 30,

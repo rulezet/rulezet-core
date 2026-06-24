@@ -29,7 +29,7 @@ def _log(job, message, level='info', event=None):
 
 # ─── CRUD ─────────────────────────────────────────────────────────────────────
 
-def create_job(job_type, payload, label, created_by):
+def create_job(job_type, payload, label, created_by, total=0):
     """Create a new pending job and return it."""
     try:
         job = BackgroundJob(
@@ -39,7 +39,7 @@ def create_job(job_type, payload, label, created_by):
             payload=payload,
             label=label,
             created_by=created_by,
-            total=0,
+            total=total,
             done=0,
             created_at=datetime.datetime.now(datetime.timezone.utc),
         )

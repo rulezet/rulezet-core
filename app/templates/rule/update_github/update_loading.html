@@ -103,21 +103,42 @@
                         <td>Total Not Found</td>
                         <td><b>[[result_data.not_found]]</b></td>
                     </tr>
-                    <tr v-if="result_data.updated" style="background-color: #f2e7c3;">
-                        <td>Updated found</td>
+                    <!-- Updates row -->
+                    <tr v-if="updatesAvailable > 0 || (activeJobUuid && bulkUpdating)" style="background-color: #f2e7c3;">
+                        <td>Updates</td>
                         <td>
-                            <span class="badge bg-primary ms-1">
-                                [[result_data.updated]]
-                            </span>
+                            <template v-if="activeJobUuid && bulkUpdating">
+                                <span class="spinner-border spinner-border-sm text-primary me-1" style="width:.8rem;height:.8rem;"></span>
+                                <span class="fw-semibold">[[activeJobDone]] / [[activeJobTotal]]</span>
+                                <span class="text-muted ms-1 small">([[activeJobPct]]%)</span>
+                            </template>
+                            <template v-else>
+                                <span class="badge bg-warning text-dark ms-1">[[updatesAvailable]] pending</span>
+                            </template>
                         </td>
                     </tr>
                     <tr v-else>
-                        <td>Updated</td>
+                        <td>Updates</td>
+                        <td><span class="badge bg-success ms-1">All processed</span></td>
+                    </tr>
+
+                    <!-- New Rules row -->
+                    <tr v-if="total_new_rules > 0 || (activeJobUuid && bulkNewRules)" style="background-color: #e8f4ec;">
+                        <td>New Rules</td>
                         <td>
-                            <span class="badge bg-success ms-1">
-                                No update found
-                            </span>
+                            <template v-if="activeJobUuid && bulkNewRules">
+                                <span class="spinner-border spinner-border-sm text-success me-1" style="width:.8rem;height:.8rem;"></span>
+                                <span class="fw-semibold">[[activeJobDone]] / [[activeJobTotal]]</span>
+                                <span class="text-muted ms-1 small">([[activeJobPct]]%)</span>
+                            </template>
+                            <template v-else>
+                                <span class="badge bg-success ms-1">[[total_new_rules]] pending</span>
+                            </template>
                         </td>
+                    </tr>
+                    <tr v-else>
+                        <td>New Rules</td>
+                        <td><span class="badge bg-secondary ms-1">All processed</span></td>
                     </tr>
                     <tr v-if="result_data.skipped">
                         <td>Skipped</td>
@@ -136,8 +157,8 @@
                 <a class="nav-link active" id="github-tab" data-bs-toggle="tab" href="#github-pane" role="tab"
                     aria-controls="github" aria-selected="true" style="color: var(--text-color);">
                     Rule Status
-                    <span v-if="rules && rules.length" class="badge bg-primary ms-1">
-                        [[ result_data.updated ]]
+                    <span v-if="updatesAvailable > 0" class="badge bg-primary ms-1">
+                        [[ updatesAvailable ]]
                     </span>
                 </a>
             </li>
@@ -684,6 +705,8 @@
             const activeJobPct    = ref(0)
             const activeJobStatus = ref('')
             const activeJobLabel  = ref('')
+            const activeJobDone   = ref(0)
+            const activeJobTotal  = ref(0)
             let   _jobPollTimer   = null
 
             async function _pollActiveJob() {
@@ -694,18 +717,17 @@
                     const data = await res.json()
                     activeJobPct.value    = data.progress_pct ?? 0
                     activeJobStatus.value = data.status
+                    activeJobDone.value   = data.done  ?? 0
+                    activeJobTotal.value  = data.total ?? 0
                     if (['done', 'failed', 'cancelled'].includes(data.status)) {
                         clearInterval(_jobPollTimer); _jobPollTimer = null
                         bulkUpdating.value = false
                         bulkNewRules.value = false
                         if (data.status === 'done') {
-                            create_message(activeJobLabel.value + ' — done!', 'success-subtle')
                             getRules(1)
                             getNewRules(1)
-                        } else {
-                            create_message(activeJobLabel.value + ' — ' + data.status, 'danger-subtle')
                         }
-                        setTimeout(() => { activeJobUuid.value = null; activeJobPct.value = 0 }, 2000)
+                        setTimeout(() => { activeJobUuid.value = null; activeJobPct.value = 0; activeJobDone.value = 0; activeJobTotal.value = 0 }, 2000)
                     }
                 } catch {}
             }
@@ -714,6 +736,8 @@
                 if (_jobPollTimer) clearInterval(_jobPollTimer)
                 activeJobUuid.value   = job_uuid
                 activeJobPct.value    = 0
+                activeJobDone.value   = 0
+                activeJobTotal.value  = 0
                 activeJobStatus.value = 'pending'
                 activeJobLabel.value  = label
                 _jobPollTimer = setInterval(_pollActiveJob, 2000)
@@ -1051,7 +1075,7 @@
                 decisionRule,
                 loading_rule_id,
 
-                activeJobUuid, activeJobPct, activeJobStatus, activeJobLabel,
+                activeJobUuid, activeJobPct, activeJobStatus, activeJobLabel, activeJobDone, activeJobTotal,
 
                 rsFiltersOpen, rsFilter, rsActiveFilterCount, rsClearFilters,
                 rsSort, rsSortDir, setRsSort, rsSorted,
