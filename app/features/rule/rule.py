@@ -1168,10 +1168,12 @@ def propose_edit(rule_id) -> redirect:
         flash(f"Syntax error in proposed content: {error}", "error")
         return redirect(url_for('rule.detail_rule_propose_edit', rule_id=rule_id))
     
+    edit_type = data.get('edit_type', 'content_update')
     form = {
         "rule_id": rule_id,
         "proposed_content": proposed_content,
         "message": message,
+        "edit_type": edit_type,
     }
 
     success , proposal_id = RuleModel.propose_edit_core(form, current_user.id)

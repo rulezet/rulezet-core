@@ -282,17 +282,12 @@
 
                 <!-- Edit type -->
                 <div class="meta-item" v-if="proposal.edit_type">
-                    <div class="meta-item__icon"><i class="fas"
-                        :class="{
-                            'fa-spell-check':    proposal.edit_type === 'typo',
-                            'fa-code':           proposal.edit_type === 'content_update',
-                            'fa-scale-balanced': proposal.edit_type === 'legal',
-                            'fa-pen':            !['typo','content_update','legal'].includes(proposal.edit_type)
-                        }"></i>
+                    <div class="meta-item__icon" :style="'color:' + editTypeMeta(proposal.edit_type).color + ';background:' + editTypeMeta(proposal.edit_type).color + '18;'">
+                        <i class="fas" :class="editTypeMeta(proposal.edit_type).icon"></i>
                     </div>
                     <div>
                         <div class="meta-item__label">Edit type</div>
-                        <div class="meta-item__value text-capitalize">[[ proposal.edit_type ]]</div>
+                        <div class="meta-item__value text-capitalize">[[ editTypeMeta(proposal.edit_type).label ]]</div>
                     </div>
                 </div>
 
@@ -348,12 +343,22 @@
 
             </div>
 
-            <!-- Message -->
+            <!-- Message / Justification -->
             <div v-if="proposal.message" class="proposal-message-block mb-3">
-                <div class="text-muted mb-1" style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">
-                    <i class="fa-solid fa-quote-left me-1"></i>Author's note
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="text-muted" style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">
+                        <i class="fa-solid fa-quote-left me-1"></i>Author's justification
+                    </div>
+                    <button class="btn btn-sm px-2 py-0 rounded-pill"
+                            style="font-size:.68rem;background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);"
+                            @click="showRawMessage = !showRawMessage"
+                            type="button">
+                        <i class="fa-solid me-1" :class="showRawMessage ? 'fa-eye-slash' : 'fa-code'"></i>
+                        [[ showRawMessage ? 'Rendered' : 'Raw' ]]
+                    </button>
                 </div>
-                [[ proposal.message ]]
+                <div v-if="showRawMessage" style="font-family:monospace;font-size:.82rem;white-space:pre-wrap;color:var(--text-color);">[[ proposal.message ]]</div>
+                <div v-else v-html="renderedMessage" class="md-body"></div>
             </div>
 
             <!-- Rejection reason -->
@@ -429,7 +434,7 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref } = Vue;
+    const { createApp, ref, computed } = Vue;
     import { create_message } from '/static/js/toaster.js';
     import UserChip      from '/static/js/components/UserChip.js';
     import DiffViewer    from '/static/js/components/diff-viewer.js';
@@ -440,6 +445,25 @@
     const RULE_ID     = {{ rule.id }};
     const PROPOSAL_ID = {{ rule_edit_id }};
 
+    // Lazy-load marked for message rendering
+    let _marked = null;
+    async function getMarked() {
+        if (!_marked) {
+            const m = await import('/static/js/marked.min.js');
+            _marked = m.marked || m.default || window.marked;
+        }
+        return _marked;
+    }
+
+    const EDIT_TYPE_META = {
+        content_update: { label: 'Content update',  icon: 'fa-code',           color: '#0d6efd' },
+        typo:           { label: 'Typo / syntax',   icon: 'fa-spell-check',    color: '#6f42c1' },
+        security:       { label: 'Security fix',    icon: 'fa-shield-halved',  color: '#dc3545' },
+        documentation:  { label: 'Documentation',   icon: 'fa-book',           color: '#198754' },
+        legal:          { label: 'Legal / license', icon: 'fa-scale-balanced', color: '#fd7e14' },
+        other:          { label: 'Other',           icon: 'fa-ellipsis',       color: '#6c757d' },
+    };
+
     createApp({
         delimiters: ['[[', ']]'],
         components: {
@@ -449,10 +473,16 @@
             'report-modal':   ReportModal,
         },
         setup() {
-            const proposal       = ref(null);
-            const isFavorited    = ref(false);
-            const deciding       = ref(null);
+            const proposal        = ref(null);
+            const isFavorited     = ref(false);
+            const deciding        = ref(null);
+            const showRawMessage  = ref(false);
+            const renderedMessage = ref('');
             const isAuthenticated = {{ current_user.is_authenticated | tojson }};
+
+            function editTypeMeta(type) {
+                return EDIT_TYPE_META[type] || { label: type || 'General', icon: 'fa-pen', color: '#6c757d' };
+            }
 
             function truncate(str, n) {
                 if (!str) return '';
@@ -482,8 +512,13 @@
                     const res = await fetch('/rule/get_proposal?id=' + PROPOSAL_ID);
                     if (res.ok) {
                         const data = await res.json();
-                        proposal.value = data.proposal;
+                        proposal.value    = data.proposal;
                         isFavorited.value = data.proposal.is_favorited ?? false;
+                        // Render message as markdown
+                        if (data.proposal.message) {
+                            const mk = await getMarked();
+                            renderedMessage.value = mk.parse ? mk.parse(data.proposal.message) : mk(data.proposal.message);
+                        }
                     }
                 } catch (e) {
                     create_message('Error loading proposal', 'danger-subtle');
@@ -534,8 +569,26 @@
 
             fetchRuleProposal();
 
-            return { proposal, isFavorited, deciding, truncate, formatDate, scoreColor, toggleFavorite, decideProposal };
+            return {
+                proposal, isFavorited, deciding,
+                showRawMessage, renderedMessage,
+                editTypeMeta, truncate, formatDate, scoreColor,
+                toggleFavorite, decideProposal,
+            };
         }
     }).mount('#main-container');
 </script>
+
+<style>
+/* Markdown body styles for rendered justification */
+.md-body { font-size: .88rem; line-height: 1.7; color: var(--text-color); }
+.md-body h1,.md-body h2,.md-body h3,.md-body h4 { font-weight: 700; margin: .75rem 0 .35rem; }
+.md-body p { margin: 0 0 .6rem; }
+.md-body code { font-size:.8rem; background:var(--light-bg-color); border:1px solid var(--border-color); border-radius:4px; padding:.1rem .3rem; }
+.md-body pre { background:var(--light-bg-color); border:1px solid var(--border-color); border-radius:8px; padding:.75rem 1rem; overflow-x:auto; margin:.5rem 0; }
+.md-body pre code { background:none; border:none; padding:0; }
+.md-body ul,.md-body ol { padding-left:1.4rem; margin-bottom:.6rem; }
+.md-body a { color:#0d6efd; }
+.md-body blockquote { border-left:3px solid #0d6efd; margin:0; padding:.4rem .8rem; color:var(--subtle-text-color); font-style:italic; background:var(--light-bg-color); border-radius:0 6px 6px 0; }
+</style>
 {% endblock %}

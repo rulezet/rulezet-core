@@ -62,6 +62,20 @@
     gap: .5rem;
 }
 
+/* Export / Bundle row inside the filter panel */
+.rl-fp-export-row {
+    margin-top: .6rem;
+    padding-top: .6rem;
+    border-top: 1px solid var(--border-color);
+}
+/* Override the bottom-bar styling when export is embedded in filter panel */
+.rl-fp-export-row .export-action-container {
+    background: transparent !important;
+    border-top: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+}
+
 .rl-fp-item { flex: 0 0 auto; }
 
 .rl-fp-select {

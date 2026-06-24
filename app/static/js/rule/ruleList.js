@@ -326,6 +326,25 @@ export default {
                     </div>
                 </div>
 
+                <!-- ── Export / Bundle — visible only when at least one filter is active ── -->
+                <div v-if="showExport && hasActiveFilters" class="rl-fp-export-row">
+                    <rule-export-action
+                        :search-query="search"
+                        :sort-by="sortKey"
+                        :rule-type="ruleType"
+                        :selected-sources="selectedSources"
+                        :selected-vulnerabilities="selectedVulns"
+                        :selected-licenses="selectedLicenses"
+                        :selected-tags="selectedTags"
+                        :total-rules="exportTotalRules"
+                        :rule-ids="exportRuleIds"
+                        :csrf-token="csrfToken"
+                        :current-user-is-authenticated="currentUserIsAuthenticated ? 'True' : 'False'"
+                        :start-view="exportActionView"
+                        modal-id="rl-export-modal">
+                    </rule-export-action>
+                </div>
+
             </div>
         </template>
 
@@ -962,24 +981,6 @@ export default {
                 </button>
             </div>
         </transition>
-
-        <!-- ── Export / Bundle bar ── -->
-        <rule-export-action
-            v-if="showExportBar && showExport"
-            :search-query="search"
-            :sort-by="sortKey"
-            :rule-type="ruleType"
-            :selected-sources="selectedSources"
-            :selected-vulnerabilities="selectedVulns"
-            :selected-licenses="selectedLicenses"
-            :selected-tags="selectedTags"
-            :total-rules="exportTotalRules"
-            :rule-ids="exportRuleIds"
-            :csrf-token="csrfToken"
-            :current-user-is-authenticated="currentUserIsAuthenticated ? 'True' : 'False'"
-            :start-view="exportActionView"
-            modal-id="rl-export-modal">
-        </rule-export-action>
 
     </div>
     `,

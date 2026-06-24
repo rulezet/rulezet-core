@@ -238,8 +238,8 @@
                             </div>
 
                             <!-- Message -->
-                            <div class="proposal-card__message" v-if="proposal.message">
-                                <i class="fa-solid fa-quote-left fa-xs me-1 opacity-50"></i>[[ proposal.message ]]
+                            <div class="proposal-card__message" v-if="proposal.message"
+                                 v-html="proposal._renderedMessage || proposal.message">
                             </div>
                             <div class="proposal-card__message" v-else style="color:var(--subtle-text-color);font-style:italic;">
                                 No description provided.
@@ -249,15 +249,10 @@
                             <div class="proposal-card__footer">
 
                                 <!-- Edit type -->
-                                <span v-if="proposal.edit_type" class="proposal-badge">
-                                    <i class="fas fa-xs"
-                                        :class="{
-                                            'fa-spell-check':   proposal.edit_type === 'typo',
-                                            'fa-code':          proposal.edit_type === 'content_update',
-                                            'fa-scale-balanced': proposal.edit_type === 'legal',
-                                            'fa-pen':           !['typo','content_update','legal'].includes(proposal.edit_type)
-                                        }"></i>
-                                    [[ proposal.edit_type ]]
+                                <span v-if="proposal.edit_type" class="proposal-badge"
+                                      :style="'color:' + editTypeMeta(proposal.edit_type).color + ';border-color:' + editTypeMeta(proposal.edit_type).color + '44;background:' + editTypeMeta(proposal.edit_type).color + '12;'">
+                                    <i class="fas fa-xs" :class="editTypeMeta(proposal.edit_type).icon"></i>
+                                    [[ editTypeMeta(proposal.edit_type).label ]]
                                 </span>
 
                                 <!-- Change score -->
@@ -312,6 +307,15 @@
 
     const rule_id = {{ rule.id }};
 
+    let _marked = null;
+    async function getMarked() {
+        if (!_marked) {
+            const m = await import('/static/js/marked.min.js');
+            _marked = m.marked || m.default || window.marked;
+        }
+        return _marked;
+    }
+
     createApp({
         delimiters: ['[[', ']]'],
         setup() {
@@ -319,6 +323,18 @@
             const current_page = ref(1);
             const total_pages = ref(1);
             const loading = ref(true);
+
+            const EDIT_TYPE_META = {
+                content_update: { label: 'Content update',  icon: 'fa-code',           color: '#0d6efd' },
+                typo:           { label: 'Typo / syntax',   icon: 'fa-spell-check',    color: '#6f42c1' },
+                security:       { label: 'Security fix',    icon: 'fa-shield-halved',  color: '#dc3545' },
+                documentation:  { label: 'Documentation',   icon: 'fa-book',           color: '#198754' },
+                legal:          { label: 'Legal / license', icon: 'fa-scale-balanced', color: '#fd7e14' },
+                other:          { label: 'Other',           icon: 'fa-ellipsis',       color: '#6c757d' },
+            };
+            function editTypeMeta(type) {
+                return EDIT_TYPE_META[type] || { label: type || 'General', icon: 'fa-pen', color: '#6c757d' };
+            }
 
             function formatDate(iso) {
                 if (!iso) return '';
@@ -338,7 +354,16 @@
                     const res = await fetch('/rule/get_rules_propose_page?page=' + page + '&rule_id=' + rule_id);
                     const data = await res.json();
                     if (data) {
-                        pull_request_list.value = data.rules_list;
+                        const list = data.rules_list || [];
+                        // Pre-render messages as markdown
+                        if (list.some(p => p.message)) {
+                            const mk = await getMarked();
+                            const parse = mk.parse ? mk.parse.bind(mk) : mk;
+                            list.forEach(p => {
+                                if (p.message) p._renderedMessage = parse(p.message);
+                            });
+                        }
+                        pull_request_list.value = list;
                         total_pages.value = data.total_pages_pending;
                         current_page.value = page;
                     }
@@ -355,7 +380,7 @@
 
             onMounted(() => fetchPullRequest(1));
 
-            return { pull_request_list, current_page, total_pages, loading, fetchPullRequest, formatDate, scoreColor };
+            return { pull_request_list, current_page, total_pages, loading, fetchPullRequest, formatDate, scoreColor, editTypeMeta };
         }
     }).mount('#main-container');
 </script>
