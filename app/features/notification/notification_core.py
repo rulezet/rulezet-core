@@ -397,7 +397,10 @@ def notify_followers_new_rule(rule, author_user_id):
 
 
 def notify_followers_new_bundle(bundle, author_user_id):
-    """Notify followers of author that a new bundle was created (honours pref_follow_new_bundle)."""
+    """Notify followers of author that a new bundle was created (honours pref_follow_new_bundle).
+    Private bundles (access=False) are never broadcast to followers — only the owner sees them."""
+    if not getattr(bundle, 'access', True):
+        return  # private bundle — no follower notifications
     try:
         follows = UserFollow.query.filter_by(followed_id=author_user_id).all()
         if not follows:
@@ -417,7 +420,7 @@ def notify_followers_new_bundle(bundle, author_user_id):
                 notif_type = 'follow_new_bundle',
                 title      = f'New bundle by {author_name}',
                 body       = bundle.name,
-                link       = f'/bundle/detail_bundle/{bundle.id}',
+                link       = f'/bundle/detail/{bundle.id}',
                 icon       = _TYPE_ICON['follow_new_bundle'],
                 is_read    = False,
                 created_at = datetime.datetime.utcnow(),
@@ -430,8 +433,11 @@ def notify_followers_new_bundle(bundle, author_user_id):
         print(f"[notification_core] notify_followers_new_bundle error: {e}")
 
 
-def notify_followers_new_comment(commenter_id, object_title, link):
-    """Notify followers of commenter that they left a new comment (honours pref_follow_new_comment)."""
+def notify_followers_new_comment(commenter_id, object_title, link, is_public=True):
+    """Notify followers of commenter that they left a new comment (honours pref_follow_new_comment).
+    Pass is_public=False for comments on private bundles to skip follower notifications."""
+    if not is_public:
+        return  # private content — followers should not be notified
     try:
         follows = UserFollow.query.filter_by(followed_id=commenter_id).all()
         if not follows:
@@ -496,7 +502,7 @@ def notify_owner_new_comment(owner_user_id, commenter_id, notif_type, object_tit
         print(f"[notification_core] notify_owner_new_comment error: {e}")
 
 
-def notify_proposal_comment(proposal_id, proposal_owner_id, commenter_id, rule_title):
+def notify_proposal_comment(proposal_id, proposal_owner_id, commenter_id, rule_title, comment_id=None):
     """Notify the proposal creator when someone comments on their proposal (honours pref_proposal_comment)."""
     if proposal_owner_id == commenter_id:
         return
@@ -509,12 +515,16 @@ def notify_proposal_comment(proposal_id, proposal_owner_id, commenter_id, rule_t
         commenter = db.session.get(User, commenter_id)
         commenter_name = commenter.get_username() if commenter else 'Someone'
 
+        link = f'/rule/proposal_content_discuss?id={proposal_id}'
+        if comment_id:
+            link += f'&comment={comment_id}'
+
         create_notification(
             user_id    = proposal_owner_id,
             notif_type = 'proposal_comment',
             title      = f'{commenter_name} commented on your proposal',
             body       = rule_title or '',
-            link       = f'/rule/proposal_content_discuss?id={proposal_id}',
+            link       = link,
         )
     except Exception as e:
         print(f"[notification_core] notify_proposal_comment error: {e}")
@@ -592,7 +602,7 @@ def notify_rule_update_found(user_id, count, update_result_id=None):
 def notify_github_import_done(user_id, imported, skipped, bad_rules, result_uuid=None):
     """Notification sent when a GitHub / ZIP import session finishes."""
     total = imported + skipped + bad_rules
-    link = f'/rule/import_history?uuid={result_uuid}' if result_uuid else '/rule/import_history'
+    link = f'/rule/github/history_github_importer?uuid={result_uuid}' if result_uuid else '/rule/github/history_github_importer'
     return create_notification(
         user_id    = user_id,
         notif_type = 'github_import_done',

@@ -124,22 +124,69 @@ class CommentList(Resource):
         db.session.add(comment)
         db.session.commit()
 
-        # Activity log
-        if object_type == 'rule':
-            from app.core.db_class.db import Rule
-            rule = Rule.query.get(object_id)
-            log_activity("comment.add",
-                         f"Added comment on rule '{rule.title if rule else object_id}'",
-                         target_type="comment", target_id=comment.id,
-                         extra={"rule_id": object_id, "rule_uuid": rule.uuid if rule else None})
-        elif object_type == 'bundle':
-            from app.core.db_class.db import Bundle
-            bundle = Bundle.query.get(object_id)
-            log_activity("bundle_comment.add",
-                         f"Added comment on bundle id={object_id}",
-                         target_type="bundle_comment", target_id=comment.id,
-                         extra={"bundle_id": object_id, "bundle_uuid": bundle.uuid if bundle else None},
-                         is_public=bool(bundle.access) if bundle else False)
+        # ── Activity log + notifications ──────────────────────────────────────
+        try:
+            from app.features.notification.notification_core import (
+                notify_owner_new_comment, notify_followers_new_comment,
+                notify_comment_reply, notify_proposal_comment,
+            )
+
+            if object_type == 'rule':
+                from app.core.db_class.db import Rule
+                rule = Rule.query.get(object_id)
+                log_activity("comment.add",
+                             f"Added comment on rule '{rule.title if rule else object_id}'",
+                             target_type="comment", target_id=comment.id,
+                             extra={"rule_id": object_id, "rule_uuid": rule.uuid if rule else None})
+                link  = f'/rule/detail_rule/{object_id}?comment={comment.id}'
+                title = rule.title if rule else ''
+                # Notify rule owner
+                if rule:
+                    notify_owner_new_comment(rule.user_id, current_user.id, 'rule_comment', title, link)
+                # Notify followers of commenter (rules are always public)
+                notify_followers_new_comment(current_user.id, title, link, is_public=True)
+                # Notify parent comment author on reply
+                if parent_id:
+                    parent_comment = UnifiedComment.query.get(parent_id)
+                    if parent_comment and parent_comment.created_by:
+                        notify_comment_reply(parent_comment.created_by, current_user.id, title, link)
+
+            elif object_type == 'bundle':
+                from app.core.db_class.db import Bundle
+                bundle    = Bundle.query.get(object_id)
+                is_public = bool(bundle.access) if bundle else True
+                log_activity("bundle_comment.add",
+                             f"Added comment on bundle id={object_id}",
+                             target_type="bundle_comment", target_id=comment.id,
+                             extra={"bundle_id": object_id, "bundle_uuid": bundle.uuid if bundle else None},
+                             is_public=is_public)
+                link  = f'/bundle/detail/{object_id}?comment={comment.id}'
+                title = bundle.name if bundle else ''
+                # Always notify bundle owner (even on private bundle — they own it)
+                if bundle:
+                    notify_owner_new_comment(bundle.user_id, current_user.id, 'bundle_comment', title, link)
+                # Only notify followers if bundle is public
+                notify_followers_new_comment(current_user.id, title, link, is_public=is_public)
+                # Notify parent comment author on reply (only if they can access the bundle)
+                if parent_id:
+                    parent_comment = UnifiedComment.query.get(parent_id)
+                    if parent_comment and parent_comment.created_by:
+                        can_notify = is_public or parent_comment.created_by == (bundle.user_id if bundle else None)
+                        if can_notify:
+                            notify_comment_reply(parent_comment.created_by, current_user.id, title, link)
+
+            elif object_type == 'proposal':
+                from app.core.db_class.db import RuleEditProposal, Rule
+                proposal = RuleEditProposal.query.get(object_id)
+                if proposal:
+                    rule  = Rule.query.get(proposal.rule_id)
+                    title = rule.title if rule else ''
+                    # Notify the proposal creator when someone else comments
+                    notify_proposal_comment(object_id, proposal.user_id, current_user.id, title,
+                                            comment_id=comment.id)
+
+        except Exception as _e:
+            print(f"[comment_api] notification error: {_e}")
 
         return {'message': 'Comment posted', 'comment': comment.to_json(current_user_id=current_user.id)}, 201
 
@@ -193,6 +240,58 @@ class CommentDetail(Resource):
         db.session.commit()
 
         return {'message': 'Comment deleted'}
+
+
+# ── Hard-delete (admin only) ───────────────────────────────────────────────────
+
+def _collect_subtree_ids(root_comment_id):
+    """Return all comment IDs in the subtree rooted at root_comment_id (BFS, inclusive)."""
+    ids = []
+    queue = [root_comment_id]
+    while queue:
+        current_id = queue.pop()
+        ids.append(current_id)
+        children = (UnifiedComment.query
+                    .filter_by(parent_id=current_id)
+                    .with_entities(UnifiedComment.id)
+                    .all())
+        queue.extend(row.id for row in children)
+    return ids
+
+
+@comment_ns.route('/<string:uuid>/hard_delete')
+class CommentHardDelete(Resource):
+
+    def delete(self, uuid):
+        """Hard-delete a comment and its entire reply subtree (admin only)."""
+        if not _can_moderate():
+            return {'message': 'Admin required'}, 403
+
+        comment = _get_or_404(uuid)
+
+        # Save scalar values before the bulk delete — the ORM object will be
+        # expired/invalid after synchronize_session=False and accessing its
+        # attributes would raise ObjectDeletedError.
+        comment_id    = comment.id
+        comment_uuid  = comment.uuid
+
+        # Collect all descendant IDs before any delete (parent_id SET NULL on delete
+        # would lose the tree structure if we deleted top-down)
+        ids = _collect_subtree_ids(comment_id)
+
+        # Bulk hard-delete — DB CASCADE handles reactions automatically
+        UnifiedComment.query.filter(UnifiedComment.id.in_(ids)).delete(synchronize_session=False)
+        db.session.commit()
+
+        log_activity(
+            "comment.hard_delete",
+            f"Hard-deleted comment uuid={comment_uuid} and {len(ids) - 1} descendant(s)",
+            target_type="comment", target_id=comment_id,
+            is_public=False,
+        )
+
+        return {'message': f'Comment and {len(ids) - 1} reply/replies permanently deleted',
+                'deleted_ids': ids}
 
 
 # ── Restore ────────────────────────────────────────────────────────────────────

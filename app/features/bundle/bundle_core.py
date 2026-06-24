@@ -880,20 +880,26 @@ def add_comment_to_bundle(bundle_id: int, user: User, content: str , parent_comm
 
         try:
             bundle = Bundle.query.get(bundle_id)
-            link   = f'/bundle/detail_bundle/{bundle_id}'
+            link   = f'/bundle/detail/{bundle_id}'
+            is_public = bool(bundle.access) if bundle else True
             from app.features.notification.notification_core import (
                 notify_owner_new_comment, notify_followers_new_comment, notify_comment_reply)
             if bundle:
+                # Always notify the owner of comment on their bundle (even private — they own it)
                 notify_owner_new_comment(
                     bundle.user_id, user.id, 'bundle_comment', bundle.name, link)
-            notify_followers_new_comment(user.id, bundle.name if bundle else '', link)
+            # Followers only see activity on public bundles
+            notify_followers_new_comment(user.id, bundle.name if bundle else '', link,
+                                         is_public=is_public)
             if parent_comment_id:
                 from app.core.db_class.db import CommentBundle
                 parent = CommentBundle.query.get(parent_comment_id)
-                if parent:
+                # Reply notification: only if the parent author can access the bundle
+                # (i.e. they're the bundle owner, or the bundle is public)
+                if parent and (is_public or parent.user_id == (bundle.user_id if bundle else None)):
                     notify_comment_reply(parent.user_id, user.id, bundle.name if bundle else '', link)
-        except Exception:
-            pass
+        except Exception as _e:
+            print(f"[bundle_core] add_comment_to_bundle notification error: {_e}")
 
         return "Comment added successfully", True
     except Exception as e:

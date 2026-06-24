@@ -152,6 +152,23 @@ const CommentItem = {
             }
         }
 
+        async function doHardDelete() {
+            const replyCount = repliesTotal.value || 0
+            const msg = replyCount > 0
+                ? `Permanently delete this comment AND its ${replyCount} reply/replies? This cannot be undone.`
+                : 'Permanently delete this comment? This cannot be undone.'
+            if (!confirm(msg)) return
+            const res = await apiFetch(`/api/comments/${props.comment.uuid}/hard_delete`, 'DELETE')
+            const d = await res.json()
+            if (res.ok) {
+                isDeleted.value = true
+                content.value = '[permanently deleted]'
+                create_message(d.message, TOAST.WARNING)
+            } else {
+                create_message(d.message || 'Hard delete failed', TOAST.ERROR)
+            }
+        }
+
         async function doRestore() {
             const res = await apiFetch(`/api/comments/${props.comment.uuid}/restore`, 'POST', {})
             const d = await res.json()
@@ -215,7 +232,7 @@ const CommentItem = {
             likeCount, dislikeCount, userReaction,
             isDeleted, content, isPublic,
             canEdit, canDelete, canRestore, hasMoreReplies,
-            loadReplies, submitReply, submitEdit, doDelete, doRestore, doReact,
+            loadReplies, submitReply, submitEdit, doDelete, doHardDelete, doRestore, doReact,
             startEdit, fmt_date,
         }
     },
@@ -282,6 +299,10 @@ const CommentItem = {
         </button>
         <button v-if="canRestore" class="cm-action-btn" style="color:#16a34a;" @click="doRestore">
             <i class="fas fa-rotate-left"></i> Restore
+        </button>
+        <button v-if="canModerate" class="cm-action-btn" style="color:#dc3545;" @click="doHardDelete"
+                title="Permanently delete this comment and all its replies">
+            <i class="fas fa-skull"></i> Hard delete
         </button>
     </div>
 

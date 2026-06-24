@@ -1628,13 +1628,13 @@ def add_comment_core(rule_id, content, user, parent_comment_id=None):
             notify_owner_new_comment, notify_followers_new_comment, notify_comment_reply)
         if rule:
             notify_owner_new_comment(rule.user_id, user.id, 'rule_comment', rule.title, link)
-        notify_followers_new_comment(user.id, rule.title if rule else '', link)
+        notify_followers_new_comment(user.id, rule.title if rule else '', link, is_public=True)
         if parent_comment_id:
             parent = Comment.query.get(parent_comment_id)
             if parent:
                 notify_comment_reply(parent.user_id, user.id, rule.title if rule else '', link)
-    except Exception:
-        pass
+    except Exception as _e:
+        print(f"[rule_core] add_comment_core notification error: {_e}")
 
     return True, "Comment posted successfully."
 
