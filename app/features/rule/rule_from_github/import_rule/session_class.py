@@ -185,6 +185,7 @@ class Session_class:
             update_admin_session_notifications(
                 session_uuid = self.uuid,
                 summary      = f'{self.imported} imported · {self.skipped} skipped · {self.bad_rules} invalid',
+                link         = f'/rule/import_loading/{self.uuid}',
             )
         except Exception as e:
             print(f"[session_class] notify error: {e}")

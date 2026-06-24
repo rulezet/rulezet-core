@@ -1332,15 +1332,21 @@ class RuleStatus(db.Model):
     error = db.Column(db.Boolean, default=False)
 
     history_id = db.Column(db.String, nullable=True)
-    def get_format(self):
-        """Return the format of the rule associated with this RuleStatus."""
+    def _get_rule(self):
         if not self.rule_id:
             return None
+        try:
+            return Rule.query.filter_by(id=int(self.rule_id)).first()
+        except (ValueError, TypeError):
+            return None
 
-        rule = Rule.query.get(self.rule_id)
-        return rule.format if rule else None
+    def get_format(self):
+        r = self._get_rule()
+        return r.format if r else None
 
-         
+    def get_title(self):
+        r = self._get_rule()
+        return r.title if r else None
 
     def to_json(self):
         return {
@@ -1349,6 +1355,7 @@ class RuleStatus(db.Model):
             "update_result_id": self.update_result_id,
             "date": self.date.strftime('%Y-%m-%d %H:%M') if self.date else None,
             "name_rule": self.name_rule,
+            "rule_title": self.get_title(),
             "rule_id": self.rule_id,
             "message": self.message,
             "found": self.found,

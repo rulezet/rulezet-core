@@ -250,8 +250,8 @@ def parse_rule_by_format(rule_content: str, user: User, format_name: str, url_re
         "license": getattr(user, "license", None) or "Unknown",
         "author": getattr(user, "first_name", "Unknown"),
         "repo_url": url_repo or None,
-        "source": current_user.first_name + current_user.last_name or "Unknown",
-        "filepath": github_path, 
+        "source": (getattr(user, "first_name", "") or "") + (getattr(user, "last_name", "") or "") or "Unknown",
+        "filepath": github_path,
     }
 
     metadata = rule_instance.parse_metadata(rule_content, info, validation_result)
@@ -279,12 +279,13 @@ def parse_rule_by_format(rule_content: str, user: User, format_name: str, url_re
     if rule:
         return True, "Rule created", rule
     else:
-        BadRuleModel.save_invalid_rule_from_new_rule(
+        if github_path:
+            metadata["github_path"] = github_path
+        BadRuleModel.save_invalid_rule(
             form_dict=metadata,
             to_string=rule_content,
             rule_type=format_name,
             error=["Failed to insert rule into DB"],
             user=user,
-            github_path=github_path
         )
         return False, "Failed to insert rule", None

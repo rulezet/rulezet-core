@@ -1509,6 +1509,16 @@ def get_proposal() -> jsonify:
 
 
 
+@rule_blueprint.route("/update_github/history_json/<int:history_id>", methods=['GET'])
+@login_required
+def history_diff_json(history_id):
+    """Return old_content / new_content for inline diff display."""
+    history = RuleModel.get_history_rule_by_id(history_id)
+    if not history:
+        return {'message': 'Not found'}, 404
+    return history.to_json(), 200
+
+
 @rule_blueprint.route("/update_github/choose_changes", methods=['GET'])
 @login_required
 def choose_changes() -> render_template:
@@ -2773,27 +2783,26 @@ def update_loading_status(sid):
 @rule_blueprint.route("/update_loading_status/<sid>/get_news_rules", methods=['GET'])
 @login_required
 def get_news_rules(sid):
-    page = request.args.get('page', 1, type=int)  
+    def _tri(key):
+        v = request.args.get(key, '')
+        return True if v == 'true' else False if v == 'false' else None
 
+    page = request.args.get('page', 1, type=int)
+    paginated = RuleModel.get_updater_result_new_rule_page(
+        sid, page=page,
+        f_syntax_valid=_tri('syntax_valid'),
+        f_accept=_tri('accept'),
+        f_error=_tri('error'),
+    )
 
-    # Retrieve paginated results
-    paginated = RuleModel.get_updater_result_new_rule_page(sid, page=page)
-
-    if not paginated :
+    if not paginated:
         return {"message": "Session not found", "toast_class": "danger-subtle"}, 404
     rules = paginated.items
-
-    if len(rules) > 0:
-        rules_list = [rule.to_json() for rule in rules]
-
-        return {
-            "rules": rules_list,
-            "total_pages": paginated.pages,
-            "total_rules": paginated.total,
-        }, 200
-    return{
-        "rules": []
-
+    rules_list = [rule.to_json() for rule in rules]
+    return {
+        "rules": rules_list,
+        "total_pages": paginated.pages,
+        "total_rules": paginated.total,
     }, 200
 
 @rule_blueprint.route("/history_github_updater/delete", methods=['GET'])
@@ -2813,30 +2822,83 @@ def history_github_updater_delete():
 @rule_blueprint.route("/update_loading_status/<sid>/get_rules", methods=['GET'])
 @login_required
 def get_rules(sid):
-    page = request.args.get('page', 1, type=int)  
+    def _tri(key):
+        v = request.args.get(key, '')
+        return True if v == 'true' else False if v == 'false' else None
 
+    page = request.args.get('page', 1, type=int)
 
-    # Retrieve paginated results
-    paginated = RuleModel.get_updater_result_rule_page(sid, page=page)
+    paginated = RuleModel.get_updater_result_rule_page(
+        sid, page=page,
+        f_update_available=_tri('update_available'),
+        f_found=_tri('found'),
+        f_error=_tri('error'),
+        f_syntax_valid=_tri('syntax_valid'),
+    )
     if not paginated :
         return {"message": "Session not found", "toast_class": "danger-subtle"}, 404
 
     rules = paginated.items
 
+    updates_available = RuleModel.count_updates_available(sid)
     if rules:
         rules_list = [rule.to_json() for rule in rules]
-
         return {
             "rules": rules_list,
             "total_pages": paginated.pages,
             "total_rules": paginated.total,
+            "updates_available": updates_available,
         }, 200
-    return{
-        "rules": []
-
+    return {
+        "rules": [],
+        "updates_available": updates_available,
     }, 200
 
-# accetped all change associate to a sid 
+# accetped all change associate to a sid
+@rule_blueprint.route("/bulk_update_decision/<sid>", methods=['POST'])
+@login_required
+def bulk_update_decision(sid):
+    """Dispatch accept-all or reject-all update as a background job, respecting active filters."""
+    data   = request.get_json() or {}
+    action = data.get('action')
+    if action not in ('accept', 'reject'):
+        return {'message': 'Invalid action', 'toast_class': 'danger-subtle'}, 400
+    if not RuleModel.get_updater_result(sid):
+        return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
+
+    def _tri(k): v = data.get(k); return True if v is True else False if v is False else None
+
+    import app.features.jobs.jobs_core as JobsModel
+    verb  = 'Accept' if action == 'accept' else 'Reject'
+    label = f"{verb} all pending updates ({sid[:8]}…)"
+    job = JobsModel.create_job(
+        job_type='bulk_update_decision',
+        payload={'sid': sid, 'action': action,
+                 'f_found': _tri('f_found'), 'f_error': _tri('f_error'),
+                 'f_syntax_valid': _tri('f_syntax_valid')},
+        label=label, created_by=current_user.id,
+    )
+    return {'message': f'Background job started: {label}', 'job_id': job.id, 'job_uuid': job.uuid, 'toast_class': 'success-subtle'}, 201
+
+
+@rule_blueprint.route("/bulk_new_rules_decision/<sid>", methods=['POST'])
+@login_required
+def bulk_new_rules_decision(sid):
+    """Dispatch add-all or reject-all new rules as a background job."""
+    data = request.get_json() or {}
+    action = data.get('action')
+    if action not in ('add', 'reject'):
+        return {'message': 'Invalid action', 'toast_class': 'danger-subtle'}, 400
+    if not RuleModel.get_updater_result(sid):
+        return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
+    import app.features.jobs.jobs_core as JobsModel
+    label = f"{'Add' if action == 'add' else 'Reject'} all new rules ({sid[:8]}…)"
+    job = JobsModel.create_job(job_type='bulk_new_rules_decision',
+                               payload={'sid': sid, 'action': action, 'user_id': current_user.id},
+                               label=label, created_by=current_user.id)
+    return {'message': f'Background job started: {label}', 'job_id': job.id, 'job_uuid': job.uuid, 'toast_class': 'success-subtle'}, 201
+
+
 @rule_blueprint.route("/accept_all_update/<sid>", methods=['GET'])
 @login_required
 def accept_all_update(sid):

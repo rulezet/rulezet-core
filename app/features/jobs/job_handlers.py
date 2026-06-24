@@ -24,6 +24,7 @@ from app.features.jobs.job_worker import register_handler
 from app import db
 from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJob, BackgroundJobLog, ActivityLog
 from app.features.rule.rule_core import _wipe_rule_children
+import json as _json
 
 BATCH_SIZE = 2000   # bulk_insert_mappings handles large batches efficiently
 
@@ -1575,5 +1576,123 @@ def handle_remove_submodule(job, app):
         except Exception as e:
             job.status = 'failed'
             job.error = str(e)
+            log_job(job, str(e), level='error', event='failed')
+        db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  bulk_update_decision — accept or reject all pending rule updates for a scan
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('bulk_update_decision')
+def handle_bulk_update_decision(job, app):
+    with app.app_context():
+        try:
+            sid    = job.payload.get('sid')
+            action = job.payload.get('action')  # 'accept' | 'reject'
+
+            from app.features.rule.rule_core import (
+                get_rule_update_list_filtered, accept_all_update, reject_all_update,
+            )
+            rule_list, count = get_rule_update_list_filtered(
+                sid,
+                f_found=job.payload.get('f_found'),
+                f_error=job.payload.get('f_error'),
+                f_syntax_valid=job.payload.get('f_syntax_valid'),
+            )
+
+            job.total = max(count, 1)
+            if not rule_list or count == 0:
+                log_job(job, 'No pending updates found.', level='info', event='done')
+                job.status = 'done'
+                job.done = job.total
+                db.session.commit()
+                return
+
+            ok = accept_all_update(rule_list) if action == 'accept' else reject_all_update(rule_list)
+            job.done   = job.total
+            job.status = 'done' if ok else 'failed'
+            verb = 'accepted' if action == 'accept' else 'rejected'
+            log_job(job, f'{count} update(s) {verb}.', level='success' if ok else 'error', event='done')
+        except Exception as e:
+            job.status = 'failed'
+            job.error  = str(e)
+            log_job(job, str(e), level='error', event='failed')
+        db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  bulk_new_rules_decision — add or reject all new rules found in a scan
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('bulk_new_rules_decision')
+def handle_bulk_new_rules_decision(job, app):
+    with app.app_context():
+        try:
+            sid     = job.payload.get('sid')
+            action  = job.payload.get('action')   # 'add' | 'reject'
+            user_id = job.payload.get('user_id')
+
+            from app.features.rule.rule_core import (
+                get_valid_new_rules_by_sid, reject_all_new_rules_by_sid,
+                get_updater_result_by_id, change_message_new_rule,
+            )
+            from app.features.rule.rule_format.main_format import parse_rule_by_format
+            from app.core.db_class.db import User
+            import app.features.account.account_core as AccountModel
+
+            if action == 'reject':
+                reject_all_new_rules_by_sid(sid)
+                job.done = job.total = 1
+                job.status = 'done'
+                log_job(job, 'All new rules rejected.', level='success', event='done')
+                db.session.commit()
+                return
+
+            # action == 'add'
+            new_rules = get_valid_new_rules_by_sid(sid)
+            job.total = max(len(new_rules), 1)
+
+            if not new_rules:
+                log_job(job, 'No valid new rules to add.', level='info', event='done')
+                job.status = 'done'
+                job.done = job.total
+                db.session.commit()
+                return
+
+            user   = User.query.get(user_id)
+            added  = errors = 0
+
+            for i, nr in enumerate(new_rules):
+                source_info = None
+                updater = get_updater_result_by_id(nr.update_result_id)
+                if updater:
+                    try:
+                        info = _json.loads(updater.info)
+                        source_info = info.get('repo_url')
+                    except Exception:
+                        pass
+
+                change_message_new_rule(nr.id, 'imported')
+                success, message, imported = parse_rule_by_format(
+                    nr.rule_content, user, nr.format, source_info, github_path=nr.github_path
+                )
+                if success and imported:
+                    profil = AccountModel.get_or_create_gamification_profile(imported.user_id)
+                    if profil:
+                        AccountModel.update_rules_owned_gamification(profil.id, imported.user_id)
+                    added += 1
+                else:
+                    change_message_new_rule(nr.id, f'error: {message}')
+                    errors += 1
+
+                job.done = i + 1
+                db.session.commit()
+
+            job.status = 'done'
+            log_job(job, f'{added} rule(s) added, {errors} error(s).', level='success', event='done')
+        except Exception as e:
+            job.status = 'failed'
+            job.error  = str(e)
             log_job(job, str(e), level='error', event='failed')
         db.session.commit()

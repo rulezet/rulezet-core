@@ -20,6 +20,7 @@ const { createApp, ref, computed, onMounted, onUnmounted, watch } = Vue
 
 const POLL_INTERVAL = 15_000
 
+
 function csrf() {
     return document.getElementById('csrf_token')?.value || ''
 }
@@ -85,7 +86,7 @@ const NotificationBell = {
         })
 
         const hasActiveJobs = computed(() =>
-            items.value.some(n => n.is_job_active)
+            items.value.some(n => n.is_job_active || n.notif_type === 'session_running')
         )
 
         // ── Fetch ─────────────────────────────────────────────────────────────
@@ -231,7 +232,9 @@ const NotificationPanel = {
             if (activeTab.value === 'jobs')   return items.value.filter(n => n.notif_type?.startsWith('job'))
             return items.value
         })
-        const hasActiveJobs = computed(() => items.value.some(n => n.is_job_active))
+        const hasActiveJobs = computed(() =>
+            items.value.some(n => n.is_job_active || n.notif_type === 'session_running')
+        )
 
         function startPolling() {
             if (timer) return

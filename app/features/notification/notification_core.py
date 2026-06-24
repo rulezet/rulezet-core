@@ -241,11 +241,19 @@ def notify_admins_report_created(report, rule, reporter):
 
 def notify_admins_session_started(user, session_type, session_uuid, label, link):
     """
-    Notify all admins that a long-running session (import / update / similarity)
-    has started.  The notification stays visible in the bell while job_status='running'.
+    Notify all admins (and the triggering user) that a long-running session
+    (import / update / similarity) has started.
+    The notification stays visible in the bell while job_status='running',
+    which keeps the bell polling so the completion toast always fires.
     """
     try:
-        admin_ids = _get_all_admin_ids()
+        admin_ids = set(_get_all_admin_ids())
+        # Always include the triggering user so their bell keeps polling
+        # even if they are not an admin — this is the key invariant that
+        # allows update_admin_session_notifications() to later fire a toast
+        # for the session owner regardless of their role.
+        if user and getattr(user, 'id', None):
+            admin_ids.add(user.id)
         if not admin_ids:
             return
 
@@ -279,10 +287,11 @@ def notify_admins_session_started(user, session_type, session_uuid, label, link)
         print(f"[notification_core] notify_admins_session_started error: {e}")
 
 
-def update_admin_session_notifications(session_uuid, summary):
+def update_admin_session_notifications(session_uuid, summary, link=None):
     """
     Called when a session finishes. Finds all session_running notifications
     for this session UUID and marks them done with the final summary.
+    Pass `link` to redirect the user to the specific results page.
     """
     try:
         notifs = Notification.query.filter_by(job_uuid=session_uuid, notif_type='session_running').all()
@@ -294,6 +303,8 @@ def update_admin_session_notifications(session_uuid, summary):
             n.job_progress = 100
             n.is_read      = False   # resurface in the bell as "done"
             n.icon         = _TYPE_ICON['session_done']
+            if link:
+                n.link = link
         db.session.commit()
     except Exception as e:
         db.session.rollback()

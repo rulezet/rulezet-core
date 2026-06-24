@@ -2398,35 +2398,78 @@ def get_importer_result(sid: str):
 def get_updater_result(sid: str):
     return UpdateResult.query.filter_by(uuid=sid).first()
 
-def get_updater_result_new_rule_page(sid: str, page: int, per_page: int = 30):
+def get_updater_result_new_rule_page(sid: str, page: int, per_page: int = 30,
+                                      f_syntax_valid=None,
+                                      f_accept=None,
+                                      f_error=None):
     """
-    Retrieve paginated NewRule entries linked to the UpdateResult with UUID = sid
-    """
-    update_result = UpdateResult.query.filter_by(uuid=sid).first()
-    if not update_result:
-        return None
-
-    return (
-        NewRule.query
-        .filter_by(update_result_id=update_result.id)
-        .filter(NewRule.message != "imported")    
-        .paginate(page=page, per_page=per_page, error_out=False)
-    )
-
-
-def get_updater_result_rule_page(sid: str, page: int, per_page: int = 30):
-    """
-    Retrieve paginated RuleStatus entries linked to the UpdateResult with UUID = sid,
-    prioritizing rules that have an update available.
+    Retrieve paginated NewRule entries. Each filter is None (any) | True | False.
     """
     update_result = UpdateResult.query.filter_by(uuid=sid).first()
     if not update_result:
         return None
 
-    # Prioritize rules with update_available=True, then by date ascending
-    return RuleStatus.query.filter_by(update_result_id=update_result.id)\
-        .order_by(RuleStatus.update_available.desc(), RuleStatus.date.asc())\
-        .paginate(page=page, per_page=per_page, error_out=False)
+    q = (NewRule.query
+         .filter_by(update_result_id=update_result.id)
+         .filter(NewRule.message != "imported"))
+    if f_syntax_valid is not None:
+        q = q.filter(NewRule.rule_syntax_valid == f_syntax_valid)
+    if f_accept is not None:
+        q = q.filter(NewRule.accept == f_accept)
+    if f_error is not None:
+        q = q.filter(NewRule.error == f_error)
+    return q.paginate(page=page, per_page=per_page, error_out=False)
+
+
+def count_updates_available(sid: str) -> int:
+    """Count RuleStatus rows with update_available=True for a session."""
+    update_result = UpdateResult.query.filter_by(uuid=sid).first()
+    if not update_result:
+        return 0
+    return RuleStatus.query.filter_by(
+        update_result_id=update_result.id, update_available=True
+    ).count()
+
+
+def get_updater_result_rule_page(sid: str, page: int, per_page: int = 30,
+                                  f_update_available=None,
+                                  f_found=None,
+                                  f_error=None,
+                                  f_syntax_valid=None):
+    """Retrieve paginated RuleStatus entries. Each filter is None (any) | True | False."""
+    update_result = UpdateResult.query.filter_by(uuid=sid).first()
+    if not update_result:
+        return None
+    q = RuleStatus.query.filter_by(update_result_id=update_result.id)
+    if f_update_available is not None:
+        q = q.filter(RuleStatus.update_available == f_update_available)
+    if f_found is not None:
+        q = q.filter(RuleStatus.found == f_found)
+    if f_error is not None:
+        q = q.filter(RuleStatus.error == f_error)
+    if f_syntax_valid is not None:
+        q = q.filter(RuleStatus.rule_syntax_valid == f_syntax_valid)
+    return q.order_by(RuleStatus.update_available.desc(), RuleStatus.date.asc())\
+             .paginate(page=page, per_page=per_page, error_out=False)
+
+
+def get_rule_update_list_filtered(sid: str,
+                                   f_found=None,
+                                   f_error=None,
+                                   f_syntax_valid=None):
+    """Return RuleStatus with update_available=True, optionally narrowed by extra filters."""
+    update_result = UpdateResult.query.filter_by(uuid=sid).first()
+    if not update_result:
+        return [], 0
+    q = RuleStatus.query.filter_by(update_result_id=update_result.id, update_available=True)
+    if f_found is not None:
+        q = q.filter(RuleStatus.found == f_found)
+    if f_error is not None:
+        q = q.filter(RuleStatus.error == f_error)
+    if f_syntax_valid is not None:
+        q = q.filter(RuleStatus.rule_syntax_valid == f_syntax_valid)
+    rules = q.all()
+    return rules, len(rules)
 
 
 def get_importer_list_page(page: int = 1):
@@ -2669,6 +2712,47 @@ def accept_all_update(rule_udpate_list):
     except Exception as e:
         return False
    
+
+def reject_all_update(rule_update_list):
+    try:
+        for rule in rule_update_list:
+            rule.update_available = False
+            rule.message = "Rejected"
+            history = RuleUpdateHistory.query.filter_by(id=rule.history_id).first()
+            if history:
+                history.message = "rejected"
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
+
+
+def get_valid_new_rules_by_sid(sid):
+    updater = get_updater_result(sid)
+    if not updater:
+        return []
+    return NewRule.query.filter_by(
+        update_result_id=updater.id,
+        rule_syntax_valid=True
+    ).filter(
+        NewRule.message != 'imported',
+        NewRule.message != 'rejected'
+    ).all()
+
+
+def reject_all_new_rules_by_sid(sid):
+    updater = get_updater_result(sid)
+    if not updater:
+        return False
+    rules = NewRule.query.filter_by(update_result_id=updater.id).filter(
+        NewRule.message != 'imported'
+    ).all()
+    for r in rules:
+        r.message = 'rejected'
+    db.session.commit()
+    return True
+
 
 def get_rule_update_from_updater_by_rule_id_and_change_statue(rule_id, updater_id , decision, updater):
     rule = RuleStatus.query.filter_by(

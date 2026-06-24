@@ -621,6 +621,7 @@ class Update_class:
             update_admin_session_notifications(
                 session_uuid = self.uuid,
                 summary      = f'{self.found} checked · {self.updated} update(s) found',
+                link         = f'/rule/update_loading/{self.uuid}',
             )
         except Exception as e:
             print(f"[update_class] notify error: {e}")
