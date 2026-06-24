@@ -31,7 +31,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(64), unique=True, index=True)
     admin = db.Column(db.Boolean, default=False, index=True)
     password_hash = db.Column(db.String(165))
-    api_key = db.Column(db.String(60), index=True)
+    api_key = db.Column(db.String(128), index=True)
     is_connected = db.Column(db.Boolean, default=False, index=True)
 
     is_verified = db.Column(db.Boolean, default=False)
