@@ -289,7 +289,13 @@
                 <div class="meta-item" v-if="proposal.change_score !== null && proposal.change_score !== undefined">
                     <div class="meta-item__icon"><i class="fa-solid fa-chart-simple"></i></div>
                     <div class="flex-grow-1">
-                        <div class="meta-item__label">Diff size</div>
+                        <div class="meta-item__label d-flex align-items-center gap-1">
+                            Diff size
+                            <span title="How much the proposed content differs from the original. Close to 0% = nearly identical (minor tweak). Close to 100% = heavily rewritten."
+                                  style="cursor:help;color:var(--subtle-text-color);font-size:0.68rem;opacity:.75;">
+                                <i class="fa-solid fa-circle-question"></i>
+                            </span>
+                        </div>
                         <div class="score-bar-wrap mt-1">
                             <span class="score-bar">
                                 <span class="score-bar__fill"
@@ -476,7 +482,11 @@
                     return;
                 }
                 try {
-                    const res = await fetch('/rule/favorite/' + proposal.value.rule_id);
+                    const csrf = document.getElementById('csrf_token')?.value || '';
+                    const res = await fetch('/rule/favorite/' + proposal.value.rule_id, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrf },
+                    });
                     if (res.ok) {
                         const data = await res.json();
                         isFavorited.value = data.is_favorited;

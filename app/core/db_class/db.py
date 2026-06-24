@@ -660,7 +660,9 @@ class RuleEditProposal(db.Model):
             'status': self.status,
             'edit_type': self.edit_type,
             'change_score': self.change_score,
-            'comment_count': self.comments.count() if hasattr(self, 'comments') else 0,
+            'comment_count': UnifiedComment.query.filter_by(
+                object_type='proposal', object_id=self.id, is_active=True
+            ).count(),
             'timestamp': self.timestamp.isoformat(),
             'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
             'reviewed_by_id': self.reviewed_by_id,
