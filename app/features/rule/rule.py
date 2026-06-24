@@ -1361,9 +1361,11 @@ def proposal_content_discuss() -> render_template:
     rule = RuleModel.get_rule(proposal.rule_id)
     if not rule:
         return render_template("404.html")
+    can_decide = current_user.id == rule.user_id or current_user.is_admin()
     return render_template("rule/proposal_content_discuss.html",
                            rule_edit_id=rule_edit_id,
                            rule=rule,
+                           can_decide=can_decide,
                            **_nav_counts(rule.id))
 
 @rule_blueprint.route('/get_contributor', methods=['GET'])

@@ -68,16 +68,24 @@ const NotificationBell = {
     delimiters: ['[[', ']]'],
 
     setup() {
-        const items       = ref([])
-        const loading     = ref(true)
-        const activeTab   = ref('all')   // 'all' | 'unread' | 'jobs'
-        const offcanvasEl = ref(null)
+        const items           = ref([])
+        const loading         = ref(true)
+        const activeTab       = ref('all')   // 'all' | 'unread' | 'jobs'
+        const offcanvasEl     = ref(null)
+        const bannerDismissed = ref(false)
         let bsOffcanvas   = null
         let timer         = null
         let isOpen        = false
 
+        // Read user preference from localStorage
+        const notifStyle = computed(() => localStorage.getItem('rz-notif-style') || 'discrete')
+
         // ── Computed ─────────────────────────────────────────────────────────
         const unreadCount = computed(() => items.value.filter(n => !n.is_read).length)
+
+        const showBanner = computed(() =>
+            notifStyle.value === 'prominent' && unreadCount.value > 0 && !bannerDismissed.value
+        )
 
         const filteredItems = computed(() => {
             if (activeTab.value === 'unread') return items.value.filter(n => !n.is_read)
@@ -93,7 +101,11 @@ const NotificationBell = {
         async function fetchBell() {
             try {
                 const data = await apiFetch('/notifications/bell')
-                if (data) items.value = data
+                if (data) {
+                    items.value = data
+                    // Reset banner dismiss when new unread arrive
+                    if (unreadCount.value > 0) bannerDismissed.value = false
+                }
             } catch {}
             loading.value = false
         }
@@ -152,6 +164,8 @@ const NotificationBell = {
             if (notif.link) window.location.href = notif.link
         }
 
+        function dismissBanner() { bannerDismissed.value = true }
+
         // ── Helpers ───────────────────────────────────────────────────────────
         function progressFillClass(notif) {
             if (notif.job_status === 'done')   return 'notif-progress__fill--done'
@@ -185,9 +199,9 @@ const NotificationBell = {
         })
 
         return {
-            items, loading, activeTab, unreadCount,
+            items, loading, activeTab, unreadCount, showBanner,
             filteredItems, hasActiveJobs,
-            openBell, markRead, deleteNotif, markAllRead, clickNotif,
+            openBell, markRead, deleteNotif, markAllRead, clickNotif, dismissBanner,
             progressFillClass, progressWidth,
             bubbleClass, typeLabel, relativeTime,
         }
@@ -199,10 +213,22 @@ const NotificationBell = {
     <button class="notif-bell-btn nav-icon-btn" @click="openBell" title="Notifications">
         <i class="fa-solid fa-bell fs-5"></i>
         <span v-if="unreadCount > 0"
-              :class="['notif-bell-badge', unreadCount > 0 ? 'notif-bell-badge--pulse' : '']">
+              :class="['notif-bell-badge', 'notif-bell-badge--pulse']">
             [[ unreadCount > 99 ? '99+' : unreadCount ]]
         </span>
     </button>
+
+    <!-- ── Prominent banner (teleported to body) ── -->
+    <teleport to="body">
+        <div v-if="showBanner" class="notif-prominent-banner">
+            <i class="fa-solid fa-bell me-2"></i>
+            <span>You have <strong>[[ unreadCount ]]</strong> unread notification[[ unreadCount !== 1 ? 's' : '' ]]</span>
+            <a href="/notifications/" class="notif-prominent-banner__link">View all</a>
+            <button class="notif-prominent-banner__dismiss" @click.stop="dismissBanner" title="Dismiss">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    </teleport>
 </div>
     `,
 }
@@ -300,31 +326,47 @@ const NotificationPanel = {
 <div class="d-flex flex-column h-100">
 
     <!-- Header -->
-    <div class="notif-offcanvas-header d-flex align-items-center justify-content-between">
-        <div>
-            <h5 class="mb-0 fw-bold">
-                <i class="fa-solid fa-bell me-2"></i>Notifications
-            </h5>
-            <div class="mt-1 opacity-75" style="font-size:.78rem;" v-if="unreadCount > 0">
-                [[ unreadCount ]] unread
+    <div class="notif-offcanvas-header">
+        <div class="notif-offcanvas-header__left">
+            <div class="notif-offcanvas-header__icon">
+                <i class="fa-solid fa-bell"></i>
+            </div>
+            <div>
+                <div class="notif-offcanvas-header__title">Notifications</div>
+                <div class="notif-offcanvas-header__sub" v-if="unreadCount > 0">
+                    <span class="notif-offcanvas-header__badge">[[ unreadCount ]]</span>
+                    unread
+                </div>
+                <div class="notif-offcanvas-header__sub" v-else>All caught up</div>
             </div>
         </div>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+        <div class="d-flex align-items-center gap-2">
+            <a href="/notifications/" class="notif-offcanvas-header__action" title="Notification settings">
+                <i class="fa-solid fa-sliders"></i>
+            </a>
+            <button type="button" class="notif-offcanvas-header__close" data-bs-dismiss="offcanvas" title="Close">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
     </div>
 
     <!-- Tabs -->
     <div class="notif-tabs">
-        <button class="notif-tab" :class="{active: activeTab==='all'}"    @click="activeTab='all'">All</button>
-        <button class="notif-tab" :class="{active: activeTab==='unread'}" @click="activeTab='unread'">
-            Unread
-            <span v-if="unreadCount > 0" class="badge bg-danger ms-1 rounded-pill"
-                  style="font-size:.6rem;padding:2px 5px;">[[ unreadCount ]]</span>
+        <button class="notif-tab" :class="{active: activeTab==='all'}"    @click="activeTab='all'">
+            <i class="fa-solid fa-list me-1" style="font-size:.7rem;"></i>All
         </button>
-        <button class="notif-tab" :class="{active: activeTab==='jobs'}"   @click="activeTab='jobs'">Jobs</button>
+        <button class="notif-tab" :class="{active: activeTab==='unread'}" @click="activeTab='unread'">
+            <i class="fa-solid fa-circle me-1" style="font-size:.5rem;color:#dc3545;" v-if="unreadCount > 0"></i>
+            Unread
+            <span v-if="unreadCount > 0" class="notif-tab-badge">[[ unreadCount ]]</span>
+        </button>
+        <button class="notif-tab" :class="{active: activeTab==='jobs'}"   @click="activeTab='jobs'">
+            <i class="fa-solid fa-gears me-1" style="font-size:.7rem;"></i>Jobs
+        </button>
     </div>
 
     <!-- Toolbar -->
-    <div class="notif-toolbar">
+    <div class="notif-toolbar" v-if="filteredItems.length > 0 || unreadCount > 0">
         <span class="notif-toolbar-count">
             [[ filteredItems.length ]] notification[[ filteredItems.length !== 1 ? 's' : '' ]]
         </span>
@@ -421,7 +463,12 @@ const NotificationPanel = {
 
     <!-- Footer -->
     <div class="notif-footer">
-        <a href="/notifications/">See all notifications →</a>
+        <a href="/notifications/" class="notif-footer__all">
+            <i class="fa-solid fa-arrow-right me-1"></i>See all notifications
+        </a>
+        <a href="/settings" class="notif-footer__settings" title="Notification settings">
+            <i class="fa-solid fa-gear"></i>
+        </a>
     </div>
 
 </div>

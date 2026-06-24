@@ -131,6 +131,46 @@
                 </div>
             </div>
 
+            <!-- Notification style -->
+            <div class="card mb-3" id="section-notif">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-bell"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Notifications</h6>
+                            <p class="text-muted small mb-0">Choose how unread notifications are shown.</p>
+                        </div>
+                    </div>
+
+                    <div class="settings-theme-group">
+                        <div v-for="opt in notif_style_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: notif_style === opt.value }"
+                             @click="setNotifStyle(opt.value)">
+                            <div class="nav-preview" :class="'notif-style-preview--' + opt.value">
+                                <div class="nsp-bell">
+                                    <i class="fas fa-bell" style="font-size:1rem;color:#0d6efd;"></i>
+                                    <span class="nsp-badge">3</span>
+                                </div>
+                                <div v-if="opt.value === 'prominent'" class="nsp-banner">
+                                    <span>3 unread</span>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + opt.icon"></i>
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="notif_style === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0" style="font-size:.75rem;">
+                        <i class="fas fa-info-circle me-1 text-primary opacity-75"></i>
+                        <template v-if="notif_style === 'discrete'">A small badge on the bell icon shows your unread count.</template>
+                        <template v-else>A banner appears at the top of the page when you have unread notifications.</template>
+                    </p>
+                </div>
+            </div>
+
             {% if is_admin %}
             <!-- Theme Studio (admin only) -->
             <div class="card mb-3" id="section-studio">
@@ -244,6 +284,23 @@
                             </div>
                             <div class="recap-status">
                                 <i v-if="nav_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Notification style row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-bell"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Notifications</div>
+                                <div class="recap-value">
+                                    <i :class="'fas ' + (notif_style_options.find(o => o.value === notif_style)?.icon || 'fa-bell')" class="me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ notif_style_options.find(o => o.value === notif_style)?.label || notif_style ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="notif_style_saved" class="fas fa-circle-check text-success"></i>
                             </div>
                         </div>
 
@@ -523,6 +580,22 @@
                 setTimeout(() => { window.location.reload() }, 500)
             }
 
+            // ── Notification style (localStorage only) ────────────────────────
+            const notif_style = ref(localStorage.getItem('rz-notif-style') || 'discrete')
+            const notif_style_saved = ref(false)
+            const notif_style_options = [
+                { value: 'discrete',  label: 'Discrete',  icon: 'fa-bell' },
+                { value: 'prominent', label: 'Prominent', icon: 'fa-bell-exclamation' },
+            ]
+            function setNotifStyle(value) {
+                if (value === notif_style.value) return
+                notif_style.value = value
+                localStorage.setItem('rz-notif-style', value)
+                notif_style_saved.value = true
+                create_message('Notification style saved', 'success')
+                setTimeout(() => { notif_style_saved.value = false }, 2000)
+            }
+
             // Theme options — base built-ins
             const theme_options = reactive([
                 { value: 'system', label: 'System', icon: 'fa-circle-half-stroke' },
@@ -798,6 +871,7 @@
             return {
                 theme, save_status, theme_options,
                 nav_style, nav_saved, nav_options, setNavStyle,
+                notif_style, notif_style_saved, notif_style_options, setNotifStyle,
                 named_theme_options, custom_theme_options,
                 livePreviewStyle,
                 setTheme, getPreviewStyle,

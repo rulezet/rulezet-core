@@ -237,6 +237,16 @@
                         <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
                     </a>
 
+                    {% if can_decide %}
+                    <!-- Review queue -->
+                    <a href="/rule/rule_propose_edit"
+                       class="btn btn-sm rounded-pill px-3"
+                       style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                       title="Go to proposals review queue">
+                        <i class="fa-solid fa-list-check me-1"></i>Review queue
+                    </a>
+                    {% endif %}
+
                     <!-- Report -->
                     <a :href="'/rule/report/' + proposal.rule_id"
                        class="btn btn-sm rounded-pill px-3"
@@ -337,6 +347,31 @@
                 [[ proposal.rejection_reason ]]
             </div>
 
+            {% if can_decide %}
+            <!-- Accept / Reject actions (owner or admin, pending only) -->
+            <div v-if="proposal.status === 'pending'" class="mt-3 pt-3" style="border-top:1px solid var(--border-color);">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="text-muted" style="font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">
+                        <i class="fa-solid fa-gavel me-1"></i>Your decision
+                    </span>
+                    <button @click="decideProposal('accepted')"
+                            class="btn btn-sm btn-success rounded-pill px-3"
+                            :disabled="deciding"
+                            title="Accept this proposal and apply the changes to the rule">
+                        <span v-if="deciding === 'accepted'" class="spinner-border spinner-border-sm me-1"></span>
+                        <i v-else class="fa-solid fa-check me-1"></i>Accept
+                    </button>
+                    <button @click="decideProposal('rejected')"
+                            class="btn btn-sm btn-danger rounded-pill px-3"
+                            :disabled="deciding"
+                            title="Reject this proposal">
+                        <span v-if="deciding === 'rejected'" class="spinner-border spinner-border-sm me-1"></span>
+                        <i v-else class="fa-solid fa-xmark me-1"></i>Reject
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
         </div>
 
         <!-- ── Diff ── -->
@@ -382,6 +417,10 @@
     import DiffViewer    from '/static/js/components/diff-viewer.js';
     import CommentThread from '/static/js/components/comments/comment-thread.js';
 
+    const CAN_DECIDE  = {{ can_decide | tojson }};
+    const RULE_ID     = {{ rule.id }};
+    const PROPOSAL_ID = {{ rule_edit_id }};
+
     createApp({
         delimiters: ['[[', ']]'],
         components: {
@@ -390,9 +429,9 @@
             'comment-thread': CommentThread,
         },
         setup() {
-            const proposalId = {{ rule_edit_id }};
-            const proposal   = ref(null);
-            const isFavorited = ref(false);
+            const proposal       = ref(null);
+            const isFavorited    = ref(false);
+            const deciding       = ref(null);
             const isAuthenticated = {{ current_user.is_authenticated | tojson }};
 
             function truncate(str, n) {
@@ -420,7 +459,7 @@
 
             async function fetchRuleProposal() {
                 try {
-                    const res = await fetch('/rule/get_proposal?id=' + proposalId);
+                    const res = await fetch('/rule/get_proposal?id=' + PROPOSAL_ID);
                     if (res.ok) {
                         const data = await res.json();
                         proposal.value = data.proposal;
@@ -448,9 +487,30 @@
                 }
             }
 
+            async function decideProposal(decision) {
+                if (!CAN_DECIDE || deciding.value) return;
+                deciding.value = decision;
+                try {
+                    const url = `/rule/validate_proposal?ruleId=${RULE_ID}&decision=${decision}&ruleproposalId=${PROPOSAL_ID}`;
+                    const res = await fetch(url);
+                    if (res.ok) {
+                        const data = await res.json();
+                        create_message(data.message || (decision === 'accepted' ? 'Proposal accepted' : 'Proposal rejected'),
+                                       data.toast_class || 'success');
+                        if (proposal.value) proposal.value.status = decision;
+                    } else {
+                        create_message('Error processing decision', 'danger');
+                    }
+                } catch (e) {
+                    create_message('Error processing decision', 'danger');
+                } finally {
+                    deciding.value = null;
+                }
+            }
+
             fetchRuleProposal();
 
-            return { proposal, isFavorited, truncate, formatDate, scoreColor, toggleFavorite };
+            return { proposal, isFavorited, deciding, truncate, formatDate, scoreColor, toggleFavorite, decideProposal };
         }
     }).mount('#main-container');
 </script>

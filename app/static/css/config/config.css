@@ -538,3 +538,48 @@ body.dark-mode .settings-save-status.saved { color: #4ade80; background: rgba(74
     color: #0d6efd;
 }
 
+/* ── Notification style preview ───────────────────────────────────── */
+.notif-style-preview--discrete,
+.notif-style-preview--prominent {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/2.5;
+    border-radius: 7px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    margin-bottom: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.nsp-bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.nsp-badge {
+    position: absolute;
+    top: -5px; right: -7px;
+    min-width: 16px; height: 16px;
+    border-radius: 8px;
+    background: #dc3545;
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--light-bg-color);
+}
+.nsp-banner {
+    background: linear-gradient(90deg, #0d6efd, #0a58ca);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
