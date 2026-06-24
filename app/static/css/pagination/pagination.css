@@ -1,0 +1,79 @@
+/*
+  pagination.css — Pagination component styles
+  Component: <pagination>
+  Prefix: pag-
+*/
+
+/*---PAG_WRAPPER---*/
+
+.pag-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0;
+    flex-wrap: wrap;
+}
+
+/*---PAG_BTN---*/
+
+.pag-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background-color: var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: background-color var(--transition), color var(--transition), border-color var(--transition);
+    text-decoration: none;
+    user-select: none;
+    line-height: 1;
+}
+
+.pag-btn:hover:not(.pag-btn--disabled):not(.pag-btn--active) {
+    background-color: var(--bg-elevated);
+    color: var(--text-main);
+    border-color: var(--brand);
+}
+
+/*---PAG_BTN_ACTIVE---*/
+
+.pag-btn--active {
+    background-color: var(--brand);
+    border-color: var(--brand);
+    color: #ffffff;
+    cursor: default;
+    font-weight: 600;
+    box-shadow: 0 1px 4px var(--brand-glow);
+}
+
+/*---PAG_BTN_DISABLED---*/
+
+.pag-btn--disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/*---PAG_ELLIPSIS---*/
+
+.pag-ellipsis {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 34px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    user-select: none;
+    pointer-events: none;
+    letter-spacing: 0.05em;
+}
