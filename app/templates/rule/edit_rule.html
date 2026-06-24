@@ -146,6 +146,17 @@
                             </div>
                         </div>
 
+                        <div class="row mb-4 text-start">
+                            <div class="col-12">
+                                <attack-input
+                                    v-model="selectedAttacks"
+                                    label="ATT&CK Techniques"
+                                    :rule-id="parseInt(ruleId)"
+                                    csrf-token="{{ csrf_token() }}">
+                                </attack-input>
+                            </div>
+                        </div>
+
                         <div class="row g-3 mb-4">
                             <div class="col-md-12 text-start">
                                 <div class="form-group">
@@ -213,6 +224,7 @@
     import SmartEditor from '/static/js/components/smart-editor.js';
     import TagInput from '/static/js/tags/tagInput.js';
     import VersionPicker from '/static/js/tags/utils/versionPicker.js';
+    import AttackInput from '/static/js/attack/attackInput.js';
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -220,7 +232,8 @@
             'vulnerability-input': VulnerabilityInput,
             'smart-editor': SmartEditor,
             'tag-input': TagInput,
-            'version-picker': VersionPicker
+            'version-picker': VersionPicker,
+            'attack-input': AttackInput,
         },
         setup() {
 
@@ -232,6 +245,7 @@
 
             const detectedVulnerabilities = ref([]);
             const selectedTags = ref([]);
+            const selectedAttacks = ref([]);
 
             const formData = reactive({
                 version: "{{ form.version.data or '1.0' }}",
@@ -272,12 +286,20 @@
                 }
             }
 
+            async function initAttacks() {
+                try {
+                    const res = await fetch(`/attack/rule/${ruleId.value}`);
+                    selectedAttacks.value = await res.json();
+                } catch { selectedAttacks.value = []; }
+            }
+
             onMounted(async () => {
 
                 await Promise.all([
                     fetchCurrentRule(),
                     initRuleTags(),
-                    fetchFormats()
+                    fetchFormats(),
+                    initAttacks(),
                 ]);
 
 
@@ -299,6 +321,7 @@
                 editFormat,
                 rules_formats,
                 selectedTags,
+                selectedAttacks,
                 formData,
             }
         },

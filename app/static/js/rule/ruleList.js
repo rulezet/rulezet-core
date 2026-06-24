@@ -54,6 +54,8 @@ import CodeViewer               from '/static/js/components/code-viewer.js'
 import RuleExportAction         from '/static/js/rule/ruleExportAction.js'
 import { create_message }       from '/static/js/toaster.js'
 import ReportModal              from '/static/js/components/ReportModal.js'
+import MultiAttackFilter        from '/static/js/attack/multiAttackFilter.js'
+import AttackDisplayList        from '/static/js/attack/attackDisplayList.js'
 
 const { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue
 
@@ -72,6 +74,8 @@ export default {
         CodeViewer,
         RuleExportAction,
         ReportModal,
+        MultiAttackFilter,
+        AttackDisplayList,
     },
 
     props: {
@@ -288,6 +292,16 @@ export default {
                         </multi-vulnerability-filter>
                     </div>
 
+                    <div class="rl-fp-multi-item" v-if="!isFilterHidden('attacks')">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-crosshairs text-warning"></i> ATT&amp;CK
+                        </span>
+                        <multi-attack-filter v-model="selectedAttacks"
+                            placeholder="T1059, Command…"
+                            @change="onFilterChange">
+                        </multi-attack-filter>
+                    </div>
+
                     <div class="rl-fp-multi-item" v-if="!isFilterHidden('licenses')">
                         <span class="rl-fp-multi-label">
                             <i class="fa-solid fa-scale-balanced text-info"></i> Licenses
@@ -483,6 +497,11 @@ export default {
                         </vulnerability-displays-list>
                     </div>
 
+                    <!-- ATT&CK techniques -->
+                    <div v-if="rule.attacks && rule.attacks.length" class="mb-2" @click.stop>
+                        <attack-display-list :initial-attacks="rule.attacks" :max-visible="3"></attack-display-list>
+                    </div>
+
                     <!-- Tags -->
                     <div class="mb-3" @click.stop>
                         <tags-displays-list object-type="rule" :object-id="rule.id" :max-visible="3"
@@ -654,6 +673,7 @@ export default {
                         <th v-show="colVisible.description" class="dt-th">Description</th>
                         <th v-show="colVisible.tags" class="dt-th" style="width:160px;">Tags</th>
                         <th v-show="colVisible.cves" class="dt-th" style="width:130px;">CVEs</th>
+                        <th v-show="colVisible.attacks" class="dt-th" style="width:160px;">ATT&amp;CK</th>
                         <th v-show="colVisible.created"
                             class="dt-th dt-th--sortable" style="width:110px;"
                             :class="{ 'dt-th--sorted': sortKey === 'creation_date' }"
@@ -731,6 +751,13 @@ export default {
                                     object-type="rule" :object-id="rule.id" :max-visible="2"
                                     :initial-vulnerabilities="rule.cves || []">
                                 </vulnerability-displays-list>
+                            </td>
+
+                            <td v-show="colVisible.attacks" class="dt-td" @click.stop>
+                                <attack-display-list
+                                    :initial-attacks="rule.attacks || []"
+                                    :max-visible="2">
+                                </attack-display-list>
                             </td>
 
                             <td v-show="colVisible.created" class="dt-td"
@@ -915,6 +942,16 @@ export default {
                                                     :initial-vulnerabilities="rule.cves">
                                                 </vulnerability-displays-list>
                                             </div>
+                                            <div v-if="rule.attacks && rule.attacks.length"
+                                                 class="rl-expand-taxonomy-section mt-2">
+                                                <span class="rl-expand-k mb-1">
+                                                    <i class="fa-solid fa-crosshairs text-warning me-1"></i>ATT&amp;CK
+                                                </span>
+                                                <attack-display-list
+                                                    :initial-attacks="rule.attacks"
+                                                    :max-visible="20">
+                                                </attack-display-list>
+                                            </div>
                                         </div>
 
                                         <div class="rl-expand-code">
@@ -1031,6 +1068,7 @@ export default {
         const selectedSources  = ref(_arr('sources',         init.sources || ''))
         const selectedLicenses = ref(_arr('licenses',        init.licenses || ''))
         const selectedVulns    = ref(_arr('vulnerabilities', init.vulnerabilities || ''))
+        const selectedAttacks  = ref(_arr('attacks',         init.attacks         || ''))
         const personFilter     = ref({
             mode:   _p('person_mode', 'author'),
             values: _arr(_url.has('editors') ? 'editors' : 'authors'),
@@ -1043,7 +1081,7 @@ export default {
 
         // ── UI state ──────────────────────────────────────────────────────
         const viewMode    = ref(_p('view', props.defaultView))
-        const _hasUrlFilters = ['tags','sources','licenses','vulnerabilities','authors','editors',
+        const _hasUrlFilters = ['tags','sources','licenses','vulnerabilities','attacks','authors','editors',
                                 'rule_type','search_field','exact_match','person_mode','scope']
                                .some(k => _url.has(k))
         const filtersOpen = ref(_hasUrlFilters)
@@ -1056,6 +1094,7 @@ export default {
             { key: 'description', label: 'Description' },
             { key: 'tags',        label: 'Tags' },
             { key: 'cves',        label: 'CVEs' },
+            { key: 'attacks',     label: 'ATT&CK' },
             { key: 'created',     label: 'Created' },
             { key: 'votes',       label: 'Votes' },
         ]
@@ -1103,6 +1142,7 @@ export default {
             selectedSources.value.length +
             selectedLicenses.value.length +
             selectedVulns.value.length +
+            selectedAttacks.value.length +
             personFilter.value.values.length
         )
 
@@ -1126,6 +1166,7 @@ export default {
             _upd('sources',         selectedSources.value.join(',') || null)
             _upd('licenses',        selectedLicenses.value.join(',')|| null)
             _upd('vulnerabilities', selectedVulns.value.join(',')   || null)
+            _upd('attacks',         selectedAttacks.value.join(',') || null)
             if (personFilter.value.values.length) {
                 const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
                 p.set(pKey, personFilter.value.values.join(','))
@@ -1159,6 +1200,7 @@ export default {
                 if (selectedSources.value.length)    params.set('sources', selectedSources.value.join(','))
                 if (selectedLicenses.value.length)   params.set('licenses', selectedLicenses.value.join(','))
                 if (selectedVulns.value.length)      params.set('vulnerabilities', selectedVulns.value.join(','))
+                if (selectedAttacks.value.length)    params.set('attacks', selectedAttacks.value.join(','))
                 if (personFilter.value.values.length) {
                     const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
                     params.set(pKey, personFilter.value.values.join(','))
@@ -1204,8 +1246,9 @@ export default {
             selectedTags.value   = []
             selectedSources.value = []
             selectedLicenses.value = []
-            selectedVulns.value  = []
-            personFilter.value   = { mode: 'author', values: [] }
+            selectedVulns.value   = []
+            selectedAttacks.value = []
+            personFilter.value    = { mode: 'author', values: [] }
             onFilterChange()
         }
 
@@ -1517,6 +1560,7 @@ export default {
             selectedSources.value.length > 0 ||
             selectedLicenses.value.length > 0 ||
             selectedVulns.value.length > 0 ||
+            selectedAttacks.value.length > 0 ||
             personFilter.value.values.length > 0
         )
 
@@ -1565,7 +1609,7 @@ export default {
             sortKey, sortDir, search,
             // Filters
             filtersOpen, ruleType, searchField, exactMatch, cardSort,
-            selectedTags, selectedSources, selectedLicenses, selectedVulns,
+            selectedTags, selectedSources, selectedLicenses, selectedVulns, selectedAttacks,
             personFilter, onPersonFilterChange,
             scopeMine,
             rulesFormats, activeFilterCount,

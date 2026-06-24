@@ -1228,47 +1228,59 @@ def _parse_generic(content: str):
 
 
 def get_attack_coverage(bundle_id: int) -> dict:
-    """Return MITRE ATT&CK coverage data for all rules in a bundle."""
+    """
+    Return MITRE ATT&CK coverage data for all rules in a bundle.
+    Reads from RuleAttackAssociation (populated by the auto-parse job).
+    Falls back to on-the-fly parsing when the DB has no associations yet.
+    """
+    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
+
     bundle = Bundle.query.get(bundle_id)
     if not bundle:
         return None
 
-    rows = (
-        db.session.query(Rule.id, Rule.title, Rule.uuid, Rule.format, Rule.to_string)
+    # All rule IDs in the bundle
+    rule_rows = (
+        db.session.query(Rule.id, Rule.title, Rule.uuid)
         .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
         .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
         .all()
     )
+    total_rules = len(rule_rows)
+    rule_map = {r.id: {'id': r.id, 'name': r.title or '', 'uuid': str(r.uuid) if r.uuid else ''}
+                for r in rule_rows}
+    rule_ids = list(rule_map.keys())
+
+    # Fetch associations from DB
+    assoc_rows = (
+        db.session.query(
+            RuleAttackAssociation.rule_id,
+            RuleAttackAssociation.technique_id,
+            AttackTechnique.tactic_keys,
+        )
+        .join(AttackTechnique, RuleAttackAssociation.technique_id == AttackTechnique.technique_id)
+        .filter(RuleAttackAssociation.rule_id.in_(rule_ids))
+        .all()
+    ) if rule_ids else []
+
+    # If no DB associations, fall back to parsing
+    use_fallback = not assoc_rows and rule_ids
+
+    if use_fallback:
+        return _get_attack_coverage_parsed(bundle_id, rule_map, total_rules)
 
     # tactic_key -> technique_id -> list of rule dicts
     coverage: dict = _dd(lambda: _dd(list))
-    total_rules = len(rows)
-    rules_with_attack = 0
+    rules_with_attack: set = set()
 
-    for rule_id, title, uuid_val, fmt, content in rows:
-        content = content or ''
-        info = {'id': rule_id, 'name': (title or ''), 'uuid': str(uuid_val) if uuid_val else ''}
-
-        if fmt == 'sigma':
-            tactics, techs = _parse_sigma(content)
-        else:
-            tactics, techs = [], _parse_generic(content)
-
-        if not tactics and not techs:
+    for rule_id, technique_id, tactic_keys in assoc_rows:
+        info = rule_map.get(rule_id)
+        if not info:
             continue
-        rules_with_attack += 1
-
-        if tactics and techs:
-            for tac in tactics:
-                for tech in techs:
-                    coverage[tac][tech].append(info)
-        elif tactics:
-            for tac in tactics:
-                coverage[tac][''].append(info)
-        else:
-            coverage.setdefault('__unknown__', _dd(list))
-            for tech in techs:
-                coverage['__unknown__'][tech].append(info)
+        rules_with_attack.add(rule_id)
+        tactics = tactic_keys or ['unknown']
+        for tac in tactics:
+            coverage[tac][technique_id].append(info)
 
     # Build ordered output
     tactics_out = []
@@ -1302,7 +1314,81 @@ def get_attack_coverage(bundle_id: int) -> dict:
             'covered_tactics':    covered_count,
             'total_tactics':      len(_TACTIC_ORDER),
             'unique_techniques':  len(all_techs),
-            'rules_with_attack':  rules_with_attack,
+            'rules_with_attack':  len(rules_with_attack) if isinstance(rules_with_attack, set) else rules_with_attack,
             'total_rules':        total_rules,
+        },
+    }
+
+
+def _get_attack_coverage_parsed(bundle_id: int, rule_map: dict, total_rules: int) -> dict:
+    """Fallback: parse rule content directly when no DB associations exist yet."""
+    rows = (
+        db.session.query(Rule.id, Rule.format, Rule.to_string)
+        .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
+        .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
+        .all()
+    )
+
+    coverage: dict = _dd(lambda: _dd(list))
+    rules_with_attack: set = set()
+
+    for rule_id, fmt, content in rows:
+        info = rule_map.get(rule_id, {'id': rule_id, 'name': '', 'uuid': ''})
+        content = content or ''
+
+        if fmt == 'sigma':
+            tactics, techs = _parse_sigma(content)
+        else:
+            tactics, techs = [], _parse_generic(content)
+
+        if not tactics and not techs:
+            continue
+        rules_with_attack.add(rule_id)
+
+        if tactics and techs:
+            for tac in tactics:
+                for tech in techs:
+                    coverage[tac][tech].append(info)
+        elif tactics:
+            for tac in tactics:
+                coverage[tac][''].append(info)
+        else:
+            for tech in techs:
+                coverage['unknown'][tech].append(info)
+
+    # Build ordered output (shared logic)
+    tactics_out = []
+    all_techs: set = set()
+    covered_count = 0
+
+    for key in _TACTIC_ORDER:
+        tac_techs = coverage.get(key, {})
+        techs_out = []
+        for tid, rule_list in tac_techs.items():
+            if tid:
+                all_techs.add(tid)
+                techs_out.append({'id': tid, 'count': len(rule_list), 'rules': rule_list})
+        techs_out.sort(key=lambda x: x['id'])
+        is_covered = bool(techs_out)
+        if is_covered:
+            covered_count += 1
+        tactics_out.append({
+            'key': key,
+            'label': _TACTIC_LABELS.get(key, key.replace('-', ' ').title()),
+            'covered': is_covered,
+            'technique_count': len(techs_out),
+            'rule_count': sum(t['count'] for t in techs_out),
+            'techniques': techs_out,
+        })
+
+    return {
+        'tactics': tactics_out,
+        'stats': {
+            'covered_tactics':   covered_count,
+            'total_tactics':     len(_TACTIC_ORDER),
+            'unique_techniques': len(all_techs),
+            'rules_with_attack': len(rules_with_attack),
+            'total_rules':       total_rules,
+            'source':            'parsed',   # hint for frontend
         },
     }

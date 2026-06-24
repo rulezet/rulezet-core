@@ -1796,3 +1796,127 @@ def handle_ownership_transfer_bulk(job, app):
         log_job(job, f"Notification error: {_e}", level='warning')
 
     log_job(job, f"Done — {transferred} rule(s) transferred.", level='success', event='done')
+
+
+# ─── ATT&CK: update catalogue from MITRE ─────────────────────────────────────
+
+@register_handler('update_attack_data')
+def handle_update_attack_data(job, app):
+    """Download MITRE ATT&CK STIX bundle and upsert AttackTechnique rows."""
+    log_job(job, 'Fetching ATT&CK data from MITRE GitHub…', level='info', event='start')
+    try:
+        from app.features.attack.attack_core import fetch_and_update_attack_data
+        created, updated = fetch_and_update_attack_data()
+        job.done = 1
+        db.session.commit()
+        log_job(job, f'Done — {created} techniques created, {updated} updated.',
+                level='success', event='done')
+    except Exception as exc:
+        log_job(job, f'Error: {exc}', level='error', event='error')
+        raise
+
+
+# ─── ATT&CK: bulk auto-parse rules ───────────────────────────────────────────
+
+ATTACK_PARSE_BATCH = 500
+
+@register_handler('bulk_parse_attack_rules')
+def handle_bulk_parse_attack_rules(job, app):
+    """
+    Scan all (or format-filtered) rules and auto-create RuleAttackAssociation
+    entries by parsing rule content for ATT&CK technique IDs.
+    """
+    payload  = job.payload or {}
+    fmt      = payload.get('format')        # optional format filter, e.g. 'sigma'
+    offset   = payload.get('_resume_offset', 0)
+
+    from app.features.attack.attack_core import _extract_technique_ids
+    from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
+    import datetime as _dt
+
+    # Build query
+    q = Rule.query.filter(Rule.is_deleted == False)
+    if fmt:
+        q = q.filter(Rule.format == fmt)
+
+    if job.total == 0:
+        job.total = q.count()
+        db.session.commit()
+        log_job(job, f'Starting — {job.total} rules to parse.', level='info', event='start')
+
+    # Cache all known technique IDs — include deprecated ones so sigma rules
+    # that explicitly reference deprecated IDs (e.g. T1068) are still associated.
+    known_ids = {
+        t.technique_id
+        for t in AttackTechnique.query.all()
+    }
+    if not known_ids:
+        log_job(job, 'No ATT&CK techniques in DB — run "Update ATT&CK data" job first.',
+                level='warning', event='done')
+        job.done = job.total
+        db.session.commit()
+        return
+
+    total_added = 0
+    batch_num   = 0
+
+    while True:
+        if _is_cancelled(job): # noqa — defined in local scope via job_worker helpers
+            log_job(job, 'Cancelled.', level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+
+        rules = (
+            q.with_entities(Rule.id, Rule.format, Rule.to_string)
+            .offset(offset)
+            .limit(ATTACK_PARSE_BATCH)
+            .all()
+        )
+        if not rules:
+            break
+
+        new_assocs = []
+        # Fetch existing associations for this batch to avoid duplicates
+        rule_ids = [r.id for r in rules]
+        existing = {
+            (a.rule_id, a.technique_id)
+            for a in RuleAttackAssociation.query.filter(
+                RuleAttackAssociation.rule_id.in_(rule_ids)
+            ).all()
+        }
+
+        for rule_id, rule_fmt, content in rules:
+            ids = _extract_technique_ids(rule_fmt or '', content or '')
+            for tid in dict.fromkeys(ids):   # dedup
+                if tid not in known_ids:
+                    continue
+                if (rule_id, tid) in existing:
+                    continue
+                new_assocs.append({
+                    'uuid':         str(uuid_mod.uuid4()),
+                    'rule_id':      rule_id,
+                    'technique_id': tid,
+                    'user_id':      None,
+                    'source':       'auto',
+                    'added_at':     _dt.datetime.now(tz=_dt.timezone.utc),
+                })
+                existing.add((rule_id, tid))
+
+        if new_assocs:
+            db.session.bulk_insert_mappings(RuleAttackAssociation, new_assocs)
+            db.session.commit()
+            total_added += len(new_assocs)
+
+        offset   += len(rules)
+        job.done  = offset
+        _save_offset(job, offset)
+        db.session.commit()
+
+        batch_num += 1
+        if batch_num % LOG_EVERY == 0:
+            log_job(job, f'{offset}/{job.total} rules processed, {total_added} associations created.',
+                    level='info', event='progress')
+
+    log_job(job, f'Done — {offset} rules parsed, {total_added} ATT&CK associations created.',
+            level='success', event='done')

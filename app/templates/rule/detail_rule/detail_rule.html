@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/graph-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/attack-display.css') }}">
 
 <script>
 window.__rule_json   = {{ rule_to_json | tojson | safe }};
@@ -194,12 +195,16 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                                 css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
                             </vulnerability-display>
                         </div>
-                        <div class="mt-2 mb-4">
+                        <div class="mt-2">
                             <!-- Tags Component -->
                             <tag-display :tags="displayTags" :loading="loadingDisplayTags"
                                 section-title="Workspace Tags"
                                 css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
                             </tag-display>
+                        </div>
+                        <!-- ATT&CK Techniques -->
+                        <div class="mt-2 mb-4">
+                            <attack-display :rule-id="{{ rule.id }}"></attack-display>
                         </div>
 
                         <!-- Rule Content Card -->
@@ -790,6 +795,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
     import CommentThread from '/static/js/components/comments/comment-thread.js';
     import { initBundleGraph } from '/static/js/bundle/bundleMispGraph.js';
     import ReportModal from '/static/js/components/ReportModal.js';
+    import AttackDisplay from '/static/js/components/AttackDisplay.js';
 
 
     createApp({
@@ -801,6 +807,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
             'code-viewer': CodeViewer,
             'comment-thread': CommentThread,
             'report-modal': ReportModal,
+            'attack-display': AttackDisplay,
         },
         setup() {
             /**
@@ -843,6 +850,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
 
                     fetchBundleVulnerabilities(),
                     fetchRuleTags(),
+                    // attack: no fetch needed — AttackDisplay fetches independently via ruleId prop
 
                 ])
 

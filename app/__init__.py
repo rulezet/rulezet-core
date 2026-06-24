@@ -52,6 +52,7 @@ def create_app(start_worker=True):
     from app.features.connector.connector import connector_blueprint
     from app.features.notification.notification import notification_blueprint
     from app.features.report.report import report_blueprint
+    from app.features.attack.attack import attack_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
     app.register_blueprint(account_blueprint, url_prefix="/account")
@@ -62,6 +63,7 @@ def create_app(start_worker=True):
     app.register_blueprint(connector_blueprint, url_prefix='/connector')
     app.register_blueprint(notification_blueprint, url_prefix='/notifications')
     app.register_blueprint(report_blueprint, url_prefix='/report')
+    app.register_blueprint(attack_blueprint, url_prefix='/attack')
 
     from app.api.api import api_blueprint
 

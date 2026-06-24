@@ -427,6 +427,13 @@ def add_rule_core(form_dict, user) -> tuple[bool, str] | tuple[Rule, str]:
             except Exception:
                 pass
 
+        # Auto-extract ATT&CK technique associations from rule content
+        try:
+            from app.features.attack.attack_core import auto_parse_rule
+            auto_parse_rule(new_rule.id, user_id)
+        except Exception:
+            pass
+
         return new_rule, "rule created"
 
     except Exception as e:
@@ -1335,7 +1342,7 @@ def process_vote(rule_id, user_id, vote_type):
 #   Filter  #
 #############
 
-def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None) -> Rule:
+def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None) -> Rule:
     """Filter the rules with specific field targeting"""
     query = _active()
     
@@ -1407,7 +1414,13 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
             # Tag requested but doesn't exist in DB → no rules can match
             query = query.filter(False)
 
-
+    if attacks:
+        from app.core.db_class.db import RuleAttackAssociation as _RAA
+        upper = [a.upper() for a in attacks]
+        query = (query
+                 .join(_RAA, _RAA.rule_id == Rule.id)
+                 .filter(_RAA.technique_id.in_(upper))
+                 .distinct())
 
     if source:
         source_list = [s.strip() for s in source.split(',')] if isinstance(source, str) else source
@@ -2222,7 +2235,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          direction='asc', source=None, user_id=None,
                          search_field='all', exact_match=False, rule_type=None,
                          author=None, vulnerabilities=None, licenses=None,
-                         tags=None, editor_names=None, bundle_id=None):
+                         tags=None, editor_names=None, bundle_id=None, attacks=None):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -2241,6 +2254,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         exact_match=exact_match,
         editor_names=editor_names,
         bundle_id=bundle_id,
+        attacks=attacks,
     )
 
     col = _DATA_TABLE_SORT_KEYS.get(sort)

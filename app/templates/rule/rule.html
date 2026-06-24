@@ -230,6 +230,13 @@
               <input type="hidden" name="vulnerabilities" :value="JSON.stringify(detectedVulnerabilities)">
             </div>
           </div>
+          <div class="row mb-4">
+            <div class="col-12">
+              <attack-input v-model="selectedAttacks" label="ATT&CK Techniques"
+                csrf-token="{{ csrf_token() }}"></attack-input>
+              <input type="hidden" name="attacks" :value="JSON.stringify(selectedAttacks)">
+            </div>
+          </div>
 
           <!-- Description & UUID -->
           <p class="form-section-title"><i class="fas fa-align-left me-1"></i>Description &amp; Reference</p>
@@ -583,6 +590,7 @@ window.__manual_format  = {{ (form.format.data  or '') | tojson }};
       import SmartEditor from '/static/js/components/smart-editor.js';
       import TagInput from '/static/js/tags/tagInput.js';
       import VersionPicker from '/static/js/tags/utils/versionPicker.js';
+      import AttackInput from '/static/js/attack/attackInput.js';
 
       createApp({
             delimiters: ['[[', ']]'],
@@ -590,7 +598,8 @@ window.__manual_format  = {{ (form.format.data  or '') | tojson }};
                   'vulnerability-input': VulnerabilityInput,
                   'smart-editor': SmartEditor,
                   'tag-input': TagInput,
-                  'version-picker': VersionPicker
+                  'version-picker': VersionPicker,
+                  'attack-input': AttackInput,
             },
             setup() {
                   const manualContent = ref(window.__manual_content || '');
@@ -737,6 +746,7 @@ window.__manual_format  = {{ (form.format.data  or '') | tojson }};
 
                   const detectedVulnerabilities = ref([]);
                   const selectedTags = ref([]);
+                  const selectedAttacks = ref([]);
 
                   const formData = Vue.reactive({
                         version: "{{ form.version.data or '1.0' }}",
@@ -775,6 +785,7 @@ window.__manual_format  = {{ (form.format.data  or '') | tojson }};
                         parseContent,
                         detectedVulnerabilities,
                         selectedTags,
+                        selectedAttacks,
                         formData
                   };
             }

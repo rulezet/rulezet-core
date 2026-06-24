@@ -726,3 +726,54 @@
 .rl-scope-btn:hover { background: var(--border-color); color: var(--text-color); }
 .rl-scope-btn--active { background: #0d6efd; color: #fff; }
 .rl-scope-btn--active:hover { background: #0a58ca; color: #fff; }
+/* ── Attack Display List (inline chips in cards/table) ──────────────────────── */
+
+.adl-root {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    align-items: center;
+}
+
+.adl-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .15rem .42rem;
+    border-radius: 6px;
+    border: 1px solid;
+    font-size: .7rem;
+    text-decoration: none;
+    transition: filter .12s, transform .1s;
+    max-width: 200px;
+}
+.adl-chip:hover {
+    filter: brightness(.92);
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+.adl-tid {
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    font-size: .68rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.adl-sep { opacity: .4; flex-shrink: 0; }
+.adl-name {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.adl-more {
+    font-size: .68rem;
+    padding: .12rem .4rem;
+    border-radius: 99px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    transition: background .1s;
+}
+.adl-more:hover { background: var(--light-bg-color); color: var(--text-color); }
