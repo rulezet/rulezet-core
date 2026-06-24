@@ -63,7 +63,7 @@
             <a class="nav-link active d-flex align-items-center gap-1" data-bs-toggle="tab" href="#pane-techniques" style="color:var(--text-color);">
                 <i class="fa-solid fa-crosshairs"></i>
                 Techniques
-                <span class="badge bg-secondary rounded-pill ms-1">[[ filteredTechniques.length ]]</span>
+                <span class="badge bg-secondary rounded-pill ms-1">[[ total ]]</span>
             </a>
         </li>
         <li class="nav-item">
@@ -84,7 +84,7 @@
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
 
                         <!-- Search -->
-                        <div class="input-group" style="max-width:300px;">
+                        <div class="input-group" style="max-width:280px;">
                             <span class="input-group-text border-0" style="background:var(--light-bg-color);">
                                 <i class="fa-solid fa-magnifying-glass text-muted small"></i>
                             </span>
@@ -97,7 +97,7 @@
                         </div>
 
                         <!-- Tactic filter -->
-                        <select v-model="filterTactic" class="form-select" style="max-width:220px;">
+                        <select v-model="filterTactic" class="form-select" style="max-width:200px;">
                             <option value="">All tactics</option>
                             <option v-for="t in TACTIC_ORDER" :key="t" :value="t">[[ tacticLabel(t) ]]</option>
                         </select>
@@ -108,9 +108,18 @@
                             <label class="form-check-label small text-muted" for="showDeprecated">Show deprecated</label>
                         </div>
 
-                        <!-- Spacer + reload -->
+                        <!-- Per-page -->
+                        <select v-model="perPage" class="form-select" style="max-width:100px;">
+                            <option :value="25">25</option>
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                            <option :value="200">200</option>
+                            <option :value="500">500</option>
+                        </select>
+
+                        <!-- Spacer + counter + reload -->
                         <div class="ms-auto d-flex align-items-center gap-2">
-                            <span class="small text-muted">[[ filteredTechniques.length ]] technique(s)</span>
+                            <span class="small text-muted">[[ total ]] technique(s)</span>
                             <button @click="loadTechniques" :disabled="loading"
                                     class="btn btn-sm btn-outline-secondary rounded-pill px-3">
                                 <i class="fa-solid fa-rotate" :class="loading ? 'fa-spin' : ''"></i>
@@ -124,168 +133,165 @@
                         <p class="text-muted small">Loading techniques…</p>
                     </div>
 
-                    <!-- Empty state -->
-                    <div v-else-if="!techniques.length" class="text-center py-5">
+                    <!-- Empty — no techniques in DB -->
+                    <div v-else-if="!total && !search && !filterTactic" class="text-center py-5">
                         <i class="fa-solid fa-crosshairs fa-3x text-muted opacity-25 mb-3 d-block"></i>
                         <h6 class="text-muted">No techniques indexed yet</h6>
                         <p class="text-muted small mb-3">Go to the <strong>Update &amp; Parse</strong> tab and click <em>Update from MITRE</em> first.</p>
                     </div>
 
-                    <!-- No search results -->
-                    <div v-else-if="!filteredTechniques.length" class="text-center py-4 text-muted">
+                    <!-- No results for current filter -->
+                    <div v-else-if="!techniques.length" class="text-center py-4 text-muted">
                         <i class="fa-solid fa-magnifying-glass mb-2 d-block opacity-25"></i>
                         <small>No technique matches your search.</small>
                     </div>
 
-                    <!-- Grouped table -->
+                    <!-- Flat table -->
                     <template v-else>
-                        <div v-for="group in groupedTechniques" :key="group.tactic" class="mb-4">
+                        <div class="table-responsive rounded-3 border overflow-hidden">
+                            <table class="table table-hover mb-0" style="font-size:.83rem;">
+                                <thead style="background:var(--light-bg-color);">
+                                    <tr>
+                                        <th class="ps-3" style="width:115px; cursor:pointer; user-select:none;"
+                                            @click="setSort('technique_id')">
+                                            <span class="d-inline-flex align-items-center gap-1">
+                                                ID
+                                                <i class="fa-solid fa-xs"
+                                                   :class="sortBy==='technique_id' ? (sortDir==='asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"
+                                                   :style="sortBy==='technique_id' ? 'color:#0d6efd;' : 'color:#adb5bd;opacity:.6;'"></i>
+                                            </span>
+                                        </th>
+                                        <th style="cursor:pointer; user-select:none;" @click="setSort('name')">
+                                            <span class="d-inline-flex align-items-center gap-1">
+                                                Name
+                                                <i class="fa-solid fa-xs"
+                                                   :class="sortBy==='name' ? (sortDir==='asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"
+                                                   :style="sortBy==='name' ? 'color:#0d6efd;' : 'color:#adb5bd;opacity:.6;'"></i>
+                                            </span>
+                                        </th>
+                                        <th style="width:150px;">Tactic(s)</th>
+                                        <th style="width:90px; cursor:pointer; user-select:none; text-align:center;"
+                                            @click="setSort('rule_count')">
+                                            <span class="d-inline-flex align-items-center justify-content-center gap-1">
+                                                Rules
+                                                <i class="fa-solid fa-xs"
+                                                   :class="sortBy==='rule_count' ? (sortDir==='asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"
+                                                   :style="sortBy==='rule_count' ? 'color:#0d6efd;' : 'color:#adb5bd;opacity:.6;'"></i>
+                                            </span>
+                                        </th>
+                                        <th style="width:70px; cursor:pointer; user-select:none; text-align:center;"
+                                            @click="setSort('is_subtechnique')">
+                                            <span class="d-inline-flex align-items-center justify-content-center gap-1">
+                                                Sub
+                                                <i class="fa-solid fa-xs"
+                                                   :class="sortBy==='is_subtechnique' ? (sortDir==='asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"
+                                                   :style="sortBy==='is_subtechnique' ? 'color:#0d6efd;' : 'color:#adb5bd;opacity:.6;'"></i>
+                                            </span>
+                                        </th>
+                                        <th style="width:100px; cursor:pointer; user-select:none; text-align:center;"
+                                            @click="setSort('deprecated')">
+                                            <span class="d-inline-flex align-items-center justify-content-center gap-1">
+                                                Status
+                                                <i class="fa-solid fa-xs"
+                                                   :class="sortBy==='deprecated' ? (sortDir==='asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"
+                                                   :style="sortBy==='deprecated' ? 'color:#0d6efd;' : 'color:#adb5bd;opacity:.6;'"></i>
+                                            </span>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="t in techniques" :key="t.technique_id">
 
-                            <!-- Group header -->
-                            <div class="d-flex align-items-center gap-2 mb-2 px-1">
-                                <span class="d-inline-flex align-items-center justify-content-center rounded-circle"
-                                      :style="{ background: TACTIC_BG[group.tactic] || '#f3f4f6', width:'28px', height:'28px', flexShrink:0 }">
-                                    <i class="fa-solid fa-crosshairs" :style="{ color: TACTIC_COLORS[group.tactic] || '#374151', fontSize:'.65rem' }"></i>
-                                </span>
-                                <span class="fw-bold text-uppercase" style="font-size:.78rem; letter-spacing:.06em;"
-                                      :style="{ color: TACTIC_COLORS[group.tactic] || 'var(--text-color)' }">
-                                    [[ tacticLabel(group.tactic) ]]
-                                </span>
-                                <span class="badge rounded-pill ms-1" style="font-size:.7rem;"
-                                      :style="{ background: TACTIC_BG[group.tactic] || '#f3f4f6', color: TACTIC_COLORS[group.tactic] || '#374151' }">
-                                    [[ group.techniques.length ]]
-                                </span>
-                                <a :href="'/rule/rules_list?attacks=' + group.techniques.map(t => t.technique_id).join(',')"
-                                   class="ms-auto btn btn-sm rounded-pill px-3"
-                                   style="font-size:.72rem;"
-                                   :style="{ background: TACTIC_BG[group.tactic] || '#f3f4f6', color: TACTIC_COLORS[group.tactic] || '#374151' }"
-                                   title="Browse all rules for this tactic">
-                                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View rules
-                                </a>
-                            </div>
+                                        <!-- ID badge -->
+                                        <td class="ps-3">
+                                            <a :href="t.url || ('https://attack.mitre.org/techniques/' + t.technique_id.replace('.','/') )"
+                                               target="_blank" rel="noopener"
+                                               class="badge rounded-pill text-decoration-none"
+                                               :style="tacticBadgeStyle(t.tactic_keys && t.tactic_keys[0])">
+                                                [[ t.technique_id ]]
+                                            </a>
+                                        </td>
 
-                            <!-- Table -->
-                            <div class="table-responsive rounded-3 border overflow-hidden">
-                                <table class="table table-hover mb-0" style="font-size:.83rem;">
-                                    <thead style="background:var(--light-bg-color);">
-                                        <tr>
-                                            <th style="width:110px;" class="ps-3">ID</th>
-                                            <th>Name</th>
-                                            <th style="width:130px;">Tactic(s)</th>
-                                            <th style="width:90px;" class="text-center">Rules</th>
-                                            <th style="width:70px;" class="text-center">Sub</th>
-                                            <th style="width:90px;" class="text-center">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr v-for="t in group.techniques" :key="t.technique_id">
-                                            <!-- ID -->
-                                            <td class="ps-3">
-                                                <a :href="t.url || ('https://attack.mitre.org/techniques/' + t.technique_id.replace('.','/'))"
-                                                   target="_blank" rel="noopener"
-                                                   class="badge rounded-pill text-decoration-none"
-                                                   :style="{ background: TACTIC_BG[group.tactic] || '#f3f4f6', color: TACTIC_COLORS[group.tactic] || '#374151', fontFamily:'monospace', fontSize:'.72rem', border: '1px solid ' + (TACTIC_BORDER[group.tactic] || '#d1d5db') }">
-                                                    [[ t.technique_id ]]
-                                                </a>
-                                            </td>
-                                            <!-- Name -->
-                                            <td>
-                                                <span class="fw-semibold" style="color:var(--text-color);">[[ t.name ]]</span>
-                                                <span v-if="t.deprecated" class="badge bg-danger-subtle text-danger ms-1" style="font-size:.65rem;">deprecated</span>
-                                            </td>
-                                            <!-- Tactic(s) -->
-                                            <td>
-                                                <div class="d-flex flex-wrap gap-1">
-                                                    <span v-for="tk in (t.tactic_keys || []).slice(0,2)" :key="tk"
-                                                          class="badge rounded-pill"
-                                                          style="font-size:.65rem;"
-                                                          :style="{ background: TACTIC_BG[tk] || '#f3f4f6', color: TACTIC_COLORS[tk] || '#374151' }">
-                                                        [[ tacticLabel(tk) ]]
-                                                    </span>
-                                                    <span v-if="(t.tactic_keys||[]).length > 2" class="badge bg-secondary rounded-pill" style="font-size:.65rem;">
-                                                        +[[ t.tactic_keys.length - 2 ]]
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <!-- Rules count -->
-                                            <td class="text-center">
-                                                <a v-if="t.rule_count > 0"
-                                                   :href="'/rule/rules_list?attacks=' + t.technique_id"
-                                                   class="badge rounded-pill text-decoration-none"
-                                                   style="background:rgba(13,110,253,.1);color:#0d6efd;border:1px solid rgba(13,110,253,.2);">
-                                                    [[ t.rule_count ]]
-                                                </a>
-                                                <span v-else class="text-muted small">0</span>
-                                            </td>
-                                            <!-- Sub-technique -->
-                                            <td class="text-center">
-                                                <span v-if="t.is_subtechnique"
-                                                      class="badge bg-secondary-subtle text-secondary rounded-pill"
-                                                      style="font-size:.65rem;">sub</span>
-                                                <span v-else class="text-muted small opacity-30">—</span>
-                                            </td>
-                                            <!-- Status -->
-                                            <td class="text-center">
-                                                <span v-if="t.deprecated"
-                                                      class="badge bg-danger-subtle text-danger rounded-pill"
-                                                      style="font-size:.65rem;">deprecated</span>
-                                                <span v-else
-                                                      class="badge bg-success-subtle text-success rounded-pill"
-                                                      style="font-size:.65rem;">active</span>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                                        <!-- Name -->
+                                        <td>
+                                            <span class="fw-semibold" style="color:var(--text-color);">[[ t.name ]]</span>
+                                        </td>
 
-                        </div><!-- /group -->
+                                        <!-- Tactic(s) -->
+                                        <td>
+                                            <div class="d-flex flex-wrap gap-1 align-items-center">
+                                                <span v-for="tk in expandedRows.has(t.technique_id) ? (t.tactic_keys || []) : (t.tactic_keys || []).slice(0,2)"
+                                                      :key="tk"
+                                                      class="badge rounded-pill"
+                                                      style="font-size:.65rem;"
+                                                      :style="{ background: TACTIC_BG[tk] || '#f3f4f6', color: TACTIC_COLORS[tk] || '#374151' }">
+                                                    [[ tacticLabel(tk) ]]
+                                                </span>
+                                                <!-- Expand: show hidden count -->
+                                                <button v-if="!expandedRows.has(t.technique_id) && (t.tactic_keys||[]).length > 2"
+                                                        @click="toggleRow(t.technique_id)"
+                                                        class="badge border-0 rounded-pill"
+                                                        style="font-size:.65rem;background:rgba(108,117,125,.15);color:#6c757d;cursor:pointer;">
+                                                    +[[ t.tactic_keys.length - 2 ]]
+                                                </button>
+                                                <!-- Collapse: hide extras -->
+                                                <button v-if="expandedRows.has(t.technique_id) && (t.tactic_keys||[]).length > 2"
+                                                        @click="toggleRow(t.technique_id)"
+                                                        class="badge border-0 rounded-pill"
+                                                        style="font-size:.65rem;background:rgba(108,117,125,.15);color:#6c757d;cursor:pointer;">
+                                                    <i class="fa-solid fa-chevron-up" style="font-size:.55rem;"></i>
+                                                </button>
+                                            </div>
+                                        </td>
 
-                        <!-- Ungrouped (unknown tactic) -->
-                        <div v-if="ungroupedTechniques.length" class="mb-4">
-                            <div class="d-flex align-items-center gap-2 mb-2 px-1">
-                                <span class="d-inline-flex align-items-center justify-content-center rounded-circle"
-                                      style="background:#f3f4f6;width:28px;height:28px;flex-shrink:0;">
-                                    <i class="fa-solid fa-question" style="color:#6c757d;font-size:.65rem;"></i>
-                                </span>
-                                <span class="fw-bold text-uppercase text-muted" style="font-size:.78rem;letter-spacing:.06em;">Unknown tactic</span>
-                                <span class="badge bg-secondary rounded-pill ms-1" style="font-size:.7rem;">[[ ungroupedTechniques.length ]]</span>
-                            </div>
-                            <div class="table-responsive rounded-3 border overflow-hidden">
-                                <table class="table table-hover mb-0" style="font-size:.83rem;">
-                                    <thead style="background:var(--light-bg-color);">
-                                        <tr>
-                                            <th class="ps-3" style="width:110px;">ID</th>
-                                            <th>Name</th>
-                                            <th style="width:90px;" class="text-center">Rules</th>
-                                            <th style="width:70px;" class="text-center">Sub</th>
-                                            <th style="width:90px;" class="text-center">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr v-for="t in ungroupedTechniques" :key="t.technique_id">
-                                            <td class="ps-3">
-                                                <span class="badge rounded-pill bg-secondary-subtle text-secondary" style="fontFamily:'monospace';font-size:.72rem;">[[ t.technique_id ]]</span>
-                                            </td>
-                                            <td><span class="fw-semibold">[[ t.name ]]</span></td>
-                                            <td class="text-center">
-                                                <a v-if="t.rule_count > 0" :href="'/rule/rules_list?attacks=' + t.technique_id"
-                                                   class="badge rounded-pill text-decoration-none"
-                                                   style="background:rgba(13,110,253,.1);color:#0d6efd;">[[ t.rule_count ]]</a>
-                                                <span v-else class="text-muted small">0</span>
-                                            </td>
-                                            <td class="text-center">
-                                                <span v-if="t.is_subtechnique" class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:.65rem;">sub</span>
-                                                <span v-else class="text-muted small opacity-30">—</span>
-                                            </td>
-                                            <td class="text-center">
-                                                <span v-if="t.deprecated" class="badge bg-danger-subtle text-danger rounded-pill" style="font-size:.65rem;">deprecated</span>
-                                                <span v-else class="badge bg-success-subtle text-success rounded-pill" style="font-size:.65rem;">active</span>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                                        <!-- Rules count -->
+                                        <td class="text-center">
+                                            <a v-if="t.rule_count > 0"
+                                               :href="'/rule/rules_list?attacks=' + t.technique_id"
+                                               class="badge rounded-pill text-decoration-none"
+                                               style="background:rgba(13,110,253,.1);color:#0d6efd;border:1px solid rgba(13,110,253,.2);">
+                                                [[ t.rule_count ]]
+                                            </a>
+                                            <span v-else class="text-muted small">0</span>
+                                        </td>
+
+                                        <!-- Sub-technique -->
+                                        <td class="text-center">
+                                            <span v-if="t.is_subtechnique"
+                                                  class="badge bg-secondary-subtle text-secondary rounded-pill"
+                                                  style="font-size:.65rem;">sub</span>
+                                            <span v-else class="text-muted small opacity-30">—</span>
+                                        </td>
+
+                                        <!-- Status -->
+                                        <td class="text-center">
+                                            <span v-if="t.deprecated"
+                                                  class="badge bg-danger-subtle text-danger rounded-pill"
+                                                  style="font-size:.65rem;">deprecated</span>
+                                            <span v-else
+                                                  class="badge bg-success-subtle text-success rounded-pill"
+                                                  style="font-size:.65rem;">active</span>
+                                        </td>
+
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
+
+                        <!-- Pagination -->
+                        <div class="d-flex align-items-center justify-content-between mt-3 flex-wrap gap-2">
+                            <span class="small text-muted">
+                                Page [[ currentPage ]] / [[ totalPages ]]
+                                &nbsp;·&nbsp;
+                                [[ (currentPage-1)*perPage + 1 ]]–[[ Math.min(currentPage*perPage, total) ]] of [[ total ]]
+                            </span>
+                            <pagination-component
+                                :current-page="currentPage"
+                                :total-pages="totalPages"
+                                @change-page="goToPage">
+                            </pagination-component>
+                        </div>
+
                     </template>
 
                 </div>
@@ -308,9 +314,10 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed, watch, onMounted } = Vue;
+    const { createApp, ref, reactive, watch, onMounted } = Vue;
     import { create_message, message_list } from '/static/js/toaster.js';
-    import AttackUpdater from '/static/js/attack/manage/AttackUpdater.js';
+    import AttackUpdater      from '/static/js/attack/manage/AttackUpdater.js';
+    import PaginationComponent from '/static/js/rule/paginationComponent.js';
 
     const TACTIC_ORDER = [
         'reconnaissance','resource-development','initial-access','execution','persistence',
@@ -345,67 +352,58 @@
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'attack-updater': AttackUpdater },
+        components: {
+            'attack-updater':       AttackUpdater,
+            'pagination-component': PaginationComponent,
+        },
         setup() {
-            const csrfToken   = '{{ csrf_token() }}';
-            const techniques  = ref([]);
-            const stats       = ref({});
-            const loading     = ref(false);
-            const search      = ref('');
-            const filterTactic = ref('');
+            const csrfToken     = '{{ csrf_token() }}';
+            const techniques    = ref([]);
+            const stats         = ref({});
+            const loading       = ref(false);
+
+            // Filters
+            const search         = ref('');
+            const filterTactic   = ref('');
             const showDeprecated = ref(false);
 
-            // ── filtered list ────────────────────────────────────────────────
-            const filteredTechniques = computed(() => {
-                let list = techniques.value;
-                if (!showDeprecated.value) list = list.filter(t => !t.deprecated);
-                if (search.value) {
-                    const q = search.value.toLowerCase();
-                    list = list.filter(t =>
-                        t.technique_id.toLowerCase().includes(q) ||
-                        t.name.toLowerCase().includes(q)
-                    );
-                }
-                if (filterTactic.value) {
-                    list = list.filter(t => (t.tactic_keys || []).includes(filterTactic.value));
-                }
-                return list;
-            });
+            // Pagination
+            const currentPage = ref(1);
+            const totalPages  = ref(1);
+            const total       = ref(0);
+            const perPage     = ref(50);
 
-            // ── grouped by tactic (ordered) ──────────────────────────────────
-            const groupedTechniques = computed(() => {
-                const map = {};
-                for (const t of filteredTechniques.value) {
-                    const keys = t.tactic_keys && t.tactic_keys.length ? t.tactic_keys : null;
-                    if (!keys) continue;
-                    for (const k of keys) {
-                        if (!map[k]) map[k] = [];
-                        // avoid duplicates (a technique in multiple tactics)
-                        if (!map[k].some(x => x.technique_id === t.technique_id)) {
-                            map[k].push(t);
-                        }
-                    }
-                }
-                return TACTIC_ORDER
-                    .filter(k => map[k] && map[k].length)
-                    .map(k => ({
-                        tactic:     k,
-                        label:      tacticLabel(k),
-                        techniques: map[k].sort((a, b) => a.technique_id.localeCompare(b.technique_id)),
-                    }));
-            });
+            // Sort
+            const sortBy  = ref('technique_id');
+            const sortDir = ref('asc');
 
-            const ungroupedTechniques = computed(() =>
-                filteredTechniques.value.filter(t => !(t.tactic_keys && t.tactic_keys.length))
-            );
+            // Per-row tactic expand/collapse (keyed by technique_id)
+            const expandedRows = reactive(new Set());
+            function toggleRow(tid) {
+                if (expandedRows.has(tid)) expandedRows.delete(tid);
+                else expandedRows.add(tid);
+            }
 
-            // ── fetch techniques ─────────────────────────────────────────────
+            // ── fetch techniques (server-side) ────────────────────────────────
+            let _searchTimer = null;
             async function loadTechniques() {
                 loading.value = true;
                 try {
-                    const res  = await fetch('/attack/admin/techniques');
+                    const params = new URLSearchParams({
+                        search:          search.value,
+                        tactic:          filterTactic.value,
+                        show_deprecated: showDeprecated.value,
+                        sort_by:         sortBy.value,
+                        sort_dir:        sortDir.value,
+                        page:            currentPage.value,
+                        per_page:        perPage.value,
+                    });
+                    const res  = await fetch('/attack/admin/techniques?' + params);
                     const data = await res.json();
                     techniques.value = data.techniques || [];
+                    total.value      = data.total      || 0;
+                    totalPages.value = data.pages      || 1;
+                    currentPage.value = data.page      || 1;
                 } catch (e) {
                     create_message('Failed to load techniques: ' + e, 'danger-subtle');
                 } finally {
@@ -424,8 +422,48 @@
                 await Promise.all([loadTechniques(), loadStats()]);
             }
 
+            function goToPage(p) {
+                currentPage.value = p;
+                loadTechniques();
+            }
+
+            function setSort(col) {
+                if (sortBy.value === col) {
+                    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortBy.value  = col;
+                    sortDir.value = 'asc';
+                }
+                currentPage.value = 1;
+                loadTechniques();
+            }
+
             function notify(msg) {
                 create_message(msg, 'success-subtle');
+            }
+
+            // Reset page on filter changes, debounce search
+            watch(search, () => {
+                clearTimeout(_searchTimer);
+                _searchTimer = setTimeout(() => { currentPage.value = 1; loadTechniques(); }, 350);
+            });
+            watch([filterTactic, showDeprecated, perPage], () => {
+                currentPage.value = 1;
+                loadTechniques();
+            });
+
+            // Tactic-based badge style for ID column
+            function tacticBadgeStyle(tactic) {
+                const bg     = TACTIC_BG[tactic]     || '#f3f4f6';
+                const color  = TACTIC_COLORS[tactic] || '#374151';
+                const border = TACTIC_BORDER[tactic] || '#d1d5db';
+                return {
+                    background:  bg,
+                    color:       color,
+                    border:      '1px solid ' + border,
+                    fontFamily:  'monospace',
+                    fontSize:    '.72rem',
+                };
             }
 
             onMounted(loadAll);
@@ -433,10 +471,13 @@
             return {
                 csrfToken, techniques, stats, loading,
                 search, filterTactic, showDeprecated,
-                filteredTechniques, groupedTechniques, ungroupedTechniques,
+                currentPage, totalPages, total, perPage,
+                sortBy, sortDir,
                 TACTIC_ORDER, TACTIC_COLORS, TACTIC_BG, TACTIC_BORDER,
-                tacticLabel, loadTechniques, loadAll, notify,
-                message_list,
+                tacticLabel, tacticBadgeStyle,
+                loadTechniques, loadAll, goToPage, setSort, notify,
+                expandedRows, toggleRow,
+                message_list, Math,
             };
         },
     }).mount('#main-container');

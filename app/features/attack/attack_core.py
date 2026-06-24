@@ -12,6 +12,7 @@ Key functions:
 import datetime
 import uuid as uuid_mod
 import json
+from pathlib import Path
 
 from ... import db
 from ...core.db_class.db import AttackTechnique, RuleAttackAssociation, Rule
@@ -124,6 +125,12 @@ ATTACK_STIX_URL = (
     'enterprise-attack/enterprise-attack.json'
 )
 
+# Local path set by the cti git submodule (app/modules/cti)
+_LOCAL_CTI_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / 'modules' / 'cti' / 'enterprise-attack' / 'enterprise-attack.json'
+)
+
 
 def _parse_stix_technique(obj: dict) -> dict | None:
     """Extract our fields from a STIX attack-pattern object."""
@@ -164,13 +171,17 @@ def _parse_stix_technique(obj: dict) -> dict | None:
 
 def fetch_and_update_attack_data() -> tuple[int, int]:
     """
-    Download the MITRE ATT&CK STIX bundle and upsert into AttackTechnique.
+    Load the MITRE ATT&CK STIX bundle and upsert into AttackTechnique.
+    Prefers the local cti submodule (app/modules/cti); falls back to HTTP.
     Returns (created_count, updated_count).
     """
     import urllib.request
 
-    with urllib.request.urlopen(ATTACK_STIX_URL, timeout=120) as resp:
-        bundle = json.loads(resp.read())
+    if _LOCAL_CTI_PATH.exists():
+        bundle = json.loads(_LOCAL_CTI_PATH.read_text(encoding='utf-8'))
+    else:
+        with urllib.request.urlopen(ATTACK_STIX_URL, timeout=120) as resp:
+            bundle = json.loads(resp.read())
 
     created = updated = 0
     now = datetime.datetime.utcnow()

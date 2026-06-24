@@ -114,17 +114,24 @@ def admin_list():
 @attack_blueprint.route('/admin/techniques')
 @login_required
 def admin_techniques():
-    """Paginated admin API — all techniques with rule counts."""
+    """Server-side paginated + sorted admin API for ATT&CK techniques."""
     if not current_user.is_admin():
         return jsonify({'error': 'Forbidden'}), 403
 
     from app import db
     from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
-    from sqlalchemy import func
+    from sqlalchemy import func, asc, desc, cast, Text
 
     search          = request.args.get('search', '').strip()
     tactic          = request.args.get('tactic', '').strip()
     show_deprecated = request.args.get('show_deprecated', 'false').lower() == 'true'
+    sort_by         = request.args.get('sort_by', 'technique_id')
+    sort_dir        = request.args.get('sort_dir', 'asc').lower()
+    try:
+        page     = max(1, int(request.args.get('page', 1)))
+        per_page = min(500, max(10, int(request.args.get('per_page', 50))))
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
 
     count_subq = (
         db.session.query(
@@ -150,7 +157,28 @@ def admin_techniques():
             AttackTechnique.name.ilike(like),
         ))
 
-    rows = q.order_by(AttackTechnique.technique_id).all()
+    if tactic:
+        # Works on both PostgreSQL JSON and SQLite TEXT-cast
+        q = q.filter(cast(AttackTechnique.tactic_keys, Text).ilike(f'%"{tactic}"%'))
+
+    # Sorting
+    _SORT_COLS = {
+        'technique_id':  AttackTechnique.technique_id,
+        'name':          AttackTechnique.name,
+        'rule_count':    count_subq.c.cnt,
+        'is_subtechnique': AttackTechnique.is_subtechnique,
+        'deprecated':    AttackTechnique.deprecated,
+    }
+    sort_col = _SORT_COLS.get(sort_by, AttackTechnique.technique_id)
+    order_fn = desc if sort_dir == 'desc' else asc
+    # Secondary sort by technique_id for stable ordering
+    q = q.order_by(order_fn(sort_col), AttackTechnique.technique_id)
+
+    total = q.count()
+    pages = max(1, (total + per_page - 1) // per_page)
+    page  = min(page, pages)
+
+    rows = q.offset((page - 1) * per_page).limit(per_page).all()
 
     result = []
     for tech, rule_count in rows:
@@ -158,10 +186,13 @@ def admin_techniques():
         d['rule_count'] = int(rule_count)
         result.append(d)
 
-    if tactic:
-        result = [t for t in result if tactic in (t.get('tactic_keys') or [])]
-
-    return jsonify({'techniques': result, 'total': len(result)})
+    return jsonify({
+        'techniques': result,
+        'total':      total,
+        'page':       page,
+        'pages':      pages,
+        'per_page':   per_page,
+    })
 
 
 @attack_blueprint.route('/admin/trigger_update', methods=['POST'])

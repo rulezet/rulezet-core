@@ -10,3 +10,6 @@
 [submodule "app/modules/pivotick"]
 	path = app/modules/pivotick
 	url = https://github.com/Pivotick/Pivotick.git
+[submodule "app/modules/cti"]
+	path = app/modules/cti
+	url = https://github.com/mitre/cti

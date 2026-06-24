@@ -107,7 +107,7 @@
                <!-- ── Admin (dropdown, admin only) ── -->
                {% if current_user.is_authenticated and current_user.is_admin() %}
                <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if '/admin' in request.path or request.path.startswith('/tags/admin') or request.path.startswith('/jobs') or request.path.startswith('/connector') or request.path == '/rule/bulk_tag' or request.path == '/rule/trash' %}active{% endif %}"
+                  <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if '/admin' in request.path or request.path.startswith('/tags/admin') or request.path.startswith('/attack/admin') or request.path.startswith('/jobs') or request.path.startswith('/connector') or request.path == '/rule/bulk_tag' or request.path == '/rule/trash' %}active{% endif %}"
                      href="#" role="button" data-bs-toggle="dropdown">
                      <i class="fa-solid fa-shield-halved fa-fw me-1 text-danger"></i>Admin
                   </a>
@@ -147,6 +147,8 @@
                      <li><h6 class="dropdown-header" style="font-size:.65rem;letter-spacing:.07em;text-transform:uppercase;">System</h6></li>
                      <li><a href="/tags/admin/list" class="dropdown-item {% if request.path.startswith('/tags/admin/list') %}active{% endif %}">
                            <i class="fa-solid fa-tag fa-fw me-2"></i>Tags</a></li>
+                     <li><a href="/attack/admin/list" class="dropdown-item {% if request.path.startswith('/attack/admin') %}active{% endif %}">
+                           <i class="fa-solid fa-crosshairs fa-fw me-2"></i>ATT&amp;CK</a></li>
                      <li><a href="/jobs/list" class="dropdown-item {% if request.path.startswith('/jobs') %}active{% endif %}">
                            <i class="fa-solid fa-gears fa-fw me-2"></i>Jobs</a></li>
                      <li><a href="/admin/logs" class="dropdown-item {% if request.path == '/admin/logs' %}active{% endif %}">

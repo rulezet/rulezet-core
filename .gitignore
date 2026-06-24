@@ -35,4 +35,5 @@ app/rule/output_rules
 /backup/dumps
 /static/uploads/*
 app/modules/*
+!app/modules/cti
 app/static/uploads/*

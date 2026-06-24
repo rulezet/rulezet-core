@@ -19,6 +19,19 @@ echo -e "${CYAN}🐘 Install PostgreSQL ...${RESET}"
 
 chmod +x ./launch.sh
 
+# Init required git submodules
+echo -e "${CYAN}📂 Initialising git submodules...${RESET}"
+git submodule update --init --recursive --depth 1 app/modules/rulezet-cast
+git submodule update --init --recursive --depth 1 app/modules/pivotick
+
+# CTI submodule (mitre/cti) — large repo, only initialise if not already present
+if [ ! -f "app/modules/cti/enterprise-attack/enterprise-attack.json" ]; then
+    echo -e "${CYAN}🛡️  Cloning MITRE ATT&CK CTI data (shallow, may take a moment)...${RESET}"
+    git submodule update --init --depth 1 app/modules/cti
+else
+    echo -e "${GREEN}✔ MITRE CTI submodule already present.${RESET}"
+fi
+
 . env/bin/activate
 
 echo -e "${GREEN}🎮 Launch the application...${RESET}"
