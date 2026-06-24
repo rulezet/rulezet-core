@@ -101,10 +101,14 @@ def _job_to_detail(j):
 
 # ─── UI pages ─────────────────────────────────────────────────────────────────
 
+def _running_jobs_count():
+    return BackgroundJob.query.filter(BackgroundJob.status == 'running').count()
+
+
 @jobs_blueprint.route('/list', methods=['GET'])
 @login_required
 def list_jobs():
-    return render_template('jobs/list.html')
+    return render_template('jobs/list.html', running_jobs_count=_running_jobs_count())
 
 
 @jobs_blueprint.route('/detail/<string:job_uuid>', methods=['GET'])
@@ -113,7 +117,7 @@ def job_detail_page(job_uuid):
     job, err = _get_job_or_403(job_uuid)
     if err:
         abort(404)
-    return render_template('jobs/detail.html', job=job)
+    return render_template('jobs/detail.html', job=job, running_jobs_count=_running_jobs_count())
 
 
 # ─── DataTable API ─────────────────────────────────────────────────────────────
@@ -252,21 +256,29 @@ def api_delete_job(job_uuid):
     return jsonify({"message": msg}), 200 if ok else 400
 
 
+def _resolve_job(ref):
+    """Resolve a job by integer ID or UUID string — the DataTable sends integer IDs."""
+    try:
+        return db.session.get(BackgroundJob, int(ref))
+    except (ValueError, TypeError):
+        return JobsModel.get_job_by_uuid(str(ref))
+
+
 @jobs_blueprint.route('/api/bulk', methods=['POST'])
 @login_required
 def api_bulk_jobs():
     data   = request.json or {}
     action = data.get('action')
-    uuids  = data.get('uuids', [])
+    refs   = data.get('uuids', [])   # may be int IDs or UUID strings
 
     if action not in ('cancel', 'delete'):
         return jsonify({"message": "Unknown action."}), 400
-    if not uuids:
+    if not refs:
         return jsonify({"message": "No jobs selected."}), 400
 
     ok_count = fail_count = 0
-    for uuid in uuids:
-        job = JobsModel.get_job_by_uuid(uuid)
+    for ref in refs:
+        job = _resolve_job(ref)
         if not job:
             fail_count += 1
             continue
@@ -282,8 +294,9 @@ def api_bulk_jobs():
         else:
             fail_count += 1
 
+    verb = 'cancelled' if action == 'cancel' else 'deleted'
     return jsonify({
-        "message": f"{ok_count} job(s) {action}led, {fail_count} failed.",
+        "message": f"{ok_count} job(s) {verb}, {fail_count} failed.",
         "success": ok_count,
         "failed":  fail_count,
     }), 200

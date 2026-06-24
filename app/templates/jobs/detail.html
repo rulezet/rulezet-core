@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Job — {{ job.label or job.job_type }} — Rulezet{% endblock %}
 
 {% block head %}
@@ -15,17 +16,17 @@
 
     <div v-if="page_is_loading">
 
-        <!-- ── Breadcrumb ── -->
-        <nav aria-label="breadcrumb" class="mb-3">
-            <ol class="breadcrumb mb-0" style="font-size:.75rem;">
-                <li class="breadcrumb-item"><a href="/jobs/list" class="text-decoration-none text-muted"><i class="fas fa-gear me-1"></i>Jobs</a></li>
-                <li class="breadcrumb-item active" aria-current="page" style="color:var(--subtle-text-color);font-family:monospace;">[[ job.uuid || '...' ]]</li>
-            </ol>
-        </nav>
-
-        <!-- ── Header banner ── -->
+        <!-- ── Banner ── -->
         <div class="explorer-banner mb-4">
             <i class="fa-solid fa-gear banner-watermark"></i>
+            <nav aria-label="breadcrumb" class="mb-3">
+                <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                    <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                    <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                    <li class="breadcrumb-item"><a href="/jobs/list" class="text-decoration-none text-muted">Jobs</a></li>
+                    <li class="breadcrumb-item active text-muted" aria-current="page" style="font-family:monospace;text-transform:none;">{{ job.uuid }}</li>
+                </ol>
+            </nav>
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
                 <div class="d-flex align-items-center gap-3">
                     <div class="banner-icon"><i class="fa-solid fa-gear"></i></div>
@@ -68,6 +69,8 @@
                 <span v-if="job.created_at"><i class="fas fa-clock me-1 opacity-50"></i>[[ new Date(job.created_at).toLocaleString() ]]</span>
             </p>
         </div>
+
+        {{ anav.admin_nav('jobs', jobs_count=running_jobs_count) }}
 
         <!-- ── Info grid ── -->
         <div class="jobs-detail-grid">
