@@ -51,6 +51,7 @@ import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDis
 import UserChip                 from '/static/js/components/UserChip.js'
 import CodeViewer               from '/static/js/components/code-viewer.js'
 import { create_message }       from '/static/js/toaster.js'
+import ReportModal              from '/static/js/components/ReportModal.js'
 
 const { ref, reactive, computed, watch, onMounted, onUnmounted } = Vue
 
@@ -65,6 +66,7 @@ export default {
         VulnerabilityDisplaysList,
         UserChip,
         CodeViewer,
+        ReportModal,
     },
 
     props: {
@@ -492,6 +494,22 @@ export default {
                                             </button>
                                         </li>
                                     </template>
+                                    <template v-if="currentUserIsAuthenticated">
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <report-modal
+                                                object-type="bundle"
+                                                :object-id="bundle.id"
+                                                :object-label="bundle.name"
+                                                :csrf-token="csrfToken">
+                                                <template #trigger="{ open }">
+                                                    <button class="dropdown-item rounded-2 text-danger" @click.stop="open">
+                                                        <i class="fas fa-flag me-2"></i>Report
+                                                    </button>
+                                                </template>
+                                            </report-modal>
+                                        </li>
+                                    </template>
                                 </ul>
                             </div>
                         </div>
@@ -738,6 +756,20 @@ export default {
                                                         @click="$emit('delete', bundle)">
                                                     <i class="fas fa-trash"></i> Delete
                                                 </button>
+                                            </template>
+                                            <template v-if="currentUserIsAuthenticated">
+                                                <div class="rl-action-divider"></div>
+                                                <report-modal
+                                                    object-type="bundle"
+                                                    :object-id="bundle.id"
+                                                    :object-label="bundle.name"
+                                                    :csrf-token="csrfToken">
+                                                    <template #trigger="{ open }">
+                                                        <button class="rl-action-item rl-action-item--danger" @click.stop="open">
+                                                            <i class="fas fa-flag"></i> Report
+                                                        </button>
+                                                    </template>
+                                                </report-modal>
                                             </template>
                                         </div>
                                     </div>

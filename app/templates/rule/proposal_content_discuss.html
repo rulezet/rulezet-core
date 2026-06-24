@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
 <style>
 /* ── Status colors ── */
 .pstatus-badge {
@@ -248,12 +249,22 @@
                     {% endif %}
 
                     <!-- Report -->
-                    <a :href="'/rule/report/' + proposal.rule_id"
-                       class="btn btn-sm rounded-pill px-3"
-                       style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
-                       title="Report an issue with this rule">
-                        <i class="fas fa-flag me-1"></i>Report
-                    </a>
+                    {% if current_user.is_authenticated %}
+                    <report-modal
+                        object-type="rule"
+                        :object-id="proposal.rule_id"
+                        :object-label="proposal.rule_name || 'Rule'"
+                        csrf-token="{{ csrf_token() }}">
+                        <template #trigger="{ open }">
+                            <button @click="open"
+                                class="btn btn-sm rounded-pill px-3"
+                                style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                title="Report an issue with this rule">
+                                <i class="fas fa-flag me-1"></i>Report
+                            </button>
+                        </template>
+                    </report-modal>
+                    {% endif %}
                 </div>
             </div>
 
@@ -407,7 +418,8 @@
             :can-edit-own="{{ current_user.is_authenticated | tojson }}"
             :can-delete-own="{{ current_user.is_authenticated | tojson }}"
             :can-moderate="{{ current_user.is_admin() | tojson }}"
-            :current-user-id="{{ current_user.id if current_user.is_authenticated else 0 }}">
+            :current-user-id="{{ current_user.id if current_user.is_authenticated else 0 }}"
+            csrf-token="{{ csrf_token() }}">
         </comment-thread>
 
     </div>
@@ -422,6 +434,7 @@
     import UserChip      from '/static/js/components/UserChip.js';
     import DiffViewer    from '/static/js/components/diff-viewer.js';
     import CommentThread from '/static/js/components/comments/comment-thread.js';
+    import ReportModal   from '/static/js/components/ReportModal.js';
 
     const CAN_DECIDE  = {{ can_decide | tojson }};
     const RULE_ID     = {{ rule.id }};
@@ -433,6 +446,7 @@
             'user-chip':      UserChip,
             'diff-viewer':    DiffViewer,
             'comment-thread': CommentThread,
+            'report-modal':   ReportModal,
         },
         setup() {
             const proposal       = ref(null);

@@ -53,6 +53,7 @@ import UserChip                 from '/static/js/components/UserChip.js'
 import CodeViewer               from '/static/js/components/code-viewer.js'
 import RuleExportAction         from '/static/js/rule/ruleExportAction.js'
 import { create_message }       from '/static/js/toaster.js'
+import ReportModal              from '/static/js/components/ReportModal.js'
 
 const { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue
 
@@ -70,6 +71,7 @@ export default {
         UserChip,
         CodeViewer,
         RuleExportAction,
+        ReportModal,
     },
 
     props: {
@@ -546,11 +548,21 @@ export default {
                                             <i class="fas fa-eye me-2 text-muted"></i>View Detail
                                         </a>
                                     </li>
-                                    <li>
-                                        <a class="dropdown-item rounded-2" :href="'/rule/report/' + rule.id">
-                                            <i class="fas fa-flag me-2 text-muted"></i>Report Issue
-                                        </a>
-                                    </li>
+                                    <template v-if="currentUserIsAuthenticated">
+                                        <li>
+                                            <report-modal
+                                                object-type="rule"
+                                                :object-id="rule.id"
+                                                :object-label="rule.title"
+                                                :csrf-token="csrfToken">
+                                                <template #trigger="{ open }">
+                                                    <button class="dropdown-item rounded-2" @click.stop="open">
+                                                        <i class="fas fa-flag me-2 text-muted"></i>Report Issue
+                                                    </button>
+                                                </template>
+                                            </report-modal>
+                                        </li>
+                                    </template>
                                     <template v-if="numericCurrentUserId && (isOwner(rule) || currentUserIsAdmin)">
                                         <li><hr class="dropdown-divider"></li>
                                         <li>
@@ -747,10 +759,19 @@ export default {
                                                class="rl-action-item">
                                                 <i class="fas fa-eye"></i> View
                                             </a>
-                                            <a :href="'/rule/report/' + rule.id"
-                                               class="rl-action-item rl-action-item--muted">
-                                                <i class="fas fa-flag"></i> Report
-                                            </a>
+                                            <template v-if="currentUserIsAuthenticated">
+                                                <report-modal
+                                                    object-type="rule"
+                                                    :object-id="rule.id"
+                                                    :object-label="rule.title"
+                                                    :csrf-token="csrfToken">
+                                                    <template #trigger="{ open }">
+                                                        <button class="rl-action-item rl-action-item--muted" @click.stop="open">
+                                                            <i class="fas fa-flag"></i> Report
+                                                        </button>
+                                                    </template>
+                                                </report-modal>
+                                            </template>
                                             <template v-if="numericCurrentUserId && (isOwner(rule) || currentUserIsAdmin)">
                                                 <div class="rl-action-divider"></div>
                                                 <a :href="'/rule/edit_rule/' + rule.id"

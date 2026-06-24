@@ -129,8 +129,8 @@
                      <!-- Content -->
                      <li><h6 class="dropdown-header" style="font-size:.65rem;letter-spacing:.07em;text-transform:uppercase;">Content</h6></li>
                      <li>
-                        <a href="/rule/admin/rules_reported" class="dropdown-item d-flex justify-content-between align-items-center {% if request.path == '/rule/admin/rules_reported' %}active{% endif %}">
-                           <span><i class="fa-solid fa-triangle-exclamation fa-fw me-2"></i>Reported Rules</span>
+                        <a href="/report/admin" class="dropdown-item d-flex justify-content-between align-items-center {% if request.path.startswith('/report/admin') %}active{% endif %}">
+                           <span><i class="fa-solid fa-triangle-exclamation fa-fw me-2"></i>Reports</span>
                            <span v-if="reports_to_check > 0" class="badge rounded-pill bg-danger ms-2">[[ reports_to_check ]]</span>
                         </a>
                      </li>
@@ -384,7 +384,7 @@
          }
          async function getReportsToCheck() {
             try {
-               const res = await fetch('/rule/repport_to_check')
+               const res = await fetch('/report/count')
                reports_to_check.value = (await res.json()).count || 0
             } catch {}
          }

@@ -9,6 +9,7 @@ const { ref, computed, onMounted, nextTick } = Vue
 import { apiFetch } from '/static/js/constants.js'
 import { create_message } from '/static/js/toaster.js'
 import UserChip from '/static/js/components/UserChip.js'
+import ReportModal from '/static/js/components/ReportModal.js'
 
 const TOAST = { SUCCESS: 'success', WARNING: 'warning', ERROR: 'danger', INFO: 'info' }
 
@@ -41,6 +42,7 @@ const CommentItem = {
         canDeleteOwn: { type: Boolean, default: false },
         canModerate: { type: Boolean, default: false },
         currentUserId: { type: Number, default: 0 },
+        csrfToken: { type: String, default: '' },
     },
     setup(props) {
         const collapsed = ref(false)
@@ -304,6 +306,17 @@ const CommentItem = {
                 title="Permanently delete this comment and all its replies">
             <i class="fas fa-skull"></i> Hard delete
         </button>
+        <report-modal v-if="currentUserId && !isDeleted && currentUserId !== comment.created_by"
+            object-type="comment"
+            :object-id="comment.id"
+            object-label="comment"
+            :csrf-token="csrfToken">
+            <template #trigger="{ open }">
+                <button class="cm-action-btn" @click="open" title="Report this comment">
+                    <i class="fas fa-flag"></i> Report
+                </button>
+            </template>
+        </report-modal>
     </div>
 
     <!-- Edit form -->
@@ -347,7 +360,8 @@ const CommentItem = {
             :can-edit-own="canEditOwn"
             :can-delete-own="canDeleteOwn"
             :can-moderate="canModerate"
-            :current-user-id="currentUserId" />
+            :current-user-id="currentUserId"
+            :csrf-token="csrfToken" />
 
         <button v-if="hasMoreReplies" class="cm-load-more" @click="loadReplies()"
                 :disabled="repliesLoading">
@@ -359,8 +373,8 @@ const CommentItem = {
     `,
 }
 
-// Self-referential for recursion (also includes UserChip)
-CommentItem.components = { CommentItem, UserChip }
+// Self-referential for recursion (also includes UserChip and ReportModal)
+CommentItem.components = { CommentItem, UserChip, ReportModal }
 
 // ── CommentThread ──────────────────────────────────────────────────────────
 
@@ -376,6 +390,7 @@ const CommentThread = {
         canDeleteOwn: { type: Boolean, default: false },
         canModerate: { type: Boolean, default: false },
         currentUserId: { type: Number, default: 0 },
+        csrfToken: { type: String, default: '' },
     },
     setup(props) {
         const comments = ref([])
@@ -515,7 +530,8 @@ const CommentThread = {
             :can-edit-own="canEditOwn"
             :can-delete-own="canDeleteOwn"
             :can-moderate="canModerate"
-            :current-user-id="currentUserId" />
+            :current-user-id="currentUserId"
+            :csrf-token="csrfToken" />
     </div>
 
     <!-- Loading indicator -->

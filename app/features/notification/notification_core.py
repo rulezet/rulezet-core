@@ -278,7 +278,7 @@ def notify_admins_report_created(report, rule, reporter):
                 notif_type = 'report_submitted',
                 title      = f'Rule reported: "{rule_title}"',
                 body       = f'{reporter_name} submitted a report — reason: {report.reason or "unspecified"}',
-                link       = '/rule/admin/rules_reported',
+                link       = '/report/admin',
                 icon       = _TYPE_ICON['report_submitted'],
                 is_read    = False,
                 created_at = datetime.datetime.utcnow(),

@@ -2006,10 +2006,10 @@ def get_bad_rules_licenses_usage():
 
 @rule_blueprint.route('/report/<int:rule_id>', methods=['GET', 'POST'])
 @login_required
-def report(rule_id) -> jsonify:
-    """Redirect to the repport secion"""
-    return render_template('rule/report.html' , rule_id=rule_id)
-    
+def report(rule_id):
+    from flask import redirect
+    return redirect(f'/rule/detail_rule/{rule_id}')
+
 @rule_blueprint.route('/get_rule', methods=['GET', 'POST'])
 @login_required
 def get_rule() -> jsonify:
@@ -2023,166 +2023,35 @@ def get_rule() -> jsonify:
 @rule_blueprint.route('/report_rule', methods=['POST'])
 @login_required
 def report_rule():
-    """Create a report for a specific rule (delegated to service)."""
-    data = request.get_json()
-    result, is_new = RuleModel.create_repport(current_user.id, data.get('rule_id'), data.get('message', ''), data.get('reason'))
-
-    if result:
-        rule_id_r = data.get('rule_id')
-        log_activity(
-            "rule.report",
-            f"Reported rule id={rule_id_r}: {data.get('reason', '')}",
-            target_type="rule", target_id=rule_id_r,
-            extra={"reason": data.get('reason'), "message": data.get('message', ''), "is_new": is_new},
-            is_public=False,
-        )
+    """Legacy endpoint — forward to unified report system."""
+    from app.features.report.report_core import create_report, notify_admins, VALID_REASONS
+    data      = request.get_json(silent=True) or {}
+    rule_id   = data.get('rule_id')
+    reason    = (data.get('reason') or '').strip()
+    message   = (data.get('message') or '').strip()
+    if not rule_id or not reason:
+        return jsonify({'success': False, 'message': 'rule_id and reason required',
+                        'toast_class': 'danger-subtle'}), 400
+    try:
+        rpt, is_new = create_report(current_user.id, 'rule', int(rule_id), reason, message)
         if is_new:
-            try:
-                from app.features.notification.notification_core import notify_admins_report_created
-                rule_obj = RuleModel.get_rule(rule_id_r)
-                notify_admins_report_created(result, rule_obj, current_user)
-            except Exception as _e:
-                print(f"[rule] notify_admins_report_created error: {_e}")
-        return {
-            "message": "Report created successfully.",
-            "toast_class": "success-subtle",
-            "success": True}, 200
-    else:
-        return {"success": False,
-                "message": "Error to create the report",
-                "toast_class": "danger-subtle"
-                }, 500 
+            notify_admins(rpt, current_user)
+        return jsonify({'success': True, 'message': 'Report submitted.',
+                        'toast_class': 'success-subtle'}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e),
+                        'toast_class': 'danger-subtle'}), 500
 
 @rule_blueprint.route('/admin/rules_reported', methods=['GET'])
 @login_required
 def rules_repported():
-    """Redirect to the admin report secion"""
-    return render_template('admin/report_rule.html')
+    from flask import redirect
+    return redirect('/report/admin')
 
 @rule_blueprint.route("/repport_to_check")
-def repport_to_check() -> jsonify:
-    """Get the number of changeto check"""
-    if current_user.is_admin():
-        count = RuleModel.get_total_repport_to_check_admin()
-    else:
-        count = 0
-    return jsonify({"count": count})
-
-
-
-@rule_blueprint.route("/reports_datatable", methods=['GET'])
-@login_required
-def reports_datatable():
-    """DataTable-compatible endpoint for reported rules."""
-    if not current_user.is_admin():
-        return jsonify({"message": "Forbidden"}), 403
-    page     = request.args.get('page',     1,   type=int)
-    per_page = request.args.get('per_page', 20,  type=int)
-    search   = request.args.get('search',   '',  type=str).strip()
-    sort     = request.args.get('sort',     'created_at', type=str)
-    dir_     = request.args.get('dir',      'desc', type=str)
-
-    from app.core.db_class.db import RepportRule, Rule, User
-    q = RepportRule.query.join(Rule, RepportRule.rule_id == Rule.id, isouter=True) \
-                         .join(User, RepportRule.user_id == User.id, isouter=True)
-    if search:
-        like = f'%{search}%'
-        q = q.filter(db.or_(
-            RepportRule.reason.ilike(like),
-            RepportRule.message.ilike(like),
-            Rule.title.ilike(like),
-            User.first_name.ilike(like),
-        ))
-    sort_col = {'created_at': RepportRule.created_at, 'reason': RepportRule.reason,
-                'rule_name': Rule.title}.get(sort, RepportRule.created_at)
-    q = q.order_by(sort_col.desc() if dir_ == 'desc' else sort_col.asc())
-    pag = q.paginate(page=page, per_page=per_page, error_out=False)
-    return jsonify({
-        "items":       [r.to_json() for r in pag.items],
-        "total":       pag.total,
-        "total_pages": pag.pages,
-    })
-
-
-@rule_blueprint.route("/reports_bulk_action", methods=['POST'])
-@login_required
-def reports_bulk_action():
-    """Bulk delete reports or their rules. Body: {action, report_ids}."""
-    if not current_user.is_admin():
-        return jsonify({"message": "Forbidden"}), 403
-    data       = request.get_json(silent=True) or {}
-    action     = data.get('action')
-    report_ids = data.get('report_ids', [])
-    if not report_ids or action not in ('delete_reports', 'delete_rules'):
-        return jsonify({"message": "Invalid payload"}), 400
-
-    from app.core.db_class.db import RepportRule
-    ok = fail = 0
-    for rid in report_ids:
-        report = RepportRule.query.get(rid)
-        if not report:
-            fail += 1
-            continue
-        if action == 'delete_reports':
-            if RuleModel.delete_report(rid):
-                ok += 1
-            else:
-                fail += 1
-        else:
-            rule_id = report.rule_id
-            result  = RuleModel.soft_delete_rule(rule_id, current_user.id)
-            if result:
-                ok += 1
-            else:
-                fail += 1
-    log_activity(
-        "rule.delete" if action == "delete_rules" else "admin.delete_reports",
-        f"Bulk reports action '{action}': {ok} succeeded, {fail} failed",
-        extra={"action": action, "report_ids": report_ids, "ok": ok, "fail": fail},
-        is_public=False,
-    )
-    return jsonify({"ok": ok, "fail": fail,
-                    "message": f"{ok} deleted" + (f", {fail} errors" if fail else ""),
-                    "toast_class": "warning-subtle" if fail else "success-subtle"})
-
-
-@rule_blueprint.route("/get_rules_reported", methods=['GET'])
-def   get_rules_reported() -> jsonify:
-    """Get all the rules repported on a page"""
-    page = request.args.get('page', 1, type=int)
-    if current_user.is_admin():
-        rules = RuleModel.get_repported_rule(page)
-        if rules:
-            return {"success": True,
-                    "rule": [rule.to_json() for rule in rules],
-                    "total_pages": rules.pages
-                }
-    
-        return {"message": "No Rule"}, 404
-
-    else:
-        return render_template("access_denied.html")
-    
-
-@rule_blueprint.route("/delete_report", methods=['GET'])
-def   deleteReport() -> jsonify:
-    """Delete report"""
-    id  = request.args.get("id")
-    
-    if current_user.is_admin():
-        check = RuleModel.delete_report(id)
-        if check:
-            return {"success": True,
-                    "message": "Report deleted successfully.",
-                    "toast_class": "success-subtle"
-                    }, 200
-    
-        return {"message": "No Repport",
-                "success": False,
-                "toast_class": "danger-subtle"
-                }, 404
-    else:
-        return render_template("access_denied.html")
+def repport_to_check():
+    from flask import redirect
+    return redirect('/report/count')
     
 
 ################

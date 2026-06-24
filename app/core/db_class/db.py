@@ -767,6 +767,80 @@ class RepportRule(db.Model):
             }
     
 
+class Report(db.Model):
+    """Unified report model for rules, bundles, and comments."""
+    __tablename__ = 'report'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    object_type = db.Column(db.String(20), nullable=False, index=True)   # 'rule' | 'bundle' | 'comment'
+    object_id   = db.Column(db.Integer, nullable=False, index=True)
+    reason      = db.Column(db.String(100), nullable=False)
+    message     = db.Column(db.Text, nullable=True)
+    created_at  = db.Column(db.DateTime,
+                            default=lambda: datetime.datetime.now(datetime.timezone.utc),
+                            index=True)
+    status        = db.Column(db.String(20), default='pending', nullable=False, index=True)
+    checked_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    checked_at    = db.Column(db.DateTime, nullable=True)
+
+    user       = db.relationship('User', foreign_keys=[user_id], backref=db.backref('reports_submitted', lazy='dynamic'))
+    checked_by = db.relationship('User', foreign_keys=[checked_by_id], backref=db.backref('reports_checked', lazy='dynamic'))
+
+    def get_object_label(self):
+        """Human-readable name of the reported object."""
+        try:
+            if self.object_type == 'rule':
+                obj = Rule.query.get(self.object_id)
+                return obj.title if obj else f'Rule #{self.object_id}'
+            if self.object_type == 'bundle':
+                obj = Bundle.query.get(self.object_id)
+                return obj.name if obj else f'Bundle #{self.object_id}'
+            if self.object_type == 'comment':
+                obj = UnifiedComment.query.get(self.object_id)
+                if obj and obj.object_type == 'proposal':
+                    return f'Comment on proposal #{obj.object_id}'
+                return f'Comment #{self.object_id}'
+        except Exception:
+            pass
+        return f'{self.object_type} #{self.object_id}'
+
+    def get_object_url(self):
+        if self.object_type == 'rule':
+            return f'/rule/detail_rule/{self.object_id}'
+        if self.object_type == 'bundle':
+            return f'/bundle/detail/{self.object_id}'
+        if self.object_type == 'comment':
+            c = UnifiedComment.query.get(self.object_id)
+            if c:
+                if c.object_type == 'rule':
+                    return f'/rule/detail_rule/{c.object_id}?comment={c.id}'
+                if c.object_type == 'bundle':
+                    return f'/bundle/detail/{c.object_id}?comment={c.id}'
+                if c.object_type == 'proposal':
+                    return f'/rule/proposal_content_discuss?id={c.object_id}&comment={c.id}'
+        return '#'
+
+    def to_json(self):
+        reporter = self.user
+        return {
+            'id':              self.id,
+            'user_id':         self.user_id,
+            'reporter_name':   reporter.get_username() if reporter else '?',
+            'user_avatar':     reporter.get_avatar_url() if reporter else None,
+            'object_type':     self.object_type,
+            'object_id':       self.object_id,
+            'object_label':    self.get_object_label(),
+            'object_url':      self.get_object_url(),
+            'reason':          self.reason,
+            'message':         self.message,
+            'created_at':      self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'status':          self.status,
+            'checked_by_name': self.checked_by.get_username() if self.checked_by else None,
+            'checked_at':      self.checked_at.strftime('%Y-%m-%d %H:%M') if self.checked_at else None,
+        }
+
+
 class RuleUpdateHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rule_id = db.Column(db.Integer, db.ForeignKey('rule.id'), nullable=False)

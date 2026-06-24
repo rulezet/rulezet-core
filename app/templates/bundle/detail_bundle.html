@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/pvt-dark.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
 
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <style>
@@ -202,6 +203,24 @@
                                 <i class="fa-solid fa-trash me-1"></i>Delete
                             </button>
                             </template>
+
+                            {% if current_user.is_authenticated %}
+                            <report-modal
+                                object-type="bundle"
+                                :object-id="bundle.id"
+                                :object-label="bundle.name"
+                                csrf-token="{{ csrf_token() }}">
+                                <template #trigger="{ open }">
+                                    <button @click="open"
+                                        class="btn btn-sm rounded-pill px-3"
+                                        style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                        title="Report an issue with this bundle">
+                                        <i class="fas fa-flag me-1"></i>Report
+                                    </button>
+                                </template>
+                            </report-modal>
+                            {% endif %}
+
                             <!-- Modal-->
                             <div class="modal fade" :id="'delete_bundle_modal_'+bundle.id" tabindex="-1"
                                 aria-hidden="true" style="z-index: 2000;">
@@ -374,7 +393,8 @@
                 :can-edit-own="{{ current_user.is_authenticated | tojson }}"
                 :can-delete-own="{{ current_user.is_authenticated | tojson }}"
                 :can-moderate="{{ current_user.is_admin() | tojson }}"
-                :current-user-id="{{ current_user.id if current_user.is_authenticated else 0 }}">
+                :current-user-id="{{ current_user.id if current_user.is_authenticated else 0 }}"
+                csrf-token="{{ csrf_token() }}">
             </comment-thread>
         </div>
     </template>
@@ -405,6 +425,7 @@
     import RuleList                  from '/static/js/rule/ruleList.js';
     import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
+    import ReportModal from '/static/js/components/ReportModal.js';
 
     const csrfToken = '{{ csrf_token() }}';
 
@@ -421,6 +442,7 @@
             'rule-list': RuleList,
             'tags-displays-list': TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
+            'report-modal': ReportModal,
         },
         setup() {
             /**
