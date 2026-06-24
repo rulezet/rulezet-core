@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <style>
 [v-cloak] { display: none; }
@@ -116,7 +117,7 @@
     {{ nav.detail_rule_nav(rule, 'propose_edit', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
 
     {% if current_user.is_authenticated %}
-    <form id="proposalForm" action="{{ url_for('rule.propose_edit', rule_id=rule.id) }}" method="post">
+    <form id="proposalForm" action="{{ url_for('rule.propose_edit', rule_id=rule.id) }}" method="post" @submit.prevent>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <input type="hidden" name="edit_type" :value="editType" />
 
@@ -183,6 +184,14 @@
                 </span>
             </div>
             <div class="pe-card__body">
+                <!-- Inline error -->
+                <div v-if="submitError" class="d-flex align-items-start gap-2 mb-3 px-3 py-2 rounded-3"
+                     style="background:rgba(220,53,69,.08);border:1px solid rgba(220,53,69,.3);font-size:.83rem;color:#dc3545;">
+                    <i class="fa-solid fa-circle-exclamation mt-1 flex-shrink-0"></i>
+                    <span>[[ submitError ]]</span>
+                    <button type="button" class="btn-close btn-close-sm ms-auto" style="font-size:.6rem;filter:invert(27%) sepia(99%) saturate(1200%) hue-rotate(330deg);" @click="submitError = null"></button>
+                </div>
+
                 <smart-editor
                     v-model="proposalContent"
                     mode="code"
@@ -193,26 +202,42 @@
                     max-height="700px">
                 </smart-editor>
 
-                <!-- Original content toggle -->
-                <div class="mt-3 pt-3" style="border-top:1px solid var(--border-color);">
-                    <div class="pe-orig-toggle" :class="{ open: showOriginal }" @click="showOriginal = !showOriginal">
+                <!-- Toggles: original + diff -->
+                <div class="mt-3 pt-3 d-flex gap-2" style="border-top:1px solid var(--border-color);">
+                    <div class="pe-orig-toggle" :class="{ open: showOriginal }" @click="showOriginal = !showOriginal; if(showOriginal) showDiff = false;">
                         <i class="fa-solid fa-chevron-right chevron"></i>
                         <i class="fa-solid fa-file-code text-muted"></i>
-                        Show original rule content for reference
-                        <span class="ms-auto badge" style="font-size:.65rem;background:var(--light-bg-color);color:var(--subtle-text-color);border:1px solid var(--border-color);border-radius:6px;">
+                        Show original
+                        <span class="ms-2 badge" style="font-size:.65rem;background:var(--light-bg-color);color:var(--subtle-text-color);border:1px solid var(--border-color);border-radius:6px;">
                             [[ originalContent ? originalContent.length + ' chars' : '' ]]
                         </span>
                     </div>
-                    <div v-if="showOriginal" class="mt-2">
-                        <smart-editor
-                            :model-value="originalContent"
-                            mode="code"
-                            :language="ruleFormat"
-                            min-height="200px"
-                            max-height="400px"
-                            :read-only="true">
-                        </smart-editor>
+                    <div class="pe-orig-toggle ms-3" :class="{ open: showDiff }" @click="showDiff = !showDiff; if(showDiff) showOriginal = false;">
+                        <i class="fa-solid fa-chevron-right chevron"></i>
+                        <i class="fa-solid fa-code-compare text-muted"></i>
+                        Show diff preview
                     </div>
+                </div>
+
+                <div v-if="showOriginal" class="mt-2">
+                    <smart-editor
+                        :model-value="originalContent"
+                        mode="code"
+                        :language="ruleFormat"
+                        min-height="200px"
+                        max-height="400px"
+                        :read-only="true">
+                    </smart-editor>
+                </div>
+
+                <div v-if="showDiff" class="mt-2">
+                    <diff-viewer
+                        :initial-left="originalContent"
+                        :initial-right="proposalContent"
+                        left-label="Current rule"
+                        right-label="Your proposal"
+                        mode="read">
+                    </diff-viewer>
                 </div>
             </div>
         </div>
@@ -224,8 +249,11 @@
                style="background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);">
                 <i class="fa-solid fa-arrow-left me-1"></i>View all proposals
             </a>
-            <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm fw-bold">
-                <i class="fas fa-paper-plane me-1"></i>Submit Proposal
+            <button type="button" @click="submitProposal" :disabled="submitting"
+                    class="btn btn-primary rounded-pill px-4 shadow-sm fw-bold">
+                <span v-if="submitting" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="fas fa-paper-plane me-1"></i>
+                [[ submitting ? 'Submitting…' : 'Submit Proposal' ]]
             </button>
         </div>
 
@@ -244,23 +272,28 @@
 {% block script %}
 <script type="module">
 import SmartEditor from '/static/js/components/smart-editor.js';
+import DiffViewer  from '/static/js/components/diff-viewer.js';
 import { create_message } from '/static/js/toaster.js';
 const { createApp, ref, onMounted } = Vue;
 
 const RULE_ID     = {{ rule.id }};
 const RULE_FORMAT = '{{ rule.format or "text" }}';
+const CSRF        = '{{ csrf_token() }}';
 
 createApp({
     delimiters: ['[[', ']]'],
-    components: { SmartEditor },
+    components: { SmartEditor, DiffViewer },
     setup() {
         const proposalContent  = ref('');
         const originalContent  = ref('');
         const ruleFormat       = ref(RULE_FORMAT);
         const showOriginal     = ref(false);
+        const showDiff         = ref(false);
         const editType         = ref('content_update');
         const proposalMessage  = ref('');
         const messageMode      = ref('text');
+        const submitting       = ref(false);
+        const submitError      = ref(null);
 
         const editTypes = [
             { value: 'content_update', label: 'Content update',  icon: 'fa-solid fa-code' },
@@ -290,10 +323,46 @@ createApp({
             }
         });
 
+        async function submitProposal() {
+            if (submitting.value) return;
+            submitting.value = true;
+            submitError.value = null;
+            try {
+                const fd = new FormData();
+                fd.append('csrf_token',   CSRF);
+                fd.append('rule_content', proposalContent.value);
+                fd.append('message',      proposalMessage.value);
+                fd.append('edit_type',    editType.value);
+
+                const res  = await fetch(`/rule/propose_edit/${RULE_ID}`, {
+                    method:  'POST',
+                    headers: { 'Accept': 'application/json' },
+                    body:    fd,
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    submitError.value = data.message || 'An error occurred.';
+                    create_message(data.message, 'danger');
+                } else {
+                    create_message(data.message, data.toast_class || 'success');
+                    if (data.redirect_url) {
+                        setTimeout(() => { window.location.href = data.redirect_url; }, 900);
+                    }
+                }
+            } catch {
+                const msg = 'Network error — please try again.';
+                submitError.value = msg;
+                create_message(msg, 'danger');
+            } finally {
+                submitting.value = false;
+            }
+        }
+
         return {
             proposalContent, originalContent, ruleFormat,
-            showOriginal, editType, editTypes,
+            showOriginal, showDiff, editType, editTypes,
             proposalMessage, messageMode, messageModes,
+            submitting, submitError, submitProposal,
         };
     }
 }).mount('#pe-app');

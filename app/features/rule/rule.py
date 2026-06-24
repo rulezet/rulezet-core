@@ -1140,34 +1140,38 @@ def get_rules_propose_page() -> jsonify:
 @rule_blueprint.route('/propose_edit/<int:rule_id>', methods=['POST'])
 @login_required
 def propose_edit(rule_id) -> redirect:
-    """Create a new edit (like a change request)"""
+    """Create a new edit (like a change request). Returns JSON when Accept: application/json."""
+    is_ajax = request.headers.get('Accept', '').startswith('application/json')
+
+    def _err(msg, code=400):
+        if is_ajax:
+            return jsonify({"success": False, "message": msg, "toast_class": "danger"}), code
+        flash(msg, "error")
+        return redirect(url_for('rule.detail_rule_propose_edit', rule_id=rule_id))
+
     data = request.form
     proposed_content = data.get('rule_content')
     message = data.get('message')
+
     if not proposed_content:
-        flash("Proposed content cannot be empty.", "error")
-        # return redirect(url_for('rule.detail_rule', rule_id=rule_id))
-        return redirect(url_for('rule.detail_rule_propose_edit', rule_id=rule_id))
-    
-    # verify if the proposed content is different from the current content and verify the syntax
+        return _err("Proposed content cannot be empty.")
 
     rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return _err("Rule not found.", 404)
 
-    # ignore the formatting
-    current_normalized = "".join(rule.to_string.split())
+    current_normalized  = "".join(rule.to_string.split())
     proposed_normalized = "".join(proposed_content.split())
-    
+
     if current_normalized == proposed_normalized:
-        flash("Proposed content is the same as the current content (ignoring formatting).", "warning")
-        return redirect(url_for('rule.detail_rule_propose_edit', rule_id=rule_id))
-    
+        return _err("Proposed content is the same as the current content (ignoring formatting).")
+
     rule_dict = rule.to_json()
     rule_dict['to_string'] = proposed_content
-    valide , error = verify_syntax_rule_by_format(rule_dict)
+    valide, error = verify_syntax_rule_by_format(rule_dict)
     if not valide:
-        flash(f"Syntax error in proposed content: {error}", "error")
-        return redirect(url_for('rule.detail_rule_propose_edit', rule_id=rule_id))
-    
+        return _err(f"Syntax error in proposed content: {error}")
+
     edit_type = data.get('edit_type', 'content_update')
     form = {
         "rule_id": rule_id,
@@ -1176,36 +1180,40 @@ def propose_edit(rule_id) -> redirect:
         "edit_type": edit_type,
     }
 
-    success , proposal_id = RuleModel.propose_edit_core(form, current_user.id)
-    if success:
-        # add to gamification 
-        gamification = AccountModel.get_or_create_gamification_profile(current_user.id)
-        if gamification == None:
-            flash("Request sended but fail to update gamification.", "error")
-            return redirect(url_for('rule.detail_rule', rule_id=rule_id)) 
-        
-        _ = AccountModel.update_propose_edit_gamification(gamification.id , "add_one_to_suggested")
+    success, proposal_id = RuleModel.propose_edit_core(form, current_user.id)
+    if not success:
+        return _err("Failed to save proposal.", 500)
 
+    gamification = AccountModel.get_or_create_gamification_profile(current_user.id)
+    if gamification:
+        AccountModel.update_propose_edit_gamification(gamification.id, "add_one_to_suggested")
 
-        try:
-            from app.features.notification.notification_core import notify_proposal_submitted
-            from app.core.db_class.db import RuleEditProposal as ProposalModel
-            proposal_obj = ProposalModel.query.get(proposal_id)
-            if proposal_obj:
-                notify_proposal_submitted(proposal_obj, rule)
-        except Exception as _e:
-            print(f"[rule] notify_proposal_submitted error: {_e}")
+    try:
+        from app.features.notification.notification_core import notify_proposal_submitted
+        from app.core.db_class.db import RuleEditProposal as ProposalModel
+        proposal_obj = ProposalModel.query.get(proposal_id)
+        if proposal_obj:
+            notify_proposal_submitted(proposal_obj, rule)
+    except Exception as _e:
+        print(f"[rule] notify_proposal_submitted error: {_e}")
 
-        log_activity(
-            "rule.propose_edit",
-            f"Submitted an edit proposal for rule '{rule.title}' (id={rule_id})",
-            target_type="rule", target_id=rule_id, target_uuid=rule.uuid,
-            extra={"proposal_id": proposal_id, "message": message or ""},
-            is_public=False,
-        )
-        flash("Request sended.", "success", f"/rule/proposal_content_discuss?id={proposal_id}")
-    else:
-        flash("Request sended but fail.", "error")
+    log_activity(
+        "rule.propose_edit",
+        f"Submitted an edit proposal for rule '{rule.title}' (id={rule_id})",
+        target_type="rule", target_id=rule_id, target_uuid=rule.uuid,
+        extra={"proposal_id": proposal_id, "message": message or ""},
+        is_public=False,
+    )
+
+    discuss_url = f"/rule/proposal_content_discuss?id={proposal_id}"
+    if is_ajax:
+        return jsonify({
+            "success": True,
+            "message": "Proposal submitted successfully!",
+            "toast_class": "success",
+            "redirect_url": discuss_url,
+        })
+    flash("Request sended.", "success", discuss_url)
     return redirect(url_for('rule.detail_rule', rule_id=rule_id))
 
 @rule_blueprint.route("/validate_proposal", methods=['GET'])
