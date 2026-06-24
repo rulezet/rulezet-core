@@ -52,6 +52,7 @@ const MultiAttackFilter = {
     props: {
         modelValue:  { type: Array,  default: () => [] },
         placeholder: { type: String, default: 'Filter by ATT&CK technique…' },
+        apiEndpoint: { type: String, default: '/attack/techniques/usage' },
     },
     emits: ['update:modelValue', 'change'],
     delimiters: ['[[', ']]'],
@@ -70,7 +71,7 @@ const MultiAttackFilter = {
         async function fetchTechniques() {
             loading.value = true;
             try {
-                const res  = await fetch('/attack/techniques/usage');
+                const res  = await fetch(props.apiEndpoint);
                 const data = await res.json();
                 allTechniques.value = data.techniques || [];
 

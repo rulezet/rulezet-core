@@ -19,6 +19,49 @@ from ...core.db_class.db import AttackTechnique, RuleAttackAssociation, Rule
 
 # ── Read ──────────────────────────────────────────────────────────────────────
 
+def get_techniques_for_bundles_batch(bundle_ids: list, max_per_bundle: int = 5) -> dict:
+    """Return {bundle_id: [technique_json, ...]} for a list of bundle IDs (top N by rule count)."""
+    if not bundle_ids:
+        return {}
+    from app.core.db_class.db import BundleRuleAssociation
+
+    br_rows = (
+        db.session.query(BundleRuleAssociation.bundle_id, BundleRuleAssociation.rule_id)
+        .filter(BundleRuleAssociation.bundle_id.in_(bundle_ids))
+        .all()
+    )
+    rule_to_bundles: dict = {}
+    all_rule_ids: set = set()
+    for row in br_rows:
+        all_rule_ids.add(row.rule_id)
+        rule_to_bundles.setdefault(row.rule_id, []).append(row.bundle_id)
+
+    result = {bid: [] for bid in bundle_ids}
+    if not all_rule_ids:
+        return result
+
+    atk_rows = (
+        db.session.query(RuleAttackAssociation.rule_id, RuleAttackAssociation.technique_id)
+        .filter(RuleAttackAssociation.rule_id.in_(all_rule_ids))
+        .all()
+    )
+    tech_ids = list({r.technique_id for r in atk_rows})
+    tech_map = {t.technique_id: t for t in AttackTechnique.query.filter(
+        AttackTechnique.technique_id.in_(tech_ids)).all()} if tech_ids else {}
+
+    bundle_counts: dict = {}
+    for ar in atk_rows:
+        for bid in rule_to_bundles.get(ar.rule_id, []):
+            bundle_counts.setdefault(bid, {})
+            bundle_counts[bid][ar.technique_id] = bundle_counts[bid].get(ar.technique_id, 0) + 1
+
+    for bid, counts in bundle_counts.items():
+        top = sorted(counts.items(), key=lambda x: -x[1])[:max_per_bundle]
+        result[bid] = [tech_map[tid].to_json() for tid, _ in top if tid in tech_map]
+
+    return result
+
+
 def get_techniques_for_rules_batch(rule_ids: list) -> dict:
     """Return {rule_id: [technique_json, ...]} for a list of rule IDs (one query)."""
     if not rule_ids:

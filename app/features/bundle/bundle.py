@@ -1155,11 +1155,13 @@ def bundle_data_table():
     tags_raw     = request.args.get('tags',         '',   type=str) or ''
     vulns_raw    = request.args.get('vulnerabilities', '', type=str) or ''
     creators_raw = request.args.get('creators',    '',   type=str) or ''
+    attacks_raw  = request.args.get('attacks',     '',   type=str) or ''
     access       = request.args.get('access',      '',   type=str)  # 'public' | 'private' | ''
 
     tag_names    = [t.strip() for t in tags_raw.split(',')      if t.strip()]
     vuln_list    = [v.strip() for v in vulns_raw.split(',')     if v.strip()]
     creator_list = [c.strip() for c in creators_raw.split(',')  if c.strip()]
+    attack_ids   = [a.strip().upper() for a in attacks_raw.split(',') if a.strip()]
 
     query = Bundle.query
 
@@ -1187,6 +1189,14 @@ def bundle_data_table():
         query = (query
                  .join(User, User.id == Bundle.user_id, isouter=False)
                  .filter(User.first_name.in_(creator_list)))
+
+    if attack_ids:
+        from app.core.db_class.db import BundleRuleAssociation, RuleAttackAssociation
+        query = (query
+                 .join(BundleRuleAssociation, BundleRuleAssociation.bundle_id == Bundle.id)
+                 .join(RuleAttackAssociation, RuleAttackAssociation.rule_id == BundleRuleAssociation.rule_id)
+                 .filter(RuleAttackAssociation.technique_id.in_(attack_ids))
+                 .distinct())
 
     if access == 'public':
         query = query.filter(Bundle.access.is_(True))
@@ -1221,11 +1231,59 @@ def bundle_data_table():
         j['tags'] = BundleModel.get_tags_for_bundle_json(b.id)
         items.append(j)
 
+    try:
+        from app.features.attack.attack_core import get_techniques_for_bundles_batch
+        atk_map = get_techniques_for_bundles_batch([b.id for b in pagination.items])
+        for item in items:
+            item['attacks'] = atk_map.get(item['id'], [])
+    except Exception:
+        pass
+
     return jsonify({
         'items':       items,
         'total':       pagination.total,
         'total_pages': pagination.pages,
     })
+
+
+@bundle_blueprint.route('/attacks_usage')
+def bundle_attacks_usage():
+    """Return techniques used in at least one bundle's rules (for the filter dropdown)."""
+    from app import db
+    from app.core.db_class.db import (
+        BundleRuleAssociation, RuleAttackAssociation, AttackTechnique
+    )
+    from sqlalchemy import func
+
+    rows = (
+        db.session.query(
+            RuleAttackAssociation.technique_id,
+            func.count(RuleAttackAssociation.id).label('count'),
+        )
+        .join(BundleRuleAssociation, BundleRuleAssociation.rule_id == RuleAttackAssociation.rule_id)
+        .group_by(RuleAttackAssociation.technique_id)
+        .order_by(func.count(RuleAttackAssociation.id).desc())
+        .all()
+    )
+    tech_ids = [r.technique_id for r in rows]
+    count_map = {r.technique_id: r.count for r in rows}
+
+    techs = AttackTechnique.query.filter(AttackTechnique.technique_id.in_(tech_ids)).all()
+    tech_map = {t.technique_id: t for t in techs}
+
+    result = []
+    for tid, cnt in [(r.technique_id, r.count) for r in rows]:
+        tech = tech_map.get(tid)
+        if not tech:
+            continue
+        result.append({
+            'id':         tech.technique_id,
+            'name':       tech.name,
+            'tactic_keys': tech.tactic_keys or [],
+            'count':      cnt,
+        })
+
+    return jsonify({'techniques': result})
 
 
 @bundle_blueprint.route('/attack_coverage/<int:bundle_id>')

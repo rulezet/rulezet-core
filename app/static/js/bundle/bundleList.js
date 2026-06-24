@@ -46,8 +46,10 @@ import PaginationComponent      from '/static/js/rule/paginationComponent.js'
 import MultiVulnerabilityFilter from '/static/js/vulnerability/multiVulnerabilityFilter.js'
 import MultiTagFilter           from '/static/js/tags/multiTagFIlter.js'
 import MultiPersonFilter        from '/static/js/rule/multiPersonFilter.js'
+import MultiAttackFilter        from '/static/js/attack/multiAttackFilter.js'
 import TagsDisplaysList         from '/static/js/tags/tagsDisplaysList.js'
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
+import AttackDisplayList        from '/static/js/attack/attackDisplayList.js'
 import UserChip                 from '/static/js/components/UserChip.js'
 import CodeViewer               from '/static/js/components/code-viewer.js'
 import { create_message }       from '/static/js/toaster.js'
@@ -62,8 +64,10 @@ export default {
         MultiVulnerabilityFilter,
         MultiTagFilter,
         MultiPersonFilter,
+        MultiAttackFilter,
         TagsDisplaysList,
         VulnerabilityDisplaysList,
+        AttackDisplayList,
         UserChip,
         CodeViewer,
         ReportModal,
@@ -259,6 +263,17 @@ export default {
                         </multi-vulnerability-filter>
                     </div>
 
+                    <div v-if="!isFilterHidden('attacks')" class="rl-fp-multi-item">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-crosshairs text-warning"></i> ATT&amp;CK
+                        </span>
+                        <multi-attack-filter v-model="selectedAttacks"
+                            api-endpoint="/bundle/attacks_usage"
+                            placeholder="Filter by technique…"
+                            @change="onFilterChange">
+                        </multi-attack-filter>
+                    </div>
+
                     <div v-if="!isFilterHidden('person') && !numericUserId" class="rl-fp-multi-item">
                         <span class="rl-fp-multi-label">
                             <i class="fa-solid fa-person-circle-check text-warning"></i> Creator
@@ -413,11 +428,17 @@ export default {
                     </div>
 
                     <!-- Tags -->
-                    <div class="mb-3" @click.stop>
+                    <div class="mb-2" @click.stop>
                         <tags-displays-list object-type="bundle" :object-id="bundle.id"
                             :max-visible="3"
                             :initial-tags="bundle.tags || []">
                         </tags-displays-list>
+                    </div>
+
+                    <!-- ATT&CK -->
+                    <div v-if="bundle.attacks && bundle.attacks.length" class="mb-3" @click.stop>
+                        <attack-display-list :initial-attacks="bundle.attacks" :max-visible="3">
+                        </attack-display-list>
                     </div>
 
                     <!-- Meta strip -->
@@ -626,6 +647,7 @@ export default {
                         <th v-show="colVisible.rules" class="dt-th" style="width:120px;">Rules</th>
                         <th v-show="colVisible.tags" class="dt-th" style="width:160px;">Tags</th>
                         <th v-show="colVisible.cves" class="dt-th" style="width:130px;">CVEs</th>
+                        <th v-show="colVisible.attacks" class="dt-th" style="width:180px;">ATT&amp;CK</th>
                         <th v-show="colVisible.created"
                             class="dt-th dt-th--sortable" style="width:110px;"
                             :class="{ 'dt-th--sorted': sortKey === 'created_at' }"
@@ -709,10 +731,17 @@ export default {
                             </td>
 
                             <td v-show="colVisible.cves" class="dt-td" @click.stop>
-                                <vulnerability-displays-list
+                                <vulnerability-displays-list v-if="bundle.vulnerability_identifiers && bundle.vulnerability_identifiers.length"
                                     object-type="bundle" :object-id="bundle.id" :max-visible="2"
-                                    :initial-vulnerabilities="bundle.vulnerability_identifiers || []">
+                                    :initial-vulnerabilities="bundle.vulnerability_identifiers">
                                 </vulnerability-displays-list>
+                                <span v-else class="text-muted small">—</span>
+                            </td>
+                            <td v-show="colVisible.attacks" class="dt-td" @click.stop>
+                                <attack-display-list v-if="bundle.attacks && bundle.attacks.length"
+                                    :initial-attacks="bundle.attacks" :max-visible="2">
+                                </attack-display-list>
+                                <span v-else class="text-muted small">—</span>
                             </td>
 
                             <td v-show="colVisible.created" class="dt-td"
@@ -854,6 +883,14 @@ export default {
                                                     :object-id="bundle.id" :max-visible="8"
                                                     :initial-vulnerabilities="bundle.vulnerability_identifiers">
                                                 </vulnerability-displays-list>
+                                            </div>
+                                            <div v-if="bundle.attacks && bundle.attacks.length"
+                                                 class="rl-expand-taxonomy-section mt-2">
+                                                <span class="rl-expand-k mb-1">
+                                                    <i class="fas fa-crosshairs text-warning me-1"></i>ATT&amp;CK
+                                                </span>
+                                                <attack-display-list :initial-attacks="bundle.attacks" :max-visible="10">
+                                                </attack-display-list>
                                             </div>
                                         </div>
 
@@ -1014,17 +1051,18 @@ export default {
         })
 
         // ── Filter state ─────────────────────────────────────────────────
-        const search       = ref(_p('search', init.search || ''))
-        const selectedTags = ref(_arr('tags',            init.tags || ''))
-        const selectedVulns= ref(_arr('vulnerabilities', init.vulnerabilities || ''))
-        const accessFilter = ref(_p('access', init.access || ''))
-        const scopeMine    = ref(_p('scope') === 'mine')
-        const personFilter = ref({
+        const search          = ref(_p('search', init.search || ''))
+        const selectedTags    = ref(_arr('tags',            init.tags || ''))
+        const selectedVulns   = ref(_arr('vulnerabilities', init.vulnerabilities || ''))
+        const selectedAttacks = ref(_arr('attacks',         init.attacks || ''))
+        const accessFilter    = ref(_p('access', init.access || ''))
+        const scopeMine       = ref(_p('scope') === 'mine')
+        const personFilter    = ref({
             mode:   _p('person_mode', 'author'),
             values: _arr('creators'),
         })
         const cardSort     = ref('newest')
-        const filtersOpen  = ref(['tags','vulnerabilities','access','creators','scope'].some(k => _url.has(k)))
+        const filtersOpen  = ref(['tags','vulnerabilities','attacks','access','creators','scope'].some(k => _url.has(k)))
 
         // ── Column visibility ─────────────────────────────────────────────
         const TOGGLEABLE_COLS = [
@@ -1033,6 +1071,7 @@ export default {
             { key: 'rules',       label: 'Rules'       },
             { key: 'tags',        label: 'Tags'        },
             { key: 'cves',        label: 'CVEs'        },
+            { key: 'attacks',     label: 'ATT&CK'      },
             { key: 'created',     label: 'Created'     },
             { key: 'votes',       label: 'Votes'       },
         ]
@@ -1072,6 +1111,7 @@ export default {
             (scopeMine.value ? 1 : 0) +
             selectedTags.value.length +
             selectedVulns.value.length +
+            selectedAttacks.value.length +
             personFilter.value.values.length
         )
 
@@ -1090,10 +1130,11 @@ export default {
             // per_page — only write when non-default so URLs stay clean
             const _defaultPP = viewMode.value === 'table' ? 25 : props.initialPerPage
             if (perPage.value !== _defaultPP) p.set('per_page', perPage.value)
-            if (selectedTags.value.length)  p.set('tags',            selectedTags.value.join(','))
-            if (selectedVulns.value.length) p.set('vulnerabilities', selectedVulns.value.join(','))
-            if (accessFilter.value)         p.set('access', accessFilter.value)
-            if (scopeMine.value)            p.set('scope', 'mine')
+            if (selectedTags.value.length)     p.set('tags',            selectedTags.value.join(','))
+            if (selectedVulns.value.length)    p.set('vulnerabilities', selectedVulns.value.join(','))
+            if (selectedAttacks.value.length)  p.set('attacks',         selectedAttacks.value.join(','))
+            if (accessFilter.value)            p.set('access', accessFilter.value)
+            if (scopeMine.value)               p.set('scope', 'mine')
             if (personFilter.value.values.length) {
                 p.set('creators', personFilter.value.values.join(','))
                 if (personFilter.value.mode && personFilter.value.mode !== 'author')
@@ -1116,8 +1157,9 @@ export default {
                 if (numericUserId.value)      params.set('user_id', numericUserId.value)
                 else if (scopeMine.value && numericCurrentUserId.value)
                     params.set('user_id', numericCurrentUserId.value)
-                if (selectedTags.value.length)  params.set('tags',            selectedTags.value.join(','))
-                if (selectedVulns.value.length) params.set('vulnerabilities', selectedVulns.value.join(','))
+                if (selectedTags.value.length)     params.set('tags',            selectedTags.value.join(','))
+                if (selectedVulns.value.length)    params.set('vulnerabilities', selectedVulns.value.join(','))
+                if (selectedAttacks.value.length)  params.set('attacks',         selectedAttacks.value.join(','))
                 if (personFilter.value.values.length)
                     params.set('creators', personFilter.value.values.join(','))
 
@@ -1204,11 +1246,12 @@ export default {
         }
 
         function resetFilters() {
-            selectedTags.value   = []
-            selectedVulns.value  = []
-            accessFilter.value   = ''
-            scopeMine.value      = false
-            personFilter.value   = { mode: 'author', values: [] }
+            selectedTags.value    = []
+            selectedVulns.value   = []
+            selectedAttacks.value = []
+            accessFilter.value    = ''
+            scopeMine.value       = false
+            personFilter.value    = { mode: 'author', values: [] }
             onFilterChange()
         }
 
@@ -1410,7 +1453,7 @@ export default {
         return {
             items, total, totalPages, loading, page, perPage, perPageModel,
             sortKey, sortDir, search,
-            filtersOpen, selectedTags, selectedVulns, accessFilter, scopeMine,
+            filtersOpen, selectedTags, selectedVulns, selectedAttacks, accessFilter, scopeMine,
             personFilter, onPersonFilterChange,
             activeFilterCount,
             viewMode, expandedIds, allExpanded,

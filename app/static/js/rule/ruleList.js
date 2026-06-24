@@ -747,10 +747,11 @@ export default {
                             </td>
 
                             <td v-show="colVisible.cves" class="dt-td" @click.stop>
-                                <vulnerability-displays-list
+                                <vulnerability-displays-list v-if="rule.cves && rule.cves.length"
                                     object-type="rule" :object-id="rule.id" :max-visible="2"
-                                    :initial-vulnerabilities="rule.cves || []">
+                                    :initial-vulnerabilities="rule.cves">
                                 </vulnerability-displays-list>
+                                <span v-else class="text-muted small">—</span>
                             </td>
 
                             <td v-show="colVisible.attacks" class="dt-td" @click.stop>
