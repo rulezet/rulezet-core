@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/pvt-dark.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/attack-matrix.css') }}">
 
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <style>
@@ -289,6 +290,26 @@
                      </div>
                 </div>
 
+                <!-- ── ATT&CK Coverage ────────────────────────── -->
+                <div class="mt-5">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <div style="width:3px;height:16px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
+                        <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
+                            <i class="fa-solid fa-crosshairs me-1"></i>ATT&amp;CK Coverage
+                        </span>
+                        <span v-if="attackStats" class="badge rounded-pill ms-1"
+                              style="font-size:.65rem;background:rgba(13,110,253,.12);color:#0d6efd;border:1px solid rgba(13,110,253,.2);">
+                            [[ attackStats.covered_tactics ]]/[[ attackStats.total_tactics ]] tactics
+                        </span>
+                    </div>
+                    <div class="p-3 rounded-3 shadow-sm border" style="background:var(--light-bg-color);">
+                        <attack-matrix
+                            :coverage="attackCoverage"
+                            :loading="attackLoading">
+                        </attack-matrix>
+                    </div>
+                </div>
+
                 <!--Structure section-->
                 <div v-if="rules.length > 0" class="mt-5">
                     <div class="d-flex align-items-center gap-2 mb-3">
@@ -426,6 +447,7 @@
     import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
     import ReportModal from '/static/js/components/ReportModal.js';
+    import AttackMatrix from '/static/js/components/attack-matrix.js';
 
     const csrfToken = '{{ csrf_token() }}';
 
@@ -443,6 +465,7 @@
             'tags-displays-list': TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
             'report-modal': ReportModal,
+            'attack-matrix': AttackMatrix,
         },
         setup() {
             /**
@@ -797,6 +820,24 @@
                 this.rules[index].showContent = !this.rules[index].showContent;
             }
             // --------------------------------------------
+            // ── ATT&CK Coverage ──────────────────────────────────
+            const attackCoverage = ref(null);
+            const attackLoading  = ref(false);
+            const attackStats    = computed(() => attackCoverage.value?.stats ?? null);
+
+            async function fetchAttackCoverage() {
+                attackLoading.value = true;
+                try {
+                    const res  = await fetch(`/bundle/attack_coverage/${bundle_id}`);
+                    const data = await res.json();
+                    attackCoverage.value = data;
+                } catch {
+                    attackCoverage.value = null;
+                } finally {
+                    attackLoading.value = false;
+                }
+            }
+
             // STRUCTURE VIEWS (tree / graph / misp)
             // --------------------------------------------
 
@@ -877,7 +918,8 @@
                     }
                 }
 
-                // Load MISP data then try to init graph (graph tab may already be visible)
+                // Load ATT&CK coverage and MISP data
+                fetchAttackCoverage();
                 _loadMisp().then(() => nextTick(_maybeInitGraph));
 
                 // Also init when the graph tab is first shown (data may not be ready yet above)
@@ -909,7 +951,9 @@
                 // tags
                 displayTags, loadingDisplayTags, fetchBundleTags, loadingDisplayVulnerabilities, displayVulnerabilities, fetchBundleVulnerabilities,
 
-                currentPage, totalPages, changePage, visiblePages, DownloadMISP
+                currentPage, totalPages, changePage, visiblePages, DownloadMISP,
+
+                attackCoverage, attackLoading, attackStats,
             };
         }
     }).mount('#main-container');

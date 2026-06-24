@@ -1148,3 +1148,161 @@ def get_bundle_by_id(bundle_id: int):
 
 def get_only_root_nodes(bundle_id: int):
     return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).all()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ATT&CK Coverage
+# ─────────────────────────────────────────────────────────────────────────────
+
+import re as _re
+from collections import defaultdict as _dd
+
+_TACTIC_ORDER = [
+    'reconnaissance', 'resource-development', 'initial-access', 'execution',
+    'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access',
+    'discovery', 'lateral-movement', 'collection', 'command-and-control',
+    'exfiltration', 'impact',
+]
+
+_TACTIC_LABELS = {
+    'reconnaissance':      'Reconnaissance',
+    'resource-development':'Resource Development',
+    'initial-access':      'Initial Access',
+    'execution':           'Execution',
+    'persistence':         'Persistence',
+    'privilege-escalation':'Privilege Escalation',
+    'defense-evasion':     'Defense Evasion',
+    'credential-access':   'Credential Access',
+    'discovery':           'Discovery',
+    'lateral-movement':    'Lateral Movement',
+    'collection':          'Collection',
+    'command-and-control': 'Command and Control',
+    'exfiltration':        'Exfiltration',
+    'impact':              'Impact',
+}
+
+_TACTIC_ALIASES = {
+    'resource_development':  'resource-development',
+    'initial_access':        'initial-access',
+    'privilege_escalation':  'privilege-escalation',
+    'defense_evasion':       'defense-evasion',
+    'credential_access':     'credential-access',
+    'lateral_movement':      'lateral-movement',
+    'command_and_control':   'command-and-control',
+}
+
+_TECH_RE = _re.compile(r'\bT(\d{4})(?:\.(\d{3}))?\b', _re.IGNORECASE)
+
+
+def _norm_tactic(raw: str) -> str:
+    k = raw.lower().replace(' ', '-').replace('_', '-')
+    return _TACTIC_ALIASES.get(k.replace('-', '_'), k)
+
+
+def _parse_sigma(content: str):
+    """Return (tactics: list[str], techniques: list[str]) from a Sigma rule."""
+    tactics, techs = [], []
+    in_tags = False
+    for line in content.split('\n'):
+        s = line.strip()
+        if s.startswith('tags:'):
+            in_tags = True
+            continue
+        if in_tags:
+            if s.startswith('- attack.'):
+                val = s[9:].strip().lower()
+                m = _re.match(r'^(t\d{4})(\.\d{3})?$', val)
+                if m:
+                    techs.append(val.upper())
+                else:
+                    tactics.append(_norm_tactic(val))
+            elif s and not s.startswith('-') and not s.startswith('#'):
+                in_tags = False
+    return tactics, techs
+
+
+def _parse_generic(content: str):
+    """Extract technique IDs from any rule content (YARA meta, comments, etc.)."""
+    return [f"T{m.group(1)}" + (f".{m.group(2)}" if m.group(2) else '')
+            for m in _TECH_RE.finditer(content)]
+
+
+def get_attack_coverage(bundle_id: int) -> dict:
+    """Return MITRE ATT&CK coverage data for all rules in a bundle."""
+    bundle = Bundle.query.get(bundle_id)
+    if not bundle:
+        return None
+
+    rows = (
+        db.session.query(Rule.id, Rule.title, Rule.uuid, Rule.format, Rule.to_string)
+        .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
+        .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
+        .all()
+    )
+
+    # tactic_key -> technique_id -> list of rule dicts
+    coverage: dict = _dd(lambda: _dd(list))
+    total_rules = len(rows)
+    rules_with_attack = 0
+
+    for rule_id, title, uuid_val, fmt, content in rows:
+        content = content or ''
+        info = {'id': rule_id, 'name': (title or ''), 'uuid': str(uuid_val) if uuid_val else ''}
+
+        if fmt == 'sigma':
+            tactics, techs = _parse_sigma(content)
+        else:
+            tactics, techs = [], _parse_generic(content)
+
+        if not tactics and not techs:
+            continue
+        rules_with_attack += 1
+
+        if tactics and techs:
+            for tac in tactics:
+                for tech in techs:
+                    coverage[tac][tech].append(info)
+        elif tactics:
+            for tac in tactics:
+                coverage[tac][''].append(info)
+        else:
+            coverage.setdefault('__unknown__', _dd(list))
+            for tech in techs:
+                coverage['__unknown__'][tech].append(info)
+
+    # Build ordered output
+    tactics_out = []
+    all_techs: set = set()
+    covered_count = 0
+
+    for key in _TACTIC_ORDER:
+        tac_techs = coverage.get(key, {})
+        techs_out = []
+        for tid, rules in tac_techs.items():
+            if tid:
+                all_techs.add(tid)
+                techs_out.append({'id': tid, 'count': len(rules),
+                                  'rules': rules})
+        techs_out.sort(key=lambda x: x['id'])
+        is_covered = bool(techs_out)
+        if is_covered:
+            covered_count += 1
+        tactics_out.append({
+            'key':            key,
+            'label':          _TACTIC_LABELS.get(key, key.replace('-', ' ').title()),
+            'covered':        is_covered,
+            'technique_count': len(techs_out),
+            'rule_count':     sum(t['count'] for t in techs_out),
+            'techniques':     techs_out,
+        })
+
+    return {
+        'tactics': tactics_out,
+        'stats': {
+            'covered_tactics':    covered_count,
+            'total_tactics':      len(_TACTIC_ORDER),
+            'unique_techniques':  len(all_techs),
+            'rules_with_attack':  rules_with_attack,
+            'total_rules':        total_rules,
+        },
+    }

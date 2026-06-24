@@ -1226,3 +1226,17 @@ def bundle_data_table():
         'total':       pagination.total,
         'total_pages': pagination.pages,
     })
+
+
+@bundle_blueprint.route('/attack_coverage/<int:bundle_id>')
+def attack_coverage(bundle_id):
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return jsonify({'error': 'Bundle not found'}), 404
+    if bundle.access == 'private':
+        if not current_user.is_authenticated:
+            return jsonify({'error': 'Unauthorized'}), 403
+        if bundle.user_id != current_user.id and not current_user.is_admin():
+            return jsonify({'error': 'Forbidden'}), 403
+    data = BundleModel.get_attack_coverage(bundle_id)
+    return jsonify(data)
