@@ -24,6 +24,38 @@ Toasts via `create_message(msg, class)` from `/static/js/toaster.js` — never i
 Pagination: use `PaginationComponent` from `/static/js/rule/paginationComponent.js`.
 `ChartViewer` needs `window.echarts` (ECharts CDN) loaded globally; data format: `{ categories: [...], series: [{ name, values: [...] }] }`.
 
+Page layout pattern — breadcrumb inside the banner, then cards:
+Breadcrumb goes inside `.explorer-banner`, above the icon+title row. Truncate page title at 40 chars in breadcrumb, 60 in `<h2>`.
+```html
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+    <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+    <li class="breadcrumb-item"><a href="/section" class="text-decoration-none text-muted">Section</a></li>
+    <li class="breadcrumb-item active text-muted" aria-current="page">{% if title|length > 40 %}{{ title[:40] }}…{% else %}{{ title }}{% endif %}</li>
+  </ol>
+</nav>
+```
+
+Main detail card (used on rule/bundle/user detail pages):
+```html
+<div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4" style="border-radius:12px;">
+  <div class="card-watermark-detail"><i class="fa-solid fa-[icon]"></i></div>
+  <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+    <!-- badges here -->
+  </div>
+  <div class="card-body p-4 p-md-5">
+    <!-- content -->
+  </div>
+</div>
+```
+CSS for detail pages: always include `css/rule/base/detail_rule.css` — shared between rule, bundle, and any detail page.
+`.card_detail` = deep shadow. `.card-watermark-detail` = decorative oversized icon (18rem, blue 3% opacity, top-right).
+`.card-security-premium` = hover lift effect (translateY -12px). Add on cards in list views.
+`.premium-accent-line` = thin blue gradient line at top of a card (absolute, top 0, 80% width).
+
+Secondary content cards (panels/sections inside a detail page): `<div class="card border-0 shadow-sm rounded-3 mb-4">` with `<div class="card-body p-4">`.
+Inline section separators inside a card: `<div class="rounded-3 border p-3 mb-4" style="background:var(--light-bg-color);">`.
+
 Page banner structure (all nav pages use this):
 ```html
 <div class="explorer-banner mb-4">
@@ -47,7 +79,27 @@ Dark mode CSS vars: `--text-color`, `--subtle-text-color`, `--card-bg-color`, `-
 Use `var(--subtle-text-color)` for secondary text — `var(--color-text)` does not exist.
 
 Shared components in `app/static/js/components/` (ES modules, each has matching CSS in `css/components/`):
-SmartEditor, CodeViewer, DiffViewer, AnsiTerminal, ChartViewer, FileTree, GraphViewer, RequestBuilder, Timeline.
+`SmartEditor` — multi-mode editor (code/markdown/text), used on rule create/edit pages.
+`CodeViewer` — read-only syntax-highlighted code display, props: `code`, `language`, `filename`. Used everywhere a rule is shown.
+`DiffViewer` — side-by-side diff, props: `old_content`, `new_content`. Used on edit proposals and rule history.
+`ChartViewer` — ECharts wrapper, chart types: line/area/bar/bar-h/pie/donut/scatter. Used on stats/analytics pages.
+`Timeline` — vertical event list, prop: `events [{date, label, icon, color}]`. Used in connector history, activity feeds.
+`AnsiTerminal` — renders ANSI color codes, prop: `content`. Used in job logs.
+`FileTree` — recursive tree, prop: `node`, emits `select`. Used in bundle structure.
+`UserChip` — user avatar + name badge, prop: `user`. Used almost everywhere a user is referenced.
+`CommentThread` — full comment thread (reactions, replies), from `components/comments/comment-thread.js`. Used on rule and bundle detail pages.
+`LoadingBar` — thin progress bar, from `components/loading-bar.js`. Used during async operations.
+`KeyValue` — simple key/value display row, from `components/key-value.js`.
+`DataTable` — generic sortable table, from `components/table/data-table.js`.
+`LogTable` — log entry table, from `components/log-table.js`. Used on admin logs page.
+`ReportModal` — user report/flag dialog, from `components/ReportModal.js`. Used on rule and bundle pages.
+`JobTracker` — live background job progress, from `/static/js/jobs/JobTracker.js`. Used on job detail page.
+`TagInput` — tag selector with autocomplete, from `/static/js/tags/tagInput.js`. Used on rule/bundle create+edit.
+`AttackInput` — ATT&CK technique selector, from `/static/js/attack/attackInput.js`. Used on rule create/edit.
+`BundleRuleSelector` — pick rules to add to a bundle, from `/static/js/bundle/BundleRuleSelector.js`.
+`BundleStructureEditor` — drag-and-drop tree editor for bundle folders, from `/static/js/bundle/BundleStructureEditor.js`.
+`AttackMatrix` — MITRE ATT&CK matrix heatmap, from `/static/js/components/attack-matrix.js`.
+`AttackDisplay` — single technique badge/card, from `/static/js/components/AttackDisplay.js`.
 
 RuleList component (`app/static/js/rule/ruleList.js`) — always register with TagsDisplaysList + VulnerabilityDisplaysList.
 RuleList CSS deps: `dataTable.css`, `code-viewer.css`, `ruleList.css`.
@@ -55,7 +107,28 @@ RuleList modes: `read`, `select`, `manage`. Bulk actions `delete`/`download`/`bu
 ATT&CK chips use `AttackDisplayList` from `/static/js/attack/attackDisplayList.js` — CSS is in `ruleList.css` (adl-* classes).
 MultiAttackFilter `apiEndpoint` prop must return `{ id: technique_id_string, name, tactic_keys, count }` — id must be the string like "T1068", not the integer PK.
 
+Roles & permissions — always enforce, never skip:
+3 levels: anonymous (read-only public), authenticated user (create/vote/comment/favorite), admin (`user.admin=True`, checked via `current_user.is_admin()`).
+Owner = the user whose `id` matches the resource's `user_id` field. Owner and admin can edit/delete; nobody else can.
+Backend guard pattern: `@login_required` on the route, then `if current_user.id != resource.user_id and not current_user.is_admin(): return jsonify(...), 403`.
+Never allow a user to act on another user's resource without `is_admin()` check.
+Jinja: `{% if current_user.is_authenticated %}` — for logged-in only. `{% if current_user.id == rule.user_id %}` — owner only. `{% if current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}` — owner or admin.
+Vue: pass auth state via Jinja into `const is_admin = {{ current_user.is_admin() | tojson }}` and `const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }}`. Owner check in Vue: `parseInt('{{ current_user.id }}') === resource.user_id || is_admin`.
+CommentThread props: `:can-create`, `:can-edit-own`, `:can-delete-own` (all = `is_authenticated`), `:can-moderate` (= `is_admin()`).
+RuleList props: `:current-user-id`, `:current-user-is-admin`, `:current-user-is-authenticated` — edit/delete buttons appear automatically when owner or admin.
+Admin-only pages: use `before_request` hook returning 403 for non-admins, not inline checks per route.
+
 Tag tooltips use Vue `<teleport to="body">` with `position:fixed` to escape overflow:hidden parents.
 Connectors (federation sync) admin-only. Pull modes: soft (skip existing) / hard (update in place). Match by uuid only.
 Instance telemetry: phone-home to rulezet.org every 24h. `IS_OFFICIAL_INSTANCE=true` only on rulezet.org.
 Tests: SQLite, no CSRF. Fixtures in `conftest.py`: `create_user_test()`, `create_admin_test()`, `create_rule_test()`.
+
+File organisation — never put files in the wrong place:
+Python blueprints → `app/features/<feature>/`  |  DB logic → `app/features/<feature>/<feature>_core.py`  |  API → `app/api/<feature>/`
+Templates → `app/templates/<feature>/`  — one subfolder per feature, mirrors the blueprint structure.
+JS components (reusable across features) → `app/static/js/components/`  — their CSS goes in `app/static/css/components/`.
+JS feature code (specific to one feature) → `app/static/js/<feature>/`  — their CSS goes in `app/static/css/<feature>/`.
+Shared/global CSS → `app/static/css/core.css`  — only add here if truly global (new CSS var, banner class, card class, etc.).
+Never put inline `<style>` blocks in templates unless it's a one-off animation that belongs nowhere else.
+Never put feature JS in `components/` and never put reusable components in a feature folder.
+New feature = new subfolder in templates + js + css, named identically (e.g. `attack/`, `connector/`).
