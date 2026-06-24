@@ -823,21 +823,24 @@ class Report(db.Model):
 
     def to_json(self):
         reporter = self.user
+        checker  = self.checked_by
         return {
-            'id':              self.id,
-            'user_id':         self.user_id,
-            'reporter_name':   reporter.get_username() if reporter else '?',
-            'user_avatar':     reporter.get_avatar_url() if reporter else None,
-            'object_type':     self.object_type,
-            'object_id':       self.object_id,
-            'object_label':    self.get_object_label(),
-            'object_url':      self.get_object_url(),
-            'reason':          self.reason,
-            'message':         self.message,
-            'created_at':      self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
-            'status':          self.status,
-            'checked_by_name': self.checked_by.get_username() if self.checked_by else None,
-            'checked_at':      self.checked_at.strftime('%Y-%m-%d %H:%M') if self.checked_at else None,
+            'id':               self.id,
+            'user_id':          self.user_id,
+            'reporter_name':    reporter.get_username() if reporter else '?',
+            'user_avatar':      reporter.get_avatar_url() if reporter else None,
+            'object_type':      self.object_type,
+            'object_id':        self.object_id,
+            'object_label':     self.get_object_label(),
+            'object_url':       self.get_object_url(),
+            'reason':           self.reason,
+            'message':          self.message,
+            'created_at':       self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'status':           self.status,
+            'checked_by_id':    self.checked_by_id,
+            'checked_by_name':  checker.get_username() if checker else None,
+            'checked_by_avatar': checker.get_avatar_url() if checker else None,
+            'checked_at':       self.checked_at.strftime('%Y-%m-%d %H:%M') if self.checked_at else None,
         }
 
 

@@ -62,10 +62,12 @@ def _legacy_to_dict(r):
         'reason':        r.reason or '',
         'message':       r.message,
         'created_at':    r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else None,
-        'status':          'pending',   # RepportRule has no status field
-        'checked_by_name': None,
-        'checked_at':      None,
-        'is_legacy':       True,
+        'status':            'pending',   # RepportRule has no status field
+        'checked_by_id':     None,
+        'checked_by_name':   None,
+        'checked_by_avatar': None,
+        'checked_at':        None,
+        'is_legacy':         True,
     }
 
 
@@ -307,7 +309,7 @@ def bulk_check_reports(report_ids, user_id):
 
 
 def delete_target_object(object_type, object_id, admin_user_id):
-    """Delete the object being reported (rule soft-delete, bundle delete, comment hard-delete)."""
+    """Delete the object being reported, then clean up all associated reports."""
     try:
         if object_type == 'rule':
             from app.features.rule.rule_core import soft_delete_rule
@@ -321,6 +323,15 @@ def delete_target_object(object_type, object_id, admin_user_id):
             if c:
                 c.is_active = False
                 db.session.commit()
+
+        # Remove all reports pointing to this object so they don't show as orphans
+        Report.query.filter_by(
+            object_type=object_type, object_id=object_id
+        ).delete(synchronize_session=False)
+        if object_type == 'rule':
+            from app.core.db_class.db import RepportRule
+            RepportRule.query.filter_by(rule_id=object_id).delete(synchronize_session=False)
+        db.session.commit()
         return True
     except Exception as e:
         db.session.rollback()

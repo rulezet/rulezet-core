@@ -222,7 +222,15 @@
               <span v-else class="small" style="color:var(--subtle-text-color);">id=[[ r.object_id ]]</span>
             </td>
             <!-- Reporter -->
-            <td class="rpt-td small">[[ r.reporter_name || '—' ]]</td>
+            <td class="rpt-td">
+              <user-chip v-if="r.user_id"
+                :user-id="r.user_id"
+                :username="r.reporter_name || ''"
+                :avatar="r.user_avatar || null"
+                size="sm">
+              </user-chip>
+              <span v-else class="small" style="color:var(--subtle-text-color);">—</span>
+            </td>
             <!-- Reason -->
             <td class="rpt-td small">[[ r.reason ]]</td>
             <!-- Message -->
@@ -244,10 +252,13 @@
             </td>
             <!-- Checked by -->
             <td class="rpt-td">
-              <template v-if="r.checked_by_name">
-                <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-2" style="font-size:.7rem;">
-                  <i class="fa-solid fa-user me-1" style="font-size:.6rem;"></i>[[ r.checked_by_name ]]
-                </span>
+              <template v-if="r.checked_by_id">
+                <user-chip
+                  :user-id="r.checked_by_id"
+                  :username="r.checked_by_name || ''"
+                  :avatar="r.checked_by_avatar || null"
+                  size="sm">
+                </user-chip>
                 <div class="small mt-1" style="color:var(--subtle-text-color);font-size:.68rem;">[[ r.checked_at ]]</div>
               </template>
               <span v-else style="color:var(--subtle-text-color);">—</span>
@@ -257,20 +268,20 @@
               <button v-if="r.status === 'pending' && !r.is_legacy"
                       class="btn btn-outline-success me-1" style="padding:.2rem .45rem;font-size:.75rem;"
                       @click="singleCheck(r)" title="Mark as checked">
-                <i class="fa-solid fa-eye"></i>
+                <i class="fa-solid fa-eye me-1"></i>Check
               </button>
               <button v-if="r.status === 'checked' && !r.is_legacy"
                       class="btn btn-outline-secondary me-1" style="padding:.2rem .45rem;font-size:.75rem;"
                       @click="singleUncheck(r)" title="Revert to pending">
-                <i class="fa-solid fa-eye-slash"></i>
+                <i class="fa-solid fa-eye-slash me-1"></i>Uncheck
               </button>
-              <button class="btn btn-outline-warning me-1" style="padding:.2rem .45rem;font-size:.75rem;"
-                      @click="singleDeleteTarget(r)" :title="'Delete the reported ' + r.object_type">
-                <i class="fa-solid fa-bullseye"></i>
+              <button class="btn btn-outline-danger me-1" style="padding:.2rem .45rem;font-size:.75rem;"
+                      @click="singleAction(r.id, 'delete')" title="Delete this report record only">
+                <i class="fa-solid fa-trash me-1"></i>Del. report
               </button>
-              <button class="btn btn-outline-danger" style="padding:.2rem .45rem;font-size:.75rem;"
-                      @click="singleAction(r.id, 'delete')" title="Delete report">
-                <i class="fa-solid fa-trash"></i>
+              <button class="btn btn-outline-warning" style="padding:.2rem .45rem;font-size:.75rem;"
+                      @click="singleDeleteTarget(r)" :title="'Delete the reported ' + r.object_type + ' and its reports'">
+                <i class="fa-solid fa-bullseye me-1"></i>Del. [[ r.object_type ]]
               </button>
             </td>
           </tr>
@@ -353,11 +364,13 @@
 
 <script type="module">
 import { create_message } from '/static/js/toaster.js'
+import UserChip from '/static/js/components/UserChip.js'
 const { createApp, ref, computed, onMounted } = Vue
 const CSRF = '{{ csrf_token() }}'
 
 createApp({
     delimiters: ['[[', ']]'],
+    components: { UserChip },
     setup() {
         const items        = ref([])
         const loading      = ref(false)
