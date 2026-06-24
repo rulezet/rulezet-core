@@ -2293,6 +2293,50 @@ class UserConfig(db.Model):
         }
 
 
+class NotificationPreference(db.Model):
+    """Per-user opt-in/out for each notification category."""
+    __tablename__ = 'notification_preference'
+
+    id      = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'),
+                        nullable=False, unique=True, index=True)
+
+    # Follow-based (someone I follow does something)
+    pref_follow_new_rule    = db.Column(db.Boolean, nullable=False, default=True)
+    pref_follow_new_bundle  = db.Column(db.Boolean, nullable=False, default=True)
+    pref_follow_new_comment = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Ownership-based (someone interacts with my content)
+    pref_rule_comment   = db.Column(db.Boolean, nullable=False, default=True)
+    pref_bundle_comment = db.Column(db.Boolean, nullable=False, default=True)
+
+    # System
+    pref_job_done  = db.Column(db.Boolean, nullable=False, default=True)
+    pref_proposal  = db.Column(db.Boolean, nullable=False, default=True)
+
+    # Proposals & replies
+    pref_proposal_comment  = db.Column(db.Boolean, nullable=False, default=True)
+    pref_proposal_accepted = db.Column(db.Boolean, nullable=False, default=True)
+    pref_comment_reply     = db.Column(db.Boolean, nullable=False, default=True)
+
+    user = db.relationship('User', backref=db.backref(
+        'notification_preference', uselist=False, cascade='all, delete-orphan'))
+
+    def to_json(self):
+        return {
+            'follow_new_rule':    self.pref_follow_new_rule,
+            'follow_new_bundle':  self.pref_follow_new_bundle,
+            'follow_new_comment': self.pref_follow_new_comment,
+            'rule_comment':       self.pref_rule_comment,
+            'bundle_comment':     self.pref_bundle_comment,
+            'job_done':           self.pref_job_done,
+            'proposal':           self.pref_proposal,
+            'proposal_comment':   self.pref_proposal_comment,
+            'proposal_accepted':  self.pref_proposal_accepted,
+            'comment_reply':      self.pref_comment_reply,
+        }
+
+
 class CustomTheme(db.Model):
     __tablename__ = 'custom_theme'
 

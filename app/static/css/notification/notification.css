@@ -173,12 +173,20 @@
     margin-top: 1px;
 }
 .notif-icon-bubble--new_rule            { background: rgba(13,110,253,.12);  color: #0d6efd; }
+.notif-icon-bubble--follow_new_bundle  { background: rgba(20,184,166,.12);  color: #14b8a6; }
+.notif-icon-bubble--follow_new_comment { background: rgba(245,158,11,.12);  color: #f59e0b; }
+.notif-icon-bubble--rule_comment       { background: rgba(99,102,241,.12);  color: #6366f1; }
+.notif-icon-bubble--bundle_comment     { background: rgba(99,102,241,.12);  color: #6366f1; }
 .notif-icon-bubble--rule_update_found  { background: rgba(13,202,240,.12);  color: #0dcaf0; }
 .notif-icon-bubble--job_created        { background: rgba(108,117,125,.12); color: #6c757d; }
 .notif-icon-bubble--job_finished       { background: rgba(25,135,84,.12);   color: #198754; }
 .notif-icon-bubble--job_failed         { background: rgba(220,53,69,.12);   color: #dc3545; }
 .notif-icon-bubble--github_import_done { background: rgba(52,58,64,.12);    color: #495057; }
 .notif-icon-bubble--github_update_done { background: rgba(102,16,242,.10);  color: #6610f2; }
+.notif-icon-bubble--proposal_comment   { background: rgba(249,115,22,.12);   color: #f97316; }
+.notif-icon-bubble--proposal_accepted  { background: rgba(25,135,84,.12);    color: #198754; }
+.notif-icon-bubble--proposal_rejected  { background: rgba(220,53,69,.12);    color: #dc3545; }
+.notif-icon-bubble--comment_reply      { background: rgba(139,92,246,.12);   color: #8b5cf6; }
 
 /* Content */
 .notif-content { flex: 1; min-width: 0; }
@@ -375,4 +383,47 @@
     border-color: #dc3545;
     color: #dc3545;
     background: rgba(220,53,69,.06);
+}
+
+/* ── Notification Preferences Panel ── */
+.notif-prefs-section {
+    border-bottom: 1px solid var(--border-color);
+}
+.notif-prefs-section:last-child { border-bottom: none; }
+
+.notif-prefs-section-header {
+    padding: .6rem 1.25rem .4rem;
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--subtle-text-color);
+    background: var(--light-bg-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.notif-prefs-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .85rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    transition: background .12s;
+}
+.notif-prefs-item:hover { background: var(--light-bg-color); }
+
+.notif-prefs-item-info { flex: 1; min-width: 0; }
+
+.notif-prefs-item-label {
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: .15rem;
+}
+
+.notif-prefs-item-sub {
+    font-size: .76rem;
+    color: var(--subtle-text-color);
+    line-height: 1.4;
 }

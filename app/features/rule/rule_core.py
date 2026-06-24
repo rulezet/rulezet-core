@@ -1620,6 +1620,22 @@ def add_comment_core(rule_id, content, user, parent_comment_id=None):
     )
     db.session.add(comment)
     db.session.commit()
+
+    try:
+        rule = _active().filter_by(id=rule_id).first()
+        link = f'/rule/detail_rule/{rule_id}'
+        from app.features.notification.notification_core import (
+            notify_owner_new_comment, notify_followers_new_comment, notify_comment_reply)
+        if rule:
+            notify_owner_new_comment(rule.user_id, user.id, 'rule_comment', rule.title, link)
+        notify_followers_new_comment(user.id, rule.title if rule else '', link)
+        if parent_comment_id:
+            parent = Comment.query.get(parent_comment_id)
+            if parent:
+                notify_comment_reply(parent.user_id, user.id, rule.title if rule else '', link)
+    except Exception:
+        pass
+
     return True, "Comment posted successfully."
 
 

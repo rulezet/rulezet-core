@@ -1231,6 +1231,13 @@ def validate_proposal() -> jsonify:
                     extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id},
                     is_public=False,
                 )
+                try:
+                    from app.features.notification.notification_core import notify_proposal_status_change
+                    _rule_for_notif = RuleModel.get_rule(rule_id)
+                    notify_proposal_status_change(rule_proposal, 'accepted',
+                                                  _rule_for_notif.title if _rule_for_notif else '')
+                except Exception as _e:
+                    print(f"[rule] notify_proposal_status_change accepted error: {_e}")
                 # add to contributor
                 user_proposal_id = RuleModel.get_rule_proposal_user_id(rule_proposal_id)
                 RuleModel.create_contribution(user_proposal_id,rule_proposal_id)
@@ -1273,6 +1280,13 @@ def validate_proposal() -> jsonify:
                     extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id},
                     is_public=False,
                 )
+                try:
+                    from app.features.notification.notification_core import notify_proposal_status_change
+                    _rule_for_notif = RuleModel.get_rule(rule_id)
+                    notify_proposal_status_change(rule_proposal, 'rejected',
+                                                  _rule_for_notif.title if _rule_for_notif else '')
+                except Exception as _e:
+                    print(f"[rule] notify_proposal_status_change rejected error: {_e}")
                 # update gamification
                 gamification = AccountModel.get_or_create_gamification_profile(rule_proposal.user_id)
                 if gamification == None:
@@ -1386,6 +1400,20 @@ def post_rule_edit_comment() -> jsonify:
 
     try:
         new_comment = RuleModel.create_comment_discuss(proposal_id, current_user.id, content)
+        try:
+            from app.features.notification.notification_core import notify_proposal_comment
+            from app.core.db_class.db import RuleEditProposal as ProposalModel
+            proposal_obj = ProposalModel.query.get(proposal_id)
+            if proposal_obj:
+                rule_for_notif = RuleModel.get_rule(proposal_obj.rule_id)
+                notify_proposal_comment(
+                    proposal_id,
+                    proposal_obj.user_id,
+                    current_user.id,
+                    rule_for_notif.title if rule_for_notif else '',
+                )
+        except Exception as _e:
+            print(f"[rule] notify_proposal_comment error: {_e}")
         return jsonify(new_comment.to_json()), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500

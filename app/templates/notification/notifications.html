@@ -4,6 +4,113 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/notification/notification.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<style>
+/* ── Type-filter dropdown tags ──────────────────────────────────────────── */
+.notif-type-wrap {
+    position: relative;
+}
+.notif-type-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: .83rem;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .14s, box-shadow .14s;
+    min-width: 160px;
+}
+.notif-type-trigger:hover {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,.08);
+}
+.notif-type-trigger .chevron {
+    margin-left: auto;
+    font-size: .7rem;
+    opacity: .55;
+    transition: transform .18s;
+}
+.notif-type-trigger.open .chevron { transform: rotate(180deg); }
+
+.notif-type-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 200;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.12);
+    padding: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 320px;
+    max-width: 420px;
+}
+.notif-type-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    border-radius: 20px;
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--subtle-text-color);
+    transition: background .12s, border-color .12s, color .12s;
+    white-space: nowrap;
+    user-select: none;
+}
+.notif-type-option:hover { background: var(--light-bg-color); color: var(--text-color); }
+.notif-type-option.active {
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    border-color: transparent;
+    color: #fff;
+}
+
+/* Active type tags shown inline next to trigger */
+.notif-active-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+}
+.notif-active-tag {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: .76rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    color: #fff;
+    cursor: default;
+}
+.notif-active-tag-rm {
+    background: none;
+    border: none;
+    color: #fff;
+    padding: 0;
+    cursor: pointer;
+    font-size: .7rem;
+    opacity: .75;
+    transition: opacity .12s;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+}
+.notif-active-tag-rm:hover { opacity: 1; }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -20,164 +127,397 @@
             </div>
         </div>
         <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
-            All your notifications — job completions, followed authors, rule updates.
+            Track activity on your rules, bundles, proposals, and the people you follow.
         </p>
     </div>
 
-    <!-- Filters + toolbar -->
-    <div class="d-flex flex-wrap align-items-center gap-3 mb-4">
+    <!-- dr-nav style tabs -->
+    <nav class="dr-nav mb-4">
+        <a href="#" :class="['dr-nav__item', mainTab === 'notifs' ? 'active' : '']"
+           @click.prevent="mainTab = 'notifs'">
+            <i class="fa-solid fa-bell"></i>
+            <span>Notifications</span>
+            <span v-if="unreadCount > 0" class="dr-nav__badge">[[ unreadCount ]]</span>
+        </a>
+        <a href="#" :class="['dr-nav__item', mainTab === 'prefs' ? 'active' : '']"
+           @click.prevent="mainTab = 'prefs'; loadPrefs()">
+            <i class="fa-solid fa-sliders"></i>
+            <span>Preferences</span>
+        </a>
+    </nav>
 
-        <!-- Type filter -->
-        <div class="d-flex gap-2 flex-wrap">
-            <button v-for="tab in tabs" :key="tab.key"
-                    :class="['btn btn-sm', activeType === tab.key ? 'btn-primary' : 'btn-outline-secondary']"
-                    style="border-radius:20px;"
-                    @click="activeType = tab.key; loadPage(1)">
-                <i :class="tab.icon + ' me-1'"></i>[[ tab.label ]]
-            </button>
-        </div>
+    <!-- ── NOTIFICATIONS TAB ── -->
+    <div v-if="mainTab === 'notifs'">
 
-        <div class="ms-auto d-flex gap-2 align-items-center">
-            <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
-                <input class="form-check-input" type="checkbox" id="unreadSwitch"
-                       v-model="unreadOnly" @change="loadPage(1)" style="cursor:pointer;">
-                <label class="form-check-label small fw-semibold" for="unreadSwitch">Unread only</label>
-            </div>
-            <button class="btn btn-sm btn-outline-secondary" @click="markAllRead" v-if="unreadCount > 0">
-                <i class="fa-solid fa-check-double me-1"></i>Mark all read
-            </button>
-        </div>
-    </div>
+        <!-- Toolbar row -->
+        <div class="d-flex flex-wrap align-items-start gap-3 mb-4">
 
-    <!-- List card -->
-    <div class="notif-page-card">
-
-        <!-- Loading -->
-        <template v-if="loading">
-            <div v-for="i in 6" :key="i" class="notif-skeleton" style="border-bottom:1px solid var(--border-color);">
-                <div class="notif-skeleton__bubble"></div>
-                <div class="notif-skeleton__lines">
-                    <div class="notif-skeleton__line"></div>
-                    <div class="notif-skeleton__line"></div>
+            <!-- Type filter dropdown -->
+            <div class="notif-type-wrap" v-click-outside="closeDropdown">
+                <div :class="['notif-type-trigger', dropdownOpen ? 'open' : '']"
+                     @click="dropdownOpen = !dropdownOpen">
+                    <i class="fa-solid fa-filter" style="font-size:.78rem;color:#0d6efd;"></i>
+                    <span>Filter by type</span>
+                    <i class="fa-solid fa-chevron-down chevron"></i>
                 </div>
-            </div>
-        </template>
-
-        <!-- Empty -->
-        <template v-else-if="notifications.length === 0">
-            <div class="notif-empty" style="padding:80px 24px;">
-                <div class="notif-empty__icon"><i class="fa-solid fa-bell-slash"></i></div>
-                <div class="notif-empty__title">No notifications</div>
-                <div class="notif-empty__sub">Nothing here yet — follow some users to get started!</div>
-            </div>
-        </template>
-
-        <!-- Notifications -->
-        <template v-else>
-            <div v-for="notif in notifications" :key="notif.id"
-                 :class="['notif-page-item', !notif.is_read ? 'unread' : '']">
-
-                <!-- Icon bubble -->
-                <div :class="['notif-icon-bubble', `notif-icon-bubble--${notif.notif_type}`]"
-                     style="width:42px;height:42px;flex-shrink:0;">
-                    <i :class="notif.icon || 'fa-solid fa-bell'"></i>
-                </div>
-
-                <!-- Content -->
-                <div class="flex-grow-1 min-width-0">
-                    <div class="d-flex align-items-start gap-2">
-                        <span class="notif-page-title">[[ notif.title ]]</span>
-                        <span v-if="!notif.is_read"
-                              class="badge rounded-pill ms-auto flex-shrink-0"
-                              style="background:#0d6efd;font-size:.6rem;padding:3px 7px;">NEW</span>
-                    </div>
-                    <div class="notif-page-body" v-if="notif.body">[[ notif.body ]]</div>
-
-                    <!-- Job progress -->
-                    <template v-if="notif.notif_type?.startsWith('job')">
-                        <div class="notif-progress mt-2" style="max-width:320px;">
-                            <div :class="['notif-progress__fill', progressFillClass(notif)]"
-                                 :style="progressWidth(notif) ? `width:${progressWidth(notif)}` : ''">
-                            </div>
-                        </div>
-                        <div style="font-size:.73rem;color:var(--subtle-text-color);margin-top:4px;">
-                            <span v-if="notif.job_status === 'done'" class="text-success fw-semibold">
-                                <i class="fa-solid fa-circle-check me-1"></i>Completed — 100%
-                            </span>
-                            <span v-else-if="notif.job_status === 'failed'" class="text-danger fw-semibold">
-                                <i class="fa-solid fa-circle-xmark me-1"></i>Failed
-                            </span>
-                            <span v-else-if="notif.job_status === 'cancelled'" class="text-muted">
-                                <i class="fa-solid fa-ban me-1"></i>Cancelled
-                            </span>
-                            <span v-else class="text-primary">
-                                <i class="fa-solid fa-circle-notch fa-spin me-1"></i>
-                                [[ notif.job_progress ? notif.job_progress + '%' : 'Running…' ]]
-                            </span>
-                        </div>
-                    </template>
-
-                    <div class="notif-page-time">
-                        <i class="fa-regular fa-clock me-1"></i>[[ relativeTime(notif.created_at) ]]
+                <div v-if="dropdownOpen" class="notif-type-dropdown">
+                    <div v-for="opt in TYPE_OPTIONS" :key="opt.key"
+                         :class="['notif-type-option', activeTypes.includes(opt.key) ? 'active' : '']"
+                         @click="toggleType(opt.key)">
+                        <i :class="opt.icon"></i>[[ opt.label ]]
                     </div>
                 </div>
+            </div>
 
-                <!-- Actions -->
-                <div class="notif-page-actions">
-                    <a v-if="notif.link" :href="notif.link"
-                       class="btn btn-sm btn-outline-primary"
-                       style="font-size:.75rem;border-radius:8px;"
-                       @click="markRead(notif)">
-                        <i class="fa-solid fa-arrow-right"></i>
-                    </a>
-                    <button v-if="!notif.is_read"
-                            class="btn btn-sm btn-outline-success"
-                            style="font-size:.75rem;border-radius:8px;"
-                            title="Mark as read"
-                            @click="markRead(notif)">
-                        <i class="fa-solid fa-check"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger"
-                            style="font-size:.75rem;border-radius:8px;"
-                            title="Delete"
-                            @click="deleteNotif(notif)">
+            <!-- Active type chips -->
+            <div v-if="activeTypes.length" class="notif-active-tags">
+                <div v-for="key in activeTypes" :key="key" class="notif-active-tag">
+                    <i :class="typeIcon(key)" style="font-size:.72rem;"></i>
+                    [[ typeLabel(key) ]]
+                    <button class="notif-active-tag-rm" @click="removeType(key)" title="Remove">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
             </div>
-        </template>
-    </div>
 
-    <!-- Pagination -->
-    <div v-if="totalPages > 1" class="d-flex justify-content-center gap-2 mt-4">
-        <button class="btn btn-sm btn-outline-secondary" :disabled="currentPage === 1"
-                @click="loadPage(currentPage - 1)">
-            <i class="fa-solid fa-chevron-left"></i>
-        </button>
-        <span class="btn btn-sm disabled bg-transparent border-0"
-              style="color:var(--subtle-text-color);">
-            Page [[ currentPage ]] / [[ totalPages ]]
-        </span>
-        <button class="btn btn-sm btn-outline-secondary" :disabled="currentPage === totalPages"
-                @click="loadPage(currentPage + 1)">
-            <i class="fa-solid fa-chevron-right"></i>
-        </button>
-    </div>
+            <!-- Right side controls -->
+            <div class="ms-auto d-flex gap-2 align-items-center flex-wrap">
+                <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                    <input class="form-check-input" type="checkbox" id="unreadSwitch"
+                           v-model="unreadOnly" @change="loadPage(1)" style="cursor:pointer;">
+                    <label class="form-check-label small fw-semibold" for="unreadSwitch">Unread only</label>
+                </div>
+                <button class="btn btn-sm btn-outline-success" @click="markAllRead" v-if="unreadCount > 0">
+                    <i class="fa-solid fa-check-double me-1"></i>Mark all read
+                </button>
+                <button class="btn btn-sm btn-outline-danger" @click="deleteAll"
+                        v-if="totalCount > 0" title="Delete all notifications">
+                    <i class="fa-solid fa-trash me-1"></i>Delete all
+                </button>
+            </div>
+        </div>
+
+        <!-- List card -->
+        <div class="notif-page-card">
+
+            <!-- Loading -->
+            <template v-if="loading">
+                <div v-for="i in 6" :key="i" class="notif-skeleton" style="border-bottom:1px solid var(--border-color);">
+                    <div class="notif-skeleton__bubble"></div>
+                    <div class="notif-skeleton__lines">
+                        <div class="notif-skeleton__line"></div>
+                        <div class="notif-skeleton__line"></div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Empty -->
+            <template v-else-if="notifications.length === 0">
+                <div class="notif-empty" style="padding:80px 24px;">
+                    <div class="notif-empty__icon"><i class="fa-solid fa-bell-slash"></i></div>
+                    <div class="notif-empty__title">No notifications</div>
+                    <div class="notif-empty__sub">Nothing here yet — follow some users to get started!</div>
+                </div>
+            </template>
+
+            <!-- Notifications -->
+            <template v-else>
+                <div v-for="notif in notifications" :key="notif.id"
+                     :class="['notif-page-item', !notif.is_read ? 'unread' : '']">
+
+                    <!-- Icon bubble -->
+                    <div :class="['notif-icon-bubble', `notif-icon-bubble--${notif.notif_type}`]"
+                         style="width:42px;height:42px;flex-shrink:0;">
+                        <i :class="notif.icon || 'fa-solid fa-bell'"></i>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="flex-grow-1 min-width-0">
+                        <div class="d-flex align-items-start gap-2">
+                            <span class="notif-page-title">[[ notif.title ]]</span>
+                            <span v-if="!notif.is_read"
+                                  class="badge rounded-pill ms-auto flex-shrink-0"
+                                  style="background:#0d6efd;font-size:.6rem;padding:3px 7px;">NEW</span>
+                        </div>
+                        <div class="notif-page-body" v-if="notif.body">[[ notif.body ]]</div>
+
+                        <!-- Job progress -->
+                        <template v-if="notif.notif_type?.startsWith('job')">
+                            <div class="notif-progress mt-2" style="max-width:320px;">
+                                <div :class="['notif-progress__fill', progressFillClass(notif)]"
+                                     :style="progressWidth(notif) ? `width:${progressWidth(notif)}` : ''">
+                                </div>
+                            </div>
+                            <div style="font-size:.73rem;color:var(--subtle-text-color);margin-top:4px;">
+                                <span v-if="notif.job_status === 'done'" class="text-success fw-semibold">
+                                    <i class="fa-solid fa-circle-check me-1"></i>Completed — 100%
+                                </span>
+                                <span v-else-if="notif.job_status === 'failed'" class="text-danger fw-semibold">
+                                    <i class="fa-solid fa-circle-xmark me-1"></i>Failed
+                                </span>
+                                <span v-else-if="notif.job_status === 'cancelled'" class="text-muted">
+                                    <i class="fa-solid fa-ban me-1"></i>Cancelled
+                                </span>
+                                <span v-else class="text-primary">
+                                    <i class="fa-solid fa-circle-notch fa-spin me-1"></i>
+                                    [[ notif.job_progress ? notif.job_progress + '%' : 'Running…' ]]
+                                </span>
+                            </div>
+                        </template>
+
+                        <div class="notif-page-time">
+                            <i class="fa-regular fa-clock me-1"></i>[[ relativeTime(notif.created_at) ]]
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="notif-page-actions">
+                        <a v-if="notif.link" :href="notif.link"
+                           class="btn btn-sm btn-outline-primary"
+                           style="font-size:.75rem;border-radius:8px;"
+                           @click="markRead(notif)">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </a>
+                        <button v-if="!notif.is_read"
+                                class="btn btn-sm btn-outline-success"
+                                style="font-size:.75rem;border-radius:8px;"
+                                title="Mark as read"
+                                @click="markRead(notif)">
+                            <i class="fa-solid fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger"
+                                style="font-size:.75rem;border-radius:8px;"
+                                title="Delete"
+                                @click="deleteNotif(notif)">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Pagination (Rulezet native) -->
+        <div v-if="totalPages > 1" class="d-flex justify-content-center mt-4">
+            <rz-pagination
+                :current-page="currentPage"
+                :total-pages="totalPages"
+                @change-page="loadPage">
+            </rz-pagination>
+        </div>
+
+    </div><!-- end #notifs tab -->
+
+    <!-- ── PREFERENCES TAB ── -->
+    <div v-if="mainTab === 'prefs'">
+        <div class="notif-page-card" style="max-width:680px;">
+
+            <!-- Header with reset button -->
+            <div class="d-flex align-items-center justify-content-between px-4 py-3"
+                 style="border-bottom:1px solid var(--border-color);">
+                <div>
+                    <div class="fw-semibold" style="font-size:.9rem;">Notification preferences</div>
+                    <div class="text-muted" style="font-size:.77rem;">Choose which events trigger a notification</div>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary" @click="resetPrefs"
+                        title="Reset all preferences to defaults">
+                    <i class="fa-solid fa-rotate-left me-1"></i>Reset to default
+                </button>
+            </div>
+
+            <template v-if="prefsLoading">
+                <div class="p-4 text-center text-muted">
+                    <i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading…
+                </div>
+            </template>
+
+            <template v-else>
+                <!-- Section: Follow-based -->
+                <div class="notif-prefs-section">
+                    <div class="notif-prefs-section-header">
+                        <i class="fa-solid fa-user-group me-2" style="color:#0d6efd;"></i>
+                        Activity from people you follow
+                    </div>
+                    <div class="notif-prefs-item">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-shield-halved me-1" style="color:#0d6efd;"></i>
+                                New rule published
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when someone you follow creates a detection rule</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.follow_new_rule"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                    <div class="notif-prefs-item">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-layer-group me-1" style="color:#14b8a6;"></i>
+                                New bundle published
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when someone you follow creates a bundle</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.follow_new_bundle"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                    <div class="notif-prefs-item">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-comment me-1" style="color:#f59e0b;"></i>
+                                New comment posted
+                                <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;">Noisy</span>
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when someone you follow leaves a comment — off by default</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.follow_new_comment"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: Ownership-based -->
+                <div class="notif-prefs-section">
+                    <div class="notif-prefs-section-header">
+                        <i class="fa-solid fa-comment-dots me-2" style="color:#6366f1;"></i>
+                        Activity on your content
+                    </div>
+                    <div class="notif-prefs-item">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-comment-dots me-1" style="color:#6366f1;"></i>
+                                Comment on your rule
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when someone comments on a rule you own</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.rule_comment"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                    <div class="notif-prefs-item">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-comment-dots me-1" style="color:#6366f1;"></i>
+                                Comment on your bundle
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when someone comments on a bundle you own</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.bundle_comment"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                    <div class="notif-prefs-item">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-reply me-1" style="color:#8b5cf6;"></i>
+                                Reply to your comment
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when someone replies to a comment you wrote</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.comment_reply"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: Proposals -->
+                <div class="notif-prefs-section">
+                    <div class="notif-prefs-section-header">
+                        <i class="fa-solid fa-code-pull-request me-2" style="color:#6610f2;"></i>
+                        Edit proposals
+                    </div>
+                    <div class="notif-prefs-item">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-code-pull-request me-1" style="color:#6610f2;"></i>
+                                Proposal submitted on your rule
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when someone submits an edit proposal on a rule you own</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.proposal"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                    <div class="notif-prefs-item">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-message-lines me-1" style="color:#f97316;"></i>
+                                Comment on your proposal
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when someone comments in the discussion of a proposal you submitted</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.proposal_comment"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                    <div class="notif-prefs-item">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-circle-check me-1" style="color:#198754;"></i>
+                                Proposal accepted or rejected
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when a rule owner or admin accepts or rejects one of your edit proposals</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.proposal_accepted"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: System -->
+                <div class="notif-prefs-section">
+                    <div class="notif-prefs-section-header">
+                        <i class="fa-solid fa-gear me-2" style="color:#6c757d;"></i>
+                        System notifications
+                    </div>
+                    <div class="notif-prefs-item" style="border-bottom:none;">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-circle-check me-1" style="color:#198754;"></i>
+                                Background job completed
+                            </div>
+                            <div class="notif-prefs-item-sub">Notified when your import, update or bulk jobs finish</div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.job_done"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Save feedback -->
+                <div v-if="prefsSaved" class="px-4 py-2 text-success"
+                     style="font-size:.82rem;border-top:1px solid var(--border-color);">
+                    <i class="fa-solid fa-circle-check me-1"></i>Preferences saved
+                </div>
+            </template>
+        </div>
+    </div><!-- end #prefs tab -->
 
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
+import RzPagination from '/static/js/rule/paginationComponent.js'
+import { create_message } from '/static/js/toaster.js'
+
 const { createApp, ref, computed, onMounted } = Vue
 
 function csrf() { return document.getElementById('csrf_token')?.value || '' }
 
 async function apiFetch(url, opts = {}) {
-    const res = await fetch(url, {
-        headers: { 'X-CSRFToken': csrf() },
-        ...opts,
-    })
+    const headers = { 'X-CSRFToken': csrf(), ...(opts.headers || {}) }
+    const res = await fetch(url, { ...opts, headers })
     if (!res.ok) return null
     return res.json()
 }
@@ -194,48 +534,96 @@ function relativeTime(isoStr) {
     } catch { return '' }
 }
 
-const TABS = [
-    { key: '',                    label: 'All',           icon: 'fa-solid fa-inbox' },
-    { key: 'new_rule',            label: 'New Rules',     icon: 'fa-solid fa-shield-halved' },
-    { key: 'rule_update_found',   label: 'Updates',       icon: 'fa-solid fa-rotate' },
-    { key: 'proposal_submitted',  label: 'Proposals',     icon: 'fa-solid fa-code-pull-request' },
-    { key: 'job_created',         label: 'Jobs',          icon: 'fa-solid fa-tasks' },
-    { key: 'session_running',     label: 'Sessions',      icon: 'fa-solid fa-spinner' },
-    { key: 'report_submitted',    label: 'Reports',       icon: 'fa-solid fa-triangle-exclamation' },
-    { key: 'github_import_done',  label: 'Imports',       icon: 'fa-brands fa-github' },
-    { key: 'github_update_done',  label: 'GitHub Updates',icon: 'fa-solid fa-code-branch' },
+const TYPE_OPTIONS = [
+    { key: 'new_rule',            label: 'New Rules',           icon: 'fa-solid fa-shield-halved' },
+    { key: 'follow_new_bundle',   label: 'New Bundles',         icon: 'fa-solid fa-layer-group' },
+    { key: 'follow_new_comment',  label: 'Follow comment',      icon: 'fa-solid fa-comment' },
+    { key: 'rule_comment',        label: 'Rule comment',        icon: 'fa-solid fa-comment-dots' },
+    { key: 'bundle_comment',      label: 'Bundle comment',      icon: 'fa-solid fa-comment-dots' },
+    { key: 'comment_reply',       label: 'Reply',               icon: 'fa-solid fa-reply' },
+    { key: 'proposal_submitted',  label: 'Proposal submitted',  icon: 'fa-solid fa-code-pull-request' },
+    { key: 'proposal_comment',    label: 'Proposal comment',    icon: 'fa-solid fa-message-lines' },
+    { key: 'proposal_accepted',   label: 'Proposal accepted',   icon: 'fa-solid fa-circle-check' },
+    { key: 'proposal_rejected',   label: 'Proposal rejected',   icon: 'fa-solid fa-circle-xmark' },
+    { key: 'rule_update_found',   label: 'Rule updates',        icon: 'fa-solid fa-rotate' },
+    { key: 'job_created',         label: 'Jobs',                icon: 'fa-solid fa-tasks' },
+    { key: 'session_running',     label: 'Sessions',            icon: 'fa-solid fa-spinner' },
+    { key: 'github_import_done',  label: 'Imports',             icon: 'fa-brands fa-github' },
+    { key: 'github_update_done',  label: 'GitHub Updates',      icon: 'fa-solid fa-code-branch' },
+    { key: 'report_submitted',    label: 'Reports',             icon: 'fa-solid fa-triangle-exclamation' },
 ]
+
+const DEFAULT_PREFS = {
+    follow_new_rule: true, follow_new_bundle: true, follow_new_comment: false,
+    rule_comment: true, bundle_comment: true, comment_reply: true,
+    job_done: true, proposal: true,
+    proposal_comment: true, proposal_accepted: true,
+}
 
 createApp({
     delimiters: ['[[', ']]'],
+    components: { RzPagination },
+    directives: {
+        clickOutside: {
+            mounted(el, binding) {
+                el._clickOutsideHandler = e => { if (!el.contains(e.target)) binding.value(e) }
+                document.addEventListener('click', el._clickOutsideHandler)
+            },
+            unmounted(el) { document.removeEventListener('click', el._clickOutsideHandler) },
+        },
+    },
     setup() {
         const notifications = ref([])
         const loading       = ref(true)
         const currentPage   = ref(1)
         const totalPages    = ref(1)
+        const totalCount    = ref(0)
         const unreadCount   = ref(0)
         const unreadOnly    = ref(false)
-        const activeType    = ref('')
-        const tabs          = ref(TABS)
+        const activeTypes   = ref([])    // multi-select
+        const dropdownOpen  = ref(false)
 
+        const mainTab      = ref('notifs')
+        const prefs        = ref({ ...DEFAULT_PREFS })
+        const prefsLoading = ref(false)
+        const prefsSaved   = ref(false)
+        let   prefsSaveTimer = null
+
+        // ── Type filter helpers ──────────────────────────────────────────────
+        function typeIcon(key)  { return TYPE_OPTIONS.find(o => o.key === key)?.icon || '' }
+        function typeLabel(key) { return TYPE_OPTIONS.find(o => o.key === key)?.label || key }
+
+        function toggleType(key) {
+            const idx = activeTypes.value.indexOf(key)
+            if (idx === -1) activeTypes.value.push(key)
+            else activeTypes.value.splice(idx, 1)
+            loadPage(1)
+        }
+        function removeType(key) {
+            activeTypes.value = activeTypes.value.filter(k => k !== key)
+            loadPage(1)
+        }
+        function closeDropdown() { dropdownOpen.value = false }
+
+        // ── Data loading ─────────────────────────────────────────────────────
         async function loadPage(page = 1) {
             loading.value = true
             currentPage.value = page
-            const params = new URLSearchParams({
-                page,
-                per_page: 25,
-                unread_only: unreadOnly.value,
-            })
-            if (activeType.value) params.set('type', activeType.value)
+            const params = new URLSearchParams({ page, per_page: 20, unread_only: unreadOnly.value })
+            if (activeTypes.value.length === 1) params.set('type', activeTypes.value[0])
+            // multi-type: send comma-separated; backend handles single type via existing param
+            if (activeTypes.value.length > 1)  params.set('type', activeTypes.value.join(','))
             const data = await apiFetch(`/notifications/list?${params}`)
             if (data) {
                 notifications.value = data.notifications
                 totalPages.value    = data.pages
+                totalCount.value    = data.total
                 unreadCount.value   = data.unread_count
             }
             loading.value = false
         }
 
+        // ── Actions ──────────────────────────────────────────────────────────
         async function markRead(notif) {
             if (notif.is_read) return
             await apiFetch(`/notifications/${notif.id}/read`, { method: 'POST' })
@@ -247,14 +635,32 @@ createApp({
             await apiFetch('/notifications/read_all', { method: 'POST' })
             notifications.value.forEach(n => { n.is_read = true })
             unreadCount.value = 0
+            create_message('All notifications marked as read.', 'success-subtle')
         }
 
         async function deleteNotif(notif) {
             await apiFetch(`/notifications/${notif.id}`, { method: 'DELETE' })
             notifications.value = notifications.value.filter(n => n.id !== notif.id)
             if (!notif.is_read && unreadCount.value > 0) unreadCount.value--
+            totalCount.value = Math.max(0, totalCount.value - 1)
         }
 
+        async function deleteAll() {
+            if (!confirm('Delete all your notifications? This cannot be undone.')) return
+            const ok = await apiFetch('/notifications/delete_all', { method: 'DELETE' })
+            if (ok) {
+                notifications.value = []
+                totalCount.value  = 0
+                unreadCount.value = 0
+                totalPages.value  = 1
+                currentPage.value = 1
+                create_message('All notifications deleted.', 'success-subtle')
+            } else {
+                create_message('Failed to delete notifications.', 'danger-subtle')
+            }
+        }
+
+        // ── Progress helpers ─────────────────────────────────────────────────
         function progressFillClass(notif) {
             if (notif.job_status === 'done')   return 'notif-progress__fill--done'
             if (notif.job_status === 'failed') return 'notif-progress__fill--failed'
@@ -267,13 +673,57 @@ createApp({
             return `${notif.job_progress}%`
         }
 
+        // ── Preferences ──────────────────────────────────────────────────────
+        async function loadPrefs() {
+            if (prefsLoading.value) return
+            prefsLoading.value = true
+            const data = await apiFetch('/notifications/preferences')
+            if (data) prefs.value = { ...DEFAULT_PREFS, ...data }
+            prefsLoading.value = false
+        }
+
+        async function savePrefs() {
+            clearTimeout(prefsSaveTimer)
+            prefsSaveTimer = setTimeout(async () => {
+                const data = await apiFetch('/notifications/preferences', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                    body: JSON.stringify(prefs.value),
+                })
+                if (data?.ok) {
+                    prefsSaved.value = true
+                    setTimeout(() => { prefsSaved.value = false }, 2500)
+                    create_message('Preferences saved.', 'success-subtle')
+                }
+            }, 400)
+        }
+
+        async function resetPrefs() {
+            if (!confirm('Reset all notification preferences to their default values?')) return
+            prefs.value = { ...DEFAULT_PREFS }
+            clearTimeout(prefsSaveTimer)
+            const data = await apiFetch('/notifications/preferences', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                body: JSON.stringify(prefs.value),
+            })
+            if (data?.ok) {
+                create_message('Preferences reset to default.', 'success-subtle')
+            } else {
+                create_message('Failed to reset preferences.', 'danger-subtle')
+            }
+        }
+
         onMounted(() => loadPage(1))
 
         return {
-            notifications, loading, currentPage, totalPages,
-            unreadCount, unreadOnly, activeType, tabs,
-            loadPage, markRead, markAllRead, deleteNotif,
+            notifications, loading, currentPage, totalPages, totalCount,
+            unreadCount, unreadOnly, activeTypes, dropdownOpen,
+            TYPE_OPTIONS, mainTab, prefs, prefsLoading, prefsSaved,
+            loadPage, markRead, markAllRead, deleteNotif, deleteAll,
+            loadPrefs, savePrefs, resetPrefs,
             progressFillClass, progressWidth, relativeTime,
+            toggleType, removeType, closeDropdown, typeIcon, typeLabel,
         }
     },
 }).mount('#notif-page-app')

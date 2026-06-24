@@ -58,7 +58,13 @@ def create_bundle(form_dict , user) -> Bundle:
     except Exception as e:
         db.session.rollback()
         raise e
-        
+
+    try:
+        from app.features.notification.notification_core import notify_followers_new_bundle
+        notify_followers_new_bundle(new_bundle, user.id)
+    except Exception:
+        pass
+
     return new_bundle
 
 def add_rules_to_bundle(bundle_id: int, rule_ids: list[int]) -> bool:
@@ -871,6 +877,24 @@ def add_comment_to_bundle(bundle_id: int, user: User, content: str , parent_comm
         )
         db.session.add(new_comment)
         db.session.commit()
+
+        try:
+            bundle = Bundle.query.get(bundle_id)
+            link   = f'/bundle/detail_bundle/{bundle_id}'
+            from app.features.notification.notification_core import (
+                notify_owner_new_comment, notify_followers_new_comment, notify_comment_reply)
+            if bundle:
+                notify_owner_new_comment(
+                    bundle.user_id, user.id, 'bundle_comment', bundle.name, link)
+            notify_followers_new_comment(user.id, bundle.name if bundle else '', link)
+            if parent_comment_id:
+                from app.core.db_class.db import CommentBundle
+                parent = CommentBundle.query.get(parent_comment_id)
+                if parent:
+                    notify_comment_reply(parent.user_id, user.id, bundle.name if bundle else '', link)
+        except Exception:
+            pass
+
         return "Comment added successfully", True
     except Exception as e:
         db.session.rollback()

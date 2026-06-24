@@ -30,12 +30,16 @@ Public surface:
 import datetime
 
 from app import db
-from app.core.db_class.db import Notification, UserFollow, BackgroundJob
+from app.core.db_class.db import Notification, UserFollow, BackgroundJob, NotificationPreference
 
 # ── Icons per notification type ────────────────────────────────────────────────
 
 _TYPE_ICON = {
     'new_rule':              'fa-solid fa-shield-halved',
+    'follow_new_bundle':     'fa-solid fa-layer-group',
+    'follow_new_comment':    'fa-solid fa-comment',
+    'rule_comment':          'fa-solid fa-comment-dots',
+    'bundle_comment':        'fa-solid fa-comment-dots',
     'rule_update_found':     'fa-solid fa-rotate',
     'job_created':           'fa-solid fa-clock',
     'job_finished':          'fa-solid fa-circle-check',
@@ -43,10 +47,57 @@ _TYPE_ICON = {
     'github_import_done':    'fa-brands fa-github',
     'github_update_done':    'fa-solid fa-code-branch',
     'proposal_submitted':    'fa-solid fa-code-pull-request',
+    'proposal_comment':      'fa-solid fa-message-lines',
+    'proposal_accepted':     'fa-solid fa-circle-check',
+    'proposal_rejected':     'fa-solid fa-circle-xmark',
+    'comment_reply':         'fa-solid fa-reply',
     'session_running':       'fa-solid fa-spinner',
     'session_done':          'fa-solid fa-circle-check',
     'report_submitted':      'fa-solid fa-triangle-exclamation',
 }
+
+
+# ── Preference helpers ─────────────────────────────────────────────────────────
+
+def _get_pref(user_id):
+    """Return the NotificationPreference for user_id, creating it if absent."""
+    pref = NotificationPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = NotificationPreference(user_id=user_id)
+        db.session.add(pref)
+        db.session.flush()
+    return pref
+
+
+def get_preference(user_id):
+    """Public: return preference, committing if newly created."""
+    try:
+        pref = NotificationPreference.query.filter_by(user_id=user_id).first()
+        if not pref:
+            pref = NotificationPreference(user_id=user_id)
+            db.session.add(pref)
+            db.session.commit()
+        return pref
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] get_preference error: {e}")
+        return NotificationPreference(user_id=user_id)
+
+
+def update_preference(user_id, prefs_dict):
+    """Update preference toggles. prefs_dict: {key: bool} where key matches to_json() keys."""
+    try:
+        pref = _get_pref(user_id)
+        for key, val in prefs_dict.items():
+            attr = f'pref_{key}'
+            if hasattr(pref, attr):
+                setattr(pref, attr, bool(val))
+        db.session.commit()
+        return pref
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] update_preference error: {e}")
+        return None
 
 
 # ── Admin helpers ──────────────────────────────────────────────────────────────
@@ -324,6 +375,9 @@ def notify_followers_new_rule(rule, author_user_id):
 
         notifs = []
         for follow in follows:
+            pref = _get_pref(follow.follower_id)
+            if not pref.pref_follow_new_rule:
+                continue
             notifs.append(Notification(
                 user_id    = follow.follower_id,
                 notif_type = 'new_rule',
@@ -334,11 +388,190 @@ def notify_followers_new_rule(rule, author_user_id):
                 is_read    = False,
                 created_at = datetime.datetime.utcnow(),
             ))
-        db.session.add_all(notifs)
+        if notifs:
+            db.session.add_all(notifs)
         db.session.commit()
     except Exception as e:
         db.session.rollback()
         print(f"[notification_core] notify_followers_new_rule error: {e}")
+
+
+def notify_followers_new_bundle(bundle, author_user_id):
+    """Notify followers of author that a new bundle was created (honours pref_follow_new_bundle)."""
+    try:
+        follows = UserFollow.query.filter_by(followed_id=author_user_id).all()
+        if not follows:
+            return
+
+        from app.core.db_class.db import User
+        author = db.session.get(User, author_user_id)
+        author_name = author.get_username() if author else 'Someone'
+
+        notifs = []
+        for follow in follows:
+            pref = _get_pref(follow.follower_id)
+            if not pref.pref_follow_new_bundle:
+                continue
+            notifs.append(Notification(
+                user_id    = follow.follower_id,
+                notif_type = 'follow_new_bundle',
+                title      = f'New bundle by {author_name}',
+                body       = bundle.name,
+                link       = f'/bundle/detail_bundle/{bundle.id}',
+                icon       = _TYPE_ICON['follow_new_bundle'],
+                is_read    = False,
+                created_at = datetime.datetime.utcnow(),
+            ))
+        if notifs:
+            db.session.add_all(notifs)
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_followers_new_bundle error: {e}")
+
+
+def notify_followers_new_comment(commenter_id, object_title, link):
+    """Notify followers of commenter that they left a new comment (honours pref_follow_new_comment)."""
+    try:
+        follows = UserFollow.query.filter_by(followed_id=commenter_id).all()
+        if not follows:
+            return
+
+        from app.core.db_class.db import User
+        commenter = db.session.get(User, commenter_id)
+        commenter_name = commenter.get_username() if commenter else 'Someone'
+
+        notifs = []
+        for follow in follows:
+            if follow.follower_id == commenter_id:
+                continue
+            pref = _get_pref(follow.follower_id)
+            if not pref.pref_follow_new_comment:
+                continue
+            notifs.append(Notification(
+                user_id    = follow.follower_id,
+                notif_type = 'follow_new_comment',
+                title      = f'{commenter_name} commented',
+                body       = object_title,
+                link       = link,
+                icon       = _TYPE_ICON['follow_new_comment'],
+                is_read    = False,
+                created_at = datetime.datetime.utcnow(),
+            ))
+        if notifs:
+            db.session.add_all(notifs)
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_followers_new_comment error: {e}")
+
+
+def notify_owner_new_comment(owner_user_id, commenter_id, notif_type, object_title, link):
+    """Notify the owner of a rule/bundle that someone commented on it.
+
+    notif_type: 'rule_comment' or 'bundle_comment'
+    Skipped if commenter == owner (no self-notification).
+    Honours pref_rule_comment / pref_bundle_comment.
+    """
+    if owner_user_id == commenter_id:
+        return
+    try:
+        pref = _get_pref(owner_user_id)
+        pref_key = 'pref_rule_comment' if notif_type == 'rule_comment' else 'pref_bundle_comment'
+        if not getattr(pref, pref_key, True):
+            return
+
+        from app.core.db_class.db import User
+        commenter = db.session.get(User, commenter_id)
+        commenter_name = commenter.get_username() if commenter else 'Someone'
+
+        create_notification(
+            user_id    = owner_user_id,
+            notif_type = notif_type,
+            title      = f'{commenter_name} commented on your {"rule" if notif_type == "rule_comment" else "bundle"}',
+            body       = object_title,
+            link       = link,
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_owner_new_comment error: {e}")
+
+
+def notify_proposal_comment(proposal_id, proposal_owner_id, commenter_id, rule_title):
+    """Notify the proposal creator when someone comments on their proposal (honours pref_proposal_comment)."""
+    if proposal_owner_id == commenter_id:
+        return
+    try:
+        pref = _get_pref(proposal_owner_id)
+        if not pref.pref_proposal_comment:
+            return
+
+        from app.core.db_class.db import User
+        commenter = db.session.get(User, commenter_id)
+        commenter_name = commenter.get_username() if commenter else 'Someone'
+
+        create_notification(
+            user_id    = proposal_owner_id,
+            notif_type = 'proposal_comment',
+            title      = f'{commenter_name} commented on your proposal',
+            body       = rule_title or '',
+            link       = f'/rule/proposal_content_discuss?id={proposal_id}',
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_proposal_comment error: {e}")
+
+
+def notify_proposal_status_change(proposal, status, rule_title):
+    """Notify the proposal author when their proposal is accepted or rejected (honours pref_proposal_accepted)."""
+    try:
+        pref = _get_pref(proposal.user_id)
+        if not pref.pref_proposal_accepted:
+            return
+
+        notif_type = 'proposal_accepted' if status == 'accepted' else 'proposal_rejected'
+        verb = 'accepted' if status == 'accepted' else 'rejected'
+        create_notification(
+            user_id    = proposal.user_id,
+            notif_type = notif_type,
+            title      = f'Your proposal was {verb}',
+            body       = rule_title or '',
+            link       = f'/rule/proposal_content_discuss?id={proposal.id}',
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_proposal_status_change error: {e}")
+
+
+def notify_comment_reply(parent_comment_author_id, replier_id, object_title, link):
+    """Notify the author of the parent comment when someone replies (honours pref_comment_reply)."""
+    if parent_comment_author_id == replier_id:
+        return
+    try:
+        pref = _get_pref(parent_comment_author_id)
+        if not pref.pref_comment_reply:
+            return
+
+        from app.core.db_class.db import User
+        replier = db.session.get(User, replier_id)
+        replier_name = replier.get_username() if replier else 'Someone'
+
+        create_notification(
+            user_id    = parent_comment_author_id,
+            notif_type = 'comment_reply',
+            title      = f'{replier_name} replied to your comment',
+            body       = object_title or '',
+            link       = link,
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_comment_reply error: {e}")
+
+
+def delete_all_notifications(user_id):
+    """Hard-delete every notification row for this user."""
+    try:
+        Notification.query.filter_by(user_id=user_id).delete()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] delete_all_notifications error: {e}")
 
 
 def notify_rule_update_found(user_id, count, update_result_id=None):
@@ -396,7 +629,12 @@ def get_notifications(user_id, page=1, per_page=20, unread_only=False, notif_typ
     if unread_only:
         q = q.filter_by(is_read=False)
     if notif_type:
-        q = q.filter_by(notif_type=notif_type)
+        # notif_type may be a single string or a comma-separated list of types
+        types = [t.strip() for t in notif_type.split(',') if t.strip()] if isinstance(notif_type, str) else list(notif_type)
+        if len(types) == 1:
+            q = q.filter(Notification.notif_type == types[0])
+        elif len(types) > 1:
+            q = q.filter(Notification.notif_type.in_(types))
     return q.order_by(Notification.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
 
 
