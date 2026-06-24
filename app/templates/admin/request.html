@@ -1,516 +1,359 @@
 {% extends 'base.html' %}
 {% import 'macros/admin_nav.html' as anav %}
 {% block title %}Ownership Requests — Rulezet{% endblock %}
-{% block content %}
-<div class="container my-4" id="main-container" v-cloak>
 
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<style>
+[v-cloak] { display: none; }
+.req-tab {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .3rem .9rem; border-radius: 99px;
+    border: 1.5px solid var(--border-color);
+    background: var(--light-bg-color);
+    font-size: .78rem; font-weight: 600; color: var(--subtle-text-color);
+    cursor: pointer; transition: all .12s; user-select: none;
+}
+.req-tab.active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.req-tab:hover:not(.active) { border-color: #0d6efd44; color: var(--text-color); }
+.req-row { cursor: pointer; }
+.req-row:hover td { background: rgba(13,110,253,.03); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4" id="req-app" v-cloak>
+
+    <!-- Banner -->
     <div class="explorer-banner mb-4">
-        <i class="fa-solid fa-envelope banner-watermark"></i>
+        <i class="fa-solid fa-user-pen banner-watermark"></i>
         <nav aria-label="breadcrumb" class="mb-3">
-            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+            <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">Ownership Requests</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon">
-                <i class="fa-solid fa-envelope"></i>
-            </div>
+            <div class="banner-icon"><i class="fa-solid fa-user-pen"></i></div>
             <div>
                 <h2 class="fw-bold mb-1">Ownership Requests</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
-        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-            Manage and review proposed edits to existing rules. Accept or reject changes, view proposal history, and participate in discussions to ensure the quality and accuracy of our rule repository.
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+            Review and manage rule ownership transfer requests. Accept or reject pending claims to keep rule authorship accurate.
         </p>
     </div>
 
     {{ anav.admin_nav('requests') }}
 
-    <ul class="nav nav-underline justify-content-center w-100 mb-3" id="exampleTabs" role="tablist">
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link active" id="chap1-tab" data-bs-toggle="tab" href="#chap1-pane" role="tab"
-                aria-controls="chap1-pane" aria-selected="true" style="color: var(--text-color);">
-                Ownership Request
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link" id="chap2-tab" data-bs-toggle="tab" href="#chap2-pane" role="tab"
-                aria-controls="chap2-pane" aria-selected="false" style="color: var(--text-color);">
-                Proposal History
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link" id="chap3-tab" data-bs-toggle="tab" href="#chap3-pane" role="tab"
-                aria-controls="chap3-pane" aria-selected="false" style="color: var(--text-color);">
-                Discussions
-            </a>
-        </li>
-    </ul>
+    <!-- Stats pills -->
+    <div class="d-flex gap-2 flex-wrap mb-3">
+        <span class="badge rounded-pill px-3 py-2"
+              style="font-size:.78rem;background:rgba(255,193,7,.15);color:#856404;border:1px solid rgba(255,193,7,.3);">
+            <i class="fa-solid fa-clock me-1"></i>Pending: [[ pendingTotal ]]
+        </span>
+        <span class="badge rounded-pill px-3 py-2"
+              style="font-size:.78rem;background:rgba(108,117,125,.1);color:var(--subtle-text-color);border:1px solid rgba(108,117,125,.2);">
+            <i class="fa-solid fa-check me-1"></i>Processed: [[ processTotal ]]
+        </span>
+    </div>
 
-    <div class="tab-content" id="exampleTabsContent">
-        <div class="tab-pane fade show active" id="chap1-pane" role="tabpanel" aria-labelledby="chap1-tab">
-            <div class="card card-body shadow-sm" id="main-container">
-                <div class="card" v-if="pending_requests_list.length > 0">
-                    <div class="card-header text-white" style="background-color: #dba709;">
-                        <i class="fas fa-tasks me-2"></i> Processed Ownership Requests
-                    </div>
+    <!-- Tabs + result count -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="req-tab" :class="{active: activeTab==='pending'}" @click="switchTab('pending')">
+                <i class="fa-solid fa-clock"></i> Pending
+            </span>
+            <span class="req-tab" :class="{active: activeTab==='history'}" @click="switchTab('history')">
+                <i class="fa-solid fa-history"></i> History
+            </span>
+            <span class="req-tab" :class="{active: activeTab==='mine'}" @click="switchTab('mine')">
+                <i class="fa-solid fa-user"></i> My Requests
+            </span>
+        </div>
+        <span class="small fw-semibold" style="color:var(--subtle-text-color);">
+            [[ filteredItems.length ]] result[[ filteredItems.length===1?'':'s' ]]
+        </span>
+    </div>
 
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover table-bordered align-middle mb-0 shadow-sm text-center">
-                                <thead class="table-warning">
-                                    <tr>
-                                        <th>#</th>
-                                        <th style="width: 15%;"><i class="fas fa-user"></i> Requester</th>
-                                        <th style="width: 20%;"><i class="fas fa-heading"></i> Title</th>
-                                        <th style="width: 12%;"><i class="fas fa-info-circle"></i> Status</th>
-                                        <th style="width: 15%;"><i class="fas fa-calendar-day"></i> Submitted</th>
-                                        <th style="width: 33%;"><i class="fas fa-file-alt"></i> Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="(request, index) in pending_requests_list" :key="request.id">
-                                        <td class="fw-bold">
-                                            <a :href="`/requests/${request.id}`"
-                                                class="d-block text-decoration-none text-dark">[[ index + 1 ]]</a>
-                                        </td>
-                                        <td class="text-truncate" :title="request.user_who_made_request">
-                                            <a :href="`/requests/${request.id}`"
-                                                class="d-block text-decoration-none text-dark">[[
-                                                request.user_who_made_request ]]</a>
-                                        </td>
-                                        <td style="white-space: normal; overflow-wrap: break-word;"
-                                            :title="request.title">
-                                            <a :href="`/requests/${request.id}`"
-                                                class="d-block text-decoration-none text-dark fw-semibold">
-                                                [[ request.title ]]
-                                                <span v-if="request.user_id === current_user_id"
-                                                    class="badge bg-primary text-uppercase ms-2">(you)</span>
-                                            </a>
-                                        </td>
-                                        <td>
-                                            <a :href="`/requests/${request.id}`" class="d-block text-decoration-none">
-                                                <span class="badge text-uppercase" :class="{
-                                                'bg-success': request.status === 'approved',
-                                                'bg-danger': request.status === 'rejected',
-                                                'bg-secondary': request.status !== 'approved' && request.status !== 'rejected'
-                                            }">
-                                                    [[ request.status ]]
-                                                </span>
-                                            </a>
-                                        </td>
-                                        <td>
-                                            <a :href="`/requests/${request.id}`"
-                                                class="d-block text-decoration-none text-dark">[[ request.created_at
-                                                ]]</a>
-                                        </td>
-                                        <td style="white-space: normal; overflow-wrap: break-word;"
-                                            :title="request.content">
-                                            <a :href="`/requests/${request.id}`"
-                                                class="d-block text-decoration-none text-dark">[[ request.content ]]</a>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="d-flex justify-content-center mt-3" v-if="pending_totalPages > 10">
-                            <nav aria-label="Page navigation">
-                                <ul class="pagination">
-                                    <li class="page-item" :class="{ disabled: pending_currentPage === 1 }">
-                                        <a class="page-link" href="#"
-                                            @click.prevent="fetchPendingRequests(pending_currentPage - 1)">
-                                            <i class="fas fa-arrow-left"></i> Previous
-                                        </a>
-                                    </li>
-                                    <li class="page-item" v-for="page in visiblePages" :key="page"
-                                        :class="{ active: pending_currentPage === page, disabled: page === '...' }">
-                                        <a v-if="page !== '...'" class="page-link" href="#"
-                                            @click.prevent="fetchPendingRequests(page)">[[ page ]]</a>
-                                        <span v-else class="page-link">...</span>
-                                    </li>
-                                    <li class="page-item"
-                                        :class="{ disabled: pending_currentPage === pending_totalPages }">
-                                        <a class="page-link" href="#"
-                                            @click.prevent="fetchPendingRequests(pending_currentPage + 1)">
-                                            Next <i class="fas fa-arrow-right"></i>
-                                        </a>
-                                    </li>
-                                </ul>
-                            </nav>
-                        </div>
+    <!-- Search + per-page bar -->
+    <div class="card mb-3 border-0 shadow-sm" style="border-radius:12px;background:var(--card-bg-color);">
+        <div class="card-body py-3 px-4">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-7">
+                    <label class="form-label small fw-semibold mb-1" style="color:var(--subtle-text-color);">Search</label>
+                    <div class="dt-search">
+                        <i class="fa-solid fa-magnifying-glass dt-search-icon"></i>
+                        <input type="text" class="dt-search-input w-100"
+                               placeholder="Title, message, username…" v-model="search">
+                        <button v-if="search" class="dt-search-clear" @click="search=''">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
                     </div>
                 </div>
-                <div v-else class="alert alert-secondary">No pending requests.</div>
-            </div>
-        </div>
-        <div class="tab-pane fade" id="chap2-pane" role="tabpanel" aria-labelledby="chap2-tab">
-            <div class="card card-body shadow-sm" id="main-container">
-                <div class="card shadow-sm mt-4">
-                    <div class="card-header bg-success text-white">
-                        <i class="fas fa-tasks me-2"></i> Processed Ownership Requests
-                    </div>
-                    <div class="card-body p-0">
-                        <div v-if="process_requests_list.length > 0">
-                            <div class="table-responsive">
-                                <table class="table table-hover table-bordered align-middle mb-0">
-                                    <thead class="table-success text-center">
-                                        <tr>
-                                            <th>#</th>
-                                            <th><i class="fas fa-user"></i> Requester</th>
-                                            <th><i class="fas fa-heading"></i> Title</th>
-                                            <th><i class="fas fa-info-circle"></i> Status</th>
-                                            <th><i class="fas fa-calendar-day"></i> Submitted</th>
-                                            <th><i class="fas fa-file-alt"></i> Description</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr v-for="(request, index) in process_requests_list" :key="request.id">
-                                            <td class="text-center">[[ index + 1 ]]</td>
-                                            <td class="text-center">[[ request.user_who_made_request ]]</td>
-                                            <td>
-                                                <span class="fw-semibold">[[ request.title ]]</span>
-                                            </td>
-                                            <td class="text-center">
-                                                <span class="badge text-uppercase" :class="{
-                                                    'bg-success': request.status === 'approved',
-                                                    'bg-danger': request.status === 'rejected',
-                                                    'bg-secondary': request.status !== 'approved' && request.status !== 'rejected'
-                                                    }">
-                                                    [[ request.status ]]
-                                                </span>
-                                            </td>
-                                            <td class="text-center">[[ request.created_at ]]</td>
-                                            <td>
-                                                <div
-                                                    style="white-space: pre-line; max-width: 400px; overflow-wrap: break-word;">
-                                                    [[ request.content ]]
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-
-                            </div>
-                            <!-- Pagination -->
-                            <div class="d-flex justify-content-center mt-3" v-if="process_totalPages > 10">
-                                <nav aria-label="Page navigation">
-                                    <ul class="pagination">
-                                        <li class="page-item" :class="{ disabled: process_currentPage === 1 }">
-                                            <a class="page-link" href="#"
-                                                @click.prevent="fetchProcessRequests(process_currentPage - 1)">
-                                                <i class="fas fa-arrow-left"></i> Previous
-                                            </a>
-                                        </li>
-                                        <li class="page-item" v-for="page in visiblePagesprocess" :key="page"
-                                            :class="{ active: process_currentPage === page, disabled: page === '...' }">
-                                            <a v-if="page !== '...'" class="page-link" href="#"
-                                                @click.prevent="fetchProcessRequests(page)">[[ page ]]</a>
-                                            <span v-else class="page-link">...</span>
-                                        </li>
-                                        <li class="page-item"
-                                            :class="{ disabled: process_currentPage === process_totalPages }">
-                                            <a class="page-link" href="#"
-                                                @click.prevent="fetchProcessRequests(current_page + 1)">
-                                                Next <i class="fas fa-arrow-right"></i>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </nav>
-                            </div>
-                        </div>
-                        <div v-else class="text-center p-4 text-muted">
-                            <i class="fas fa-check-circle fa-2x mb-2 text-success"></i>
-                            <p class="mb-0">No processed ownership requests.</p>
-                        </div>
-                    </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small fw-semibold mb-1" style="color:var(--subtle-text-color);">Per page</label>
+                    <select class="form-select form-select-sm" v-model="perPage"
+                            style="background:var(--card-bg-color);color:var(--text-color);border-color:var(--border-color);">
+                        <option :value="20">20</option>
+                        <option :value="50">50</option>
+                        <option :value="100">100</option>
+                    </select>
                 </div>
-            </div>
-        </div>
-        <div class="tab-pane fade" id="chap3-pane" role="tabpanel" aria-labelledby="chap3-tab">
-            <div class="card card-body shadow-sm" id="main-container">
-                <div class="card shadow-sm mt-4">
-                    <div class="card-header bg-primary text-white">
-                        <i class="fas fa-paper-plane me-2"></i> My Ownership Requests
-                    </div>
-                    <div class="card-body p-0">
-                        <div v-if="request_made_list.length > 0">
-                            <div class="table-responsive">
-                                <table class="table table-hover table-bordered align-middle mb-0">
-                                    <thead class="table-primary text-center">
-                                        <tr>
-                                            <th>#</th>
-                                            <th><i class="fas fa-heading"></i> Title</th>
-                                            <th><i class="fas fa-info-circle"></i> Status</th>
-                                            <th><i class="fas fa-calendar-day"></i> Submitted</th>
-                                            <th><i class="fas fa-file-alt"></i> Description</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr v-for="(request, index) in request_made_list" :key="request.id">
-                                            <td class="text-center">[[ index + 1 ]]</td>
-                                            <td>
-                                                <span class="fw-semibold">[[ request.title ]]</span>
-                                            </td>
-                                            <td class="text-center">
-                                                <span class="badge text-uppercase" :class="{
-                                                        'bg-success': request.status === 'approved',
-                                                        'bg-danger': request.status === 'rejected',
-                                                        'bg-warning text-dark': request.status === 'pending',
-                                                        'bg-secondary': request.status !== 'approved' && request.status !== 'rejected' && request.status !== 'pending'
-                                                    }">
-                                                    [[ request.status ]]
-                                                </span>
-                                            </td>
-                                            <td class="text-center">[[ request.created_at ]]</td>
-                                            <td>
-                                                <div
-                                                    style="white-space: pre-line; max-width: 400px; overflow-wrap: break-word;">
-                                                    [[ request.content ]]
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <!-- Pagination -->
-                            <div class="d-flex justify-content-center mt-3" v-if="request_made_totalPages > 10">
-                                <nav aria-label="Page navigation">
-                                    <ul class="pagination">
-                                        <li class="page-item" :class="{ disabled: request_made_currentPage === 1 }">
-                                            <a class="page-link" href="#"
-                                                @click.prevent="fetchMadeRequests(request_made_currentPage - 1)">
-                                                <i class="fas fa-arrow-left"></i> Previous
-                                            </a>
-                                        </li>
-                                        <li class="page-item" v-for="page in visiblePagesRequestMade" :key="page"
-                                            :class="{ active: request_made_currentPage === page, disabled: page === '...' }">
-                                            <a v-if="page !== '...'" class="page-link" href="#"
-                                                @click.prevent="fetchMadeRequests(page)">[[ page ]]</a>
-                                            <span v-else class="page-link">...</span>
-                                        </li>
-                                        <li class="page-item"
-                                            :class="{ disabled: request_made_currentPage === request_made_totalPages }">
-                                            <a class="page-link" href="#"
-                                                @click.prevent="fetchMadeRequests(request_made_currentPage + 1)">
-                                                Next <i class="fas fa-arrow-right"></i>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </nav>
-                            </div>
-                        </div>
-
-                        <!-- Empty State -->
-                        <div v-else class="text-center p-4 text-muted">
-                            <i class="fas fa-inbox fa-2x mb-2 text-primary"></i>
-                            <p class="mb-0">You have not made any ownership requests yet.</p>
-                        </div>
-                    </div>
+                <div class="col-6 col-md-3">
+                    <button class="btn btn-sm btn-outline-secondary w-100" @click="reload">
+                        <i class="fa-solid fa-rotate-left me-1"></i>Refresh
+                    </button>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Table card -->
+    <div class="dt-wrapper">
+        <div v-if="loading" class="dt-loading-overlay"><div class="dt-spinner"></div></div>
+
+        <div class="dt-table-wrap">
+            <!-- Empty state -->
+            <div v-if="!loading && !filteredItems.length" class="text-center py-5"
+                 style="color:var(--subtle-text-color);">
+                <i class="fa-solid fa-inbox fa-2x mb-3 d-block opacity-50"></i>
+                <div class="fw-semibold">No requests found</div>
+                <div class="small mt-1">Try adjusting your search or switching tabs</div>
+            </div>
+
+            <table v-else class="dt-table">
+                <thead class="dt-thead">
+                    <tr>
+                        <th class="dt-th">Requester</th>
+                        <th class="dt-th">Title</th>
+                        <th class="dt-th">Target owner</th>
+                        <th class="dt-th">Type</th>
+                        <th class="dt-th">Status</th>
+                        <th class="dt-th">Date</th>
+                        <th class="dt-th pe-3 text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="req in pagedItems" :key="req.id" class="req-row"
+                        @click="navigate(req.id)">
+                        <!-- Requester -->
+                        <td class="dt-td" @click.stop>
+                            <user-chip :user-id="req.user_id"
+                                       :username="req.user_who_made_request || ''"
+                                       size="sm"/>
+                        </td>
+                        <!-- Title -->
+                        <td class="dt-td fw-semibold" style="max-width:200px;">
+                            <span style="display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;"
+                                  :title="req.title">[[ req.title ]]</span>
+                        </td>
+                        <!-- Target owner -->
+                        <td class="dt-td" @click.stop>
+                            <user-chip v-if="req.user_id_to_send"
+                                       :user-id="req.user_id_to_send"
+                                       size="sm"/>
+                            <span v-else class="small" style="color:var(--subtle-text-color);">—</span>
+                        </td>
+                        <!-- Type -->
+                        <td class="dt-td">
+                            <span v-if="req.rule_source" class="badge rounded-pill"
+                                  style="font-size:.7rem;background:rgba(13,110,253,.12);color:#0d6efd;border:1px solid rgba(13,110,253,.2);">
+                                <i class="fa-brands fa-github me-1"></i>Source
+                            </span>
+                            <span v-else-if="req.rule_id" class="badge rounded-pill"
+                                  style="font-size:.7rem;background:rgba(25,135,84,.12);color:#146c43;border:1px solid rgba(25,135,84,.25);">
+                                <i class="fa-solid fa-shield-halved me-1"></i>Rule
+                            </span>
+                            <span v-else class="small" style="color:var(--subtle-text-color);">—</span>
+                        </td>
+                        <!-- Status -->
+                        <td class="dt-td">
+                            <span class="badge rounded-pill"
+                                  :class="req.status==='pending'  ? 'bg-warning text-dark' :
+                                          req.status==='approved' ? 'bg-success'           :
+                                          req.status==='rejected' ? 'bg-danger'            : 'bg-secondary'"
+                                  style="font-size:.72rem;text-transform:uppercase;">
+                                [[ req.status ]]
+                            </span>
+                        </td>
+                        <!-- Date -->
+                        <td class="dt-td small text-nowrap"
+                            style="color:var(--subtle-text-color);">[[ req.created_at ]]</td>
+                        <!-- Action -->
+                        <td class="dt-td pe-3 text-end" @click.stop>
+                            <a :href="'/requests/' + req.id"
+                               class="btn btn-outline-primary"
+                               style="padding:.2rem .55rem;font-size:.75rem;">
+                                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View
+                            </a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="totalPages > 1" class="dt-pagination">
+            <button class="dt-pg-btn" :disabled="page===1" @click="goPage(page-1)">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <template v-for="p in visiblePages" :key="p">
+                <span v-if="p==='...'" class="dt-pg-ellipsis">…</span>
+                <button v-else class="dt-pg-btn" :class="{active: p===page}" @click="goPage(p)">[[ p ]]</button>
+            </template>
+            <button class="dt-pg-btn" :disabled="page===totalPages" @click="goPage(page+1)">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+
 </div>
-
-
 {% endblock %}
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed } = Vue;
-    import { message_list } from '/static/js/toaster.js';
+const { createApp, ref, computed } = Vue;
+import { create_message } from '/static/js/toaster.js';
+import UserChip from '/static/js/components/UserChip.js';
 
-    createApp({
-        delimiters: ['[[', ']]'],
-        setup() {
-            /*###################################_Fetch_requests_#################################*/
+createApp({
+    delimiters: ['[[', ']]'],
+    components: { UserChip },
+    setup() {
+        const loading  = ref(false);
+        const activeTab = ref('pending');
+        const search   = ref('');
+        const perPage  = ref(20);
+        const page     = ref(1);
 
-            const pending_requests_list = ref([]);
-            const pending_currentPage = ref(1);
-            const pending_totalPages = ref(1);
+        const pendingItems       = ref([]);
+        const historyItems       = ref([]);
+        const mineItems          = ref([]);
+        const pendingTotal       = ref(0);
+        const processTotal       = ref(0);
+        const pendingTotalPages  = ref(1);
+        const historyTotalPages  = ref(1);
+        const mineTotalPages     = ref(1);
 
-            /**
-             *          ####################
-             *          #   fetch pending  #
-             *          ####################
-             * */
-
-            async function fetchPendingRequests(page) {
-                const params = new URLSearchParams({
-                    page
-                })
-                const res = await fetch(`/get_requests_page?` + params.toString());
-                if (await res.status == 200) {
-                    const data = await res.json();
-                    if (data) {
-                        pending_requests_list.value = data.pending_requests_list || [];
-                        pending_currentPage.value = page;
-                        pending_totalPages.value = data.pending_totalPages;
-                    }
-                }
-            }
-
-            fetchPendingRequests(1);
-
-
-            /**
-             *          ####################
-             *          #   fetch page     #
-             *          ####################
-             * */
-
-            const visiblePages = computed(() => {
-                const pages = []
-                const total = pending_totalPages.value
-                const current = pending_currentPage.value
-                if (total <= 7) {
-                    for (let i = 1; i <= total; i++) pages.push(i)
-                } else {
-                    if (current <= 4) {
-                        pages.push(1, 2, 3, 4, 5, '...', total)
-                    } else if (current >= total - 3) {
-                        pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total)
-                    } else {
-                        pages.push(1, '...', current - 1, current, current + 1, '...', total)
-                    }
-                }
-                return pages
-            })
-            /*###################################_Fetch_history_#################################*/
-
-            const process_requests_list = ref([])
-            const process_currentPage = ref(1)
-            const process_totalPages = ref(1)
-
-            /**
-             *          ####################
-             *          #   fetch history  #
-             *          ####################
-             * */
-
-            async function fetchProcessRequests(page) {
-                const params = new URLSearchParams({
-                    page
-                })
-                const res = await fetch(`/get_process_requests_page?` + params.toString());
-                if (await res.status == 200) {
-                    const data = await res.json();
-                    if (data) {
-                        process_requests_list.value = data.process_requests_list || [];
-                        process_currentPage.value = page;
-                        process_totalPages.value = data.process_totalPages;
-                    }
-                }
-            }
-
-            fetchProcessRequests(1)
-
-            /**
-             *          ####################
-             *          #   fetch page     #
-             *          ####################
-             * */
-
-            const visiblePagesprocess = computed(() => {
-                const pages = []
-                const total = process_totalPages.value
-                const current = process_currentPage.value
-                if (total <= 7) {
-                    for (let i = 1; i <= total; i++) pages.push(i)
-                } else {
-                    if (current <= 4) {
-                        pages.push(1, 2, 3, 4, 5, '...', total)
-                    } else if (current >= total - 3) {
-                        pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total)
-                    } else {
-                        pages.push(1, '...', current - 1, current, current + 1, '...', total)
-                    }
-                }
-                return pages
-            })
-
-            /*###################################_Fetch_history_#################################*/
-
-            const request_made_list = ref([])
-            const request_made_currentPage = ref(1)
-            const request_made_totalPages = ref(1)
-
-            /**
-             *          ####################################
-             *          #   fetch respond and request made #
-             *          ####################################
-             * */
-
-            async function fetchMadeRequests(page) {
-                const params = new URLSearchParams({
-                    page
-                })
-                const res = await fetch(`/get_made_requests_page?` + params.toString());
-                if (await res.status == 200) {
-                    const data = await res.json();
-                    if (data) {
-                        request_made_list.value = data.made_requests_list || [];
-                        request_made_currentPage.value = page;
-                        request_made_totalPages.value = data.made_totalPages;
-                    }
-                }
-            }
-
-            fetchMadeRequests(1)
-
-
-            const visiblePagesRequestMade = computed(() => {
-                const total = request_made_totalPages.value;
-                const current = request_made_currentPage.value;
-                const delta = 2;
-                const range = [];
-
-                for (let i = Math.max(1, current - delta); i <= Math.min(total, current + delta); i++) {
-                    range.push(i);
-                }
-
-                if (range[0] > 1) {
-                    if (range[0] > 2) range.unshift('...');
-                    range.unshift(1);
-                }
-                if (range[range.length - 1] < total) {
-                    if (range[range.length - 1] < total - 1) range.push('...');
-                    range.push(total);
-                }
-
-                return range;
-            });
-
-
-
-
-            return {
-                pending_requests_list,
-                pending_currentPage,
-                pending_totalPages,
-                fetchPendingRequests,
-
-
-                visiblePages,
-                fetchProcessRequests,
-                process_requests_list,
-                process_currentPage,
-                process_totalPages,
-                visiblePagesprocess,
-
-                request_made_list,
-                request_made_currentPage,
-                request_made_totalPages,
-                fetchMadeRequests,
-                visiblePagesRequestMade,
-
-                message_list
-            };
+        async function fetchPending(p = 1) {
+            loading.value = true;
+            try {
+                const res  = await fetch(`/get_requests_page?page=${p}`);
+                const data = await res.json();
+                if (data.success !== false) {
+                    pendingItems.value     = data.pending_requests_list || [];
+                    pendingTotalPages.value = data.pending_totalPages || 1;
+                    pendingTotal.value     = pendingItems.value.length;
+                } else { pendingItems.value = []; }
+            } catch { create_message('Failed to load pending requests', 'danger'); }
+            finally { loading.value = false; }
         }
-    }).mount('#main-container');
+
+        async function fetchHistory(p = 1) {
+            loading.value = true;
+            try {
+                const res  = await fetch(`/get_process_requests_page?page=${p}`);
+                const data = await res.json();
+                if (data.success !== false) {
+                    historyItems.value     = data.process_requests_list || [];
+                    historyTotalPages.value = data.process_totalPages || 1;
+                    processTotal.value     = historyItems.value.length;
+                } else { historyItems.value = []; }
+            } catch { create_message('Failed to load history', 'danger'); }
+            finally { loading.value = false; }
+        }
+
+        async function fetchMine(p = 1) {
+            loading.value = true;
+            try {
+                const res  = await fetch(`/get_made_requests_page?page=${p}`);
+                const data = await res.json();
+                if (data.success !== false) {
+                    mineItems.value     = data.made_requests_list || [];
+                    mineTotalPages.value = data.made_totalPages || 1;
+                } else { mineItems.value = []; }
+            } catch { create_message('Failed to load your requests', 'danger'); }
+            finally { loading.value = false; }
+        }
+
+        const currentItems = computed(() => {
+            if (activeTab.value === 'pending') return pendingItems.value;
+            if (activeTab.value === 'history') return historyItems.value;
+            return mineItems.value;
+        });
+
+        const totalPages = computed(() => {
+            if (activeTab.value === 'pending') return pendingTotalPages.value;
+            if (activeTab.value === 'history') return historyTotalPages.value;
+            return mineTotalPages.value;
+        });
+
+        const filteredItems = computed(() => {
+            const q = search.value.trim().toLowerCase();
+            if (!q) return currentItems.value;
+            return currentItems.value.filter(r =>
+                (r.title || '').toLowerCase().includes(q) ||
+                (r.content || '').toLowerCase().includes(q) ||
+                (r.user_who_made_request || '').toLowerCase().includes(q) ||
+                (r.rule_source || '').toLowerCase().includes(q)
+            );
+        });
+
+        const pagedItems = computed(() => {
+            const s = (page.value - 1) * perPage.value;
+            return filteredItems.value.slice(s, s + perPage.value);
+        });
+
+        const visiblePages = computed(() => {
+            const total   = totalPages.value;
+            const current = page.value;
+            const pages   = [];
+            if (total <= 7) { for (let i = 1; i <= total; i++) pages.push(i); }
+            else if (current <= 4) { pages.push(1,2,3,4,5,'...',total); }
+            else if (current >= total - 3) { pages.push(1,'...',total-4,total-3,total-2,total-1,total); }
+            else { pages.push(1,'...',current-1,current,current+1,'...',total); }
+            return pages;
+        });
+
+        function goPage(p) {
+            page.value = p;
+            if (activeTab.value === 'pending') fetchPending(p);
+            else if (activeTab.value === 'history') fetchHistory(p);
+            else fetchMine(p);
+        }
+
+        function switchTab(tab) {
+            activeTab.value = tab;
+            page.value = 1;
+            search.value = '';
+            if (tab === 'pending' && !pendingItems.value.length) fetchPending(1);
+            if (tab === 'history' && !historyItems.value.length) fetchHistory(1);
+            if (tab === 'mine'    && !mineItems.value.length)    fetchMine(1);
+        }
+
+        function reload() {
+            page.value = 1;
+            if (activeTab.value === 'pending') fetchPending(1);
+            else if (activeTab.value === 'history') fetchHistory(1);
+            else fetchMine(1);
+        }
+
+        function navigate(id) { window.location.href = `/requests/${id}`; }
+
+        fetchPending(1);
+        fetchHistory(1);
+
+        return {
+            loading, activeTab, search, perPage, page,
+            currentItems, filteredItems, pagedItems,
+            totalPages, visiblePages, pendingTotal, processTotal,
+            switchTab, goPage, reload, navigate,
+        };
+    }
+}).mount('#req-app');
 </script>
 {% endblock %}

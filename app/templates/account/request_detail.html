@@ -1,374 +1,529 @@
 {% extends 'base.html' %}
-{% block title %}Ownership Request Details — Rulezet{% endblock %}
+{% block title %}Ownership Request — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<style>
+[v-cloak] { display: none; }
+
+/* ── Section cards ───────────────────────────────────── */
+.rd-card {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+}
+.rd-card__header {
+    display: flex; align-items: center; gap: .55rem;
+    padding: .7rem 1.1rem;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    flex-wrap: wrap;
+}
+.rd-card__accent { width: 3px; height: 15px; background: #0d6efd; border-radius: 2px; flex-shrink: 0; }
+.rd-card__accent--green  { background: #198754; }
+.rd-card__accent--orange { background: #fd7e14; }
+.rd-card__accent--red    { background: #dc3545; }
+.rd-card__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color); }
+.rd-card__body { padding: 1.25rem; }
+
+/* ── Info grid ───────────────────────────────────────── */
+.rd-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: .85rem;
+}
+.rd-info-cell {
+    display: flex; align-items: flex-start; gap: .65rem;
+}
+.rd-info-icon {
+    width: 36px; height: 36px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: .85rem;
+}
+.rd-info-label {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--subtle-text-color); margin-bottom: .15rem;
+}
+.rd-info-value { font-size: .88rem; color: var(--text-color); font-weight: 500; }
+
+/* ── Message box ─────────────────────────────────────── */
+.rd-message {
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: .9rem 1.1rem;
+    font-size: .88rem;
+    line-height: 1.6;
+    color: var(--text-color);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ── Action bar ──────────────────────────────────────── */
+.rd-action-bar {
+    display: flex; align-items: center; gap: .65rem;
+    padding: .9rem 1.25rem;
+    border-top: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    flex-wrap: wrap;
+}
+
+/* ── Single rule card (for rule_id requests) ─────────── */
+.rd-rule-card {
+    display: flex; align-items: center; gap: .85rem;
+    padding: .85rem 1rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: 11px;
+    background: var(--card-bg-color);
+    transition: border-color .12s;
+}
+.rd-rule-card.selected { border-color: #0d6efd; background: rgba(13,110,253,.04); }
+.rd-rule-card__check {
+    width: 20px; height: 20px; border-radius: 5px;
+    border: 2px solid var(--border-color);
+    background: var(--light-bg-color);
+    cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .12s;
+}
+.rd-rule-card.selected .rd-rule-card__check { border-color: #0d6efd; background: #0d6efd; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container my-5" id="main-container">
-    <nav aria-label="breadcrumb" class="mb-4">
-        <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
-            <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-            <li class="breadcrumb-item"><a href="/account" class="text-decoration-none text-muted">Account</a></li>
-            <li class="breadcrumb-item active text-muted" aria-current="page">Request Details</li>
-        </ol>
-    </nav>
-    <div class="text-center mb-5">
-        <i class="fas fa-id-card fa-3x text-primary mb-3"></i>
-        <h2 class="fw-bold">Ownership Request Details</h2>
-        <p class="text-muted">Full details of the ownership transfer request</p>
+<div class="container my-4" id="req-detail-app" v-cloak>
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-user-pen banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/admin/request" class="text-decoration-none text-muted">Ownership Requests</a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">
+                    Request #[[ requestId ]]
+                </li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-user-pen"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">
+                    <template v-if="current_request">[[ current_request.title ]]</template>
+                    <template v-else>Ownership Request #[[ requestId ]]</template>
+                </h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+            Review the details of this ownership transfer request and accept or reject it.
+        </p>
     </div>
 
-    <div v-if="current_request" class="row justify-content-center">
-        <div class="col-md-10">
-            <div class="border rounded shadow-sm p-4 ">
-                <div class="mb-4 d-flex align-items-center justify-content-between">
-                    <h4 class="fw-bold mb-0">
-                        <i class="fas fa-scroll me-2 text-info"></i>[[ current_request.title ]]
-                    </h4>
-                    <span :class="statusBadge(current_request.status)" class="badge fs-6 text-uppercase">
-                        [[ current_request.status ]]
-                    </span>
-                </div>
+    <!-- Loading placeholder -->
+    <div v-if="!current_request" class="text-center py-5" style="color:var(--subtle-text-color);">
+        <i class="fa-solid fa-spinner fa-spin fa-2x mb-3 d-block"></i>
+        <div class="fw-semibold">Loading request…</div>
+    </div>
 
-                <ul class="list-group list-group-flush mb-4">
-                    <li class="list-group-item">
-                        <strong><i class="fas fa-user me-2 text-secondary"></i>Requester:</strong>
-                        <span class="ms-2">[[ current_request.user_who_made_request ]]</span>
-                    </li>
-                    <li class="list-group-item">
-                        <strong><i class="fas fa-user-shield me-2 text-secondary"></i>Adress to:</strong>
-                        <span class="ms-2"> <span class="badge bg-primary text-uppercase"> (you) </span></span>
-                    </li>
-                    <span v-if="current_request.rule_id">
-                        <li class="list-group-item">
-                            <strong><i class="fas fa-database me-2 text-secondary"></i>Rule ID:</strong>
-                            <span class="ms-2">[[ current_request.rule_id ]]</span>
-                        </li>
-                    </span>
-                    <span v-if="current_request.rule_source">
-                        <li class="list-group-item">
-                            <strong><i class="fas fa-link me-2 text-secondary"></i>Rule Source:</strong>
-                            <span class="ms-2" v-if="current_request.rule_source">
-                            <a :href="current_request.rule_source" rel="noreferrer" target="_blank" class="text-decoration-none">
-                                [[ current_request.rule_source ]]
-                            </a>
-                            </span>
-                            <span class="ms-2" v-else class="text-muted fst-italic">None</span>
-                        </li>
-                    </span>
-                </ul>
+    <template v-else>
 
-                <div class="mb-4">
-                    <h5 class="fw-semibold"><i class="fas fa-comment-dots me-2 text-primary"></i>Request Message</h5>
-                    <p class="bg-light p-3 rounded border fst-italic">[[ current_request.content ]]</p>
-                </div>
-
-                <div class="d-flex justify-content-between text-muted small">
-                    <div>
-                        <i class="fas fa-calendar-alt me-1"></i>Created:
-                        <span>[[ current_request.created_at ]]</span>
-                    </div>
-                    <div>
-                        <i class="fas fa-clock me-1"></i>Updated:
-                        <span>[[ current_request.updated_at ]]</span>
-                    </div>
-                    <div>
-                        <i class="fas fa-fingerprint me-1"></i>UUID:
-                        <span class="text-break">[[ current_request.uuid ]]</span>
-                    </div>
-                    <button
-                        class="btn btn-danger me-2"
-                        @click="updateStatus('rejected')">
-                        <i class="fas fa-times"></i> Reject
+        <!-- ── Request info card ──────────────────────────────── -->
+        <div class="rd-card">
+            <div class="rd-card__header">
+                <div class="rd-card__accent"
+                     :class="current_request.status==='approved' ? 'rd-card__accent--green' :
+                             current_request.status==='rejected' ? 'rd-card__accent--red'   : ''"></div>
+                <span class="rd-card__title">Ownership Request #[[ current_request.id ]]</span>
+                <span class="badge rounded-pill ms-1"
+                      :class="current_request.status==='pending'  ? 'bg-warning text-dark' :
+                              current_request.status==='approved' ? 'bg-success'           :
+                              current_request.status==='rejected' ? 'bg-danger'            : 'bg-secondary'"
+                      style="font-size:.72rem;text-transform:uppercase;">
+                    [[ current_request.status ]]
+                </span>
+                <!-- Reject button in header (pending only) -->
+                <div class="ms-auto" v-if="isPending && canAct">
+                    <button class="btn btn-outline-danger btn-sm"
+                            :disabled="submitting"
+                            @click="updateStatus('rejected', [])">
+                        <i class="fa-solid fa-xmark me-1"></i>Reject
                     </button>
                 </div>
             </div>
-        </div>
 
-        <div class="container mt-4" v-if="(concerned_rules_list) && (concerned_rules_list.length > 0)">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h4 class="mb-0">
-                    <i class="fas fa-shield-alt me-2"></i> Rule(s) concerned : [[ total_rules ]]
-                </h4>
-                <button class="btn btn-sm btn-primary" @click="selectAllConcernedRules">
-                    [[ selected_rules.length > 0 ? 'Deselect All' : 'Select All (All Pages)' ]]
+            <div class="rd-card__body">
+                <h5 class="fw-semibold mb-4">[[ current_request.title ]]</h5>
 
-                </button>
-            </div>
-
-
-            <div>
-                <div >
-                    <table class="table table-hover table-bordered align-middle shadow-sm">
-                        <thead class="table-dark">
-                        <tr>
-                            <th>#</th>
-                            <th><i class="fas fa-signature me-1"></i> Titre</th>
-                            <th><i class="fas fa-code me-1"></i> Format</th>
-                            <th><i class="fas fa-user me-1"></i> Author</th>
-                            <th><i class="fas fa-calendar-alt me-1"></i> Created</th>
-                            <th><i class="fas fa-gavel me-1"></i> Licence</th>
-                            <th><i class="fas fa-heart me-1"></i> Votes</th>
-                            <th>Select</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <tr v-for="(rule, index) in concerned_rules_list" :key="rule.id" @click="toggleRuleSelection(rule)"  :class="{ 'table-active': isSelected(rule) }" style="cursor: pointer;" >
-                            <th scope="row">[[ index + 1 ]]</th>
-                            <td :title="[[ rule.to_string ]]">[[ rule.title ]]</td>
-                            <td><span class="badge bg-primary text-uppercase">[[ rule.format ]]</span></td>
-                            <td>[[ rule.author ]]</td>
-                            <td>[[ rule.creation_date ]]</td>
-                            <td>
-                                <span class="badge bg-secondary text-truncate d-inline-block" style="max-width: 150px;" :title="[[ rule.license ]]">
-                                    [[ rule.license ]]
-                                </span>
-                            </td>
-                            <td>
-                                <i class="fas fa-thumbs-up text-success me-1"></i> [[ rule.vote_up ]] 
-                                <i class="fas fa-thumbs-down text-danger ms-2 me-1"></i> [[ rule.vote_down ]]
-                            </td>
-                            <td @click.stop>
-                                <input type="checkbox" :value="rule" @change="toggleRuleSelection(rule)" :checked="isSelected(rule)">
-                            </td>
-                        </tr>
-                        </tbody>
-                    </table>
-
-                    <div class="d-flex justify-content-center mt-3">
-                        <nav aria-label="Page navigation">
-                            <ul class="pagination">
-                            <li class="page-item" :class="{ disabled: Rules_Page === 1 }">
-                                <a class="page-link" href="#" @click.prevent="fetchConcernedRules(Rules_Page - 1)">
-                                <i class="fas fa-arrow-left"></i> Previous
-                                </a>
-                            </li>
-                            <li class="page-item" v-for="page in visiblePages" :key="page" :class="{ active: Rules_Page === page, disabled: page === '...' }">
-                                <a v-if="page !== '...'" class="page-link" href="#" @click.prevent="fetchConcernedRules(page)">[[ page ]]</a>
-                                <span v-else class="page-link">...</span>
-                            </li>
-                            <li class="page-item" :class="{ disabled: Rules_Page === Rules_totalPages }">
-                                <a class="page-link" href="#" @click.prevent="fetchConcernedRules(current_page + 1)">
-                                Next <i class="fas fa-arrow-right"></i>
-                                </a>
-                            </li>
-                            </ul>
-                        </nav>
+                <!-- Info grid -->
+                <div class="rd-info-grid mb-4">
+                    <!-- Requester -->
+                    <div class="rd-info-cell">
+                        <div class="rd-info-icon" style="background:rgba(13,110,253,.1);color:#0d6efd;">
+                            <i class="fa-solid fa-user-pen"></i>
+                        </div>
+                        <div>
+                            <div class="rd-info-label">Requested by</div>
+                            <user-chip :user-id="current_request.user_id"
+                                       :username="current_request.user_who_made_request || ''"
+                                       size="sm">
+                            </user-chip>
+                        </div>
                     </div>
-                </div>
-                <div v-if="selected_rules.length > 0">
-                    <span> selected rules : [[ selected_rules.length ]] </span>
-                    <div class="border rounded p-2 ">
-                        <div class="d-flex flex-wrap align-items-center gap-2">
-                            <div
-                                v-for="rule in selected_rules.slice(0, 50)"
-                                :key="rule.id"
-                                class="d-flex align-items-center  border rounded px-2 py-1 small"
-                            >
-                                <span class="text-truncate me-2" style="max-width: 150px;">[[ rule.title ]]</span>
-                                <button class="btn btn-sm btn-outline-danger py-0 px-1" @click="removeSelectedRule(rule)">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
-                            <div v-if="selected_rules.length > 50" class="text-muted small">
-                                ...
+
+                    <!-- Target owner -->
+                    <div class="rd-info-cell" v-if="current_request.user_id_to_send">
+                        <div class="rd-info-icon" style="background:rgba(25,135,84,.1);color:#198754;">
+                            <i class="fa-solid fa-user-shield"></i>
+                        </div>
+                        <div>
+                            <div class="rd-info-label">Current owner</div>
+                            <user-chip :user-id="current_request.user_id_to_send" size="sm"/>
+                        </div>
+                    </div>
+
+                    <!-- Rule or Source -->
+                    <div class="rd-info-cell" v-if="current_request.rule_source">
+                        <div class="rd-info-icon" style="background:rgba(13,110,253,.07);color:#0d6efd;">
+                            <i class="fa-brands fa-github"></i>
+                        </div>
+                        <div>
+                            <div class="rd-info-label">Source</div>
+                            <div class="rd-info-value">
+                                <a :href="current_request.rule_source" target="_blank" rel="noreferrer"
+                                   class="text-decoration-none"
+                                   style="font-size:.8rem;max-width:240px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;">
+                                    [[ current_request.rule_source ]]
+                                    <i class="fa-solid fa-arrow-up-right-from-square ms-1 opacity-50" style="font-size:.6rem;"></i>
+                                </a>
                             </div>
                         </div>
-                        <!-- <div class="text-muted small">
-                            selected rules : [[ selected_rules.length ]]
-                        </div> -->
                     </div>
-                    <button
-                        class="btn btn-success me-2"
-                        @click="updateStatus('approved')">
-                        <i class="fas fa-check"></i> Accept
-                    </button>
+                    <div class="rd-info-cell" v-else-if="current_request.rule_id">
+                        <div class="rd-info-icon" style="background:rgba(25,135,84,.1);color:#198754;">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <div>
+                            <div class="rd-info-label">Rule</div>
+                            <div class="rd-info-value">
+                                <a :href="'/rule/detail_rule/' + current_request.rule_id"
+                                   class="text-decoration-none" style="font-size:.85rem;">
+                                    Rule #[[ current_request.rule_id ]]
+                                    <i class="fa-solid fa-arrow-up-right-from-square ms-1 opacity-50" style="font-size:.6rem;"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Created -->
+                    <div class="rd-info-cell">
+                        <div class="rd-info-icon" style="background:rgba(108,117,125,.1);color:var(--subtle-text-color);">
+                            <i class="fa-solid fa-calendar-alt"></i>
+                        </div>
+                        <div>
+                            <div class="rd-info-label">Submitted</div>
+                            <div class="rd-info-value">[[ current_request.created_at ]]</div>
+                        </div>
+                    </div>
+
+                    <!-- Updated -->
+                    <div class="rd-info-cell">
+                        <div class="rd-info-icon" style="background:rgba(108,117,125,.1);color:var(--subtle-text-color);">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </div>
+                        <div>
+                            <div class="rd-info-label">Last updated</div>
+                            <div class="rd-info-value">[[ current_request.updated_at ]]</div>
+                        </div>
+                    </div>
                 </div>
 
-
-
-
+                <!-- Message -->
+                <div class="rd-info-label mb-2">
+                    <i class="fa-solid fa-comment-dots me-1"></i>Message
+                </div>
+                <div class="rd-message">[[ current_request.content ]]</div>
             </div>
         </div>
-    </div>
 
-    <div v-else class="text-center mt-5 text-muted">
-        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
-        <p>Loading request details...</p>
-    </div>
+        <!-- ── Concerned rules (source request) ──────────────── -->
+        <div v-if="current_request.rule_source">
+            <div v-if="isPending && canAct" class="alert alert-info border-0 rounded-3 py-2 px-3 mb-3" style="font-size:.82rem;">
+                <i class="fa-solid fa-circle-info me-1"></i>
+                Select the rules you want to transfer, then click <strong>Confirm</strong> to accept.
+                Use the <strong>Reject</strong> button above to decline without transferring.
+                Transfers of more than 500 rules are automatically processed as a background job.
+            </div>
+
+            <!-- Transfer in-progress overlay -->
+            <div v-if="transferring"
+                 class="d-flex flex-column align-items-center justify-content-center gap-3 py-5 mb-3"
+                 style="background:var(--card-bg-color);border-radius:14px;border:1px solid var(--border-color);">
+                <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;">
+                    <span class="visually-hidden">Loading…</span>
+                </div>
+                <div class="fw-semibold" style="color:var(--text-color);">[[ transferLabel ]]</div>
+                <div class="small" style="color:var(--subtle-text-color);">Please wait…</div>
+            </div>
+
+            <rule-list
+                v-show="!transferring"
+                :mode="isPending && canAct ? 'select' : 'read'"
+                default-view="card"
+                fetch-url="/rule/data_table"
+                :source="current_request.rule_source"
+                :user-id="current_request.status === 'approved'
+                    ? current_request.user_id
+                    : (isAdmin ? null : current_request.user_id_to_send)"
+                :can-vote="{{ current_user.is_authenticated | tojson }}"
+                :can-favorite="{{ current_user.is_authenticated | tojson }}"
+                :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
+                :current-user-is-admin="{{ current_user.is_admin() | tojson }}"
+                :show-create="false"
+                :current-user-is-authenticated="{{ current_user.is_authenticated | tojson }}"
+                :csrf-token="csrfToken"
+                @send="onRuleListSend">
+            </rule-list>
+        </div>
+
+        <!-- ── Concerned rule (single rule request) ──────────── -->
+        <div class="rd-card" v-else-if="current_request.rule_id">
+            <div class="rd-card__header">
+                <div class="rd-card__accent"></div>
+                <span class="rd-card__title"><i class="fa-solid fa-shield-halved me-1"></i>Concerned rule</span>
+            </div>
+            <div class="rd-card__body">
+                <!-- Rule card -->
+                <div v-if="singleRule" class="rd-rule-card mb-3"
+                     :class="{ selected: singleSelected }"
+                     @click="isPending && canAct ? singleSelected = !singleSelected : null"
+                     :style="isPending && canAct ? 'cursor:pointer' : ''">
+                    <!-- Checkbox -->
+                    <div v-if="isPending && canAct" class="rd-rule-card__check"
+                         @click.stop="singleSelected = !singleSelected">
+                        <i v-if="singleSelected" class="fa-solid fa-check" style="color:#fff;font-size:.65rem;"></i>
+                    </div>
+                    <!-- Rule info -->
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="fw-semibold mb-1" style="font-size:.9rem;">
+                            <a :href="'/rule/detail_rule/' + singleRule.id"
+                               class="text-decoration-none"
+                               style="color:var(--text-color);"
+                               @click.stop>
+                                [[ singleRule.title ]]
+                                <i class="fa-solid fa-arrow-up-right-from-square ms-1 opacity-50" style="font-size:.6rem;"></i>
+                            </a>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="badge bg-primary text-uppercase" style="font-size:.68rem;">
+                                [[ singleRule.format ]]
+                            </span>
+                            <span class="small" style="color:var(--subtle-text-color);">
+                                <i class="fa-solid fa-calendar-alt me-1"></i>[[ singleRule.creation_date ]]
+                            </span>
+                            <span class="small" style="color:var(--subtle-text-color);" v-if="singleRule.license">
+                                <i class="fa-solid fa-scale-balanced me-1"></i>[[ singleRule.license ]]
+                            </span>
+                        </div>
+                    </div>
+                    <!-- Votes -->
+                    <div class="text-end flex-shrink-0" style="font-size:.8rem;color:var(--subtle-text-color);">
+                        <i class="fa-solid fa-thumbs-up text-success me-1"></i>[[ singleRule.vote_up ]]
+                        <i class="fa-solid fa-thumbs-down text-danger ms-2 me-1"></i>[[ singleRule.vote_down ]]
+                    </div>
+                </div>
+                <div v-else-if="loadingRule" class="text-center py-3" style="color:var(--subtle-text-color);">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                </div>
+
+                <!-- Accept action for single rule -->
+                <div v-if="isPending && canAct" class="d-flex gap-2">
+                    <button class="btn btn-success btn-sm"
+                            :disabled="!singleSelected || submitting"
+                            @click="updateStatus('approved', [current_request.rule_id])">
+                        <i class="fa-solid fa-check me-1"></i>Accept &amp; Transfer
+                    </button>
+                    <span v-if="!singleSelected" class="small align-self-center"
+                          style="color:var(--subtle-text-color);">
+                        Select the rule above to enable acceptance
+                    </span>
+                </div>
+            </div>
+        </div>
+
+    </template>
+
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-const { createApp, ref, computed } = Vue;
-import { message_list } from '/static/js/toaster.js';
+const { createApp, ref, computed, onMounted } = Vue;
+import { create_message } from '/static/js/toaster.js';
+import UserChip               from '/static/js/components/UserChip.js';
+import RuleList               from '/static/js/rule/ruleList.js';
+import TagsDisplaysList       from '/static/js/tags/tagsDisplaysList.js';
+import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
+
+const isAdmin     = {{ current_user.is_admin() | tojson }};
+const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
+const csrfToken   = '{{ csrf_token() }}';
 
 createApp({
     delimiters: ['[[', ']]'],
+    components: {
+        'user-chip':                   UserChip,
+        'rule-list':                   RuleList,
+        'tags-displays-list':          TagsDisplaysList,
+        'vulnerability-displays-list': VulnerabilityDisplaysList,
+    },
     setup() {
-        const request_id = ref("{{ request_id }}");
-        const current_request = ref();
-        const concerned_rules_list = ref([]);
-        const Rules_Page = ref(1);
-        const Rules_totalPages = ref(1);
-        const selected_rules = ref([]);
-        const total_rules = ref(0);
+        const requestId      = ref({{ request_id }});
+        const current_request = ref(null);
+        const singleRule     = ref(null);
+        const loadingRule    = ref(false);
+        const singleSelected = ref(false);
+        const submitting     = ref(false);
+        const ruleListRef    = ref(null);
+        const transferring   = ref(false);
+        const transferLabel  = ref('Transferring ownership…');
 
+        const isPending = computed(() =>
+            current_request.value && current_request.value.status === 'pending'
+        );
+        const canAct = computed(() =>
+            isAdmin ||
+            (current_request.value && current_request.value.user_id_to_send === currentUserId)
+        );
+
+        // ── Fetch request ─────────────────────────────────────────
         async function fetchCurrentRequest() {
-            const params = new URLSearchParams({ request_id: request_id.value });
-            const res = await fetch(`/get_request?` + params.toString());
-            if (res.status == 200) {
-                const data = await res.json();
-                if (data) {
-                    current_request.value = data.current_request;
-                    fetchConcernedRules(1);
+            const res  = await fetch(`/get_request?request_id=${requestId.value}`);
+            const data = await res.json();
+            if (data.success && data.current_request) {
+                current_request.value = data.current_request;
+                // For single-rule requests, fetch the rule info
+                if (data.current_request.rule_id && !data.current_request.rule_source) {
+                    fetchSingleRule(data.current_request.rule_id);
                 }
-            }
-        }
-
-        async function fetchConcernedRules(page) {
-            const params = new URLSearchParams({ request_id: request_id.value, page });
-            const res = await fetch(`/get_concerned_rule?` + params.toString());
-            if (res.status == 200) {
-                const data = await res.json();
-                if (data) {
-                    concerned_rules_list.value = data.concerned_rules_list || [];
-                    Rules_Page.value = page;
-                    Rules_totalPages.value = data.Rules_totalPages;
-                    total_rules.value = data.total_rules;
-                }
-            }
-        }
-
-        function statusBadge(status) {
-            switch (status) {
-                case "approved": return "bg-success text-white";
-                case "pending": return "bg-warning text-dark";
-                case "rejected": return "bg-danger text-white";
-                default: return "bg-secondary text-white";
-            }
-        }
-
-        function toggleRuleSelection(rule) {
-            const index = selected_rules.value.findIndex(r => r.id === rule.id);
-            if (index === -1) {
-                selected_rules.value.push(rule);
             } else {
-                selected_rules.value.splice(index, 1);
+                create_message('Request not found or access denied', 'danger');
             }
         }
 
-        function removeSelectedRule(rule) {
-            selected_rules.value = selected_rules.value.filter(r => r.id !== rule.id);
-        }
-
-        function isSelected(rule) {
-            return selected_rules.value.some(r => r.id === rule.id);
-        }
-
-        const selected_rule_ids = computed(() => selected_rules.value.map(r => r.id));
-
-        // async function updateStatus( status) {
-        //     const ruleIds = selected_rules.value.map(rule => rule.id);
-        //     const params = new URLSearchParams({ 
-        //         request_id: request_id.value,
-        //         status: status ,
-        //         rule_list: JSON.stringify(ruleIds)
-        //     });
-        //     const res = await fetch(`/update_request?` + params.toString());
-        //     if (res.status == 200) {
-        //         window.location.href = `/admin/request`
-        //     }            
-        // }
-
-        const csrf_token = '{{ csrf_token() }}';
-
-        async function updateStatus(status) {
-            const ruleIds = selected_rules.value.map(rule => rule.id);
-
-            const bodyData = {
-                request_id: request_id.value,
-                status: status,
-                rule_list: ruleIds
-            };
-
-            const res = await fetch('/update_request', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrf_token  
-                },
-                body: JSON.stringify(bodyData)
-            });
-
-            if (res.status === 200) {
-                window.location.href = '/admin/request';
-            }
-        }
-
-
-
-        async function selectAllConcernedRules() {
-            const res = await fetch(`/get_all_concerned_rules?request_id=${request_id.value}`);
-            if (res.status === 200) {
+        async function fetchSingleRule(ruleId) {
+            loadingRule.value = true;
+            try {
+                const res  = await fetch(`/get_concerned_rule?request_id=${requestId.value}&page=1`);
                 const data = await res.json();
-                if (data && data.all_concerned_rules) {
-                    const allRules = data.all_concerned_rules;
-                    const allIds = allRules.map(r => r.id).sort();
-                    const selectedIds = selected_rules.value.map(r => r.id).sort();
+                if (data.success && data.concerned_rules_list && data.concerned_rules_list.length) {
+                    singleRule.value = data.concerned_rules_list[0];
+                }
+            } catch { /* silent */ }
+            finally { loadingRule.value = false; }
+        }
 
-                    const isAllSelected = JSON.stringify(allIds) === JSON.stringify(selectedIds);
+        // ── Accept / Reject ───────────────────────────────────────
+        async function updateStatus(status, ruleIds) {
+            submitting.value = true;
+            try {
+                const res = await fetch('/update_request', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        request_id: requestId.value,
+                        status,
+                        rule_list: ruleIds,
+                    }),
+                });
+                if (res.ok) {
+                    create_message(
+                        status === 'approved' ? 'Request approved — ownership transferred' : 'Request rejected',
+                        status === 'approved' ? 'success' : 'warning'
+                    );
+                    setTimeout(() => { window.location.href = '/admin/request'; }, 900);
+                } else {
+                    create_message('Action failed', 'danger');
+                }
+            } catch {
+                create_message('Network error', 'danger');
+            } finally {
+                submitting.value = false;
+            }
+        }
 
-                    if (isAllSelected) {
-                        selected_rules.value = [];
+        // ── Handle RuleList @send (select mode Confirm) ──────────
+        async function onRuleListSend(ids) {
+            transferring.value = true;
+            transferLabel.value = 'Resolving selection…';
+
+            let resolvedIds = ids;
+            if (ids === 'ALL') {
+                try {
+                    const res  = await fetch(`/get_all_concerned_rules?request_id=${requestId.value}`);
+                    const data = await res.json();
+                    resolvedIds = (data.all_concerned_rules || []).map(r => r.id);
+                } catch {
+                    create_message('Failed to fetch all concerned rules', 'danger');
+                    transferring.value = false;
+                    return;
+                }
+            }
+            if (!Array.isArray(resolvedIds) || !resolvedIds.length) {
+                create_message('No rules selected', 'warning');
+                transferring.value = false;
+                return;
+            }
+
+            if (resolvedIds.length > 500) {
+                // Background job path
+                transferLabel.value = `Dispatching background job for ${resolvedIds.length} rules…`;
+                try {
+                    const res = await fetch('/update_request_bulk', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ request_id: requestId.value, rule_ids: resolvedIds }),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        create_message('Transfer queued as a background job', 'success');
+                        setTimeout(() => { window.location.href = '/jobs'; }, 1000);
                     } else {
-                        selected_rules.value = allRules;
+                        create_message(data.error || 'Failed to dispatch job', 'danger');
+                        transferring.value = false;
                     }
+                } catch {
+                    create_message('Network error', 'danger');
+                    transferring.value = false;
                 }
             } else {
-                message_list.error("Failed to fetch all rules for selection.");
+                // Direct transfer path
+                transferLabel.value = `Transferring ${resolvedIds.length} rule(s)…`;
+                updateStatus('approved', resolvedIds);
             }
         }
 
-        const visiblePages = computed(() => {
-            const pages = []
-            const total = Rules_totalPages.value
-            const current = Rules_Page.value
-            if (total <= 7) {
-            for (let i = 1; i <= total; i++) pages.push(i)
-            } else {
-            if (current <= 4) {
-                pages.push(1, 2, 3, 4, 5, '...', total)
-            } else if (current >= total - 3) {
-                pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total)
-            } else {
-                pages.push(1, '...', current - 1, current, current + 1, '...', total)
-            }
-            }
-            return pages
-        })
-
-
-        fetchCurrentRequest();
+        onMounted(fetchCurrentRequest);
 
         return {
-            request_id,
-            current_request,
-            statusBadge,
-            concerned_rules_list,
-            Rules_Page,
-            Rules_totalPages,
-            fetchConcernedRules,
-            selected_rules,
-            toggleRuleSelection,
-            removeSelectedRule,
-            isSelected,
-            selected_rule_ids,
-            selectAllConcernedRules,
-            updateStatus,
-            visiblePages,
-            total_rules,
-            fetchCurrentRequest
+            requestId, current_request, singleRule, loadingRule,
+            singleSelected, submitting, ruleListRef,
+            transferring, transferLabel,
+            isPending, canAct,
+            isAdmin, currentUserId, csrfToken,
+            updateStatus, onRuleListSend,
         };
     }
-}).mount('#main-container');
+}).mount('#req-detail-app');
 </script>
 {% endblock %}

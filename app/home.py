@@ -166,7 +166,7 @@ def owner_request() -> redirect:
         rules = RuleModel.get_rule_by_source(source)
         if not rules:
             return {"success": False, "message": "No rule with this source!" , "toast_class" : "danger-subtle"}, 200
-        request_ = AccountModel.create_request(rule_id=None, source=source)
+        created_requests = AccountModel.create_request(rule_id=None, source=source)
         log_activity(
             "user.owner_request",
             f"Requested ownership of rules from source '{source}'",
@@ -175,7 +175,10 @@ def owner_request() -> redirect:
         )
         try:
             from app.features.notification.notification_core import notify_ownership_requested
-            notify_ownership_requested(request_, None, current_user)
+            req_list = created_requests if isinstance(created_requests, list) else [created_requests]
+            for req in req_list:
+                if req:
+                    notify_ownership_requested(req, None, current_user)
         except Exception as _e:
             print(f"[home] notify_ownership_requested (source) error: {_e}")
         return {"success": True, "message": "Ownership request submitted successfully !" , "toast_class" : "success-subtle"}, 200
@@ -258,7 +261,7 @@ def get_request() -> json:
     request_id = request.args.get('request_id', 1, type=int)
     request_ = AccountModel.get_request_by_id(request_id)
     if request_:
-        if current_user.is_admin() or request_.user_id_to_send == current_user.id:
+        if current_user.is_admin() or request_.user_id_to_send == current_user.id or request_.user_id == current_user.id:
             return {
                 "success": True,
                 "current_request": request_.to_json() 
@@ -352,6 +355,47 @@ def get_made_requests_page() -> json:
             "made_totalPages": requests_paginated.pages,  
         } , 200
     return {"message": "No requests found"}, 200
+
+
+@home_blueprint.route("/update_request_bulk", methods=["POST"])
+@login_required
+def update_request_bulk() -> jsonify:
+    """Dispatch an ownership_transfer_bulk background job for large transfers."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "Invalid JSON"}), 400
+
+    request_id = data.get('request_id')
+    rule_ids   = data.get('rule_ids', [])
+
+    if not request_id or not rule_ids:
+        return jsonify({"success": False, "error": "Missing request_id or rule_ids"}), 400
+
+    request_ = AccountModel.get_request_by_id(request_id)
+    if not request_:
+        return jsonify({"success": False, "error": "Request not found"}), 404
+
+    is_the_owner = AccountModel.is_the_owner(request_id)
+    if not (current_user.is_admin() or is_the_owner):
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type   = 'ownership_transfer_bulk',
+        payload    = {'request_id': request_id, 'rule_ids': rule_ids},
+        label      = f"Ownership transfer — {len(rule_ids)} rules (request #{request_id})",
+        created_by = current_user.id,
+        total      = len(rule_ids),
+    )
+    if not job:
+        return jsonify({"success": False, "error": "Failed to create job"}), 500
+
+    log_activity(
+        "admin.request_approved",
+        f"Approved ownership request id={request_id} — {len(rule_ids)} rules queued for transfer",
+        extra={"request_id": request_id, "job_uuid": job.uuid, "rule_count": len(rule_ids)},
+    )
+    return jsonify({"success": True, "job_uuid": job.uuid}), 200
 
 
 @home_blueprint.route("/update_request", methods=["POST" ])

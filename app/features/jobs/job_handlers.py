@@ -22,7 +22,7 @@ from pathlib import Path
 
 from app.features.jobs.job_worker import register_handler
 from app import db
-from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJob, BackgroundJobLog, ActivityLog
+from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJob, BackgroundJobLog, ActivityLog, RequestOwnerRule
 from app.features.rule.rule_core import _wipe_rule_children
 import json as _json
 
@@ -1696,3 +1696,103 @@ def handle_bulk_new_rules_decision(job, app):
             job.error  = str(e)
             log_job(job, str(e), level='error', event='failed')
         db.session.commit()
+
+
+# ─── ownership_transfer_bulk ───────────────────────────────────────────────────
+
+OWNERSHIP_BATCH = 100
+
+@register_handler('ownership_transfer_bulk')
+def handle_ownership_transfer_bulk(job, app):
+    """
+    Transfer ownership of a large set of rules to a new owner in batches.
+
+    Payload:
+        request_id : int        — RequestOwnerRule id
+        rule_ids   : list[int]  — rules to transfer
+    """
+    payload    = job.payload or {}
+    request_id = payload.get('request_id')
+    rule_ids   = payload.get('rule_ids', [])
+
+    if not request_id or not rule_ids:
+        log_job(job, "Missing request_id or rule_ids.", level='error', event='done')
+        job.status = 'failed'
+        db.session.commit()
+        return
+
+    ownership_request = RequestOwnerRule.query.get(request_id)
+    if not ownership_request:
+        log_job(job, f"RequestOwnerRule #{request_id} not found.", level='error', event='done')
+        job.status = 'failed'
+        db.session.commit()
+        return
+
+    total = len(rule_ids)
+    if job.total == 0:
+        job.total = total
+        db.session.commit()
+
+    # Mark request as approved upfront
+    ownership_request.status = 'approved'
+    db.session.commit()
+    log_job(job, f"Starting transfer of {total} rule(s) to user #{ownership_request.user_id}.",
+            level='info', event='started')
+
+    offset    = payload.get('_resume_offset', 0)
+    new_owner = ownership_request.user_id
+    source    = ownership_request.rule_source
+    transferred = 0
+
+    for i in range(offset, total, OWNERSHIP_BATCH):
+        if _is_cancelled(job):
+            log_job(job, "Cancelled.", level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+
+        chunk_ids = rule_ids[i:i + OWNERSHIP_BATCH]
+
+        # Transfer ownership
+        Rule.query.filter(Rule.id.in_(chunk_ids)).update(
+            {"user_id": new_owner}, synchronize_session=False
+        )
+
+        # Auto-reject other pending requests for these rules
+        RequestOwnerRule.query.filter(
+            RequestOwnerRule.rule_id.in_(chunk_ids),
+            RequestOwnerRule.status == 'pending',
+            RequestOwnerRule.id != request_id,
+        ).update(
+            {"status": "rejected", "user_id_to_send": new_owner},
+            synchronize_session=False,
+        )
+
+        db.session.commit()
+        transferred += len(chunk_ids)
+        job.done = transferred
+        _save_offset(job, i + OWNERSHIP_BATCH)
+        db.session.commit()
+        log_job(job, f"{transferred}/{total} rule(s) transferred.", level='info', event='progress')
+
+    # Also reject pending source-level requests if applicable
+    if source:
+        RequestOwnerRule.query.filter(
+            RequestOwnerRule.rule_source == source,
+            RequestOwnerRule.status == 'pending',
+            RequestOwnerRule.id != request_id,
+        ).update(
+            {"status": "rejected", "user_id_to_send": new_owner},
+            synchronize_session=False,
+        )
+        db.session.commit()
+
+    # Notify the requester
+    try:
+        from app.features.notification.notification_core import notify_ownership_decision
+        notify_ownership_decision(ownership_request, approved=True,
+                                  rule_title=f"{transferred} rules from {source or 'source'}")
+    except Exception as _e:
+        log_job(job, f"Notification error: {_e}", level='warning')
+
+    log_job(job, f"Done — {transferred} rule(s) transferred.", level='success', event='done')
