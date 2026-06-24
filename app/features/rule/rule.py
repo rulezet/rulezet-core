@@ -3196,6 +3196,38 @@ def rules_data_table():
     }), 200
 
 
+@rule_blueprint.route("/data_table_favorites", methods=['GET'])
+@login_required
+def rules_data_table_favorites():
+    """Favorite rules listing in RuleList format."""
+    per_page   = request.args.get('per_page', 12, type=int)
+    page       = request.args.get('page', 1, type=int)
+    search     = request.args.get('search', None, type=str)
+    pagination = RuleModel.get_rules_page_favorite(
+        page, current_user.id,
+        search=search,
+        per_page=per_page,
+    )
+    rule_ids     = [r.id for r in pagination.items]
+    tags_by_rule = RuleModel.get_tags_for_rules_batch(rule_ids)
+    items = []
+    for r in pagination.items:
+        d = r.to_json()
+        d['tags']        = [t.to_json() for t in tags_by_rule.get(r.id, [])]
+        d['is_favorited'] = True
+        try:
+            cves = json.loads(r.cve_id) if r.cve_id else []
+            d['cves'] = cves if isinstance(cves, list) else []
+        except (ValueError, TypeError):
+            d['cves'] = []
+        items.append(d)
+    return jsonify({
+        "items":       items,
+        "total":       pagination.total,
+        "total_pages": pagination.pages,
+    }), 200
+
+
 @rule_blueprint.route("/github_source_stats", methods=['GET'])
 def github_source_stats():
     """Aggregate stats for one GitHub source URL (GitHub dashboard header)."""

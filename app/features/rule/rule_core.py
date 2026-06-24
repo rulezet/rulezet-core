@@ -922,9 +922,8 @@ def give_all_right_to_admin(rules) -> None:
 #   Favorite rule   #
 #####################
 
-def get_rules_page_favorite(page, id_user, search=None, author=None, sort_by=None, rule_type=None):
+def get_rules_page_favorite(page, id_user, search=None, author=None, sort_by=None, rule_type=None, per_page=30):
     """Get paginated favorite rules of a user with optional filters"""
-    per_page = 30
 
     # Base query: select favorite rules for the user
     query = Rule.query\
