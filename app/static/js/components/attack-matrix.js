@@ -1,6 +1,6 @@
 const { defineComponent, ref, computed } = Vue;
 
-const MITRE_BASE = 'https://attack.mitre.org/techniques/';
+const LOCAL_TECH_BASE = '/attack/technique/';
 
 export default defineComponent({
     name: 'AttackMatrix',
@@ -51,8 +51,8 @@ export default defineComponent({
             return { background: `rgba(13,110,253,${alpha.toFixed(2)})`, color: alpha > 0.5 ? '#fff' : 'var(--text-color)' };
         }
 
-        function mitreUrl(techId) {
-            return MITRE_BASE + techId.replace('.', '/');
+        function techUrl(techId) {
+            return LOCAL_TECH_BASE + techId;
         }
 
         const showAllTactics = ref(false);
@@ -84,7 +84,7 @@ export default defineComponent({
 
         return {
             selected, selectTechnique, closePicker,
-            techBg, techColor, tacticHeaderStyle, mitreUrl,
+            techBg, techColor, tacticHeaderStyle, techUrl,
             stats, tactics, visibleTactics, hiddenCount,
             showAllTactics, coveragePct, overallRulePct,
         };
@@ -220,9 +220,9 @@ export default defineComponent({
                         <span class="am-detail-tech-id">{{ selected.technique.id }}</span>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <a :href="mitreUrl(selected.technique.id)" target="_blank" rel="noopener"
+                        <a :href="techUrl(selected.technique.id)"
                            class="btn btn-sm btn-outline-primary" style="font-size:.72rem;padding:.2rem .6rem;">
-                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>MITRE ATT&amp;CK
+                            <i class="fa-solid fa-crosshairs me-1"></i>View technique
                         </a>
                         <button class="btn btn-sm btn-outline-secondary" style="font-size:.72rem;padding:.2rem .55rem;" @click="closePicker">
                             <i class="fa-solid fa-xmark"></i>

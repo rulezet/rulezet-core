@@ -19,6 +19,23 @@ from ...core.db_class.db import AttackTechnique, RuleAttackAssociation, Rule
 
 # ── Read ──────────────────────────────────────────────────────────────────────
 
+def get_techniques_for_rules_batch(rule_ids: list) -> dict:
+    """Return {rule_id: [technique_json, ...]} for a list of rule IDs (one query)."""
+    if not rule_ids:
+        return {}
+    assocs = (
+        RuleAttackAssociation.query
+        .filter(RuleAttackAssociation.rule_id.in_(rule_ids))
+        .join(AttackTechnique, RuleAttackAssociation.technique_id == AttackTechnique.technique_id)
+        .order_by(RuleAttackAssociation.rule_id, AttackTechnique.technique_id)
+        .all()
+    )
+    result = {rid: [] for rid in rule_ids}
+    for a in assocs:
+        result[a.rule_id].append(a.to_json())
+    return result
+
+
 def get_techniques_for_rule(rule_id: int) -> list:
     assocs = (
         RuleAttackAssociation.query
@@ -461,3 +478,224 @@ def auto_parse_rule(rule_id: int, user_id: int | None = None) -> list[str]:
     if added:
         db.session.commit()
     return added
+
+
+from collections import defaultdict as _dd2
+
+_TACTIC_ORDER_GLOBAL = [
+    'reconnaissance', 'resource-development', 'initial-access', 'execution',
+    'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access',
+    'discovery', 'lateral-movement', 'collection', 'command-and-control',
+    'exfiltration', 'impact',
+]
+_TACTIC_LABELS_GLOBAL = {
+    'reconnaissance':'Reconnaissance','resource-development':'Resource Development',
+    'initial-access':'Initial Access','execution':'Execution',
+    'persistence':'Persistence','privilege-escalation':'Privilege Escalation',
+    'defense-evasion':'Defense Evasion','credential-access':'Credential Access',
+    'discovery':'Discovery','lateral-movement':'Lateral Movement',
+    'collection':'Collection','command-and-control':'Command and Control',
+    'exfiltration':'Exfiltration','impact':'Impact',
+}
+
+
+def get_global_coverage() -> dict:
+    """
+    ATT&CK coverage across ALL active rules (same format as bundle_core.get_attack_coverage).
+    Used by the global heatmap page.
+    """
+    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
+
+    # rule_id -> {id, name, uuid}
+    rule_rows = (
+        db.session.query(Rule.id, Rule.title, Rule.uuid)
+        .filter(Rule.is_deleted == False)
+        .all()
+    )
+    total_rules = len(rule_rows)
+    rule_map = {r.id: {'id': r.id, 'name': r.title or '', 'uuid': str(r.uuid) if r.uuid else ''}
+                for r in rule_rows}
+    rule_ids = list(rule_map.keys())
+
+    assoc_rows = (
+        db.session.query(
+            RuleAttackAssociation.rule_id,
+            RuleAttackAssociation.technique_id,
+            AttackTechnique.tactic_keys,
+        )
+        .join(AttackTechnique, RuleAttackAssociation.technique_id == AttackTechnique.technique_id)
+        .filter(RuleAttackAssociation.rule_id.in_(rule_ids))
+        .all()
+    ) if rule_ids else []
+
+    coverage = _dd2(lambda: _dd2(list))
+    rules_with_attack = set()
+
+    for rule_id, technique_id, tactic_keys in assoc_rows:
+        info = rule_map.get(rule_id)
+        if not info:
+            continue
+        rules_with_attack.add(rule_id)
+        for tac in (tactic_keys or ['unknown']):
+            coverage[tac][technique_id].append(info)
+
+    tactics_out = []
+    all_techs = set()
+    covered_count = 0
+
+    for key in _TACTIC_ORDER_GLOBAL:
+        tac_techs = coverage.get(key, {})
+        techs_out = []
+        for tid, rules in tac_techs.items():
+            if tid:
+                all_techs.add(tid)
+                techs_out.append({'id': tid, 'count': len(rules), 'rules': rules})
+        techs_out.sort(key=lambda x: x['id'])
+        is_covered = bool(techs_out)
+        if is_covered:
+            covered_count += 1
+        tactics_out.append({
+            'key': key,
+            'label': _TACTIC_LABELS_GLOBAL.get(key, key.replace('-', ' ').title()),
+            'covered': is_covered,
+            'technique_count': len(techs_out),
+            'rule_count': sum(t['count'] for t in techs_out),
+            'techniques': techs_out,
+        })
+
+    return {
+        'tactics': tactics_out,
+        'stats': {
+            'covered_tactics': covered_count,
+            'total_tactics': len(_TACTIC_ORDER_GLOBAL),
+            'unique_techniques': len(all_techs),
+            'rules_with_attack': len(rules_with_attack),
+            'total_rules': total_rules,
+        },
+    }
+
+
+def get_analytics_data() -> dict:
+    """
+    Admin analytics: top techniques, coverage % per tactic, totals.
+    """
+    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
+    from sqlalchemy import func, cast, Text
+
+    # Top 20 techniques by rule count
+    top_rows = (
+        db.session.query(
+            RuleAttackAssociation.technique_id,
+            func.count(RuleAttackAssociation.id).label('cnt'),
+        )
+        .group_by(RuleAttackAssociation.technique_id)
+        .order_by(func.count(RuleAttackAssociation.id).desc())
+        .limit(20)
+        .all()
+    )
+
+    # Get names for top techniques
+    top_ids = [r.technique_id for r in top_rows]
+    name_map = {t.technique_id: t.name for t in AttackTechnique.query.filter(
+        AttackTechnique.technique_id.in_(top_ids)).all()} if top_ids else {}
+
+    top_techniques = [
+        {'id': r.technique_id, 'name': name_map.get(r.technique_id, r.technique_id), 'count': r.cnt}
+        for r in top_rows
+    ]
+
+    # Coverage per tactic: covered techniques vs total
+    all_techs = AttackTechnique.query.filter(AttackTechnique.deprecated == False).all()
+    covered_ids = {
+        r.technique_id
+        for r in db.session.query(RuleAttackAssociation.technique_id).distinct().all()
+    }
+
+    tactic_stats = {}
+    for t in all_techs:
+        for tac in (t.tactic_keys or []):
+            if tac not in tactic_stats:
+                tactic_stats[tac] = {'total': 0, 'covered': 0, 'rule_count': 0}
+            tactic_stats[tac]['total'] += 1
+            if t.technique_id in covered_ids:
+                tactic_stats[tac]['covered'] += 1
+
+    # Rule counts per tactic — aggregate in Python to avoid GROUP BY on JSON column
+    assoc_counts = (
+        db.session.query(
+            RuleAttackAssociation.technique_id,
+            func.count(RuleAttackAssociation.id).label('cnt'),
+        )
+        .group_by(RuleAttackAssociation.technique_id)
+        .all()
+    )
+    tech_rule_count = {r.technique_id: r.cnt for r in assoc_counts}
+    # Map technique_id -> tactic_keys (already have all_techs)
+    for t in all_techs:
+        cnt = tech_rule_count.get(t.technique_id, 0)
+        if cnt == 0:
+            continue
+        for tac in (t.tactic_keys or []):
+            if tac in tactic_stats:
+                tactic_stats[tac]['rule_count'] = tactic_stats[tac].get('rule_count', 0) + cnt
+
+    tactic_coverage = []
+    for key in _TACTIC_ORDER_GLOBAL:
+        s = tactic_stats.get(key, {'total': 0, 'covered': 0, 'rule_count': 0})
+        pct = round(s['covered'] / s['total'] * 100, 1) if s['total'] else 0
+        tactic_coverage.append({
+            'key': key,
+            'label': _TACTIC_LABELS_GLOBAL.get(key, key),
+            'total': s['total'],
+            'covered': s['covered'],
+            'pct': pct,
+            'rule_count': s.get('rule_count', 0),
+        })
+
+    return {
+        'top_techniques': top_techniques,
+        'tactic_coverage': tactic_coverage,
+    }
+
+
+def get_coverage_gaps() -> list:
+    """
+    Return techniques with 0 rule associations, grouped by tactic.
+    Excludes deprecated techniques.
+    """
+    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
+
+    covered_ids = {
+        r.technique_id
+        for r in db.session.query(RuleAttackAssociation.technique_id).distinct().all()
+    }
+
+    all_techs = (
+        AttackTechnique.query
+        .filter(AttackTechnique.deprecated == False)
+        .order_by(AttackTechnique.technique_id)
+        .all()
+    )
+
+    gap_by_tactic = _dd2(list)
+    for t in all_techs:
+        if t.technique_id not in covered_ids:
+            for tac in (t.tactic_keys or ['unknown']):
+                gap_by_tactic[tac].append({
+                    'technique_id': t.technique_id,
+                    'name': t.name,
+                    'is_subtechnique': t.is_subtechnique,
+                    'url': t.url,
+                })
+
+    result = []
+    for key in _TACTIC_ORDER_GLOBAL + ['unknown']:
+        techs = gap_by_tactic.get(key)
+        if not techs:
+            continue
+        result.append({
+            'key': key,
+            'label': _TACTIC_LABELS_GLOBAL.get(key, key.replace('-', ' ').title()),
+            'techniques': techs,
+        })
+    return result

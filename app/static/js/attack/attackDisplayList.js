@@ -89,8 +89,7 @@ const AttackDisplayList = {
     template: `
 <div v-if="attacks.length" class="adl-root">
     <a v-for="t in visible" :key="t.technique_id"
-       :href="'https://attack.mitre.org/techniques/' + t.technique_id.replace('.', '/')"
-       target="_blank" rel="noopener"
+       :href="'/attack/technique/' + t.technique_id"
        class="adl-chip"
        :style="chipStyle(t.tactic_keys)"
        :title="t.name">

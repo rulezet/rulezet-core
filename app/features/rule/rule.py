@@ -2298,7 +2298,15 @@ def get_rules_format() -> dict:
 @rule_blueprint.route("/get_last_cve_rules", methods=['GET'])
 def get_last_cve_rules() -> dict:
     rules = RuleModel.get_last_cve_rules()
-    return {"success": True, "rules": [r.to_json() for r in rules], "length": len(rules)}, 200
+    serialized = [r.to_json() for r in rules]
+    try:
+        from app.features.attack.attack_core import get_techniques_for_rules_batch
+        atk_map = get_techniques_for_rules_batch([r.id for r in rules])
+        for item in serialized:
+            item['attacks'] = atk_map.get(item['id'], [])
+    except Exception:
+        pass
+    return {"success": True, "rules": serialized, "length": len(serialized)}, 200
 
 @rule_blueprint.route("/admin/manage_format_rule", methods=["GET", "POST"])
 @login_required

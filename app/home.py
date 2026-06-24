@@ -116,7 +116,15 @@ def home_charts():
 def get_last_rules() -> dict:
     """Get the last 10 rules create or update"""
     rules = RuleModel.get_last_rules_from_db()
-    return {'rules': [r.to_json() for r in rules], 'success': True}, 200
+    serialized = [r.to_json() for r in rules]
+    try:
+        from app.features.attack.attack_core import get_techniques_for_rules_batch
+        atk_map = get_techniques_for_rules_batch([r.id for r in rules])
+        for item in serialized:
+            item['attacks'] = atk_map.get(item['id'], [])
+    except Exception:
+        pass
+    return {'rules': serialized, 'success': True}, 200
 
 @home_blueprint.route("/get_current_user_connected", methods=['GET'])
 def get_current_user_connected() -> jsonify:
@@ -1094,6 +1102,48 @@ def platform_insights_data():
     ]
     heatmap_cats = [f'{h:02d}h' for h in range(24)]
 
+    # ── MITRE ATT&CK coverage ──────────────────────────────────────────
+    attack_kpi = {'techniques': 0, 'rules_covered': 0, 'coverage_pct': 0, 'total_assocs': 0}
+    attack_charts = {}
+    try:
+        from app.features.attack.attack_core import get_analytics_data as _atk_analytics
+        atk = _atk_analytics()
+        tc  = atk.get('tactic_coverage', [])
+        tot = sum(x['total'] for x in tc)
+        cov = sum(x['covered'] for x in tc)
+        attack_kpi = {
+            'techniques':   tot,
+            'rules_covered': sum(x['rule_count'] for x in tc),
+            'coverage_pct': round(cov / tot * 100, 1) if tot else 0,
+            'total_assocs': sum(x['rule_count'] for x in tc),
+        }
+        top = atk.get('top_techniques', [])
+        attack_charts = {
+            'top_techniques': {
+                'title': 'Top Techniques',
+                'subtitle': 'by rule count',
+                'categories': [x['id'] + ' — ' + x['name'][:28] for x in top[:15]],
+                'series': [{'name': 'Rules', 'values': [x['count'] for x in top[:15]]}],
+            },
+            'tactic_coverage': {
+                'title': 'Coverage % per Tactic',
+                'categories': [x['label'] for x in tc],
+                'series': [{'name': 'Coverage %', 'values': [x['pct'] for x in tc]}],
+            },
+            'tactic_rules': {
+                'title': 'Rule Associations by Tactic',
+                'categories': [x['label'] for x in tc if x['rule_count'] > 0],
+                'series': [{'values': [x['rule_count'] for x in tc if x['rule_count'] > 0]}],
+            },
+            'covered_donut': {
+                'title': 'Techniques Covered',
+                'categories': ['Covered', 'Uncovered'],
+                'series': [{'values': [cov, tot - cov]}],
+            },
+        }
+    except Exception:
+        pass
+
     def chart(title, cats, vals, subtitle=None):
         c = {'title': title, 'categories': cats, 'series': [{'name': title, 'values': vals}]}
         if subtitle: c['subtitle'] = subtitle
@@ -1125,7 +1175,12 @@ def platform_insights_data():
             'rule_health':  {'title': 'Rule Health',  'categories': ['Active', 'Deleted'], 'series': [{'name': 'Rules', 'values': [total_rules, total_deleted]}]},
             'user_roles':   {'title': 'User Roles',   'categories': ['Regular', 'Admins'],  'series': [{'name': 'Users', 'values': [total_users - admin_users, admin_users]}]},
             'heatmap': {'title': 'Activity Heatmap', 'subtitle': 'Last 90 days — hour × day', 'categories': heatmap_cats, 'series': heatmap_series},
+            'attack_top_techniques': attack_charts.get('top_techniques', {}),
+            'attack_tactic_coverage': attack_charts.get('tactic_coverage', {}),
+            'attack_tactic_rules': attack_charts.get('tactic_rules', {}),
+            'attack_covered_donut': attack_charts.get('covered_donut', {}),
         },
+        'attack_kpi': attack_kpi,
     })
 
 

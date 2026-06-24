@@ -1,6 +1,10 @@
 {% extends 'base.html' %}
 {% import 'macros/admin_nav.html' as anav %}
 {% block title %}ATT&CK Management — Rulezet{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
+{% endblock %}
 {% block content %}
 <div class="container-fluid mt-3 px-4" id="main-container" v-cloak>
 
@@ -71,6 +75,17 @@
                 <i class="fa-solid fa-bolt"></i>Update &amp; Parse
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link d-flex align-items-center gap-1" data-bs-toggle="tab" href="#pane-analytics" style="color:var(--text-color);" @click="loadAnalytics">
+                <i class="fa-solid fa-chart-bar"></i>Analytics
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link d-flex align-items-center gap-1" data-bs-toggle="tab" href="#pane-gaps" style="color:var(--text-color);" @click="loadGaps">
+                <i class="fa-solid fa-triangle-exclamation"></i>Coverage Gaps
+                <span v-if="gapTotal > 0" class="badge bg-warning-subtle text-warning rounded-pill ms-1" style="font-size:.65rem;">[[ gapTotal ]]</span>
+            </a>
+        </li>
     </ul>
 
     <div class="tab-content">
@@ -120,6 +135,9 @@
                         <!-- Spacer + counter + reload -->
                         <div class="ms-auto d-flex align-items-center gap-2">
                             <span class="small text-muted">[[ total ]] technique(s)</span>
+                            <a href="/attack/heatmap" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                                <i class="fa-solid fa-grid-2 me-1"></i>Heatmap
+                            </a>
                             <button @click="loadTechniques" :disabled="loading"
                                     class="btn btn-sm btn-outline-secondary rounded-pill px-3">
                                 <i class="fa-solid fa-rotate" :class="loading ? 'fa-spin' : ''"></i>
@@ -204,8 +222,7 @@
 
                                         <!-- ID badge -->
                                         <td class="ps-3">
-                                            <a :href="t.url || ('https://attack.mitre.org/techniques/' + t.technique_id.replace('.','/') )"
-                                               target="_blank" rel="noopener"
+                                            <a :href="'/attack/technique/' + t.technique_id"
                                                class="badge rounded-pill text-decoration-none"
                                                :style="tacticBadgeStyle(t.tactic_keys && t.tactic_keys[0])">
                                                 [[ t.technique_id ]]
@@ -307,6 +324,130 @@
             </attack-updater>
         </div>
 
+        <!-- ══ TAB 3 — Analytics ════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="pane-analytics">
+            <div v-if="analyticsLoading" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-muted small mt-2">Loading analytics…</p>
+            </div>
+            <div v-else-if="!analytics" class="text-center py-5 text-muted">
+                <i class="fa-solid fa-chart-bar fa-2x opacity-25 mb-3 d-block"></i>
+                <small>Click the Analytics tab to load charts.</small>
+            </div>
+            <template v-else>
+                <div class="row g-4">
+                    <!-- Top techniques chart -->
+                    <div class="col-12 col-xl-7">
+                        <div class="card border-0 shadow-sm rounded-4 h-100">
+                            <div class="card-body p-4">
+                                <div class="fw-bold mb-3">
+                                    <i class="fa-solid fa-trophy me-2 text-warning"></i>Top 20 techniques by rule count
+                                </div>
+                                <chart-viewer
+                                    views="bar-h"
+                                    :data="topTechChart"
+                                    height="480px">
+                                </chart-viewer>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Coverage by tactic -->
+                    <div class="col-12 col-xl-5">
+                        <div class="card border-0 shadow-sm rounded-4 h-100">
+                            <div class="card-body p-4">
+                                <div class="fw-bold mb-3">
+                                    <i class="fa-solid fa-shield-halved me-2 text-primary"></i>Coverage % per tactic
+                                </div>
+                                <chart-viewer
+                                    views="bar"
+                                    :data="tacticCoverageChart"
+                                    height="480px">
+                                </chart-viewer>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Rules per tactic donut -->
+                    <div class="col-12 col-md-6">
+                        <div class="card border-0 shadow-sm rounded-4 h-100">
+                            <div class="card-body p-4">
+                                <div class="fw-bold mb-3">
+                                    <i class="fa-solid fa-chart-pie me-2" style="color:#6f42c1;"></i>Rule associations by tactic
+                                </div>
+                                <chart-viewer
+                                    views="donut"
+                                    :data="tacticDonutChart"
+                                    height="320px">
+                                </chart-viewer>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Coverage % donut -->
+                    <div class="col-12 col-md-6">
+                        <div class="card border-0 shadow-sm rounded-4 h-100">
+                            <div class="card-body p-4">
+                                <div class="fw-bold mb-3">
+                                    <i class="fa-solid fa-bullseye me-2" style="color:#198754;"></i>Techniques covered vs uncovered
+                                </div>
+                                <chart-viewer
+                                    views="donut"
+                                    :data="coveredDonutChart"
+                                    height="320px">
+                                </chart-viewer>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ══ TAB 4 — Coverage Gaps ════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="pane-gaps">
+            <div v-if="gapsLoading" class="text-center py-5">
+                <div class="spinner-border text-warning" role="status"></div>
+                <p class="text-muted small mt-2">Analysing gaps…</p>
+            </div>
+            <div v-else-if="!gaps" class="text-center py-5 text-muted">
+                <i class="fa-solid fa-triangle-exclamation fa-2x opacity-25 mb-3 d-block"></i>
+                <small>Click the Coverage Gaps tab to load.</small>
+            </div>
+            <template v-else>
+                <div class="alert alert-warning border-0 rounded-4 mb-4 d-flex align-items-start gap-3" role="alert">
+                    <i class="fa-solid fa-triangle-exclamation mt-1"></i>
+                    <div>
+                        <strong>[[ gapTotal ]] techniques</strong> have no detection rules.
+                        These are your current blind spots — consider adding rules for high-priority tactics.
+                    </div>
+                </div>
+
+                <div v-if="gaps.length === 0" class="text-center py-5">
+                    <i class="fa-solid fa-check-circle fa-3x text-success opacity-50 mb-3 d-block"></i>
+                    <h6 class="text-success">Full coverage!</h6>
+                    <p class="text-muted small">All non-deprecated techniques have at least one rule.</p>
+                </div>
+
+                <div v-for="group in gaps" :key="group.key" class="mb-4">
+                    <div class="d-flex align-items-center gap-2 mb-2 px-1">
+                        <span class="fw-bold text-uppercase" style="font-size:.78rem;letter-spacing:.06em;color:var(--text-color);">
+                            [[ group.label ]]
+                        </span>
+                        <span class="badge bg-warning-subtle text-warning rounded-pill ms-1" style="font-size:.7rem;">
+                            [[ group.techniques.length ]] uncovered
+                        </span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a v-for="t in group.techniques" :key="t.technique_id"
+                           :href="'/attack/technique/' + t.technique_id"
+                           class="badge text-decoration-none rounded-pill"
+                           style="font-size:.75rem;font-family:monospace;background:rgba(255,193,7,.12);color:#856404;border:1px solid rgba(255,193,7,.3);"
+                           :title="t.name">
+                            [[ t.technique_id ]]
+                            <span v-if="t.is_subtechnique" class="opacity-60" style="font-size:.65rem;">(sub)</span>
+                        </a>
+                    </div>
+                </div>
+            </template>
+        </div>
+
     </div><!-- /tab-content -->
 
 </div>
@@ -314,10 +455,11 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, reactive, watch, onMounted } = Vue;
+    const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
     import { create_message, message_list } from '/static/js/toaster.js';
     import AttackUpdater      from '/static/js/attack/manage/AttackUpdater.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
+    import ChartViewer        from '/static/js/components/chart-viewer.js';
 
     const TACTIC_ORDER = [
         'reconnaissance','resource-development','initial-access','execution','persistence',
@@ -355,6 +497,7 @@
         components: {
             'attack-updater':       AttackUpdater,
             'pagination-component': PaginationComponent,
+            'chart-viewer':         ChartViewer,
         },
         setup() {
             const csrfToken     = '{{ csrf_token() }}';
@@ -468,6 +611,82 @@
 
             onMounted(loadAll);
 
+            // ── Analytics tab ─────────────────────────────────────────────────
+            const analytics        = ref(null);
+            const analyticsLoading = ref(false);
+
+            const topTechChart = computed(() => {
+                if (!analytics.value) return null;
+                const t = analytics.value.top_techniques || [];
+                return {
+                    categories: t.map(x => x.id + ' — ' + x.name.slice(0, 28)),
+                    series: [{ name: 'Rules', values: t.map(x => x.count) }],
+                };
+            });
+
+            const tacticCoverageChart = computed(() => {
+                if (!analytics.value) return null;
+                const t = analytics.value.tactic_coverage || [];
+                return {
+                    categories: t.map(x => x.label),
+                    series: [{ name: 'Coverage %', values: t.map(x => x.pct) }],
+                };
+            });
+
+            const tacticDonutChart = computed(() => {
+                if (!analytics.value) return null;
+                const t = (analytics.value.tactic_coverage || []).filter(x => x.rule_count > 0);
+                return {
+                    categories: t.map(x => x.label),
+                    series: [{ values: t.map(x => x.rule_count) }],
+                };
+            });
+
+            const coveredDonutChart = computed(() => {
+                if (!analytics.value) return null;
+                const tc = analytics.value.tactic_coverage || [];
+                const covered   = tc.reduce((s, x) => s + x.covered, 0);
+                const uncovered = tc.reduce((s, x) => s + (x.total - x.covered), 0);
+                return {
+                    categories: ['Covered', 'Uncovered'],
+                    series: [{ values: [covered, uncovered] }],
+                };
+            });
+
+            async function loadAnalytics() {
+                if (analytics.value || analyticsLoading.value) return;
+                analyticsLoading.value = true;
+                try {
+                    const res = await fetch('/attack/admin/analytics');
+                    analytics.value = await res.json();
+                } catch (e) {
+                    create_message('Failed to load analytics: ' + e, 'danger-subtle');
+                } finally {
+                    analyticsLoading.value = false;
+                }
+            }
+
+            // ── Gaps tab ──────────────────────────────────────────────────────
+            const gaps        = ref(null);
+            const gapsLoading = ref(false);
+            const gapTotal    = computed(() =>
+                gaps.value ? gaps.value.reduce((s, g) => s + g.techniques.length, 0) : 0
+            );
+
+            async function loadGaps() {
+                if (gaps.value || gapsLoading.value) return;
+                gapsLoading.value = true;
+                try {
+                    const res = await fetch('/attack/admin/gaps');
+                    const d   = await res.json();
+                    gaps.value = d.gaps || [];
+                } catch (e) {
+                    create_message('Failed to load gaps: ' + e, 'danger-subtle');
+                } finally {
+                    gapsLoading.value = false;
+                }
+            }
+
             return {
                 csrfToken, techniques, stats, loading,
                 search, filterTactic, showDeprecated,
@@ -478,6 +697,8 @@
                 loadTechniques, loadAll, goToPage, setSort, notify,
                 expandedRows, toggleRow,
                 message_list, Math,
+                analytics, analyticsLoading, topTechChart, tacticCoverageChart, tacticDonutChart, coveredDonutChart, loadAnalytics,
+                gaps, gapsLoading, gapTotal, loadGaps,
             };
         },
     }).mount('#main-container');

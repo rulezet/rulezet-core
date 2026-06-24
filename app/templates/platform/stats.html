@@ -207,6 +207,65 @@
         </div>
 
         <!-- ══════════════════════════════════════════════
+             SECTION: MITRE ATT&CK COVERAGE
+             ══════════════════════════════════════════════ -->
+        <div class="ud-section-header mb-3 mt-2">
+            <i class="fas fa-crosshairs ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">MITRE ATT&amp;CK Coverage</div>
+                <div class="ud-section-sub">Detection rule coverage across the ATT&amp;CK Enterprise matrix</div>
+            </div>
+        </div>
+
+        <div class="pi-kpi-row mb-3">
+            <div class="ud-kpi-card ud-kpi-card--blue">
+                <div class="ud-kpi-icon"><i class="fas fa-crosshairs"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(attackKpi.techniques) ]]</div>
+                    <div class="ud-kpi-label">Techniques Indexed</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--green">
+                <div class="ud-kpi-icon"><i class="fas fa-shield-halved"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(attackKpi.rules_covered) ]]</div>
+                    <div class="ud-kpi-label">Rules with ATT&amp;CK</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--purple">
+                <div class="ud-kpi-icon"><i class="fas fa-percent"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ attackKpi.coverage_pct ]]%</div>
+                    <div class="ud-kpi-label">Techniques Covered</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--orange" style="cursor:pointer;" @click="goHeatmap">
+                <div class="ud-kpi-icon"><i class="fas fa-grid-2"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value" style="font-size:1rem;">Navigator</div>
+                    <div class="ud-kpi-label">Open Heatmap</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="pi-grid-2 mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-blue">
+                <chart-viewer :data="charts.attack_top_techniques" views="bar-h" height="360px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-teal">
+                <chart-viewer :data="charts.attack_tactic_coverage" views="bar" height="360px"></chart-viewer>
+            </div>
+        </div>
+        <div class="pi-grid-2 mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-purple">
+                <chart-viewer :data="charts.attack_tactic_rules" views="donut" height="280px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-green">
+                <chart-viewer :data="charts.attack_covered_donut" views="donut" height="280px"></chart-viewer>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
              SECTION: ACTIVITY HEATMAP
              ══════════════════════════════════════════════ -->
         <div class="ud-section-header mb-3 mt-2">
@@ -349,21 +408,27 @@
         delimiters: ['[[', ']]'],
         components: { 'chart-viewer': ChartViewer },
         setup() {
-            const loading = ref(true)
-            const kpi     = ref({})
-            const charts  = ref({})
+            const loading   = ref(true)
+            const kpi       = ref({})
+            const charts    = ref({})
+            const attackKpi = ref({ techniques: 0, rules_covered: 0, coverage_pct: 0 })
 
             function fmt(n) {
                 if (n === undefined || n === null) return '—'
                 return Number(n).toLocaleString()
             }
 
+            function goHeatmap() {
+                window.location.href = '/attack/heatmap'
+            }
+
             async function load() {
                 try {
                     const res  = await fetch('/platform/insights_data')
                     const data = await res.json()
-                    kpi.value    = data.kpi    || {}
-                    charts.value = data.charts || {}
+                    kpi.value       = data.kpi        || {}
+                    charts.value    = data.charts     || {}
+                    attackKpi.value = data.attack_kpi || { techniques: 0, rules_covered: 0, coverage_pct: 0 }
                 } finally {
                     loading.value = false
                 }
@@ -371,7 +436,7 @@
 
             onMounted(load)
 
-            return { loading, kpi, charts, fmt }
+            return { loading, kpi, charts, attackKpi, goHeatmap, fmt }
         }
     }).mount('#pi-app')
 </script>

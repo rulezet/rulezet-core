@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% block title %}{{ technique.technique_id }} — {{ technique.name }} — Rulezet{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
+{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3 px-4" id="tech-app" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-crosshairs banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                <li class="breadcrumb-item"><a href="/attack/admin/list" class="text-decoration-none text-muted">ATT&amp;CK</a></li>
+                {% else %}
+                <li class="breadcrumb-item text-muted">ATT&amp;CK</li>
+                {% endif %}
+                <li class="breadcrumb-item active text-muted" aria-current="page">{{ technique.technique_id }}</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-crosshairs"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">{{ technique.name }}</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+
+        <!-- Left: technique info -->
+        <div class="col-12 col-xl-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4">
+
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="badge rounded-pill" style="font-family:monospace;font-size:.85rem;background:rgba(13,110,253,.12);color:#0d6efd;border:1px solid rgba(13,110,253,.2);">
+                            {{ technique.technique_id }}
+                        </span>
+                        {% if technique.deprecated %}
+                        <span class="badge bg-danger-subtle text-danger rounded-pill" style="font-size:.72rem;">deprecated</span>
+                        {% endif %}
+                        {% if technique.is_subtechnique %}
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:.72rem;">sub-technique</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Tactics -->
+                    {% if technique.tactic_keys %}
+                    <div class="mb-3">
+                        <div class="small fw-semibold text-muted mb-1" style="text-transform:uppercase;letter-spacing:.05em;font-size:.7rem;">Tactics</div>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for tac in technique.tactic_keys %}
+                            <span class="badge rounded-pill" style="font-size:.75rem;background:rgba(13,110,253,.1);color:#0d6efd;">
+                                {{ tac.replace('-', ' ').title() }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Parent -->
+                    {% if technique.parent_technique_id %}
+                    <div class="mb-3">
+                        <div class="small fw-semibold text-muted mb-1" style="text-transform:uppercase;letter-spacing:.05em;font-size:.7rem;">Parent technique</div>
+                        <a href="/attack/technique/{{ technique.parent_technique_id }}"
+                           class="badge text-decoration-none rounded-pill"
+                           style="font-family:monospace;font-size:.8rem;background:rgba(13,110,253,.1);color:#0d6efd;">
+                            {{ technique.parent_technique_id }}
+                        </a>
+                    </div>
+                    {% endif %}
+
+                    <!-- Description -->
+                    {% if technique.description %}
+                    <div class="mb-3">
+                        <div class="small fw-semibold text-muted mb-2" style="text-transform:uppercase;letter-spacing:.05em;font-size:.7rem;">Description</div>
+                        <p class="small" style="color:var(--text-color);line-height:1.6;">{{ technique.description[:600] }}{% if technique.description|length > 600 %}…{% endif %}</p>
+                    </div>
+                    {% endif %}
+
+                    <!-- MITRE link -->
+                    {% if technique.url %}
+                    <a href="{{ technique.url }}" target="_blank" rel="noopener"
+                       class="btn btn-outline-primary btn-sm rounded-pill px-3 mt-2">
+                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View on MITRE ATT&amp;CK
+                    </a>
+                    {% endif %}
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: rules -->
+        <div class="col-12 col-xl-8">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <i class="fa-solid fa-shield-halved text-primary"></i>
+                        <span class="fw-bold">Rules covering this technique</span>
+                        <span class="badge bg-primary-subtle text-primary rounded-pill ms-1">[[ ruleCount ]]</span>
+                    </div>
+                    <rule-list
+                        mode="read"
+                        default-view="card"
+                        :initial-filters="{ attacks: '{{ technique.technique_id }}' }"
+                        :hidden-filters="['sources','licenses','vulnerabilities']"
+                        :show-filters="true"
+                        :can-vote="isAuthenticated"
+                        :can-favorite="isAuthenticated"
+                        :current-user-id="currentUserId"
+                        :current-user-is-admin="isAdmin"
+                        :current-user-is-authenticated="isAuthenticated"
+                        :csrf-token="csrfToken"
+                        @loaded="onLoaded">
+                    </rule-list>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ── Stats charts ─────────────────────────────────────────────────────── -->
+    <div class="row g-4 mt-1" v-if="techStats">
+        <div class="col-12">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <div style="width:3px;height:14px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
+                <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
+                    <i class="fa-solid fa-chart-bar me-1"></i>Statistics
+                </span>
+            </div>
+        </div>
+        <div class="col-12 col-md-5">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4">
+                    <div class="fw-semibold mb-3 small text-muted" style="text-transform:uppercase;letter-spacing:.05em;">
+                        Rules by Format
+                    </div>
+                    <chart-viewer :data="techStats.formats" views="donut" height="260px"></chart-viewer>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-7">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4">
+                    <div class="fw-semibold mb-3 small text-muted" style="text-transform:uppercase;letter-spacing:.05em;">
+                        Rules Added Over Time
+                    </div>
+                    <chart-viewer :data="techStats.over_time" views="area" height="260px"></chart-viewer>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+{% block script %}
+<script type="module">
+    const { createApp, ref, onMounted } = Vue;
+    import RuleList                  from '/static/js/rule/ruleList.js';
+    import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js';
+    import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
+    import ChartViewer               from '/static/js/components/chart-viewer.js';
+
+    const isAuthenticated = {{ current_user.is_authenticated | tojson }};
+    const isAdmin         = {{ current_user.is_admin() | tojson }};
+    const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }};
+    const csrfToken       = '{{ csrf_token() }}';
+    const techniqueId     = '{{ technique.technique_id }}';
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: {
+            'rule-list':                   RuleList,
+            'tags-displays-list':          TagsDisplaysList,
+            'vulnerability-displays-list': VulnerabilityDisplaysList,
+            'chart-viewer':                ChartViewer,
+        },
+        setup() {
+            const ruleCount = ref('…');
+            const techStats = ref(null);
+
+            function onLoaded(data) {
+                if (data && data.total !== undefined) ruleCount.value = data.total;
+            }
+
+            async function loadStats() {
+                try {
+                    const res = await fetch(`/attack/technique/${techniqueId}/stats`);
+                    const d   = await res.json();
+                    if (d.total_rules > 0) techStats.value = d;
+                } catch {}
+            }
+
+            onMounted(loadStats);
+
+            return { ruleCount, onLoaded, techStats, isAuthenticated, isAdmin, currentUserId, csrfToken };
+        },
+    }).mount('#tech-app');
+</script>
+{% endblock %}

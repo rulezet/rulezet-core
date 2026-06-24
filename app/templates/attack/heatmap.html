@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}ATT&CK Global Heatmap — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/attack-matrix.css') }}">
+{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3 px-4" id="heatmap-app" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-grid-2 banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                <li class="breadcrumb-item"><a href="/attack/admin/list" class="text-decoration-none text-muted">ATT&amp;CK</a></li>
+                {% else %}
+                <li class="breadcrumb-item text-muted">ATT&amp;CK</li>
+                {% endif %}
+                <li class="breadcrumb-item active text-muted" aria-current="page">Heatmap</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-grid-2"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">ATT&amp;CK Coverage Heatmap</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            Visual overview of your detection coverage across all MITRE ATT&amp;CK tactics and techniques.
+            Cell colour intensity reflects the number of rules covering each technique.
+        </p>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="loading" class="text-center py-5">
+        <div class="spinner-border text-primary mb-3" role="status"></div>
+        <p class="text-muted small">Loading coverage data…</p>
+    </div>
+
+    <!-- Matrix -->
+    <div v-else class="card border-0 shadow-sm rounded-4">
+        <div class="card-body p-4">
+            <attack-matrix :coverage="coverage" :loading="false"></attack-matrix>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+{% block script %}
+<script type="module">
+    const { createApp, ref, onMounted } = Vue;
+    import AttackMatrix from '/static/js/components/attack-matrix.js';
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'attack-matrix': AttackMatrix },
+        setup() {
+            const coverage = ref(null);
+            const loading  = ref(true);
+            onMounted(async () => {
+                try {
+                    const res = await fetch('/attack/heatmap_data');
+                    coverage.value = await res.json();
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    loading.value = false;
+                }
+            });
+            return { coverage, loading };
+        },
+    }).mount('#heatmap-app');
+</script>
+{% endblock %}

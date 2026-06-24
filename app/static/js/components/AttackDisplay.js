@@ -110,8 +110,7 @@ export default defineComponent({
             <!-- Technique chips -->
             <template v-else>
                 <a v-for="t in visibleTechniques" :key="t.technique_id"
-                   :href="t.url || ('https://attack.mitre.org/techniques/' + t.technique_id.replace('.', '/'))"
-                   target="_blank" rel="noopener"
+                   :href="'/attack/technique/' + t.technique_id"
                    class="d-inline-flex align-items-center gap-1 text-decoration-none rounded-pill px-2 py-1"
                    :style="chipStyle(t.tactic_keys)"
                    style="font-size:.78rem; transition: filter .12s, transform .1s;"

@@ -1,6 +1,7 @@
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
 import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js'
 import UserChip from '/static/js/components/UserChip.js'
+import AttackDisplayList from '/static/js/attack/attackDisplayList.js'
 
 const { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } = Vue
 import { message_list, create_message } from '/static/js/toaster.js'
@@ -13,6 +14,7 @@ const RulesCarousel = {
         'vulnerability-displays-list': VulnerabilityDisplaysList,
         'tags-displays-list': TagsDisplaysList,
         'user-chip': UserChip,
+        'attack-display-list': AttackDisplayList,
     },
 
     props: {
@@ -138,6 +140,10 @@ const RulesCarousel = {
                                     <div class="mb-3" @click.stop>
                                         <tags-displays-list object-type="rule" :object-id="rule.id" :max-visible="1">
                                         </tags-displays-list>
+                                    </div>
+                                    <div v-if="rule.attacks && rule.attacks.length" class="mb-3" @click.stop>
+                                        <attack-display-list :initial-attacks="rule.attacks" :max-visible="2">
+                                        </attack-display-list>
                                     </div>
 
                                     <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto bg-transparent">
