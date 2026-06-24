@@ -151,6 +151,11 @@ def owner_request() -> redirect:
                     extra={"rule_id": rule_id, "choice": 1},
                     is_public=False,
                 )
+                try:
+                    from app.features.notification.notification_core import notify_ownership_requested
+                    notify_ownership_requested(request_, rule, current_user)
+                except Exception as _e:
+                    print(f"[home] notify_ownership_requested error: {_e}")
                 return {"success": True, "message": "Ownership request submitted successfully !" , "toast_class" : "success-subtle"}, 200
         return {"success": False, "message": "You can create a request for your own rule !" , "toast_class" : "danger-subtle"}, 200
     elif choice == 2:
@@ -161,13 +166,18 @@ def owner_request() -> redirect:
         rules = RuleModel.get_rule_by_source(source)
         if not rules:
             return {"success": False, "message": "No rule with this source!" , "toast_class" : "danger-subtle"}, 200
-        AccountModel.create_request(rule_id=None, source=source)
+        request_ = AccountModel.create_request(rule_id=None, source=source)
         log_activity(
             "user.owner_request",
             f"Requested ownership of rules from source '{source}'",
             extra={"source": source, "choice": 2},
             is_public=False,
         )
+        try:
+            from app.features.notification.notification_core import notify_ownership_requested
+            notify_ownership_requested(request_, None, current_user)
+        except Exception as _e:
+            print(f"[home] notify_ownership_requested (source) error: {_e}")
         return {"success": True, "message": "Ownership request submitted successfully !" , "toast_class" : "success-subtle"}, 200
     else:
         return {"success": False, "message": "Error system" , "toast_class" : "danger-subtle"}, 500
@@ -398,12 +408,26 @@ def update_request_status() -> jsonify:
                     #             request__.user_id_to_send = ownership_request.user_id   
                 
 
+            try:
+                from app.features.notification.notification_core import notify_ownership_decision
+                ownership_request = AccountModel.get_request_by_id(request_id)
+                rule_title = rules[0].title if rules else None
+                notify_ownership_decision(ownership_request, approved=True, rule_title=rule_title)
+            except Exception as _e:
+                print(f"[home] notify_ownership_decision (approved) error: {_e}")
             flash(f"Request Accepted! {len(rules)} rules are impacted", "success")
         else:
             if updated:
                 log_activity("admin.request_rejected",
                              f"Rejected ownership request id={request_id}",
                              extra={"request_id": request_id})
+                try:
+                    from app.features.notification.notification_core import notify_ownership_decision
+                    ownership_request = AccountModel.get_request_by_id(request_id)
+                    rule_title = rules[0].title if rules else None
+                    notify_ownership_decision(ownership_request, approved=False, rule_title=rule_title)
+                except Exception as _e:
+                    print(f"[home] notify_ownership_decision (rejected) error: {_e}")
             flash('Request decline with success!', 'success')
         return jsonify({"success": updated}), 200 if updated else 400
     else:

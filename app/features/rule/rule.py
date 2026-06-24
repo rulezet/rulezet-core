@@ -752,14 +752,18 @@ def rule_history_data(rule_id):
     EXCLUDED_ACTIONS = {'rule.vote_up', 'rule.vote_down', 'rule.favorite', 'rule.unfavorite'}
 
     action_labels = {
-        'rule.create':       ('Rule created',   'success', 'fa-solid fa-file-shield'),
-        'rule.edit':         ('Rule edited',    'info',    'fa-solid fa-pen-to-square'),
-        'rule.delete':       ('Rule deleted',   'error',   'fa-solid fa-trash'),
-        'rule.restore':      ('Rule restored',  'success', 'fa-solid fa-rotate-left'),
-        'rule.scope_add':    ('Scope declared', 'info',    'fa-solid fa-globe'),
-        'rule.scope_update': ('Scope updated',  'info',    'fa-solid fa-globe'),
-        'rule.scope_delete': ('Scope removed',  'warning', 'fa-solid fa-globe'),
-        'comment.add':       ('Comment added',  'info',    'fa-solid fa-comment'),
+        'rule.create':            ('Rule created',       'success', 'fa-solid fa-file-shield'),
+        'rule.edit':              ('Rule edited',        'info',    'fa-solid fa-pen-to-square'),
+        'rule.delete':            ('Rule deleted',       'error',   'fa-solid fa-trash'),
+        'rule.restore':           ('Rule restored',      'success', 'fa-solid fa-rotate-left'),
+        'rule.scope_add':         ('Scope declared',     'info',    'fa-solid fa-globe'),
+        'rule.scope_update':      ('Scope updated',      'info',    'fa-solid fa-globe'),
+        'rule.scope_delete':      ('Scope removed',      'warning', 'fa-solid fa-globe'),
+        'comment.add':            ('Comment added',      'info',    'fa-solid fa-comment'),
+        'rule.propose_edit':      ('Proposal submitted', 'info',    'fa-solid fa-code-pull-request'),
+        'rule.proposal_approved': ('Proposal approved',  'success', 'fa-solid fa-circle-check'),
+        'rule.proposal_rejected': ('Proposal rejected',  'warning', 'fa-solid fa-circle-xmark'),
+        'rule.version_bump':      ('Content updated',    'success', 'fa-solid fa-tag'),
     }
 
     for log in logs:
@@ -767,6 +771,11 @@ def rule_history_data(rule_id):
             continue
         label, level, icon = action_labels.get(log.action, (log.action, 'info', log.icon or 'fa-solid fa-circle'))
         actor = log.user.first_name if log.user else 'System'
+        extra = log.extra or {}
+        proposal_id = extra.get('proposal_id')
+        # For version_bump, enrich the title with version numbers
+        if log.action == 'rule.version_bump' and extra.get('to_version'):
+            label = f"Content updated — v{extra.get('from_version', '?')} → v{extra['to_version']}"
         events.append({
             'uuid':        log.uuid,
             'type':        'activity',
@@ -779,6 +788,7 @@ def rule_history_data(rule_id):
             'actor_name':  actor,
             'actor_id':    log.user_id,
             'created_at':  log.created_at.isoformat(),
+            'proposal_id': proposal_id,
         })
 
     # ── RuleUpdateHistory ─────────────────────────────────────────────────────
@@ -1229,6 +1239,7 @@ def validate_proposal() -> jsonify:
             # the rule modified
             rule_proposal = RuleModel.get_rule_proposal(rule_proposal_id)
 
+            new_version = None
             if decision == "accepted":
                 RuleModel.set_status(rule_proposal_id,"accepted")
                 # change the to_string part of the rule in the db
@@ -1280,6 +1291,22 @@ def validate_proposal() -> jsonify:
                         }),500
                 _ = AccountModel.update_propose_edit_gamification(gamification.id , "add_one_to_accepted")
 
+                # Increment community version
+                current_v = rule.version or "1.0"
+                try:
+                    new_version = bump_version(current_v) or current_v
+                except Exception:
+                    new_version = current_v
+                rule.version = new_version
+                db.session.commit()
+                log_activity(
+                    "rule.version_bump",
+                    f"Content updated — rule bumped from v{current_v} to v{new_version} (proposal #{rule_proposal_id})",
+                    target_type="rule", target_id=rule_id, target_uuid=rule.uuid,
+                    extra={"from_version": current_v, "to_version": new_version, "proposal_id": rule_proposal_id},
+                    is_public=False,
+                )
+
             elif decision == "rejected":
                 RuleModel.set_status(rule_proposal_id,"rejected")
                 message = "Proposal rejected."
@@ -1309,10 +1336,10 @@ def validate_proposal() -> jsonify:
                 return jsonify({"message": "Invalid decision",
                                 "success": False,
                                 "toast_class" : "danger"}), 400
-        return jsonify({"message": message,
-                        "success": True,
-                        "toast_class" : "success"
-                        }),200
+        resp = {"message": message, "success": True, "toast_class": "success"}
+        if new_version:
+            resp["new_version"] = new_version
+        return jsonify(resp), 200
     else:
         return render_template("access_denied.html")
 
@@ -1542,6 +1569,10 @@ def get_proposal() -> jsonify:
     d['old_diff_html'] = old_html
     d['new_diff_html'] = new_html
     d['is_favorited'] = is_rule_favorited_by_user(user_id=current_user.id, rule_id=proposal.rule_id)
+
+    # Include current rule version so accepted proposals can show the resulting version
+    rule_obj = RuleModel.get_rule(proposal.rule_id)
+    d['rule_version'] = rule_obj.version if rule_obj else None
 
     return {
         "proposal": d,

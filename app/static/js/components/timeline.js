@@ -202,7 +202,7 @@ export default {
                     <!-- Content card -->
                     <div class="tl-content">
                         <!-- Header row: title + badges + chevron + delete -->
-                        <div class="tl-header" @click.stop="toggle(item.uuid); $emit('select', item)">
+                        <div class="tl-header" @click.stop="toggle(item.uuid)">
                             <span class="tl-title">{{ item.title }}</span>
                             <div class="tl-badges">
                                 <span class="tl-cat-badge">
@@ -246,11 +246,20 @@ export default {
                                 {{ item.description }}
                             </div>
 
-                            <!-- Slot indicator for version events -->
+                            <!-- View proposal button -->
+                            <div v-if="item.proposal_id" class="tl-diff-hint" style="cursor:default;">
+                                <a :href="'/rule/proposal_content_discuss?id=' + item.proposal_id"
+                                   class="tl-action-btn"
+                                   @click.stop>
+                                    <i class="fas fa-arrow-up-right-from-square me-1"></i>View proposal
+                                </a>
+                            </div>
+
+                            <!-- Diff hint for version events -->
                             <div v-if="item.type === 'update' && (item.old_content || item.new_content)"
-                                 class="tl-diff-hint">
+                                 class="tl-diff-hint" style="cursor:pointer;" @click.stop="$emit('select', item)">
                                 <i class="fas fa-code-compare me-1"></i>
-                                Click to compare versions
+                                Click to see diff
                             </div>
                         </div>
                     </div>

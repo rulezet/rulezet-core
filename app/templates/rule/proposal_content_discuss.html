@@ -180,6 +180,12 @@
                                }"></i>
                             [[ proposal.status ]]
                         </span>
+                        <span v-if="proposal._new_version || (proposal.status === 'accepted' && proposal.rule_version)"
+                              class="badge rounded-pill fw-semibold"
+                              style="font-size:.72rem;background:rgba(25,135,84,.1);color:#198754;border:1px solid rgba(25,135,84,.3);padding:.3rem .7rem;">
+                            <i class="fa-solid fa-tag me-1" style="font-size:.6rem;"></i>
+                            v[[ proposal._new_version || proposal.rule_version ]]
+                        </span>
                     </div>
                     <div class="banner-accent"></div>
                 </div>
@@ -554,8 +560,12 @@
                     const res = await fetch(url);
                     if (res.ok) {
                         const data = await res.json();
-                        create_message(data.message || (decision === 'accepted' ? 'Proposal accepted' : 'Proposal rejected'),
-                                       data.toast_class || 'success');
+                        let msg = data.message || (decision === 'accepted' ? 'Proposal accepted' : 'Proposal rejected');
+                        if (decision === 'accepted' && data.new_version) {
+                            msg = `Proposal accepted — rule updated to v${data.new_version}`;
+                            if (proposal.value) proposal.value._new_version = data.new_version;
+                        }
+                        create_message(msg, data.toast_class || 'success');
                         if (proposal.value) proposal.value.status = decision;
                     } else {
                         create_message('Error processing decision', 'danger');

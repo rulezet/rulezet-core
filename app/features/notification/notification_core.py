@@ -35,25 +35,28 @@ from app.core.db_class.db import Notification, UserFollow, BackgroundJob, Notifi
 # ── Icons per notification type ────────────────────────────────────────────────
 
 _TYPE_ICON = {
-    'new_rule':              'fa-solid fa-shield-halved',
-    'follow_new_bundle':     'fa-solid fa-layer-group',
-    'follow_new_comment':    'fa-solid fa-comment',
-    'rule_comment':          'fa-solid fa-comment-dots',
-    'bundle_comment':        'fa-solid fa-comment-dots',
-    'rule_update_found':     'fa-solid fa-rotate',
-    'job_created':           'fa-solid fa-clock',
-    'job_finished':          'fa-solid fa-circle-check',
-    'job_failed':            'fa-solid fa-circle-xmark',
-    'github_import_done':    'fa-brands fa-github',
-    'github_update_done':    'fa-solid fa-code-branch',
-    'proposal_submitted':    'fa-solid fa-code-pull-request',
-    'proposal_comment':      'fa-solid fa-message-lines',
-    'proposal_accepted':     'fa-solid fa-circle-check',
-    'proposal_rejected':     'fa-solid fa-circle-xmark',
-    'comment_reply':         'fa-solid fa-reply',
-    'session_running':       'fa-solid fa-spinner',
-    'session_done':          'fa-solid fa-circle-check',
-    'report_submitted':      'fa-solid fa-triangle-exclamation',
+    'new_rule':                'fa-solid fa-shield-halved',
+    'follow_new_bundle':       'fa-solid fa-layer-group',
+    'follow_new_comment':      'fa-solid fa-comment',
+    'rule_comment':            'fa-solid fa-comment-dots',
+    'bundle_comment':          'fa-solid fa-comment-dots',
+    'rule_update_found':       'fa-solid fa-rotate',
+    'job_created':             'fa-solid fa-clock',
+    'job_finished':            'fa-solid fa-circle-check',
+    'job_failed':              'fa-solid fa-circle-xmark',
+    'github_import_done':      'fa-brands fa-github',
+    'github_update_done':      'fa-solid fa-code-branch',
+    'proposal_submitted':      'fa-solid fa-code-pull-request',
+    'proposal_comment':        'fa-solid fa-message-lines',
+    'proposal_accepted':       'fa-solid fa-circle-check',
+    'proposal_rejected':       'fa-solid fa-circle-xmark',
+    'comment_reply':           'fa-solid fa-reply',
+    'session_running':         'fa-solid fa-spinner',
+    'session_done':            'fa-solid fa-circle-check',
+    'report_submitted':        'fa-solid fa-triangle-exclamation',
+    'ownership_requested':     'fa-solid fa-user-pen',
+    'ownership_approved':      'fa-solid fa-user-check',
+    'ownership_rejected':      'fa-solid fa-user-xmark',
 }
 
 
@@ -572,6 +575,72 @@ def notify_comment_reply(parent_comment_author_id, replier_id, object_title, lin
         )
     except Exception as e:
         print(f"[notification_core] notify_comment_reply error: {e}")
+
+
+def notify_ownership_requested(ownership_request, rule, requester):
+    """
+    Notify all admins (and the current rule owner if different from requester)
+    when a user submits an ownership claim for a rule or source.
+    """
+    try:
+        requester_name = requester.get_username() if requester else 'Someone'
+        recipients = set(_get_all_admin_ids())
+        # Also notify current rule owner if it's a single-rule request
+        if rule and rule.user_id and rule.user_id != requester.id:
+            recipients.add(rule.user_id)
+
+        if not recipients:
+            return
+
+        if rule:
+            title = f'Ownership claim on "{rule.title}"'
+            body  = f'{requester_name} is claiming ownership of this rule.'
+            link  = f'/requests/{ownership_request.id}'
+        else:
+            title = f'Ownership claim on source rules'
+            body  = f'{requester_name} is claiming ownership of rules from a GitHub source.'
+            link  = f'/requests/{ownership_request.id}'
+
+        notifs = [
+            Notification(
+                user_id    = uid,
+                notif_type = 'ownership_requested',
+                title      = title,
+                body       = body,
+                link       = link,
+                icon       = _TYPE_ICON['ownership_requested'],
+                is_read    = False,
+                created_at = datetime.datetime.utcnow(),
+            )
+            for uid in recipients
+        ]
+        db.session.add_all(notifs)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_ownership_requested error: {e}")
+
+
+def notify_ownership_decision(ownership_request, approved, rule_title=None):
+    """
+    Notify the requester when their ownership claim is approved or rejected.
+    """
+    try:
+        notif_type = 'ownership_approved' if approved else 'ownership_rejected'
+        verb       = 'approved' if approved else 'rejected'
+        title      = f'Ownership claim {verb}'
+        body       = f'Your claim on "{rule_title}"' if rule_title else f'Your ownership claim has been {verb}.'
+        link       = f'/requests/{ownership_request.id}'
+
+        create_notification(
+            user_id    = ownership_request.user_id,
+            notif_type = notif_type,
+            title      = title,
+            body       = body,
+            link       = link,
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_ownership_decision error: {e}")
 
 
 def delete_all_notifications(user_id):
