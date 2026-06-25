@@ -385,7 +385,7 @@ body[data-nav-style="collapsible"].nav-hidden .nav-peek-tab {
 
 /* ── Search offcanvas — RuleList wrapper ─────────────── */
 #offcanvasSearch .offcanvas-body {
-    overflow-y: auto;
+    overflow-y: scroll;
     padding: 0;
 }
 #offcanvasSearch .rule-list-wrapper {

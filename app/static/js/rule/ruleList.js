@@ -101,6 +101,7 @@ export default {
         showExport:         { type: Boolean,          default: true },
         syncUrl:            { type: Boolean,          default: true },
         confirmDisabled:    { type: Boolean,          default: false },
+        hiddenColumns:      { type: Array,            default: () => [] },
     },
 
     emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send'],
@@ -186,7 +187,7 @@ export default {
                         :class="{ 'dt-toolbar-btn--active': filtersOpen }"
                         @click="filtersOpen = !filtersOpen"
                         :aria-expanded="filtersOpen">
-                    <i class="fas fa-sliders"></i>
+                    <i class="fa-solid fa-filter"></i>
                     <span>Filters</span>
                     <span v-if="activeFilterCount > 0" class="rl-filter-badge ms-1">{{ activeFilterCount }}</span>
                 </button>
@@ -1104,7 +1105,7 @@ export default {
             { key: 'created',     label: 'Created' },
             { key: 'votes',       label: 'Votes' },
         ]
-        const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, true])))
+        const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, !props.hiddenColumns.includes(c.key)])))
         function toggleColumn(key) { colVisible[key] = !colVisible[key] }
 
         // ── Selection ─────────────────────────────────────────────────────

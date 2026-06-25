@@ -249,7 +249,7 @@
 
    <!-- ── Search offcanvas ── -->
    <div class="offcanvas offcanvas-end border-0 shadow-lg" tabindex="-1" id="offcanvasSearch"
-      style="width: 760px; background-color: var(--bg-color);">
+      style="width: min(1000px, 92vw); background-color: var(--bg-color);">
       <div class="offcanvas-header border-bottom py-3 px-4" style="border-color: var(--border-color) !important;">
          <div class="d-flex align-items-center">
             <div class="bg-primary-subtle p-2 rounded-3 me-3">
@@ -265,8 +265,10 @@
       <div class="offcanvas-body p-0">
          <rule-list v-if="showSearchContent"
             mode="read"
+            default-view="table"
+            :hidden-columns="['editor', 'votes', 'created', 'cves', 'attacks']"
             :sync-url="false"
-            :initial-per-page="10"
+            :initial-per-page="15"
             :current-user-id="currentUserId"
             :current-user-is-admin="isAdmin"
             :current-user-is-authenticated="isAuthenticated"
