@@ -374,14 +374,22 @@
                     <div class="home-stats-header">
                         <i class="fa-solid fa-chart-line text-primary me-1" style="font-size:.8rem;"></i>
                         <span style="font-size:.82rem;font-weight:700;color:var(--text-color);">Platform Stats</span>
-                        <div class="ms-auto d-flex gap-1">
+                        <div class="ms-auto d-flex gap-1 flex-wrap">
                             <button class="home-stats-tab" :class="{active: chartTab==='timeline'}"
-                                    @click="chartTab='timeline'">
+                                    @click="switchTab('timeline')">
                                 <i class="fa-solid fa-chart-area me-1"></i>Timeline
                             </button>
                             <button class="home-stats-tab" :class="{active: chartTab==='formats'}"
-                                    @click="chartTab='formats'">
+                                    @click="switchTab('formats')">
                                 <i class="fa-solid fa-chart-pie me-1"></i>Formats
+                            </button>
+                            <button class="home-stats-tab" :class="{active: chartTab==='top_cve'}"
+                                    @click="switchTab('top_cve')">
+                                <i class="fa-solid fa-shield-virus me-1"></i>CVEs
+                            </button>
+                            <button class="home-stats-tab" :class="{active: chartTab==='top_atk'}"
+                                    @click="switchTab('top_atk')">
+                                <i class="fa-solid fa-crosshairs me-1"></i>ATT&amp;CK
                             </button>
                         </div>
                         <a href="/platform/insights" class="ms-3 text-muted" style="font-size:.72rem;text-decoration:none;opacity:.65;" title="Full insights">
@@ -404,6 +412,14 @@
                         <div v-show="chartTab==='formats'" style="padding:.5rem .75rem;">
                             <chart-viewer v-if="charts.formats" :data="charts.formats" views="bar-h" height="300px"
                                 @chart-click="onFormatClick"></chart-viewer>
+                        </div>
+                        <div v-show="chartTab==='top_cve'" style="padding:.5rem .75rem;">
+                            <chart-viewer v-if="charts.top_cve" :data="charts.top_cve" views="bar-h" height="300px"
+                                @chart-click="onCveClick"></chart-viewer>
+                        </div>
+                        <div v-show="chartTab==='top_atk'" style="padding:.5rem .75rem;">
+                            <chart-viewer v-if="charts.top_atk" :data="charts.top_atk" views="bar-h" height="300px"
+                                @chart-click="onAtkClick"></chart-viewer>
                         </div>
                     </template>
                 </div>
@@ -582,7 +598,7 @@
             const feed                      = ref([])
             const feedLoading               = ref(true)
             const charts                    = ref({})
-            const chartsLoading             = ref(true)
+            const chartsLoading             = ref(false)
             const chartTab                  = ref('timeline')
 
             async function fetchFeed() {
@@ -595,12 +611,13 @@
                 feedLoading.value = false
             }
 
-            async function fetchCharts() {
+            async function switchTab(tab) {
+                chartTab.value = tab
+                if (charts.value[tab]) return
                 chartsLoading.value = true
                 try {
-                    const res  = await fetch('/home_charts')
-                    const data = await res.json()
-                    charts.value = data
+                    const res  = await fetch('/home_charts/' + tab)
+                    charts.value = { ...charts.value, [tab]: await res.json() }
                 } catch {}
                 chartsLoading.value = false
             }
@@ -613,6 +630,20 @@
                 const fmt = (item.name || '').trim().toLowerCase();
                 window.location.href = fmt
                     ? '/rule/rules_list?rule_type=' + encodeURIComponent(fmt)
+                    : '/rule/rules_list';
+            }
+
+            function onCveClick(item) {
+                const cve = (item.name || '').trim();
+                window.location.href = cve
+                    ? '/rule/rules_list?vulnerabilities=' + encodeURIComponent(cve)
+                    : '/rule/rules_list';
+            }
+
+            function onAtkClick(item) {
+                const tid = (item.name || '').trim();
+                window.location.href = tid
+                    ? '/rule/rules_list?attacks=' + encodeURIComponent(tid)
                     : '/rule/rules_list';
             }
 
@@ -635,8 +666,8 @@
 
             async function init() {
                 is_loading.value = false
-                // Kick off data fetches immediately — don't serialize behind auth check
-                fetchCharts()
+                // Load default tab immediately
+                switchTab('timeline')
                 fetchFeed()
                 await checkIfUserIsConnected()
                 is_loading.value = true
@@ -648,7 +679,7 @@
                 message_list, is_loading,
                 current_user_is_admin, current_user_is_connected, currentUserId,
                 feed, feedLoading, charts, chartsLoading, chartTab,
-                openFeedItem, goToRuleList, onFormatClick,
+                openFeedItem, goToRuleList, onFormatClick, onCveClick, onAtkClick, switchTab,
                 feedBubbleStyle, friendlyAction, feedUrl, formatTime,
             }
         }

@@ -15,7 +15,7 @@ from flask import request
 from flask_restx import Namespace, Resource
 from sqlalchemy import or_, func
 
-from app.core.db_class.db import Rule, Bundle, Tag, RuleTagAssociation, BundleTagAssociation, RuleUpdateHistory
+from app.core.db_class.db import Rule, Bundle, Tag, RuleTagAssociation, BundleTagAssociation, RuleUpdateHistory, RuleAttackAssociation
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,20 @@ def _batch_load_tags(rule_ids: list) -> dict:
     return dict(result)
 
 
+def _batch_load_attacks(rule_ids: list) -> dict:
+    """Return {rule_id: [technique_id, ...]} for all given rule IDs in a single query."""
+    if not rule_ids:
+        return {}
+    rows = (RuleAttackAssociation.query
+            .filter(RuleAttackAssociation.rule_id.in_(rule_ids))
+            .with_entities(RuleAttackAssociation.rule_id, RuleAttackAssociation.technique_id)
+            .all())
+    result = defaultdict(list)
+    for rule_id, tid in rows:
+        result[rule_id].append(tid)
+    return dict(result)
+
+
 def _batch_load_history(rule_ids: list) -> dict:
     """Return {rule_id: [RuleUpdateHistory, ...]} for all given rule IDs in a single query."""
     if not rule_ids:
@@ -86,7 +100,8 @@ def _batch_load_history(rule_ids: list) -> dict:
 
 def _rule_to_sync_json(rule: Rule,
                        preloaded_tags: list = None,
-                       preloaded_history: list = None) -> dict:
+                       preloaded_history: list = None,
+                       preloaded_attacks: list = None) -> dict:
     # Use preloaded data when available — eliminates N+1 queries on large pages.
     if preloaded_tags is not None:
         tags = preloaded_tags
@@ -94,6 +109,12 @@ def _rule_to_sync_json(rule: Rule,
         tags = [a.tag.name for a in
                 RuleTagAssociation.query.filter_by(rule_id=rule.id).all()
                 if a.tag]
+
+    if preloaded_attacks is not None:
+        attack_ids = preloaded_attacks
+    else:
+        attack_ids = [a.technique_id for a in
+                      RuleAttackAssociation.query.filter_by(rule_id=rule.id).all()]
 
     if preloaded_history is not None:
         hist_rows = preloaded_history
@@ -130,6 +151,7 @@ def _rule_to_sync_json(rule: Rule,
         'source':         rule.source,
         'tags':           tags,
         'cve_ids':        cve_ids,
+        'attack_ids':     attack_ids,
         'last_modif':     rule.last_modif.isoformat() if rule.last_modif else None,
         'created_at':     rule.creation_date.isoformat() if rule.creation_date else None,
         'update_history': history,
@@ -175,6 +197,7 @@ def _apply_rule_filters(query, params: dict):
         tag_mode   — 'OR' (any of) | 'AND' (all of)
         tag_exclude— 'true' / 'false' — flip the tag condition
         cve        — comma-separated CVE IDs (OR match in JSON field)
+        attacks    — comma-separated ATT&CK technique IDs (OR match, e.g. T1071,T1059)
     """
     since_dt    = params.get('since_dt')
     date_from   = params.get('date_from', '').strip()
@@ -186,6 +209,7 @@ def _apply_rule_filters(query, params: dict):
     tag_mode    = (params.get('tag_mode', 'OR') or 'OR').upper()
     tag_exclude = (params.get('tag_exclude', 'false') or 'false').lower() == 'true'
     cve_p       = params.get('cve', '').strip()
+    attacks_p   = params.get('attacks', '').strip()
 
     # ── Date range ────────────────────────────────────────────────────────────
     # date_from is a strict lower bound (excludes NULLs).
@@ -267,6 +291,17 @@ def _apply_rule_filters(query, params: dict):
         if cve_list:
             query = query.filter(or_(*[Rule.cve_id.ilike(f'%"{c}"%') for c in cve_list]))
 
+    # ── ATT&CK techniques ────────────────────────────────────────────────────
+    if attacks_p:
+        atk_list = [a.strip().upper() for a in attacks_p.split(',') if a.strip()]
+        if atk_list:
+            atk_sub = (RuleAttackAssociation.query
+                       .filter(RuleAttackAssociation.technique_id.in_(atk_list))
+                       .with_entities(RuleAttackAssociation.rule_id)
+                       .distinct()
+                       .subquery())
+            query = query.filter(Rule.id.in_(atk_sub))
+
     return query
 
 
@@ -327,6 +362,7 @@ class SyncRules(Resource):
             'tag_exclude': 'true | false (default) — exclude rules that have the specified tags',
             'date_from':   'ISO date — include only rules modified on or after this date (excludes NULLs)',
             'date_to':     'ISO date — include only rules modified on or before this date',
+            'attacks':     'Comma-separated ATT&CK technique IDs — include only rules matching ANY (e.g. T1071,T1059)',
         }
     )
     def get(self):
@@ -343,13 +379,14 @@ class SyncRules(Resource):
             rule_ids    = [r.id for r in rules]
             tags_map    = _batch_load_tags(rule_ids)
             history_map = _batch_load_history(rule_ids)
+            attacks_map = _batch_load_attacks(rule_ids)
             return {
                 'since':    None,
                 'page':     1,
                 'per_page': len(rules),
                 'total':    len(rules),
                 'has_more': False,
-                'rules':    [_rule_to_sync_json(r, tags_map.get(r.id, []), history_map.get(r.id, [])) for r in rules],
+                'rules':    [_rule_to_sync_json(r, tags_map.get(r.id, []), history_map.get(r.id, []), attacks_map.get(r.id, [])) for r in rules],
             }, 200
 
         # ── Standard paginated fetch ──────────────────────────────────────────
@@ -368,6 +405,7 @@ class SyncRules(Resource):
             'tag_mode':   request.args.get('tag_mode', 'OR'),
             'tag_exclude':request.args.get('tag_exclude', 'false'),
             'cve':        request.args.get('cve', ''),
+            'attacks':    request.args.get('attacks', ''),
         }
 
         query = Rule.query.filter(Rule.is_deleted == False)
@@ -390,10 +428,11 @@ class SyncRules(Resource):
         if page == 1:
             _log_pull_event(total)
 
-        # Batch-load tags and history — eliminates N*2 queries per page
+        # Batch-load tags, history and attacks — eliminates N*3 queries per page
         rule_ids    = [r.id for r in rules]
         tags_map    = _batch_load_tags(rule_ids)
         history_map = _batch_load_history(rule_ids)
+        attacks_map = _batch_load_attacks(rule_ids)
 
         return {
             'since':    since.isoformat(),
@@ -401,7 +440,7 @@ class SyncRules(Resource):
             'per_page': per_page,
             'total':    total,
             'has_more': has_more,
-            'rules':    [_rule_to_sync_json(r, tags_map.get(r.id, []), history_map.get(r.id, [])) for r in rules],
+            'rules':    [_rule_to_sync_json(r, tags_map.get(r.id, []), history_map.get(r.id, []), attacks_map.get(r.id, [])) for r in rules],
         }, 200
 
 

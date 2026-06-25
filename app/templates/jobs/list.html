@@ -21,23 +21,31 @@
             <nav aria-label="breadcrumb" class="mb-3">
                 <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                     <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                    {% if admin_view %}
                     <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
-                    <li class="breadcrumb-item active text-muted" aria-current="page">Jobs</li>
+                    {% endif %}
+                    <li class="breadcrumb-item active text-muted" aria-current="page">{% if admin_view %}All Jobs{% else %}My Jobs{% endif %}</li>
                 </ol>
             </nav>
             <div class="d-flex align-items-center gap-3 mb-3">
                 <div class="banner-icon"><i class="fa-solid fa-gear"></i></div>
                 <div>
-                    <h2 class="fw-bold mb-1">Background Jobs</h2>
+                    <h2 class="fw-bold mb-1">{% if admin_view %}Background Jobs{% else %}My Jobs{% endif %}</h2>
                     <div class="banner-accent"></div>
                 </div>
             </div>
             <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+                {% if admin_view %}
                 Monitor and manage all background tasks running on this instance.
+                {% else %}
+                Monitor and manage your personal background tasks.
+                {% endif %}
             </p>
         </div>
 
+        {% if admin_view %}
         {{ anav.admin_nav('jobs', jobs_count=running_jobs_count) }}
+        {% endif %}
 
         <!-- ── Status filter chips ── -->
         <div class="d-flex gap-2 flex-wrap mb-3">
@@ -245,7 +253,8 @@
     import LoadingBar from '/static/js/components/loading-bar.js'
     import DataTable  from '/static/js/components/table/data-table.js'
 
-    const CAN_MANAGE = {{ current_user.is_admin() | tojson }}
+    const CAN_MANAGE  = {{ current_user.is_admin() | tojson }}
+    const ADMIN_VIEW  = {{ admin_view | tojson }}
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -271,8 +280,10 @@
             ]
 
             const fetch_url = computed(() => {
-                const base = '/jobs/api/list'
-                return active_status.value ? base + '?status=' + active_status.value : base
+                const params = []
+                if (active_status.value) params.push('status=' + active_status.value)
+                if (!ADMIN_VIEW) params.push('mine_only=true')
+                return '/jobs/api/list' + (params.length ? '?' + params.join('&') : '')
             })
 
             const columns = [

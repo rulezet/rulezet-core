@@ -108,7 +108,19 @@ def _running_jobs_count():
 @jobs_blueprint.route('/list', methods=['GET'])
 @login_required
 def list_jobs():
-    return render_template('jobs/list.html', running_jobs_count=_running_jobs_count())
+    return render_template('jobs/list.html',
+                           running_jobs_count=_running_jobs_count(),
+                           admin_view=False)
+
+
+@jobs_blueprint.route('/admin/list', methods=['GET'])
+@login_required
+def admin_list_jobs():
+    if not current_user.is_admin():
+        abort(403)
+    return render_template('jobs/list.html',
+                           running_jobs_count=_running_jobs_count(),
+                           admin_view=True)
 
 
 @jobs_blueprint.route('/detail/<string:job_uuid>', methods=['GET'])

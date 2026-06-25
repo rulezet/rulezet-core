@@ -63,53 +63,78 @@ def home() -> render_template:
         total_users=total_users,
     )
 
-@home_blueprint.route("/home_charts")
-def home_charts():
-    """Lightweight chart data for the home page (format distribution + monthly additions)."""
-    import datetime
+@home_blueprint.route("/home_charts/<tab>")
+def home_charts(tab):
+    """Lazy chart loader — fetches only the requested tab's data."""
+    import datetime, json as _json
     from sqlalchemy import func
     from app.core.db_class.db import Rule
     from app import db
 
-    now = datetime.datetime.utcnow()
+    if tab == 'timeline':
+        now = datetime.datetime.utcnow()
+        labels, nice = [], []
+        d = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        for _ in range(6):
+            labels.append(d.strftime('%Y-%m'))
+            d = (d - datetime.timedelta(days=1)).replace(day=1)
+        labels.reverse()
+        for l in labels:
+            try: nice.append(datetime.datetime.strptime(l, '%Y-%m').strftime('%b %Y'))
+            except: nice.append(l)
+        cutoff = now - datetime.timedelta(days=186)
+        month_expr = (func.to_char(Rule.creation_date, 'YYYY-MM')
+                      if db.engine.dialect.name == 'postgresql'
+                      else func.strftime('%Y-%m', Rule.creation_date))
+        rows = (db.session.query(month_expr.label('m'), func.count(Rule.id))
+                .filter(Rule.is_deleted == False, Rule.creation_date >= cutoff)
+                .group_by('m').all())
+        bucket = {r[0]: r[1] for r in rows if r[0]}
+        return jsonify({'title': 'Rules Added / Month', 'subtitle': 'Last 6 months',
+                        'categories': nice, 'series': [{'name': 'Rules Added', 'values': [bucket.get(l, 0) for l in labels]}]})
 
-    fmt_rows = (db.session.query(Rule.format, func.count(Rule.id))
+    if tab == 'formats':
+        rows = (db.session.query(Rule.format, func.count(Rule.id))
                 .filter(Rule.is_deleted == False)
                 .group_by(Rule.format)
                 .order_by(func.count(Rule.id).desc())
                 .limit(10).all())
-    fmt_cats = [r[0] or 'Unknown' for r in fmt_rows]
-    fmt_vals = [r[1] for r in fmt_rows]
+        return jsonify({'title': 'Rules by Format',
+                        'categories': [r[0] or 'Unknown' for r in rows],
+                        'series': [{'name': 'Rules', 'values': [r[1] for r in rows]}]})
 
-    # Build the 6 target month labels
-    labels, nice = [], []
-    d = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    for _ in range(6):
-        labels.append(d.strftime('%Y-%m'))
-        d = (d - datetime.timedelta(days=1)).replace(day=1)
-    labels.reverse()
-    for l in labels:
-        try: nice.append(datetime.datetime.strptime(l, '%Y-%m').strftime('%b %Y'))
-        except: nice.append(l)
+    if tab == 'top_cve':
+        raws = (db.session.query(Rule.cve_id)
+                .filter(Rule.is_deleted == False, Rule.cve_id.isnot(None),
+                        Rule.cve_id != '[]', Rule.cve_id != '').all())
+        counter: dict = {}
+        for (raw,) in raws:
+            try:
+                ids = _json.loads(raw) if raw else []
+            except Exception:
+                ids = []
+            for cid in ids:
+                if cid:
+                    counter[cid] = counter.get(cid, 0) + 1
+        top = sorted(counter.items(), key=lambda x: x[1], reverse=True)[:10]
+        return jsonify({'title': 'CVEs with the most rules',
+                        'categories': [c[0] for c in top],
+                        'series': [{'name': 'Rules', 'values': [c[1] for c in top]}]})
 
-    # GROUP BY in SQL — one row per month instead of fetching all creation_dates
-    cutoff = now - datetime.timedelta(days=186)
-    dialect = db.engine.dialect.name
-    if dialect == 'postgresql':
-        month_expr = func.to_char(Rule.creation_date, 'YYYY-MM')
-    else:
-        month_expr = func.strftime('%Y-%m', Rule.creation_date)
+    if tab == 'top_atk':
+        from app.core.db_class.db import RuleAttackAssociation
+        rows = (db.session.query(RuleAttackAssociation.technique_id,
+                                 func.count(RuleAttackAssociation.id).label('n'))
+                .join(Rule, Rule.id == RuleAttackAssociation.rule_id)
+                .filter(Rule.is_deleted == False)
+                .group_by(RuleAttackAssociation.technique_id)
+                .order_by(func.count(RuleAttackAssociation.id).desc())
+                .limit(10).all())
+        return jsonify({'title': 'ATT&CK techniques with the most rules',
+                        'categories': [r[0] for r in rows],
+                        'series': [{'name': 'Rules', 'values': [r[1] for r in rows]}]})
 
-    month_rows = (db.session.query(month_expr.label('m'), func.count(Rule.id))
-                  .filter(Rule.is_deleted == False, Rule.creation_date >= cutoff)
-                  .group_by('m')
-                  .all())
-    bucket = {row[0]: row[1] for row in month_rows if row[0]}
-
-    return jsonify({
-        'formats':  {'title': 'Rules by Format',  'categories': fmt_cats, 'series': [{'name': 'Rules', 'values': fmt_vals}]},
-        'timeline': {'title': 'Rules Added / Month', 'subtitle': 'Last 6 months', 'categories': nice, 'series': [{'name': 'Rules Added', 'values': [bucket.get(l, 0) for l in labels]}]},
-    })
+    return jsonify({}), 400
 
 
 @home_blueprint.route("/get_last_rules", methods=['GET'])

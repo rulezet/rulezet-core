@@ -826,7 +826,7 @@ def handle_connector_pull(job, app):
     from app.features.connector.connector_core import (
         _get_or_create_shadow_user, _upsert_rule, _upsert_bundle,
         _extract_tag_family, build_tag_cache,
-        _prepare_new_rule, _import_rule_history_new, _sync_tags, _sync_cve_ids,
+        _prepare_new_rule, _import_rule_history_new, _sync_tags, _sync_cve_ids, _sync_attacks,
     )
     from app.core.utils.activity_log import log_activity
     from sqlalchemy import or_
@@ -922,6 +922,10 @@ def handle_connector_pull(job, app):
         date_from_qs = (pull_filters.get('date_from') or '').strip()
         date_to_qs   = (pull_filters.get('date_to') or '').strip()
 
+        # ATT&CK filter
+        atk_list   = [a for a in (pull_filters.get('attacks') or []) if a]
+        attacks_qs = ','.join(atk_list) if atk_list else ''
+
         def _build_rule_url(p: int) -> str:
             url = f"{base}/api/sync/rules?since={since}&page={p}&per_page={PER_PAGE}"
             if cve_qs:       url += f"&cve={cve_qs}"
@@ -931,6 +935,7 @@ def handle_connector_pull(job, app):
             if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
             if date_from_qs: url += f"&date_from={date_from_qs}"
             if date_to_qs:   url += f"&date_to={date_to_qs}"
+            if attacks_qs:   url += f"&attacks={attacks_qs}"
             return url
 
         def _build_preflight_url() -> str:
@@ -942,9 +947,10 @@ def handle_connector_pull(job, app):
             if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
             if date_from_qs: url += f"&date_from={date_from_qs}"
             if date_to_qs:   url += f"&date_to={date_to_qs}"
+            if attacks_qs:   url += f"&attacks={attacks_qs}"
             return url
 
-        active_filters = [k for k in [cve_qs, formats_qs, authors_qs, license_qs, tags_qs, date_from_qs, date_to_qs] if k]
+        active_filters = [k for k in [cve_qs, formats_qs, authors_qs, license_qs, tags_qs, date_from_qs, date_to_qs, attacks_qs] if k]
 
         log_job(job, f"Starting pull from {base}", level='info', event='started')
         if active_filters:
@@ -956,6 +962,7 @@ def handle_connector_pull(job, app):
             if tags_qs:      parts.append(f"tags={tags_qs} ({tag_mode_qs}{', exclude' if tag_excl_qs=='true' else ''})")
             if date_from_qs: parts.append(f"from={date_from_qs}")
             if date_to_qs:   parts.append(f"to={date_to_qs}")
+            if attacks_qs:   parts.append(f"attacks={attacks_qs}")
             log_job(job, f"Filters active: {' · '.join(parts)}", level='info', event='progress')
 
         # ── Manifest preflight: verify remote supports sync API ────────────────
@@ -1023,6 +1030,26 @@ def handle_connector_pull(job, app):
         had_error       = False
         all_missing_tags: set = set()
         tag_cache: dict = None   # built once and reused across rules + bundles
+        atk_assoc_set: set = set()  # {(rule_id, technique_id)} to avoid duplicate inserts
+        attack_install_triggered = False  # only trigger the install job once
+
+        # ── Check if ATT&CK data is installed ─────────────────────────────────
+        from app.core.db_class.db import AttackTechnique as _ATK
+        if not _ATK.query.first():
+            log_job(job,
+                    "ATT&CK technique database is empty — queuing an install now. "
+                    "Techniques will be available on the next pull.",
+                    level='warning', event='progress')
+            from app.core.db_class.db import BackgroundJob as _BJ
+            atk_job = _BJ(
+                type='update_attack_data',
+                status='pending',
+                payload={},
+                created_by=job.created_by,
+            )
+            db.session.add(atk_job)
+            db.session.commit()
+            attack_install_triggered = True
 
         MAX_PAGES = 10_000  # safety guard against infinite pagination loops
 
@@ -1165,6 +1192,13 @@ def handle_connector_pull(job, app):
                                                     assoc_set=assoc_set)
                                 all_missing_tags.update(missed)
                                 _sync_cve_ids(rule, item.get('cve_ids', []))
+                                unknown_atk = _sync_attacks(rule, item.get('attack_ids', []),
+                                                            effective_user_id,
+                                                            atk_assoc_set=atk_assoc_set)
+                                if '__empty__' in unknown_atk and not attack_install_triggered:
+                                    attack_install_triggered = True
+                                    log_job(job, "ATT&CK data missing — install job already queued.",
+                                            level='warning', event='progress')
                                 _import_rule_history_new(rule, item.get('update_history', []),
                                                          effective_user_id)
                             pg_created    = len(new_rules_pending)

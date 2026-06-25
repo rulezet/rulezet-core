@@ -832,6 +832,52 @@ def _sync_cve_ids(obj, remote_cve_ids: list, field: str = 'cve_id') -> None:
         setattr(obj, field, _json.dumps(merged))
 
 
+def _sync_attacks(rule, technique_ids: list, user_id: int,
+                  atk_assoc_set: set = None) -> list:
+    """Attach ATT&CK technique associations to a rule.
+
+    Returns a list of technique_ids that don't exist locally (unknown techniques).
+    If the local ATT&CK table is completely empty, returns the sentinel ['__empty__']
+    so the caller knows to trigger an ATT&CK data install.
+    """
+    if not technique_ids:
+        return []
+
+    from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
+    import datetime as _dt
+
+    # Check if ATT&CK data exists at all
+    if not AttackTechnique.query.first():
+        return ['__empty__']
+
+    unknown = []
+    for tid in technique_ids:
+        tid = (tid or '').strip().upper()
+        if not tid:
+            continue
+        technique = AttackTechnique.query.filter_by(technique_id=tid).first()
+        if not technique:
+            unknown.append(tid)
+            continue
+        key = (rule.id, tid)
+        if atk_assoc_set is not None:
+            if key in atk_assoc_set:
+                continue
+            atk_assoc_set.add(key)
+        else:
+            if RuleAttackAssociation.query.filter_by(rule_id=rule.id, technique_id=tid).first():
+                continue
+        db.session.add(RuleAttackAssociation(
+            uuid=str(uuid_mod.uuid4()),
+            rule_id=rule.id,
+            technique_id=tid,
+            user_id=user_id,
+            source='connector',
+            added_at=_dt.datetime.now(_dt.timezone.utc),
+        ))
+    return unknown
+
+
 def _extract_tag_family(name: str) -> str | None:
     """Extract the tag family/namespace from a tag name.
 
