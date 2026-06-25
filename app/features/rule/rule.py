@@ -3237,6 +3237,7 @@ def rules_data_table():
         attacks=_csv_arg('attacks'),
         status=request.args.get('status', None, type=str),
         workspace_uuid=request.args.get('workspace_uuid', None, type=str),
+        exclude_workspace_uuid=request.args.get('exclude_workspace_uuid', None, type=str),
     )
 
     rule_ids = [r.id for r in pagination.items]

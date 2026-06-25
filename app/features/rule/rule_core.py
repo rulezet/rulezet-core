@@ -1342,7 +1342,7 @@ def process_vote(rule_id, user_id, vote_type):
 #   Filter  #
 #############
 
-def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None, status=None, workspace_uuid=None) -> Rule:
+def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None, status=None, workspace_uuid=None, exclude_workspace_uuid=None) -> Rule:
     """Filter the rules with specific field targeting"""
     query = _active()
     
@@ -1471,6 +1471,14 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
             query = query.filter(Rule.id.in_(ws_rule_ids))
         else:
             query = query.filter(_false())
+
+    if exclude_workspace_uuid:
+        from app.core.db_class.db import WorkspaceRule, Workspace
+        ex_ws = Workspace.query.filter_by(uuid=exclude_workspace_uuid).first()
+        if ex_ws:
+            ex_ids = [wr.rule_id for wr in WorkspaceRule.query.filter_by(workspace_id=ex_ws.id).all()]
+            if ex_ids:
+                query = query.filter(~Rule.id.in_(ex_ids))
 
     if status:
         query = query.filter(Rule.status == status)
@@ -2249,7 +2257,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          search_field='all', exact_match=False, rule_type=None,
                          author=None, vulnerabilities=None, licenses=None,
                          tags=None, editor_names=None, bundle_id=None, attacks=None,
-                         status=None, workspace_uuid=None):
+                         status=None, workspace_uuid=None, exclude_workspace_uuid=None):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -2271,6 +2279,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         attacks=attacks,
         status=status,
         workspace_uuid=workspace_uuid,
+        exclude_workspace_uuid=exclude_workspace_uuid,
     )
 
     col = _DATA_TABLE_SORT_KEYS.get(sort)

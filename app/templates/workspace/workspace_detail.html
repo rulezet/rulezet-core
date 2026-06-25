@@ -643,6 +643,7 @@
                 v-if="showAddRules"
                 mode="select"
                 :sync-url="false"
+                :fetch-url="`/rule/data_table?exclude_workspace_uuid=${wsUuid}`"
                 :user-id="currentUserId"
                 :current-user-id="currentUserId"
                 :current-user-is-admin="isAdmin"
