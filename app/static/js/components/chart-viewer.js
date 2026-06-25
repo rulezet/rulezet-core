@@ -64,6 +64,8 @@ export default defineComponent({
         height: { type: String,           default: '420px'     },
     },
 
+    emits: ['chart-click'],
+
     template: `
 <div class="cv-root" :style="{ height }">
 
@@ -136,7 +138,7 @@ export default defineComponent({
 </div>
     `,
 
-    setup(props) {
+    setup(props, { emit }) {
         const canvas_ref  = ref(null);
         const chart_el    = ref(null);
         const active_view = ref('');
@@ -201,15 +203,15 @@ export default defineComponent({
             } else {
                 _chart = window.echarts.init(el, null, { renderer: 'canvas' });
                 _chart.setOption(option, { notMerge: true });
-                if (props.detail) {
-                    _chart.on('click', params => {
-                        detail_item.value = {
-                            name:        params.name  || params.dataIndex,
-                            value:       params.value,
-                            series_name: params.seriesName,
-                        };
-                    });
-                }
+                _chart.on('click', params => {
+                    const item = {
+                        name:        params.name  || params.dataIndex,
+                        value:       params.value,
+                        series_name: params.seriesName,
+                    };
+                    emit('chart-click', item);
+                    if (props.detail) detail_item.value = item;
+                });
             }
         }
 

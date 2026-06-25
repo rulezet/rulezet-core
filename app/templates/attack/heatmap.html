@@ -2,29 +2,46 @@
 {% block title %}ATT&CK Global Heatmap — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/attack-matrix.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 {% endblock %}
 {% block content %}
 <div class="container-fluid mt-3 px-4" id="heatmap-app" v-cloak>
 
     <div class="explorer-banner mb-4">
-        <i class="fa-solid fa-grid-2 banner-watermark"></i>
+        <i class="fa-solid fa-crosshairs banner-watermark"></i>
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                <li class="breadcrumb-item"><a href="/rule/list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">ATT&amp;CK Heatmap</li>
             </ol>
         </nav>
-        <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon"><i class="fa-solid fa-grid-2"></i></div>
-            <div>
-                <h2 class="fw-bold mb-1">ATT&amp;CK Coverage Heatmap</h2>
-                <div class="banner-accent"></div>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="banner-icon"><i class="fa-solid fa-crosshairs"></i></div>
+                <div>
+                    <h2 class="fw-bold mb-1">ATT&amp;CK Coverage Heatmap</h2>
+                    <div class="banner-accent"></div>
+                </div>
+            </div>
+            <!-- View switcher -->
+            <div v-if="!loading" class="d-flex gap-1 p-1 rounded-3" style="background:var(--light-bg-color);">
+                <button @click="viewMode = 'matrix'"
+                        :style="viewMode === 'matrix' ? 'background:rgba(13,110,253,.1);color:#0d6efd;' : 'background:transparent;color:var(--subtle-text-color);'"
+                        style="font-size:.78rem;font-weight:600;padding:.32rem .75rem;border-radius:7px;border:none;cursor:pointer;transition:background .13s,color .13s;">
+                       <i class="fa-solid fa-table-cells me-1"></i>Matrix
+                </button>
+                <button @click="viewMode = 'charts'"
+                        :style="viewMode === 'charts' ? 'background:rgba(13,110,253,.1);color:#0d6efd;' : 'background:transparent;color:var(--subtle-text-color);'"
+                        style="font-size:.78rem;font-weight:600;padding:.32rem .75rem;border-radius:7px;border:none;cursor:pointer;transition:background .13s,color .13s;">
+                    <i class="fa-solid fa-chart-bar me-1"></i>Charts
+                </button>
             </div>
         </div>
         <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
             Visual overview of your detection coverage across all MITRE ATT&amp;CK tactics and techniques.
-            Cell colour intensity reflects the number of rules covering each technique.
+            Click any technique to explore its rules.
         </p>
     </div>
 
@@ -34,26 +51,88 @@
         <p class="text-muted small">Loading coverage data…</p>
     </div>
 
-    <!-- Matrix -->
-    <div v-else class="card border-0 shadow-sm rounded-4">
+    <!-- Matrix view -->
+    <div v-else-if="viewMode === 'matrix'" class="card border-0 shadow-sm rounded-4">
         <div class="card-body p-4">
             <attack-matrix :coverage="coverage" :loading="false" :navigate-on-click="true"></attack-matrix>
         </div>
+    </div>
+
+    <!-- Charts view -->
+    <div v-else class="row g-4">
+
+        <!-- Top techniques -->
+        <div class="col-12">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-1" style="color:var(--text-color);">
+                        <i class="fa-solid fa-ranking-star me-2 text-primary"></i>Top Techniques by Rule Count
+                    </h6>
+                    <p class="text-muted small mb-3">Click a bar to explore the rules covering that technique.</p>
+                    <chart-viewer
+                        :data="topTechData"
+                        views="bar-h"
+                        height="520px"
+                        @chart-click="onChartClick">
+                    </chart-viewer>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tactics overview -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-1" style="color:var(--text-color);">
+                        <i class="fa-solid fa-layer-group me-2" style="color:#6f42c1;"></i>Rules per Tactic
+                    </h6>
+                    <p class="text-muted small mb-3">Click a tactic to explore all its rules.</p>
+                    <chart-viewer
+                        :data="tacticData"
+                        views="bar-h"
+                        height="380px"
+                        @chart-click="onTacticClick">
+                    </chart-viewer>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coverage donut -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-1" style="color:var(--text-color);">
+                        <i class="fa-solid fa-chart-pie me-2" style="color:#198754;"></i>Coverage Distribution
+                    </h6>
+                    <p class="text-muted small mb-3">Proportion of rules across tactics.</p>
+                    <chart-viewer
+                        :data="tacticPieData"
+                        views="donut"
+                        height="380px"
+                        @chart-click="onTacticClick">
+                    </chart-viewer>
+                </div>
+            </div>
+        </div>
+
     </div>
 
 </div>
 {% endblock %}
 {% block script %}
 <script type="module">
-    const { createApp, ref, onMounted } = Vue;
+    const { createApp, ref, computed, onMounted } = Vue;
     import AttackMatrix from '/static/js/components/attack-matrix.js';
+    import ChartViewer  from '/static/js/components/chart-viewer.js';
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'attack-matrix': AttackMatrix },
+        components: { 'attack-matrix': AttackMatrix, 'chart-viewer': ChartViewer },
         setup() {
             const coverage = ref(null);
             const loading  = ref(true);
+            const viewMode = ref('matrix');
+
             onMounted(async () => {
                 try {
                     const res = await fetch('/attack/heatmap_data');
@@ -64,7 +143,79 @@
                     loading.value = false;
                 }
             });
-            return { coverage, loading };
+
+            // Top 40 techniques sorted by rule count
+            const topTechData = computed(() => {
+                if (!coverage.value) return {};
+                const techs = [];
+                for (const tactic of (coverage.value.tactics || [])) {
+                    for (const tech of (tactic.techniques || [])) {
+                        if (tech.count > 0) {
+                            techs.push({ id: tech.id, count: tech.count });
+                        }
+                    }
+                }
+                // deduplicate by id (technique can appear in multiple tactics)
+                const seen = new Map();
+                for (const t of techs) {
+                    if (!seen.has(t.id) || seen.get(t.id) < t.count) seen.set(t.id, t.count);
+                }
+                const sorted = [...seen.entries()]
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 40);
+                return {
+                    title: 'Top Techniques',
+                    categories: sorted.map(([id]) => id),
+                    series: [{ name: 'Rules', values: sorted.map(([, c]) => c) }],
+                };
+            });
+
+            // Rules per tactic
+            const tacticData = computed(() => {
+                if (!coverage.value) return {};
+                const tactics = (coverage.value.tactics || []).filter(t => t.covered);
+                return {
+                    title: 'Rules per Tactic',
+                    categories: tactics.map(t => t.label),
+                    series: [{ name: 'Rules', values: tactics.map(t => t.rule_count) }],
+                    meta: { tactic_keys: tactics.map(t => t.key) },
+                };
+            });
+
+            // Donut of coverage
+            const tacticPieData = computed(() => {
+                if (!coverage.value) return {};
+                const tactics = (coverage.value.tactics || []).filter(t => t.covered);
+                return {
+                    title: 'Coverage by Tactic',
+                    categories: tactics.map(t => t.label),
+                    series: [{ name: 'Rules', values: tactics.map(t => t.rule_count) }],
+                    meta: { tactic_keys: tactics.map(t => t.key) },
+                };
+            });
+
+            // Click on a technique bar → rules_list filtered by that technique
+            function onChartClick(item) {
+                const techId = (item.name || '').toString().trim();
+                if (/^T\d{4}(\.\d{3})?$/i.test(techId)) {
+                    window.location.href = `/rule/rules_list?attacks=${techId.toUpperCase()}`;
+                }
+            }
+
+            // Click on a tactic bar/slice → rules_list filtered by all techniques of that tactic
+            function onTacticClick(item) {
+                if (!coverage.value) return;
+                const label = (item.name || '').toString().trim();
+                const tactic = (coverage.value.tactics || []).find(t => t.label === label);
+                if (!tactic) return;
+                const ids = (tactic.techniques || [])
+                    .filter(t => t.count > 0)
+                    .map(t => t.id)
+                    .join(',');
+                if (ids) window.location.href = `/rule/rules_list?attacks=${ids}`;
+            }
+
+            return { coverage, loading, viewMode, topTechData, tacticData, tacticPieData, onChartClick, onTacticClick };
         },
     }).mount('#heatmap-app');
 </script>
