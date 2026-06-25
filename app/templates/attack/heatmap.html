@@ -45,6 +45,22 @@
         </p>
     </div>
 
+    <!-- Search bar -->
+    <div v-if="!loading" class="mb-4">
+        <div class="input-group" style="max-width:420px;">
+            <span class="input-group-text bg-transparent border-end-0">
+                <i class="fa-solid fa-magnifying-glass" style="color:var(--subtle-text-color);font-size:.85rem;"></i>
+            </span>
+            <input type="text" class="form-control border-start-0 ps-0"
+                   v-model="searchQuery"
+                   placeholder="Search technique ID or name… (e.g. T1078, Phishing)"
+                   style="font-size:.88rem;">
+            <button v-if="searchQuery" @click="searchQuery = ''" class="btn btn-outline-secondary border-start-0" style="font-size:.8rem;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+
     <!-- Loading -->
     <div v-if="loading" class="text-center py-5">
         <div class="spinner-border text-primary mb-3" role="status"></div>
@@ -54,7 +70,7 @@
     <!-- Matrix view -->
     <div v-else-if="viewMode === 'matrix'" class="card border-0 shadow-sm rounded-4">
         <div class="card-body p-4">
-            <attack-matrix :coverage="coverage" :loading="false" :navigate-on-click="true"></attack-matrix>
+            <attack-matrix :coverage="coverage" :loading="false" :navigate-on-click="true" :search="searchQuery"></attack-matrix>
         </div>
     </div>
 
@@ -129,9 +145,10 @@
         delimiters: ['[[', ']]'],
         components: { 'attack-matrix': AttackMatrix, 'chart-viewer': ChartViewer },
         setup() {
-            const coverage = ref(null);
-            const loading  = ref(true);
-            const viewMode = ref('matrix');
+            const coverage    = ref(null);
+            const loading     = ref(true);
+            const viewMode    = ref('matrix');
+            const searchQuery = ref('');
 
             onMounted(async () => {
                 try {
@@ -144,25 +161,19 @@
                 }
             });
 
-            // Top 40 techniques sorted by rule count
+            // Top 40 techniques sorted by rule count, filtered by search
             const topTechData = computed(() => {
                 if (!coverage.value) return {};
-                const techs = [];
+                const q = searchQuery.value.trim().toLowerCase();
+                const seen = new Map();
                 for (const tactic of (coverage.value.tactics || [])) {
                     for (const tech of (tactic.techniques || [])) {
-                        if (tech.count > 0) {
-                            techs.push({ id: tech.id, count: tech.count });
-                        }
+                        if (!tech.count) continue;
+                        if (q && !tech.id.toLowerCase().includes(q) && !(tech.name || '').toLowerCase().includes(q)) continue;
+                        if (!seen.has(tech.id) || seen.get(tech.id) < tech.count) seen.set(tech.id, tech.count);
                     }
                 }
-                // deduplicate by id (technique can appear in multiple tactics)
-                const seen = new Map();
-                for (const t of techs) {
-                    if (!seen.has(t.id) || seen.get(t.id) < t.count) seen.set(t.id, t.count);
-                }
-                const sorted = [...seen.entries()]
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 40);
+                const sorted = [...seen.entries()].sort((a, b) => b[1] - a[1]).slice(0, 40);
                 return {
                     title: 'Top Techniques',
                     categories: sorted.map(([id]) => id),
@@ -215,7 +226,7 @@
                 if (ids) window.location.href = `/rule/rules_list?attacks=${ids}`;
             }
 
-            return { coverage, loading, viewMode, topTechData, tacticData, tacticPieData, onChartClick, onTacticClick };
+            return { coverage, loading, viewMode, searchQuery, topTechData, tacticData, tacticPieData, onChartClick, onTacticClick };
         },
     }).mount('#heatmap-app');
 </script>

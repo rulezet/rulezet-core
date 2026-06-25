@@ -1,4 +1,4 @@
-const { defineComponent, ref, computed } = Vue;
+const { defineComponent, ref, computed, watch } = Vue;
 
 const LOCAL_TECH_BASE = '/attack/technique/';
 
@@ -9,6 +9,7 @@ export default defineComponent({
         loading:        { type: Boolean, default: false },
         navigateOnClick:{ type: Boolean, default: false },
         ruleListBase:   { type: String,  default: '/rule/rules_list' },
+        search:         { type: String,  default: '' },
     },
     setup(props) {
         const selected = ref(null); // { tactic, technique }
@@ -68,15 +69,37 @@ export default defineComponent({
         const stats   = computed(() => props.coverage?.stats ?? {});
         const tactics = computed(() => props.coverage?.tactics ?? []);
 
-        const visibleTactics = computed(() =>
-            showAllTactics.value
-                ? tactics.value
-                : tactics.value.filter(t => t.covered)
-        );
+        const searchQuery = computed(() => (props.search || '').trim().toLowerCase());
+
+        function matchesTech(tech) {
+            if (!searchQuery.value) return true;
+            return tech.id.toLowerCase().includes(searchQuery.value) ||
+                   (tech.name || '').toLowerCase().includes(searchQuery.value);
+        }
+
+        const visibleTactics = computed(() => {
+            const base = showAllTactics.value ? tactics.value : tactics.value.filter(t => t.covered);
+            if (!searchQuery.value) return base;
+            return base.map(t => ({
+                ...t,
+                techniques: t.techniques.filter(matchesTech),
+            })).filter(t => t.techniques.length > 0);
+        });
 
         const hiddenCount = computed(() =>
             tactics.value.filter(t => !t.covered).length
         );
+
+        const searchMatchCount = computed(() => {
+            if (!searchQuery.value) return null;
+            const seen = new Set();
+            for (const t of tactics.value) {
+                for (const tech of t.techniques) {
+                    if (matchesTech(tech)) seen.add(tech.id);
+                }
+            }
+            return seen.size;
+        });
 
         const coveragePct = computed(() => {
             const s = stats.value;
@@ -95,6 +118,7 @@ export default defineComponent({
             techBg, techColor, tacticHeaderStyle, techUrl,
             stats, tactics, visibleTactics, hiddenCount,
             showAllTactics, coveragePct, overallRulePct,
+            searchQuery, searchMatchCount,
         };
     },
     template: `
@@ -157,6 +181,13 @@ export default defineComponent({
             <span class="am-legend-chip" style="background:rgba(13,110,253,.55);color:var(--text-color);">4–7 rules</span>
             <span class="am-legend-chip" style="background:rgba(13,110,253,.75);color:#fff;">8–15 rules</span>
             <span class="am-legend-chip" style="background:#0d6efd;color:#fff;">16+ rules</span>
+        </div>
+
+        <!-- Search result count -->
+        <div v-if="searchQuery" class="mb-2 small" style="color:var(--subtle-text-color);">
+            <i class="fa-solid fa-magnifying-glass me-1"></i>
+            <span v-if="searchMatchCount > 0"><strong style="color:#0d6efd;">{{ searchMatchCount }}</strong> technique{{ searchMatchCount === 1 ? '' : 's' }} found</span>
+            <span v-else class="text-danger">No techniques match "{{ searchQuery }}"</span>
         </div>
 
         <!-- Toggle bar -->
