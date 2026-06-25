@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import 'macros/admin_nav.html' as anav %}
 
 {% block title %}Connectors{% endblock %}
 
@@ -31,6 +32,8 @@
          Pulls are triggered by admins.
       </p>
    </div>
+
+   {{ anav.admin_nav('connectors') }}
 
    <!-- ── How connectors work — link to doc page ─────────── -->
    <div class="mb-4">
