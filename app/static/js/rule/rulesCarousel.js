@@ -1,7 +1,7 @@
-import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
-import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js'
 import UserChip from '/static/js/components/UserChip.js'
 import AttackDisplayList from '/static/js/attack/attackDisplayList.js'
+import SingleTagDisplay from '/static/js/tags/singleTagDisplay.js'
+import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
 
 const { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } = Vue
 import { message_list, create_message } from '/static/js/toaster.js'
@@ -11,10 +11,10 @@ const RulesCarousel = {
     delimiters: ['[[', ']]'],
 
     components: {
-        'vulnerability-displays-list': VulnerabilityDisplaysList,
-        'tags-displays-list': TagsDisplaysList,
         'user-chip': UserChip,
         'attack-display-list': AttackDisplayList,
+        'single-tag-display': SingleTagDisplay,
+        'vulnerability-displays-list': VulnerabilityDisplaysList,
     },
 
     props: {
@@ -114,36 +114,40 @@ const RulesCarousel = {
                                         </div>
                                     </div>
 
-                                    <div class="flex-grow-1">
-                                        <p class="text-muted small lh-base" title="Description of the rule">
-                                            <template v-if="!rule.show_full">
-                                                [[ rule.description.substring(0, 140) ]]
-                                                <span v-if="rule.description.length > 140">...</span>
-                                                <a v-if="rule.description.length > 140"
-                                                   href="#"
-                                                   @click.prevent="rule.show_full = true"
-                                                   class="text-primary text-decoration-none fw-semibold ms-1">Read more</a>
-                                            </template>
-                                            <template v-else>
-                                                [[ rule.description ]]
-                                                <a href="#"
-                                                   @click.prevent="rule.show_full = false"
-                                                   class="text-primary text-decoration-none fw-semibold ms-1">Show less</a>
-                                            </template>
+                                    <div class="flex-grow-1" style="overflow:hidden;">
+                                        <p class="text-muted small lh-base mb-2" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;" title="Description of the rule">
+                                            [[ rule.description ? rule.description.substring(0, 120) : '' ]][[ rule.description && rule.description.length > 120 ? '…' : '' ]]
                                         </p>
                                     </div>
 
-                                    <div class="mb-3" @click.stop>
-                                        <vulnerability-displays-list object-type="rule" :object-id="rule.id" :max-visible="1">
-                                        </vulnerability-displays-list>
-                                    </div>
-                                    <div class="mb-3" @click.stop>
-                                        <tags-displays-list object-type="rule" :object-id="rule.id" :max-visible="1">
-                                        </tags-displays-list>
-                                    </div>
-                                    <div v-if="rule.attacks && rule.attacks.length" class="mb-3" @click.stop>
-                                        <attack-display-list :initial-attacks="rule.attacks" :max-visible="2">
-                                        </attack-display-list>
+                                    <div class="mt-auto" @click.stop>
+                                        <!-- CVEs -->
+                                        <div v-if="rule.cves && rule.cves.length" class="mb-1">
+                                            <vulnerability-displays-list
+                                                :initial-vulnerabilities="rule.cves"
+                                                object-type="rule"
+                                                :object-id="rule.id"
+                                                :max-visible="3">
+                                            </vulnerability-displays-list>
+                                        </div>
+                                        <!-- ATT&CK -->
+                                        <div v-if="rule.attacks && rule.attacks.length" class="mb-1">
+                                            <attack-display-list :initial-attacks="rule.attacks" :max-visible="2">
+                                            </attack-display-list>
+                                        </div>
+                                        <!-- Tags -->
+                                        <div v-if="rule.tags && rule.tags.length" class="d-flex flex-wrap gap-1">
+                                            <single-tag-display
+                                                v-for="tag in rule.tags.slice(0,3)" :key="tag.id"
+                                                :tag="tag"
+                                                :show-namespace="true">
+                                            </single-tag-display>
+                                            <span v-if="rule.tags.length > 3"
+                                                  class="badge rounded-pill"
+                                                  style="background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;font-size:.65rem;">
+                                                +[[ rule.tags.length - 3 ]]
+                                            </span>
+                                        </div>
                                     </div>
 
                                     <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto bg-transparent">
@@ -364,6 +368,19 @@ const RulesCarousel = {
             create_message(data.message, data.toast_class, false, null, '/rule/owner_rules')
         }
 
+        function tagStyle(tag) {
+            const hex = (tag.color || '#6c757d').replace('#', '')
+            const r = parseInt(hex.slice(0,2), 16)
+            const g = parseInt(hex.slice(2,4), 16)
+            const b = parseInt(hex.slice(4,6), 16)
+            const luminance = (0.299*r + 0.587*g + 0.114*b) / 255
+            const isLight = luminance > 0.6
+            const bg = isLight ? '#f3f4f6' : (tag.color + '22')
+            const text = isLight ? '#374151' : tag.color
+            const border = isLight ? '#d1d5db' : (tag.color + '55')
+            return { background: bg, color: text, border: `1px solid ${border}` }
+        }
+
         function animateClick(event) {
             const btn = event.currentTarget
             btn.classList.add('click-pop')
@@ -406,7 +423,7 @@ const RulesCarousel = {
             carouselSlide, carouselGoTo,
             dragStart, dragMove, dragEnd,
             touchStart, touchMove, touchEnd,
-            doVote, doFavorite, animateClick, fromNow,
+            doVote, doFavorite, animateClick, fromNow, tagStyle,
         }
     }
 }

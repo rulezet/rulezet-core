@@ -116,14 +116,37 @@ def home_charts():
 def get_last_rules() -> dict:
     """Get the last 10 rules create or update"""
     rules = RuleModel.get_last_rules_from_db()
+    rule_ids = [r.id for r in rules]
     serialized = [r.to_json() for r in rules]
+
     try:
         from app.features.attack.attack_core import get_techniques_for_rules_batch
-        atk_map = get_techniques_for_rules_batch([r.id for r in rules])
+        atk_map = get_techniques_for_rules_batch(rule_ids)
         for item in serialized:
             item['attacks'] = atk_map.get(item['id'], [])
     except Exception:
         pass
+
+    try:
+        tags_map = RuleModel.get_tags_for_rules_batch(rule_ids)
+        for item in serialized:
+            item['tags'] = [
+                {'id': t.id, 'name': t.name, 'color': t.color, 'icon': t.icon}
+                for t in tags_map.get(item['id'], [])
+            ]
+    except Exception:
+        for item in serialized:
+            item.setdefault('tags', [])
+
+    import json as _json
+    for item in serialized:
+        raw = item.get('cve_id') or '[]'
+        try:
+            parsed = _json.loads(raw) if isinstance(raw, str) else []
+            item['cves'] = parsed if isinstance(parsed, list) else []
+        except Exception:
+            item['cves'] = []
+
     return {'rules': serialized, 'success': True}, 200
 
 @home_blueprint.route("/get_current_user_connected", methods=['GET'])

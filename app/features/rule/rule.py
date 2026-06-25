@@ -2298,14 +2298,37 @@ def get_rules_format() -> dict:
 @rule_blueprint.route("/get_last_cve_rules", methods=['GET'])
 def get_last_cve_rules() -> dict:
     rules = RuleModel.get_last_cve_rules()
+    rule_ids = [r.id for r in rules]
     serialized = [r.to_json() for r in rules]
+
     try:
         from app.features.attack.attack_core import get_techniques_for_rules_batch
-        atk_map = get_techniques_for_rules_batch([r.id for r in rules])
+        atk_map = get_techniques_for_rules_batch(rule_ids)
         for item in serialized:
             item['attacks'] = atk_map.get(item['id'], [])
     except Exception:
         pass
+
+    try:
+        tags_map = RuleModel.get_tags_for_rules_batch(rule_ids)
+        for item in serialized:
+            item['tags'] = [
+                {'id': t.id, 'name': t.name, 'color': t.color, 'icon': t.icon}
+                for t in tags_map.get(item['id'], [])
+            ]
+    except Exception:
+        for item in serialized:
+            item.setdefault('tags', [])
+
+    import json as _json
+    for item in serialized:
+        raw = item.get('cve_id') or '[]'
+        try:
+            parsed = _json.loads(raw) if isinstance(raw, str) else []
+            item['cves'] = parsed if isinstance(parsed, list) else []
+        except Exception:
+            item['cves'] = []
+
     return {"success": True, "rules": serialized, "length": len(serialized)}, 200
 
 @rule_blueprint.route("/admin/manage_format_rule", methods=["GET", "POST"])
