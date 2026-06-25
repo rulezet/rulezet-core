@@ -90,6 +90,53 @@
 }
 .rl-fp-select:focus { outline: none; border-color: #0d6efd; }
 
+.rl-fp-fmt-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+}
+.rl-fmt-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .28rem .6rem;
+    border-radius: 8px;
+    font-size: .8rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    white-space: nowrap;
+    pointer-events: none;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    color: var(--text-color);
+    height: 32px;
+    min-width: 90px;
+    justify-content: space-between;
+}
+.rl-fmt-badge--set {
+    background: #212529;
+    color: #fff;
+    border-color: #212529;
+    font-weight: 700;
+    letter-spacing: .04em;
+    font-size: .72rem;
+}
+.rl-fmt-badge__placeholder { display: flex; align-items: center; }
+.rl-fmt-select-overlay {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+}
+[data-bs-theme="dark"] .rl-fmt-badge--set {
+    background: #e2e8f0;
+    color: #0f172a;
+    border-color: #e2e8f0;
+}
+
 .rl-fp-switch {
     display: inline-flex;
     align-items: center;

@@ -223,13 +223,17 @@ export default {
 
                 <!-- Row 1: quick options -->
                 <div class="rl-fp-row">
-                    <div class="rl-fp-item" v-if="!isFilterHidden('format')">
-                        <select v-model="ruleType" class="rl-fp-select" @change="onFilterChange"
-                                aria-label="Format">
+                    <div class="rl-fp-item rl-fp-fmt-wrap" v-if="!isFilterHidden('format')">
+                        <div class="rl-fmt-badge" :class="{ 'rl-fmt-badge--set': ruleType }">
+                            <span v-if="ruleType" class="rl-fmt-badge__label">{{ ruleType.toUpperCase() }}</span>
+                            <span v-else class="rl-fmt-badge__placeholder">
+                                <i class="fa-solid fa-file-code me-1" style="font-size:.7rem;opacity:.5;"></i>Format
+                            </span>
+                            <i class="fa-solid fa-chevron-down" style="font-size:.6rem;opacity:.5;flex-shrink:0;"></i>
+                        </div>
+                        <select class="rl-fmt-select-overlay" v-model="ruleType" @change="onFilterChange" aria-label="Format">
                             <option value="">All formats</option>
-                            <option v-for="f in rulesFormats" :key="f.id" :value="f.name">
-                                {{ f.name.toUpperCase() }}
-                            </option>
+                            <option v-for="f in rulesFormats" :key="f.id" :value="f.name">{{ f.name.toUpperCase() }}</option>
                         </select>
                     </div>
 
