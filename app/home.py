@@ -53,14 +53,15 @@ def home() -> render_template:
         and current_user.is_admin()
         and RuleModel.get_total_rules_count() == 0
     )
+    from app.core.db_class.db import AttackTechnique
     total_rules   = Rule.query.filter_by(is_deleted=False).count()
     total_bundles = Bundle.query.count()
-    total_users   = User.query.count()
+    total_attacks = AttackTechnique.query.count()
     return render_template("home.html",
         show_import_hint=show_import_hint,
         total_rules=total_rules,
         total_bundles=total_bundles,
-        total_users=total_users,
+        total_attacks=total_attacks,
     )
 
 @home_blueprint.route("/home_charts/<tab>")
