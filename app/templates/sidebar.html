@@ -249,112 +249,46 @@
 
    <!-- ── Search offcanvas ── -->
    <div class="offcanvas offcanvas-end border-0 shadow-lg" tabindex="-1" id="offcanvasSearch"
-      style="width: 700px; background-color: var(--bg-color);">
-      <div class="offcanvas-header border-bottom py-4 px-4">
+      style="width: 760px; background-color: var(--bg-color);">
+      <div class="offcanvas-header border-bottom py-3 px-4" style="border-color: var(--border-color) !important;">
          <div class="d-flex align-items-center">
             <div class="bg-primary-subtle p-2 rounded-3 me-3">
                <i class="fa-solid fa-magnifying-glass text-primary fs-5"></i>
             </div>
             <div>
                <h5 class="fw-bold mb-0">Search Rules</h5>
-               <p class="text-muted mb-0">Find specific security detections</p>
+               <p class="text-muted mb-0" style="font-size:.82rem;">Find specific security detections</p>
             </div>
          </div>
          <button type="button" class="btn-close shadow-none" data-bs-dismiss="offcanvas"></button>
       </div>
-      <div class="offcanvas-body p-4">
-         <template v-if="showSearchContent">
-            <rule-filter-bar ref="filterBar"
-               api-endpoint="/rule/get_rules_page_filter"
-               @update:results="onRulesUpdated"
-               :current-user-is-authenticated="'{{current_user.is_authenticated}}'"
-               @loading="search_is_loading = $event"
-               :auto-fetch="false"
-               :csrf-token="'{{ csrf_token() }}'">
-            </rule-filter-bar>
-         </template>
-
-         <div class="results-wrapper">
-            <div class="d-flex justify-content-between align-items-center mb-4 px-2">
-               <span class="badge rounded-pill fw-normal p-2 px-3 shadow-sm"
-                  style="background-color: var(--card-bg-color); color: var(--color-text); border: 1px solid rgba(0,0,0,0.1);">
-                  <i class="fa-solid fa-list-check me-2 text-primary"></i>
-                  <strong class="text-primary">[[ total_rules_liste ]]</strong> results found
-               </span>
-            </div>
-
-            <template v-if="search_is_loading">
-               <div class="text-center py-5">
-                  <div class="spinner-border text-primary" role="status" style="width:3rem;height:3rem;"></div>
-                  <p class="mt-3 text-muted">Searching the database...</p>
-               </div>
-            </template>
-            <template v-else>
-               <div v-if="rules_list && rules_list.length > 0" class="results-list">
-                  <pagination-component :current-page="current_page" :total-pages="total_pages"
-                     @change-page="changePage"></pagination-component>
-
-                  <a v-for="rule in rules_list" :key="rule.id" :href="`/rule/detail_rule/${rule.id}`"
-                     class="rule-card d-flex align-items-start p-3 mb-3 text-decoration-none" @click.stop>
-                     <div class="flex-shrink-0 me-3">
-                        <div class="rule-icon-box rounded-3 d-flex align-items-center justify-content-center shadow-sm">
-                           <i class="fa-solid fa-shield-halved"></i>
-                        </div>
-                     </div>
-                     <div class="flex-grow-1 min-width-0">
-                        <div class="d-flex justify-content-between align-items-start mb-1">
-                           <h6 class="mb-0 fw-bold rule-title text-truncate">[[ rule.title ]]</h6>
-                           <span class="badge rule-type-badge ms-2">[[ rule.type ]]</span>
-                        </div>
-                        <p class="rule-description mb-2 text-truncate-2">[[ rule.description ]]</p>
-                        <div class="d-flex flex-wrap align-items-center gap-2">
-                           <span class="badge format-badge">
-                              <i class="fa-solid fa-file-code me-1"></i>[[ rule.format ]]
-                           </span>
-                           <div @click.stop class="vuln-list-inline">
-                              <vulnerability-displays-list object-type="rule" :object-id="rule.id"
-                                 :max-visible="2" @click.stop>
-                              </vulnerability-displays-list>
-                           </div>
-                        </div>
-                     </div>
-                     <div class="ms-3 align-self-center d-none d-md-block">
-                        <i class="fa-solid fa-chevron-right text-muted opacity-50"></i>
-                     </div>
-                  </a>
-
-                  <pagination-component :current-page="current_page" :total-pages="total_pages"
-                     @change-page="changePage"></pagination-component>
-               </div>
-               <div v-else class="text-center py-5">
-                  <div class="mb-3 opacity-25">
-                     <i class="fa-solid fa-box-open fa-4x" style="color: var(--color-text)"></i>
-                  </div>
-                  <h5 class="fw-bold" style="color: var(--color-text)">No results found</h5>
-                  <p class="text-muted small">Try refining your search or removing some filters.</p>
-               </div>
-            </template>
-         </div>
+      <div class="offcanvas-body p-0">
+         <rule-list v-if="showSearchContent"
+            mode="read"
+            :sync-url="false"
+            :initial-per-page="10"
+            :current-user-id="currentUserId"
+            :current-user-is-admin="isAdmin"
+            :current-user-is-authenticated="isAuthenticated"
+         ></rule-list>
       </div>
    </div>
 </div>
 
 <script type="module">
-   const { createApp, ref, onMounted, computed } = Vue
-   import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
-   import RuleFilterBar             from '/static/js/rule/ruleFilterBar.js';
-   import PaginationComponent       from '/static/js/rule/paginationComponent.js';
+   const { createApp, ref, onMounted } = Vue
+   import RuleList from '/static/js/rule/ruleList.js';
+
+   const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
+   const isAdmin         = {{ current_user.is_admin() | tojson if current_user.is_authenticated else 'false' }}
+   const isAuthenticated = {{ current_user.is_authenticated | tojson }}
 
    createApp({
       delimiters: ['[[', ']]'],
-      components: {
-         'vulnerability-displays-list': VulnerabilityDisplaysList,
-         'rule-filter-bar':             RuleFilterBar,
-         'pagination-component':        PaginationComponent,
-      },
+      components: { RuleList },
       setup() {
 
-         // ── Admin counters (kept for admin badge indicators in nav) ────────
+         // ── Admin counters ────────────────────────────────────────────────
          const requests_to_validate = ref(0)
          const changes_to_validate  = ref(0)
          const update_to_validate   = ref(0)
@@ -362,69 +296,29 @@
          const reports_to_check     = ref(0)
 
          async function getNbRequestAdmin() {
-            try {
-               const res = await fetch('/request_to_check')
-               requests_to_validate.value = (await res.json()).count || 0
-            } catch {}
+            try { requests_to_validate.value = (await (await fetch('/request_to_check')).json()).count || 0 } catch {}
          }
          async function getNbChanges() {
-            try {
-               const res = await fetch('/rule/change_to_check')
-               changes_to_validate.value = (await res.json()).count || 0
-            } catch {}
+            try { changes_to_validate.value = (await (await fetch('/rule/change_to_check')).json()).count || 0 } catch {}
          }
          async function getNbUpdate() {
-            try {
-               const res = await fetch('/rule/update_to_check')
-               update_to_validate.value = (await res.json()).count || 0
-            } catch {}
+            try { update_to_validate.value = (await (await fetch('/rule/update_to_check')).json()).count || 0 } catch {}
          }
          async function getRunningJobs() {
             try {
-               const res  = await fetch('/jobs/get_jobs?status=running')
-               const data = await res.json()
+               const data = await (await fetch('/jobs/get_jobs?status=running')).json()
                running_jobs_count.value = Array.isArray(data) ? data.length : 0
             } catch { running_jobs_count.value = 0 }
          }
          async function getReportsToCheck() {
-            try {
-               const res = await fetch('/report/count')
-               reports_to_check.value = (await res.json()).count || 0
-            } catch {}
+            try { reports_to_check.value = (await (await fetch('/report/count')).json()).count || 0 } catch {}
          }
 
          // ── Search ──────────────────────────────────────────────────────────
-         const search_is_loading   = ref(true)
-         const filterBar           = ref(null)
-         const rules_list          = ref([])
-         const total_rules_liste   = ref(0)
-         const current_page        = ref(1)
-         const total_pages         = ref(1)
-         const showSearchContent   = ref(false)
-         const isSearchInitialized = ref(false)
-
-         const onRulesUpdated = (results) => {
-            rules_list.value        = results.rules.rule || []
-            total_pages.value       = results.total_pages || 1
-            current_page.value      = results.current_page || 1
-            total_rules_liste.value = results.total_rules || 0
-         }
-
-         const changePage = (page) => {
-            if (filterBar.value) {
-               filterBar.value.fetchRules(page)
-               window.scrollTo({ top: 0, behavior: 'smooth' })
-            }
-         }
+         const showSearchContent = ref(false)
 
          function initSearch() {
             showSearchContent.value = true
-            setTimeout(() => {
-               if (!isSearchInitialized.value && filterBar.value) {
-                  filterBar.value.fetchRules(1)
-                  isSearchInitialized.value = true
-               }
-            }, 400)
          }
 
          // ── Init ────────────────────────────────────────────────────────────
@@ -439,9 +333,8 @@
          return {
             requests_to_validate, changes_to_validate,
             update_to_validate, running_jobs_count, reports_to_check,
-            search_is_loading, filterBar, rules_list, total_rules_liste,
-            current_page, total_pages, showSearchContent,
-            onRulesUpdated, changePage, initSearch,
+            showSearchContent, initSearch,
+            currentUserId, isAdmin, isAuthenticated,
          }
       },
    }).mount('#app')

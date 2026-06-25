@@ -382,3 +382,19 @@ body[data-nav-style="collapsible"] .nav-collapse-btn {
 body[data-nav-style="collapsible"].nav-hidden .nav-peek-tab {
     display: flex;
 }
+
+/* ── Search offcanvas — RuleList wrapper ─────────────── */
+#offcanvasSearch .offcanvas-body {
+    overflow-y: auto;
+    padding: 0;
+}
+#offcanvasSearch .rule-list-wrapper {
+    padding: 1rem;
+}
+/* Tighten the RuleList toolbar inside the narrow offcanvas */
+#offcanvasSearch .dt-toolbar {
+    padding: 0.75rem 1rem 0;
+}
+#offcanvasSearch .rl-fp-row {
+    padding: 0 1rem 0.5rem;
+}
