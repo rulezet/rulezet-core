@@ -212,6 +212,41 @@ export default {
             if (v && !selectedCves.value.includes(v)) { selectedCves.value.push(v); emitFilter() }
         }
 
+        // ── ATT&CK techniques ───────────────────────────────────────────────
+        const allAttacks      = ref([])
+        const attacksLoading  = ref(false)
+        const attackSearch    = ref('')
+        const selectedAttacks = ref([])
+
+        async function fetchAttacks() {
+            attacksLoading.value = true
+            try {
+                const r = await fetch('/attack/techniques/usage')
+                if (r.ok) allAttacks.value = (await r.json()).techniques || []
+            } catch {}
+            finally { attacksLoading.value = false }
+        }
+
+        const filteredAttacks = computed(() => {
+            if (!attackSearch.value) return allAttacks.value
+            const q = attackSearch.value.toLowerCase()
+            return allAttacks.value.filter(t =>
+                t.technique_id.toLowerCase().includes(q) || t.name.toLowerCase().includes(q)
+            )
+        })
+
+        function toggleAttack(tid) {
+            const i = selectedAttacks.value.indexOf(tid)
+            if (i > -1) selectedAttacks.value.splice(i, 1)
+            else selectedAttacks.value.push(tid)
+            emitFilter()
+        }
+
+        function addAttackManually(v) {
+            const tid = (v || '').trim().toUpperCase()
+            if (tid && !selectedAttacks.value.includes(tid)) { selectedAttacks.value.push(tid); emitFilter() }
+        }
+
         // ── Licenses ────────────────────────────────────────────────────────
         const allLicenses      = ref([])
         const licensesLoading  = ref(false)
@@ -265,6 +300,7 @@ export default {
             if (selectedTags.value.length)        n++
             if (selectedLicenses.value.length)    n++
             if (selectedCves.value.length)        n++
+            if (selectedAttacks.value.length)     n++
             if (authorList.value.length)          n++
             return n
         })
@@ -273,8 +309,9 @@ export default {
             dateFrom.value = ''; dateTo.value = ''
             selectedFormats.value = []; selectedTags.value = []
             selectedLicenses.value = []; selectedCves.value = []
+            selectedAttacks.value = []
             authorList.value = []
-            tagSearch.value = ''; cveSearch.value = ''; licenseSearch.value = ''
+            tagSearch.value = ''; cveSearch.value = ''; licenseSearch.value = ''; attackSearch.value = ''
             emitFilter()
         }
 
@@ -295,6 +332,7 @@ export default {
                     ? [{ names: [...selectedLicenses.value], mode: licenseMode.value, exclude: licenseExclude.value }] : [],
                 cves:      selectedCves.value.length
                     ? [{ names: [...selectedCves.value], mode: cveMode.value, exclude: cveExclude.value }] : [],
+                attacks:   [...selectedAttacks.value],
             }
         }
 
@@ -303,6 +341,7 @@ export default {
             fetchTags()
             fetchLicenses()
             fetchCves()
+            fetchAttacks()
         })
 
         return {
@@ -319,6 +358,9 @@ export default {
             // cves
             allCves, cvesLoading, cveSearch, selectedCves, cveMode, cveExclude,
             filteredCves, toggleCve, addCveManually,
+            // attacks
+            allAttacks, attacksLoading, attackSearch, selectedAttacks,
+            filteredAttacks, toggleAttack, addAttackManually,
             // licenses
             allLicenses, licensesLoading, licenseSearch, selectedLicenses,
             licenseMode, licenseExclude, filteredLicenses, toggleLicense, addLicenseManually,
@@ -566,6 +608,51 @@ export default {
     </div>
     <!-- Manual input -->
     <manual-input placeholder="Or type CVE-2024-…, GHSA-… and press Enter" @add="addCveManually"></manual-input>
+  </div>
+
+  <!-- ── ATT&CK Techniques ─────────────────────────────── -->
+  <div class="cpf-section">
+    <div class="cpf-section-label">
+      <i class="fa-solid fa-crosshairs text-warning"></i> ATT&CK Techniques
+    </div>
+    <div v-if="selectedAttacks.length" class="cpf-chips mb-2">
+      <span v-for="tid in selectedAttacks" :key="tid"
+            class="cpf-chip"
+            @click="toggleAttack(tid)">
+        <i class="fa-solid fa-xmark me-1" style="font-size:.6rem;"></i>[[ tid ]]
+      </span>
+    </div>
+    <!-- Browser dropdown -->
+    <div class="dropdown mb-2">
+      <div class="cpf-search-box" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+        <i class="fa-solid fa-magnifying-glass cpf-search-icon"></i>
+        <input type="text" class="cpf-search-input" placeholder="Browse techniques…" v-model="attackSearch" @click.stop>
+        <div v-if="attacksLoading" class="spinner-border spinner-border-sm text-warning" style="width:14px;height:14px;flex-shrink:0;"></div>
+      </div>
+      <div class="dropdown-menu shadow-lg border-0 cpf-dropdown"
+           style="min-width:340px;max-height:280px;overflow-y:auto;border-radius:12px;z-index:2000;padding:.5rem;">
+        <div v-if="filteredAttacks.length===0 && !attacksLoading" class="text-center py-3 text-muted" style="font-size:.8rem;">
+          <i class="fa-solid fa-crosshairs d-block mb-1" style="font-size:1.3rem;opacity:.3;"></i>No techniques found
+        </div>
+        <div v-for="t in filteredAttacks" :key="t.technique_id"
+             class="cpf-dropdown-item"
+             :class="selectedAttacks.includes(t.technique_id) && 'cpf-dropdown-item--selected'"
+             @click.stop="toggleAttack(t.technique_id)">
+          <code class="text-warning" style="font-size:.72rem;flex-shrink:0;">[[ t.technique_id ]]</code>
+          <span style="font-size:.82rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">[[ t.name ]]</span>
+          <span v-if="t.count" style="font-size:.68rem;color:var(--subtle-text-color);flex-shrink:0;">([[ t.count ]])</span>
+          <i v-if="selectedAttacks.includes(t.technique_id)" class="fa-solid fa-check text-primary ms-auto" style="font-size:.75rem;flex-shrink:0;"></i>
+        </div>
+        <div v-if="attackSearch && filteredAttacks.length===0"
+             class="cpf-dropdown-item cpf-dropdown-item--manual"
+             @click.stop="addAttackManually(attackSearch); attackSearch=''">
+          <i class="fa-solid fa-plus text-primary" style="font-size:.75rem;"></i>
+          <span>Add <strong>[[ attackSearch.toUpperCase() ]]</strong> manually</span>
+        </div>
+      </div>
+    </div>
+    <!-- Manual input -->
+    <manual-input placeholder="Or type T1071, T1059.001… and press Enter" @add="addAttackManually"></manual-input>
   </div>
 
   <!-- ── Licenses ───────────────────────────────────────── -->

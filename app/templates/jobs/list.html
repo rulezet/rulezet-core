@@ -47,8 +47,8 @@
         {{ anav.admin_nav('jobs', jobs_count=running_jobs_count) }}
         {% endif %}
 
-        <!-- ── Status filter chips ── -->
-        <div class="d-flex gap-2 flex-wrap mb-3">
+        <!-- ── Status filter chips + refresh ── -->
+        <div class="d-flex gap-2 flex-wrap mb-3 align-items-center">
             <button
                 v-for="s in status_filters"
                 :key="s.key"
@@ -56,6 +56,9 @@
                 :class="active_status === s.key ? 'btn-primary' : 'btn-outline-secondary'"
                 @click="setStatusFilter(s.key)">
                 [[ s.label ]]
+            </button>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @click="manualRefresh" title="Refresh">
+                <i class="fas fa-rotate-right"></i>
             </button>
         </div>
 
@@ -319,13 +322,20 @@
 
             let poll_interval = null
 
+            function manualRefresh() {
+                table_ref.value?.fetchData()
+                fetchAlerts()
+            }
+
             onMounted(async () => {
                 page_is_loading.value = true
                 await fetchAlerts()
-                poll_interval = setInterval(() => {
-                    table_ref.value?.fetchData()
-                    fetchAlerts()
-                }, 5000)
+                if (ADMIN_VIEW) {
+                    poll_interval = setInterval(() => {
+                        table_ref.value?.fetchData()
+                        fetchAlerts()
+                    }, 5000)
+                }
             })
 
             onUnmounted(() => { clearInterval(poll_interval) })
@@ -406,7 +416,7 @@
                 status_filters, fetch_url, columns, bulk_actions,
                 alerts_errors, alerts_warnings, alerts_open,
                 setStatusFilter, statusIcon, formatDuration,
-                relativeDate,
+                relativeDate, manualRefresh,
                 handleView, handleDelete, actionJob, handleBulk,
             }
         }

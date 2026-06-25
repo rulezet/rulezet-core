@@ -138,8 +138,12 @@ def job_detail_page(job_uuid):
 @login_required
 def api_list_jobs():
     """Paginated job list for the DataTable component."""
-    is_admin = current_user.is_admin()
-    query = BackgroundJob.query if is_admin else BackgroundJob.query.filter_by(created_by=current_user.id)
+    is_admin  = current_user.is_admin()
+    mine_only = request.args.get('mine_only', 'false').lower() == 'true'
+    if not is_admin or mine_only:
+        query = BackgroundJob.query.filter_by(created_by=current_user.id)
+    else:
+        query = BackgroundJob.query
 
     status = request.args.get('status', '').strip()
     if status:
