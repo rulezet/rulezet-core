@@ -301,7 +301,7 @@ body.dark-mode mark.dt-highlight {
 /*---DT_BULK_BAR---*/
 
 .dt-bulk-bar {
-    position: sticky;
+    position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
@@ -312,9 +312,20 @@ body.dark-mode mark.dt-highlight {
     background-color: var(--bg-sidebar);
     color: var(--text-sidebar);
     border-top: 1px solid var(--border-sidebar);
-    z-index: 100;
-    flex-wrap: wrap;
-    box-shadow: 0 -4px 16px rgba(0,0,0,.15);
+    z-index: 1050;
+    flex-wrap: nowrap;
+    box-shadow: 0 -4px 16px rgba(0,0,0,.25);
+    border-radius: 0;
+}
+
+@media (min-width: 992px) {
+    .dt-bulk-bar {
+        left: 200px;
+    }
+}
+
+.dt-wrapper--bulk-open {
+    padding-bottom: 52px;
 }
 
 .dt-bulk-count {

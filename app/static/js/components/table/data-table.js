@@ -65,7 +65,7 @@ export default {
     expose: ['fetchData'],
 
     template: `
-        <div class="dt-wrapper">
+        <div class="dt-wrapper" :class="{ 'dt-wrapper--bulk-open': showBulkBar }">
 
             <!-- Loading overlay -->
             <div v-if="loading" class="dt-loading-overlay" aria-live="polite">
