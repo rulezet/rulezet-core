@@ -56,8 +56,16 @@ def _job_to_table_row(j, is_admin=False):
         "finished_at": j.finished_at.strftime('%Y-%m-%dT%H:%M:%S') if j.finished_at else None,
     }
     if is_admin:
-        row['owner'] = (f"{j.user.first_name} {j.user.last_name or ''}".strip()
-                        if j.user else f"user #{j.created_by}")
+        u = j.user
+        row['author'] = {
+            'id':       u.id if u else None,
+            'username': u.get_username() if u else f'#{j.created_by}',
+            'avatar':   u.get_avatar_url() if u else None,
+        } if u else {
+            'id':       None,
+            'username': f'#{j.created_by}',
+            'avatar':   None,
+        }
     return row
 
 
@@ -113,15 +121,6 @@ def list_jobs():
                            admin_view=False)
 
 
-@jobs_blueprint.route('/admin/list', methods=['GET'])
-@login_required
-def admin_list_jobs():
-    if not current_user.is_admin():
-        abort(403)
-    return render_template('jobs/list.html',
-                           running_jobs_count=_running_jobs_count(),
-                           admin_view=True)
-
 
 @jobs_blueprint.route('/detail/<string:job_uuid>', methods=['GET'])
 @login_required
@@ -138,8 +137,9 @@ def job_detail_page(job_uuid):
 @login_required
 def api_list_jobs():
     """Paginated job list for the DataTable component."""
-    is_admin  = current_user.is_admin()
-    mine_only = request.args.get('mine_only', 'false').lower() == 'true'
+    is_admin   = current_user.is_admin()
+    mine_only  = request.args.get('mine_only', 'false').lower() == 'true'
+    admin_view = request.args.get('admin', 'false').lower() == 'true' and is_admin
     if not is_admin or mine_only:
         query = BackgroundJob.query.filter_by(created_by=current_user.id)
     else:
@@ -172,7 +172,7 @@ def api_list_jobs():
     items    = query.offset((page - 1) * per_page).limit(per_page).all()
 
     return jsonify({
-        "items":       [_job_to_table_row(j, is_admin) for j in items],
+        "items":       [_job_to_table_row(j, is_admin=admin_view) for j in items],
         "total":       total,
         "total_pages": max(1, -(-total // per_page)),
     }), 200

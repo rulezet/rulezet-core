@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, abort
 from flask_login import login_required, current_user
 
 from .config_core import (
@@ -7,6 +7,16 @@ from .config_core import (
 )
 
 config_blueprint = Blueprint('config', __name__)
+
+
+@config_blueprint.route('/admin/jobs/list')
+@login_required
+def admin_jobs_list():
+    if not current_user.is_admin():
+        abort(403)
+    from app.core.db_class.db import BackgroundJob
+    running_count = BackgroundJob.query.filter(BackgroundJob.status == 'running').count()
+    return render_template('jobs/admin_list.html', running_jobs_count=running_count)
 
 
 @config_blueprint.route('/settings')

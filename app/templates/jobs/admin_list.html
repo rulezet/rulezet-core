@@ -1,0 +1,333 @@
+{% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
+{% block title %}All Background Jobs — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/table/data-table.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/jobs/jobs.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3 px-4" id="admin-jobs-app" v-cloak>
+
+    <loading-bar :active="!page_is_loading"></loading-bar>
+
+    <div v-if="page_is_loading">
+
+        <!-- ── Banner ── -->
+        <div class="explorer-banner mb-4">
+            <i class="fa-solid fa-gear banner-watermark"></i>
+            <nav aria-label="breadcrumb" class="mb-3">
+                <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                    <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                    <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                    <li class="breadcrumb-item active text-muted" aria-current="page">All Jobs</li>
+                </ol>
+            </nav>
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="banner-icon"><i class="fa-solid fa-gear"></i></div>
+                <div>
+                    <h2 class="fw-bold mb-1">Background Jobs</h2>
+                    <div class="banner-accent"></div>
+                </div>
+            </div>
+            <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+                Monitor and manage all background tasks from all users on this instance.
+            </p>
+        </div>
+
+        {{ anav.admin_nav('jobs', jobs_count=running_jobs_count) }}
+
+        <!-- ── Status filter chips + refresh ── -->
+        <div class="d-flex gap-2 flex-wrap mb-3 align-items-center">
+            <button
+                v-for="s in status_filters"
+                :key="s.key"
+                class="btn btn-sm"
+                :class="active_status === s.key ? 'btn-primary' : 'btn-outline-secondary'"
+                @click="setStatusFilter(s.key)">
+                [[ s.label ]]
+            </button>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @click="manualRefresh" title="Refresh">
+                <i class="fas fa-rotate-right"></i>
+            </button>
+        </div>
+
+        <!-- ── DataTable ── -->
+        <data-table
+            ref="table_ref"
+            :fetch-url="fetch_url"
+            :columns="columns"
+            :can-delete="true"
+            :can-view="true"
+            :bulk-actions="bulk_actions"
+            initial-sort="created_at"
+            initial-dir="desc"
+            @delete="handleDelete"
+            @view="handleView"
+            @bulk-action="handleBulk">
+
+            <!-- Status cell -->
+            <template #cell-status="{ item }">
+                <span class="jobs-status-badge" :class="'jobs-status-badge--' + item.status">
+                    <i :class="statusIcon(item.status)"></i>
+                    [[ item.status ]]
+                </span>
+            </template>
+
+            <!-- Progress cell -->
+            <template #cell-progress="{ item }">
+                <div class="jobs-progress-wrap">
+                    <div class="jobs-progress-bar">
+                        <div
+                            class="jobs-progress-fill"
+                            :class="item.status === 'running' ? 'jobs-progress-fill--running' : ''"
+                            :style="{ width: item.progress + '%' }">
+                        </div>
+                    </div>
+                    <span class="jobs-progress-label">[[ item.progress ]]%</span>
+                </div>
+            </template>
+
+            <!-- Duration cell -->
+            <template #cell-duration="{ item }">
+                <span v-if="item.duration !== null && item.duration !== undefined">
+                    [[ formatDuration(item.duration) ]]
+                </span>
+                <span v-else class="text-muted">—</span>
+            </template>
+
+            <!-- Author cell -->
+            <template #cell-author="{ item }">
+                <user-chip v-if="item.author && item.author.id"
+                    :user-id="item.author.id"
+                    :username="item.author.username"
+                    :avatar="item.author.avatar">
+                </user-chip>
+                <span v-else-if="item.author" class="text-muted" style="font-size:.78rem;">[[ item.author.username ]]</span>
+                <span v-else class="text-muted" style="font-size:.78rem;">—</span>
+            </template>
+
+            <!-- Card body slot -->
+            <template #card-body="{ item }">
+                <div class="jobs-card-meta">
+                    <span class="jobs-card-type">[[ item.type ]]</span>
+                    <span class="jobs-status-badge" :class="'jobs-status-badge--' + item.status" style="font-size:.62rem;">
+                        <i :class="statusIcon(item.status)"></i> [[ item.status ]]
+                    </span>
+                </div>
+                <div v-if="item.author && item.author.id" class="mb-1">
+                    <user-chip :user-id="item.author.id" :username="item.author.username" :avatar="item.author.avatar"></user-chip>
+                </div>
+                <div class="jobs-card-progress-wrap">
+                    <div class="jobs-card-progress-bar">
+                        <div
+                            class="jobs-card-progress-fill"
+                            :class="item.status === 'running' ? 'jobs-card-progress-fill--running' : ''"
+                            :style="{ width: item.progress + '%' }">
+                        </div>
+                    </div>
+                    <div class="jobs-card-progress-label">[[ item.progress ]]% <span v-if="item.duration !== null && item.duration !== undefined">· [[ formatDuration(item.duration) ]]</span></div>
+                </div>
+                <div v-if="item.error" class="mt-1" style="font-size:.72rem;color:#ef4444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    <i class="fas fa-circle-xmark me-1"></i>[[ item.error ]]
+                </div>
+            </template>
+
+            <!-- Expand slot -->
+            <template #expand="{ item }">
+                <div class="p-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="jobs-detail-field">
+                                <span class="jobs-detail-label">UUID</span>
+                                <code class="jobs-detail-value" style="font-size:.75rem;">[[ item.uuid ]]</code>
+                            </div>
+                            <div class="jobs-detail-field" v-if="item.author && item.author.id">
+                                <span class="jobs-detail-label">Author</span>
+                                <user-chip :user-id="item.author.id" :username="item.author.username" :avatar="item.author.avatar"></user-chip>
+                            </div>
+                            <div class="jobs-detail-field">
+                                <span class="jobs-detail-label">Started</span>
+                                <span class="jobs-detail-value">[[ item.started_at ? new Date(item.started_at).toLocaleString() : '—' ]]</span>
+                            </div>
+                            <div class="jobs-detail-field">
+                                <span class="jobs-detail-label">Finished</span>
+                                <span class="jobs-detail-value">[[ item.finished_at ? new Date(item.finished_at).toLocaleString() : '—' ]]</span>
+                            </div>
+                            <div v-if="item.error" class="jobs-detail-field">
+                                <span class="jobs-detail-label">Error</span>
+                                <span class="jobs-detail-value text-danger">[[ item.error ]]</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6 d-flex gap-2 align-items-start flex-wrap">
+                            <a :href="'/jobs/detail/' + item.uuid" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-eye me-1"></i> View details
+                            </a>
+                            <button v-if="item.status === 'running'"
+                                class="btn btn-sm btn-outline-warning"
+                                @click="actionJob('pause', item)">
+                                <i class="fas fa-pause me-1"></i> Pause
+                            </button>
+                            <button v-if="item.status === 'paused'"
+                                class="btn btn-sm btn-outline-primary"
+                                @click="actionJob('resume', item)">
+                                <i class="fas fa-play me-1"></i> Resume
+                            </button>
+                            <button v-if="['pending','running','paused'].includes(item.status)"
+                                class="btn btn-sm btn-outline-danger"
+                                @click="actionJob('cancel', item)">
+                                <i class="fas fa-ban me-1"></i> Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+        </data-table>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, computed, onMounted } = Vue
+    import { apiFetch, TOAST } from '/static/js/constants.js'
+    import { message_list, create_message } from '/static/js/toaster.js'
+    import LoadingBar from '/static/js/components/loading-bar.js'
+    import DataTable  from '/static/js/components/table/data-table.js'
+    import UserChip   from '/static/js/components/UserChip.js'
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { LoadingBar, DataTable, UserChip },
+
+        setup() {
+            const page_is_loading  = ref(false)
+            const table_ref        = ref(null)
+            const active_status    = ref('')
+
+            const status_filters = [
+                { key: '',          label: 'All'       },
+                { key: 'pending',   label: 'Pending'   },
+                { key: 'running',   label: 'Running'   },
+                { key: 'paused',    label: 'Paused'    },
+                { key: 'done',      label: 'Done'      },
+                { key: 'failed',    label: 'Failed'    },
+                { key: 'cancelled', label: 'Cancelled' },
+            ]
+
+            const fetch_url = computed(() => {
+                const params = ['admin=true']
+                if (active_status.value) params.push('status=' + active_status.value)
+                return '/jobs/api/list?' + params.join('&')
+            })
+
+            const columns = [
+                { key: 'title',      label: 'Title',    sortable: true },
+                { key: 'type',       label: 'Type',     sortable: true },
+                { key: 'author',     label: 'Author',   sortable: false, width: '160px' },
+                { key: 'status',     label: 'Status',   sortable: true,  width: '130px' },
+                { key: 'progress',   label: 'Progress', sortable: false, width: '140px' },
+                { key: 'duration',   label: 'Duration', sortable: false, width: '90px'  },
+                { key: 'created_at', label: 'Created',  sortable: true,  type: 'date',  width: '120px' },
+            ]
+
+            const bulk_actions = [
+                { key: 'cancel', label: 'Cancel', icon: 'fa-ban',   variant: 'danger' },
+                { key: 'delete', label: 'Delete', icon: 'fa-trash', variant: 'danger' },
+            ]
+
+            function manualRefresh() {
+                table_ref.value?.fetchData()
+            }
+
+            onMounted(() => {
+                page_is_loading.value = true
+            })
+
+            function setStatusFilter(key) {
+                active_status.value = key
+                setTimeout(() => table_ref.value?.fetchData(), 0)
+            }
+
+            function statusIcon(status) {
+                const icons = {
+                    pending:   'fas fa-clock',
+                    running:   'fas fa-spinner fa-spin',
+                    paused:    'fas fa-pause',
+                    done:      'fas fa-circle-check',
+                    completed: 'fas fa-circle-check',
+                    failed:    'fas fa-circle-xmark',
+                    cancelled: 'fas fa-ban',
+                }
+                return icons[status] || 'fas fa-circle'
+            }
+
+            function formatDuration(secs) {
+                if (secs === null || secs === undefined) return '—'
+                if (secs < 60)   return secs.toFixed(1) + 's'
+                if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.round(secs % 60) + 's'
+                return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm'
+            }
+
+            function handleView(job) {
+                window.location.href = '/jobs/detail/' + job.uuid
+            }
+
+            async function handleDelete(job) {
+                if (!confirm(`Delete job "${job.title}"?\n\nThis cannot be undone.`)) return
+                const res = await apiFetch('/jobs/api/' + job.uuid, 'DELETE')
+                if (res.ok) {
+                    create_message('Job deleted', TOAST.SUCCESS)
+                    table_ref.value?.fetchData()
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Failed to delete job', TOAST.ERROR, true)
+                }
+            }
+
+            async function actionJob(action, job) {
+                const labels = { pause: 'paused', resume: 'resumed', cancel: 'cancelled' }
+                const res = await apiFetch(`/jobs/api/${job.uuid}/${action}`, 'POST')
+                if (res.ok) {
+                    create_message(`Job ${labels[action] || action}`, TOAST.SUCCESS)
+                    table_ref.value?.fetchData()
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || `Failed to ${action} job`, TOAST.ERROR, true)
+                }
+            }
+
+            async function handleBulk({ action, ids }) {
+                const count = ids === 'ALL' ? 'all' : ids.length
+                const verb  = action === 'cancel' ? 'Cancel' : 'Delete'
+                if (!confirm(`${verb} ${count} selected job(s)?`)) return
+
+                const uuids = ids === 'ALL' ? [] : ids
+                const res = await apiFetch('/jobs/api/bulk', 'POST', { action, uuids })
+                if (res.ok) {
+                    const d = await res.json()
+                    create_message(d.message, TOAST.SUCCESS)
+                    table_ref.value?.fetchData()
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || `Bulk ${action} failed`, TOAST.ERROR, true)
+                }
+            }
+
+            return {
+                message_list, page_is_loading,
+                table_ref, active_status,
+                status_filters, fetch_url, columns, bulk_actions,
+                setStatusFilter, statusIcon, formatDuration,
+                manualRefresh,
+                handleView, handleDelete, actionJob, handleBulk,
+            }
+        }
+    }).mount('#admin-jobs-app')
+</script>
+{% endblock %}

@@ -151,7 +151,7 @@
                            <i class="fa-solid fa-tag fa-fw me-2"></i>Tags</a></li>
                      <li><a href="/attack/admin/list" class="dropdown-item {% if request.path.startswith('/attack/admin') %}active{% endif %}">
                            <i class="fa-solid fa-crosshairs fa-fw me-2"></i>ATT&amp;CK</a></li>
-                     <li><a href="/jobs/list" class="dropdown-item {% if request.path.startswith('/jobs') %}active{% endif %}">
+                     <li><a href="/admin/jobs/list" class="dropdown-item {% if request.path.startswith('/admin/jobs') or request.path.startswith('/jobs') %}active{% endif %}">
                            <i class="fa-solid fa-gears fa-fw me-2"></i>Jobs</a></li>
                      <li><a href="/admin/logs" class="dropdown-item {% if request.path == '/admin/logs' %}active{% endif %}">
                            <i class="fa-solid fa-list-ul fa-fw me-2"></i>Activity Logs</a></li>
