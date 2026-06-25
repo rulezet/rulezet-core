@@ -50,17 +50,10 @@
         <template v-if="similar_rules.length > 0">
 
             <!-- Controls bar -->
-            <div class="d-flex align-items-center justify-content-between mb-3">
+            <div class="mb-3">
                 <p class="mb-0 small" style="color: var(--subtle-text-color);">
                     <strong>[[ total_count ]]</strong> similar rule[[ total_count === 1 ? '' : 's' ]] found
                 </p>
-                {% if current_user.is_authenticated %}
-                <button @click="refreshSimilarity" :disabled="refreshing"
-                        class="btn btn-sm btn-outline-secondary rounded-pill">
-                    <i class="fa-solid fa-rotate me-1" :class="{ 'fa-spin': refreshing }"></i>
-                    [[ refreshing ? 'Computing…' : 'Refresh similarity' ]]
-                </button>
-                {% endif %}
             </div>
 
             <pagination-component v-if="total_pages > 1"
