@@ -207,6 +207,13 @@
     transform: translateX(2px);
     z-index: 1;
 }
+.am-tech--nav {
+    cursor: pointer;
+}
+.am-tech--nav:hover {
+    transform: translateX(3px) scale(1.04);
+    box-shadow: 0 2px 8px rgba(13,110,253,.3);
+}
 
 .am-tech-badge {
     background: rgba(0,0,0,.15);

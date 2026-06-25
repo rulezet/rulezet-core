@@ -104,13 +104,11 @@ def remove_from_rule(rule_id, technique_id):
 # ── Heatmap & technique detail ────────────────────────────────────────────────
 
 @attack_blueprint.route('/heatmap')
-@login_required
 def heatmap():
     return render_template('attack/heatmap.html')
 
 
 @attack_blueprint.route('/heatmap_data')
-@login_required
 def heatmap_data():
     from app.features.attack.attack_core import get_global_coverage
     return jsonify(get_global_coverage())

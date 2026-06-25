@@ -5,13 +5,21 @@ const LOCAL_TECH_BASE = '/attack/technique/';
 export default defineComponent({
     name: 'AttackMatrix',
     props: {
-        coverage: { type: Object, default: null },
-        loading:  { type: Boolean, default: false },
+        coverage:       { type: Object,  default: null },
+        loading:        { type: Boolean, default: false },
+        navigateOnClick:{ type: Boolean, default: false },
+        ruleListBase:   { type: String,  default: '/rule/rules_list' },
     },
     setup(props) {
         const selected = ref(null); // { tactic, technique }
 
         function selectTechnique(tactic, technique) {
+            if (props.navigateOnClick) {
+                if (technique.count > 0) {
+                    window.location.href = `${props.ruleListBase}?attacks=${technique.id}`;
+                }
+                return;
+            }
             if (
                 selected.value &&
                 selected.value.technique.id === technique.id &&
@@ -197,9 +205,9 @@ export default defineComponent({
                             v-for="tech in tactic.techniques"
                             :key="tech.id"
                             class="am-tech"
-                            :class="{ 'am-tech--selected': selected && selected.technique.id === tech.id && selected.tactic.key === tactic.key }"
+                            :class="{ 'am-tech--selected': selected && selected.technique.id === tech.id && selected.tactic.key === tactic.key, 'am-tech--nav': navigateOnClick && tech.count > 0 }"
                             :style="{ background: techBg(tech.count), color: techColor(tech.count) }"
-                            :title="tech.id + ' — ' + tech.count + ' rule' + (tech.count === 1 ? '' : 's')"
+                            :title="navigateOnClick && tech.count > 0 ? 'View ' + tech.count + ' rule' + (tech.count === 1 ? '' : 's') + ' for ' + tech.id : tech.id + ' — ' + tech.count + ' rule' + (tech.count === 1 ? '' : 's')"
                             @click="selectTechnique(tactic, tech)">
                             {{ tech.id }}
                             <span class="am-tech-badge">{{ tech.count }}</span>

@@ -11,12 +11,8 @@
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                {% if current_user.is_authenticated and current_user.is_admin() %}
-                <li class="breadcrumb-item"><a href="/attack/admin/list" class="text-decoration-none text-muted">ATT&amp;CK</a></li>
-                {% else %}
-                <li class="breadcrumb-item text-muted">ATT&amp;CK</li>
-                {% endif %}
-                <li class="breadcrumb-item active text-muted" aria-current="page">Heatmap</li>
+                <li class="breadcrumb-item"><a href="/rule/list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">ATT&amp;CK Heatmap</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
@@ -41,7 +37,7 @@
     <!-- Matrix -->
     <div v-else class="card border-0 shadow-sm rounded-4">
         <div class="card-body p-4">
-            <attack-matrix :coverage="coverage" :loading="false"></attack-matrix>
+            <attack-matrix :coverage="coverage" :loading="false" :navigate-on-click="true"></attack-matrix>
         </div>
     </div>
 
