@@ -2845,6 +2845,18 @@ body.dark-mode .table .opacity-50 {
     margin: 0 4px;
     flex-shrink: 0;
 }
+.dr-nav__label {
+    font-size: .64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--subtle-text-color);
+    opacity: .55;
+    padding: 0 6px;
+    white-space: nowrap;
+    user-select: none;
+    flex-shrink: 0;
+}
 @media (max-width: 600px) {
     .dr-nav__item span { display: none; }
     .dr-nav__item { padding: 9px 13px; }

@@ -1,5 +1,8 @@
 {% macro admin_nav(active, requests_count=0, reports_count=0, jobs_count=0) %}
-<nav class="dr-nav mb-4">
+
+<!-- Row 1 — Community -->
+<nav class="dr-nav mb-2">
+    <span class="dr-nav__label">Community</span>
 
     <a href="/account/admin/all_users"
        class="dr-nav__item {% if active == 'users' %}active{% endif %}">
@@ -10,7 +13,7 @@
     <a href="/admin/request"
        class="dr-nav__item {% if active == 'requests' %}active{% endif %}">
         <i class="fa-solid fa-envelope"></i>
-        <span>Ownership Requests</span>
+        <span>Requests</span>
         {% if requests_count > 0 %}
         <span class="dr-nav__badge">{{ requests_count }}</span>
         {% endif %}
@@ -24,8 +27,11 @@
         <span class="dr-nav__badge">{{ reports_count }}</span>
         {% endif %}
     </a>
+</nav>
 
-    <span class="dr-nav__sep"></span>
+<!-- Row 2 — Content -->
+<nav class="dr-nav mb-2">
+    <span class="dr-nav__label">Content</span>
 
     <a href="/rule/admin/manage_format_rule"
        class="dr-nav__item {% if active == 'formats' %}active{% endif %}">
@@ -45,10 +51,16 @@
         <span>ATT&amp;CK</span>
     </a>
 
-    <a href="/attack/heatmap"
-       class="dr-nav__item {% if active == 'heatmap' %}active{% endif %}">
-        <i class="fa-solid fa-grid-2"></i>
-        <span>Heatmap</span>
+    <a href="/admin/similar_rules"
+       class="dr-nav__item {% if active == 'similar' %}active{% endif %}">
+        <i class="fa-solid fa-copy"></i>
+        <span>Duplicates</span>
+    </a>
+
+    <a href="/rule/trash"
+       class="dr-nav__item {% if active == 'trash' %}active{% endif %}">
+        <i class="fa-solid fa-trash-can-arrow-up"></i>
+        <span>Trash</span>
     </a>
 
     <a href="/rule/bulk_tag"
@@ -62,12 +74,15 @@
         <i class="fa-solid fa-wand-magic-sparkles"></i>
         <span>Field Parser</span>
     </a>
+</nav>
 
-    <span class="dr-nav__sep"></span>
+<!-- Row 3 — System -->
+<nav class="dr-nav mb-4">
+    <span class="dr-nav__label">System</span>
 
     <a href="/jobs/list"
        class="dr-nav__item {% if active == 'jobs' %}active{% endif %}">
-        <i class="fa-solid fa-tasks"></i>
+        <i class="fa-solid fa-gears"></i>
         <span>Jobs</span>
         {% if jobs_count > 0 %}
         <span class="dr-nav__badge">{{ jobs_count }}</span>
@@ -77,19 +92,7 @@
     <a href="/admin/logs"
        class="dr-nav__item {% if active == 'logs' %}active{% endif %}">
         <i class="fa-solid fa-scroll"></i>
-        <span>Activity Logs</span>
-    </a>
-
-    <a href="/rule/trash"
-       class="dr-nav__item {% if active == 'trash' %}active{% endif %}">
-        <i class="fa-solid fa-trash-can-arrow-up"></i>
-        <span>Trash</span>
-    </a>
-
-    <a href="/admin/similar_rules"
-       class="dr-nav__item {% if active == 'similar' %}active{% endif %}">
-        <i class="fa-solid fa-link"></i>
-        <span>Similar Rules</span>
+        <span>Logs</span>
     </a>
 
     {% if is_official %}
@@ -100,13 +103,11 @@
     </a>
     {% endif %}
 
-    <span class="dr-nav__sep"></span>
-
     <a href="/admin/settings"
        class="dr-nav__item {% if active == 'settings' %}active{% endif %}">
         <i class="fa-solid fa-sliders"></i>
-        <span>Settings</span>
+        <span>Server Settings</span>
     </a>
-
 </nav>
+
 {% endmacro %}
