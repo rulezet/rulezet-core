@@ -73,13 +73,19 @@
     border: 1px solid var(--border-color);
     border-radius: 14px; padding: 1.25rem .9rem;
     text-align: center; position: relative; overflow: hidden;
-    transition: transform .16s, box-shadow .16s;
+    transition: transform .18s cubic-bezier(.22,1,.36,1), box-shadow .18s;
+    cursor: pointer;
+    user-select: none;
 }
-.hero-kpi-big:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.07); }
-.hkb-top { position: absolute; top: 0; left: 0; right: 0; height: 2.5px; border-radius: 14px 14px 0 0; }
-.hkb-num { font-size: 2rem; font-weight: 900; line-height: 1; margin-bottom: .25rem; }
-.hkb-icon { font-size: 1rem; margin-bottom: .3rem; opacity: .75; }
+.hero-kpi-big:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 28px rgba(0,0,0,.1); }
+.hero-kpi-big:active { transform: scale(.97); }
+.hkb-top { position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 14px 14px 0 0; }
+.hkb-num { font-size: 2rem; font-weight: 900; line-height: 1; margin-bottom: .25rem; transition: transform .18s; }
+.hero-kpi-big:hover .hkb-num { transform: scale(1.06); }
+.hkb-icon { font-size: 1rem; margin-bottom: .3rem; opacity: .75; transition: opacity .18s, transform .18s; }
+.hero-kpi-big:hover .hkb-icon { opacity: 1; transform: scale(1.15); }
 .hkb-lbl { font-size: .62rem; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color); font-weight: 600; }
+
 /* Format pills */
 .hero-formats { display: flex; flex-wrap: wrap; gap: .4rem; }
 .hero-fmt-pill {
@@ -293,19 +299,19 @@
                 <!-- Right: big KPI cards -->
                 <div class="col-lg-6">
                     <div class="hero-kpi-grid mb-3">
-                        <div class="hero-kpi-big">
+                        <div class="hero-kpi-big" data-kpi-href="/rule/rules_list" data-kpi-type="rules" data-kpi-color="#0d6efd">
                             <div class="hkb-top" style="background:#0d6efd;"></div>
                             <div class="hkb-icon" style="color:#0d6efd;"><i class="fa-solid fa-shield-halved"></i></div>
                             <div class="hkb-num" style="color:#0d6efd;">{{ "{:,}".format(total_rules) }}</div>
                             <div class="hkb-lbl">Detection Rules</div>
                         </div>
-                        <div class="hero-kpi-big">
+                        <div class="hero-kpi-big" data-kpi-href="/bundle/list" data-kpi-type="bundles" data-kpi-color="#198754">
                             <div class="hkb-top" style="background:#198754;"></div>
                             <div class="hkb-icon" style="color:#198754;"><i class="fa-solid fa-box"></i></div>
                             <div class="hkb-num" style="color:#198754;">{{ "{:,}".format(total_bundles) }}</div>
                             <div class="hkb-lbl">Rule Bundles</div>
                         </div>
-                        <div class="hero-kpi-big">
+                        <div class="hero-kpi-big" data-kpi-href="/attack/heatmap" data-kpi-type="attacks" data-kpi-color="#fd7e14">
                             <div class="hkb-top" style="background:#fd7e14;"></div>
                             <div class="hkb-icon" style="color:#fd7e14;"><i class="fa-solid fa-crosshairs"></i></div>
                             <div class="hkb-num" style="color:#fd7e14;">{{ "{:,}".format(total_attacks) }}</div>
@@ -685,4 +691,6 @@
         }
     }).mount('#main-container')
 </script>
+
+<script src="{{ url_for('static', filename='js/home/kpiTransition.js') }}" defer></script>
 {% endblock %}
