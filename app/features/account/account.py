@@ -1,6 +1,7 @@
 from typing import Union
 import datetime
 from ...core.db_class.db import User, RegisteredInstance, InstanceConfig
+from ... import db
 from flask import Blueprint, jsonify, render_template, redirect, url_for, request, flash
 from .form import LoginForm, EditUserForm, AddNewUserForm
 from ..rule import rule_core as RuleModel
@@ -605,6 +606,100 @@ def admin():
     if current_user.is_admin():
         return jsonify({"message": "Access granted", "success": True , "toast_class" : "success-subtle"}), 200
     return jsonify({"message": "Access denied", "success": False , "toast_class" : "danger-subtle"}), 403
+
+
+# ── Bulk Field Parser ────────────────────────────────────────────────────────
+
+@account_blueprint.route('/admin/bulk_parse_fields', methods=['GET'])
+@login_required
+def bulk_parse_fields_page():
+    if not current_user.is_admin():
+        from flask import abort
+        abort(403)
+    from app.features.rule.field_parser_core import FIELD_META, PARSEABLE_FIELD_KEYS
+    return render_template('admin/bulk_parse_fields.html',
+                           field_meta=FIELD_META,
+                           parseable_fields=PARSEABLE_FIELD_KEYS)
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/trigger', methods=['POST'])
+@login_required
+def bulk_parse_fields_trigger():
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'Admin only'}), 403
+    from app.features.jobs.jobs_core import create_job
+    data = request.get_json(force=True)
+    rule_ids      = data.get('rule_ids', 'ALL')
+    fields_config = data.get('fields_config', {})
+    format_filter = (data.get('format_filter') or '').strip() or None
+    if not fields_config:
+        return jsonify({'success': False, 'message': 'No fields configured'}), 400
+    enabled = [k for k, v in fields_config.items() if v.get('enabled')]
+    if not enabled:
+        return jsonify({'success': False, 'message': 'No fields enabled'}), 400
+    count = len(rule_ids) if isinstance(rule_ids, list) else (format_filter or 'ALL')
+    job = create_job(
+        job_type='bulk_parse_fields',
+        label=f'Bulk parse fields ({", ".join(enabled)})',
+        payload={'rule_ids': rule_ids, 'format_filter': format_filter, 'fields_config': fields_config},
+        created_by=current_user.id,
+    )
+    log_activity('admin.bulk_parse_fields', f'Triggered bulk field parse for {count} rules, fields: {", ".join(enabled)}',
+                 target_type='job', target_id=job.id)
+    return jsonify({'success': True, 'job_uuid': job.uuid})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/configs', methods=['GET'])
+@login_required
+def bulk_parse_fields_configs_list():
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.features.rule.field_parser_core import get_all_configs
+    cfgs = get_all_configs()
+    return jsonify({'configs': [c.to_json() for c in cfgs]})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/configs', methods=['POST'])
+@login_required
+def bulk_parse_fields_configs_save():
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.features.rule.field_parser_core import save_config
+    data = request.get_json(force=True)
+    name = (data.get('name') or '').strip()
+    config = data.get('config', {})
+    if not name:
+        return jsonify({'success': False, 'message': 'Name is required'}), 400
+    cfg = save_config(name=name, config=config, user_id=current_user.id)
+    return jsonify({'success': True, 'config': cfg.to_json()})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/configs/<int:config_id>', methods=['PATCH'])
+@login_required
+def bulk_parse_fields_configs_update(config_id):
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.features.rule.field_parser_core import get_config
+    cfg = get_config(config_id)
+    if not cfg:
+        return jsonify({'success': False, 'message': 'Config not found'}), 404
+    data = request.get_json(force=True)
+    if 'name' in data:
+        cfg.name = data['name'].strip() or cfg.name
+    if 'config' in data:
+        cfg.config = data['config']
+    db.session.commit()
+    return jsonify({'success': True, 'config': cfg.to_json()})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/configs/<int:config_id>', methods=['DELETE'])
+@login_required
+def bulk_parse_fields_configs_delete(config_id):
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.features.rule.field_parser_core import delete_config
+    ok = delete_config(config_id)
+    return jsonify({'success': ok})
 
 
 

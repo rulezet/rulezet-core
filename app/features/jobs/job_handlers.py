@@ -1920,3 +1920,106 @@ def handle_bulk_parse_attack_rules(job, app):
 
     log_job(job, f'Done — {offset} rules parsed, {total_added} ATT&CK associations created.',
             level='success', event='done')
+
+
+# ── Bulk Field Parser ────────────────────────────────────────────────────────
+
+FIELD_PARSE_BATCH = 200
+FIELD_PARSE_LOG_EVERY = 10
+
+@register_handler('bulk_parse_fields')
+def handle_bulk_parse_fields(job, app):
+    """
+    Parse rule content and update metadata fields (license, author, original_uuid, etc.)
+    based on keyword/regex config provided in the job payload.
+    """
+    from app.features.rule.field_parser_core import parse_field_from_content, PARSEABLE_FIELD_KEYS
+
+    payload       = job.payload or {}
+    rule_ids      = payload.get('rule_ids', 'ALL')
+    format_filter = payload.get('format_filter') or None
+    fields_config = payload.get('fields_config', {})
+    offset        = payload.get('_resume_offset', 0)
+
+    enabled_fields = [k for k, v in fields_config.items() if v.get('enabled')]
+    if not enabled_fields:
+        log_job(job, 'No fields enabled — nothing to do.', level='warning', event='done')
+        job.done = job.total or 0
+        db.session.commit()
+        return
+
+    # with_entities column order: id, to_string, license, author, original_uuid, description, version, title
+    FIELD_IDX = {k: i + 2 for i, k in enumerate(PARSEABLE_FIELD_KEYS)}
+
+    q = Rule.query.filter(Rule.is_deleted == False)
+    if rule_ids != 'ALL':
+        q = q.filter(Rule.id.in_(rule_ids))
+    elif format_filter:
+        q = q.filter(Rule.format == format_filter)
+
+    if job.total == 0:
+        job.total = q.count()
+        db.session.commit()
+        log_job(job, f'Starting — {job.total} rules to process, fields: {", ".join(enabled_fields)}.',
+                level='info', event='start')
+    else:
+        log_job(job, f'Resuming from offset {offset}.', level='info', event='resume')
+
+    total_updated = 0
+    batch_num     = 0
+
+    while True:
+        if _is_cancelled(job):
+            log_job(job, 'Cancelled.', level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+
+        rows = (
+            q.with_entities(
+                Rule.id, Rule.to_string,
+                Rule.license, Rule.author, Rule.original_uuid,
+                Rule.description, Rule.version, Rule.title,
+            )
+            .offset(offset)
+            .limit(FIELD_PARSE_BATCH)
+            .all()
+        )
+        if not rows:
+            break
+
+        for row in rows:
+            rule_id = row[0]
+            content = row[1] or ''
+            updates = {}
+
+            for field_key in enabled_fields:
+                if field_key not in FIELD_IDX:
+                    continue
+                cfg         = fields_config.get(field_key, {})
+                current_val = row[FIELD_IDX[field_key]]
+
+                if current_val and not cfg.get('overwrite', False):
+                    continue
+
+                new_val = parse_field_from_content(content, cfg)
+                if new_val:
+                    updates[field_key] = new_val
+
+            if updates:
+                Rule.query.filter(Rule.id == rule_id).update(updates)
+                total_updated += 1
+
+        db.session.commit()
+        offset    += len(rows)
+        job.done   = offset
+        _save_offset(job, offset)
+        db.session.commit()
+
+        batch_num += 1
+        if batch_num % FIELD_PARSE_LOG_EVERY == 0:
+            log_job(job, f'{offset}/{job.total} rules processed, {total_updated} rules updated.',
+                    level='info', event='progress')
+
+    log_job(job, f'Done — {offset} rules processed, {total_updated} rules updated.',
+            level='success', event='done')

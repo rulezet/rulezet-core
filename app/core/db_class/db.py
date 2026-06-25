@@ -2522,3 +2522,25 @@ class RuleAttackAssociation(db.Model):
             'source':       self.source,
         }
 
+
+class FieldParserConfig(db.Model):
+    """Saved configurations for the bulk field parser admin tool."""
+    __tablename__ = 'field_parser_config'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(100), nullable=False)
+    config     = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+
+    user = db.relationship('User', backref=db.backref('field_parser_configs', lazy='dynamic'))
+
+    def to_json(self):
+        return {
+            'id':         self.id,
+            'name':       self.name,
+            'config':     self.config,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'user_id':    self.user_id,
+        }
+

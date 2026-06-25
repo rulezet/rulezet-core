@@ -100,6 +100,7 @@ export default {
         currentUserIsAuthenticated: { type: Boolean,  default: false },
         showExport:         { type: Boolean,          default: true },
         syncUrl:            { type: Boolean,          default: true },
+        confirmDisabled:    { type: Boolean,          default: false },
     },
 
     emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send'],
@@ -200,7 +201,7 @@ export default {
                 <!-- Select-all / send (mode=select) -->
                 <button v-if="mode === 'select'"
                         class="dt-toolbar-btn dt-toolbar-btn--primary"
-                        :disabled="selectionCount === 0"
+                        :disabled="selectionCount === 0 || confirmDisabled"
                         @click="emitSend">
                     <i class="fas fa-check"></i>
                     <span>Confirm{{ selectionCount > 0 ? ' (' + selectionCount + ')' : '' }}</span>
@@ -1480,7 +1481,8 @@ export default {
 
         function emitSend() {
             const ids = allPagesSelected.value ? 'ALL' : Array.from(selectedIds)
-            emit('send', ids)
+            const filters = { format: ruleType.value || null }
+            emit('send', ids, filters)
         }
 
         // ── Table colspan ─────────────────────────────────────────────────

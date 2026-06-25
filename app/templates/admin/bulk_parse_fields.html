@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
+{% block title %}Bulk Field Parser — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3 px-4" id="main-container" v-cloak>
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-wand-magic-sparkles banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Bulk Field Parser</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="banner-icon">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </div>
+                <div>
+                    <h2 class="fw-bold mb-1">Bulk Field Parser</h2>
+                    <div class="banner-accent"></div>
+                </div>
+            </div>
+            <a href="/jobs/list" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-tasks me-1"></i>My Jobs
+            </a>
+        </div>
+        <p class="text-muted mb-0" style="max-width:680px;font-size:.95rem;">
+            Extract metadata from rule content and populate fields like
+            <code>license</code>, <code>author</code>, <code>original_uuid</code> and more —
+            using keyword detection or custom regex patterns, on selected or all rules.
+        </p>
+    </div>
+
+    {{ anav.admin_nav('bulk_parse_fields') }}
+
+    <field-parser-updater
+        :csrf-token="csrfToken"
+        :field-meta="fieldMeta"
+        :parseable-fields="parseableFields"
+        @notify="notify">
+    </field-parser-updater>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+const { createApp } = Vue;
+import FieldParserUpdater from '/static/js/admin/bulkParseFields.js'
+import { create_message } from '/static/js/toaster.js'
+
+const fieldMeta       = {{ field_meta | tojson | safe }};
+const parseableFields = {{ parseable_fields | tojson | safe }};
+const csrfToken       = '{{ csrf_token() }}';
+
+createApp({
+    components: { 'field-parser-updater': FieldParserUpdater },
+    setup() {
+        function notify(msg) { create_message(msg, 'info-subtle'); }
+        return { fieldMeta, parseableFields, csrfToken, notify };
+    }
+}).mount('#main-container');
+</script>
+{% endblock %}
