@@ -122,7 +122,7 @@
 
     <!-- Toast app — standalone Vue instance, always active regardless of page app mount point -->
     <div id="rz-toast-app">
-        <div class="rz-toast-container" role="region" aria-live="polite">
+        <div :class="toastContainerClass" role="region" aria-live="polite">
             <template v-if="message_list">
                 <template v-for="msg in message_list" :key="msg.id">
                     <div :id="`rz-toast-${msg.id}`" :class="`rz-toast rz-toast--${msg.variant}`" role="alert">
@@ -165,11 +165,21 @@
 
     {% block toast_app %}
     <script type="module">
-        const { createApp } = Vue
-        import { message_list } from '/static/js/toaster.js';
+        const { createApp, computed } = Vue
+        import { message_list, toast_position, toast_style } from '/static/js/toaster.js';
         createApp({
             delimiters: ['[[', ']]'],
-            setup() { return { message_list } }
+            setup() {
+                const toastContainerClass = computed(() => {
+                    const cls = ['rz-toast-container']
+                    if (toast_position.value !== 'top-right')
+                        cls.push('rz-toast-container--' + toast_position.value)
+                    if (toast_style.value !== 'default')
+                        cls.push('rz-toast-container--style-' + toast_style.value)
+                    return cls
+                })
+                return { message_list, toastContainerClass }
+            }
         }).mount('#rz-toast-app')
     </script>
     {% endblock %}

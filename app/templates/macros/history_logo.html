@@ -61,7 +61,7 @@
 
                     <div class="col-md-5" :class="index % 2 === 0 ? 'order-3' : 'order-1'">
                         <div class="p-3 bg-white rounded-4 shadow-sm">
-                            <img :src="item.is_doc ? '../doc/' + item.filename : '/static/image/' + item.filename"
+                            <img :src="'/static/image/' + item.filename"
                                 :alt="item.title"
                                 class="img-fluid rounded-3 shadow-sm timeline-img transition-transform"
                                 style="max-height: 250px; object-fit: contain; width: 100%;">

@@ -5,7 +5,9 @@
  */
 
 const { nextTick, ref } = Vue
-export const message_list = ref([])
+export const message_list   = ref([])
+export const toast_position = ref(localStorage.getItem('rz-toast-position') || 'top-right')
+export const toast_style    = ref(localStorage.getItem('rz-toast-style')    || 'default')
 
 const DURATION = 4000  // ms before auto-dismiss
 

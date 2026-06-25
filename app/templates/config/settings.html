@@ -171,6 +171,67 @@
                 </div>
             </div>
 
+            <!-- Toast settings -->
+            <div class="card mb-3" id="section-toast">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-layer-group"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Toast Notifications</h6>
+                            <p class="text-muted small mb-0">Choose where and how toast messages appear.</p>
+                        </div>
+                    </div>
+
+                    <!-- Position -->
+                    <p class="settings-sub-label mb-2">Position</p>
+                    <div class="settings-theme-group settings-pos-group mb-4">
+                        <div v-for="pos in toast_pos_options" :key="pos.value"
+                             class="settings-theme-card settings-pos-card"
+                             :class="{ active: toast_pos === pos.value }"
+                             @click="setToastPosition(pos.value)">
+                            <div class="toast-pos-preview">
+                                <div class="tpp-screen">
+                                    <div class="tpp-dot" :class="'tpp-dot--' + pos.value"></div>
+                                    <div class="tpp-dot tpp-dot--fade" :class="'tpp-dot--' + pos.value" style="opacity:.25;"></div>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <span style="font-size:.72rem;">[[ pos.label ]]</span>
+                                <i v-if="toast_pos === pos.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Style -->
+                    <p class="settings-sub-label mb-2">Style</p>
+                    <div class="settings-theme-group">
+                        <div v-for="sty in toast_style_options" :key="sty.value"
+                             class="settings-theme-card"
+                             :class="{ active: toast_sty === sty.value }"
+                             @click="setToastStyle(sty.value)">
+                            <div class="toast-style-preview" :class="'tsp--' + sty.value">
+                                <div class="tsp-toast">
+                                    <div class="tsp-left-bar"></div>
+                                    <i class="fas fa-check tsp-icon"></i>
+                                    <span class="tsp-text">Saved</span>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + sty.icon"></i>
+                                <span>[[ sty.label ]]</span>
+                                <i v-if="toast_sty === sty.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0" style="font-size:.75rem;">
+                        <i class="fas fa-info-circle me-1 text-primary opacity-75"></i>
+                        <template v-if="toast_sty === 'default'">Tinted background with a colored left accent border.</template>
+                        <template v-else-if="toast_sty === 'minimal'">Clean card look on the page background, accent border only.</template>
+                        <template v-else>Solid colored background — high contrast.</template>
+                    </p>
+                </div>
+            </div>
+
             {% if is_admin %}
             <!-- Theme Studio (admin only) -->
             <div class="card mb-3" id="section-studio">
@@ -301,6 +362,26 @@
                             </div>
                             <div class="recap-status">
                                 <i v-if="notif_style_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Toast row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-layer-group"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Toast</div>
+                                <div class="recap-value">
+                                    <i class="fas fa-location-dot me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ toast_pos_options.find(o => o.value === toast_pos)?.label || toast_pos ]]
+                                    <span class="ms-1 opacity-50">·</span>
+                                    <i :class="'fas ' + (toast_style_options.find(o => o.value === toast_sty)?.icon || 'fa-layer-group')" class="ms-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ toast_style_options.find(o => o.value === toast_sty)?.label || toast_sty ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="toast_saved" class="fas fa-circle-check text-success"></i>
                             </div>
                         </div>
 
@@ -501,7 +582,7 @@
 {% block script %}
 <script type="module">
     const { createApp, ref, reactive, computed, onMounted } = Vue
-    import { create_message } from '/static/js/toaster.js'
+    import { create_message, toast_position as _toastPos, toast_style as _toastSty } from '/static/js/toaster.js'
 
     const IS_ADMIN     = {{ 'true' if is_admin else 'false' }}
     const BUILTIN_KEYS = {{ ['dark'] | tojson | safe }}
@@ -578,6 +659,42 @@
                 nav_saved.value = true
                 // Brief flash of the checkmark then reload so the new nav style is visible
                 setTimeout(() => { window.location.reload() }, 500)
+            }
+
+            // ── Toast position & style (localStorage only) ───────────────────
+            const toast_pos  = ref(localStorage.getItem('rz-toast-position') || 'top-right')
+            const toast_sty  = ref(localStorage.getItem('rz-toast-style')    || 'default')
+            const toast_saved = ref(false)
+            const toast_pos_options = [
+                { value: 'top-left',      label: 'Top Left'      },
+                { value: 'top-center',    label: 'Top Center'    },
+                { value: 'top-right',     label: 'Top Right'     },
+                { value: 'bottom-left',   label: 'Bottom Left'   },
+                { value: 'bottom-center', label: 'Bottom Center' },
+                { value: 'bottom-right',  label: 'Bottom Right'  },
+            ]
+            const toast_style_options = [
+                { value: 'default', label: 'Default', icon: 'fa-layer-group' },
+                { value: 'minimal', label: 'Minimal', icon: 'fa-minus'       },
+                { value: 'filled',  label: 'Filled',  icon: 'fa-fill-drip'   },
+            ]
+            function setToastPosition(value) {
+                if (value === toast_pos.value) return
+                toast_pos.value  = value
+                _toastPos.value  = value
+                localStorage.setItem('rz-toast-position', value)
+                toast_saved.value = true
+                setTimeout(() => { toast_saved.value = false }, 2000)
+                create_message('Toast position updated', 'success')
+            }
+            function setToastStyle(value) {
+                if (value === toast_sty.value) return
+                toast_sty.value  = value
+                _toastSty.value  = value
+                localStorage.setItem('rz-toast-style', value)
+                toast_saved.value = true
+                setTimeout(() => { toast_saved.value = false }, 2000)
+                create_message('Toast style updated', 'success')
             }
 
             // ── Notification style (localStorage only) ────────────────────────
@@ -871,6 +988,9 @@
             return {
                 theme, save_status, theme_options,
                 nav_style, nav_saved, nav_options, setNavStyle,
+                toast_pos, toast_sty, toast_saved,
+                toast_pos_options, toast_style_options,
+                setToastPosition, setToastStyle,
                 notif_style, notif_style_saved, notif_style_options, setNotifStyle,
                 named_theme_options, custom_theme_options,
                 livePreviewStyle,

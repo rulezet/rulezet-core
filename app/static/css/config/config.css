@@ -583,3 +583,110 @@ body.dark-mode .settings-save-status.saved { color: #4ade80; background: rgba(74
     white-space: nowrap;
 }
 
+/* ── Toast position picker ────────────────────────────────────── */
+.settings-pos-group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+.settings-pos-card {
+    min-width: 0;
+}
+.toast-pos-preview {
+    padding: 6px;
+    margin-bottom: 6px;
+}
+.tpp-screen {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/9;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background: var(--light-bg-color);
+    overflow: hidden;
+}
+.tpp-dot {
+    position: absolute;
+    width: 38%;
+    height: 28%;
+    background: #0d6efd;
+    border-radius: 3px;
+    opacity: .7;
+    transition: opacity .15s;
+}
+/* second dot offset */
+.tpp-dot.tpp-dot--fade {
+    margin-top: 32%;
+    opacity: .2 !important;
+}
+.tpp-dot--top-right    { top: 8%; right: 5%; }
+.tpp-dot--top-left     { top: 8%; left: 5%; }
+.tpp-dot--top-center   { top: 8%; left: 50%; transform: translateX(-50%); }
+.tpp-dot--bottom-right { bottom: 8%; right: 5%; }
+.tpp-dot--bottom-left  { bottom: 8%; left: 5%; }
+.tpp-dot--bottom-center { bottom: 8%; left: 50%; transform: translateX(-50%); }
+
+/* ── Toast style preview ──────────────────────────────────────── */
+.toast-style-preview {
+    width: 100%;
+    padding: 10px 8px;
+    margin-bottom: 6px;
+    border-radius: 7px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+}
+.tsp-toast {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: .72rem;
+    font-weight: 500;
+    position: relative;
+    width: 100%;
+    max-width: 130px;
+}
+.tsp-left-bar {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    border-radius: 3px 0 0 3px;
+    background: #198754;
+}
+.tsp-icon { font-size: .7rem; flex-shrink: 0; }
+.tsp-text  { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Default style */
+.tsp--default .tsp-toast {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #14532d;
+}
+.tsp--default .tsp-icon { color: #198754; }
+body.dark-mode .tsp--default .tsp-toast {
+    background: #052e16; border-color: #166534; color: #bbf7d0;
+}
+
+/* Minimal style */
+.tsp--minimal .tsp-toast {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+.tsp--minimal .tsp-icon { color: #198754; }
+
+/* Filled style */
+.tsp--filled .tsp-toast {
+    background: #198754;
+    border: 1px solid #198754;
+    color: #fff;
+}
+.tsp--filled .tsp-icon { color: #fff; }
+.tsp--filled .tsp-left-bar { background: rgba(255,255,255,.5); }
+
