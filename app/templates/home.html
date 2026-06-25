@@ -397,10 +397,12 @@
 
                     <template v-else>
                         <div v-show="chartTab==='timeline'" style="padding:.5rem .75rem;">
-                            <chart-viewer v-if="charts.timeline" :data="charts.timeline" views="area" height="300px"></chart-viewer>
+                            <chart-viewer v-if="charts.timeline" :data="charts.timeline" views="area" height="300px"
+                                @chart-click="goToRuleList"></chart-viewer>
                         </div>
                         <div v-show="chartTab==='formats'" style="padding:.5rem .75rem;">
-                            <chart-viewer v-if="charts.formats" :data="charts.formats" views="bar-h" height="300px"></chart-viewer>
+                            <chart-viewer v-if="charts.formats" :data="charts.formats" views="bar-h" height="300px"
+                                @chart-click="onFormatClick"></chart-viewer>
                         </div>
                     </template>
                 </div>
@@ -602,6 +604,17 @@
                 chartsLoading.value = false
             }
 
+            function goToRuleList() {
+                window.location.href = '/rule/rules_list';
+            }
+
+            function onFormatClick(item) {
+                const fmt = (item.name || '').trim().toLowerCase();
+                window.location.href = fmt
+                    ? '/rule/rules_list?rule_type=' + encodeURIComponent(fmt)
+                    : '/rule/rules_list';
+            }
+
             function openFeedItem(item) {
                 const url = feedUrl(item)
                 if (url) window.open(url, '_blank')
@@ -634,7 +647,7 @@
                 message_list, is_loading,
                 current_user_is_admin, current_user_is_connected, currentUserId,
                 feed, feedLoading, charts, chartsLoading, chartTab,
-                openFeedItem,
+                openFeedItem, goToRuleList, onFormatClick,
                 feedBubbleStyle, friendlyAction, feedUrl, formatTime,
             }
         }
