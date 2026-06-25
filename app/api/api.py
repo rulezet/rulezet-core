@@ -104,24 +104,34 @@ api.add_namespace(bundle_private_ns, path="/bundle/private")
 api.add_namespace(account_public_ns,  path="/account/public")
 api.add_namespace(account_private_ns, path="/account/private")
 
+def _hide_ns(ns):
+    """Hide all resources in a namespace from the Swagger UI."""
+    for route in ns.resources:
+        ns.doc(False)(route.resource)
+
 # Sync / Federation API
 from .connector.connector_sync_api import sync_ns  # noqa
+_hide_ns(sync_ns)
 api.add_namespace(sync_ns, path="/sync")
 
 # Instance registry (phone-home)
 from .instance.instance_api import instance_ns  # noqa
+_hide_ns(instance_ns)
 api.add_namespace(instance_ns, path="/instance")
 
 # User config / Theme Studio
 from .config.config_api import config_ns  # noqa
+_hide_ns(config_ns)
 api.add_namespace(config_ns, path="/config")
 
 # Unified comment thread
 from .comment.comment_api import comment_ns  # noqa
+_hide_ns(comment_ns)
 api.add_namespace(comment_ns, path="/comments")
 
 # Activity log (admin only)
 from .log.log_api import log_ns  # noqa
+_hide_ns(log_ns)
 api.add_namespace(log_ns, path="/log")
 
 
