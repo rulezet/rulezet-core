@@ -1,0 +1,1301 @@
+{% extends "base.html" %}
+{% block title %}{{ workspace.name[:60] }} — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/workspace/workspace_detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+{% endblock %}
+
+{% block content %}
+<div id="ws-detail-app" v-cloak>
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-layer-group banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/workspace/my_rules" class="text-decoration-none text-muted">My Rules</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">{% if workspace.name|length > 40 %}{{ workspace.name[:40] }}…{% else %}{{ workspace.name }}{% endif %}</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="wd-ws-icon" :style="{ background: wsColor }">
+                <i :class="'fa-solid ' + wsIcon"></i>
+            </div>
+            <div>
+                <h2 class="fw-bold mb-1">{% if workspace.name|length > 60 %}{{ workspace.name[:60] }}…{% else %}{{ workspace.name }}{% endif %}</h2>
+                <div class="banner-accent"></div>
+            </div>
+            <div class="ms-auto d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="openEditModal">
+                    <i class="fa-solid fa-pencil me-1"></i>Edit
+                </button>
+                <button class="btn btn-sm btn-outline-danger rounded-pill px-3" @click="deleteWorkspace">
+                    <i class="fa-solid fa-trash me-1"></i>Delete
+                </button>
+            </div>
+        </div>
+        <p v-if="wsDesc" class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">[[ wsDesc ]]</p>
+        <p v-else class="text-muted fst-italic mb-0" style="font-size:.9rem;">No description.</p>
+    </div>
+
+    <!-- ── Metadata + Taxonomy card ───────────────────── -->
+    <div class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card" style="border-radius:12px;">
+        <div class="card-watermark-detail"><i :class="'fa-solid ' + wsIcon"></i></div>
+        <div class="card-body p-4">
+
+            <!-- Author / Date / URL + edit button -->
+            <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <!-- Author via UserChip -->
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted small text-uppercase fw-bold" style="letter-spacing:.06em;font-size:.65rem;">Author</span>
+                        <user-chip
+                            :user-id="{{ workspace.user_id }}"
+                            username="{{ workspace.owner.get_username() if workspace.owner else '' }}"
+                            size="xs">
+                        </user-chip>
+                    </div>
+                    <!-- Created date -->
+                    <div class="d-flex align-items-center gap-1 text-muted" style="font-size:.82rem;">
+                        <i class="fa-solid fa-calendar-plus" style="font-size:.7rem;opacity:.6;"></i>
+                        <span>{{ workspace.created_at.strftime('%d %b %Y') }}</span>
+                    </div>
+                    <!-- Reference URL — inline edit -->
+                    <div class="d-flex align-items-center gap-1" style="font-size:.82rem;">
+                        <i class="fa-solid fa-link text-primary" style="font-size:.7rem;opacity:.7;"></i>
+                        <template v-if="!urlEditing">
+                            <a v-if="wsMeta.url" :href="wsMeta.url" target="_blank" rel="noopener noreferrer"
+                               class="text-primary text-decoration-none text-truncate" style="max-width:220px;">
+                                [[ wsMeta.url ]]
+                            </a>
+                            <button class="btn btn-link btn-sm p-0 ms-1 text-muted" @click="startUrlEdit" style="font-size:.7rem;">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                        </template>
+                        <template v-else>
+                            <input type="url" class="form-control form-control-sm border-0 rounded-2 px-2 py-0"
+                                   style="background:var(--light-bg-color);height:26px;font-size:.82rem;max-width:240px;"
+                                   v-model="urlDraft" placeholder="https://…"
+                                   @keyup.enter="saveUrl" @keyup.escape="urlEditing = false" autofocus>
+                            <button class="btn btn-sm btn-primary px-2 py-0 ms-1 rounded-2" style="height:26px;font-size:.75rem;" @click="saveUrl">
+                                <i class="fa-solid fa-check"></i>
+                            </button>
+                            <button class="btn btn-sm btn-link px-1 py-0 text-muted" style="font-size:.75rem;" @click="urlEditing = false">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+                <!-- Edit metadata button -->
+                <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="openMetaEdit"
+                        style="font-size:.78rem;white-space:nowrap;">
+                    <i class="fa-solid fa-pen me-1"></i>Edit metadata
+                </button>
+            </div>
+
+            <hr class="my-3" style="opacity:.08;">
+
+            <!-- Taxonomy — identique à detail_rule -->
+            <div class="mt-2">
+                <vulnerability-display
+                    :vulnerabilities="wsMeta.cves"
+                    :loading="false"
+                    section-title="Security Identifiers"
+                    css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
+                </vulnerability-display>
+            </div>
+            <div class="mt-2">
+                <tag-display
+                    :tags="wsTags"
+                    :loading="tagsLoading"
+                    section-title="Tags"
+                    css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
+                </tag-display>
+            </div>
+            <div class="mt-2 mb-2">
+                <attack-display
+                    :attacks="wsAttacks"
+                    :loading="attacksLoading"
+                    section-title="ATT&CK Techniques">
+                </attack-display>
+            </div>
+
+            <!-- Empty state -->
+            <div v-if="!wsMeta.cves.length && !wsTags.length && !wsAttacks.length && !tagsLoading"
+                 class="d-flex align-items-center gap-2 text-muted mt-1" style="font-size:.82rem;">
+                <i class="fa-solid fa-tags opacity-40"></i>
+                <span class="fst-italic">No tags, CVEs or ATT&CK techniques yet.</span>
+                <button class="btn btn-link btn-sm p-0 ms-1" @click="openMetaEdit" style="font-size:.82rem;">Add some</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Meta Edit Modal ─────────────────────────────── -->
+    <div class="modal fade" id="metaEditModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg" style="border-radius:16px;background:var(--card-bg-color);overflow:visible;">
+                <div class="modal-header border-0 px-4 pt-4 pb-2">
+                    <h5 class="modal-title fw-bold d-flex align-items-center gap-2 mb-0">
+                        <i class="fa-solid fa-pen-to-square text-primary"></i>
+                        Edit Workspace Metadata
+                    </h5>
+                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body px-4 py-3 d-flex flex-column gap-4" style="overflow:visible;">
+                    <!-- Tags -->
+                    <div>
+                        <tag-input v-model="metaForm.tags" label="Tags" :user-id="currentUserId"></tag-input>
+                    </div>
+                    <!-- CVEs via VulnerabilityInput -->
+                    <div>
+                        <vulnerability-input v-model="metaForm.vulns" target-type="workspace"
+                            label="Vulnerabilities (CVE, GHSA…)">
+                        </vulnerability-input>
+                    </div>
+                    <!-- ATT&CK — last so dropdown opens downward with room -->
+                    <div style="min-height:300px;">
+                        <attack-input v-model="metaForm.attacks" label="ATT&CK Techniques" :csrf-token="csrfToken"></attack-input>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 px-4 pb-4 pt-2 gap-2">
+                    <button class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+                    <button class="btn btn-primary rounded-pill px-5 fw-semibold" @click="saveMetaEdit">
+                        <i class="fa-solid fa-floppy-disk me-2"></i>Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI strip -->
+    <div class="wd-kpi-strip mb-4">
+        <div class="wd-kpi-card wd-kpi-card--total" :class="{ 'wd-kpi-card--active': activeStatus === null }" @click="setStatus(null)">
+            <div class="wd-kpi-card__value">[[ kpiCounts.total ]]</div>
+            <div class="wd-kpi-card__label">Total</div>
+        </div>
+        <div class="wd-kpi-card wd-kpi-card--draft" :class="{ 'wd-kpi-card--active': activeStatus === 'draft' }" @click="setStatus('draft')">
+            <div class="wd-kpi-card__value">[[ kpiCounts.draft ]]</div>
+            <div class="wd-kpi-card__label"><i class="fa-solid fa-pencil me-1"></i>Draft</div>
+        </div>
+        <div class="wd-kpi-card wd-kpi-card--testing" :class="{ 'wd-kpi-card--active': activeStatus === 'testing' }" @click="setStatus('testing')">
+            <div class="wd-kpi-card__value">[[ kpiCounts.testing ]]</div>
+            <div class="wd-kpi-card__label"><i class="fa-solid fa-flask me-1"></i>Testing</div>
+        </div>
+        <div class="wd-kpi-card wd-kpi-card--production" :class="{ 'wd-kpi-card--active': activeStatus === 'production' }" @click="setStatus('production')">
+            <div class="wd-kpi-card__value">[[ kpiCounts.production ]]</div>
+            <div class="wd-kpi-card__label"><i class="fa-solid fa-circle-check me-1"></i>Production</div>
+        </div>
+        <div class="wd-kpi-card wd-kpi-card--deprecated" :class="{ 'wd-kpi-card--active': activeStatus === 'deprecated' }" @click="setStatus('deprecated')">
+            <div class="wd-kpi-card__value">[[ kpiCounts.deprecated ]]</div>
+            <div class="wd-kpi-card__label"><i class="fa-solid fa-ban me-1"></i>Deprecated</div>
+        </div>
+    </div>
+
+    <!-- Navigation tabs — same style as rule detail page -->
+    <nav class="dr-nav">
+        <button type="button" class="dr-nav__item" :class="{ active: activeTab === 'rules' }"
+                @click="activeTab = 'rules'">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Rules</span>
+            <span class="dr-nav__badge" v-if="kpiCounts.total > 0">[[ kpiCounts.total ]]</span>
+        </button>
+        <button type="button" class="dr-nav__item" :class="{ active: activeTab === 'notes' }"
+                @click="activeTab = 'notes'">
+            <i class="fa-solid fa-file-lines"></i>
+            <span>Notes &amp; Docs</span>
+            <span class="dr-nav__badge" v-if="documents.length > 0">[[ documents.length ]]</span>
+        </button>
+        <button type="button" class="dr-nav__item" :class="{ active: activeTab === 'links' }"
+                @click="activeTab = 'links'">
+            <i class="fa-solid fa-link"></i>
+            <span>External Links</span>
+            <span class="dr-nav__badge" v-if="links.length > 0">[[ links.length ]]</span>
+        </button>
+    </nav>
+
+    <!-- ══════════════════════════════════════
+         RULES TAB
+         ══════════════════════════════════════ -->
+    <div v-show="activeTab === 'rules'">
+
+        <!-- Empty state: no rules yet -->
+        <div v-if="kpiCounts.total === 0" class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card" style="border-radius:12px;">
+            <div class="card-watermark-detail"><i class="fa-solid fa-shield-halved"></i></div>
+            <div class="card-body p-4 p-md-5 text-center">
+                <div class="mb-3" style="font-size:3rem;opacity:.2;">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h5 class="fw-bold mb-2">No rules in this workspace yet</h5>
+                <p class="text-muted mb-4" style="font-size:.92rem;max-width:420px;margin:0 auto 1.5rem;">
+                    Add detection rules from your personal rules library to start tracking their lifecycle.
+                </p>
+                <button class="btn btn-primary rounded-pill px-4 shadow-sm" @click="openAddRules">
+                    <i class="fa-solid fa-plus me-2"></i>Add Rules to this Workspace
+                </button>
+            </div>
+        </div>
+
+        <!-- Rules list (only shown when there are rules) -->
+        <template v-else>
+            <div class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card" style="border-radius:12px;">
+                <div class="card-watermark-detail"><i class="fa-solid fa-shield-halved"></i></div>
+                <div class="card-body p-3 wd-rule-list-wrap">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.04em;">
+                            <i class="fa-solid fa-shield-halved me-1"></i>
+                            Rules in this workspace
+                            <span v-if="activeStatus" class="badge ms-2" :style="statusBadgeStyle(activeStatus)">[[ activeStatus ]]</span>
+                        </span>
+                        <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" @click="openAddRules">
+                            <i class="fa-solid fa-plus me-1"></i>Add Rules
+                        </button>
+                    </div>
+
+                    <rule-list
+                        ref="ruleListRef"
+                        :key="ruleListKey"
+                        mode="manage"
+                        :fetch-url="fetchUrl"
+                        :show-status="true"
+                        :draggable="false"
+                        :initial-per-page="25"
+                        :hidden-columns="['editor', 'votes', 'created']"
+                        default-view="table"
+                        :sync-url="false"
+                        :current-user-id="currentUserId"
+                        :current-user-is-admin="isAdmin"
+                        :current-user-is-authenticated="true"
+                        :csrf-token="csrfToken"
+                        :bulk-actions="bulkActions"
+                        @bulk-action="onBulkAction"
+                        @status-change="onStatusChange"
+                    ></rule-list>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         NOTES & DOCS TAB
+         ══════════════════════════════════════ -->
+    <div v-show="activeTab === 'notes'">
+
+        <!-- Document editor (inline, shown when a doc is open) -->
+        <div v-if="editingDoc" class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card" style="border-radius:12px;">
+            <div class="card-watermark-detail"><i class="fa-solid fa-file-pen"></i></div>
+            <div class="card-body p-0">
+                <div class="wd-doc-editor__header px-4 py-3">
+                    <i class="fa-solid fa-file-pen text-primary me-2"></i>
+                    <input class="wd-doc-editor__title-input fw-semibold"
+                           v-model="editingDoc.title"
+                           placeholder="Document title…"
+                           @input="scheduleSave"
+                           @blur="saveDocument">
+                    <div class="ms-auto d-flex align-items-center gap-3">
+                        <span class="wd-save-status" :class="saveStatus.cls">
+                            <i :class="saveStatus.icon" class="me-1"></i>[[ saveStatus.label ]]
+                        </span>
+                        <button class="btn btn-sm btn-primary rounded-pill px-3" @click="saveDocument">
+                            <i class="fa-solid fa-floppy-disk me-1"></i>Save
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="closeDocument">
+                            <i class="fa-solid fa-xmark me-1"></i>Close
+                        </button>
+                    </div>
+                </div>
+                <div class="px-4 pb-4">
+                    <smart-editor
+                        v-model="editingDoc.content"
+                        mode="markdown"
+                        placeholder="Write notes in Markdown…"
+                        min-height="340px"
+                        max-height="65vh"
+                        @update:model-value="scheduleSave">
+                    </smart-editor>
+                </div>
+            </div>
+        </div>
+
+        <!-- Document list -->
+        <div class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card" style="border-radius:12px;">
+            <div class="card-watermark-detail"><i class="fa-solid fa-file-lines"></i></div>
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center justify-content-between mb-4">
+                    <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.04em;">
+                        <i class="fa-solid fa-file-lines me-1"></i>Documents ([[ documents.length ]])
+                    </span>
+                    <div class="d-flex gap-2">
+                        <!-- Import file from PC -->
+                        <label class="btn btn-sm btn-outline-secondary rounded-pill px-3 mb-0" style="cursor:pointer;">
+                            <i class="fa-solid fa-file-import me-1"></i>Import File
+                            <input type="file" accept=".txt,.md,.markdown,.log,.yaml,.yml,.json,.csv" class="d-none"
+                                   @change="importFile($event)">
+                        </label>
+                        <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" @click="createDocument()">
+                            <i class="fa-solid fa-plus me-1"></i>New Document
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="docsLoading" class="text-center py-4 text-muted">
+                    <i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading…
+                </div>
+
+                <div v-else-if="documents.length === 0" class="wd-empty-state">
+                    <i class="fa-regular fa-file-lines"></i>
+                    <p>No documents yet. Create one or import a file to take notes about this workspace.</p>
+                </div>
+
+                <div v-else class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+                    <div v-for="doc in documents" :key="doc.id" class="col">
+                        <div class="wd-doc-card" :class="{ 'wd-doc-card--editing': editingDoc && editingDoc.id === doc.id }"
+                             @click="openDocument(doc)">
+                            <div class="wd-doc-card__icon">
+                                <i class="fa-solid fa-file-lines"></i>
+                            </div>
+                            <div class="wd-doc-card__info">
+                                <div class="wd-doc-card__title">[[ doc.title ]]</div>
+                                <div class="wd-doc-card__preview">[[ (doc.content || 'Empty document').slice(0, 80) ]]</div>
+                                <div class="wd-doc-card__meta">
+                                    <i class="fa-regular fa-clock me-1"></i>[[ doc.updated_at || doc.created_at || '–' ]]
+                                </div>
+                            </div>
+                            <div class="wd-doc-card__actions">
+                                <button class="wd-doc-card__action-btn" @click.stop="openRenameModal(doc)" title="Rename">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button class="wd-doc-card__action-btn wd-doc-card__action-btn--del" @click.stop="deleteDocument(doc)" title="Delete">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         EXTERNAL LINKS TAB
+         ══════════════════════════════════════ -->
+    <div v-show="activeTab === 'links'">
+
+        <!-- Add link form -->
+        <div class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card" style="border-radius:12px;">
+            <div class="card-watermark-detail"><i class="fa-solid fa-link"></i></div>
+            <div class="card-body p-4">
+                <div class="fw-semibold small text-muted text-uppercase mb-3" style="letter-spacing:.04em;">
+                    <i class="fa-solid fa-plus me-1 text-primary"></i>Add a Reference Link
+                </div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Title <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control rounded-3"
+                               v-model="newLink.title" placeholder="e.g. SIEM playbook, CVE report…" maxlength="200">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">URL <span class="text-danger">*</span></label>
+                        <input type="url" class="form-control rounded-3"
+                               v-model="newLink.url" placeholder="https://…" maxlength="1000">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Description</label>
+                        <input type="text" class="form-control rounded-3"
+                               v-model="newLink.description" placeholder="Optional…" maxlength="500">
+                    </div>
+                    <div class="col-md-1">
+                        <button class="btn btn-primary w-100 rounded-3"
+                                @click="addLink"
+                                :disabled="!newLink.title.trim() || !newLink.url.trim()">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Link list -->
+        <div class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card" style="border-radius:12px;">
+            <div class="card-watermark-detail"><i class="fa-solid fa-globe"></i></div>
+            <div class="card-body p-4">
+                <div class="fw-semibold text-muted small text-uppercase mb-3" style="letter-spacing:.04em;">
+                    <i class="fa-solid fa-link me-1"></i>References ([[ links.length ]])
+                </div>
+
+                <div v-if="linksLoading" class="text-center py-4 text-muted">
+                    <i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading…
+                </div>
+                <div v-else-if="links.length === 0" class="wd-empty-state">
+                    <i class="fa-solid fa-link"></i>
+                    <p>No links yet. Add references, playbooks, or external resources above.</p>
+                </div>
+                <div v-else class="d-flex flex-column gap-3">
+                    <div v-for="link in links" :key="link.id" class="wd-link-card">
+                        <div class="wd-link-card__icon">
+                            <i class="fa-solid fa-globe"></i>
+                        </div>
+                        <div class="wd-link-card__body">
+                            <div class="wd-link-card__title">[[ link.title ]]</div>
+                            <a :href="link.url" target="_blank" rel="noopener noreferrer"
+                               class="wd-link-card__url" @click.stop>[[ link.url ]]</a>
+                            <div v-if="link.description" class="wd-link-card__desc">[[ link.description ]]</div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger rounded-pill px-2"
+                                @click="deleteLink(link)" title="Delete">
+                            <i class="fa-solid fa-trash-can" style="font-size:.72rem;"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── FILE NAME MODAL (new / import / rename) ─────── -->
+    <div class="modal fade" id="fileNameModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:440px;">
+            <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
+                <div class="modal-header border-0 pb-0 pt-4 px-4">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="bg-primary-subtle p-2 rounded-3">
+                            <i class="fa-solid fa-file-signature text-primary fs-5"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0">[[ fileNameModal.mode === 'rename' ? 'Rename File' : 'Name your File' ]]</h5>
+                            <p class="text-muted small mb-0">[[ fileNameModal.mode === 'import' ? 'You can rename it before saving' : 'Choose a filename and extension' ]]</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <label class="form-label fw-bold small text-muted text-uppercase mb-2">Filename</label>
+                    <div class="input-group shadow-sm rounded-3">
+                        <input type="text" class="form-control border-0 bg-light rounded-start-3"
+                               v-model="fileNameModal.basename"
+                               placeholder="e.g. runbook, notes, playbook…"
+                               @keyup.enter="confirmFileName"
+                               ref="fileNameInput"
+                               style="height:45px;">
+                        <select class="form-select border-0 bg-light rounded-end-3 fw-mono"
+                                v-model="fileNameModal.ext"
+                                style="max-width:110px;height:45px;">
+                            <option>.md</option>
+                            <option>.txt</option>
+                            <option>.yaml</option>
+                            <option>.yml</option>
+                            <option>.json</option>
+                            <option>.log</option>
+                            <option>.csv</option>
+                            <option>.sh</option>
+                            <option value="">no ext</option>
+                        </select>
+                    </div>
+                    <div class="mt-2 small text-muted font-monospace">
+                        <i class="fa-solid fa-file me-1"></i>
+                        <span v-if="fileNameModal.basename.trim()">[[ fileNameModal.basename.trim() ]][[ fileNameModal.ext ]]</span>
+                        <span v-else class="fst-italic">filename preview…</span>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 p-4 pt-0">
+                    <button class="btn btn-link text-decoration-none fw-bold text-muted px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary rounded-pill px-5 fw-bold shadow"
+                            @click="confirmFileName"
+                            :disabled="!fileNameModal.basename.trim()">
+                        <i class="fa-solid fa-circle-check me-2"></i>[[ fileNameModal.mode === 'rename' ? 'Rename' : 'Create' ]]
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── EDIT WORKSPACE MODAL ───────────────────────── -->
+    <div class="modal fade" id="wsEditModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
+                <div class="modal-header border-0 pb-0 pt-4 px-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center shadow-sm"
+                             :style="{ backgroundColor: wsEditForm.color, width:'52px', height:'52px', color:'white', transition:'all .3s' }">
+                            <i :class="['fa-solid', wsEditForm.icon || 'fa-folder']" style="font-size:1.4rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0">Edit Workspace</h5>
+                            <p class="text-muted small mb-0">Update this workspace's settings</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-bold small text-muted text-uppercase mb-1">Name <span class="text-danger">*</span></label>
+                            <div class="input-group shadow-sm rounded-3">
+                                <span class="input-group-text border-0 bg-light"><i class="fa-solid fa-signature text-muted"></i></span>
+                                <input type="text" class="form-control border-0 bg-light" v-model="wsEditForm.name" maxlength="100" style="height:45px;">
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold small text-muted text-uppercase mb-1">Description</label>
+                            <textarea class="form-control border-0 bg-light rounded-3 p-3 shadow-sm"
+                                      v-model="wsEditForm.description" rows="2" placeholder="Optional description…"></textarea>
+                        </div>
+                        <div class="col-md-7"><icon-picker v-model="wsEditForm.icon"></icon-picker></div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-bold small text-muted text-uppercase mb-1">Color</label>
+                            <div class="d-flex align-items-center bg-light rounded-3 p-1 shadow-sm">
+                                <input type="color" class="form-control form-control-color border-0 bg-transparent" v-model="wsEditForm.color" style="width:45px;height:35px;">
+                                <input type="text" class="form-control border-0 bg-transparent py-0 small text-muted font-monospace" v-model="wsEditForm.color">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 p-4 pt-0">
+                    <button class="btn btn-link text-decoration-none fw-bold text-muted px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary rounded-pill px-5 fw-bold shadow" @click="saveEditWorkspace" :disabled="!wsEditForm.name.trim()">
+                        <i class="fa-solid fa-circle-check me-2"></i>Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── QUICK EDIT RULE MODAL (Tags / CVE / ATT&CK) ───── -->
+    <div class="modal fade" id="quickEditModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
+                <div class="modal-header border-0 pb-0 pt-4 px-4">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0">
+                            <i class="fa-solid fa-tags me-2 text-primary"></i>
+                            <span v-if="quickEdit.ruleId">Quick Edit — [[ quickEdit.ruleTitle ]]</span>
+                            <span v-else>Bulk Tag — [[ quickEdit.bulkCount ]] rules selected</span>
+                        </h5>
+                        <p class="text-muted small mb-0 mt-1">Add or remove tags, CVEs, and ATT&amp;CK techniques</p>
+                    </div>
+                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <!-- Tags -->
+                    <div class="mb-4">
+                        <tag-input v-model="quickEdit.tags" label="Tags" :user-id="currentUserId"></tag-input>
+                    </div>
+                    <!-- CVEs -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold small text-muted text-uppercase mb-2">
+                            <i class="fa-solid fa-shield-virus text-danger me-1"></i>CVEs
+                        </label>
+                        <div class="d-flex flex-wrap gap-2 mb-2">
+                            <span v-for="cve in quickEdit.cves" :key="cve"
+                                  class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle px-3 py-2"
+                                  style="font-size:.78rem;cursor:pointer;"
+                                  @click="removeCve(cve)">
+                                [[ cve ]] <i class="fa-solid fa-xmark ms-1"></i>
+                            </span>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control rounded-start-3"
+                                   v-model="quickEdit.cveInput"
+                                   placeholder="CVE-2024-1234"
+                                   @keyup.enter="addCve">
+                            <button class="btn btn-outline-danger rounded-end-3" @click="addCve">Add</button>
+                        </div>
+                    </div>
+                    <!-- ATT&CK -->
+                    <div class="mb-2">
+                        <attack-input
+                            v-model="quickEdit.attacks"
+                            label="ATT&CK Techniques"
+                            :csrf-token="csrfToken">
+                        </attack-input>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 p-4 pt-0">
+                    <button class="btn btn-link text-decoration-none fw-bold text-muted px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary rounded-pill px-5 fw-bold shadow" @click="saveQuickEdit">
+                        <i class="fa-solid fa-floppy-disk me-2"></i>Apply
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── ADD RULES OFFCANVAS ─────────────────────────── -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="addRulesOffcanvas"
+         style="width:min(900px,92vw);background:var(--bg-color);">
+        <div class="offcanvas-header border-bottom py-3 px-4" style="background:var(--card-bg-color);border-color:var(--border-color) !important;">
+            <div class="d-flex align-items-center gap-3">
+                <div class="bg-primary-subtle p-2 rounded-3">
+                    <i class="fa-solid fa-plus text-primary fs-5"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold mb-0">Add Rules to Workspace</h5>
+                    <p class="text-muted mb-0" style="font-size:.82rem;">Select from your rules, then click Confirm</p>
+                </div>
+            </div>
+            <button type="button" class="btn-close shadow-none" data-bs-dismiss="offcanvas"></button>
+        </div>
+        <div class="offcanvas-body p-0" style="overflow-y:scroll;">
+            <rule-list
+                v-if="showAddRules"
+                mode="select"
+                :sync-url="false"
+                :user-id="currentUserId"
+                :current-user-id="currentUserId"
+                :current-user-is-admin="isAdmin"
+                :current-user-is-authenticated="true"
+                :csrf-token="csrfToken"
+                :hidden-columns="['editor', 'votes']"
+                default-view="table"
+                :initial-per-page="15"
+                @send="addRulesToWorkspace"
+            ></rule-list>
+        </div>
+    </div>
+
+</div><!-- end #ws-detail-app -->
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, computed, onMounted } = Vue
+    import RuleList     from '/static/js/rule/ruleList.js'
+    import SmartEditor  from '/static/js/components/smart-editor.js'
+    import IconPicker   from '/static/js/tags/utils/iconPicker.js'
+    import TagInput              from '/static/js/tags/tagInput.js'
+    import AttackInput           from '/static/js/attack/attackInput.js'
+    import TagDisplay            from '/static/js/tags/tagDisplay.js'
+    import UserChip              from '/static/js/components/UserChip.js'
+    import VulnerabilityInput    from '/static/js/vulnerability/vulnerabilityInput.js'
+    import VulnerabilityDisplay  from '/static/js/vulnerability/vulnerabilityDisplay.js'
+    import AttackDisplay         from '/static/js/attack/attackDisplay.js'
+    import { create_message } from '/static/js/toaster.js'
+
+    const wsUuid        = '{{ workspace.uuid }}'
+    const wsName        = '{{ workspace.name | e }}'
+    const wsColor       = '{{ workspace.color }}'
+    const wsIcon        = '{{ workspace.icon }}'
+    const wsDesc        = '{{ (workspace.description or "") | e }}'
+    const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }}
+    const isAdmin       = {{ current_user.is_admin() | tojson }}
+    const csrfToken     = '{{ csrf_token() }}'
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { RuleList, SmartEditor, IconPicker, TagInput, AttackInput, TagDisplay, UserChip, VulnerabilityInput, VulnerabilityDisplay, AttackDisplay },
+        setup() {
+            const wsColorRef = ref(wsColor)
+            const wsIconRef  = ref(wsIcon)
+            const wsDescRef  = ref(wsDesc)
+
+            // ── Tabs & filters ─────────────────────────────────────────────
+            const activeTab   = ref('rules')
+            const activeStatus = ref(null)
+            const ruleListRef  = ref(null)
+            const ruleListKey  = computed(() => `ws-${wsUuid}-${activeStatus.value || 'all'}`)
+            const fetchUrl     = computed(() => {
+                const p = new URLSearchParams({ workspace_uuid: wsUuid })
+                if (activeStatus.value) p.set('status', activeStatus.value)
+                return `/rule/data_table?${p}`
+            })
+
+            // ── Workspace metadata (tags / attacks / CVEs / URL) ───────────
+            const wsMeta    = ref({
+                url:  '{{ (workspace.url or "") | e }}',
+                cves: {{ workspace.cve_id | safe if workspace.cve_id else '[]' }},
+            })
+            const wsTags    = ref([])
+            const wsAttacks = ref([])
+            const tagsLoading    = ref(false)
+            const attacksLoading = ref(false)
+
+            async function loadWorkspaceMeta() {
+                tagsLoading.value = true
+                attacksLoading.value = true
+                try {
+                    const [tagsRes, attacksRes] = await Promise.all([
+                        fetch(`/workspace/${wsUuid}/tags`),
+                        fetch(`/workspace/${wsUuid}/attacks`),
+                    ])
+                    wsTags.value    = await tagsRes.json()
+                    wsAttacks.value = await attacksRes.json()
+                } catch {} finally {
+                    tagsLoading.value = false
+                    attacksLoading.value = false
+                }
+            }
+
+            // ── URL inline edit ────────────────────────────────────────────
+            const urlEditing = ref(false)
+            const urlDraft   = ref('')
+
+            function startUrlEdit() {
+                urlDraft.value = wsMeta.value.url || ''
+                urlEditing.value = true
+            }
+
+            async function saveUrl() {
+                const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                const url  = urlDraft.value.trim()
+                await fetch(`/workspace/${wsUuid}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                    body: JSON.stringify({ url }),
+                })
+                wsMeta.value.url = url
+                urlEditing.value = false
+            }
+
+            // Meta edit modal
+            const metaForm = ref({ vulns: [], tags: [], attacks: [] })
+            let _metaEditModal = null
+
+            function openMetaEdit() {
+                metaForm.value = {
+                    vulns:   [...(wsMeta.value.cves || [])],
+                    tags:    [...wsTags.value],
+                    attacks: [...wsAttacks.value],
+                }
+                _metaEditModal.show()
+            }
+
+            async function saveMetaEdit() {
+                const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                const form = metaForm.value
+
+                // Save cves via PATCH workspace
+                const cveStrings = form.vulns.map(v => typeof v === 'string' ? v : String(v))
+                await fetch(`/workspace/${wsUuid}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                    body: JSON.stringify({ cves: cveStrings }),
+                })
+                wsMeta.value.cves = [...cveStrings]
+
+                // Sync tags: add new, remove deleted
+                const oldTagIds = new Set(wsTags.value.map(t => t.id))
+                const newTagIds = new Set(form.tags.map(t => t.id))
+                await Promise.all([
+                    ...[...newTagIds].filter(id => !oldTagIds.has(id)).map(id =>
+                        fetch(`/workspace/${wsUuid}/tags`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                            body: JSON.stringify({ tag_id: id }),
+                        })
+                    ),
+                    ...[...oldTagIds].filter(id => !newTagIds.has(id)).map(id =>
+                        fetch(`/workspace/${wsUuid}/tags/${id}`, { method: 'DELETE', headers: { 'X-CSRFToken': csrf } })
+                    ),
+                ])
+                wsTags.value = [...form.tags]
+
+                // Sync attacks
+                const oldAtks = new Set(wsAttacks.value.map(a => a.technique_id))
+                const newAtks = new Set(form.attacks.map(a => a.technique_id))
+                await Promise.all([
+                    ...[...newAtks].filter(id => !oldAtks.has(id)).map(id =>
+                        fetch(`/workspace/${wsUuid}/attacks`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                            body: JSON.stringify({ technique_id: id }),
+                        })
+                    ),
+                    ...[...oldAtks].filter(id => !newAtks.has(id)).map(id =>
+                        fetch(`/workspace/${wsUuid}/attacks/${id}`, { method: 'DELETE', headers: { 'X-CSRFToken': csrf } })
+                    ),
+                ])
+                wsAttacks.value = [...form.attacks]
+
+                _metaEditModal.hide()
+                create_message('Metadata saved', 'success')
+            }
+
+            // ── KPIs ───────────────────────────────────────────────────────
+            const kpiCounts = ref({ total: 0, draft: 0, testing: 0, production: 0, deprecated: 0 })
+
+            async function loadKpis() {
+                try {
+                    const res = await fetch(`/workspace/${wsUuid}/kpis`)
+                    kpiCounts.value = await res.json()
+                } catch {}
+            }
+
+            function setStatus(status) {
+                activeStatus.value = activeStatus.value === status ? null : status
+            }
+
+            // ── Bulk actions ───────────────────────────────────────────────
+            const bulkActions = [
+                { key: 'status:draft',      label: 'Draft',      icon: 'fa-pencil' },
+                { key: 'status:testing',    label: 'Testing',    icon: 'fa-flask' },
+                { key: 'status:production', label: 'Production', icon: 'fa-circle-check' },
+                { key: 'status:deprecated', label: 'Deprecated', icon: 'fa-ban',          variant: 'danger' },
+                { key: 'workspace:tag',     label: 'Tags',       icon: 'fa-tags' },
+                { key: 'workspace:remove',  label: 'Remove',     icon: 'fa-folder-minus', variant: 'danger' },
+            ]
+
+            async function onBulkAction({ action, ids }) {
+                if (!Array.isArray(ids) || ids.length === 0) return
+                const csrf = document.getElementById('csrf_token')?.value || csrfToken
+
+                if (action.startsWith('status:')) {
+                    const status = action.split(':')[1]
+                    let ok = 0
+                    await Promise.all(ids.map(async id => {
+                        try {
+                            const r = await fetch(`/rule/${id}/status`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                                body: JSON.stringify({ status }),
+                            })
+                            if ((await r.json()).success) ok++
+                        } catch {}
+                    }))
+                    create_message(`${ok} rule${ok !== 1 ? 's' : ''} set to ${status}`, 'success')
+                    ruleListRef.value?.fetchData()
+                    loadKpis()
+
+                } else if (action === 'workspace:tag') {
+                    openQuickEditModal(null, ids)
+
+                } else if (action === 'workspace:remove') {
+                    try {
+                        const r = await fetch(`/workspace/${wsUuid}/rules/bulk`, {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                            body: JSON.stringify({ rule_ids: ids }),
+                        })
+                        const data = await r.json()
+                        if (data.success) {
+                            create_message(`${data.removed} rule${data.removed !== 1 ? 's' : ''} removed`, 'success')
+                            ruleListRef.value?.fetchData()
+                            loadKpis()
+                        }
+                    } catch { create_message('Failed to remove rules', 'danger') }
+                }
+            }
+
+            async function onStatusChange({ ruleId, status }) {
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    await fetch(`/rule/${ruleId}/status`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                        body: JSON.stringify({ status }),
+                    })
+                    loadKpis()
+                } catch {}
+            }
+
+            // ── Quick Edit (tags / CVE / ATT&CK) ──────────────────────────
+            const quickEdit = ref({
+                ruleId: null, ruleTitle: '', bulkIds: [],
+                bulkCount: 0, tags: [], cves: [], attacks: [], cveInput: '',
+            })
+            let _quickEditModal = null
+
+            function openQuickEditModal(rule, bulkIds = []) {
+                quickEdit.value = {
+                    ruleId:     rule ? rule.id : null,
+                    ruleTitle:  rule ? rule.title : '',
+                    bulkIds:    bulkIds,
+                    bulkCount:  bulkIds.length,
+                    tags:       rule ? (rule.tags || []) : [],
+                    cves:       rule ? (rule.cves || []) : [],
+                    attacks:    rule ? (rule.attacks || []) : [],
+                    cveInput:   '',
+                }
+                _quickEditModal.show()
+            }
+
+            function addCve() {
+                const v = quickEdit.value.cveInput.trim().toUpperCase()
+                if (v && !quickEdit.value.cves.includes(v)) quickEdit.value.cves.push(v)
+                quickEdit.value.cveInput = ''
+            }
+
+            function removeCve(cve) {
+                quickEdit.value.cves = quickEdit.value.cves.filter(c => c !== cve)
+            }
+
+            async function saveQuickEdit() {
+                const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                const ids = quickEdit.value.ruleId ? [quickEdit.value.ruleId] : quickEdit.value.bulkIds
+                if (!ids.length) { _quickEditModal.hide(); return }
+
+                let saved = 0
+                await Promise.all(ids.map(async ruleId => {
+                    try {
+                        // Save tags
+                        const tagIds = quickEdit.value.tags.map(t => t.id).filter(Boolean)
+                        // Save attacks
+                        const techniqueIds = (quickEdit.value.attacks || []).map(a => a.technique_id).filter(Boolean)
+                        // Save CVEs
+                        const cveJson = JSON.stringify(quickEdit.value.cves)
+
+                        // Use the rule edit endpoint for metadata patch
+                        const r = await fetch(`/rule/${ruleId}/quick_meta`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                            body: JSON.stringify({ tag_ids: tagIds, technique_ids: techniqueIds, cve_ids: quickEdit.value.cves }),
+                        })
+                        if (r.ok) saved++
+                    } catch {}
+                }))
+
+                if (saved > 0) {
+                    create_message(`Metadata applied to ${saved} rule${saved !== 1 ? 's' : ''}`, 'success')
+                    ruleListRef.value?.fetchData()
+                }
+                _quickEditModal.hide()
+            }
+
+            // ── Add Rules offcanvas ────────────────────────────────────────
+            const showAddRules = ref(false)
+            let _addRulesOffcanvas = null
+
+            function openAddRules() {
+                showAddRules.value = true
+                _addRulesOffcanvas.show()
+            }
+
+            async function addRulesToWorkspace(ids) {
+                if (!ids || ids.length === 0) return
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}/rules`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                        body: JSON.stringify({ rule_ids: ids }),
+                    })
+                    const data = await r.json()
+                    if (data.success) {
+                        create_message(`${data.added} rule${data.added !== 1 ? 's' : ''} added`, 'success')
+                        _addRulesOffcanvas.hide()
+                        ruleListRef.value?.fetchData()
+                        loadKpis()
+                    }
+                } catch { create_message('Failed to add rules', 'danger') }
+            }
+
+            // ── Edit workspace modal ───────────────────────────────────────
+            const wsEditForm = ref({ name: wsName, description: wsDesc, icon: wsIcon, color: wsColor })
+            let _editModal = null
+
+            function openEditModal() {
+                wsEditForm.value = { name: wsName, description: wsDescRef.value, icon: wsIconRef.value, color: wsColorRef.value }
+                _editModal.show()
+            }
+
+            async function saveEditWorkspace() {
+                if (!wsEditForm.value.name.trim()) return
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                        body: JSON.stringify(wsEditForm.value),
+                    })
+                    const data = await r.json()
+                    if (data.success) {
+                        wsColorRef.value = data.workspace.color
+                        wsIconRef.value  = data.workspace.icon
+                        wsDescRef.value  = data.workspace.description || ''
+                        _editModal.hide()
+                        create_message('Workspace updated', 'success')
+                        document.title = `${data.workspace.name} — Rulezet`
+                    }
+                } catch { create_message('Failed to update workspace', 'danger') }
+            }
+
+            async function deleteWorkspace() {
+                if (!confirm(`Delete workspace "${wsName}"?\n\nRules will not be deleted.`)) return
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}`, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRFToken': csrf },
+                    })
+                    if ((await r.json()).success) {
+                        create_message('Workspace deleted', 'success')
+                        window.location.href = '/workspace/my_rules'
+                    }
+                } catch { create_message('Failed to delete workspace', 'danger') }
+            }
+
+            // ── Documents ─────────────────────────────────────────────────
+            const documents    = ref([])
+            const docsLoading  = ref(false)
+            const editingDoc   = ref(null)
+            const fileNameInput = ref(null)
+            let _docsLoaded    = false
+
+            async function loadDocuments() {
+                if (_docsLoaded) return
+                docsLoading.value = true
+                try {
+                    const r = await fetch(`/workspace/${wsUuid}/documents`)
+                    documents.value = await r.json()
+                    _docsLoaded = true
+                } catch {} finally { docsLoading.value = false }
+            }
+
+            // File name modal state
+            const fileNameModal = ref({
+                mode: 'new',       // 'new' | 'import' | 'rename'
+                basename: '',
+                ext: '.md',
+                pendingContent: '', // used in 'import' mode
+                doc: null,          // used in 'rename' mode
+            })
+            let _fileNameModal = null
+
+            function _splitFilename(name) {
+                const known = ['.yaml', '.yml', '.json', '.log', '.csv', '.sh', '.md', '.txt', '.markdown']
+                for (const ext of known) {
+                    if (name.toLowerCase().endsWith(ext)) {
+                        return { basename: name.slice(0, -ext.length), ext }
+                    }
+                }
+                const dot = name.lastIndexOf('.')
+                if (dot > 0) return { basename: name.slice(0, dot), ext: name.slice(dot) }
+                return { basename: name, ext: '.md' }
+            }
+
+            function createDocument() {
+                fileNameModal.value = { mode: 'new', basename: '', ext: '.md', pendingContent: '', doc: null }
+                _fileNameModal.show()
+                Vue.nextTick(() => fileNameInput.value?.focus())
+            }
+
+            function importFile(event) {
+                const file = event.target.files[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = (e) => {
+                    const { basename, ext } = _splitFilename(file.name)
+                    fileNameModal.value = { mode: 'import', basename, ext, pendingContent: e.target.result, doc: null }
+                    _fileNameModal.show()
+                    Vue.nextTick(() => fileNameInput.value?.focus())
+                    event.target.value = ''
+                }
+                reader.readAsText(file)
+            }
+
+            function openRenameModal(doc) {
+                const { basename, ext } = _splitFilename(doc.title)
+                fileNameModal.value = { mode: 'rename', basename, ext, pendingContent: '', doc }
+                _fileNameModal.show()
+                Vue.nextTick(() => fileNameInput.value?.focus())
+            }
+
+            async function confirmFileName() {
+                const { mode, basename, ext, pendingContent, doc } = fileNameModal.value
+                const title = basename.trim() + ext
+                if (!title.trim()) return
+                const csrf = document.getElementById('csrf_token')?.value || csrfToken
+
+                if (mode === 'rename') {
+                    try {
+                        const r = await fetch(`/workspace/${wsUuid}/documents/${doc.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                            body: JSON.stringify({ title }),
+                        })
+                        const data = await r.json()
+                        if (data.success) {
+                            const idx = documents.value.findIndex(d => d.id === data.document.id)
+                            if (idx !== -1) documents.value[idx] = data.document
+                            if (editingDoc.value?.id === data.document.id) editingDoc.value = { ...data.document }
+                            _fileNameModal.hide()
+                            create_message('File renamed', 'success')
+                        }
+                    } catch { create_message('Failed to rename file', 'danger') }
+                } else {
+                    try {
+                        const r = await fetch(`/workspace/${wsUuid}/documents`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                            body: JSON.stringify({ title, content: pendingContent }),
+                        })
+                        const data = await r.json()
+                        if (data.success) {
+                            documents.value.unshift(data.document)
+                            _fileNameModal.hide()
+                            openDocument(data.document)
+                        }
+                    } catch { create_message('Failed to create file', 'danger') }
+                }
+            }
+
+            const saveStatus = Vue.computed(() => {
+                if (_saving) return { label: 'Saving…', icon: 'fa-solid fa-circle-notch fa-spin', cls: 'wd-save-status--saving' }
+                if (!_lastSavedAt.value) return { label: '', icon: '', cls: '' }
+                const t = _lastSavedAt.value
+                const h = String(t.getHours()).padStart(2, '0')
+                const m = String(t.getMinutes()).padStart(2, '0')
+                return { label: `Last saved ${h}:${m}`, icon: 'fa-solid fa-circle-check', cls: 'wd-save-status--ok' }
+            })
+
+            let _saving = false
+            const _lastSavedAt = ref(null)
+            let _autoSaveTimer = null
+
+            function scheduleSave() {
+                clearTimeout(_autoSaveTimer)
+                _autoSaveTimer = setTimeout(() => saveDocument(), 1500)
+            }
+
+            function openDocument(doc) {
+                editingDoc.value = { ...doc }
+                _lastSavedAt.value = null
+                clearTimeout(_autoSaveTimer)
+            }
+
+            async function saveDocument() {
+                if (!editingDoc.value) return
+                clearTimeout(_autoSaveTimer)
+                _saving = true
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}/documents/${editingDoc.value.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                        body: JSON.stringify({ title: editingDoc.value.title, content: editingDoc.value.content }),
+                    })
+                    const data = await r.json()
+                    if (data.success) {
+                        const idx = documents.value.findIndex(d => d.id === data.document.id)
+                        if (idx !== -1) documents.value[idx] = data.document
+                        editingDoc.value = { ...data.document }
+                        _lastSavedAt.value = new Date()
+                    }
+                } catch { create_message('Failed to save document', 'danger') }
+                finally { _saving = false }
+            }
+
+            function closeDocument() {
+                clearTimeout(_autoSaveTimer)
+                editingDoc.value = null
+                _lastSavedAt.value = null
+            }
+
+            async function deleteDocument(doc) {
+                if (!confirm(`Delete "${doc.title}"?`)) return
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}/documents/${doc.id}`, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRFToken': csrf },
+                    })
+                    if ((await r.json()).success) {
+                        documents.value = documents.value.filter(d => d.id !== doc.id)
+                        if (editingDoc.value?.id === doc.id) editingDoc.value = null
+                        create_message('Document deleted', 'success')
+                    }
+                } catch { create_message('Failed to delete document', 'danger') }
+            }
+
+            // ── Links ─────────────────────────────────────────────────────
+            const links       = ref([])
+            const linksLoading = ref(false)
+            const newLink     = ref({ title: '', url: '', description: '' })
+            let _linksLoaded  = false
+
+            async function loadLinks() {
+                if (_linksLoaded) return
+                linksLoading.value = true
+                try {
+                    const r = await fetch(`/workspace/${wsUuid}/links`)
+                    links.value = await r.json()
+                    _linksLoaded = true
+                } catch {} finally { linksLoading.value = false }
+            }
+
+            async function addLink() {
+                if (!newLink.value.title.trim() || !newLink.value.url.trim()) return
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}/links`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                        body: JSON.stringify(newLink.value),
+                    })
+                    const data = await r.json()
+                    if (data.success) {
+                        links.value.unshift(data.link)
+                        newLink.value = { title: '', url: '', description: '' }
+                        create_message('Link added', 'success')
+                    } else {
+                        create_message(data.message || 'Failed to add link', 'danger')
+                    }
+                } catch { create_message('Failed to add link', 'danger') }
+            }
+
+            async function deleteLink(link) {
+                if (!confirm(`Delete link "${link.title}"?`)) return
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}/links/${link.id}`, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRFToken': csrf },
+                    })
+                    if ((await r.json()).success) {
+                        links.value = links.value.filter(l => l.id !== link.id)
+                        create_message('Link deleted', 'success')
+                    }
+                } catch { create_message('Failed to delete link', 'danger') }
+            }
+
+            // ── Helpers ───────────────────────────────────────────────────
+            function statusBadgeStyle(status) {
+                const map = {
+                    draft:      { background: 'rgba(108,117,125,.15)', color: '#6c757d' },
+                    testing:    { background: 'rgba(217,119,6,.15)',   color: '#d97706' },
+                    production: { background: 'rgba(25,135,84,.15)',   color: '#198754' },
+                    deprecated: { background: 'rgba(220,53,69,.15)',   color: '#dc3545' },
+                }
+                return map[status] || {}
+            }
+
+            onMounted(() => {
+                _editModal          = new bootstrap.Modal(document.getElementById('wsEditModal'))
+                _quickEditModal     = new bootstrap.Modal(document.getElementById('quickEditModal'))
+                _fileNameModal      = new bootstrap.Modal(document.getElementById('fileNameModal'))
+                _metaEditModal      = new bootstrap.Modal(document.getElementById('metaEditModal'))
+                const addRulesEl    = document.getElementById('addRulesOffcanvas')
+                _addRulesOffcanvas  = new bootstrap.Offcanvas(addRulesEl)
+                addRulesEl.addEventListener('hidden.bs.offcanvas', () => { showAddRules.value = false })
+                loadKpis()
+                loadWorkspaceMeta()
+                loadDocuments()
+                loadLinks()
+            })
+
+            return {
+                wsColor: wsColorRef, wsIcon: wsIconRef, wsDesc: wsDescRef,
+                wsMeta, wsTags, wsAttacks, tagsLoading, attacksLoading,
+                urlEditing, urlDraft, startUrlEdit, saveUrl,
+                metaForm, openMetaEdit, saveMetaEdit,
+                activeTab, activeStatus, ruleListKey, fetchUrl, ruleListRef,
+                kpiCounts, setStatus,
+                bulkActions, onBulkAction, onStatusChange,
+                quickEdit, openQuickEditModal, addCve, removeCve, saveQuickEdit,
+                showAddRules, openAddRules, addRulesToWorkspace,
+                wsEditForm, openEditModal, saveEditWorkspace, deleteWorkspace,
+                documents, docsLoading, editingDoc, fileNameModal, fileNameInput,
+                saveStatus, scheduleSave,
+                loadDocuments, createDocument, importFile, openRenameModal, confirmFileName,
+                openDocument, saveDocument, closeDocument, deleteDocument,
+                links, linksLoading, newLink,
+                loadLinks, addLink, deleteLink,
+                statusBadgeStyle,
+                currentUserId, isAdmin, csrfToken,
+            }
+        }
+    }).mount('#ws-detail-app')
+</script>
+{% endblock %}

@@ -102,9 +102,11 @@ export default {
         syncUrl:            { type: Boolean,          default: true },
         confirmDisabled:    { type: Boolean,          default: false },
         hiddenColumns:      { type: Array,            default: () => [] },
+        draggable:          { type: Boolean,          default: false },
+        showStatus:         { type: Boolean,          default: false },
     },
 
-    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send'],
+    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'rule-drag-start', 'rule-drag-end', 'status-change'],
 
     expose: ['fetchData'],
 
@@ -651,6 +653,7 @@ export default {
             <table class="dt-table" role="grid">
                 <thead class="dt-thead">
                     <tr>
+                        <th v-if="draggable" class="dt-th dt-th--drag"></th>
                         <th v-if="isSelectable" class="dt-th dt-th--checkbox">
                             <input type="checkbox" class="dt-checkbox"
                                    :checked="allOnPageSelected"
@@ -658,6 +661,7 @@ export default {
                                    @change="togglePageSelection"
                                    aria-label="Select all on page" />
                         </th>
+                        <th v-if="showStatus" class="dt-th" style="width:110px;">Status</th>
                         <th class="dt-th dt-th--sortable" style="width:180px;"
                             :class="{ 'dt-th--sorted': sortKey === 'title' }"
                             @click="setSort('title')">
@@ -707,13 +711,31 @@ export default {
                                 'dt-row--selected':  isSelected(rule),
                                 'dt-row--expanded':  expandedIds.has(rule.id),
                                 'dt-row--favorited': rule.is_favorited,
-                            }">
+                            }"
+                            :draggable="draggable"
+                            @dragstart="draggable && $emit('rule-drag-start', rule)"
+                            @dragend="draggable && $emit('rule-drag-end', rule)">
 
+                            <td v-if="draggable" class="dt-td dt-td--drag">
+                                <span class="drag-handle" title="Drag to workspace">
+                                    <i class="fas fa-grip-vertical"></i>
+                                </span>
+                            </td>
                             <td v-if="isSelectable" class="dt-td dt-td--checkbox">
                                 <input type="checkbox" class="dt-checkbox"
                                        :checked="isSelected(rule)"
                                        @change="toggleItem(rule)"
                                        :aria-label="'Select ' + rule.title" />
+                            </td>
+
+                            <td v-if="showStatus" class="dt-td" @click.stop>
+                                <button class="rl-status-badge"
+                                        :class="'rl-status--' + (rule.status || 'draft')"
+                                        :title="canChangeStatus(rule) ? 'Click to cycle status' : statusLabel(rule.status || \'draft\')"
+                                        @click="canChangeStatus(rule) && cycleStatus(rule)">
+                                    <i :class="statusIcon(rule.status || 'draft')"></i>
+                                    {{ statusLabel(rule.status || 'draft') }}
+                                </button>
                             </td>
 
                             <td class="dt-td" style="max-width:200px;word-break:break-word;">
@@ -1494,9 +1516,38 @@ export default {
         const tableColspan = computed(() => {
             let n = 2 // title + actions always visible
             if (isSelectable.value) n++
+            if (props.draggable) n++
+            if (props.showStatus) n++
             for (const col of TOGGLEABLE_COLS) if (colVisible[col.key]) n++
             return n
         })
+
+        // ── Status helpers ────────────────────────────────────────────────
+        const STATUS_ORDER  = ['draft', 'testing', 'production', 'deprecated']
+        const STATUS_ICONS  = { draft: 'fa-solid fa-pencil', testing: 'fa-solid fa-flask', production: 'fa-solid fa-circle-check', deprecated: 'fa-solid fa-ban' }
+        const STATUS_LABELS = { draft: 'Draft', testing: 'Testing', production: 'Production', deprecated: 'Deprecated' }
+
+        function statusIcon(s)  { return STATUS_ICONS[s]  || STATUS_ICONS.draft }
+        function statusLabel(s) { return STATUS_LABELS[s] || 'Draft' }
+
+        function canChangeStatus(rule) {
+            return numericCurrentUserId.value !== null &&
+                   (numericCurrentUserId.value === rule.user_id || props.currentUserIsAdmin)
+        }
+
+        async function cycleStatus(rule) {
+            const cur  = rule.status || 'draft'
+            const next = STATUS_ORDER[(STATUS_ORDER.indexOf(cur) + 1) % STATUS_ORDER.length]
+            try {
+                const res  = await fetch(`/rule/${rule.id}/status`, {
+                    method:  'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+                    body:    JSON.stringify({ status: next }),
+                })
+                const data = await res.json()
+                if (data.success) { rule.status = next; emit('status-change', { ruleId: rule.id, status: next }) }
+            } catch { /* ignore */ }
+        }
 
         // ── Footer info ───────────────────────────────────────────────────
         const footerInfo = computed(() => {
@@ -1644,6 +1695,8 @@ export default {
             handleVote, handleFavorite,
             emitBulkAction, emitSend,
             fromNow, formatDate, ruleLanguage, highlight,
+            // Status
+            statusIcon, statusLabel, canChangeStatus, cycleStatus,
             // Export
             hasActiveFilters, exportRuleIds, showExportBar, exportTotalRules,
             exportActionView,

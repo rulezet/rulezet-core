@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}My Rules — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/workspace/my_rules.css') }}">
+{% endblock %}
+
+{% block content %}
+<div id="ws-app" v-cloak>
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-layer-group banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">My Rules</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-layer-group"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">My Rules</h2>
+                <div class="banner-accent"></div>
+            </div>
+            {% if current_user.is_admin() %}
+            <div class="ms-auto">
+                <div class="scope-toggle">
+                    <button class="scope-toggle__btn" :class="{ 'scope-toggle__btn--active': !showAll }" @click="showAll = false">
+                        <i class="fa-solid fa-user me-1"></i>My Workspaces
+                    </button>
+                    <button class="scope-toggle__btn" :class="{ 'scope-toggle__btn--active': showAll }" @click="showAll = true">
+                        <i class="fa-solid fa-users me-1"></i>All Users
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+            Organise your detection rules into workspaces and track their deployment status.
+        </p>
+    </div>
+
+    <!-- Workspaces header row -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <span class="fw-semibold text-muted" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;">
+            <i class="fa-solid fa-folder-open me-2"></i>[[ workspaces.length ]] workspace[[ workspaces.length !== 1 ? 's' : '' ]]
+        </span>
+        <button class="btn btn-primary rounded-pill px-4 shadow-sm" @click="openCreateModal">
+            <i class="fa-solid fa-plus me-1"></i>New Workspace
+        </button>
+    </div>
+
+    <!-- Workspace gallery grid -->
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+
+        <!-- Workspace cards -->
+        <div v-for="ws in workspaces" :key="ws.uuid" class="col">
+            <div class="ws-gallery-card card-security-premium" @click="goToWorkspace(ws)">
+                <div class="wsgc-accent" :style="{ background: ws.color }"></div>
+                <div class="ws-gallery-card__body">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="wsgc-icon" :style="{ background: ws.color }">
+                            <i :class="'fa-solid ' + ws.icon"></i>
+                        </div>
+                        <div style="min-width:0;">
+                            <h6 class="wsgc-name mb-0">[[ ws.name ]]</h6>
+                            <span class="wsgc-count mt-1 d-inline-flex">
+                                <i class="fa-solid fa-shield-halved"></i>[[ ws.rule_count ]] rule[[ ws.rule_count !== 1 ? 's' : '' ]]
+                            </span>
+                        </div>
+                    </div>
+                    <p v-if="ws.description" class="wsgc-desc">[[ ws.description ]]</p>
+                    <p v-else class="wsgc-desc fst-italic">No description.</p>
+                </div>
+                <!-- Delete button -->
+                <button class="ws-gallery-card__del" @click.stop="deleteWorkspace(ws)" title="Delete workspace">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- New workspace empty-state card (always shown at the end) -->
+        <div class="col">
+            <div class="ws-new-card" @click="openCreateModal">
+                <i class="fa-solid fa-folder-plus ws-new-card__icon"></i>
+                <span class="ws-new-card__label">New Workspace</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Empty state when no workspaces exist -->
+    <div v-if="workspaces.length === 0" class="text-center py-5 text-muted">
+        <i class="fa-solid fa-folder-open" style="font-size:3rem;opacity:.25;display:block;margin-bottom:.75rem;"></i>
+        <p class="mb-2" style="font-size:.95rem;">You have no workspaces yet.</p>
+        <p class="small">Create one above to start organising your detection rules.</p>
+    </div>
+
+    <!-- New Workspace Modal -->
+    <div class="modal fade" id="wsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-sm"
+                         :style="{ backgroundColor: wsForm.color, width: '52px', height: '52px', color: 'white', transition: 'all 0.3s ease' }">
+                        <i :class="['fa-solid', wsForm.icon || 'fa-folder']" style="font-size:1.4rem;"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0">New Workspace</h5>
+                        <p class="text-muted small mb-0">Organise your rules by category or project</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-bold small text-muted text-uppercase mb-1">Name <span class="text-danger">*</span></label>
+                        <div class="input-group shadow-sm rounded-3">
+                            <span class="input-group-text border-0 bg-light">
+                                <i class="fa-solid fa-signature text-muted"></i>
+                            </span>
+                            <input type="text" class="form-control border-0 bg-light"
+                                   v-model="wsForm.name" placeholder="e.g. Ransomware Detection"
+                                   maxlength="100" style="height:45px;">
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold small text-muted text-uppercase mb-1">Description</label>
+                        <textarea class="form-control border-0 bg-light rounded-3 p-3 shadow-sm"
+                                  v-model="wsForm.description" rows="2"
+                                  placeholder="Optional description…"></textarea>
+                    </div>
+                    <div class="col-md-7">
+                        <icon-picker v-model="wsForm.icon"></icon-picker>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label fw-bold small text-muted text-uppercase mb-1">Color</label>
+                        <div class="d-flex align-items-center bg-light rounded-3 p-1 shadow-sm">
+                            <input type="color" class="form-control form-control-color border-0 bg-transparent"
+                                   v-model="wsForm.color" style="width:45px;height:35px;">
+                            <input type="text" class="form-control border-0 bg-transparent py-0 small text-muted font-monospace"
+                                   v-model="wsForm.color">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 p-4 pt-0">
+                <button class="btn btn-link text-decoration-none fw-bold text-muted px-4"
+                        data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary rounded-pill px-5 fw-bold shadow"
+                        @click="saveWorkspace" :disabled="!wsForm.name.trim()">
+                    <i class="fa-solid fa-circle-check me-2"></i>Create
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div><!-- end #ws-app -->
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, onMounted } = Vue
+    import IconPicker from '/static/js/tags/utils/iconPicker.js'
+    import { create_message } from '/static/js/toaster.js'
+
+    const csrfToken = '{{ csrf_token() }}'
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { IconPicker },
+        setup() {
+            const workspaces = ref([])
+            const showAll    = ref(false)
+            const wsForm     = ref({ name: '', description: '', icon: 'fa-folder', color: '#0d6efd' })
+            let _modal = null
+
+            async function loadWorkspaces() {
+                try {
+                    const res = await fetch('/workspace/list')
+                    workspaces.value = await res.json()
+                } catch {
+                    create_message('Failed to load workspaces', 'danger')
+                }
+            }
+
+            function goToWorkspace(ws) {
+                window.location.href = `/workspace/${ws.uuid}/detail`
+            }
+
+            function openCreateModal() {
+                wsForm.value = { name: '', description: '', icon: 'fa-folder', color: '#0d6efd' }
+                _modal.show()
+            }
+
+            async function saveWorkspace() {
+                const name = wsForm.value.name.trim()
+                if (!name) return
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const res = await fetch('/workspace/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                        body: JSON.stringify(wsForm.value),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        workspaces.value.push(data.workspace)
+                        _modal.hide()
+                        create_message(`Workspace "${name}" created`, 'success')
+                    }
+                } catch {
+                    create_message('Failed to create workspace', 'danger')
+                }
+            }
+
+            async function deleteWorkspace(ws) {
+                if (!confirm(`Delete workspace "${ws.name}"?\n\nRules will not be deleted.`)) return
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const res = await fetch(`/workspace/${ws.uuid}`, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRFToken': csrf },
+                    })
+                    if ((await res.json()).success) {
+                        workspaces.value = workspaces.value.filter(w => w.uuid !== ws.uuid)
+                        create_message('Workspace deleted', 'success')
+                    }
+                } catch {
+                    create_message('Failed to delete workspace', 'danger')
+                }
+            }
+
+            onMounted(async () => {
+                _modal = new bootstrap.Modal(document.getElementById('wsModal'))
+                await loadWorkspaces()
+            })
+
+            return {
+                workspaces, showAll, wsForm,
+                goToWorkspace, openCreateModal, saveWorkspace, deleteWorkspace,
+            }
+        }
+    }).mount('#ws-app')
+</script>
+{% endblock %}

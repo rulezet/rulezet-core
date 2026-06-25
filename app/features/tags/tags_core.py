@@ -289,8 +289,10 @@ def get_tags_bundle(args):
             query = query.filter_by(is_active=True)
         elif args.get('user_id'):
             if current_user.id == int(args.get('user_id')):
-                query = query.filter_by(is_active=True, visibility='public')
-                query = query.union(db.session.query(Tag).filter_by(created_by=current_user.id))
+                from sqlalchemy import or_
+                query = query.filter_by(is_active=True).filter(
+                    or_(Tag.visibility == 'public', Tag.created_by == current_user.id)
+                )
             else:
                 query = query.filter_by(is_active=True, visibility='public')
         else:
@@ -348,8 +350,18 @@ def get_all_tags(args):
             query = query.filter_by(is_active=True)
         elif args.get('user_id'):
             if current_user.id == int(args.get('user_id')):
-                query = query.filter_by(is_active=True, visibility='public')
-                query = query.union(db.session.query(Tag).filter_by(created_by=current_user.id))
+                # UNION ALL avoids equality check on json column; dedup by id in Python
+                public_q  = Tag.query.filter_by(is_active=True, visibility='public')
+                private_q = Tag.query.filter_by(created_by=current_user.id)
+                search = args.get('search')
+                if search:
+                    public_q  = public_q.filter(Tag.name.ilike(f'%{search}%'))
+                    private_q = private_q.filter(Tag.name.ilike(f'%{search}%'))
+                seen = {}
+                for t in public_q.all() + private_q.all():
+                    seen.setdefault(t.id, t)
+                tags = sorted(seen.values(), key=lambda t: t.created_at, reverse=True)
+                return _inject_usage_counts(tags)
             else:
                 query = query.filter_by(is_active=True, visibility='public')
         else:

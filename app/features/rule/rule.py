@@ -3235,6 +3235,8 @@ def rules_data_table():
         editor_names=_csv_arg('editors'),
         bundle_id=request.args.get('bundle_id', None, type=int),
         attacks=_csv_arg('attacks'),
+        status=request.args.get('status', None, type=str),
+        workspace_uuid=request.args.get('workspace_uuid', None, type=str),
     )
 
     rule_ids = [r.id for r in pagination.items]
@@ -3275,6 +3277,76 @@ def rules_data_table():
         "total":       pagination.total,
         "total_pages": pagination.pages,
     }), 200
+
+
+@rule_blueprint.route("/<int:rule_id>/status", methods=['PATCH'])
+@login_required
+def update_rule_status(rule_id):
+    from app.core.db_class.db import Rule
+    rule = RuleModel._active().filter(Rule.id == rule_id).first()
+    if not rule:
+        return jsonify({'success': False, 'message': 'Rule not found'}), 404
+    if rule.user_id != current_user.id and not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    data = request.get_json(force=True)
+    status = data.get('status')
+    if status not in ('draft', 'testing', 'production', 'deprecated'):
+        return jsonify({'success': False, 'message': 'Invalid status'}), 400
+    rule.status = status
+    db.session.commit()
+    log_activity('rule.status_change', f"Status changed to {status}", target_type='rule', target_id=rule.id, extra={'status': status})
+    return jsonify({'success': True, 'status': status})
+
+
+@rule_blueprint.route("/<int:rule_id>/quick_meta", methods=['PATCH'])
+@login_required
+def quick_meta(rule_id):
+    """Patch tags, CVEs, and ATT&CK techniques on a rule from workspace quick-edit."""
+    from app.core.db_class.db import Rule, RuleTagAssociation, Tag
+    rule = RuleModel._active().filter(Rule.id == rule_id).first()
+    if not rule:
+        return jsonify({'success': False}), 404
+    # Allow edit if owner, admin, or the rule is in one of the user's workspaces
+    if rule.user_id != current_user.id and not current_user.is_admin():
+        from app.core.db_class.db import WorkspaceRule, Workspace
+        in_own_ws = (db.session.query(WorkspaceRule)
+                     .join(Workspace, WorkspaceRule.workspace_id == Workspace.id)
+                     .filter(WorkspaceRule.rule_id == rule_id, Workspace.user_id == current_user.id)
+                     .first())
+        if not in_own_ws:
+            return jsonify({'success': False}), 403
+
+    data = request.get_json(force=True)
+
+    # Tags
+    if 'tag_ids' in data:
+        import uuid as _uuid
+        tag_ids = [int(t) for t in data['tag_ids'] if str(t).isdigit()]
+        current_tag_ids = {a.tag_id for a in RuleTagAssociation.query.filter_by(rule_id=rule.id).all()}
+        for tid in tag_ids:
+            if tid not in current_tag_ids:
+                tag = Tag.query.get(tid)
+                if tag:
+                    db.session.add(RuleTagAssociation(
+                        uuid=str(_uuid.uuid4()),
+                        rule_id=rule.id, tag_id=tid, user_id=current_user.id))
+
+    # CVEs
+    if 'cve_ids' in data:
+        import json as _json
+        rule.cve_id = _json.dumps(data['cve_ids']) if data['cve_ids'] else None
+
+    # ATT&CK techniques
+    if 'technique_ids' in data:
+        from app.features.attack.attack_core import add_technique_to_rule
+        for technique_id in data['technique_ids']:
+            try:
+                add_technique_to_rule(rule.id, technique_id, current_user.id, 'manual')
+            except Exception:
+                pass
+
+    db.session.commit()
+    return jsonify({'success': True})
 
 
 @rule_blueprint.route("/data_table_favorites", methods=['GET'])

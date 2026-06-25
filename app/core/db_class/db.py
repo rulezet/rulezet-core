@@ -161,6 +161,9 @@ class Rule(db.Model):
     remote_rule_uuid   = db.Column(db.String(36), nullable=True, index=True)  # UUID on the remote instance
     sync_instance_url  = db.Column(db.String(255), nullable=True)             # Instance URL the rule was pulled from (persisted even if connector deleted)
 
+    # Rule lifecycle status (personal management)
+    status = db.Column(db.String(20), nullable=False, default='draft', index=True)
+
     #edit
     def get_rule_user_first_name_by_id(self):
         user = User.query.get(self.user_id)  
@@ -198,9 +201,9 @@ class Rule(db.Model):
             "cve_id": self.cve_id if self.cve_id is not None else [],
             "editor": self.get_rule_user_first_name_by_id(),
             "github_path": self.github_path if self.github_path else None,
-            "editor": self.get_rule_user_first_name_by_id(),
             "editor_avatar": submitter_avatar,
             "sync_instance_url": self.sync_instance_url,
+            "status": self.status or 'draft',
         }
 
     def get_extension(self):
@@ -2544,3 +2547,134 @@ class FieldParserConfig(db.Model):
             'user_id':    self.user_id,
         }
 
+
+
+########################################
+#   Workspace                          #
+########################################
+
+class WorkspaceTagAssociation(db.Model):
+    __tablename__ = 'workspace_tag_association'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    tag_id       = db.Column(db.Integer, db.ForeignKey('tag.id', ondelete='CASCADE'), nullable=False)
+    user_id      = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    tag          = db.relationship('Tag', foreign_keys=[tag_id], lazy='joined')
+    __table_args__ = (db.UniqueConstraint('workspace_id', 'tag_id'),)
+
+
+class WorkspaceAttackAssociation(db.Model):
+    __tablename__ = 'workspace_attack_association'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    technique_id = db.Column(db.String(20), db.ForeignKey('attack_technique.technique_id', ondelete='CASCADE'), nullable=False)
+    technique    = db.relationship('AttackTechnique', foreign_keys=[technique_id], lazy='joined')
+    __table_args__ = (db.UniqueConstraint('workspace_id', 'technique_id'),)
+
+
+class Workspace(db.Model):
+    """Personal rule workspace — grouping owned rules by context."""
+    __tablename__ = 'workspace'
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    name        = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    icon        = db.Column(db.String(50), nullable=False, default='fa-folder')
+    color       = db.Column(db.String(20), nullable=False, default='#0d6efd')
+    url         = db.Column(db.Text, nullable=True)
+    cve_id      = db.Column(db.Text, nullable=True)
+    other       = db.Column(db.Text, nullable=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at  = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    updated_at  = db.Column(db.DateTime,
+                             default=lambda: datetime.datetime.now(tz=datetime.timezone.utc),
+                             onupdate=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    owner       = db.relationship('User', backref=db.backref('workspaces', lazy='dynamic'))
+    rules_assoc = db.relationship('WorkspaceRule', backref='workspace', lazy='dynamic',
+                                   cascade='all, delete-orphan')
+    tag_assocs  = db.relationship('WorkspaceTagAssociation', backref='workspace',
+                                   cascade='all, delete-orphan', foreign_keys='WorkspaceTagAssociation.workspace_id')
+    attack_assocs = db.relationship('WorkspaceAttackAssociation', backref='workspace',
+                                     cascade='all, delete-orphan', foreign_keys='WorkspaceAttackAssociation.workspace_id')
+
+    def rule_count(self):
+        return self.rules_assoc.count()
+
+    def to_json(self):
+        import json as _json
+        return {
+            'id':          self.id,
+            'uuid':        self.uuid,
+            'name':        self.name,
+            'description': self.description,
+            'icon':        self.icon,
+            'color':       self.color,
+            'url':         self.url,
+            'cves':        _json.loads(self.cve_id) if self.cve_id else [],
+            'user_id':     self.user_id,
+            'owner_name':  self.owner.username if self.owner else None,
+            'rule_count':  self.rule_count(),
+            'created_at':  self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
+            'updated_at':  self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
+        }
+
+
+class WorkspaceRule(db.Model):
+    """Association table between Workspace and Rule."""
+    __tablename__ = 'workspace_rule'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    rule_id      = db.Column(db.Integer, db.ForeignKey('rule.id',      ondelete='CASCADE'), nullable=False)
+    added_at     = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    note         = db.Column(db.Text, nullable=True)
+    __table_args__ = (db.UniqueConstraint('workspace_id', 'rule_id'),)
+
+    def to_json(self):
+        return {
+            'id':           self.id,
+            'workspace_id': self.workspace_id,
+            'rule_id':      self.rule_id,
+            'note':         self.note,
+            'added_at':     self.added_at.strftime('%Y-%m-%d %H:%M') if self.added_at else None,
+        }
+
+
+class WorkspaceDocument(db.Model):
+    __tablename__ = 'workspace_document'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    title        = db.Column(db.String(200), nullable=False, default='Untitled')
+    content      = db.Column(db.Text, nullable=False, default='')
+    created_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    updated_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc),
+                              onupdate=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    def to_json(self):
+        return {
+            'id':         self.id,
+            'title':      self.title,
+            'content':    self.content,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
+        }
+
+
+class WorkspaceLink(db.Model):
+    __tablename__ = 'workspace_link'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    title        = db.Column(db.String(200), nullable=False)
+    url          = db.Column(db.String(1000), nullable=False)
+    description  = db.Column(db.String(500), nullable=True)
+    created_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    def to_json(self):
+        return {
+            'id':          self.id,
+            'title':       self.title,
+            'url':         self.url,
+            'description': self.description,
+            'created_at':  self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+        }
