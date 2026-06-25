@@ -1068,8 +1068,11 @@ export default {
 
         // ── Pagination / sort ─────────────────────────────────────────────
         const page         = ref(Number(_p('page', '1')) || 1)
-        const cardPerPage  = ref(Number(_p('per_page', String(props.initialPerPage))) || props.initialPerPage)
-        const tablePerPage = ref(25)
+        const _cardDefault = props.initialPerPage === 12
+            ? (Number(localStorage.getItem('rz-per-page-card')) || 12)
+            : props.initialPerPage
+        const cardPerPage  = ref(Number(_p('per_page', String(_cardDefault))) || _cardDefault)
+        const tablePerPage = ref(Number(localStorage.getItem('rz-per-page-table')) || 25)
         const sortKey      = ref(_p('sort', ''))
         const sortDir      = ref(_p('dir', 'asc'))
 
@@ -1109,7 +1112,10 @@ export default {
         const cardSort = ref('newest')
 
         // ── UI state ──────────────────────────────────────────────────────
-        const viewMode    = ref(_p('view', props.defaultView))
+        const _defaultView = props.defaultView !== 'card'
+            ? props.defaultView
+            : (localStorage.getItem('rz-list-view') || 'card')
+        const viewMode    = ref(_p('view', _defaultView))
         const _hasUrlFilters = ['tags','sources','licenses','vulnerabilities','attacks','authors','editors',
                                 'rule_type','search_field','exact_match','person_mode','scope']
                                .some(k => _url.has(k))

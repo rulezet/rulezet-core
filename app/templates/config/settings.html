@@ -13,10 +13,14 @@
         <i class="fa-solid fa-sliders banner-watermark"></i>
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon"><i class="fa-solid fa-sliders"></i></div>
-            <div>
+            <div class="flex-1">
                 <h2 class="fw-bold mb-1">Settings</h2>
                 <div class="banner-accent"></div>
             </div>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @click="resetAllSettings"
+                    style="white-space:nowrap;flex-shrink:0;">
+                <i class="fas fa-rotate-left me-1"></i>Reset to defaults
+            </button>
         </div>
         <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
             Personalise the interface. Your preferences are saved automatically.
@@ -27,6 +31,88 @@
 
         <!-- ── Left column ────────────────────────────────── -->
         <div class="col-12 col-lg-8">
+
+            {% if is_admin %}
+            <!-- Theme Studio (admin only) — collapsible, collapsed by default -->
+            <div class="card mb-3" id="section-studio">
+                <div class="card-body" style="padding-bottom:0;">
+                    <div class="settings-card-header studio-header" @click="studio_open = !studio_open">
+                        <div class="settings-card-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+                        <div class="flex-1">
+                            <h6 class="settings-section-title mb-0">Theme Studio</h6>
+                            <p class="text-muted small mb-0">Create custom themes and override built-in ones.</p>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 ms-2">
+                            <button class="btn btn-sm btn-primary" @click.stop="openCreateModal()">
+                                <i class="fas fa-plus me-1"></i>New theme
+                            </button>
+                            <i class="fas fa-chevron-down studio-chevron" :class="{ 'studio-chevron--open': studio_open }"></i>
+                        </div>
+                    </div>
+                    <div class="studio-collapse" :class="{ 'studio-collapse--open': studio_open }">
+                        <div class="pt-3 pb-1">
+
+                            <p class="settings-sub-label">Custom themes</p>
+                            <div v-if="studio_themes === null" class="text-muted small mb-4" style="min-height:2rem;">
+                                <i class="fas fa-spinner fa-spin me-1 opacity-50"></i>Loading…
+                            </div>
+                            <div class="ts-theme-list mb-4" v-else-if="studio_themes.filter(t => !t.is_builtin).length">
+                                <div v-for="t in studio_themes.filter(t => !t.is_builtin)" :key="t.uuid"
+                                     class="ts-theme-row">
+                                    <div class="ts-theme-icon">
+                                        <i :class="'fas ' + t.icon"></i>
+                                    </div>
+                                    <div class="ts-theme-info">
+                                        <div class="ts-theme-name">[[ t.name ]]</div>
+                                        <div class="ts-theme-meta">
+                                            <span class="badge rounded-pill"
+                                                  :class="t.is_dark ? 'bg-secondary-subtle text-secondary-emphasis' : 'bg-warning-subtle text-warning-emphasis'">
+                                                [[ t.is_dark ? 'Dark' : 'Light' ]]
+                                            </span>
+                                            <span class="ms-1 font-mono small">[[ t.css_key ]]</span>
+                                        </div>
+                                    </div>
+                                    <div class="ts-theme-actions">
+                                        <button class="settings-toggle-btn me-1"
+                                                :class="{ active: t.is_public }"
+                                                :title="t.is_public ? 'Public — click to make private' : 'Private — click to publish'"
+                                                @click="toggleVisibility(t)">
+                                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                        </button>
+                                        <span class="small me-2"
+                                              :class="t.is_public ? 'text-success' : 'text-muted'"
+                                              style="font-size:0.72rem;min-width:42px;">
+                                            [[ t.is_public ? 'Public' : 'Private' ]]
+                                        </span>
+                                        <button class="btn-icon me-1" title="Edit" @click="openEditModal(t)">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                        <button class="btn-icon" title="Delete" @click="deleteTheme(t)">
+                                            <i class="fas fa-trash text-danger"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <p v-else class="text-muted small mb-4">No custom themes yet. Click "New theme" to create one.</p>
+
+                            <p class="settings-sub-label">Override built-in themes</p>
+                            <div class="ts-builtin-grid mb-1">
+                                <div v-for="key in builtin_keys" :key="key"
+                                     class="ts-builtin-card"
+                                     @click="openBuiltinModal(key)">
+                                    <i :class="'fas ' + builtin_meta[key].icon"></i>
+                                    <span>[[ builtin_meta[key].label ]]</span>
+                                    <span v-if="studio_themes && studio_themes.find(t => t.css_key === key && t.is_builtin)"
+                                          class="badge bg-primary-subtle text-primary-emphasis"
+                                          style="font-size:0.6rem;">Modified</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Theme picker -->
             <div class="card mb-3" id="section-theme">
@@ -232,76 +318,147 @@
                 </div>
             </div>
 
-            {% if is_admin %}
-            <!-- Theme Studio (admin only) -->
-            <div class="card mb-3" id="section-studio">
+            <!-- Default list view -->
+            <div class="card mb-3" id="section-view">
                 <div class="card-body">
                     <div class="settings-card-header mb-3">
-                        <div class="settings-card-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
-                        <div class="flex-1">
-                            <h6 class="settings-section-title mb-0">Theme Studio</h6>
-                            <p class="text-muted small mb-0">Create custom themes and override built-in ones.</p>
-                        </div>
-                        <button class="btn btn-sm btn-primary ms-auto" @click="openCreateModal()">
-                            <i class="fas fa-plus me-1"></i>New theme
-                        </button>
-                    </div>
-
-                    <p class="settings-sub-label">Custom themes</p>
-                    <div class="ts-theme-list mb-4" v-if="studio_themes.filter(t => !t.is_builtin).length">
-                        <div v-for="t in studio_themes.filter(t => !t.is_builtin)" :key="t.uuid"
-                             class="ts-theme-row">
-                            <div class="ts-theme-icon">
-                                <i :class="'fas ' + t.icon"></i>
-                            </div>
-                            <div class="ts-theme-info">
-                                <div class="ts-theme-name">[[ t.name ]]</div>
-                                <div class="ts-theme-meta">
-                                    <span class="badge rounded-pill"
-                                          :class="t.is_dark ? 'bg-secondary-subtle text-secondary-emphasis' : 'bg-warning-subtle text-warning-emphasis'">
-                                        [[ t.is_dark ? 'Dark' : 'Light' ]]
-                                    </span>
-                                    <span class="ms-1 font-mono small">[[ t.css_key ]]</span>
-                                </div>
-                            </div>
-                            <div class="ts-theme-actions">
-                                <button class="settings-toggle-btn me-1"
-                                        :class="{ active: t.is_public }"
-                                        :title="t.is_public ? 'Public — click to make private' : 'Private — click to publish'"
-                                        @click="toggleVisibility(t)">
-                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                                </button>
-                                <span class="small me-2"
-                                      :class="t.is_public ? 'text-success' : 'text-muted'"
-                                      style="font-size:0.72rem;min-width:42px;">
-                                    [[ t.is_public ? 'Public' : 'Private' ]]
-                                </span>
-                                <button class="btn-icon me-1" title="Edit" @click="openEditModal(t)">
-                                    <i class="fas fa-pen"></i>
-                                </button>
-                                <button class="btn-icon" title="Delete" @click="deleteTheme(t)">
-                                    <i class="fas fa-trash text-danger"></i>
-                                </button>
-                            </div>
+                        <div class="settings-card-icon"><i class="fas fa-rectangle-list"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Default list view</h6>
+                            <p class="text-muted small mb-0">How rule lists appear when no view is forced by the page.</p>
                         </div>
                     </div>
-                    <p v-else class="text-muted small mb-4">No custom themes yet. Click "New theme" to create one.</p>
-
-                    <p class="settings-sub-label">Override built-in themes</p>
-                    <div class="ts-builtin-grid">
-                        <div v-for="key in builtin_keys" :key="key"
-                             class="ts-builtin-card"
-                             @click="openBuiltinModal(key)">
-                            <i :class="'fas ' + builtin_meta[key].icon"></i>
-                            <span>[[ builtin_meta[key].label ]]</span>
-                            <span v-if="studio_themes.find(t => t.css_key === key && t.is_builtin)"
-                                  class="badge bg-primary-subtle text-primary-emphasis"
-                                  style="font-size:0.6rem;">Modified</span>
+                    <div class="settings-theme-group">
+                        <div v-for="opt in list_view_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: list_view === opt.value }"
+                             @click="setListView(opt.value)">
+                            <div class="view-preview">
+                                <template v-if="opt.value === 'card'">
+                                    <div class="vp-card-grid">
+                                        <div class="vp-card-item"></div>
+                                        <div class="vp-card-item"></div>
+                                        <div class="vp-card-item"></div>
+                                        <div class="vp-card-item"></div>
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <div class="vp-table">
+                                        <div class="vp-table-row vp-table-row--header"></div>
+                                        <div class="vp-table-row"></div>
+                                        <div class="vp-table-row"></div>
+                                        <div class="vp-table-row"></div>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + opt.icon"></i>
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="list_view === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            {% endif %}
+
+            <!-- Code font -->
+            <div class="card mb-3" id="section-font">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-code"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Code font</h6>
+                            <p class="text-muted small mb-0">Font used in rule content, diffs, and code viewers.</p>
+                        </div>
+                    </div>
+                    <div class="settings-theme-group">
+                        <div v-for="opt in font_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: code_font === opt.value }"
+                             @click="setCodeFont(opt.value)">
+                            <div class="font-preview" :style="opt.css ? { fontFamily: opt.css } : { fontFamily: 'var(--font-mono)' }">
+                                <div style="font-weight:500;font-size:.9rem;">[[ opt.sample ]]</div>
+                                <div style="font-size:.72rem;opacity:.6;">0Oo 1lI != =&gt;</div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="code_font === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Default pagination -->
+            <div class="card mb-3" id="section-pagination">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-list-ol"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Default pagination</h6>
+                            <p class="text-muted small mb-0">Items per page when not explicitly set by the page.</p>
+                        </div>
+                    </div>
+
+                    <p class="settings-sub-label mb-2">Card view</p>
+                    <div class="d-flex gap-2 flex-wrap mb-4">
+                        <button v-for="n in [8, 12, 24, 48]" :key="n"
+                                class="per-page-chip"
+                                :class="{ active: per_page_card === n }"
+                                @click="setPerPageCard(n)">
+                            [[ n ]]
+                            <i v-if="per_page_card === n" class="fas fa-check" style="font-size:.65rem;"></i>
+                        </button>
+                    </div>
+
+                    <p class="settings-sub-label mb-2">Table view</p>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button v-for="n in [10, 25, 50, 100]" :key="n"
+                                class="per-page-chip"
+                                :class="{ active: per_page_table === n }"
+                                @click="setPerPageTable(n)">
+                            [[ n ]]
+                            <i v-if="per_page_table === n" class="fas fa-check" style="font-size:.65rem;"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- JSON colour theme -->
+            <div class="card mb-3" id="section-json-theme">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-brackets-curly"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">JSON colour theme</h6>
+                            <p class="text-muted small mb-0">Syntax colours used in JSON viewers and code blocks.</p>
+                        </div>
+                    </div>
+                    <div class="settings-theme-group">
+                        <div v-for="opt in json_theme_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: json_theme === opt.value }"
+                             @click="setJsonTheme(opt.value)">
+                            <div class="json-theme-preview"
+                                 :style="{ '--prev-key': opt.key, '--prev-str': opt.str, '--prev-num': opt.num, '--prev-bool': opt.bool, '--prev-null': opt.null_, '--prev-punct': opt.punct }">
+                                <span class="pv-punct">{</span><br>
+                                <span class="pv-punct">&nbsp;&nbsp;</span><span class="pv-key">"name"</span><span class="pv-punct">: </span><span class="pv-str">"rule"</span><span class="pv-punct">,</span><br>
+                                <span class="pv-punct">&nbsp;&nbsp;</span><span class="pv-key">"score"</span><span class="pv-punct">: </span><span class="pv-num">9</span><span class="pv-punct">,</span><br>
+                                <span class="pv-punct">&nbsp;&nbsp;</span><span class="pv-key">"active"</span><span class="pv-punct">: </span><span class="pv-bool">true</span><br>
+                                <span class="pv-punct">}</span>
+                            </div>
+                            <div class="settings-theme-label">
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="json_theme === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0" style="font-size:.75rem;">
+                        <i class="fas fa-info-circle me-1 text-primary opacity-75"></i>
+                        Changes apply instantly — no reload needed.
+                    </p>
+                </div>
+            </div>
 
         </div>
 
@@ -382,6 +539,75 @@
                             </div>
                             <div class="recap-status">
                                 <i v-if="toast_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- List view row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-rectangle-list"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">List view</div>
+                                <div class="recap-value">
+                                    <i :class="'fas ' + (list_view_options.find(o => o.value === list_view)?.icon || 'fa-rectangle-list')" class="me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ list_view_options.find(o => o.value === list_view)?.label || list_view ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="list_view_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Code font row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-code"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Code font</div>
+                                <div class="recap-value">
+                                    [[ font_options.find(o => o.value === code_font)?.label || code_font ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="code_font_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Pagination row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-list-ol"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Pagination</div>
+                                <div class="recap-value">
+                                    <i class="fas fa-rectangle-list me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ per_page_card ]]
+                                    <span class="ms-1 opacity-50">·</span>
+                                    <i class="fas fa-table-cells-large ms-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ per_page_table ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="per_page_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- JSON theme row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-brackets-curly"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">JSON theme</div>
+                                <div class="recap-value">
+                                    [[ json_theme_options.find(o => o.value === json_theme)?.label || json_theme ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="json_theme_saved" class="fas fa-circle-check text-success"></i>
                             </div>
                         </div>
 
@@ -628,11 +854,16 @@
         return o
     }
 
+    const _API_KEY = {{ (current_user.api_key or '') | tojson }}
     function apiFetch(url, method, body) {
         const csrf = document.getElementById('csrf_token')
         return fetch(url, {
             method,
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf ? csrf.value : '' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf ? csrf.value : '',
+                'X-API-KEY': _API_KEY,
+            },
             body: body ? JSON.stringify(body) : undefined,
         })
     }
@@ -713,6 +944,98 @@
                 setTimeout(() => { notif_style_saved.value = false }, 2000)
             }
 
+            // ── List view (localStorage only) ─────────────────────────────────
+            const list_view = ref(localStorage.getItem('rz-list-view') || 'card')
+            const list_view_saved = ref(false)
+            const list_view_options = [
+                { value: 'card',  label: 'Card',  icon: 'fa-rectangle-list' },
+                { value: 'table', label: 'Table', icon: 'fa-table-cells-large' },
+            ]
+            function setListView(value) {
+                if (value === list_view.value) return
+                list_view.value = value
+                localStorage.setItem('rz-list-view', value)
+                list_view_saved.value = true
+                setTimeout(() => { list_view_saved.value = false }, 2000)
+                create_message('Default list view saved', 'success')
+            }
+
+            // ── Code font (localStorage only) ─────────────────────────────────
+            const FONT_OPTS = [
+                { value: 'system',    label: 'System',         sample: 'SFMono',        css: null },
+                { value: 'jetbrains', label: 'JetBrains Mono', sample: 'JetBrains',     css: "'JetBrains Mono', monospace" },
+                { value: 'fira',      label: 'Fira Code',      sample: 'Fira Code',     css: "'Fira Code', monospace" },
+                { value: 'courier',   label: 'Courier New',    sample: 'Courier New',   css: "'Courier New', Courier, monospace" },
+            ]
+            const stored_font_css = localStorage.getItem('rz-code-font')
+            const code_font = ref(FONT_OPTS.find(o => o.css === stored_font_css)?.value || 'system')
+            const code_font_saved = ref(false)
+            const font_options = FONT_OPTS
+            function setCodeFont(value) {
+                if (value === code_font.value) return
+                code_font.value = value
+                const opt = FONT_OPTS.find(o => o.value === value)
+                if (!opt) return
+                if (opt.css) {
+                    localStorage.setItem('rz-code-font', opt.css)
+                    document.documentElement.style.setProperty('--font-mono', opt.css)
+                } else {
+                    localStorage.removeItem('rz-code-font')
+                    document.documentElement.style.removeProperty('--font-mono')
+                }
+                code_font_saved.value = true
+                setTimeout(() => { code_font_saved.value = false }, 2000)
+                create_message('Code font saved', 'success')
+            }
+
+            // ── Pagination (localStorage only) ────────────────────────────────
+            const per_page_card  = ref(Number(localStorage.getItem('rz-per-page-card'))  || 12)
+            const per_page_table = ref(Number(localStorage.getItem('rz-per-page-table')) || 25)
+            const per_page_saved = ref(false)
+            function setPerPageCard(n) {
+                if (n === per_page_card.value) return
+                per_page_card.value = n
+                localStorage.setItem('rz-per-page-card', String(n))
+                per_page_saved.value = true
+                setTimeout(() => { per_page_saved.value = false }, 2000)
+                create_message('Card pagination saved', 'success')
+            }
+            function setPerPageTable(n) {
+                if (n === per_page_table.value) return
+                per_page_table.value = n
+                localStorage.setItem('rz-per-page-table', String(n))
+                per_page_saved.value = true
+                setTimeout(() => { per_page_saved.value = false }, 2000)
+                create_message('Table pagination saved', 'success')
+            }
+
+            // ── JSON colour theme (localStorage only) ────────────────────────
+            const JSON_THEME_OPTS = [
+                { value: 'default',   label: 'Default',   key: 'var(--cv-key)',     str: 'var(--cv-string)', num: 'var(--cv-number)', bool: 'var(--cv-bool)', null_: 'var(--cv-null)',   punct: 'var(--cv-punct)' },
+                { value: 'monokai',   label: 'Monokai',   key: '#f92672',           str: '#e6db74',          num: '#ae81ff',         bool: '#ae81ff',        null_: '#66d9e8',          punct: '#75715e' },
+                { value: 'dracula',   label: 'Dracula',   key: '#ff79c6',           str: '#f1fa8c',          num: '#bd93f9',         bool: '#50fa7b',        null_: '#8be9fd',          punct: '#6272a4' },
+                { value: 'one-dark',  label: 'One Dark',  key: '#e06c75',           str: '#98c379',          num: '#d19a66',         bool: '#56b6c2',        null_: '#c678dd',          punct: '#abb2bf' },
+                { value: 'nord',      label: 'Nord',      key: '#bf616a',           str: '#a3be8c',          num: '#b48ead',         bool: '#88c0d0',        null_: '#81a1c1',          punct: '#4c566a' },
+                { value: 'solarized', label: 'Solarized', key: '#dc322f',           str: '#2aa198',          num: '#268bd2',         bool: '#6c71c4',        null_: '#d33682',          punct: '#586e75' },
+            ]
+            const json_theme = ref(localStorage.getItem('rz-json-theme') || 'default')
+            const json_theme_saved = ref(false)
+            const json_theme_options = JSON_THEME_OPTS
+            function setJsonTheme(value) {
+                if (value === json_theme.value) return
+                json_theme.value = value
+                if (value === 'default') {
+                    localStorage.removeItem('rz-json-theme')
+                    document.documentElement.removeAttribute('data-json-theme')
+                } else {
+                    localStorage.setItem('rz-json-theme', value)
+                    document.documentElement.setAttribute('data-json-theme', value)
+                }
+                json_theme_saved.value = true
+                setTimeout(() => { json_theme_saved.value = false }, 2000)
+                create_message('JSON theme saved', 'success')
+            }
+
             // Theme options — base built-ins
             const theme_options = reactive([
                 { value: 'system', label: 'System', icon: 'fa-circle-half-stroke' },
@@ -721,7 +1044,8 @@
             ])
 
             // Studio state
-            const studio_themes      = ref([])
+            const studio_open        = ref(false)
+            const studio_themes      = ref(null)
             const modal_title        = ref('')
             const modal_is_builtin   = ref(false)
             const modal_editing_uuid = ref(null)
@@ -979,6 +1303,31 @@
                 await savePreference({ theme: value })
             }
 
+            async function resetAllSettings() {
+                if (!confirm('Reset all settings to their defaults? This cannot be undone.')) return
+
+                // localStorage-only preferences
+                localStorage.removeItem('rz-nav-style')
+                localStorage.removeItem('rz-toast-position')
+                localStorage.removeItem('rz-toast-style')
+                localStorage.removeItem('rz-notif-style')
+                localStorage.removeItem('rz-list-view')
+                localStorage.removeItem('rz-code-font')
+                localStorage.removeItem('rz-per-page-card')
+                localStorage.removeItem('rz-per-page-table')
+                localStorage.removeItem('rz-json-theme')
+
+                // Reset CSS vars / attributes immediately
+                document.documentElement.style.removeProperty('--font-mono')
+                document.documentElement.removeAttribute('data-json-theme')
+
+                // Server-side preference (theme)
+                await savePreference({ theme: 'system' })
+
+                create_message('Settings reset to defaults', 'success')
+                setTimeout(() => { window.location.reload() }, 600)
+            }
+
             onMounted(async () => {
                 const modalEl = document.getElementById('themeStudioModal')
                 if (modalEl) _modal = new bootstrap.Modal(modalEl)
@@ -992,11 +1341,16 @@
                 toast_pos_options, toast_style_options,
                 setToastPosition, setToastStyle,
                 notif_style, notif_style_saved, notif_style_options, setNotifStyle,
+                list_view, list_view_saved, list_view_options, setListView,
+                code_font, code_font_saved, font_options, setCodeFont,
+                per_page_card, per_page_table, per_page_saved, setPerPageCard, setPerPageTable,
+                json_theme, json_theme_saved, json_theme_options, setJsonTheme,
+                resetAllSettings,
                 named_theme_options, custom_theme_options,
                 livePreviewStyle,
                 setTheme, getPreviewStyle,
                 // Studio
-                studio_themes, modal_title, modal_is_builtin, modal_editing_uuid,
+                studio_open, studio_themes, modal_title, modal_is_builtin, modal_editing_uuid,
                 modal_saving, modal_form, modal_tab, paste_input, paste_result,
                 show_icon_picker, icon_search, filteredIcons,
                 builtin_keys, builtin_meta, var_groups, var_placeholders,

@@ -17,6 +17,9 @@
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
 
     <link rel="icon" href="{{ url_for('static',filename='image/logo.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Fira+Code:wght@400;500&display=swap">
     <link rel="stylesheet" type="text/css"
         href="{{ url_for('static',filename='css/external_library/select2.min.css') }}">
     <link rel="stylesheet" type="text/css"
@@ -60,8 +63,16 @@
 </head>
 
 <body>
-    <!-- Apply nav style before first paint to avoid flash -->
+    <!-- Apply nav style, code font, and json theme before first paint to avoid flash -->
     <script>
+    (function(){
+        var f = localStorage.getItem('rz-code-font');
+        if (f) document.documentElement.style.setProperty('--font-mono', f);
+    })();
+    (function(){
+        var t = localStorage.getItem('rz-json-theme');
+        if (t && t !== 'default') document.documentElement.setAttribute('data-json-theme', t);
+    })();
     (function(){
         var s = localStorage.getItem('rz-nav-style') || 'default';
         document.body.dataset.navStyle = s;

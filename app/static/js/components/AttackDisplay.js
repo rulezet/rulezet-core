@@ -104,7 +104,6 @@ export default defineComponent({
             <div v-else-if="!techniques.length" class="text-muted small fst-italic py-1">
                 <i class="fa-solid fa-crosshairs me-1 opacity-50"></i>
                 No ATT&amp;CK techniques detected.
-                <span class="d-block mt-1" style="font-size:.72rem;">Run the auto-parse job from Admin → Settings → ATT&amp;CK.</span>
             </div>
 
             <!-- Technique chips -->

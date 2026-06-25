@@ -54,6 +54,81 @@ body.dark-mode,
     --cv-param:     #ffa657;
 }
 
+/* ── JSON theme palettes ──────────────────────────────────────────
+   Placed after the dark-mode block so same-specificity rules win
+   by document order (html[data-json-theme] body beats body.dark-mode).
+------------------------------------------------------------------- */
+
+html[data-json-theme="monokai"],
+html[data-json-theme="monokai"] body {
+    --cv-keyword:  #f92672;
+    --cv-string:   #e6db74;
+    --cv-number:   #ae81ff;
+    --cv-bool:     #ae81ff;
+    --cv-null:     #66d9e8;
+    --cv-comment:  #75715e;
+    --cv-function: #a6e22e;
+    --cv-operator: #f92672;
+    --cv-key:      #f92672;
+    --cv-punct:    #75715e;
+}
+
+html[data-json-theme="dracula"],
+html[data-json-theme="dracula"] body {
+    --cv-keyword:  #ff79c6;
+    --cv-string:   #f1fa8c;
+    --cv-number:   #bd93f9;
+    --cv-bool:     #50fa7b;
+    --cv-null:     #8be9fd;
+    --cv-comment:  #6272a4;
+    --cv-function: #50fa7b;
+    --cv-operator: #ff79c6;
+    --cv-key:      #ff79c6;
+    --cv-punct:    #6272a4;
+}
+
+html[data-json-theme="one-dark"],
+html[data-json-theme="one-dark"] body {
+    --cv-keyword:  #e06c75;
+    --cv-string:   #98c379;
+    --cv-number:   #d19a66;
+    --cv-bool:     #56b6c2;
+    --cv-null:     #c678dd;
+    --cv-comment:  #5c6370;
+    --cv-function: #61afef;
+    --cv-operator: #e06c75;
+    --cv-key:      #e06c75;
+    --cv-punct:    #abb2bf;
+}
+
+html[data-json-theme="nord"],
+html[data-json-theme="nord"] body {
+    --cv-keyword:  #bf616a;
+    --cv-string:   #a3be8c;
+    --cv-number:   #b48ead;
+    --cv-bool:     #88c0d0;
+    --cv-null:     #81a1c1;
+    --cv-comment:  #4c566a;
+    --cv-function: #8fbcbb;
+    --cv-operator: #bf616a;
+    --cv-key:      #bf616a;
+    --cv-punct:    #4c566a;
+}
+
+html[data-json-theme="solarized"],
+html[data-json-theme="solarized"] body {
+    --cv-keyword:  #859900;
+    --cv-string:   #2aa198;
+    --cv-number:   #268bd2;
+    --cv-bool:     #6c71c4;
+    --cv-null:     #d33682;
+    --cv-comment:  #657b83;
+    --cv-function: #268bd2;
+    --cv-operator: #dc322f;
+    --cv-key:      #dc322f;
+    --cv-punct:    #586e75;
+}
+
 /*---ROOT---*/
 
 .cv-root {
