@@ -1,4 +1,4 @@
-from flask import Blueprint, flash, jsonify, redirect, render_template , request, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template , request, url_for
 from flask_login import current_user, login_required
 
 from app.features.bundle.bundle_form import AddNewBundleForm, EditBundleForm
@@ -220,6 +220,11 @@ def save_workspace(bundle_id):
 
 @bundle_blueprint.route("/get_bundle_json/<int:bundle_id>")
 def get_bundle_json(bundle_id):
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        abort(404)
+    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+        abort(403)
     # Fetch only top-level nodes (those without parents)
     root_nodes = BundleModel.get_only_root_nodes(bundle_id)
     
@@ -318,10 +323,15 @@ def remove() :
 
 
 @bundle_blueprint.route("/get_rules_page_from_bundle", methods=['GET'])
-def get_rules_page_from_bundle() :     
-    """get all the rule from the bundles for pages"""     
+def get_rules_page_from_bundle() :
+    """get all the rule from the bundles for pages"""
     page = request.args.get('page', 1, type=int)
     bundle_id = request.args.get('bundle_id',  type=int)
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        abort(404)
+    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+        abort(403)
     rule_list = BundleModel.get_all_rule_bundles_page(page , bundle_id)
     total_rules = BundleModel.get_total_rule_from_bundle_count(bundle_id)
     if rule_list:
@@ -347,6 +357,8 @@ def get_bundle():
             "message": f"No bundle found with id {bundle_id}",
             "success": False
         }, 404
+    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+        abort(403)
 
     rules_ids_from_bundle = BundleModel.get_rule_ids_by_bundle(bundle_id)
     if isinstance(rules_ids_from_bundle, dict) and "error" in rules_ids_from_bundle:
@@ -1032,8 +1044,9 @@ def get_bundle_page():
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if not bundle:
         return {"message": f"No bundle found with id {bundle_id}", "success": False}, 404
+    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+        abort(403)
 
-   
     pagination = BundleModel.get_paginated_rules_info_by_bundle(bundle_id, page)
     
     
