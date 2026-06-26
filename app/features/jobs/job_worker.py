@@ -148,6 +148,10 @@ def _worker_loop(app):
 
             except Exception as e:
                 print(f"[worker] Unexpected error in worker loop: {e}")
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
                 time.sleep(5)
 
 

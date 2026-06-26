@@ -171,7 +171,7 @@ def _enforce_csrf_for_session_api():
 
 # Paths excluded from API request logging (high-volume or self-referential)
 _LOG_SKIP_PREFIXES = ("/api/sync/", "/api/instance/", "/api/log/", "/api/config/",
-                      "/api/swaggerui/")
+                      "/api/swaggerui/", "/api/rule/public/search_rules_by_cve")
 
 @api_blueprint.after_request
 def _log_api_request(response):
