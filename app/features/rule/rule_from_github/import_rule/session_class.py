@@ -2,7 +2,7 @@ import datetime
 import json
 import os
 from queue import Queue
-from threading import Thread
+from threading import Event, Lock, Thread
 from uuid import uuid4
 
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, load_all_rule_formats
@@ -30,9 +30,14 @@ class Session_class:
         self.skipped = 0
         self.query_date = datetime.datetime.now(tz=datetime.timezone.utc)
         self.current_user = user
+        self.user_id      = user.id if user else None
         self.info = info
         self.total = 0
         self.count_per_format = {}
+        self._stop_lock    = Lock()
+        self._finalized    = False
+        self._save_done    = Event()  # set once save_info() has completed
+        self._workers_done = 0        # how many worker threads have exited
 
     def start(self):
         job_index = 0
@@ -91,6 +96,7 @@ class Session_class:
             worker.start()
             self.threads.append(worker)
 
+
     def status(self):
         if self.jobs.empty():
             self.stop()
@@ -110,15 +116,36 @@ class Session_class:
             "skipped": self.skipped,
         }
 
+    def _ensure_finalized(self, app_obj=None):
+        """Save import results and send notifications exactly once, thread-safe.
+        Called by _bg_watchdog (background, needs app_obj) or stop() (request context).
+        Sets _save_done once the DB commit and notifications are complete so that
+        stop() never clears threads before the result is persisted."""
+        with self._stop_lock:
+            if self._finalized:
+                return
+            self._finalized = True
+        try:
+            if app_obj:
+                with app_obj.app_context():
+                    self.save_info()
+            else:
+                self.save_info()
+            if self in sessions:
+                sessions.remove(self)
+            delete_existing_repo_folder("app/rule_from_github/Rules_Github")
+        except Exception:
+            pass
+        finally:
+            self._save_done.set()   # always unblock stop(), even on error
+
     def stop(self):
         self.jobs.queue.clear()
         for worker in self.threads:
             worker.join(3.5)
-        self.threads.clear()
-        self.save_info()
-        if self in sessions:
-            sessions.remove(self)
-        delete_existing_repo_folder("app/rule_from_github/Rules_Github")
+        self._ensure_finalized()        # save + notify (no-op if watchdog already did it)
+        self._save_done.wait(timeout=30)  # wait until save is committed before clearing
+        self.threads.clear()            # only now is remaining=0 safe to return
 
     def process(self, loc_app, user: User):
         while not self.jobs.empty():
@@ -154,7 +181,6 @@ class Session_class:
                                 self.imported += 1
                                 self.count_per_format[rule_instance.format]["imported"] += 1
                             else:
-                                print(msg)
                                 self.skipped += 1
                                 self.count_per_format[rule_instance.format]["skipped"] += 1
                         else:
@@ -169,10 +195,33 @@ class Session_class:
                             self.count_per_format[rule_instance.format]["bad_rule"] += 1
                 
                 self.jobs.task_done()
-            except Exception as e:
-                print(f"Error occurred while processing job: {e}")
-                if not self.jobs.empty():
-                    self.jobs.task_done()
+            except Exception:
+                self.jobs.task_done()
+
+        # Detect whether this is the last worker to exit.
+        # If so, finalize the session right here — we already have an app context
+        # available via loc_app, so no extra thread or Queue.join() is needed.
+        with self._stop_lock:
+            self._workers_done += 1
+            is_last = (self._workers_done >= self.thread_count and not self._finalized)
+            if is_last:
+                self._finalized = True
+
+        if is_last:
+            with loc_app.app_context():
+                try:
+                    self.save_info()
+                except Exception:
+                    pass
+                finally:
+                    self._save_done.set()
+            if self in sessions:
+                sessions.remove(self)
+            try:
+                delete_existing_repo_folder("app/rule_from_github/Rules_Github")
+            except Exception:
+                pass
+
         return True
     
     def save_info(self):
@@ -185,26 +234,21 @@ class Session_class:
             total=self.total,
             count_per_format=json.dumps(self.count_per_format),
             query_date=self.query_date,
-            user_id=self.current_user.id
+            user_id=self.user_id
         )
         db.session.add(result_entry)
         db.session.commit()
 
         try:
-            from app.features.notification.notification_core import notify_github_import_done, update_admin_session_notifications
+            from app.features.notification.notification_core import notify_github_import_done
             notify_github_import_done(
-                user_id    = self.current_user.id,
+                user_id    = self.user_id,
                 imported   = self.imported,
                 skipped    = self.skipped,
                 bad_rules  = self.bad_rules,
                 result_uuid = self.uuid,
             )
-            update_admin_session_notifications(
-                session_uuid = self.uuid,
-                summary      = f'{self.imported} imported · {self.skipped} skipped · {self.bad_rules} invalid',
-                link         = f'/rule/import_loading/{self.uuid}',
-            )
-        except Exception as e:
-            print(f"[session_class] notify error: {e}")
+        except Exception:
+            pass
 
         return result_entry

@@ -671,7 +671,7 @@ def notify_rule_update_found(user_id, count, update_result_id=None):
 def notify_github_import_done(user_id, imported, skipped, bad_rules, result_uuid=None):
     """Notification sent when a GitHub / ZIP import session finishes."""
     total = imported + skipped + bad_rules
-    link = f'/rule/github/history_github_importer?uuid={result_uuid}' if result_uuid else '/rule/github/history_github_importer'
+    link = f'/rule/import_loading/{result_uuid}' if result_uuid else '/rule/github/history_github_importer'
     return create_notification(
         user_id    = user_id,
         notif_type = 'github_import_done',
