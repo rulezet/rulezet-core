@@ -7,7 +7,7 @@
 {% endblock %}
 {% block content %}
 
-<div v-if="info_session">
+<div v-cloak v-if="info_session">
     <h2 class="fw-bold mb-1 text-center text-primary">Update Status</h2>
     <div class="mx-auto mb-4" style="width: 60px; height: 4px; background-color: #0d6efd; border-radius: 2px;"></div>
 
@@ -157,7 +157,7 @@
                 <a class="nav-link active" id="github-tab" data-bs-toggle="tab" href="#github-pane" role="tab"
                     aria-controls="github" aria-selected="true" style="color: var(--text-color);">
                     Rule Status
-                    <span v-if="updatesAvailable > 0" class="badge bg-primary ms-1">
+                    <span v-if="rulesLoaded && updatesAvailable > 0" class="badge bg-primary ms-1">
                         [[ updatesAvailable ]]
                     </span>
                 </a>
@@ -166,8 +166,7 @@
                 <a class="nav-link" id="rule-tab" data-bs-toggle="tab" href="#rule-pane" role="tab"
                     aria-controls="rule-pane" aria-selected="false" style="color: var(--text-color);">
                     New Rules
-                    <span v-if="new_rules && new_rules.length" class="badge bg-success ms-1">[[ total_new_rules
-                        ]]</span>
+                    <span v-if="rulesLoaded && new_rules && new_rules.length" class="badge bg-success ms-1">[[ total_new_rules ]]</span>
                 </a>
             </li>
         </ul>
@@ -978,6 +977,7 @@
             const total_pages_rules = ref(1)
             const total_rules = ref(0)
             const updatesAvailable = ref(0)
+            const rulesLoaded = ref(false)
 
             async function getRules(page) {
                 const f = rsFilter.value
@@ -994,6 +994,7 @@
                     total_rules.value = data.total_rules || 0
                     updatesAvailable.value = data.updates_available ?? 0
                     current_page_rules.value = page
+                    rulesLoaded.value = true
                 } else {
                     create_message((await res.json()).message, (await res.json()).toast_class)
                 }
@@ -1067,6 +1068,7 @@
                 visiblePagesRules,
                 getRules,
                 updatesAvailable,
+                rulesLoaded,
                 fixRule,
                 addRule,
 

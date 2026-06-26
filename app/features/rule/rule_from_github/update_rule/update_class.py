@@ -633,10 +633,10 @@ class Update_class:
         try:
             from app.features.notification.notification_core import notify_github_update_done
             notify_github_update_done(
-                user_id   = self.user_id,
-                updated   = self.updated,
-                found     = self.found,
-                result_id = s.id,
+                user_id     = self.user_id,
+                updated     = self.updated,
+                found       = self.found,
+                result_uuid = self.uuid,
             )
         except Exception:
             pass

@@ -682,11 +682,14 @@ def notify_github_import_done(user_id, imported, skipped, bad_rules, result_uuid
     )
 
 
-def notify_github_update_done(user_id, updated, found, result_id=None):
+def notify_github_update_done(user_id, updated, found, result_id=None, result_uuid=None):
     """Notification sent when a GitHub update check session finishes."""
-    link = '/rule/github/update_github/update_rules_from_github'
-    if result_id:
-        link += f'?result_id={result_id}'
+    if result_uuid:
+        link = f'/rule/update_loading/{result_uuid}'
+    elif result_id:
+        link = f'/rule/github/update_github/update_rules_from_github?result_id={result_id}'
+    else:
+        link = '/rule/github/update_github/update_rules_from_github'
     if updated:
         title = f'{updated} rule update{"s" if updated != 1 else ""} available'
     else:
