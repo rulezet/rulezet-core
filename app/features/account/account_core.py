@@ -76,7 +76,7 @@ def resend_verification_code_core(user_id) -> bool:
     user = get_user(user_id)
     if user:
         user.verification_code = str(random.randint(100000, 999999))
-        user.verification_expiration = datetime.now(timezone.utc).replace(tzinfo=None) + TIME_EMAIL_EXPIRATION
+        user.verification_expiration = datetime.datetime.now(timezone.utc).replace(tzinfo=None) + TIME_EMAIL_EXPIRATION
         db.session.commit()
         
         success , message = send_verify_email(user, user.verification_code)
