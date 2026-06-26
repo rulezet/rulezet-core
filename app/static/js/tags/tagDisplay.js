@@ -27,12 +27,15 @@ const TagDisplay = {
         <div class="mt-4">
             <div @click="isCollapsed = !isCollapsed" style="cursor:pointer" class="user-select-none">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold mb-0 d-flex align-items-center" style="color: var(--text-color)">
-                        <span class="text-primary me-2">|</span>[[ sectionTitle ]]
-                        <i class="fas fa-chevron-down ms-2 small opacity-50"
-                           :style="{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: '0.3s' }"></i>
-                    </h6>
-                    <span v-if="!isCollapsed" class="badge bg-light text-primary border rounded-pill px-3 shadow-sm">
+                    <div class="d-flex align-items-center gap-2">
+                        <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                        <span class="fw-bold d-flex align-items-center" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                            <i class="fa-solid fa-tags me-1"></i>[[ sectionTitle ]]
+                            <i class="fas fa-chevron-down ms-2 small opacity-50"
+                               :style="{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: '0.3s' }"></i>
+                        </span>
+                    </div>
+                    <span v-if="!isCollapsed" class="badge rounded-pill px-3" style="background:var(--light-bg-color); color:var(--subtle-text-color); border:1px solid var(--border-color); font-size:.75rem;">
                         [[ tags.length ]] tags
                     </span>
                 </div>

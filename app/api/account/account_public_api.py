@@ -3,7 +3,6 @@
 # ------------------------------------------------------------------------------------------------------------------- #
 from flask_restx import Namespace, Resource
 from flask import request
-from flask_login import login_user, logout_user, login_required
 from wtforms.validators import Email, ValidationError
 
 
@@ -82,47 +81,4 @@ class Register(Resource):
 #     }'
 
 
-@account_public_ns.route('/login')
-@account_public_ns.doc(description='Connect an user')
-class Login(Resource):
-    @account_public_ns.doc(params={
-        'email': 'User email',
-        'password': 'User password',
-        'remember_me': 'Boolean to keep the user logged in'
-    })
-    def post(self):
-        data = request.get_json(silent=True)
-        if not data:
-            data = request.args.to_dict()
-
-        required_fields = ["email", "password"]
-        if not all(field in data for field in required_fields):
-            return {"message": "Missing fields in request"}, 400
-
-        email = data.get('email')
-        password = data.get('password')
-        remember_me = data.get('remember_me', False)
-
-        try:
-            Email(message="Invalid email format")(None, type("DummyField", (), {"data": email})())
-        except ValidationError:
-            return {"message": "Invalid email"}, 400
-
-        if not isinstance(remember_me, bool):
-            return {"message": "remember_me must be a boolean"}, 400
-
-        user = User.query.filter_by(email=email).first()
-        if user and user.verify_password(password):
-            login_user(user, remember=remember_me)
-            return {"message": "Logged in successfully"}, 200
-        return {"message": "Invalid email or password"}, 401
-
-
-@account_public_ns.route('/logout')
-@account_public_ns.doc(description='Logout an user')
-class Logout(Resource):
-    @login_required
-    def post(self):
-        logout_user()
-        return {"message": "You have been logged out."}, 200
 

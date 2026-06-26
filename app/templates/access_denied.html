@@ -1,19 +1,42 @@
 {% extends 'base.html' %}
+{% block title %}403 — Access Denied | Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/error.css') }}">
+{% endblock %}
+
 {% block content %}
-<title>Access Denied</title>
-<body class="bg-light">
-    <div class="container mt-5">
-        <div class="row justify-content-center">
-            <div class="col-12 col-md-8 col-lg-6">
-                <div class="alert alert-danger text-center" role="alert">
-                    <h4 class="alert-heading">Access Denied</h4>
-                    <p>You do not have permission to modify/delete/make choise because you are not the owner of this rule or you have the admin right.</p>
-                    <hr>
-                    <p class="mb-0">Please return to the main menu to view your own rules.</p>
-                    <a href="/" class="btn btn-primary mt-3">Return to Main Menu</a>
-                </div>
-            </div>
+<div class="error-page">
+    <div class="error-card">
+
+        <div class="error-icon-wrap">
+            <i class="fa-solid fa-lock error-icon"></i>
         </div>
+
+        <div class="error-code">403</div>
+
+        <h1 class="error-title">Access denied</h1>
+
+        <p class="error-desc">
+            You don't have permission to view this page.
+            If you think this is a mistake, make sure you're logged in with the right account.
+        </p>
+
+        <div class="error-actions">
+            <a href="javascript:history.back()"
+               class="btn btn-outline-secondary rounded-pill px-4">
+                <i class="fas fa-arrow-left me-2"></i>Go back
+            </a>
+            <a href="/" class="btn btn-primary rounded-pill px-4">
+                <i class="fas fa-house me-2"></i>Home
+            </a>
+            {% if not current_user.is_authenticated %}
+            <a href="/account/login" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="fas fa-right-to-bracket me-2"></i>Sign in
+            </a>
+            {% endif %}
+        </div>
+
     </div>
-</body>
+</div>
 {% endblock %}

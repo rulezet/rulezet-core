@@ -21,11 +21,17 @@
                 <a href="https://github.com/rulezet/rulezet-core/discussions" target="_blank" class="footer-nav__link">
                     <i class="fa-solid fa-envelope"></i> Contact
                 </a>
+                <a href="https://rulezet.github.io/rulezet-core/" target="_blank" class="footer-nav__link">
+                    <i class="fa-solid fa-book"></i> Documentation
+                </a>
                 <a href="/history_logo" class="footer-nav__link">
                     <i class="fa-solid fa-history"></i> History
                 </a>
                 <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="noreferrer" target="_blank" class="footer-nav__link">
                     <i class="fa-solid fa-balance-scale"></i> License
+                </a>
+                <a href="https://rulezet.org/api" rel="noreferrer" target="_blank" class="footer-nav__link">
+                    <i class="fa-solid fa-code"></i> API
                 </a>
             </nav>
 
@@ -35,29 +41,11 @@
                    class="footer-github" title="GitHub Source">
                     <i class="fa-brands fa-github"></i>
                 </a>
-                <div id="toggle-theme" class="theme-toggle" title="Toggle theme">
-                    <div class="theme-toggle__option" data-theme="light">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                             stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px">
-                            <circle cx="12" cy="12" r="4"/>
-                            <line x1="12" y1="2" x2="12" y2="4"/>
-                            <line x1="12" y1="20" x2="12" y2="22"/>
-                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                            <line x1="2" y1="12" x2="4" y2="12"/>
-                            <line x1="20" y1="12" x2="22" y2="12"/>
-                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                        </svg>
-                        Light
-                    </div>
-                    <div class="theme-toggle__option" data-theme="dark">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                             stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px">
-                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                        </svg>
-                        Dark
-                    </div>
+                <div class="footer-theme-picker">
+                    <i class="fas fa-palette footer-theme-icon"></i>
+                    <select id="footer-theme-select" class="footer-theme-select" title="Switch theme">
+                        <!-- auto-populated by theme.js on DOMContentLoaded -->
+                    </select>
                 </div>
             </div>
         </div>

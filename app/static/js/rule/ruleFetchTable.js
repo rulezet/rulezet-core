@@ -80,7 +80,14 @@ const UserRulesManagementComponent = {
         };
 
         const executeDelete = async () => {
-            const res = await fetch(`/rule/delete_rule?id=${ruleToDelete.value.id}`);
+            const res = await fetch('/rule/delete_rule', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '',
+                },
+                body: JSON.stringify({ id: ruleToDelete.value.id }),
+            });
             if (res.ok) {
                 rules_list.value = rules_list.value.filter(r => r.id !== ruleToDelete.value.id);
                 const bootstrap_module = window.bootstrap;
@@ -104,7 +111,10 @@ const UserRulesManagementComponent = {
         };
 
         const favorite = async (rule_id) => {
-            const res = await fetch(`/rule/favorite/${rule_id}`);
+            const res = await fetch(`/rule/favorite/${rule_id}`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' },
+            });
             const data = await res.json();
             if (res.ok) {
                 const rule = rules_list.value.find(r => r.id === rule_id);

@@ -1,0 +1,439 @@
+/*
+  request-builder.css — HTTP request builder component.
+  All classes prefixed .rb-
+*/
+
+/*---RB_ROOT---*/
+
+.rb {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    font-family: var(--font-sans);
+}
+
+/*---RB_URL_BAR---*/
+
+.rb-url-bar {
+    display: flex;
+    align-items: center;
+    background: #0d1117;
+    border-bottom: 1px solid #30363d;
+    position: relative;
+    height: 48px;
+}
+
+/*---RB_METHOD_DROPDOWN---*/
+
+.rb-method-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.rb-method-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 16px;
+    height: 48px;
+    background: none;
+    border: none;
+    border-right: 1px solid #30363d;
+    font-size: .8rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    letter-spacing: .04em;
+    cursor: pointer;
+    min-width: 90px;
+    transition: background .12s;
+}
+
+.rb-method-btn:hover {
+    background: rgba(255, 255, 255, .04);
+}
+
+.rb-method-chevron {
+    font-size: .5rem;
+    color: #7d8590;
+    margin-left: auto;
+}
+
+.rb-method-drop {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 200;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+    min-width: 90px;
+    overflow: hidden;
+}
+
+.rb-method-opt {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    font-size: .79rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    letter-spacing: .04em;
+    transition: background .1s;
+}
+
+.rb-method-opt:hover,
+.rb-method-opt.is-active {
+    background: rgba(255, 255, 255, .06);
+}
+
+.rb-url-divider {
+    width: 1px;
+    height: 18px;
+    background: #30363d;
+    margin: 0 2px;
+    display: none;
+}
+
+/*---RB_URL_INPUT---*/
+
+.rb-url-input {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 0 14px;
+    font-size: .85rem;
+    font-family: var(--font-mono);
+    color: #c9d1d9;
+    outline: none;
+    height: 100%;
+    caret-color: #22c55e;
+}
+
+.rb-url-input::placeholder {
+    color: #484f58;
+}
+
+/*---RB_SEND_BTN---*/
+
+.rb-send-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 20px;
+    height: 100%;
+    background: var(--brand);
+    border: none;
+    border-left: 1px solid #30363d;
+    color: #fff;
+    font-size: .82rem;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: filter .12s;
+    white-space: nowrap;
+}
+
+.rb-send-btn:hover {
+    filter: brightness(1.1);
+}
+
+.rb-send-btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+/*---RB_ERROR---*/
+
+.rb-error {
+    padding: 8px 16px;
+    background: rgba(239, 68, 68, .07);
+    border-bottom: 1px solid rgba(239, 68, 68, .18);
+    color: #f87171;
+    font-size: .78rem;
+}
+
+/*---RB_TAB_BAR---*/
+
+.rb-tab-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    background: var(--bg-elevated);
+}
+
+.rb-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color .12s, border-color .12s;
+    margin-bottom: -1px;
+}
+
+.rb-tab:hover {
+    color: var(--text-main);
+}
+
+.rb-tab--active {
+    color: var(--brand);
+    border-bottom-color: var(--brand);
+}
+
+.rb-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 4px;
+    background: var(--brand-dim);
+    color: var(--brand);
+    border-radius: 99px;
+    font-size: .62rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+/*---RB_PANEL---*/
+
+.rb-panel {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+/*---RB_HEADERS---*/
+
+.rb-headers-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.rb-hrow {
+    display: grid;
+    grid-template-columns: 20px 1fr 1fr 24px;
+    align-items: center;
+    gap: 8px;
+}
+
+.rb-hrow-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.rb-hrow-check input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--brand);
+    cursor: pointer;
+}
+
+.rb-hkey,
+.rb-hval {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 5px 9px;
+    font-size: .77rem;
+    font-family: var(--font-mono);
+    color: var(--text-main);
+    outline: none;
+    transition: border-color .12s;
+    min-width: 0;
+}
+
+.rb-hkey:focus,
+.rb-hval:focus {
+    border-color: var(--brand);
+}
+
+.rb-hkey::placeholder,
+.rb-hval::placeholder {
+    color: var(--text-muted);
+}
+
+.rb-hdel {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: .68rem;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    transition: color .12s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rb-hdel:hover {
+    color: #ef4444;
+}
+
+.rb-add-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 14px;
+    font-size: .74rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: border-color .12s, color .12s;
+}
+
+.rb-add-row:hover {
+    border-color: var(--brand);
+    color: var(--brand);
+}
+
+/*---RB_BODY_EDITOR---*/
+
+.rb-body-editor {
+    width: 100%;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: .8rem;
+    font-family: var(--font-mono);
+    color: #c9d1d9;
+    outline: none;
+    resize: vertical;
+    min-height: 120px;
+    line-height: 1.6;
+    caret-color: #22c55e;
+}
+
+/*---RB_RESPONSE---*/
+
+.rb-response {
+    border-top: 1px solid var(--border);
+}
+
+.rb-res-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 16px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.rb-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: .8rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    padding: 3px 10px;
+    border-radius: 99px;
+}
+
+.rb-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.rb-status--ok {
+    background: rgba(34, 197, 94, .1);
+    color: #22c55e;
+}
+
+.rb-status--ok .rb-status-dot {
+    background: #22c55e;
+}
+
+.rb-status--err {
+    background: rgba(239, 68, 68, .1);
+    color: #ef4444;
+}
+
+.rb-status--err .rb-status-dot {
+    background: #ef4444;
+}
+
+.rb-res-time {
+    font-size: .74rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.rb-res-ct {
+    font-size: .7rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    margin-left: auto;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rb-res-copy {
+    background: none;
+    border: 1px solid #30363d;
+    color: #7d8590;
+    border-radius: var(--radius-sm);
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .7rem;
+    cursor: pointer;
+    transition: color .12s, border-color .12s;
+    flex-shrink: 0;
+}
+
+.rb-res-copy:hover {
+    color: #c9d1d9;
+    border-color: #484f58;
+}
+
+.rb-res-body {
+    margin: 0;
+    padding: 14px 16px;
+    font-size: .78rem;
+    font-family: var(--font-mono);
+    color: #9ca3af;
+    background: #0d1117;
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre;
+    line-height: 1.65;
+    scrollbar-width: thin;
+    scrollbar-color: #30363d #0d1117;
+}
+
+.rb-res-body--json {
+    color: #4ade80;
+}

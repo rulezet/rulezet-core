@@ -1,146 +1,120 @@
 {% extends 'base.html' %}
-{% import 'macros/form_macros.html' as f %}
+{% block title %}Create account | Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/auth.css') }}">
+{% endblock %}
 
 {% block content %}
-<div>
-    <header>
-        <h1 class="mb-4 mt-2">
-            <i class="fas fa-user-plus me-2 text-primary"></i>
-            Register
-        </h1>
-    </header>
-</div>
+<div class="auth-wrapper" id="register-app">
+  <div style="max-width:520px;width:100%;">
 
-<div class="card card-body" id="main-container">
-    <form action="" method="post">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="auth-brand-icon"><i class="fa-solid fa-user-plus"></i></span>
+      </div>
+      <h1 class="auth-title">Create your account</h1>
+      <p class="auth-subtitle">Join the Rulezet community</p>
+
+      <form action="" method="post">
         {{ form.hidden_tag() }}
-        {% if not edit_mode %}
-            {{ form.user_id }}
-        {% endif %}
 
-        <div class="modal-body">
-            <div class="row">
-                <div class="col">
-                    {{ form.first_name.label(class_="col-form-label") }}:  <span style="color:red">*</span>
-                    {{ form.first_name(class_="form-control") }}
-                    {% if form.first_name.errors %}
-                        <div style="color: red;">{{ form.first_name.errors[0] | safe }}</div>
-                    {% endif %}
-                </div>
-                <div class="col">
-                    {{ form.last_name.label(class_="col-form-label") }}: <span style="color:red">*</span>
-                    {{ form.last_name(class_="form-control") }}
-                    {% if form.last_name.errors %}
-                        <div style="color: red;">{{ form.last_name.errors[0] | safe }}</div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="col">
-                {{ form.email.label(class_="col-form-label") }}:  <span style="color:red">*</span>
-                {{ form.email(class_="form-control") }}
-                {% if form.email.errors %}
-                    <div style="color: red;">{{ form.email.errors[0] | safe }}</div>
-                {% endif %}
-            </div>
-
-            <!-- Password -->
-          <div class="col" id="password-container">
-                <label for="password" class="col-form-label">{{ form.password.label }}</label>  
-                <span style="color:red">*</span>
-                <div class="position-relative">
-                    <div class="position-relative">
-                        {{ form.password(class_="form-control pe-5", **{"v-model": "password"}) }}
-                        <i class="fa fa-eye position-absolute top-50 end-0 translate-middle-y me-3"
-                        style="cursor: pointer"
-                        id="togglePasswordIcon"
-                        @click="togglePassword"></i>
-                    </div>
-
-                </div>
-                {% if form.password.errors %}
-                    <div style="color: red;">{{ form.password.errors[0] | safe }}</div>
-                {% endif %}
-
-                <!-- Password rules -->
-                <ul style="margin-top: 10px; padding-left: 20px; list-style: none;">
-                    <li :class="password.length >= 8 ? 'text-success' : 'text-danger'">
-                        <span v-if="password.length >= 8">
-                            <i class="fa-solid fa-check"></i>
-                        </span>
-                        <span v-else>
-                            <i class="fa-solid fa-xmark"></i>
-                        </span> At least 8 characters
-                    </li>
-                    <li :class="/[A-Z]/.test(password) ? 'text-success' : 'text-danger'">
-                        <span v-if="/[A-Z]/.test(password)">
-                            <i class="fa-solid fa-check"></i>
-                        </span>
-                        <span v-else>
-                            <i class="fa-solid fa-xmark"></i>
-                        </span> At least one uppercase letter
-                    </li>
-                    <li :class="/[a-z]/.test(password) ? 'text-success' : 'text-danger'">
-                        <span v-if="/[a-z]/.test(password)">
-                            <i class="fa-solid fa-check"></i>
-                        </span>
-                        <span v-else>
-                            <i class="fa-solid fa-xmark"></i>
-                        </span> At least one lowercase letter
-                    </li>
-                    <li :class="/[0-9]/.test(password) ? 'text-success' : 'text-danger'">
-                        <span v-if="/[0-9]/.test(password)">
-                            <i class="fa-solid fa-check"></i>
-                        </span>
-                        <span v-else>
-                            <i class="fa-solid fa-xmark"></i>
-                        </span> At least one digit
-                    </li>
-                </ul>
-            </div>
-
-            <div class="modal-footer" style="margin-top: 10px;">
-                {{ form.submit(class='btn btn-primary', id='submitBtn') }}
-            </div>
-
+        <!-- Name row -->
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <label class="form-label">First name <span class="text-danger">*</span></label>
+            {{ form.first_name(class_="form-control", placeholder="Alice") }}
+            {% if form.first_name.errors %}
+            <div class="field-error">{{ form.first_name.errors[0] }}</div>
+            {% endif %}
+          </div>
+          <div class="col-6">
+            <label class="form-label">Last name <span class="text-danger">*</span></label>
+            {{ form.last_name(class_="form-control", placeholder="Smith") }}
+            {% if form.last_name.errors %}
+            <div class="field-error">{{ form.last_name.errors[0] }}</div>
+            {% endif %}
+          </div>
         </div>
-    </form>
+
+        <div class="mb-3">
+          <label class="form-label">Email <span class="text-danger">*</span></label>
+          {{ form.email(class_="form-control", placeholder="you@example.com", autocomplete="email") }}
+          {% if form.email.errors %}
+          <div class="field-error">{{ form.email.errors[0] }}</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-4" id="password-block">
+          <label class="form-label">Password <span class="text-danger">*</span></label>
+          <div class="input-group">
+            {{ form.password(class_="form-control", id="password", placeholder="••••••••", **{"v-model": "password", "autocomplete": "new-password"}) }}
+            <span class="input-group-text" @click="togglePwd">
+              <i :class="showPwd ? 'fa fa-eye-slash fa-fw' : 'fa fa-eye fa-fw'"></i>
+            </span>
+          </div>
+          {% if form.password.errors %}
+          <div class="field-error">{{ form.password.errors[0] }}</div>
+          {% endif %}
+
+          <ul class="pw-checks mt-2">
+            <li :class="password.length >= 8 ? 'text-success' : 'text-danger'">
+              <i :class="password.length >= 8 ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i> At least 8 characters
+            </li>
+            <li :class="/[A-Z]/.test(password) ? 'text-success' : 'text-danger'">
+              <i :class="/[A-Z]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i> One uppercase letter
+            </li>
+            <li :class="/[a-z]/.test(password) ? 'text-success' : 'text-danger'">
+              <i :class="/[a-z]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i> One lowercase letter
+            </li>
+            <li :class="/[0-9]/.test(password) ? 'text-success' : 'text-danger'">
+              <i :class="/[0-9]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i> One digit
+            </li>
+          </ul>
+        </div>
+
+        <button type="submit" id="submitBtn" class="btn-auth mb-3" :disabled="!passwordValid">
+          <i class="fa-solid fa-user-plus me-1"></i> Create account
+        </button>
+      </form>
+
+      <div class="auth-footer-row">
+        Already have an account?
+        <a href="/account/login" class="auth-link fw-semibold ms-1">Log in</a>
+      </div>
+    </div>
+
+    <p class="text-center mt-3" style="font-size:.78rem;color:var(--subtle-text-color);">
+      &copy; 2026 Rulezet. All rights reserved.
+    </p>
+  </div>
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-const { createApp, ref, computed, onMounted, watch } = Vue;
-
+const { createApp, ref, computed } = Vue;
 createApp({
+    delimiters: ['[[', ']]'],
     setup() {
-        const password = ref('');
+        const password  = ref('');
+        const showPwd   = ref(false);
 
-        const passwordValid = computed(() => {
-            return password.value.length >= 8 &&
-                   /[A-Z]/.test(password.value) &&
-                   /[a-z]/.test(password.value) &&
-                   /[0-9]/.test(password.value);
-        });
+        const passwordValid = computed(() =>
+            password.value.length >= 8 &&
+            /[A-Z]/.test(password.value) &&
+            /[a-z]/.test(password.value) &&
+            /[0-9]/.test(password.value)
+        );
 
-        const togglePassword = () => {
-            const input = document.getElementById("password");
-            const icon = document.getElementById("togglePasswordIcon");
-            input.type = input.type === "password" ? "text" : "password";
-            icon.classList.toggle("fa-eye");
-            icon.classList.toggle("fa-eye-slash");
+        const togglePwd = () => {
+            showPwd.value = !showPwd.value;
+            const inp = document.getElementById('password');
+            inp.type = showPwd.value ? 'text' : 'password';
         };
 
-        onMounted(() => {
-            const submitBtn = document.getElementById('submitBtn');
-            submitBtn.disabled = true;
-            watch(passwordValid, (val) => {
-                submitBtn.disabled = !val;
-            });
-        });
-
-        return { password, togglePassword, passwordValid };
+        return { password, showPwd, passwordValid, togglePwd };
     }
-}).mount('#password-container');
+}).mount('#register-app');
 </script>
 {% endblock %}

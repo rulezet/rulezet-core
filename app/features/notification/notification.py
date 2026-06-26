@@ -6,6 +6,7 @@ from app.features.notification.notification_core import (
     mark_read, mark_all_read, delete_notification,
     follow_user, unfollow_user, is_following,
     get_follower_count, get_following_count,
+    get_preference, update_preference,
 )
 from app.core.db_class.db import UserFollow, User
 
@@ -74,6 +75,14 @@ def api_delete(notif_id):
     return jsonify({'ok': ok}), (200 if ok else 404)
 
 
+@notification_blueprint.delete('/delete_all')
+@login_required
+def api_delete_all():
+    from app.features.notification.notification_core import delete_all_notifications
+    delete_all_notifications(current_user.id)
+    return jsonify({'ok': True})
+
+
 # ── Follow API ─────────────────────────────────────────────────────────────────
 
 @notification_blueprint.post('/follow/<int:user_id>')
@@ -135,6 +144,25 @@ def api_my_following():
         if u:
             users.append(_user_to_card(u))
     return jsonify(users)
+
+
+# ── Preferences API ───────────────────────────────────────────────────────────
+
+@notification_blueprint.get('/preferences')
+@login_required
+def api_get_preferences():
+    pref = get_preference(current_user.id)
+    return jsonify(pref.to_json())
+
+
+@notification_blueprint.post('/preferences')
+@login_required
+def api_update_preferences():
+    data = request.json or {}
+    pref = update_preference(current_user.id, data)
+    if pref is None:
+        return jsonify({'ok': False}), 500
+    return jsonify({'ok': True, 'preferences': pref.to_json()})
 
 
 # ── Page ───────────────────────────────────────────────────────────────────────

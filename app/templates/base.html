@@ -1,16 +1,25 @@
 <!DOCTYPE html>
-<html>
+<html {% if user_config %}data-user-theme="{{ user_config.theme }}"{% endif %}>
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{% block title %}RULEZET{% endblock %}</title>
+
+    {# Inject custom themes before theme.js so applyTheme() knows about them #}
+    <script>window.__CUSTOM_THEMES__ = {{ custom_themes_for_js | tojson | safe }};</script>
+    {# theme.js — sync, runs before CSS to prevent flash #}
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.1/styles/github.min.css" />
     <link rel="stylesheet" type="text/css"
         href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css" />
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
 
     <link rel="icon" href="{{ url_for('static',filename='image/logo.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Fira+Code:wght@400;500&display=swap">
     <link rel="stylesheet" type="text/css"
         href="{{ url_for('static',filename='css/external_library/select2.min.css') }}">
     <link rel="stylesheet" type="text/css"
@@ -22,12 +31,19 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='fontawesome-6.3.0/css/solid.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='fontawesome-6.3.0/css/brands.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/external_library/jquery-ui.css') }}">
+    {# Design tokens must load before core.css so overrides cascade correctly #}
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/variables.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/theme.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/custom-themes.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/core.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/base/sidebar.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/base/toaster.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/jobWidget.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/verify_email.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/notification/notification.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/components/dataTable.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/components/code-viewer.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/ruleList.css') }}">
 
     {% block head %}
     {% endblock %}
@@ -47,11 +63,79 @@
 </head>
 
 <body>
+    <!-- Apply nav style, code font, and json theme before first paint to avoid flash -->
+    <script>
+    (function(){
+        var f = localStorage.getItem('rz-code-font');
+        if (f) document.documentElement.style.setProperty('--font-mono', f);
+    })();
+    (function(){
+        var t = localStorage.getItem('rz-json-theme');
+        if (t && t !== 'default') document.documentElement.setAttribute('data-json-theme', t);
+    })();
+    (function(){
+        var s = localStorage.getItem('rz-nav-style') || 'default';
+        document.body.dataset.navStyle = s;
+        // Restore collapsed state: add class immediately so CSS applies on first render
+        if (s === 'collapsible' && localStorage.getItem('rz-nav-hidden') === '1')
+            document.body.classList.add('nav-hidden');
+    })();
+    </script>
+
     {% include 'sidebar.html' %}
+
+    <!-- Collapsible nav: floating tab to restore hidden navbar -->
+    <div class="nav-peek-tab" id="navPeekTab">
+        <i class="fas fa-chevron-down"></i> Navigation
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var navbar = document.querySelector('.main-navbar');
+
+        // Measure real navbar height and set CSS variable (for sticky/collapsible padding-top)
+        if (navbar && (document.body.dataset.navStyle === 'sticky' || document.body.dataset.navStyle === 'collapsible')) {
+            var h = navbar.offsetHeight;
+            if (h) document.body.style.setProperty('--navbar-h', h + 'px');
+            // Keep in sync on resize (mobile toggler changes height)
+            new ResizeObserver(function() {
+                var nh = navbar.offsetHeight;
+                if (nh) document.body.style.setProperty('--navbar-h', nh + 'px');
+            }).observe(navbar);
+        }
+
+        // Inject collapse toggle button into the navbar
+        var navbarInner = document.querySelector('.main-navbar .container-fluid') || navbar;
+        if (navbarInner) {
+            var btn = document.createElement('button');
+            btn.id = 'navCollapseBtn';
+            btn.className = 'nav-collapse-btn';
+            btn.title = 'Hide navigation';
+            btn.innerHTML = '<i class="fas fa-chevron-up"></i>';
+            btn.addEventListener('click', rzToggleNav);
+            navbarInner.appendChild(btn);
+        }
+        var peekEl = document.getElementById('navPeekTab');
+        if (peekEl) peekEl.addEventListener('click', rzToggleNav);
+    });
+
+    function rzToggleNav() {
+        var hidden = document.body.classList.toggle('nav-hidden');
+        localStorage.setItem('rz-nav-hidden', hidden ? '1' : '0');
+    }
+    function rzSetNavStyle(style) {
+        document.body.dataset.navStyle = style;
+        localStorage.setItem('rz-nav-style', style);
+        if (style !== 'collapsible') {
+            document.body.classList.remove('nav-hidden');
+            localStorage.removeItem('rz-nav-hidden');
+        }
+    }
+    </script>
 
     <!-- Toast app — standalone Vue instance, always active regardless of page app mount point -->
     <div id="rz-toast-app">
-        <div class="rz-toast-container" role="region" aria-live="polite">
+        <div :class="toastContainerClass" role="region" aria-live="polite">
             <template v-if="message_list">
                 <template v-for="msg in message_list" :key="msg.id">
                     <div :id="`rz-toast-${msg.id}`" :class="`rz-toast rz-toast--${msg.variant}`" role="alert">
@@ -94,11 +178,21 @@
 
     {% block toast_app %}
     <script type="module">
-        const { createApp } = Vue
-        import { message_list } from '/static/js/toaster.js';
+        const { createApp, computed } = Vue
+        import { message_list, toast_position, toast_style } from '/static/js/toaster.js';
         createApp({
             delimiters: ['[[', ']]'],
-            setup() { return { message_list } }
+            setup() {
+                const toastContainerClass = computed(() => {
+                    const cls = ['rz-toast-container']
+                    if (toast_position.value !== 'top-right')
+                        cls.push('rz-toast-container--' + toast_position.value)
+                    if (toast_style.value !== 'default')
+                        cls.push('rz-toast-container--style-' + toast_style.value)
+                    return cls
+                })
+                return { message_list, toastContainerClass }
+            }
         }).mount('#rz-toast-app')
     </script>
     {% endblock %}
@@ -118,28 +212,17 @@
                 if (sec) $el.T = setTimeout(triggerRemove, sec * 1000);
             });
         });
-        (function () {
-            const html = document.documentElement;
-            function setTheme(theme) {
-                html.classList.remove("light-mode", "dark-mode");
-                html.classList.add(theme + "-mode");
-                if (document.body) {
-                    document.body.classList.remove("light-mode", "dark-mode");
-                    document.body.classList.add(theme + "-mode");
-                }
-                document.querySelectorAll('.theme-toggle__option').forEach(opt => {
-                    opt.classList.toggle('active', opt.dataset.theme === theme);
-                });
-                localStorage.setItem("theme", theme);
+
+        // theme.js (loaded in <head>) already applied the theme synchronously.
+        // Wire click events for the legacy .theme-toggle__option buttons.
+        document.addEventListener('click', function (e) {
+            const opt = e.target.closest('.theme-toggle__option');
+            if (opt && opt.dataset.theme) {
+                applyTheme(opt.dataset.theme);
+                updateThemeIcon(opt.dataset.theme);
+                _saveThemeToDb(opt.dataset.theme);
             }
-            const saved = localStorage.getItem("theme") ||
-                (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-            setTheme(saved);
-            document.addEventListener('click', function (e) {
-                const opt = e.target.closest('.theme-toggle__option');
-                if (opt && opt.dataset.theme) setTheme(opt.dataset.theme);
-            });
-        })();
+        });
 
         (function () {
             function dismissFlash(el) {
@@ -176,18 +259,6 @@
             } else {
                 initFlashes()
             }
-        })();
-
-        (function () {
-            let savedTheme = localStorage.getItem('theme');
-            if (!savedTheme) {
-                savedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            }
-            document.documentElement.classList.add(savedTheme + '-mode');
-            const style = document.createElement('style');
-            style.innerHTML = `* { transition: none !important; }`;
-            document.head.appendChild(style);
-            window.addEventListener('DOMContentLoaded', () => style.remove());
         })();
 
         document.addEventListener("DOMContentLoaded", () => {

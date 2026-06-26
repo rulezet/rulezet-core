@@ -1,0 +1,267 @@
+{% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
+{% block title %}Job — {{ job.label or job.job_type }} — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/jobs/jobs.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/key-value.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3 px-4" id="jobs-detail-app" v-cloak>
+
+    <loading-bar :active="!page_is_loading"></loading-bar>
+
+    <div v-if="page_is_loading">
+
+        <!-- ── Banner ── -->
+        <div class="explorer-banner mb-4">
+            <i class="fa-solid fa-gear banner-watermark"></i>
+            <nav aria-label="breadcrumb" class="mb-3">
+                <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                    <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                    <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                    <li class="breadcrumb-item"><a href="/jobs/list" class="text-decoration-none text-muted">Jobs</a></li>
+                    <li class="breadcrumb-item active text-muted" aria-current="page" style="font-family:monospace;text-transform:none;">{{ job.uuid }}</li>
+                </ol>
+            </nav>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="banner-icon"><i class="fa-solid fa-gear"></i></div>
+                    <div>
+                        <h2 class="fw-bold mb-1">
+                            [[ job.title || 'Job detail' ]]
+                            <span class="jobs-status-badge ms-2" :class="'jobs-status-badge--' + job.status" style="font-size:.55rem;vertical-align:middle;">
+                                <i :class="statusIcon(job.status)"></i>
+                                [[ job.status ]]
+                            </span>
+                        </h2>
+                        <div class="banner-accent"></div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 flex-wrap" v-if="can_manage">
+                    <button v-if="job.status === 'running'"
+                        class="btn btn-sm btn-outline-warning"
+                        @click="doAction('pause')">
+                        <i class="fas fa-pause me-1"></i> Pause
+                    </button>
+                    <button v-if="job.status === 'paused'"
+                        class="btn btn-sm btn-outline-primary"
+                        @click="doAction('resume')">
+                        <i class="fas fa-play me-1"></i> Resume
+                    </button>
+                    <button v-if="['pending','running','paused'].includes(job.status)"
+                        class="btn btn-sm btn-outline-danger"
+                        @click="doAction('cancel')">
+                        <i class="fas fa-ban me-1"></i> Cancel
+                    </button>
+                    <button v-if="!['running','pending'].includes(job.status)"
+                        class="btn btn-sm btn-outline-danger"
+                        @click="doDelete">
+                        <i class="fas fa-trash me-1"></i> Delete
+                    </button>
+                </div>
+            </div>
+            <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+                <span class="me-3"><i class="fas fa-tag me-1 opacity-50"></i>[[ job.type ]]</span>
+                <span v-if="job.created_at"><i class="fas fa-clock me-1 opacity-50"></i>[[ new Date(job.created_at).toLocaleString() ]]</span>
+            </p>
+        </div>
+
+        {{ anav.admin_nav('jobs', jobs_count=running_jobs_count) }}
+
+        <!-- ── Info grid ── -->
+        <div class="jobs-detail-grid">
+
+            <!-- Job info card -->
+            <div class="jobs-detail-card">
+                <h6><i class="fas fa-circle-info me-1"></i> Job info</h6>
+                <div class="jobs-detail-field">
+                    <span class="jobs-detail-label">UUID</span>
+                    <code class="jobs-detail-value" style="font-size:.72rem;">[[ job.uuid ]]</code>
+                </div>
+                <div class="jobs-detail-field">
+                    <span class="jobs-detail-label">Type</span>
+                    <span class="jobs-detail-value">[[ job.type ]]</span>
+                </div>
+                <div class="jobs-detail-field">
+                    <span class="jobs-detail-label">Created</span>
+                    <span class="jobs-detail-value">[[ job.created_at ? new Date(job.created_at).toLocaleString() : '—' ]]</span>
+                </div>
+                <div class="jobs-detail-field">
+                    <span class="jobs-detail-label">Started</span>
+                    <span class="jobs-detail-value">[[ job.started_at ? new Date(job.started_at).toLocaleString() : '—' ]]</span>
+                </div>
+                <div class="jobs-detail-field">
+                    <span class="jobs-detail-label">Finished</span>
+                    <span class="jobs-detail-value">[[ job.finished_at ? new Date(job.finished_at).toLocaleString() : '—' ]]</span>
+                </div>
+                <div class="jobs-detail-field">
+                    <span class="jobs-detail-label">Duration</span>
+                    <span class="jobs-detail-value">[[ job.duration !== null && job.duration !== undefined ? formatDuration(job.duration) : '—' ]]</span>
+                </div>
+
+                <!-- Input payload -->
+                <div v-if="job.meta && Object.keys(job.meta).length" class="mt-3">
+                    <key-value :data="job.meta" label="Payload"></key-value>
+                </div>
+            </div>
+
+            <!-- Progress + result card -->
+            <div class="jobs-detail-card">
+                <h6><i class="fas fa-chart-simple me-1"></i> Progress</h6>
+                <div class="jobs-big-progress">
+                    <div class="jobs-big-progress-bar">
+                        <div
+                            class="jobs-big-progress-fill"
+                            :class="job.status === 'running' ? 'jobs-big-progress-fill--running' : ''"
+                            :style="{ width: job.progress + '%' }">
+                        </div>
+                    </div>
+                    <div class="jobs-big-progress-pct">[[ job.progress ]]%</div>
+                </div>
+                <div v-if="job.error" class="alert alert-danger p-2 mt-2" style="font-size:.82rem;">
+                    <i class="fas fa-circle-xmark me-1"></i> <strong>Error:</strong> [[ job.error ]]
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ── Execution logs ── -->
+        <ansi-terminal
+            ref="terminal_ref"
+            :entries="job.logs"
+            :live="is_live"
+            title="Execution logs"
+            @clear="job.logs = []">
+        </ansi-terminal>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, computed, onMounted, onUnmounted } = Vue
+    import { apiFetch, TOAST } from '/static/js/constants.js'
+    import { message_list, create_message } from '/static/js/toaster.js'
+    import LoadingBar   from '/static/js/components/loading-bar.js'
+    import AnsiTerminal from '/static/js/components/ansi-terminal.js'
+    import KeyValue     from '/static/js/components/key-value.js'
+
+    const JOB_UUID   = '{{ job.uuid }}'
+    const CAN_MANAGE = {{ current_user.is_admin() | tojson }}
+
+    const TERMINAL_STATUSES = ['done', 'completed', 'failed', 'cancelled']
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { LoadingBar, AnsiTerminal, KeyValue },
+
+        setup() {
+            const page_is_loading = ref(false)
+            const can_manage      = CAN_MANAGE
+            const terminal_ref    = ref(null)
+            const job             = ref({
+                uuid:        JOB_UUID,
+                title:       '',
+                type:        '',
+                status:      'pending',
+                progress:    0,
+                logs:        [],
+                error:       null,
+                meta:        {},
+                duration:    null,
+                created_at:  null,
+                started_at:  null,
+                finished_at: null,
+            })
+
+            let poll_timer = null
+
+            const is_live = computed(() => !TERMINAL_STATUSES.includes(job.value.status))
+
+            async function fetchJob() {
+                const res = await apiFetch('/jobs/api/' + JOB_UUID)
+                if (!res.ok) return
+                const data = await res.json()
+                const grew = (data.logs || []).length > (job.value.logs || []).length
+                job.value  = data
+                if (grew && is_live.value) {
+                    terminal_ref.value?.scroll_bottom()
+                }
+                if (TERMINAL_STATUSES.includes(data.status)) {
+                    clearInterval(poll_timer)
+                    poll_timer = null
+                }
+            }
+
+            onMounted(async () => {
+                await fetchJob()
+                page_is_loading.value = true
+                if (!TERMINAL_STATUSES.includes(job.value.status)) {
+                    poll_timer = setInterval(fetchJob, 2000)
+                }
+            })
+
+            onUnmounted(() => { if (poll_timer) clearInterval(poll_timer) })
+
+            function statusIcon(status) {
+                const icons = {
+                    pending:   'fas fa-clock',
+                    running:   'fas fa-spinner fa-spin',
+                    paused:    'fas fa-pause',
+                    done:      'fas fa-circle-check',
+                    completed: 'fas fa-circle-check',
+                    failed:    'fas fa-circle-xmark',
+                    cancelled: 'fas fa-ban',
+                }
+                return icons[status] || 'fas fa-circle'
+            }
+
+            function formatDuration(secs) {
+                if (secs === null || secs === undefined) return '—'
+                if (secs < 60)   return secs.toFixed(1) + 's'
+                if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.round(secs % 60) + 's'
+                return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm'
+            }
+
+            async function doAction(action) {
+                const res = await apiFetch(`/jobs/api/${JOB_UUID}/${action}`, 'POST')
+                if (res.ok) {
+                    const d = await res.json()
+                    create_message(d.message, TOAST.SUCCESS)
+                    await fetchJob()
+                    if (!TERMINAL_STATUSES.includes(job.value.status) && !poll_timer) {
+                        poll_timer = setInterval(fetchJob, 2000)
+                    }
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || `Failed to ${action}`, TOAST.ERROR, true)
+                }
+            }
+
+            async function doDelete() {
+                if (!confirm(`Delete job "${job.value.title}"? This cannot be undone.`)) return
+                const res = await apiFetch('/jobs/api/' + JOB_UUID, 'DELETE')
+                if (res.ok) {
+                    create_message('Job deleted', TOAST.SUCCESS)
+                    window.location.href = '/jobs/list'
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Failed to delete', TOAST.ERROR, true)
+                }
+            }
+
+            return {
+                message_list, page_is_loading,
+                can_manage, job, terminal_ref, is_live,
+                statusIcon, formatDuration,
+                doAction, doDelete,
+            }
+        }
+    }).mount('#jobs-detail-app')
+</script>
+{% endblock %}

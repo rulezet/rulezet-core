@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Admin Settings — Rulezet{% endblock %}
 
 {% block head %}
@@ -32,6 +33,8 @@
         </p>
     </div>
 
+    {{ anav.admin_nav('settings') }}
+
     <!-- ── Tabs ── -->
     <ul class="nav nav-underline justify-content-center w-100 mb-4" id="settingsTabs" role="tablist">
         <li class="nav-item flex-fill text-center">
@@ -40,13 +43,14 @@
                 <i class="fa-solid fa-server me-2"></i>System
             </a>
         </li>
-        <li class="nav-item flex-fill text-center">
+        <!-- Libraries tab disabled -->
+        <!-- <li class="nav-item flex-fill text-center">
             <a class="nav-link fw-bold px-4" data-bs-toggle="tab" href="#pane-packages" role="tab"
                @click="loadPackages" style="color:var(--text-color);">
                 <i class="fa-solid fa-cubes me-2"></i>Libraries
                 <span v-if="packages.length" class="badge bg-secondary ms-1" style="font-size:.65rem;">[[ packages.length ]]</span>
             </a>
-        </li>
+        </li> -->
         <li class="nav-item flex-fill text-center">
             <a class="nav-link fw-bold px-4" data-bs-toggle="tab" href="#pane-submodules" role="tab"
                @click="loadSubmodules" style="color:var(--text-color);">
@@ -406,10 +410,6 @@
                                                 <i class="fa-solid fa-rotate"></i>
                                                 <span class="ms-1 d-none d-xl-inline">Update</span>
                                             </button>
-                                            <button class="btn btn-sm btn-outline-danger rounded-pill px-3"
-                                                    @click="confirmSubRemove(sub)">
-                                                <i class="fa-solid fa-trash"></i>
-                                            </button>
                                             <button class="btn btn-sm btn-outline-secondary rounded-pill px-3"
                                                     @click="showSubDetail(sub)">
                                                 <i class="fa-solid fa-circle-info"></i>
@@ -613,7 +613,7 @@
                             <div class="config-row">
                                 <div class="config-row__key">Password</div>
                                 <div class="config-row__value d-flex align-items-center gap-2">
-                                    <span class="config-secret">[[ config.mail.password_set ? config.mail.password_preview : 'not set' ]]</span>
+                                    <span class="config-secret">[[ config.mail.password_set ? '••••••••' : 'not set' ]]</span>
                                     <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 ms-auto" style="font-size:.72rem;"
                                             @click="editingMailPwd = !editingMailPwd">
                                         <i class="fa-solid fa-pen-to-square"></i>
@@ -930,40 +930,12 @@
                 <button type="button" class="btn btn-success rounded-pill px-4"
                         @click="createSubJob('update_submodule_bg', selectedSub.path, 'Update ' + selectedSub.name); bootstrap.Modal.getInstance(document.getElementById('subDetailModal')).hide()"
                         v-if="selectedSub">
-                    <i class="fa-solid fa-rotate me-1"></i>Update (background job)
+                    <i class="fa-solid fa-rotate me-1"></i>Update 
                 </button>
             </div>
         </div>
     </div>
     </div><!-- /subDetailModal -->
-
-    <!-- ── Confirm: Remove Submodule ── -->
-    <div class="modal fade" id="subRemoveModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
-            <div class="modal-header border-0 pb-0 px-4 pt-4">
-                <h5 class="modal-title fw-bold text-danger">
-                    <i class="fa-solid fa-triangle-exclamation me-2"></i>Remove Submodule
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body px-4 pb-2" v-if="subToRemove">
-                <p>This will <strong>permanently remove</strong> the submodule
-                   <code>[[ subToRemove.name ]]</code> from the repository.</p>
-                <p class="text-muted small mb-0">
-                    <i class="fa-solid fa-circle-info me-1"></i>
-                    Runs <code>git submodule deinit</code> + <code>git rm</code>. This cannot be undone without git history.
-                </p>
-            </div>
-            <div class="modal-footer border-0 px-4 pt-2 pb-4">
-                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger rounded-pill px-4" @click="doRemoveSub">
-                    <i class="fa-solid fa-trash me-1"></i>Remove
-                </button>
-            </div>
-        </div>
-    </div>
-    </div><!-- /subRemoveModal -->
 
     <!-- ── Confirm: Uninstall Package ── -->
     <div class="modal fade" id="pkgUninstallModal" tabindex="-1" aria-hidden="true">
@@ -1279,7 +1251,6 @@ createApp({
             })
         }
 
-        /* ── Init ── */
         loadSystem()
 
         return {

@@ -1,646 +1,425 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Background Jobs — Rulezet{% endblock %}
+
 {% block head %}
-<style>
-@keyframes job-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(13,110,253,.6); outline: 2px solid #0d6efd; }
-  70%  { box-shadow: 0 0 0 10px rgba(13,110,253,0); }
-  100% { box-shadow: 0 0 0 0 rgba(13,110,253,0); outline: 2px solid transparent; }
-}
-.job-highlight { animation: job-pulse 1.4s ease 3; background: rgba(13,110,253,.05) !important; }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/table/data-table.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/jobs/jobs.css') }}">
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-3 px-4" id="jobs-app" v-cloak>
 
-    <!-- ── Header ── -->
-    <div class="explorer-banner mb-4">
-        <i class="fa-solid fa-tasks banner-watermark"></i>
-        <nav aria-label="breadcrumb" class="mb-3">
-            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
-                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">Jobs</li>
-            </ol>
-        </nav>
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
-            <div class="d-flex align-items-center gap-3">
-                <div class="banner-icon">
-                    <i class="fa-solid fa-tasks"></i>
-                </div>
+    <loading-bar :active="!page_is_loading"></loading-bar>
+
+    <div v-if="page_is_loading">
+
+        <!-- ── Banner ── -->
+        <div class="explorer-banner mb-4">
+            <i class="fa-solid fa-gear banner-watermark"></i>
+            <nav aria-label="breadcrumb" class="mb-3">
+                <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                    <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                    {% if admin_view %}
+                    <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                    {% endif %}
+                    <li class="breadcrumb-item active text-muted" aria-current="page">{% if admin_view %}All Jobs{% else %}My Jobs{% endif %}</li>
+                </ol>
+            </nav>
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="banner-icon"><i class="fa-solid fa-gear"></i></div>
                 <div>
-                    <h2 class="fw-bold mb-1">Background Jobs</h2>
+                    <h2 class="fw-bold mb-1">{% if admin_view %}Background Jobs{% else %}My Jobs{% endif %}</h2>
                     <div class="banner-accent"></div>
                 </div>
             </div>
-            <!-- Zombie alert -->
-            <div v-if="zombies.length > 0"
-                 class="alert alert-danger border-0 rounded-3 py-2 px-3 mb-0 d-flex align-items-center gap-3">
-                <div>
-                    <i class="fas fa-skull-crossbones me-2"></i>
-                    <strong>[[ zombies.length ]] zombie job(s)</strong> detected — stuck at "running".
-                </div>
-                <button class="btn btn-sm btn-danger rounded-pill"
-                        @click="killZombies" :disabled="killingZombies">
-                    <span v-if="killingZombies" class="spinner-border spinner-border-sm me-1"></span>
-                    <i v-else class="fas fa-skull me-1"></i>Kill all
-                </button>
-            </div>
-        </div>
-        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-            {% if current_user.is_admin() %}
-            Track and manage all background tasks running on the platform.
-            {% else %}
-            Track the background tasks you started — bulk deletions, restores and imports.
-            {% endif %}
-        </p>
-    </div>
-
-    <!-- ── Filters bar ── -->
-    <div class="card border-0 shadow-sm rounded-4 mb-4">
-        <div class="card-body p-3">
-            <div class="row g-2 align-items-end">
-
-                <!-- Search -->
-                <div class="col-md-5">
-                    <label class="form-label small fw-semibold mb-1">Search</label>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-transparent border-end-0">
-                            <i class="fas fa-search text-muted"></i>
-                        </span>
-                        <input type="text" class="form-control border-start-0"
-                               v-model="search"
-                               placeholder="Label or job type…"
-                               @keyup.enter="load(1)">
-                        <button v-if="search" class="btn btn-outline-secondary btn-sm"
-                                @click="search = ''; load(1)">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Status filter -->
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold mb-1">Status</label>
-                    <select class="form-select form-select-sm" v-model="filterStatus" @change="load(1)">
-                        <option value="">All statuses</option>
-                        <option value="pending">Pending</option>
-                        <option value="running">Running</option>
-                        <option value="paused">Paused</option>
-                        <option value="done">Done</option>
-                        <option value="failed">Failed</option>
-                        <option value="cancelled">Cancelled</option>
-                    </select>
-                </div>
-
-                <!-- Per page -->
-                <div class="col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Per page</label>
-                    <select class="form-select form-select-sm" v-model="perPage" @change="load(1)">
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                    </select>
-                </div>
-
-                <!-- Actions -->
-                <div class="col-md-2 d-flex gap-2">
-                    <button class="btn btn-sm btn-primary flex-grow-1" @click="load(1)">
-                        <i class="fas fa-search me-1"></i>Search
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary" @click="load(currentPage)" title="Refresh">
-                        <i class="fas fa-sync" :class="{ 'fa-spin': loading }"></i>
-                    </button>
-                </div>
-
-            </div>
-
-            <!-- Active filter chips -->
-            <div v-if="filterStatus || search" class="d-flex gap-2 mt-2 flex-wrap">
-                <span v-if="search"
-                      class="badge rounded-pill d-flex align-items-center gap-1 px-2 py-1"
-                      style="background: var(--light-bg-color); color: var(--text-color); font-size:0.75rem">
-                    <span class="text-muted">Search:</span> [[ search ]]
-                    <i class="fas fa-times ms-1" style="cursor:pointer" @click="search = ''; load(1)"></i>
-                </span>
-                <span v-if="filterStatus"
-                      class="badge rounded-pill d-flex align-items-center gap-1 px-2 py-1"
-                      style="background: var(--light-bg-color); color: var(--text-color); font-size:0.75rem">
-                    <span class="text-muted">Status:</span> [[ filterStatus ]]
-                    <i class="fas fa-times ms-1" style="cursor:pointer" @click="filterStatus = ''; load(1)"></i>
-                </span>
-                <small class="text-muted align-self-center">
-                    [[ totalJobs ]] result(s)
-                </small>
-            </div>
-        </div>
-    </div>
-
-    <!-- ── Loading ── -->
-    <div v-if="loading && !jobs.length" class="text-center py-5">
-        <div class="spinner-border text-primary"></div>
-    </div>
-
-    <!-- ── Empty ── -->
-    <div v-else-if="!jobs.length" class="text-center text-muted py-5">
-        <i class="fas fa-tasks fa-2x d-block mb-2 opacity-25"></i>
-        No jobs found.
-    </div>
-
-    <!-- ── Job cards ── -->
-    <div v-else class="d-flex flex-column gap-3">
-        <div v-for="job in jobs" :key="job.uuid"
-             :id="'job-' + job.uuid"
-             :class="['card border-0 shadow-sm rounded-4', highlightUuid === job.uuid ? 'job-highlight' : '']">
-            <div class="card-body p-3">
-
-                <!-- Top row -->
-                <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
-
-                    <!-- Info (clickable to expand) -->
-                    <div class="flex-grow-1 min-width-0" style="cursor:pointer"
-                         @click="toggleDetail(job.uuid)">
-
-                        <!-- Title + badges -->
-                        <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
-                            <i :class="[statusIcon(job.status), 'text-' + statusColor(job.status)]"></i>
-                            <span class="fw-semibold" style="color: var(--text-color)">
-                                [[ job.label || job.job_type ]]
-                            </span>
-                            <span class="badge rounded-pill"
-                                  :class="'bg-' + statusColor(job.status) + '-subtle text-' + statusColor(job.status)">
-                                [[ job.status ]]
-                            </span>
-                            <span class="badge bg-light border text-dark small font-monospace">
-                                [[ job.job_type ]]
-                            </span>
-                            <span v-if="job.owner" class="badge bg-info-subtle text-info small"
-                                  title="Job owner">
-                                <i class="fas fa-user me-1"></i>[[ job.owner ]]
-                            </span>
-                            <i class="fas ms-auto opacity-50"
-                               :class="expandedJob === job.uuid ? 'fa-chevron-up' : 'fa-chevron-down'"
-                               style="font-size:0.7rem"></i>
-                        </div>
-
-                        <!-- Progress bar -->
-                        <div v-if="['running', 'done', 'paused'].includes(job.status)" class="mb-2">
-                            <div class="d-flex justify-content-between small mb-1"
-                                 style="color: var(--subtle-text-color)">
-                                <span>[[ job.done.toLocaleString() ]] / [[ job.total.toLocaleString() ]] items</span>
-                                <span class="fw-semibold">[[ job.progress_pct ]]%</span>
-                            </div>
-                            <div class="progress" style="height:6px; border-radius:3px;">
-                                <div class="progress-bar"
-                                     :class="[
-                                        job.status === 'running' ? 'progress-bar-animated progress-bar-striped' : '',
-                                        'bg-' + statusColor(job.status)
-                                     ]"
-                                     :style="{ width: job.progress_pct + '%' }">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Status notices -->
-                        <div v-if="job.status === 'pending'" class="small"
-                             style="color: var(--subtle-text-color)">
-                            <i class="fas fa-hourglass-start me-1"></i>Queued, waiting for worker…
-                        </div>
-                        <div v-if="job.status === 'paused'" class="small text-info">
-                            <i class="fas fa-pause-circle me-1"></i>
-                            Paused at [[ job.progress_pct ]]% — resume when ready.
-                        </div>
-                        <div v-if="job.error" class="small text-danger mt-1">
-                            <i class="fas fa-exclamation-triangle me-1"></i>[[ job.error ]]
-                        </div>
-
-                        <!-- Timestamps -->
-                        <div class="d-flex flex-wrap gap-3 mt-2"
-                             style="font-size:0.72rem; color: var(--subtle-text-color)">
-                            <span>
-                                <i class="fas fa-plus-circle me-1 opacity-50"></i>Created [[ job.created_at ]]
-                            </span>
-                            <span v-if="job.started_at">
-                                <i class="fas fa-play-circle me-1 opacity-50"></i>Started [[ job.started_at ]]
-                            </span>
-                            <span v-if="job.finished_at">
-                                <i class="fas fa-flag-checkered me-1 opacity-50"></i>Finished [[ job.finished_at ]]
-                            </span>
-                            <span v-if="job.status === 'running' && job.started_at">
-                                <i class="fas fa-clock me-1 opacity-50"></i>Running for [[ elapsed(job.started_at) ]]
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Actions -->
-                    <div class="d-flex flex-column gap-1" style="min-width:90px">
-                        <button v-if="['pending','running'].includes(job.status)"
-                                class="btn btn-sm btn-outline-info"
-                                @click="doAction(job, 'pause')"
-                                :disabled="!!acting[job.uuid]">
-                            <span v-if="acting[job.uuid] === 'pause'"
-                                  class="spinner-border spinner-border-sm me-1"></span>
-                            <i v-else class="fas fa-pause me-1"></i>Pause
-                        </button>
-                        <button v-if="job.status === 'paused'"
-                                class="btn btn-sm btn-outline-primary"
-                                @click="doAction(job, 'resume')"
-                                :disabled="!!acting[job.uuid]">
-                            <span v-if="acting[job.uuid] === 'resume'"
-                                  class="spinner-border spinner-border-sm me-1"></span>
-                            <i v-else class="fas fa-play me-1"></i>Resume
-                        </button>
-                        <button v-if="['pending','running','paused'].includes(job.status)"
-                                class="btn btn-sm btn-outline-danger"
-                                @click="doAction(job, 'cancel')"
-                                :disabled="!!acting[job.uuid]">
-                            <span v-if="acting[job.uuid] === 'cancel'"
-                                  class="spinner-border spinner-border-sm me-1"></span>
-                            <i v-else class="fas fa-stop me-1"></i>Stop
-                        </button>
-                        <button v-if="['done','failed','cancelled','paused'].includes(job.status)"
-                                class="btn btn-sm btn-outline-secondary"
-                                @click="doAction(job, 'delete')"
-                                :disabled="!!acting[job.uuid]">
-                            <span v-if="acting[job.uuid] === 'delete'"
-                                  class="spinner-border spinner-border-sm me-1"></span>
-                            <i v-else class="fas fa-trash me-1"></i>Delete
-                        </button>
-                    </div>
-                </div>
-
-                <!-- ── Expandable log panel ── -->
-                <div v-if="expandedJob === job.uuid" class="mt-3 pt-3"
-                     style="border-top: 1px solid var(--border-color)">
-
-                    <div v-if="logsLoading[job.uuid]" class="text-center py-2">
-                        <div class="spinner-border spinner-border-sm text-primary"></div>
-                        <span class="ms-2 small text-muted">Loading activity…</span>
-                    </div>
-
-                    <div v-else-if="!jobLogs[job.uuid] || jobLogs[job.uuid].length === 0"
-                         class="text-center text-muted small py-2">
-                        <i class="fas fa-list-ul me-1 opacity-25"></i>No activity recorded yet.
-                    </div>
-
-                    <div v-else>
-                        <!-- Log header -->
-                        <div class="d-flex align-items-center gap-1 mb-2"
-                             style="font-size:0.72rem; color: var(--subtle-text-color);
-                                    font-weight:600; text-transform:uppercase; letter-spacing:0.05em">
-                            <i class="fas fa-list-ul me-1"></i>Activity Timeline
-                            <span class="ms-auto badge bg-secondary rounded-pill" style="font-size:0.65rem">
-                                [[ jobLogs[job.uuid].length ]] event(s)
-                            </span>
-                        </div>
-
-                        <!-- Log feed -->
-                        <div :ref="el => { if (el) logRefs[job.uuid] = el }"
-                             class="rounded-3 p-2"
-                             style="background: var(--code-bg-color);
-                                    max-height: 280px;
-                                    overflow-y: auto;
-                                    font-family: monospace;
-                                    font-size: 0.75rem;
-                                    line-height: 1.8;">
-                            <div v-for="(log, idx) in jobLogs[job.uuid]" :key="log.id"
-                                 class="d-flex gap-2 align-items-start"
-                                 :class="{ 'mt-2 pt-2': idx > 0 && log.event && log.event !== jobLogs[job.uuid][idx-1].event }"
-                                 style="border-top: none">
-                                <!-- timestamp -->
-                                <span style="color: var(--subtle-text-color); flex-shrink:0;
-                                             user-select:none; min-width:70px">
-                                    [[ shortTime(log.created_at) ]]
-                                </span>
-                                <!-- level icon -->
-                                <i :class="[logLevelIcon(log.level), logLevelColor(log.level)]"
-                                   style="flex-shrink:0; margin-top:3px; font-size:0.65rem"></i>
-                                <!-- message -->
-                                <span :class="logLevelColor(log.level)" style="word-break:break-word">
-                                    [[ log.message ]]
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </div>
-
-    <!-- ── Pagination ── -->
-    <pagination-component
-        :current-page="currentPage"
-        :total-pages="totalPages"
-        @change-page="load">
-    </pagination-component>
-
-    {% if current_user.is_admin() %}
-    <!-- ── Section 2 (admin): errors & warnings across all jobs ── -->
-    <div class="card border-0 shadow-sm rounded-4 mt-4 mb-4">
-        <div class="card-body p-3">
-            <div class="d-flex align-items-center gap-2 mb-1">
-                <i class="fas fa-triangle-exclamation text-danger"></i>
-                <span class="fw-semibold" style="color: var(--text-color)">Errors &amp; Warnings</span>
-                <span class="badge bg-danger-subtle text-danger rounded-pill">
-                    [[ errors.length ]]
-                </span>
-                <button class="btn btn-sm btn-outline-secondary ms-auto" @click="loadErrors" title="Refresh">
-                    <i class="fas fa-sync" :class="{ 'fa-spin': errorsLoading }"></i>
-                </button>
-            </div>
-            <p class="small mb-2" style="color: var(--subtle-text-color)">
-                Latest error and warning lines recorded by all jobs — including details that
-                otherwise only show up in the server terminal.
+            <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+                {% if admin_view %}
+                Monitor and manage all background tasks running on this instance.
+                {% else %}
+                Monitor and manage your personal background tasks.
+                {% endif %}
             </p>
+        </div>
 
-            <div v-if="errorsLoading && !errors.length" class="text-center py-3">
-                <div class="spinner-border spinner-border-sm text-primary"></div>
-            </div>
+        {% if admin_view %}
+        {{ anav.admin_nav('jobs', jobs_count=running_jobs_count) }}
+        {% endif %}
 
-            <div v-else-if="!errors.length" class="text-center text-muted small py-3">
-                <i class="fas fa-check-circle me-1 text-success"></i>No errors or warnings recorded.
-            </div>
+        <!-- ── Status filter chips + refresh ── -->
+        <div class="d-flex gap-2 flex-wrap mb-3 align-items-center">
+            <button
+                v-for="s in status_filters"
+                :key="s.key"
+                class="btn btn-sm"
+                :class="active_status === s.key ? 'btn-primary' : 'btn-outline-secondary'"
+                @click="setStatusFilter(s.key)">
+                [[ s.label ]]
+            </button>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @click="manualRefresh" title="Refresh">
+                <i class="fas fa-rotate-right"></i>
+            </button>
+        </div>
 
-            <div v-else class="rounded-3 p-2"
-                 style="background: var(--code-bg-color);
-                        max-height: 320px;
-                        overflow-y: auto;
-                        font-family: monospace;
-                        font-size: 0.75rem;
-                        line-height: 1.8;">
-                <div v-for="e in errors" :key="e.id" class="d-flex gap-2 align-items-start">
-                    <span style="color: var(--subtle-text-color); flex-shrink:0; user-select:none">
-                        [[ e.created_at ]]
-                    </span>
-                    <i :class="[logLevelIcon(e.level), logLevelColor(e.level)]"
-                       style="flex-shrink:0; margin-top:5px; font-size:0.65rem"></i>
-                    <a v-if="e.job_uuid" :href="'/jobs/list?job=' + e.job_uuid"
-                       class="badge bg-light border text-dark text-decoration-none"
-                       style="flex-shrink:0" title="Open this job">
-                        [[ e.job_label ]]
-                    </a>
-                    <span :class="logLevelColor(e.level)" style="word-break:break-word">
-                        [[ e.message ]]
-                    </span>
+        <!-- ── Alerts panel (always visible) ── -->
+        <div class="jobs-alerts-panel" :class="{ 'jobs-alerts-panel--ok': !alerts_errors.length && !alerts_warnings.length }">
+            <div class="jobs-alerts-header" @click="alerts_open = !alerts_open">
+                <div class="jobs-alerts-badges">
+                    <template v-if="alerts_errors.length || alerts_warnings.length">
+                        <i class="fas fa-triangle-exclamation" style="color:#f59e0b;font-size:.85rem;"></i>
+                        <span class="jobs-alert-count jobs-alert-count--error" v-if="alerts_errors.length">
+                            <i class="fas fa-circle-xmark"></i> [[ alerts_errors.length ]] error[[ alerts_errors.length > 1 ? 's' : '' ]]
+                        </span>
+                        <span class="jobs-alert-count jobs-alert-count--warning" v-if="alerts_warnings.length">
+                            <i class="fas fa-circle-exclamation"></i> [[ alerts_warnings.length ]] warning[[ alerts_warnings.length > 1 ? 's' : '' ]]
+                        </span>
+                    </template>
+                    <template v-else>
+                        <i class="fas fa-circle-check" style="color:#22c55e;font-size:.85rem;"></i>
+                        <span style="font-size:.82rem;font-weight:600;color:#22c55e;">All jobs healthy</span>
+                    </template>
                 </div>
+                <button class="jobs-alerts-toggle" :title="alerts_open ? 'Collapse' : 'Expand'">
+                    <i class="fas" :class="alerts_open ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                </button>
+            </div>
+
+            <div v-if="alerts_open" class="jobs-alerts-body">
+
+                <!-- All clear state -->
+                <div v-if="!alerts_errors.length && !alerts_warnings.length" class="jobs-alert-item" style="color:var(--text-secondary);justify-content:center;padding:.9rem 1rem;">
+                    <i class="fas fa-circle-check me-2" style="color:#22c55e;"></i>
+                    No errors or warnings detected across all jobs.
+                </div>
+
+                <!-- Errors -->
+                <template v-if="alerts_errors.length">
+                    <div class="jobs-alert-section-label jobs-alert-section-label--error">
+                        <i class="fas fa-circle-xmark me-1"></i> Errors
+                    </div>
+                    <div v-for="job in alerts_errors" :key="'e-' + job.uuid" class="jobs-alert-item">
+                        <span class="jobs-alert-dot jobs-alert-dot--error"></span>
+                        <span class="jobs-alert-title">[[ job.title ]]</span>
+                        <span class="jobs-alert-msg">[[ job.error || 'Job failed' ]]</span>
+                        <span class="jobs-alert-date">[[ relativeDate(job.created_at) ]]</span>
+                        <a :href="'/jobs/detail/' + job.uuid" class="jobs-alert-view">
+                            <i class="fas fa-arrow-right"></i> View
+                        </a>
+                    </div>
+                </template>
+
+                <!-- Warnings -->
+                <template v-if="alerts_warnings.length">
+                    <div class="jobs-alert-section-label jobs-alert-section-label--warning">
+                        <i class="fas fa-circle-exclamation me-1"></i> Cancelled
+                    </div>
+                    <div v-for="job in alerts_warnings" :key="'w-' + job.uuid" class="jobs-alert-item">
+                        <span class="jobs-alert-dot jobs-alert-dot--warning"></span>
+                        <span class="jobs-alert-title">[[ job.title ]]</span>
+                        <span class="jobs-alert-msg" v-if="job.progress > 0">Cancelled at [[ job.progress ]]%</span>
+                        <span class="jobs-alert-msg" v-else>Cancelled before completing</span>
+                        <span class="jobs-alert-date">[[ relativeDate(job.created_at) ]]</span>
+                        <a :href="'/jobs/detail/' + job.uuid" class="jobs-alert-view">
+                            <i class="fas fa-arrow-right"></i> View
+                        </a>
+                    </div>
+                </template>
+
             </div>
         </div>
-    </div>
-    {% endif %}
 
+        <!-- ── DataTable ── -->
+        <data-table
+            ref="table_ref"
+            :fetch-url="fetch_url"
+            :columns="columns"
+            :can-delete="can_manage"
+            :can-view="true"
+            :bulk-actions="bulk_actions"
+            initial-sort="created_at"
+            initial-dir="desc"
+            @delete="handleDelete"
+            @view="handleView"
+            @bulk-action="handleBulk">
+
+            <!-- Status cell -->
+            <template #cell-status="{ item }">
+                <span class="jobs-status-badge" :class="'jobs-status-badge--' + item.status">
+                    <i :class="statusIcon(item.status)"></i>
+                    [[ item.status ]]
+                </span>
+            </template>
+
+            <!-- Progress cell -->
+            <template #cell-progress="{ item }">
+                <div class="jobs-progress-wrap">
+                    <div class="jobs-progress-bar">
+                        <div
+                            class="jobs-progress-fill"
+                            :class="item.status === 'running' ? 'jobs-progress-fill--running' : ''"
+                            :style="{ width: item.progress + '%' }">
+                        </div>
+                    </div>
+                    <span class="jobs-progress-label">[[ item.progress ]]%</span>
+                </div>
+            </template>
+
+            <!-- Duration cell -->
+            <template #cell-duration="{ item }">
+                <span v-if="item.duration !== null && item.duration !== undefined">
+                    [[ formatDuration(item.duration) ]]
+                </span>
+                <span v-else class="text-muted">—</span>
+            </template>
+
+            <!-- Card body slot: progress bar instead of raw text -->
+            <template #card-body="{ item }">
+                <div class="jobs-card-meta">
+                    <span class="jobs-card-type">[[ item.type ]]</span>
+                    <span class="jobs-status-badge" :class="'jobs-status-badge--' + item.status" style="font-size:.62rem;">
+                        <i :class="statusIcon(item.status)"></i> [[ item.status ]]
+                    </span>
+                </div>
+                <div class="jobs-card-progress-wrap">
+                    <div class="jobs-card-progress-bar">
+                        <div
+                            class="jobs-card-progress-fill"
+                            :class="item.status === 'running' ? 'jobs-card-progress-fill--running' : ''"
+                            :style="{ width: item.progress + '%' }">
+                        </div>
+                    </div>
+                    <div class="jobs-card-progress-label">[[ item.progress ]]% <span v-if="item.duration !== null && item.duration !== undefined">· [[ formatDuration(item.duration) ]]</span></div>
+                </div>
+                <div v-if="item.error" class="mt-1" style="font-size:.72rem;color:#ef4444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    <i class="fas fa-circle-xmark me-1"></i>[[ item.error ]]
+                </div>
+            </template>
+
+            <!-- Expand slot -->
+            <template #expand="{ item }">
+                <div class="p-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="jobs-detail-field">
+                                <span class="jobs-detail-label">UUID</span>
+                                <code class="jobs-detail-value" style="font-size:.75rem;">[[ item.uuid ]]</code>
+                            </div>
+                            <div class="jobs-detail-field">
+                                <span class="jobs-detail-label">Started</span>
+                                <span class="jobs-detail-value">[[ item.started_at ? new Date(item.started_at).toLocaleString() : '—' ]]</span>
+                            </div>
+                            <div class="jobs-detail-field">
+                                <span class="jobs-detail-label">Finished</span>
+                                <span class="jobs-detail-value">[[ item.finished_at ? new Date(item.finished_at).toLocaleString() : '—' ]]</span>
+                            </div>
+                            <div v-if="item.error" class="jobs-detail-field">
+                                <span class="jobs-detail-label">Error</span>
+                                <span class="jobs-detail-value text-danger">[[ item.error ]]</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6 d-flex gap-2 align-items-start flex-wrap">
+                            <a :href="'/jobs/detail/' + item.uuid" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-eye me-1"></i> View details
+                            </a>
+                            <button v-if="can_manage && item.status === 'running'"
+                                class="btn btn-sm btn-outline-warning"
+                                @click="actionJob('pause', item)">
+                                <i class="fas fa-pause me-1"></i> Pause
+                            </button>
+                            <button v-if="can_manage && item.status === 'paused'"
+                                class="btn btn-sm btn-outline-primary"
+                                @click="actionJob('resume', item)">
+                                <i class="fas fa-play me-1"></i> Resume
+                            </button>
+                            <button v-if="can_manage && ['pending','running','paused'].includes(item.status)"
+                                class="btn btn-sm btn-outline-danger"
+                                @click="actionJob('cancel', item)">
+                                <i class="fas fa-ban me-1"></i> Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+        </data-table>
+
+    </div>
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, reactive, onMounted, onUnmounted, nextTick } = Vue;
-    import { create_message } from '/static/js/toaster.js';
-    import PaginationComponent from '/static/js/rule/paginationComponent.js';
+    const { createApp, ref, computed, onMounted, onUnmounted } = Vue
+    import { apiFetch, TOAST } from '/static/js/constants.js'
+    import { message_list, create_message } from '/static/js/toaster.js'
+    import LoadingBar from '/static/js/components/loading-bar.js'
+    import DataTable  from '/static/js/components/table/data-table.js'
+
+    const CAN_MANAGE  = {{ current_user.is_admin() | tojson }}
+    const ADMIN_VIEW  = {{ admin_view | tojson }}
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'pagination-component': PaginationComponent },
+        components: { LoadingBar, DataTable },
+
         setup() {
-            const csrfToken    = '{{ csrf_token() }}';
-            const isAdmin      = {{ 'true' if current_user.is_admin() else 'false' }};
-            const jobs         = ref([]);
-            const loading      = ref(true);
-            const filterStatus = ref('');
-            const search       = ref('');
-            const perPage      = ref(20);
-            const currentPage  = ref(1);
-            const totalPages   = ref(1);
-            const totalJobs    = ref(0);
-            const acting       = reactive({});
-            const zombies      = ref([]);
-            const killingZombies = ref(false);
+            const page_is_loading  = ref(false)
+            const table_ref        = ref(null)
+            const can_manage       = CAN_MANAGE
+            const active_status    = ref('')
+            const alerts_errors    = ref([])
+            const alerts_warnings  = ref([])
+            const alerts_open      = ref(true)
 
-            // ── Logs state ───────────────────────────────────────────────────
-            const highlightUuid = ref(null);
-            const expandedJob = ref(null);
-            const jobLogs     = reactive({});
-            const logsLoading = reactive({});
-            const lastLogId   = reactive({});
-            const logRefs     = reactive({});
-            let   logPoller   = null;
-            let   autoTimer   = null;
+            const status_filters = [
+                { key: '',          label: 'All'       },
+                { key: 'pending',   label: 'Pending'   },
+                { key: 'running',   label: 'Running'   },
+                { key: 'paused',    label: 'Paused'    },
+                { key: 'done',      label: 'Done'      },
+                { key: 'failed',    label: 'Failed'    },
+                { key: 'cancelled', label: 'Cancelled' },
+            ]
 
-            // ── Helpers ──────────────────────────────────────────────────────
-            function statusColor(s) {
-                return { pending:'secondary', running:'primary', done:'success',
-                         failed:'danger', cancelled:'warning', paused:'info' }[s] || 'secondary';
-            }
-            function statusIcon(s) {
-                return { pending:'fas fa-clock', running:'fas fa-spinner fa-spin',
-                         done:'fas fa-check-circle', failed:'fas fa-times-circle',
-                         cancelled:'fas fa-ban', paused:'fas fa-pause-circle' }[s] || 'fas fa-clock';
-            }
-            function logLevelColor(level) {
-                return { info:'text-muted', success:'text-success',
-                         warning:'text-warning', error:'text-danger' }[level] || 'text-muted';
-            }
-            function logLevelIcon(level) {
-                return { info:'fas fa-circle-dot', success:'fas fa-check-circle',
-                         warning:'fas fa-triangle-exclamation',
-                         error:'fas fa-times-circle' }[level] || 'fas fa-circle-dot';
-            }
-            function shortTime(ts) {
-                if (!ts) return '';
-                return ts.split(' ')[1] || ts;
-            }
-            function elapsed(startedAt) {
-                if (!startedAt) return '';
-                const start = new Date(startedAt.replace(' ', 'T') + 'Z');
-                const diff  = Math.floor((Date.now() - start) / 1000);
-                if (diff < 60)   return `${diff}s`;
-                if (diff < 3600) return `${Math.floor(diff/60)}m ${diff%60}s`;
-                return `${Math.floor(diff/3600)}h ${Math.floor((diff%3600)/60)}m`;
-            }
-            async function scrollLogToBottom(uuid) {
-                await nextTick();
-                const el = logRefs[uuid];
-                if (el) el.scrollTop = el.scrollHeight;
+            const fetch_url = computed(() => {
+                const params = []
+                if (active_status.value) params.push('status=' + active_status.value)
+                if (!ADMIN_VIEW) params.push('mine_only=true')
+                return '/jobs/api/list' + (params.length ? '?' + params.join('&') : '')
+            })
+
+            const columns = [
+                { key: 'title',      label: 'Title',    sortable: true },
+                { key: 'type',       label: 'Type',     sortable: true },
+                { key: 'status',     label: 'Status',   sortable: true,  width: '130px' },
+                { key: 'progress',   label: 'Progress', sortable: false, width: '140px' },
+                { key: 'duration',   label: 'Duration', sortable: false, width: '90px'  },
+                { key: 'created_at', label: 'Created',  sortable: true,  type: 'date',  width: '120px' },
+            ]
+
+            const bulk_actions = can_manage ? [
+                { key: 'cancel', label: 'Cancel', icon: 'fa-ban',   variant: 'danger' },
+                { key: 'delete', label: 'Delete', icon: 'fa-trash', variant: 'danger' },
+            ] : []
+
+            async function fetchAlerts() {
+                const res = await apiFetch('/jobs/api/alerts')
+                if (!res.ok) return
+                const data = await res.json()
+                alerts_errors.value   = data.errors   || []
+                alerts_warnings.value = data.warnings || []
             }
 
-            // ── Load jobs ────────────────────────────────────────────────────
-            async function load(page = currentPage.value) {
-                loading.value = true;
-                try {
-                    const params = new URLSearchParams({
-                        page,
-                        per_page: perPage.value,
-                    });
-                    if (filterStatus.value) params.set('status', filterStatus.value);
-                    if (search.value)       params.set('search', search.value);
-
-                    const res  = await fetch('/jobs/get_jobs?' + params);
-                    const data = await res.json();
-                    if (res.ok) {
-                        jobs.value        = data.jobs || data;  // fallback if old format
-                        totalJobs.value   = data.total || jobs.value.length;
-                        totalPages.value  = data.total_pages || 1;
-                        currentPage.value = data.page || page;
-                    }
-                } finally {
-                    loading.value = false;
-                }
+            function relativeDate(iso) {
+                if (!iso) return ''
+                const diff = Math.floor((Date.now() - new Date(iso)) / 1000)
+                if (diff < 60)   return diff + 's ago'
+                if (diff < 3600) return Math.floor(diff / 60) + 'm ago'
+                if (diff < 86400) return Math.floor(diff / 3600) + 'h ago'
+                return Math.floor(diff / 86400) + 'd ago'
             }
 
-            // ── Errors panel (admin) ─────────────────────────────────────────
-            const errors        = ref([]);
-            const errorsLoading = ref(false);
-            async function loadErrors() {
-                if (!isAdmin) return;
-                errorsLoading.value = true;
-                try {
-                    const res = await fetch('/jobs/errors');
-                    if (res.ok) errors.value = await res.json();
-                } catch { /* keep previous list */ }
-                finally { errorsLoading.value = false; }
-            }
+            let poll_interval = null
 
-            // ── Zombies ──────────────────────────────────────────────────────
-            async function loadZombies() {
-                try {
-                    const res  = await fetch('/jobs/zombies');
-                    const data = await res.json();
-                    if (res.ok) zombies.value = data;
-                } catch { zombies.value = []; }
-            }
-            async function killZombies() {
-                if (!confirm(`Kill all ${zombies.value.length} zombie job(s)? They will be marked as failed.`)) return;
-                killingZombies.value = true;
-                try {
-                    const res  = await fetch('/jobs/kill_zombies', {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': csrfToken },
-                    });
-                    const data = await res.json();
-                    create_message(data.message, res.ok ? 'success-subtle' : 'danger-subtle');
-                    if (res.ok) { zombies.value = []; await load(1); }
-                } finally {
-                    killingZombies.value = false;
-                }
-            }
-
-            // ── Logs ─────────────────────────────────────────────────────────
-            async function fetchLogs(uuid, initial = false) {
-                if (initial) logsLoading[uuid] = true;
-                try {
-                    const since = lastLogId[uuid] || 0;
-                    const res   = await fetch(`/jobs/logs/${uuid}?since_id=${since}`);
-                    const data  = await res.json();
-                    if (res.ok && data.length > 0) {
-                        if (!jobLogs[uuid]) jobLogs[uuid] = [];
-                        jobLogs[uuid].push(...data);
-                        lastLogId[uuid] = data[data.length - 1].id;
-                        scrollLogToBottom(uuid);
-                    }
-                } finally {
-                    if (initial) logsLoading[uuid] = false;
-                }
-            }
-
-            async function toggleDetail(uuid) {
-                if (expandedJob.value === uuid) {
-                    if (jobLogs[uuid]) jobLogs[uuid] = [];
-                    expandedJob.value = null;
-                    if (logPoller) { clearInterval(logPoller); logPoller = null; }
-                    return;
-                }
-                expandedJob.value = uuid;
-                if (!jobLogs[uuid]) jobLogs[uuid] = [];
-                lastLogId[uuid] = 0;
-                await fetchLogs(uuid, true);
-
-                if (logPoller) clearInterval(logPoller);
-                logPoller = setInterval(async () => {
-                    if (!expandedJob.value) { clearInterval(logPoller); return; }
-                    await fetchLogs(expandedJob.value);
-                    const job = jobs.value.find(j => j.uuid === expandedJob.value);
-                    if (job && ['pending', 'running'].includes(job.status)) await load();
-                }, 2000);
-            }
-
-            // ── Actions ──────────────────────────────────────────────────────
-            async function doAction(job, action) {
-                const confirmMessages = {
-                    cancel: 'Stop this job? Progress so far will be kept.',
-                    delete: 'Permanently delete this job record?',
-                };
-                if (confirmMessages[action] && !confirm(confirmMessages[action])) return;
-                acting[job.uuid] = action;
-                try {
-                    const res  = await fetch(`/jobs/${action}/${job.uuid}`, {
-                        method: 'POST', headers: { 'X-CSRFToken': csrfToken },
-                    });
-                    const data = await res.json();
-                    if (res.ok) {
-                        create_message(data.message, 'success-subtle');
-                        if (action === 'delete') {
-                            jobs.value = jobs.value.filter(j => j.uuid !== job.uuid);
-                            if (expandedJob.value === job.uuid) {
-                                expandedJob.value = null;
-                                if (logPoller) { clearInterval(logPoller); logPoller = null; }
-                            }
-                        } else {
-                            await load();
-                            if (expandedJob.value === job.uuid) await fetchLogs(job.uuid);
-                        }
-                    } else {
-                        create_message(data.message || 'Action failed.', 'danger-subtle');
-                    }
-                } finally { delete acting[job.uuid]; }
-            }
-
-            // ── Auto refresh ─────────────────────────────────────────────────
-            function maybeAutoRefresh() {
-                const hasActive = jobs.value.some(j => ['pending', 'running'].includes(j.status));
-                if (hasActive && !logPoller) load();
+            function manualRefresh() {
+                table_ref.value?.fetchData()
+                fetchAlerts()
             }
 
             onMounted(async () => {
-                // Check for ?job=<uuid> from activity logs redirect
-                const targetUuid = new URLSearchParams(window.location.search).get('job');
-                if (targetUuid) highlightUuid.value = targetUuid;
-
-                await load(1);
-                autoTimer = setInterval(maybeAutoRefresh, 3000);
-                if (isAdmin) {
-                    loadZombies();
-                    loadErrors();
-                    setInterval(loadZombies, 15000);
+                page_is_loading.value = true
+                await fetchAlerts()
+                if (ADMIN_VIEW) {
+                    poll_interval = setInterval(() => {
+                        table_ref.value?.fetchData()
+                        fetchAlerts()
+                    }, 5000)
                 }
+            })
 
-                if (targetUuid) {
-                    await nextTick();
-                    toggleDetail(targetUuid);   // auto-expand the job
-                    setTimeout(() => {
-                        const el = document.getElementById('job-' + targetUuid);
-                        if (el) {
-                            const top = el.getBoundingClientRect().top + window.pageYOffset - 100;
-                            window.scrollTo({ top, behavior: 'smooth' });
-                        }
-                    }, 200);
+            onUnmounted(() => { clearInterval(poll_interval) })
+
+            function setStatusFilter(key) {
+                active_status.value = key
+                setTimeout(() => table_ref.value?.fetchData(), 0)
+            }
+
+            function statusIcon(status) {
+                const icons = {
+                    pending:   'fas fa-clock',
+                    running:   'fas fa-spinner fa-spin',
+                    paused:    'fas fa-pause',
+                    done:      'fas fa-circle-check',
+                    completed: 'fas fa-circle-check',
+                    failed:    'fas fa-circle-xmark',
+                    cancelled: 'fas fa-ban',
                 }
-            });
-            onUnmounted(() => {
-                if (autoTimer) clearInterval(autoTimer);
-                if (logPoller) clearInterval(logPoller);
-            });
+                return icons[status] || 'fas fa-circle'
+            }
+
+            function formatDuration(secs) {
+                if (secs === null || secs === undefined) return '—'
+                if (secs < 60)   return secs.toFixed(1) + 's'
+                if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.round(secs % 60) + 's'
+                return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm'
+            }
+
+            function handleView(job) {
+                window.location.href = '/jobs/detail/' + job.uuid
+            }
+
+            async function handleDelete(job) {
+                if (!confirm(`Delete job "${job.title}"?\n\nThis cannot be undone.`)) return
+                const res = await apiFetch('/jobs/api/' + job.uuid, 'DELETE')
+                if (res.ok) {
+                    create_message('Job deleted', TOAST.SUCCESS)
+                    table_ref.value?.fetchData()
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Failed to delete job', TOAST.ERROR, true)
+                }
+            }
+
+            async function actionJob(action, job) {
+                const labels = { pause: 'paused', resume: 'resumed', cancel: 'cancelled' }
+                const res = await apiFetch(`/jobs/api/${job.uuid}/${action}`, 'POST')
+                if (res.ok) {
+                    create_message(`Job ${labels[action] || action}`, TOAST.SUCCESS)
+                    table_ref.value?.fetchData()
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || `Failed to ${action} job`, TOAST.ERROR, true)
+                }
+            }
+
+            async function handleBulk({ action, ids }) {
+                const count = ids === 'ALL' ? 'all' : ids.length
+                const verb  = action === 'cancel' ? 'Cancel' : 'Delete'
+                if (!confirm(`${verb} ${count} selected job(s)?`)) return
+
+                const uuids = ids === 'ALL' ? [] : ids
+                const res = await apiFetch('/jobs/api/bulk', 'POST', { action, uuids })
+                if (res.ok) {
+                    const d = await res.json()
+                    create_message(d.message, TOAST.SUCCESS)
+                    table_ref.value?.fetchData()
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || `Bulk ${action} failed`, TOAST.ERROR, true)
+                }
+            }
 
             return {
-                jobs, loading, filterStatus, search, perPage,
-                currentPage, totalPages, totalJobs,
-                acting, zombies, killingZombies,
-                errors, errorsLoading, loadErrors,
-                highlightUuid, expandedJob, jobLogs, logsLoading, logRefs,
-                statusColor, statusIcon, logLevelColor, logLevelIcon,
-                shortTime, elapsed, load, doAction, toggleDetail,
-                loadZombies, killZombies,
-            };
+                message_list, page_is_loading,
+                table_ref, can_manage, active_status,
+                status_filters, fetch_url, columns, bulk_actions,
+                alerts_errors, alerts_warnings, alerts_open,
+                setStatusFilter, statusIcon, formatDuration,
+                relativeDate, manualRefresh,
+                handleView, handleDelete, actionJob, handleBulk,
+            }
         }
-    }).mount('#jobs-app');
+    }).mount('#jobs-app')
 </script>
 {% endblock %}

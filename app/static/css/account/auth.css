@@ -1,0 +1,204 @@
+/* auth.css — shared stylesheet for login, register, forgot-password, reset-password */
+
+.auth-wrapper {
+    min-height: calc(100vh - 130px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem 1rem;
+    position: relative;
+}
+
+/* Radial blue ambient blob */
+.auth-wrapper::before {
+    content: '';
+    position: fixed;
+    top: -80px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 800px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(10,88,202,0.10) 0%, transparent 68%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.auth-card {
+    position: relative;
+    z-index: 1;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    padding: 2.5rem 2.25rem;
+    width: 100%;
+    box-shadow:
+        0 2px 4px rgba(10,88,202,0.04),
+        0 8px 24px rgba(10,88,202,0.09),
+        0 28px 52px rgba(10,88,202,0.06);
+}
+
+/* Top accent line */
+.auth-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 10%;
+    right: 10%;
+    height: 3px;
+    border-radius: 0 0 4px 4px;
+    background: linear-gradient(90deg, transparent, #0a58ca, transparent);
+}
+
+/* Brand icon above title */
+.auth-brand {
+    text-align: center;
+    margin-bottom: 1.25rem;
+}
+.auth-brand-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0a58ca, #0d6efd);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(10,88,202,0.30);
+}
+
+/* Title */
+.auth-title {
+    font-size: 1.55rem;
+    font-weight: 700;
+    color: var(--text-color);
+    text-align: center;
+    margin-bottom: 0.2rem;
+}
+.auth-subtitle {
+    text-align: center;
+    color: var(--subtle-text-color);
+    font-size: 0.875rem;
+    margin-bottom: 1.75rem;
+}
+
+/* Inputs */
+.auth-card .form-control {
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color, var(--card-bg-color));
+    color: var(--text-color);
+    padding: 0.55rem 0.85rem;
+    transition: border-color 0.18s, box-shadow 0.18s;
+}
+.auth-card .form-control:focus {
+    border-color: #0a58ca;
+    box-shadow: 0 0 0 3px rgba(10,88,202,0.13);
+    background: var(--bg-color, var(--card-bg-color));
+    color: var(--text-color);
+    outline: none;
+}
+.auth-card .form-label {
+    font-size: 0.855rem;
+    font-weight: 600;
+    color: var(--subtle-text-color);
+    margin-bottom: 0.35rem;
+}
+
+/* Eye toggle */
+.auth-card .input-group-text {
+    border-radius: 0 8px 8px 0;
+    background: var(--light-bg-color);
+    border-color: var(--border-color);
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    transition: color 0.15s;
+}
+.auth-card .input-group-text:hover { color: var(--text-color); }
+
+/* Submit button */
+.btn-auth {
+    background: linear-gradient(135deg, #0a58ca, #0d6efd);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 600;
+    padding: 10px;
+    width: 100%;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+    transition: opacity 0.18s, transform 0.15s, box-shadow 0.18s;
+    box-shadow: 0 4px 14px rgba(10,88,202,0.32);
+    cursor: pointer;
+}
+.btn-auth:hover {
+    opacity: 0.91;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(10,88,202,0.42);
+    color: #fff;
+}
+.btn-auth:active { transform: translateY(0); }
+.btn-auth:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Links inside auth cards */
+.auth-link {
+    color: #0d6efd;
+    text-decoration: none;
+    font-size: 0.855rem;
+    transition: opacity 0.15s;
+}
+.auth-link:hover { opacity: 0.75; color: #0d6efd; }
+
+/* Footer row ("Already have an account?") */
+.auth-footer-row {
+    text-align: center;
+    margin-top: 1.25rem;
+    font-size: 0.855rem;
+    color: var(--subtle-text-color);
+}
+
+/* Password strength checklist */
+.pw-checks {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.pw-checks li {
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+}
+.pw-checks li i {
+    width: 14px;
+    text-align: center;
+    font-size: 0.72rem;
+}
+
+/* Field error */
+.field-error {
+    font-size: 0.8rem;
+    color: #dc3545;
+    margin-top: 4px;
+}
+
+/* Info box (e.g. "email sent" confirmation) */
+.auth-info-box {
+    background: rgba(13,110,253,0.07);
+    border: 1px solid rgba(13,110,253,0.18);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    font-size: 0.875rem;
+    color: var(--text-color);
+    text-align: center;
+    margin-bottom: 1.25rem;
+}

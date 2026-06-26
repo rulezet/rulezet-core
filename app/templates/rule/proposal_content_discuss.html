@@ -1,248 +1,620 @@
 {% extends "base.html" %}
-{% block title %}Proposal Discussion — Rulezet{% endblock %}
+{% block title %}Edit Proposal — Rulezet{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
+<style>
+/* ── Status colors ── */
+.pstatus-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.32rem 0.8rem;
+    border-radius: 20px;
+}
+.pstatus-pending  { background: #ffc107; color: #000; }
+.pstatus-accepted,
+.pstatus-approved { background: #198754; color: #fff; }
+.pstatus-rejected { background: #dc3545; color: #fff; }
+
+/* ── Info grid ── */
+.proposal-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+@media (max-width: 576px) {
+    .proposal-meta-grid { grid-template-columns: 1fr; }
+}
+.meta-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.65rem 0.85rem;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.82rem;
+}
+.meta-item__icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--subtle-text-color);
+    font-size: 0.75rem;
+}
+.meta-item__label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--subtle-text-color);
+    font-weight: 600;
+    line-height: 1.2;
+}
+.meta-item__value {
+    color: var(--text-color);
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+/* ── Message block ── */
+.proposal-message-block {
+    background: var(--light-bg-color);
+    border-left: 3px solid #0d6efd;
+    border-radius: 0 10px 10px 0;
+    padding: 0.85rem 1rem;
+    font-size: 0.88rem;
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+/* ── Score bar ── */
+.score-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.score-bar {
+    width: 80px;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 99px;
+    overflow: hidden;
+    display: inline-block;
+}
+.score-bar__fill {
+    display: block;
+    height: 6px;
+    border-radius: 99px;
+    transition: width 0.3s ease;
+}
+
+/* ── Section divider ── */
+.section-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+.section-divider__line {
+    width: 3px;
+    height: 16px;
+    background: linear-gradient(180deg, #0d6efd, #0a58ca);
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+.section-divider__label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--subtle-text-color);
+}
+
+/* ── Rejection alert ── */
+.rejection-alert {
+    background: rgba(220, 53, 69, 0.08);
+    border: 1px solid rgba(220, 53, 69, 0.3);
+    border-left: 3px solid #dc3545;
+    border-radius: 0 10px 10px 0;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div v-if="proposal">
-    <div class="container my-4" id="main-container">
-        <nav aria-label="breadcrumb" class="mb-3">
-            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
-                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
-                <li class="breadcrumb-item"><a href="/rule/rule_propose_edit" class="text-decoration-none text-muted">Proposals</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">[[ proposal.rule_name ]]</li>
-            </ol>
-        </nav>
-        <h2 class="mb-4 ">
-            <a :href="`detail_rule/${proposal.rule_id}`">
-                <i class="fas fa-code-branch  me-2 "></i>
-                Proposal [[ proposal.rule_name ]]
-            </a>
-        </h2>
+<div class="container my-4" id="main-container" v-cloak>
 
-        <div class="card mb-4 shadow-sm">
-            <div class="card-body">
-                <h5 class="card-title d-flex align-items-center gap-2 flex-wrap">
-                    <i class="fas fa-user me-1 text-secondary"></i> Proposed by:
-                    <user-chip :user-id="proposal.user_id" :username="proposal.user_name" size="sm"></user-chip>
-                </h5>
-                <p class="card-text">
-                    <i class="fas fa-comment-dots me-2"></i>
-                    <strong>Message:</strong> <template v-if="proposal.message != '' ">[[ proposal.message ]]
-                    </template> <template v-else> no message</template>
-                </p>
-                <p class="card-text">
-                    <i class="fas fa-clock me-2"></i>
-                    <strong>Submitted:</strong> [[ proposal.timestamp ]]
-                </p>
-                <p class="card-text">
-                    <i class="fas fa-flag me-2"></i>
-                    <strong>Status:</strong>
-                    <span class="badge bg-success" v-if="proposal.status === 'accepted'">Accepted</span>
-                    <span class="badge bg-warning text-dark" v-else-if="proposal.status === 'pending'">Pending</span>
-                    <span class="badge bg-danger" v-else>Rejected</span>
-                </p>
-            </div>
-        </div>
-        <div class="row mt-4">
-            <div id="myDiffElement"></div>
-        </div>
-
-
-
-
-        <div v-if="comments.length === 0" class="alert alert-secondary">
-            No comments yet.
-        </div>
-
-        <ul class="list-group mb-4" v-else>
-            <li v-for="comment in comments" :key="comment.id"
-                class="list-group-item d-flex justify-content-between align-items-start">
-                <div>
-                    <h6 class="mb-1">
-                        <i class="fas fa-user-circle  me-2"></i>
-                        [[ comment.user_name ]]
-                    </h6>
-                    <p class="mb-1">[[ comment.content ]]</p>
-                    <small class="text-muted">[[ comment.created_at ]]</small>
-                </div>
-                <template v-if="parseInt('{{current_user.id}}') == comment.user_id">
-                    <button class="btn btn-sm btn-outline-danger ms-3" @click="deleteComment(comment.id)">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </template>
-            </li>
-        </ul>
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Add a Comment</h5>
-                <textarea v-model="newComment" class="form-control" rows="3"
-                    placeholder="Write your comment here..."></textarea>
-                <button @click="submitComment" class="btn btn-primary mt-2">
-                    <i class="fas fa-paper-plane"></i> Submit
-                </button>
-            </div>
+    <!-- Loading state -->
+    <div v-if="!proposal" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading…</span>
         </div>
     </div>
-</div>
-<div v-else class="text-center text-muted">
-    <i class="fas fa-spinner fa-spin me-2"></i> Loading proposal...
-</div>
 
+    <div v-if="proposal">
+
+        <!-- ── Explorer banner ── -->
+        <div class="explorer-banner mb-4">
+            <i class="fa-solid fa-code-pull-request banner-watermark"></i>
+            <nav aria-label="breadcrumb" class="mb-3">
+                <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                    <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                    <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                    <li class="breadcrumb-item">
+                        <a href="/rule/detail_rule/{{ rule.id }}/pull_request" class="text-decoration-none text-muted">
+                            {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active text-muted" aria-current="page">Proposal #{{ rule_edit_id }}</li>
+                </ol>
+            </nav>
+            <div class="d-flex align-items-start gap-3 mb-3 flex-wrap">
+                <div class="banner-icon flex-shrink-0"><i class="fa-solid fa-code-pull-request"></i></div>
+                <div class="min-width-0">
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                        <h2 class="fw-bold mb-0">Edit Proposal</h2>
+                        <span class="pstatus-badge" :class="'pstatus-' + proposal.status">
+                            <i class="fas"
+                               :class="{
+                                   'fa-clock':   proposal.status === 'pending',
+                                   'fa-check':   proposal.status === 'accepted' || proposal.status === 'approved',
+                                   'fa-xmark':   proposal.status === 'rejected'
+                               }"></i>
+                            [[ proposal.status ]]
+                        </span>
+                        <span v-if="proposal._new_version || (proposal.status === 'accepted' && proposal.rule_version)"
+                              class="badge rounded-pill fw-semibold"
+                              style="font-size:.72rem;background:rgba(25,135,84,.1);color:#198754;border:1px solid rgba(25,135,84,.3);padding:.3rem .7rem;">
+                            <i class="fa-solid fa-tag me-1" style="font-size:.6rem;"></i>
+                            v[[ proposal._new_version || proposal.rule_version ]]
+                        </span>
+                    </div>
+                    <div class="banner-accent"></div>
+                </div>
+            </div>
+            <p class="text-muted mb-0" style="max-width: 650px; font-size: 0.95rem;">
+                Suggested edit for
+                <a :href="'/rule/detail_rule/' + proposal.rule_id" class="fw-semibold text-decoration-none">
+                    [[ proposal.rule_name ]]
+                    <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:.7rem;"></i>
+                </a>
+            </p>
+        </div>
+
+        {{ nav.detail_rule_nav(rule, 'pull_request', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
+
+        <!-- ── Proposal info card ── -->
+        <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+
+            <!-- Proposed by + action buttons -->
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-3 pb-3 flex-wrap" style="border-bottom: 1px solid var(--border-color);">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted" style="font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">
+                        <i class="fa-solid fa-user-pen me-1"></i>Proposed by
+                    </span>
+                    <user-chip
+                        :user-id="proposal.user_id"
+                        :username="proposal.user_name"
+                        :avatar="proposal.user_avatar"
+                        size="sm">
+                    </user-chip>
+                </div>
+
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <!-- View rule -->
+                    <a :href="'/rule/detail_rule/' + proposal.rule_id"
+                       class="btn btn-sm rounded-pill px-3"
+                       style="background:transparent; border:1px solid var(--border-color); color:var(--text-color);"
+                       title="View the original rule">
+                        <i class="fa-solid fa-shield-halved me-1"></i>View rule
+                    </a>
+
+                    <!-- Favorite -->
+                    <button @click="toggleFavorite"
+                            class="btn btn-sm rounded-pill px-3"
+                            style="background:transparent; border:1px solid var(--border-color);"
+                            :style="isFavorited ? 'color: #f59e0b;' : 'color: var(--subtle-text-color);'"
+                            :title="isFavorited ? 'Remove from favorites' : 'Add to favorites'">
+                        <i class="me-1" :class="isFavorited ? 'fas fa-star' : 'far fa-star'"></i>
+                        [[ isFavorited ? 'Favorited' : 'Favorite' ]]
+                    </button>
+
+                    <!-- Suggest an edit -->
+                    <a :href="'/rule/detail_rule/' + proposal.rule_id + '/propose_edit'"
+                       class="btn btn-sm rounded-pill px-3 btn-primary"
+                       title="Suggest your own edit for this rule">
+                        <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
+                    </a>
+
+                    {% if can_decide %}
+                    <!-- Review queue -->
+                    <a href="/rule/rule_propose_edit"
+                       class="btn btn-sm rounded-pill px-3"
+                       style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                       title="Go to proposals review queue">
+                        <i class="fa-solid fa-list-check me-1"></i>Review queue
+                    </a>
+                    {% endif %}
+
+                    <!-- Report -->
+                    {% if current_user.is_authenticated %}
+                    <report-modal
+                        object-type="rule"
+                        :object-id="proposal.rule_id"
+                        :object-label="proposal.rule_name || 'Rule'"
+                        csrf-token="{{ csrf_token() }}">
+                        <template #trigger="{ open }">
+                            <button @click="open"
+                                class="btn btn-sm rounded-pill px-3"
+                                style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                title="Report an issue with this rule">
+                                <i class="fas fa-flag me-1"></i>Report
+                            </button>
+                        </template>
+                    </report-modal>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Meta grid -->
+            <div class="proposal-meta-grid mb-3">
+
+                <!-- Submitted -->
+                <div class="meta-item">
+                    <div class="meta-item__icon"><i class="fa-regular fa-clock"></i></div>
+                    <div>
+                        <div class="meta-item__label">Submitted</div>
+                        <div class="meta-item__value">[[ formatDate(proposal.timestamp) ]]</div>
+                    </div>
+                </div>
+
+                <!-- Edit type -->
+                <div class="meta-item" v-if="proposal.edit_type">
+                    <div class="meta-item__icon" :style="'color:' + editTypeMeta(proposal.edit_type).color + ';background:' + editTypeMeta(proposal.edit_type).color + '18;'">
+                        <i class="fas" :class="editTypeMeta(proposal.edit_type).icon"></i>
+                    </div>
+                    <div>
+                        <div class="meta-item__label">Edit type</div>
+                        <div class="meta-item__value text-capitalize">[[ editTypeMeta(proposal.edit_type).label ]]</div>
+                    </div>
+                </div>
+
+                <!-- Change score -->
+                <div class="meta-item" v-if="proposal.change_score !== null && proposal.change_score !== undefined">
+                    <div class="meta-item__icon"><i class="fa-solid fa-chart-simple"></i></div>
+                    <div class="flex-grow-1">
+                        <div class="meta-item__label d-flex align-items-center gap-1">
+                            Diff size
+                            <span title="How much the proposed content differs from the original. Close to 0% = nearly identical (minor tweak). Close to 100% = heavily rewritten."
+                                  style="cursor:help;color:var(--subtle-text-color);font-size:0.68rem;opacity:.75;">
+                                <i class="fa-solid fa-circle-question"></i>
+                            </span>
+                        </div>
+                        <div class="score-bar-wrap mt-1">
+                            <span class="score-bar">
+                                <span class="score-bar__fill"
+                                    :style="{ width: proposal.change_score + '%', backgroundColor: scoreColor(proposal.change_score) }">
+                                </span>
+                            </span>
+                            <span class="meta-item__value">[[ Math.round(proposal.change_score) ]]%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Comments count -->
+                <div class="meta-item">
+                    <div class="meta-item__icon"><i class="fa-regular fa-comments"></i></div>
+                    <div>
+                        <div class="meta-item__label">Discussion</div>
+                        <div class="meta-item__value">
+                            [[ proposal.comment_count ]] comment[[ proposal.comment_count !== 1 ? 's' : '' ]]
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reviewed by (if applicable) -->
+                <div class="meta-item" v-if="proposal.reviewed_by_id" style="grid-column: span 2;">
+                    <div class="meta-item__icon"><i class="fa-solid fa-user-check"></i></div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <div>
+                            <div class="meta-item__label">Reviewed by</div>
+                            <div class="meta-item__value">[[ formatDate(proposal.reviewed_at) ]]</div>
+                        </div>
+                        <user-chip
+                            :user-id="proposal.reviewed_by_id"
+                            :username="proposal.reviewed_by_name"
+                            :avatar="proposal.reviewed_by_avatar"
+                            size="xs">
+                        </user-chip>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Message / Justification -->
+            <div v-if="proposal.message" class="proposal-message-block mb-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="text-muted" style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">
+                        <i class="fa-solid fa-quote-left me-1"></i>Author's justification
+                    </div>
+                    <button class="btn btn-sm px-2 py-0 rounded-pill"
+                            style="font-size:.68rem;background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);"
+                            @click="showRawMessage = !showRawMessage"
+                            type="button">
+                        <i class="fa-solid me-1" :class="showRawMessage ? 'fa-eye-slash' : 'fa-code'"></i>
+                        [[ showRawMessage ? 'Rendered' : 'Raw' ]]
+                    </button>
+                </div>
+                <div v-if="showRawMessage" style="font-family:monospace;font-size:.82rem;white-space:pre-wrap;color:var(--text-color);">[[ proposal.message ]]</div>
+                <div v-else v-html="renderedMessage" class="md-body"></div>
+            </div>
+
+            <!-- Rejection reason -->
+            <div v-if="proposal.status === 'rejected' && proposal.rejection_reason" class="rejection-alert">
+                <div class="fw-semibold mb-1" style="color:#dc3545;font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;">
+                    <i class="fa-solid fa-circle-xmark me-1"></i>Rejection reason
+                </div>
+                [[ proposal.rejection_reason ]]
+            </div>
+
+            {% if can_decide %}
+            <!-- Accept / Reject actions (owner or admin, pending only) -->
+            <div v-if="proposal.status === 'pending'" class="mt-3 pt-3" style="border-top:1px solid var(--border-color);">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="text-muted" style="font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">
+                        <i class="fa-solid fa-gavel me-1"></i>Your decision
+                    </span>
+                    <button @click="decideProposal('accepted')"
+                            class="btn btn-sm btn-success rounded-pill px-3"
+                            :disabled="deciding"
+                            title="Accept this proposal and apply the changes to the rule">
+                        <span v-if="deciding === 'accepted'" class="spinner-border spinner-border-sm me-1"></span>
+                        <i v-else class="fa-solid fa-check me-1"></i>Accept
+                    </button>
+                    <button @click="decideProposal('rejected')"
+                            class="btn btn-sm btn-danger rounded-pill px-3"
+                            :disabled="deciding"
+                            title="Reject this proposal">
+                        <span v-if="deciding === 'rejected'" class="spinner-border spinner-border-sm me-1"></span>
+                        <i v-else class="fa-solid fa-xmark me-1"></i>Reject
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+
+        <!-- ── Diff ── -->
+        <div class="mb-4">
+            <div class="section-divider">
+                <div class="section-divider__line"></div>
+                <span class="section-divider__label"><i class="fa-solid fa-code-compare me-1"></i>Diff</span>
+            </div>
+            <diff-viewer
+                :initial-left="proposal.old_content"
+                :initial-right="proposal.proposed_content"
+                left-label="Current rule"
+                right-label="Proposed change"
+                mode="read">
+            </diff-viewer>
+        </div>
+
+        <!-- ── Community discussion ── -->
+        <div class="section-divider">
+            <div class="section-divider__line"></div>
+            <span class="section-divider__label"><i class="fa-solid fa-comments me-1"></i>Community Discussion</span>
+        </div>
+        <comment-thread
+            object-type="proposal"
+            :object-id="{{ rule_edit_id }}"
+            :can-create="{{ current_user.is_authenticated | tojson }}"
+            :can-edit-own="{{ current_user.is_authenticated | tojson }}"
+            :can-delete-own="{{ current_user.is_authenticated | tojson }}"
+            :can-moderate="{{ current_user.is_admin() | tojson }}"
+            :current-user-id="{{ current_user.id if current_user.is_authenticated else 0 }}"
+            csrf-token="{{ csrf_token() }}">
+        </comment-thread>
+
+    </div>
+
+</div>
 {% endblock %}
 
 {% block script %}
-
 <script type="module">
-    const { createApp, ref, nextTick } = Vue;
-    import { message_list, create_message } from '/static/js/toaster.js';
-    import { renderDiff } from "/static/js/diff_macro.js";
-    import UserChip from '/static/js/components/UserChip.js';
+    const { createApp, ref, computed } = Vue;
+    import { create_message } from '/static/js/toaster.js';
+    import UserChip      from '/static/js/components/UserChip.js';
+    import DiffViewer    from '/static/js/components/diff-viewer.js';
+    import CommentThread from '/static/js/components/comments/comment-thread.js';
+    import ReportModal   from '/static/js/components/ReportModal.js';
+
+    const CAN_DECIDE  = {{ can_decide | tojson }};
+    const RULE_ID     = {{ rule.id }};
+    const PROPOSAL_ID = {{ rule_edit_id }};
+
+    // Lazy-load marked + DOMPurify for safe message rendering
+    let _marked = null;
+    let _purify = null;
+
+    async function getMarked() {
+        if (!_marked) {
+            const m = await import('/static/js/marked.min.js');
+            _marked = m.marked || m.default || window.marked;
+        }
+        return _marked;
+    }
+
+    async function getPurify() {
+        if (!_purify) {
+            const m = await import('/static/js/purify.min.js');
+            _purify = m.default || window.DOMPurify;
+        }
+        return _purify;
+    }
+
+    async function renderMarkdown(text) {
+        const mk     = await getMarked();
+        const purify = await getPurify();
+        const html   = mk.parse ? mk.parse(text) : mk(text);
+        return purify.sanitize(html);
+    }
+
+    const EDIT_TYPE_META = {
+        content_update: { label: 'Content update',  icon: 'fa-code',           color: '#0d6efd' },
+        typo:           { label: 'Typo / syntax',   icon: 'fa-spell-check',    color: '#6f42c1' },
+        security:       { label: 'Security fix',    icon: 'fa-shield-halved',  color: '#dc3545' },
+        documentation:  { label: 'Documentation',   icon: 'fa-book',           color: '#198754' },
+        legal:          { label: 'Legal / license', icon: 'fa-scale-balanced', color: '#fd7e14' },
+        other:          { label: 'Other',           icon: 'fa-ellipsis',       color: '#6c757d' },
+    };
+
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'user-chip': UserChip },
+        components: {
+            'user-chip':      UserChip,
+            'diff-viewer':    DiffViewer,
+            'comment-thread': CommentThread,
+            'report-modal':   ReportModal,
+        },
         setup() {
+            const proposal        = ref(null);
+            const isFavorited     = ref(false);
+            const deciding        = ref(null);
+            const showRawMessage  = ref(false);
+            const renderedMessage = ref('');
+            const isAuthenticated = {{ current_user.is_authenticated | tojson }};
 
-            /**
-             *          ##########################
-             *          #  Fetch current user    #
-             *          ##########################
-             * */
-
-            const current_user_is_admin = ref()
-
-            async function fetchCurrentUser() {
-                const res = await fetch('get_current_user')
-                const data = await res.json()
-                current_user_is_admin.value = data.user
+            function editTypeMeta(type) {
+                return EDIT_TYPE_META[type] || { label: type || 'General', icon: 'fa-pen', color: '#6c757d' };
             }
 
-            /**
-             *          ##########################
-             *          #     Fetch proposal     #
-             *          ##########################
-             * */
+            function truncate(str, n) {
+                if (!str) return '';
+                return str.length > n ? str.slice(0, n) + '…' : str;
+            }
 
-            const proposalId = parseInt("{{ rule_edit_id }}");
-            const proposal = ref(null)
+            function formatDate(iso) {
+                if (!iso) return '—';
+                const d = new Date(iso);
+                const now = new Date();
+                const diff = Math.floor((now - d) / 1000);
+                if (diff < 60)    return 'just now';
+                if (diff < 3600)  return Math.floor(diff / 60) + 'm ago';
+                if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+                if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
+                return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            }
+
+            function scoreColor(score) {
+                if (score <= 30) return '#198754';
+                if (score <= 60) return '#fd7e14';
+                return '#dc3545';
+            }
 
             async function fetchRuleProposal() {
-                const res = await fetch('/rule/get_proposal?id=' + proposalId)
-                if (res.ok) {
-                    const data = await res.json();
-                    proposal.value = data.proposal;
-
-                    if (proposal.value) {
-                        await nextTick(() => {
-                            renderDiff(
-                                proposal.value.old_content,
-                                proposal.value.proposed_content,
-                                "myDiffElement",
-                                "twoText"
-                            );
-                        });
+                try {
+                    const res = await fetch('/rule/get_proposal?id=' + PROPOSAL_ID);
+                    if (res.ok) {
+                        const data = await res.json();
+                        proposal.value    = data.proposal;
+                        isFavorited.value = data.proposal.is_favorited ?? false;
+                        // Render message as markdown
+                        if (data.proposal.message) {
+                            renderedMessage.value = await renderMarkdown(data.proposal.message);
+                        }
                     }
+                } catch (e) {
+                    create_message('Error loading proposal', 'danger-subtle');
                 }
+            }
 
+            async function toggleFavorite() {
+                if (!isAuthenticated) {
+                    create_message('Please log in to favorite rules', 'warning-subtle');
+                    return;
+                }
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || '';
+                    const res = await fetch('/rule/favorite/' + proposal.value.rule_id, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrf },
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        isFavorited.value = data.is_favorited;
+                        create_message(data.message, data.toast_class);
+                    }
+                } catch (e) {
+                    create_message('Error updating favorite', 'danger-subtle');
+                }
+            }
+
+            async function decideProposal(decision) {
+                if (!CAN_DECIDE || deciding.value) return;
+                deciding.value = decision;
+                try {
+                    const url = `/rule/validate_proposal?ruleId=${RULE_ID}&decision=${decision}&ruleproposalId=${PROPOSAL_ID}`;
+                    const res = await fetch(url);
+                    if (res.ok) {
+                        const data = await res.json();
+                        let msg = data.message || (decision === 'accepted' ? 'Proposal accepted' : 'Proposal rejected');
+                        if (decision === 'accepted' && data.new_version) {
+                            msg = `Proposal accepted — rule updated to v${data.new_version}`;
+                            if (proposal.value) proposal.value._new_version = data.new_version;
+                        }
+                        create_message(msg, data.toast_class || 'success');
+                        if (proposal.value) proposal.value.status = decision;
+                    } else {
+                        create_message('Error processing decision', 'danger');
+                    }
+                } catch (e) {
+                    create_message('Error processing decision', 'danger');
+                } finally {
+                    deciding.value = null;
+                }
             }
 
             fetchRuleProposal();
 
-            /**
-             *          ##########################
-             *          #       Fetch comment    #
-             *          ##########################
-             * */
-
-            const comments = ref([]);
-            const newComment = ref('');
-
-            async function fetchComments() {
-                try {
-                    const res = await fetch(`/rule/discuss?id=` + proposalId);
-                    if (res.ok) {
-                        comments.value = await res.json();
-                    }
-                } catch (err) {
-                    create_message('Error loading comments: ' + err, 'danger-subtle');
-                }
-            }
-
-            fetchComments();
-
-            async function submitComment() {
-                const content = newComment.value.trim()
-                if (content != "") {
-                    const res = await fetch(`/rule/add_comment_discuss?id=` + proposalId + '&content=' + content)
-                    if (res.ok) {
-                        const comment = await res.json();
-                        comments.value.push(comment);
-                        newComment.value = '';
-                    }
-                }
-            }
-
-            async function deleteComment(commentId) {
-                const res = await fetch('/rule/delete_comment?id=' + commentId)
-                if (res.ok) {
-                    comments.value = comments.value.filter(c => c.id !== commentId);
-                } else {
-                    const data = await res.json();
-                }
-            }
-
-            /**         
-             *          #############################
-             *          #   color lines for changes  #
-             *          #############################
-             * */
-
-            function getOldContentLines(content) {
-                return content.split('\n');
-            }
-
-            function getProposedContentLines(content) {
-                return content.split('\n');
-            }
-
-            function isLineNew(line, oldContent) {
-                const normalizedLine = line.trim();
-                const normalizedOldContent = oldContent.split('\n').map(l => l.trim());
-
-                return !normalizedOldContent.includes(normalizedLine);
-            }
-
-            function isLineDeleted(line, proposedContent) {
-                const normalizedLine = line.trim();
-                const normalizedProposedContent = proposedContent.split('\n').map(l => l.trim());
-
-                return !normalizedProposedContent.includes(normalizedLine);
-            }
-
-            function isLineIdentical(line, content) {
-                const normalizedLine = line.trim();
-                const normalizedContent = content.split('\n').map(l => l.trim());
-
-                return normalizedContent.includes(normalizedLine);
-            }
-
-
             return {
-                comments,
-                newComment,
-                proposalId,
-                fetchComments,
-                submitComment,
-                fetchCurrentUser,
-                current_user_is_admin,
-                deleteComment,
-                fetchRuleProposal,
-                proposal,
-                getOldContentLines,
-                getProposedContentLines,
-                isLineNew,
-                isLineDeleted,
-                isLineIdentical
+                proposal, isFavorited, deciding,
+                showRawMessage, renderedMessage,
+                editTypeMeta, truncate, formatDate, scoreColor,
+                toggleFavorite, decideProposal,
             };
         }
     }).mount('#main-container');
 </script>
+
+<style>
+/* Markdown body styles for rendered justification */
+.md-body { font-size: .88rem; line-height: 1.7; color: var(--text-color); }
+.md-body h1,.md-body h2,.md-body h3,.md-body h4 { font-weight: 700; margin: .75rem 0 .35rem; }
+.md-body p { margin: 0 0 .6rem; }
+.md-body code { font-size:.8rem; background:var(--light-bg-color); border:1px solid var(--border-color); border-radius:4px; padding:.1rem .3rem; }
+.md-body pre { background:var(--light-bg-color); border:1px solid var(--border-color); border-radius:8px; padding:.75rem 1rem; overflow-x:auto; margin:.5rem 0; }
+.md-body pre code { background:none; border:none; padding:0; }
+.md-body ul,.md-body ol { padding-left:1.4rem; margin-bottom:.6rem; }
+.md-body a { color:#0d6efd; }
+.md-body blockquote { border-left:3px solid #0d6efd; margin:0; padding:.4rem .8rem; color:var(--subtle-text-color); font-style:italic; background:var(--light-bg-color); border-radius:0 6px 6px 0; }
+</style>
 {% endblock %}

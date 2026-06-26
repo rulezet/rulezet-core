@@ -97,70 +97,65 @@ def test_register_with_bad_password_too_long(client):
 # #   login case      #
 # #####################
 
+def _verify_user(client, email):
+    """Mark a user as email-verified so the web login gate passes."""
+    from app import db
+    from app.core.db_class.db import User
+    with client.application.app_context():
+        user = User.query.filter_by(email=email).first()
+        if user:
+            user.is_verified = True
+            db.session.commit()
+
 
 def test_login_success(client):
-    # First, register a user
     api_key = test_create_user(client)
-
-    # Then test login
-    response = client.post("/api/account/public/login", json={
+    _verify_user(client, "test@example.com")
+    response = client.post("/account/login", data={
         "email": "test@example.com",
         "password": "password1@A",
-        "remember_me": True
-    })
-    assert response.status_code == 200
-    assert b"Logged in successfully" in response.data
+    }, follow_redirects=False)
+    assert response.status_code == 302
     return api_key
 
 
 def test_login_invalid_email_format(client):
     test_create_user(client)
-    response = client.post("/api/account/public/login", json={
+    response = client.post("/account/login", data={
         "email": "invalid-email",
-        "password": "password1@A"
+        "password": "password1@A",
     })
-    assert response.status_code == 400
-    assert b"Invalid email" in response.data
+    assert response.status_code == 200  # form re-rendered with validation error
 
 
 def test_login_missing_fields(client):
     test_create_user(client)
-    response = client.post("/api/account/public/login", json={
-        "email": "test@example.com"
-        # password is missing
+    response = client.post("/account/login", data={
+        "email": "test@example.com",
+        # password omitted
     })
-    assert response.status_code == 400
-    assert b"Missing fields" in response.data
+    assert response.status_code == 200  # form re-rendered with validation error
 
 
 def test_login_wrong_password(client):
     test_create_user(client)
-
-    response = client.post("/api/account/public/login", json={
+    _verify_user(client, "test@example.com")
+    response = client.post("/account/login", data={
         "email": "test@example.com",
-        "password": "wrongpass"
+        "password": "WrongPass1@",
     })
-    assert response.status_code == 401
+    assert response.status_code == 200
     assert b"Invalid email or password" in response.data
 
 
 def test_login_email_not_found(client):
-    response = client.post("/api/account/public/login", json={
+    response = client.post("/account/login", data={
         "email": "notfound@example.com",
-        "password": "password1@A"
+        "password": "password1@A",
     })
-    assert response.status_code == 401
+    assert response.status_code == 200
     assert b"Invalid email or password" in response.data
 
-
-def test_login_remember_me_not_bool(client):
-    response = client.post("/api/account/public/login", json={
-        "email": "test@example.com",
-        "password": "password1@A",
-        "remember_me": "yes"  # Invalid type
-    })
-    assert response.status_code == 400
-    assert b"remember_me must be a boolean" in response.data
 
 #############
 #   logout  #
@@ -168,9 +163,8 @@ def test_login_remember_me_not_bool(client):
 
 def test_logout(client):
     test_login_success(client)
-    response = client.post("/api/account/public/logout")
-    assert response.status_code == 200
-    assert b"You have been logged out." in response.data
+    response = client.get("/account/logout", follow_redirects=False)
+    assert response.status_code == 302
 
 #############
 #   Edit    #

@@ -22,8 +22,9 @@ from pathlib import Path
 
 from app.features.jobs.job_worker import register_handler
 from app import db
-from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJob, BackgroundJobLog, ActivityLog
+from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJob, BackgroundJobLog, ActivityLog, RequestOwnerRule
 from app.features.rule.rule_core import _wipe_rule_children
+import json as _json
 
 BATCH_SIZE = 2000   # bulk_insert_mappings handles large batches efficiently
 
@@ -825,7 +826,7 @@ def handle_connector_pull(job, app):
     from app.features.connector.connector_core import (
         _get_or_create_shadow_user, _upsert_rule, _upsert_bundle,
         _extract_tag_family, build_tag_cache,
-        _prepare_new_rule, _import_rule_history_new, _sync_tags, _sync_cve_ids,
+        _prepare_new_rule, _import_rule_history_new, _sync_tags, _sync_cve_ids, _sync_attacks,
     )
     from app.core.utils.activity_log import log_activity
     from sqlalchemy import or_
@@ -921,6 +922,10 @@ def handle_connector_pull(job, app):
         date_from_qs = (pull_filters.get('date_from') or '').strip()
         date_to_qs   = (pull_filters.get('date_to') or '').strip()
 
+        # ATT&CK filter
+        atk_list   = [a for a in (pull_filters.get('attacks') or []) if a]
+        attacks_qs = ','.join(atk_list) if atk_list else ''
+
         def _build_rule_url(p: int) -> str:
             url = f"{base}/api/sync/rules?since={since}&page={p}&per_page={PER_PAGE}"
             if cve_qs:       url += f"&cve={cve_qs}"
@@ -930,6 +935,7 @@ def handle_connector_pull(job, app):
             if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
             if date_from_qs: url += f"&date_from={date_from_qs}"
             if date_to_qs:   url += f"&date_to={date_to_qs}"
+            if attacks_qs:   url += f"&attacks={attacks_qs}"
             return url
 
         def _build_preflight_url() -> str:
@@ -941,9 +947,10 @@ def handle_connector_pull(job, app):
             if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
             if date_from_qs: url += f"&date_from={date_from_qs}"
             if date_to_qs:   url += f"&date_to={date_to_qs}"
+            if attacks_qs:   url += f"&attacks={attacks_qs}"
             return url
 
-        active_filters = [k for k in [cve_qs, formats_qs, authors_qs, license_qs, tags_qs, date_from_qs, date_to_qs] if k]
+        active_filters = [k for k in [cve_qs, formats_qs, authors_qs, license_qs, tags_qs, date_from_qs, date_to_qs, attacks_qs] if k]
 
         log_job(job, f"Starting pull from {base}", level='info', event='started')
         if active_filters:
@@ -955,6 +962,7 @@ def handle_connector_pull(job, app):
             if tags_qs:      parts.append(f"tags={tags_qs} ({tag_mode_qs}{', exclude' if tag_excl_qs=='true' else ''})")
             if date_from_qs: parts.append(f"from={date_from_qs}")
             if date_to_qs:   parts.append(f"to={date_to_qs}")
+            if attacks_qs:   parts.append(f"attacks={attacks_qs}")
             log_job(job, f"Filters active: {' · '.join(parts)}", level='info', event='progress')
 
         # ── Manifest preflight: verify remote supports sync API ────────────────
@@ -1022,6 +1030,26 @@ def handle_connector_pull(job, app):
         had_error       = False
         all_missing_tags: set = set()
         tag_cache: dict = None   # built once and reused across rules + bundles
+        atk_assoc_set: set = set()  # {(rule_id, technique_id)} to avoid duplicate inserts
+        attack_install_triggered = False  # only trigger the install job once
+
+        # ── Check if ATT&CK data is installed ─────────────────────────────────
+        from app.core.db_class.db import AttackTechnique as _ATK
+        if not _ATK.query.first():
+            log_job(job,
+                    "ATT&CK technique database is empty — queuing an install now. "
+                    "Techniques will be available on the next pull.",
+                    level='warning', event='progress')
+            from app.core.db_class.db import BackgroundJob as _BJ
+            atk_job = _BJ(
+                type='update_attack_data',
+                status='pending',
+                payload={},
+                created_by=job.created_by,
+            )
+            db.session.add(atk_job)
+            db.session.commit()
+            attack_install_triggered = True
 
         MAX_PAGES = 10_000  # safety guard against infinite pagination loops
 
@@ -1164,6 +1192,13 @@ def handle_connector_pull(job, app):
                                                     assoc_set=assoc_set)
                                 all_missing_tags.update(missed)
                                 _sync_cve_ids(rule, item.get('cve_ids', []))
+                                unknown_atk = _sync_attacks(rule, item.get('attack_ids', []),
+                                                            effective_user_id,
+                                                            atk_assoc_set=atk_assoc_set)
+                                if '__empty__' in unknown_atk and not attack_install_triggered:
+                                    attack_install_triggered = True
+                                    log_job(job, "ATT&CK data missing — install job already queued.",
+                                            level='warning', event='progress')
                                 _import_rule_history_new(rule, item.get('update_history', []),
                                                          effective_user_id)
                             pg_created    = len(new_rules_pending)
@@ -1577,3 +1612,448 @@ def handle_remove_submodule(job, app):
             job.error = str(e)
             log_job(job, str(e), level='error', event='failed')
         db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  bulk_update_decision — accept or reject all pending rule updates for a scan
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('bulk_update_decision')
+def handle_bulk_update_decision(job, app):
+    with app.app_context():
+        try:
+            sid    = job.payload.get('sid')
+            action = job.payload.get('action')  # 'accept' | 'reject'
+
+            from app.features.rule.rule_core import (
+                get_rule_update_list_filtered, accept_all_update, reject_all_update,
+            )
+            rule_list, count = get_rule_update_list_filtered(
+                sid,
+                f_found=job.payload.get('f_found'),
+                f_error=job.payload.get('f_error'),
+                f_syntax_valid=job.payload.get('f_syntax_valid'),
+            )
+
+            job.total = max(count, 1)
+            if not rule_list or count == 0:
+                log_job(job, 'No pending updates found.', level='info', event='done')
+                job.status = 'done'
+                job.done = job.total
+                db.session.commit()
+                return
+
+            ok = accept_all_update(rule_list) if action == 'accept' else reject_all_update(rule_list)
+            job.done   = job.total
+            job.status = 'done' if ok else 'failed'
+            verb = 'accepted' if action == 'accept' else 'rejected'
+            log_job(job, f'{count} update(s) {verb}.', level='success' if ok else 'error', event='done')
+        except Exception as e:
+            job.status = 'failed'
+            job.error  = str(e)
+            log_job(job, str(e), level='error', event='failed')
+        db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  bulk_new_rules_decision — add or reject all new rules found in a scan
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('bulk_new_rules_decision')
+def handle_bulk_new_rules_decision(job, app):
+    with app.app_context():
+        try:
+            sid     = job.payload.get('sid')
+            action  = job.payload.get('action')   # 'add' | 'reject'
+            user_id = job.payload.get('user_id')
+
+            from app.features.rule.rule_core import (
+                get_valid_new_rules_by_sid, reject_all_new_rules_by_sid,
+                get_updater_result_by_id, change_message_new_rule,
+            )
+            from app.features.rule.rule_format.main_format import parse_rule_by_format
+            from app.core.db_class.db import User
+            import app.features.account.account_core as AccountModel
+
+            if action == 'reject':
+                reject_all_new_rules_by_sid(sid)
+                job.done = job.total = 1
+                job.status = 'done'
+                log_job(job, 'All new rules rejected.', level='success', event='done')
+                db.session.commit()
+                return
+
+            # action == 'add'
+            new_rules = get_valid_new_rules_by_sid(sid)
+            job.total = max(len(new_rules), 1)
+
+            if not new_rules:
+                log_job(job, 'No valid new rules to add.', level='info', event='done')
+                job.status = 'done'
+                job.done = job.total
+                db.session.commit()
+                return
+
+            user   = User.query.get(user_id)
+            added  = errors = 0
+
+            for i, nr in enumerate(new_rules):
+                source_info = None
+                updater = get_updater_result_by_id(nr.update_result_id)
+                if updater:
+                    try:
+                        info = _json.loads(updater.info)
+                        source_info = info.get('repo_url')
+                    except Exception:
+                        pass
+
+                change_message_new_rule(nr.id, 'imported')
+                success, message, imported = parse_rule_by_format(
+                    nr.rule_content, user, nr.format, source_info, github_path=nr.github_path
+                )
+                if success and imported:
+                    profil = AccountModel.get_or_create_gamification_profile(imported.user_id)
+                    if profil:
+                        AccountModel.update_rules_owned_gamification(profil.id, imported.user_id)
+                    added += 1
+                else:
+                    change_message_new_rule(nr.id, f'error: {message}')
+                    errors += 1
+
+                job.done = i + 1
+                db.session.commit()
+
+            job.status = 'done'
+            log_job(job, f'{added} rule(s) added, {errors} error(s).', level='success', event='done')
+        except Exception as e:
+            job.status = 'failed'
+            job.error  = str(e)
+            log_job(job, str(e), level='error', event='failed')
+        db.session.commit()
+
+
+# ─── ownership_transfer_bulk ───────────────────────────────────────────────────
+
+OWNERSHIP_BATCH = 100
+
+@register_handler('ownership_transfer_bulk')
+def handle_ownership_transfer_bulk(job, app):
+    """
+    Transfer ownership of a large set of rules to a new owner in batches.
+
+    Payload:
+        request_id : int        — RequestOwnerRule id
+        rule_ids   : list[int]  — rules to transfer
+    """
+    payload    = job.payload or {}
+    request_id = payload.get('request_id')
+    rule_ids   = payload.get('rule_ids', [])
+
+    if not request_id or not rule_ids:
+        log_job(job, "Missing request_id or rule_ids.", level='error', event='done')
+        job.status = 'failed'
+        db.session.commit()
+        return
+
+    ownership_request = RequestOwnerRule.query.get(request_id)
+    if not ownership_request:
+        log_job(job, f"RequestOwnerRule #{request_id} not found.", level='error', event='done')
+        job.status = 'failed'
+        db.session.commit()
+        return
+
+    total = len(rule_ids)
+    if job.total == 0:
+        job.total = total
+        db.session.commit()
+
+    # Mark request as approved upfront
+    ownership_request.status = 'approved'
+    db.session.commit()
+    log_job(job, f"Starting transfer of {total} rule(s) to user #{ownership_request.user_id}.",
+            level='info', event='started')
+
+    offset    = payload.get('_resume_offset', 0)
+    new_owner = ownership_request.user_id
+    source    = ownership_request.rule_source
+    transferred = 0
+
+    for i in range(offset, total, OWNERSHIP_BATCH):
+        if _is_cancelled(job):
+            log_job(job, "Cancelled.", level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+
+        chunk_ids = rule_ids[i:i + OWNERSHIP_BATCH]
+
+        # Transfer ownership
+        Rule.query.filter(Rule.id.in_(chunk_ids)).update(
+            {"user_id": new_owner}, synchronize_session=False
+        )
+
+        # Auto-reject other pending requests for these rules
+        RequestOwnerRule.query.filter(
+            RequestOwnerRule.rule_id.in_(chunk_ids),
+            RequestOwnerRule.status == 'pending',
+            RequestOwnerRule.id != request_id,
+        ).update(
+            {"status": "rejected", "user_id_to_send": new_owner},
+            synchronize_session=False,
+        )
+
+        db.session.commit()
+        transferred += len(chunk_ids)
+        job.done = transferred
+        _save_offset(job, i + OWNERSHIP_BATCH)
+        db.session.commit()
+        log_job(job, f"{transferred}/{total} rule(s) transferred.", level='info', event='progress')
+
+    # Also reject pending source-level requests if applicable
+    if source:
+        RequestOwnerRule.query.filter(
+            RequestOwnerRule.rule_source == source,
+            RequestOwnerRule.status == 'pending',
+            RequestOwnerRule.id != request_id,
+        ).update(
+            {"status": "rejected", "user_id_to_send": new_owner},
+            synchronize_session=False,
+        )
+        db.session.commit()
+
+    # Notify the requester
+    try:
+        from app.features.notification.notification_core import notify_ownership_decision
+        notify_ownership_decision(ownership_request, approved=True,
+                                  rule_title=f"{transferred} rules from {source or 'source'}")
+    except Exception as _e:
+        log_job(job, f"Notification error: {_e}", level='warning')
+
+    log_job(job, f"Done — {transferred} rule(s) transferred.", level='success', event='done')
+
+
+# ─── ATT&CK: update catalogue from MITRE ─────────────────────────────────────
+
+@register_handler('update_attack_data')
+def handle_update_attack_data(job, app):
+    """Download MITRE ATT&CK STIX bundle and upsert AttackTechnique rows."""
+    log_job(job, 'Fetching ATT&CK data from MITRE GitHub…', level='info', event='start')
+    try:
+        from app.features.attack.attack_core import fetch_and_update_attack_data
+        created, updated = fetch_and_update_attack_data()
+        job.done = 1
+        db.session.commit()
+        log_job(job, f'Done — {created} techniques created, {updated} updated.',
+                level='success', event='done')
+    except Exception as exc:
+        log_job(job, f'Error: {exc}', level='error', event='error')
+        raise
+
+
+# ─── ATT&CK: bulk auto-parse rules ───────────────────────────────────────────
+
+ATTACK_PARSE_BATCH = 500
+
+@register_handler('bulk_parse_attack_rules')
+def handle_bulk_parse_attack_rules(job, app):
+    """
+    Scan all (or format-filtered) rules and auto-create RuleAttackAssociation
+    entries by parsing rule content for ATT&CK technique IDs.
+    """
+    payload  = job.payload or {}
+    fmt      = payload.get('format')        # optional format filter, e.g. 'sigma'
+    offset   = payload.get('_resume_offset', 0)
+
+    from app.features.attack.attack_core import _extract_technique_ids
+    from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
+    import datetime as _dt
+
+    # Build query
+    q = Rule.query.filter(Rule.is_deleted == False)
+    if fmt:
+        q = q.filter(Rule.format == fmt)
+
+    if job.total == 0:
+        job.total = q.count()
+        db.session.commit()
+        log_job(job, f'Starting — {job.total} rules to parse.', level='info', event='start')
+
+    # Cache all known technique IDs — include deprecated ones so sigma rules
+    # that explicitly reference deprecated IDs (e.g. T1068) are still associated.
+    known_ids = {
+        t.technique_id
+        for t in AttackTechnique.query.all()
+    }
+    if not known_ids:
+        log_job(job, 'No ATT&CK techniques in DB — run "Update ATT&CK data" job first.',
+                level='warning', event='done')
+        job.done = job.total
+        db.session.commit()
+        return
+
+    total_added = 0
+    batch_num   = 0
+
+    while True:
+        if _is_cancelled(job): # noqa — defined in local scope via job_worker helpers
+            log_job(job, 'Cancelled.', level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+
+        rules = (
+            q.with_entities(Rule.id, Rule.format, Rule.to_string)
+            .offset(offset)
+            .limit(ATTACK_PARSE_BATCH)
+            .all()
+        )
+        if not rules:
+            break
+
+        new_assocs = []
+        # Fetch existing associations for this batch to avoid duplicates
+        rule_ids = [r.id for r in rules]
+        existing = {
+            (a.rule_id, a.technique_id)
+            for a in RuleAttackAssociation.query.filter(
+                RuleAttackAssociation.rule_id.in_(rule_ids)
+            ).all()
+        }
+
+        for rule_id, rule_fmt, content in rules:
+            ids = _extract_technique_ids(rule_fmt or '', content or '')
+            for tid in dict.fromkeys(ids):   # dedup
+                if tid not in known_ids:
+                    continue
+                if (rule_id, tid) in existing:
+                    continue
+                new_assocs.append({
+                    'uuid':         str(uuid_mod.uuid4()),
+                    'rule_id':      rule_id,
+                    'technique_id': tid,
+                    'user_id':      None,
+                    'source':       'auto',
+                    'added_at':     _dt.datetime.now(tz=_dt.timezone.utc),
+                })
+                existing.add((rule_id, tid))
+
+        if new_assocs:
+            db.session.bulk_insert_mappings(RuleAttackAssociation, new_assocs)
+            db.session.commit()
+            total_added += len(new_assocs)
+
+        offset   += len(rules)
+        job.done  = offset
+        _save_offset(job, offset)
+        db.session.commit()
+
+        batch_num += 1
+        if batch_num % LOG_EVERY == 0:
+            log_job(job, f'{offset}/{job.total} rules processed, {total_added} associations created.',
+                    level='info', event='progress')
+
+    log_job(job, f'Done — {offset} rules parsed, {total_added} ATT&CK associations created.',
+            level='success', event='done')
+
+
+# ── Bulk Field Parser ────────────────────────────────────────────────────────
+
+FIELD_PARSE_BATCH = 200
+FIELD_PARSE_LOG_EVERY = 10
+
+@register_handler('bulk_parse_fields')
+def handle_bulk_parse_fields(job, app):
+    """
+    Parse rule content and update metadata fields (license, author, original_uuid, etc.)
+    based on keyword/regex config provided in the job payload.
+    """
+    from app.features.rule.field_parser_core import parse_field_from_content, PARSEABLE_FIELD_KEYS
+
+    payload       = job.payload or {}
+    rule_ids      = payload.get('rule_ids', 'ALL')
+    format_filter = payload.get('format_filter') or None
+    fields_config = payload.get('fields_config', {})
+    offset        = payload.get('_resume_offset', 0)
+
+    enabled_fields = [k for k, v in fields_config.items() if v.get('enabled')]
+    if not enabled_fields:
+        log_job(job, 'No fields enabled — nothing to do.', level='warning', event='done')
+        job.done = job.total or 0
+        db.session.commit()
+        return
+
+    # with_entities column order: id, to_string, license, author, original_uuid, description, version, title
+    FIELD_IDX = {k: i + 2 for i, k in enumerate(PARSEABLE_FIELD_KEYS)}
+
+    q = Rule.query.filter(Rule.is_deleted == False)
+    if rule_ids != 'ALL':
+        q = q.filter(Rule.id.in_(rule_ids))
+    elif format_filter:
+        q = q.filter(Rule.format == format_filter)
+
+    if job.total == 0:
+        job.total = q.count()
+        db.session.commit()
+        log_job(job, f'Starting — {job.total} rules to process, fields: {", ".join(enabled_fields)}.',
+                level='info', event='start')
+    else:
+        log_job(job, f'Resuming from offset {offset}.', level='info', event='resume')
+
+    total_updated = 0
+    batch_num     = 0
+
+    while True:
+        if _is_cancelled(job):
+            log_job(job, 'Cancelled.', level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+
+        rows = (
+            q.with_entities(
+                Rule.id, Rule.to_string,
+                Rule.license, Rule.author, Rule.original_uuid,
+                Rule.description, Rule.version, Rule.title,
+            )
+            .offset(offset)
+            .limit(FIELD_PARSE_BATCH)
+            .all()
+        )
+        if not rows:
+            break
+
+        for row in rows:
+            rule_id = row[0]
+            content = row[1] or ''
+            updates = {}
+
+            for field_key in enabled_fields:
+                if field_key not in FIELD_IDX:
+                    continue
+                cfg         = fields_config.get(field_key, {})
+                current_val = row[FIELD_IDX[field_key]]
+
+                if current_val and not cfg.get('overwrite', False):
+                    continue
+
+                new_val = parse_field_from_content(content, cfg)
+                if new_val:
+                    updates[field_key] = new_val
+
+            if updates:
+                Rule.query.filter(Rule.id == rule_id).update(updates)
+                total_updated += 1
+
+        db.session.commit()
+        offset    += len(rows)
+        job.done   = offset
+        _save_offset(job, offset)
+        db.session.commit()
+
+        batch_num += 1
+        if batch_num % FIELD_PARSE_LOG_EVERY == 0:
+            log_job(job, f'{offset}/{job.total} rules processed, {total_updated} rules updated.',
+                    level='info', event='progress')
+
+    log_job(job, f'Done — {offset} rules processed, {total_updated} rules updated.',
+            level='success', event='done')

@@ -1,0 +1,48 @@
+{% macro detail_rule_nav(rule, active, similarity_count=0, history_count=0, proposal_count=0, scope_count=0) %}
+<nav class="dr-nav">
+    <a href="/rule/detail_rule/{{ rule.id }}"
+       class="dr-nav__item {% if active == 'detail' %}active{% endif %}">
+        <i class="fa-solid fa-shield-halved"></i>
+        <span>Overview</span>
+    </a>
+    <a href="/rule/detail_rule/{{ rule.id }}/propose_edit"
+       class="dr-nav__item {% if active == 'propose_edit' %}active{% endif %}">
+        <i class="fa-solid fa-pen-to-square"></i>
+        <span>Suggest an Edit</span>
+    </a>
+    <a href="/rule/detail_rule/{{ rule.id }}/pull_request"
+       class="dr-nav__item {% if active == 'pull_request' %}active{% endif %}">
+        <i class="fa-solid fa-code-pull-request"></i>
+        <span>Proposals</span>
+        {% if proposal_count > 0 %}
+        <span class="dr-nav__badge">{{ proposal_count }}</span>
+        {% endif %}
+    </a>
+    <a href="/rule/detail_rule/{{ rule.id }}/scope"
+       class="dr-nav__item {% if active == 'scope' %}active{% endif %}">
+        <i class="fa-solid fa-globe"></i>
+        <span>Scope</span>
+        {% if scope_count > 0 %}
+        <span class="dr-nav__badge">{{ scope_count }}</span>
+        {% endif %}
+    </a>
+    <a href="/rule/detail_rule/{{ rule.id }}/history"
+       class="dr-nav__item {% if active == 'history' %}active{% endif %}">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>History</span>
+        {% if history_count > 0 %}
+        <span class="dr-nav__badge">{{ history_count }}</span>
+        {% endif %}
+    </a>
+    {% if similarity_count > 0 or active == 'similarity' %}
+    <a href="/rule/detail_rule/{{ rule.id }}/similarity"
+       class="dr-nav__item {% if active == 'similarity' %}active{% endif %}">
+        <i class="fa-solid fa-code-compare"></i>
+        <span>Similarity</span>
+        {% if similarity_count > 0 %}
+        <span class="dr-nav__badge">{{ similarity_count }}</span>
+        {% endif %}
+    </a>
+    {% endif %}
+</nav>
+{% endmacro %}

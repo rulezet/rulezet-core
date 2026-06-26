@@ -4,8 +4,9 @@ Business logic for the notification system.
 
 Public surface:
   create_notification(user_id, notif_type, title, body, link, icon, ...)
-  create_job_notification(job, user_id)
-  update_job_notification(job)
+  create_job_notification(job, user_id)       — creator + all admins
+  update_job_notification(job)                — updates ALL matching notifs (creator + admins)
+  notify_similarity_done(user_id, ...)        — creator done notif for similarity
   notify_followers_new_rule(rule, author_user_id)
   notify_rule_update_found(user_id, count, update_result_id)
   notify_github_import_done(user_id, imported, skipped, bad_rules, result_uuid)
@@ -29,19 +30,85 @@ Public surface:
 import datetime
 
 from app import db
-from app.core.db_class.db import Notification, UserFollow, BackgroundJob
+from app.core.db_class.db import Notification, UserFollow, BackgroundJob, NotificationPreference
 
 # ── Icons per notification type ────────────────────────────────────────────────
 
 _TYPE_ICON = {
-    'new_rule':            'fa-solid fa-shield-halved',
-    'rule_update_found':   'fa-solid fa-rotate',
-    'job_created':         'fa-solid fa-clock',
-    'job_finished':        'fa-solid fa-circle-check',
-    'job_failed':          'fa-solid fa-circle-xmark',
-    'github_import_done':  'fa-brands fa-github',
-    'github_update_done':  'fa-solid fa-code-branch',
+    'new_rule':                'fa-solid fa-shield-halved',
+    'follow_new_bundle':       'fa-solid fa-layer-group',
+    'follow_new_comment':      'fa-solid fa-comment',
+    'rule_comment':            'fa-solid fa-comment-dots',
+    'bundle_comment':          'fa-solid fa-comment-dots',
+    'rule_update_found':       'fa-solid fa-rotate',
+    'job_created':             'fa-solid fa-clock',
+    'job_finished':            'fa-solid fa-circle-check',
+    'job_failed':              'fa-solid fa-circle-xmark',
+    'github_import_done':      'fa-brands fa-github',
+    'github_update_done':      'fa-solid fa-code-branch',
+    'proposal_submitted':      'fa-solid fa-code-pull-request',
+    'proposal_comment':        'fa-solid fa-message-lines',
+    'proposal_accepted':       'fa-solid fa-circle-check',
+    'proposal_rejected':       'fa-solid fa-circle-xmark',
+    'comment_reply':           'fa-solid fa-reply',
+    'session_running':         'fa-solid fa-spinner',
+    'session_done':            'fa-solid fa-circle-check',
+    'report_submitted':        'fa-solid fa-triangle-exclamation',
+    'ownership_requested':     'fa-solid fa-user-pen',
+    'ownership_approved':      'fa-solid fa-user-check',
+    'ownership_rejected':      'fa-solid fa-user-xmark',
 }
+
+
+# ── Preference helpers ─────────────────────────────────────────────────────────
+
+def _get_pref(user_id):
+    """Return the NotificationPreference for user_id, creating it if absent."""
+    pref = NotificationPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = NotificationPreference(user_id=user_id)
+        db.session.add(pref)
+        db.session.flush()
+    return pref
+
+
+def get_preference(user_id):
+    """Public: return preference, committing if newly created."""
+    try:
+        pref = NotificationPreference.query.filter_by(user_id=user_id).first()
+        if not pref:
+            pref = NotificationPreference(user_id=user_id)
+            db.session.add(pref)
+            db.session.commit()
+        return pref
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] get_preference error: {e}")
+        return NotificationPreference(user_id=user_id)
+
+
+def update_preference(user_id, prefs_dict):
+    """Update preference toggles. prefs_dict: {key: bool} where key matches to_json() keys."""
+    try:
+        pref = _get_pref(user_id)
+        for key, val in prefs_dict.items():
+            attr = f'pref_{key}'
+            if hasattr(pref, attr):
+                setattr(pref, attr, bool(val))
+        db.session.commit()
+        return pref
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] update_preference error: {e}")
+        return None
+
+
+# ── Admin helpers ──────────────────────────────────────────────────────────────
+
+def _get_all_admin_ids():
+    """Return IDs of all admin users."""
+    from app.core.db_class.db import User
+    return [u.id for u in User.query.filter_by(admin=True).all()]
 
 
 # ── Core create / update ───────────────────────────────────────────────────────
@@ -73,47 +140,229 @@ def create_notification(user_id, notif_type, title, body=None, link=None,
 
 
 def create_job_notification(job, user_id):
-    """Create a job_created notification for the job owner."""
-    return create_notification(
-        user_id    = user_id,
-        notif_type = 'job_created',
-        title      = f'Job started: {job.label or job.job_type}',
-        body       = 'Your background job has been queued.',
-        link       = '/jobs/list',
-        icon       = 'fa-solid fa-clock',
-        job_uuid   = job.uuid,
-        job_status = 'pending',
+    """Create a job_created notification for the job owner and all admins."""
+    # Notify the job creator
+    create_notification(
+        user_id      = user_id,
+        notif_type   = 'job_created',
+        title        = f'Job started: {job.label or job.job_type}',
+        body         = 'Your background job has been queued.',
+        link         = '/jobs/list',
+        icon         = 'fa-solid fa-clock',
+        job_uuid     = job.uuid,
+        job_status   = 'pending',
         job_progress = 0,
     )
+    # Also notify all admins (skip creator to avoid duplicate)
+    try:
+        admin_ids = [uid for uid in _get_all_admin_ids() if uid != user_id]
+        if admin_ids:
+            notifs = [
+                Notification(
+                    user_id      = uid,
+                    notif_type   = 'job_created',
+                    title        = f'Job started: {job.label or job.job_type}',
+                    body         = f'Queued by user #{user_id}',
+                    link         = '/jobs/list',
+                    icon         = 'fa-solid fa-clock',
+                    job_uuid     = job.uuid,
+                    job_status   = 'pending',
+                    job_progress = 0,
+                    is_read      = False,
+                    created_at   = datetime.datetime.utcnow(),
+                )
+                for uid in admin_ids
+            ]
+            db.session.add_all(notifs)
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] create_job_notification (admins) error: {e}")
 
 
 def update_job_notification(job):
     """
     Called when a job reaches a terminal state (done / failed / cancelled).
-    Finds the matching notification and updates it in place so the bell shows
-    the final result without creating a duplicate row.
+    Updates ALL matching notifications (creator + any admins) so the bell shows
+    the final result without creating duplicate rows.
     """
     try:
-        notif = Notification.query.filter_by(job_uuid=job.uuid).first()
-        if not notif:
+        notifs = Notification.query.filter_by(job_uuid=job.uuid).all()
+        if not notifs:
             return
 
-        final_type  = 'job_finished' if job.status == 'done' else 'job_failed'
-        progress    = 100 if job.status == 'done' else (job.progress_pct or 0)
+        final_type = 'job_finished' if job.status == 'done' else 'job_failed'
+        progress   = 100 if job.status == 'done' else (job.progress_pct or 0)
+        title      = f'Job finished: {job.label or job.job_type}'
+        body       = (f'Completed — {progress}%'
+                      if job.status == 'done'
+                      else f'Failed: {job.error or "unknown error"}')
 
-        notif.notif_type    = final_type
-        notif.title         = f'Job finished: {job.label or job.job_type}'
-        notif.body          = (f'Completed with status: {job.status} — {progress}%'
-                               if job.status == 'done'
-                               else f'Failed: {job.error or "unknown error"}')
-        notif.icon          = _TYPE_ICON.get(final_type)
-        notif.job_status    = job.status
-        notif.job_progress  = progress
-        notif.is_read       = False   # force unread so it surfaces in the bell
+        for notif in notifs:
+            notif.notif_type    = final_type
+            notif.title         = title
+            notif.body          = body
+            notif.icon          = _TYPE_ICON.get(final_type)
+            notif.job_status    = job.status
+            notif.job_progress  = progress
+            notif.is_read       = False   # resurface in the bell as done
         db.session.commit()
     except Exception as e:
         db.session.rollback()
         print(f"[notification_core] update_job_notification error: {e}")
+
+
+def notify_similarity_done(user_id, session_uuid, total, pairs_found):
+    """Notify the user who triggered a similarity analysis that it finished."""
+    return create_notification(
+        user_id    = user_id,
+        notif_type = 'session_done',
+        title      = 'Similarity analysis finished',
+        body       = f'{total} rules processed · {pairs_found} similar pairs found',
+        link       = f'/rule/similar_loading/{session_uuid}',
+        icon       = 'fa-solid fa-code-compare',
+    )
+
+
+def notify_proposal_submitted(proposal, rule):
+    """
+    Notify the rule owner + all admins when a new edit proposal is submitted.
+    Skips the submitter (they don't need to notify themselves).
+    """
+    try:
+        from app.core.db_class.db import User
+        submitter = User.query.get(proposal.user_id)
+        submitter_name = submitter.get_username() if submitter else 'Someone'
+
+        recipients = set(_get_all_admin_ids())
+        if rule.user_id:
+            recipients.add(rule.user_id)
+        recipients.discard(proposal.user_id)  # don't notify the submitter
+
+        if not recipients:
+            return
+
+        notifs = []
+        for uid in recipients:
+            notifs.append(Notification(
+                user_id    = uid,
+                notif_type = 'proposal_submitted',
+                title      = f'New proposal on "{rule.title}"',
+                body       = f'{submitter_name} suggested an edit — review it now.',
+                link       = f'/rule/proposal_content_discuss?id={proposal.id}',
+                icon       = _TYPE_ICON['proposal_submitted'],
+                is_read    = False,
+                created_at = datetime.datetime.utcnow(),
+            ))
+        db.session.add_all(notifs)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_proposal_submitted error: {e}")
+
+
+def notify_admins_report_created(report, rule, reporter):
+    """
+    Notify all admins when a new rule report is submitted (first report only,
+    de-duplicated at the callsite with is_new=True).
+    """
+    try:
+        admin_ids = _get_all_admin_ids()
+        if not admin_ids:
+            return
+
+        reporter_name = reporter.get_username() if reporter else 'Someone'
+        rule_title = rule.title if rule else f'rule #{report.rule_id}'
+
+        notifs = []
+        for uid in admin_ids:
+            notifs.append(Notification(
+                user_id    = uid,
+                notif_type = 'report_submitted',
+                title      = f'Rule reported: "{rule_title}"',
+                body       = f'{reporter_name} submitted a report — reason: {report.reason or "unspecified"}',
+                link       = '/report/admin',
+                icon       = _TYPE_ICON['report_submitted'],
+                is_read    = False,
+                created_at = datetime.datetime.utcnow(),
+            ))
+        db.session.add_all(notifs)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_admins_report_created error: {e}")
+
+
+def notify_admins_session_started(user, session_type, session_uuid, label, link):
+    """
+    Notify all admins (and the triggering user) that a long-running session
+    (import / update / similarity) has started.
+    The notification stays visible in the bell while job_status='running',
+    which keeps the bell polling so the completion toast always fires.
+    """
+    try:
+        admin_ids = set(_get_all_admin_ids())
+        # Always include the triggering user so their bell keeps polling
+        # even if they are not an admin — this is the key invariant that
+        # allows update_admin_session_notifications() to later fire a toast
+        # for the session owner regardless of their role.
+        if user and getattr(user, 'id', None):
+            admin_ids.add(user.id)
+        if not admin_ids:
+            return
+
+        _icons = {
+            'github_import': 'fa-brands fa-github',
+            'github_update': 'fa-solid fa-code-branch',
+            'similarity':    'fa-solid fa-code-compare',
+        }
+        icon = _icons.get(session_type, _TYPE_ICON['session_running'])
+        username = user.get_username() if user else 'Someone'
+
+        notifs = []
+        for uid in admin_ids:
+            notifs.append(Notification(
+                user_id      = uid,
+                notif_type   = 'session_running',
+                title        = label,
+                body         = f'Started by {username}',
+                link         = link,
+                icon         = icon,
+                job_uuid     = session_uuid,
+                job_status   = 'running',
+                job_progress = 0,
+                is_read      = False,
+                created_at   = datetime.datetime.utcnow(),
+            ))
+        db.session.add_all(notifs)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_admins_session_started error: {e}")
+
+
+def update_admin_session_notifications(session_uuid, summary, link=None):
+    """
+    Called when a session finishes. Finds all session_running notifications
+    for this session UUID and marks them done with the final summary.
+    Pass `link` to redirect the user to the specific results page.
+    """
+    try:
+        notifs = Notification.query.filter_by(job_uuid=session_uuid, notif_type='session_running').all()
+        for n in notifs:
+            n.notif_type   = 'session_done'
+            n.title        = n.title.replace(' running', ' done').replace('Running', 'Done')
+            n.body         = summary
+            n.job_status   = 'done'
+            n.job_progress = 100
+            n.is_read      = False   # resurface in the bell as "done"
+            n.icon         = _TYPE_ICON['session_done']
+            if link:
+                n.link = link
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] update_admin_session_notifications error: {e}")
 
 
 def notify_followers_new_rule(rule, author_user_id):
@@ -129,6 +378,9 @@ def notify_followers_new_rule(rule, author_user_id):
 
         notifs = []
         for follow in follows:
+            pref = _get_pref(follow.follower_id)
+            if not pref.pref_follow_new_rule:
+                continue
             notifs.append(Notification(
                 user_id    = follow.follower_id,
                 notif_type = 'new_rule',
@@ -139,11 +391,266 @@ def notify_followers_new_rule(rule, author_user_id):
                 is_read    = False,
                 created_at = datetime.datetime.utcnow(),
             ))
-        db.session.add_all(notifs)
+        if notifs:
+            db.session.add_all(notifs)
         db.session.commit()
     except Exception as e:
         db.session.rollback()
         print(f"[notification_core] notify_followers_new_rule error: {e}")
+
+
+def notify_followers_new_bundle(bundle, author_user_id):
+    """Notify followers of author that a new bundle was created (honours pref_follow_new_bundle).
+    Private bundles (access=False) are never broadcast to followers — only the owner sees them."""
+    if not getattr(bundle, 'access', True):
+        return  # private bundle — no follower notifications
+    try:
+        follows = UserFollow.query.filter_by(followed_id=author_user_id).all()
+        if not follows:
+            return
+
+        from app.core.db_class.db import User
+        author = db.session.get(User, author_user_id)
+        author_name = author.get_username() if author else 'Someone'
+
+        notifs = []
+        for follow in follows:
+            pref = _get_pref(follow.follower_id)
+            if not pref.pref_follow_new_bundle:
+                continue
+            notifs.append(Notification(
+                user_id    = follow.follower_id,
+                notif_type = 'follow_new_bundle',
+                title      = f'New bundle by {author_name}',
+                body       = bundle.name,
+                link       = f'/bundle/detail/{bundle.id}',
+                icon       = _TYPE_ICON['follow_new_bundle'],
+                is_read    = False,
+                created_at = datetime.datetime.utcnow(),
+            ))
+        if notifs:
+            db.session.add_all(notifs)
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_followers_new_bundle error: {e}")
+
+
+def notify_followers_new_comment(commenter_id, object_title, link, is_public=True):
+    """Notify followers of commenter that they left a new comment (honours pref_follow_new_comment).
+    Pass is_public=False for comments on private bundles to skip follower notifications."""
+    if not is_public:
+        return  # private content — followers should not be notified
+    try:
+        follows = UserFollow.query.filter_by(followed_id=commenter_id).all()
+        if not follows:
+            return
+
+        from app.core.db_class.db import User
+        commenter = db.session.get(User, commenter_id)
+        commenter_name = commenter.get_username() if commenter else 'Someone'
+
+        notifs = []
+        for follow in follows:
+            if follow.follower_id == commenter_id:
+                continue
+            pref = _get_pref(follow.follower_id)
+            if not pref.pref_follow_new_comment:
+                continue
+            notifs.append(Notification(
+                user_id    = follow.follower_id,
+                notif_type = 'follow_new_comment',
+                title      = f'{commenter_name} commented',
+                body       = object_title,
+                link       = link,
+                icon       = _TYPE_ICON['follow_new_comment'],
+                is_read    = False,
+                created_at = datetime.datetime.utcnow(),
+            ))
+        if notifs:
+            db.session.add_all(notifs)
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_followers_new_comment error: {e}")
+
+
+def notify_owner_new_comment(owner_user_id, commenter_id, notif_type, object_title, link):
+    """Notify the owner of a rule/bundle that someone commented on it.
+
+    notif_type: 'rule_comment' or 'bundle_comment'
+    Skipped if commenter == owner (no self-notification).
+    Honours pref_rule_comment / pref_bundle_comment.
+    """
+    if owner_user_id == commenter_id:
+        return
+    try:
+        pref = _get_pref(owner_user_id)
+        pref_key = 'pref_rule_comment' if notif_type == 'rule_comment' else 'pref_bundle_comment'
+        if not getattr(pref, pref_key, True):
+            return
+
+        from app.core.db_class.db import User
+        commenter = db.session.get(User, commenter_id)
+        commenter_name = commenter.get_username() if commenter else 'Someone'
+
+        create_notification(
+            user_id    = owner_user_id,
+            notif_type = notif_type,
+            title      = f'{commenter_name} commented on your {"rule" if notif_type == "rule_comment" else "bundle"}',
+            body       = object_title,
+            link       = link,
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_owner_new_comment error: {e}")
+
+
+def notify_proposal_comment(proposal_id, proposal_owner_id, commenter_id, rule_title, comment_id=None):
+    """Notify the proposal creator when someone comments on their proposal (honours pref_proposal_comment)."""
+    if proposal_owner_id == commenter_id:
+        return
+    try:
+        pref = _get_pref(proposal_owner_id)
+        if not pref.pref_proposal_comment:
+            return
+
+        from app.core.db_class.db import User
+        commenter = db.session.get(User, commenter_id)
+        commenter_name = commenter.get_username() if commenter else 'Someone'
+
+        link = f'/rule/proposal_content_discuss?id={proposal_id}'
+        if comment_id:
+            link += f'&comment={comment_id}'
+
+        create_notification(
+            user_id    = proposal_owner_id,
+            notif_type = 'proposal_comment',
+            title      = f'{commenter_name} commented on your proposal',
+            body       = rule_title or '',
+            link       = link,
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_proposal_comment error: {e}")
+
+
+def notify_proposal_status_change(proposal, status, rule_title):
+    """Notify the proposal author when their proposal is accepted or rejected (honours pref_proposal_accepted)."""
+    try:
+        pref = _get_pref(proposal.user_id)
+        if not pref.pref_proposal_accepted:
+            return
+
+        notif_type = 'proposal_accepted' if status == 'accepted' else 'proposal_rejected'
+        verb = 'accepted' if status == 'accepted' else 'rejected'
+        create_notification(
+            user_id    = proposal.user_id,
+            notif_type = notif_type,
+            title      = f'Your proposal was {verb}',
+            body       = rule_title or '',
+            link       = f'/rule/proposal_content_discuss?id={proposal.id}',
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_proposal_status_change error: {e}")
+
+
+def notify_comment_reply(parent_comment_author_id, replier_id, object_title, link):
+    """Notify the author of the parent comment when someone replies (honours pref_comment_reply)."""
+    if parent_comment_author_id == replier_id:
+        return
+    try:
+        pref = _get_pref(parent_comment_author_id)
+        if not pref.pref_comment_reply:
+            return
+
+        from app.core.db_class.db import User
+        replier = db.session.get(User, replier_id)
+        replier_name = replier.get_username() if replier else 'Someone'
+
+        create_notification(
+            user_id    = parent_comment_author_id,
+            notif_type = 'comment_reply',
+            title      = f'{replier_name} replied to your comment',
+            body       = object_title or '',
+            link       = link,
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_comment_reply error: {e}")
+
+
+def notify_ownership_requested(ownership_request, rule, requester):
+    """
+    Notify all admins (and the current rule owner if different from requester)
+    when a user submits an ownership claim for a rule or source.
+    """
+    try:
+        requester_name = requester.get_username() if requester else 'Someone'
+        recipients = set(_get_all_admin_ids())
+        # Also notify current rule owner if it's a single-rule request
+        if rule and rule.user_id and rule.user_id != requester.id:
+            recipients.add(rule.user_id)
+
+        if not recipients:
+            return
+
+        if rule:
+            title = f'Ownership claim on "{rule.title}"'
+            body  = f'{requester_name} is claiming ownership of this rule.'
+            link  = f'/requests/{ownership_request.id}'
+        else:
+            title = f'Ownership claim on source rules'
+            body  = f'{requester_name} is claiming ownership of rules from a GitHub source.'
+            link  = f'/requests/{ownership_request.id}'
+
+        notifs = [
+            Notification(
+                user_id    = uid,
+                notif_type = 'ownership_requested',
+                title      = title,
+                body       = body,
+                link       = link,
+                icon       = _TYPE_ICON['ownership_requested'],
+                is_read    = False,
+                created_at = datetime.datetime.utcnow(),
+            )
+            for uid in recipients
+        ]
+        db.session.add_all(notifs)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_ownership_requested error: {e}")
+
+
+def notify_ownership_decision(ownership_request, approved, rule_title=None):
+    """
+    Notify the requester when their ownership claim is approved or rejected.
+    """
+    try:
+        notif_type = 'ownership_approved' if approved else 'ownership_rejected'
+        verb       = 'approved' if approved else 'rejected'
+        title      = f'Ownership claim {verb}'
+        body       = f'Your claim on "{rule_title}"' if rule_title else f'Your ownership claim has been {verb}.'
+        link       = f'/requests/{ownership_request.id}'
+
+        create_notification(
+            user_id    = ownership_request.user_id,
+            notif_type = notif_type,
+            title      = title,
+            body       = body,
+            link       = link,
+        )
+    except Exception as e:
+        print(f"[notification_core] notify_ownership_decision error: {e}")
+
+
+def delete_all_notifications(user_id):
+    """Hard-delete every notification row for this user."""
+    try:
+        Notification.query.filter_by(user_id=user_id).delete()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] delete_all_notifications error: {e}")
 
 
 def notify_rule_update_found(user_id, count, update_result_id=None):
@@ -164,7 +671,7 @@ def notify_rule_update_found(user_id, count, update_result_id=None):
 def notify_github_import_done(user_id, imported, skipped, bad_rules, result_uuid=None):
     """Notification sent when a GitHub / ZIP import session finishes."""
     total = imported + skipped + bad_rules
-    link = f'/rule/import_history?uuid={result_uuid}' if result_uuid else '/rule/import_history'
+    link = f'/rule/github/history_github_importer?uuid={result_uuid}' if result_uuid else '/rule/github/history_github_importer'
     return create_notification(
         user_id    = user_id,
         notif_type = 'github_import_done',
@@ -201,7 +708,12 @@ def get_notifications(user_id, page=1, per_page=20, unread_only=False, notif_typ
     if unread_only:
         q = q.filter_by(is_read=False)
     if notif_type:
-        q = q.filter_by(notif_type=notif_type)
+        # notif_type may be a single string or a comma-separated list of types
+        types = [t.strip() for t in notif_type.split(',') if t.strip()] if isinstance(notif_type, str) else list(notif_type)
+        if len(types) == 1:
+            q = q.filter(Notification.notif_type == types[0])
+        elif len(types) > 1:
+            q = q.filter(Notification.notif_type.in_(types))
     return q.order_by(Notification.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
 
 
@@ -223,7 +735,7 @@ def get_bell_items(user_id, limit=15):
               .limit(limit)
               .all())
 
-    # Active jobs (running / pending / paused) that may already be read
+    # Active BackgroundJobs (running / pending / paused) that may already be read
     active_job_uuids = [
         j.uuid for j in BackgroundJob.query
         .filter(BackgroundJob.status.in_(['pending', 'running', 'paused']))
@@ -239,10 +751,19 @@ def get_bell_items(user_id, limit=15):
                              .order_by(Notification.created_at.desc())
                              .all())
 
+    # Active thread-based sessions (import/update/similarity) that may already be read
+    active_session_notifs = (Notification.query
+                             .filter(Notification.user_id == user_id,
+                                     Notification.is_read == True,
+                                     Notification.notif_type == 'session_running',
+                                     Notification.job_status.in_(['running', 'pending']))
+                             .order_by(Notification.created_at.desc())
+                             .all())
+
     # Merge, deduplicate by id
     seen = set()
     merged = []
-    for n in (unread + active_job_notifs):
+    for n in (unread + active_job_notifs + active_session_notifs):
         if n.id not in seen:
             seen.add(n.id)
             merged.append(n)

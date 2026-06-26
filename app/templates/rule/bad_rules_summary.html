@@ -2,6 +2,8 @@
 {% block title %}Invalid Rules — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/bad_rule/bad_rule_summary.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -98,9 +100,12 @@
                             <summary class="text-secondary small fw-bold" style="cursor: pointer;">
                                 <i class="fas fa-chevron-right me-1 shadow-none"></i> RAW CONTENT
                             </summary>
-                            <div class="position-relative mt-2">
-                                <pre
-                                    class="bg-dark text-light p-3 mb-0 code-preview"><code>[[ rule.raw_content ]]</code></pre>
+                            <div class="mt-2">
+                                <code-viewer
+                                    :code="rule.raw_content || ''"
+                                    :language="rule.rule_type || 'auto'"
+                                    max-height="400px">
+                                </code-viewer>
                             </div>
                         </details>
                     </div>
@@ -157,12 +162,14 @@
     import { message_list, create_message } from '/static/js/toaster.js'
     import BadRuleFilterBar from '/static/js/rule/bad/badRuleFilter.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
+    import CodeViewer from '/static/js/components/code-viewer.js';
 
     createApp({
         delimiters: ['[[', ']]'],
         components: {
             'bad-rule-filter-bar': BadRuleFilterBar,
-            'pagination-component': PaginationComponent
+            'pagination-component': PaginationComponent,
+            'code-viewer': CodeViewer,
         },
         setup() {
             const csrf_token = '{{ csrf_token() }}';

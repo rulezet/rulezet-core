@@ -12,7 +12,6 @@ const DiffDisplay = {
     },
     delimiters: ['[[', ']]'],
     setup(props) {
-        // État pour la visibilité des couleurs
         const showColors = Vue.ref(true);
 
         const isIdentical = Vue.computed(() => {

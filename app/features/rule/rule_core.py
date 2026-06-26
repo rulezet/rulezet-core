@@ -1,7 +1,6 @@
 
 import json
 from collections import Counter
-import math
 import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -17,7 +16,6 @@ from sqlalchemy.orm import joinedload
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import aliased
-from app.features.rule.rule_format.abstract_rule_type import rule_type_abstract
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult, load_all_rule_formats
 
 from ... import db
@@ -429,23 +427,28 @@ def add_rule_core(form_dict, user) -> tuple[bool, str] | tuple[Rule, str]:
             except Exception:
                 pass
 
+        # Auto-extract ATT&CK technique associations from rule content
+        try:
+            from app.features.attack.attack_core import auto_parse_rule
+            auto_parse_rule(new_rule.id, user_id)
+        except Exception:
+            pass
+
         return new_rule, "rule created"
 
     except Exception as e:
         return False, e
 
-def get_rule_by_uuid(uuid):
-    return Rule.query.filter_by(uuid=uuid).first()
+def get_rule_by_uuid(uuid, include_deleted=False):
+    q = Rule.query if include_deleted else _active()
+    return q.filter(Rule.uuid == uuid).first()
 
 def get_rule_by_content(content):
     if not content:
         return None
         
-    # 1. Normalisation en Python : supprime TOUT (espaces, \n, \r, \t)
-    # et met tout en minuscule pour éviter les doublons de casse
     clean_content = "".join(content.split()).lower()
 
-    # 2. Comparaison SQL avec gestion des Tabulations (\t)
     query = _active().filter(
         func.lower(
             func.replace(
@@ -454,7 +457,7 @@ def get_rule_by_content(content):
                         func.replace(Rule.to_string, ' ', ''),
                     '\n', ''),
                 '\r', ''),
-            '\t', '') # Ajout du remplacement des tabulations
+            '\t', '')
         ) == clean_content
     )
     
@@ -607,7 +610,6 @@ def get_sources_from_ids(rule_ids: List[int]) -> List[str]:
     if not rule_ids:
         return []
 
-    # Récupère toutes les règles d'un seul coup
     rules = Rule.query.filter(Rule.id.in_(rule_ids)).all()
 
     sources = []
@@ -665,9 +667,11 @@ def get_rules_of_user_with_id_page(user_id, page, search, sort_by, rule_type) ->
 
     return query.paginate(page=page, per_page=20, max_per_page=20)
 
-def get_rule(id) -> Rule:
+def get_rule(id, include_deleted=False) -> Rule:
     """Return the rule from id"""
-    return Rule.query.get(id)
+    if include_deleted:
+        return Rule.query.get(id)
+    return _active().filter(Rule.id == id).first()
 
 def get_rule_type_count(user_id):
     """Return JSON of the different rule types and total"""
@@ -712,6 +716,16 @@ def get_rule_by_title(title) -> Rule | None:
     """Return the rule from the title"""
     return Rule.query.filter_by(title=title).first()
 
+def _normalize_github_url(url: str) -> str:
+    """Strip trailing slash and .git suffix for consistent URL comparison."""
+    if not url:
+        return url
+    url = url.rstrip('/')
+    if url.endswith('.git'):
+        url = url[:-4]
+    return url.rstrip('/')
+
+
 def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uuid) -> tuple[Rule | None, str]:
     clean_uuid = str(original_uuid).strip().lower()
     forbidden = ["none", "null", "unknown", "n/a", "undefined", ""]
@@ -721,12 +735,16 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
         if rule:
             return rule, "Rule found in Rulezet with this original_uuid"
 
+    # Build a set of equivalent URLs to handle .git suffix mismatches
+    norm_source = _normalize_github_url(repo_source)
+    source_variants = list({repo_source, norm_source}) if norm_source != repo_source else [repo_source]
+
     # check by github_path first — most reliable for NSE/formats without uuid
     if filepath_in_the_repo:
         # normalize: use only the filename as fallback
         normalized = os.path.basename(filepath_in_the_repo)
         rule = Rule.query.filter(
-            Rule.source == repo_source
+            Rule.source.in_(source_variants)
         ).filter(
             db.or_(
                 Rule.github_path == filepath_in_the_repo,
@@ -738,18 +756,27 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
             return rule, "Rule found in Rulezet with this github_path"
 
     # check by title + source
-    query = Rule.query.filter(Rule.title == title, Rule.source == repo_source)
+    query = Rule.query.filter(Rule.title == title, Rule.source.in_(source_variants))
     count_title = query.count()
 
     if count_title == 0:
         return None, "[new rule]"
     if count_title == 1:
         rule = query.first()
-        if rule.github_path != filepath_in_the_repo:
-            return None, "[new rule]"
+        # Compare normalized paths to avoid absolute-vs-relative mismatches
+        stored_basename = os.path.basename(rule.github_path) if rule.github_path else None
+        repo_basename = os.path.basename(filepath_in_the_repo) if filepath_in_the_repo else None
+        if rule.github_path and filepath_in_the_repo:
+            if rule.github_path != filepath_in_the_repo and stored_basename != repo_basename:
+                return None, "[new rule]"
         return rule, "Rule found in Rulezet with this title"
 
-    query_path = query.filter(Rule.github_path == filepath_in_the_repo)
+    query_path = query.filter(
+        db.or_(
+            Rule.github_path == filepath_in_the_repo,
+            Rule.github_path.like(f"%{os.path.basename(filepath_in_the_repo)}") if filepath_in_the_repo else False
+        )
+    )
     count_path = query_path.count()
 
     if count_path == 1:
@@ -905,9 +932,8 @@ def give_all_right_to_admin(rules) -> None:
 #   Favorite rule   #
 #####################
 
-def get_rules_page_favorite(page, id_user, search=None, author=None, sort_by=None, rule_type=None):
+def get_rules_page_favorite(page, id_user, search=None, author=None, sort_by=None, rule_type=None, per_page=30):
     """Get paginated favorite rules of a user with optional filters"""
-    per_page = 30
 
     # Base query: select favorite rules for the user
     query = Rule.query\
@@ -1319,7 +1345,7 @@ def process_vote(rule_id, user_id, vote_type):
 #   Filter  #
 #############
 
-def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False) -> Rule:
+def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None, status=None, workspace_uuid=None, exclude_workspace_uuid=None) -> Rule:
     """Filter the rules with specific field targeting"""
     query = _active()
     
@@ -1391,7 +1417,13 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
             # Tag requested but doesn't exist in DB → no rules can match
             query = query.filter(False)
 
-
+    if attacks:
+        from app.core.db_class.db import RuleAttackAssociation as _RAA
+        upper = [a.upper() for a in attacks]
+        query = (query
+                 .join(_RAA, _RAA.rule_id == Rule.id)
+                 .filter(_RAA.technique_id.in_(upper))
+                 .distinct())
 
     if source:
         source_list = [s.strip() for s in source.split(',')] if isinstance(source, str) else source
@@ -1402,11 +1434,18 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
         query = query.filter(or_(*[Rule.license.ilike(f"%{l}%") for l in license_list]))
 
     if author:
-        query = query.filter(Rule.author.ilike(f"%{author.lower()}%"))
+        author_list = author if isinstance(author, list) else [author]
+        query = query.filter(or_(*[Rule.author.ilike(f"%{a}%") for a in author_list]))
+
+    if editor_names:
+        editor_col = func.coalesce(User.username, func.concat(User.first_name, ' ', User.last_name))
+        query = (query
+                 .join(User, User.id == Rule.user_id)
+                 .filter(or_(*[editor_col.ilike(f"%{e}%") for e in editor_names])))
 
     if rule_type:
-        query = query.filter(Rule.format.ilike(f"%{rule_type.lower()}%"))  
-        
+        query = query.filter(Rule.format.ilike(f"%{rule_type.lower()}%"))
+
     if sort_by == "newest":
         query = query.order_by(Rule.creation_date.desc())
     elif sort_by == "oldest":
@@ -1420,7 +1459,33 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
 
     if user_id:
         query = query.filter(Rule.user_id == user_id)
-        
+
+    if bundle_id:
+        query = query.join(BundleRuleAssociation, BundleRuleAssociation.rule_id == Rule.id).filter(
+            BundleRuleAssociation.bundle_id == bundle_id
+        )
+
+    if workspace_uuid:
+        from app.core.db_class.db import WorkspaceRule, Workspace
+        from sqlalchemy import false as _false
+        ws = Workspace.query.filter_by(uuid=workspace_uuid).first()
+        if ws:
+            ws_rule_ids = [wr.rule_id for wr in WorkspaceRule.query.filter_by(workspace_id=ws.id).all()]
+            query = query.filter(Rule.id.in_(ws_rule_ids))
+        else:
+            query = query.filter(_false())
+
+    if exclude_workspace_uuid:
+        from app.core.db_class.db import WorkspaceRule, Workspace
+        ex_ws = Workspace.query.filter_by(uuid=exclude_workspace_uuid).first()
+        if ex_ws:
+            ex_ids = [wr.rule_id for wr in WorkspaceRule.query.filter_by(workspace_id=ex_ws.id).all()]
+            if ex_ids:
+                query = query.filter(~Rule.id.in_(ex_ids))
+
+    if status:
+        query = query.filter(Rule.status == status)
+
     return query
 
 
@@ -1591,6 +1656,22 @@ def add_comment_core(rule_id, content, user, parent_comment_id=None):
     )
     db.session.add(comment)
     db.session.commit()
+
+    try:
+        rule = _active().filter_by(id=rule_id).first()
+        link = f'/rule/detail_rule/{rule_id}'
+        from app.features.notification.notification_core import (
+            notify_owner_new_comment, notify_followers_new_comment, notify_comment_reply)
+        if rule:
+            notify_owner_new_comment(rule.user_id, user.id, 'rule_comment', rule.title, link)
+        notify_followers_new_comment(user.id, rule.title if rule else '', link, is_public=True)
+        if parent_comment_id:
+            parent = Comment.query.get(parent_comment_id)
+            if parent:
+                notify_comment_reply(parent.user_id, user.id, rule.title if rule else '', link)
+    except Exception as _e:
+        print(f"[rule_core] add_comment_core notification error: {_e}")
+
     return True, "Comment posted successfully."
 
 
@@ -1732,8 +1813,9 @@ def get_all_contributions_with_rule_id(rule_id) -> list:
 
 # Create
 
-def create_repport(user_id, rule_id, message, reason) -> RepportRule:
-    """Create a new report, unless an identical one already exists"""
+def create_repport(user_id, rule_id, message, reason):
+    """Create a new report, unless an identical one already exists.
+    Returns (report, is_new): is_new=False when a duplicate was found."""
 
     existing = RepportRule.query.filter_by(
         user_id=user_id,
@@ -1743,7 +1825,7 @@ def create_repport(user_id, rule_id, message, reason) -> RepportRule:
     ).first()
 
     if existing:
-        return existing  
+        return existing, False
 
     repport = RepportRule(
         user_id=user_id,
@@ -1754,7 +1836,7 @@ def create_repport(user_id, rule_id, message, reason) -> RepportRule:
     )
     db.session.add(repport)
     db.session.commit()
-    return repport
+    return repport, True
 
 
 
@@ -2009,11 +2091,6 @@ def get_rule_format_with_id(id):
     return FormatRule.query.get(id)
 
 def add_format_rule(format_name: str, user_id: int, can_be_execute: bool) -> tuple[bool, str]:
-        """Ajoute un format de règle si non existant.
-
-        Returns:
-            (success: bool, message: str)
-        """
         existing_format = FormatRule.query.filter_by(name=format_name).first()
         if existing_format:
             return False, "This format name already exists."
@@ -2182,7 +2259,8 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          direction='asc', source=None, user_id=None,
                          search_field='all', exact_match=False, rule_type=None,
                          author=None, vulnerabilities=None, licenses=None,
-                         tags=None):
+                         tags=None, editor_names=None, bundle_id=None, attacks=None,
+                         status=None, workspace_uuid=None, exclude_workspace_uuid=None):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -2199,6 +2277,12 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         license=licenses,
         tags=tags,
         exact_match=exact_match,
+        editor_names=editor_names,
+        bundle_id=bundle_id,
+        attacks=attacks,
+        status=status,
+        workspace_uuid=workspace_uuid,
+        exclude_workspace_uuid=exclude_workspace_uuid,
     )
 
     col = _DATA_TABLE_SORT_KEYS.get(sort)
@@ -2371,35 +2455,91 @@ def get_importer_result(sid: str):
 def get_updater_result(sid: str):
     return UpdateResult.query.filter_by(uuid=sid).first()
 
-def get_updater_result_new_rule_page(sid: str, page: int, per_page: int = 30):
+def get_updater_result_new_rule_page(sid: str, page: int, per_page: int = 30,
+                                      f_syntax_valid=None,
+                                      f_accept=None,
+                                      f_error=None):
     """
-    Retrieve paginated NewRule entries linked to the UpdateResult with UUID = sid
-    """
-    update_result = UpdateResult.query.filter_by(uuid=sid).first()
-    if not update_result:
-        return None
-
-    return (
-        NewRule.query
-        .filter_by(update_result_id=update_result.id)
-        .filter(NewRule.message != "imported")    
-        .paginate(page=page, per_page=per_page, error_out=False)
-    )
-
-
-def get_updater_result_rule_page(sid: str, page: int, per_page: int = 30):
-    """
-    Retrieve paginated RuleStatus entries linked to the UpdateResult with UUID = sid,
-    prioritizing rules that have an update available.
+    Retrieve paginated NewRule entries. Each filter is None (any) | True | False.
     """
     update_result = UpdateResult.query.filter_by(uuid=sid).first()
     if not update_result:
         return None
 
-    # Prioritize rules with update_available=True, then by date ascending
-    return RuleStatus.query.filter_by(update_result_id=update_result.id)\
-        .order_by(RuleStatus.update_available.desc(), RuleStatus.date.asc())\
-        .paginate(page=page, per_page=per_page, error_out=False)
+    q = (NewRule.query
+         .filter_by(update_result_id=update_result.id)
+         .filter(NewRule.message != "imported")
+         .filter(NewRule.message != "rejected"))
+    if f_syntax_valid is not None:
+        q = q.filter(NewRule.rule_syntax_valid == f_syntax_valid)
+    if f_accept is not None:
+        q = q.filter(NewRule.accept == f_accept)
+    if f_error is not None:
+        q = q.filter(NewRule.error == f_error)
+    return q.paginate(page=page, per_page=per_page, error_out=False)
+
+
+def count_updates_available(sid: str) -> int:
+    """Count RuleStatus rows with update_available=True for a session."""
+    update_result = UpdateResult.query.filter_by(uuid=sid).first()
+    if not update_result:
+        return 0
+    return RuleStatus.query.filter_by(
+        update_result_id=update_result.id, update_available=True
+    ).count()
+
+
+def count_pending_new_rules(sid: str) -> int:
+    """Count NewRule rows not yet imported or rejected for a session."""
+    update_result = UpdateResult.query.filter_by(uuid=sid).first()
+    if not update_result:
+        return 0
+    return (NewRule.query
+            .filter_by(update_result_id=update_result.id)
+            .filter(NewRule.message != 'imported')
+            .filter(NewRule.message != 'rejected')
+            .count())
+
+
+def get_updater_result_rule_page(sid: str, page: int, per_page: int = 30,
+                                  f_update_available=None,
+                                  f_found=None,
+                                  f_error=None,
+                                  f_syntax_valid=None):
+    """Retrieve paginated RuleStatus entries. Each filter is None (any) | True | False."""
+    update_result = UpdateResult.query.filter_by(uuid=sid).first()
+    if not update_result:
+        return None
+    q = RuleStatus.query.filter_by(update_result_id=update_result.id)
+    if f_update_available is not None:
+        q = q.filter(RuleStatus.update_available == f_update_available)
+    if f_found is not None:
+        q = q.filter(RuleStatus.found == f_found)
+    if f_error is not None:
+        q = q.filter(RuleStatus.error == f_error)
+    if f_syntax_valid is not None:
+        q = q.filter(RuleStatus.rule_syntax_valid == f_syntax_valid)
+    return q.order_by(RuleStatus.update_available.desc(), RuleStatus.date.asc())\
+             .paginate(page=page, per_page=per_page, error_out=False)
+
+
+def get_rule_update_list_filtered(sid: str,
+                                   f_found=None,
+                                   f_error=None,
+                                   f_syntax_valid=None):
+    """Return RuleStatus with update_available=True, optionally narrowed by extra filters."""
+    update_result = UpdateResult.query.filter_by(uuid=sid).first()
+    if not update_result:
+        return [], 0
+    q = RuleStatus.query.filter_by(update_result_id=update_result.id, update_available=True)
+    if f_found is not None:
+        q = q.filter(RuleStatus.found == f_found)
+    if f_error is not None:
+        q = q.filter(RuleStatus.error == f_error)
+    if f_syntax_valid is not None:
+        q = q.filter(RuleStatus.rule_syntax_valid == f_syntax_valid)
+    rules = q.all()
+    return rules, len(rules)
 
 
 def get_importer_list_page(page: int = 1):
@@ -2643,6 +2783,47 @@ def accept_all_update(rule_udpate_list):
         return False
    
 
+def reject_all_update(rule_update_list):
+    try:
+        for rule in rule_update_list:
+            rule.update_available = False
+            rule.message = "Rejected"
+            history = RuleUpdateHistory.query.filter_by(id=rule.history_id).first()
+            if history:
+                history.message = "rejected"
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
+
+
+def get_valid_new_rules_by_sid(sid):
+    updater = get_updater_result(sid)
+    if not updater:
+        return []
+    return NewRule.query.filter_by(
+        update_result_id=updater.id,
+        rule_syntax_valid=True
+    ).filter(
+        NewRule.message != 'imported',
+        NewRule.message != 'rejected'
+    ).all()
+
+
+def reject_all_new_rules_by_sid(sid):
+    updater = get_updater_result(sid)
+    if not updater:
+        return False
+    rules = NewRule.query.filter_by(update_result_id=updater.id).filter(
+        NewRule.message != 'imported'
+    ).all()
+    for r in rules:
+        r.message = 'rejected'
+    db.session.commit()
+    return True
+
+
 def get_rule_update_from_updater_by_rule_id_and_change_statue(rule_id, updater_id , decision, updater):
     rule = RuleStatus.query.filter_by(
         rule_id=str(rule_id),
@@ -2670,7 +2851,7 @@ def get_rule_update_from_updater_by_rule_id_and_change_statue(rule_id, updater_i
 
 def get_format_name(id):
     rule = RuleStatus.query.filter_by(rule_id=id).first()
-    reel_rule = get_rule(rule.rule_id)
+    reel_rule = get_rule(rule.rule_id, include_deleted=True)
     return reel_rule.format or "no format"
 
 def get_updater_result_by_id(sid: int):
@@ -3064,6 +3245,42 @@ def get_licenses_usage_with_filter(search_query, user_id=None, source_scope=None
     return query.group_by(Rule.license).order_by(func.count(Rule.id).desc()).all()
 
 
+def get_authors_usage_with_filter(search_query=None, user_id=None, source_scope=None):
+    """Distinct rule authors with usage counts, optionally filtered."""
+    query = db.session.query(
+        Rule.author.label('author'),
+        func.count(Rule.id).label('count')
+    ).filter(Rule.author.isnot(None), Rule.author != '', Rule.author != 'Unknown',
+             Rule.is_deleted == False)
+
+    if search_query:
+        query = query.filter(Rule.author.ilike(f'%{search_query}%'))
+    if user_id:
+        query = query.filter(Rule.user_id == user_id)
+    if source_scope:
+        query = query.filter(Rule.source == source_scope)
+
+    return query.group_by(Rule.author).order_by(func.count(Rule.id).desc()).all()
+
+
+def get_editors_usage_with_filter(search_query=None, source_scope=None):
+    """Distinct Rulezet editors (uploaders) with usage counts."""
+    editor_col = func.coalesce(User.username, func.concat(User.first_name, ' ', User.last_name))
+    query = (db.session.query(
+        editor_col.label('name'),
+        func.count(Rule.id).label('count')
+    )
+    .join(User, User.id == Rule.user_id)
+    .filter(Rule.is_deleted == False))
+
+    if search_query:
+        query = query.filter(editor_col.ilike(f'%{search_query}%'))
+    if source_scope:
+        query = query.filter(Rule.source == source_scope)
+
+    return query.group_by(editor_col).order_by(func.count(Rule.id).desc()).all()
+
+
 def get_tags_for_rule(rule_id: int) -> List[Tag]:
     """
     Retrieve a list of active Tag objects associated with a rule.
@@ -3090,11 +3307,43 @@ def get_tags_for_rule(rule_id: int) -> List[Tag]:
                 )
             )
     else:
-        query = query.filter(Tag.visibility.ilike('public'))    
-
+        query = query.filter(Tag.visibility.ilike('public'))
 
     return query.all()
 
+
+def get_tags_for_rules_batch(rule_ids: List[int]) -> dict:
+    """Return {rule_id: [Tag, ...]} for all given rule IDs in one query."""
+    if not rule_ids:
+        return {}
+
+    query = (
+        db.session.query(RuleTagAssociation.rule_id, Tag)
+        .join(Tag, RuleTagAssociation.tag_id == Tag.id)
+        .filter(
+            RuleTagAssociation.rule_id.in_(rule_ids),
+            Tag.is_active == True,
+        )
+    )
+
+    if current_user.is_authenticated:
+        if not current_user.is_admin():
+            query = query.filter(
+                or_(
+                    Tag.visibility.ilike('public'),
+                    and_(
+                        Tag.visibility.ilike('private'),
+                        Tag.created_by == current_user.id,
+                    ),
+                )
+            )
+    else:
+        query = query.filter(Tag.visibility.ilike('public'))
+
+    result: dict = {}
+    for rule_id, tag in query.all():
+        result.setdefault(rule_id, []).append(tag)
+    return result
 
 
 def get_all_used_tags_with_counts():

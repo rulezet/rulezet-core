@@ -1,9 +1,9 @@
-import DiffDisplay from '/static/js/codeMirror/diffDisplay.js';
+import DiffViewer from '/static/js/components/diff-viewer.js';
 import DeleteRuleModal from '/static/js/rule/deleteRule.js';
 
 const SimilarRulesCard = {
     name: 'SimilarRulesCard',
-    components: { DiffDisplay, DeleteRuleModal },
+    components: { DiffViewer, DeleteRuleModal },
     props: {
         rule: { type: Object, default: () => ({}) }, // open this rule on load if there is a startOpen flag
         ruleA: { type: Object, required: true },
@@ -44,20 +44,8 @@ const SimilarRulesCard = {
         
 
         const toggleOpen = () => {
-        isOpen.value = !isOpen.value;
-
-        if (isOpen.value) {
-            setTimeout(() => {
-                const cmInstances = document.querySelectorAll('.CodeMirror');
-                cmInstances.forEach(el => {
-                    if (el.CodeMirror) {
-                        el.CodeMirror.refresh();
-                    }
-                });
-                window.dispatchEvent(new Event('resize'));
-            }, 150);
-        }
-    };
+            isOpen.value = !isOpen.value;
+        };
 
         
         const formatDate = (dateStr) => {
@@ -192,14 +180,13 @@ const SimilarRulesCard = {
 
                 <div class="col-md-9  d-flex flex-column">            
                     <div class="flex-grow-1 diff-scroll-container">
-                        <div class="p-0">
-                            <diff-display 
-                                :unique-id="uniqueId" 
-                                :old-text="ruleA.content"
-                                :new-text="ruleB.content"
-                                displayMode="one-side" max-height="none">
-                            </diff-display>
-                        </div>
+                        <diff-viewer
+                            :initial-left="ruleA.content || ''"
+                            :initial-right="ruleB.content || ''"
+                            left-label="Original"
+                            right-label="Modified"
+                            mode="read">
+                        </diff-viewer>
                     </div>
                 </div>
             </div>

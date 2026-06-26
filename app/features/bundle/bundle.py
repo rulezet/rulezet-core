@@ -1,8 +1,8 @@
-from flask import Blueprint, flash, jsonify, redirect, render_template , request, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template , request, url_for
 from flask_login import current_user, login_required
 
 from app.features.bundle.bundle_form import AddNewBundleForm, EditBundleForm
-from app.core.utils.utils import form_to_dict
+from app.core.utils.utils import form_to_dict, safe_referrer
 from app.features.misp.bundle.misp_object import get_bundle_misp_event
 from . import bundle_core as BundleModel
 from ..rule import rule_core as RuleModel
@@ -131,7 +131,7 @@ def edit(bundle_id) :
                          target_type="bundle", target_id=bundle_id, target_uuid=bundle.uuid,
                          is_public=bool(bundle.access))
             flash("Bundle modified with success!", "success")
-            return redirect(request.referrer or '/')
+            return redirect(safe_referrer())
         else:
             form.description.data = bundle.description
             form.name.data = bundle.name 
@@ -149,21 +149,21 @@ def detail(bundle_id) :
         if bundle.access or current_user.is_admin() or current_user.id == bundle.user_id:
             # add one to the wiew
             success = BundleModel.add_view(bundle_id)
-            return render_template("bundle/detail_bundle.html", bundle_id=bundle_id)
+            return render_template("bundle/detail_bundle.html", bundle_id=bundle_id, bundle_name=bundle.name)
         else:
             return render_template("access_denied.html"),403
     else:
         return render_template("404.html"), 404
-    
+
 @bundle_blueprint.route("/detail/<string:bundle_uuid>", methods=['GET' , 'POST'])
-def detail_uuid(bundle_uuid) :     
-    """Go to detail of a bundle"""    
+def detail_uuid(bundle_uuid) :
+    """Go to detail of a bundle"""
     bundle = BundleModel.get_bundle_by_uuid(bundle_uuid)
-    if bundle: 
+    if bundle:
         if bundle.access or current_user.is_admin() or current_user.id == bundle.user_id:
             # add one to the wiew
             success = BundleModel.add_view(bundle.id)
-            return render_template("bundle/detail_bundle.html", bundle_id=bundle.id)
+            return render_template("bundle/detail_bundle.html", bundle_id=bundle.id, bundle_name=bundle.name)
         else:
             return render_template("access_denied.html"),403
     else:
@@ -207,12 +207,24 @@ def save_workspace(bundle_id):
     success = BundleModel.save_workspace(bundle_id, structure)
 
     if success:
+        log_activity(
+            "bundle.edit",
+            f"Saved workspace structure for bundle id={bundle_id}",
+            target_type="bundle", target_id=bundle_id,
+            extra={"action": "save_workspace"},
+            is_public=False,
+        )
         return {"success": True, "toast_class": "success", "message": "Workspace saved successfully"}, 200
     else:
         return {"success": False, "toast_class": "danger", "message": "Error saving workspace"}, 500
 
 @bundle_blueprint.route("/get_bundle_json/<int:bundle_id>")
 def get_bundle_json(bundle_id):
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        abort(404)
+    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+        abort(403)
     # Fetch only top-level nodes (those without parents)
     root_nodes = BundleModel.get_only_root_nodes(bundle_id)
     
@@ -273,6 +285,13 @@ def update_bundle_tags(bundle_id):
 
     success = BundleModel.update_bundle_tags(bundle_id, tag_ids, current_user)
     if success:
+        log_activity(
+            "bundle.tags_updated",
+            f"Updated tags on bundle id={bundle_id} ({len(tag_ids)} tag(s))",
+            target_type="bundle", target_id=bundle_id,
+            extra={"tag_ids": tag_ids},
+            is_public=False,
+        )
         return {"success": True, "message": "Tags updated successfully"}, 200
     else:
         return {"success": False, "message": "Error updating tags"}, 500
@@ -304,10 +323,15 @@ def remove() :
 
 
 @bundle_blueprint.route("/get_rules_page_from_bundle", methods=['GET'])
-def get_rules_page_from_bundle() :     
-    """get all the rule from the bundles for pages"""     
+def get_rules_page_from_bundle() :
+    """get all the rule from the bundles for pages"""
     page = request.args.get('page', 1, type=int)
     bundle_id = request.args.get('bundle_id',  type=int)
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        abort(404)
+    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+        abort(403)
     rule_list = BundleModel.get_all_rule_bundles_page(page , bundle_id)
     total_rules = BundleModel.get_total_rule_from_bundle_count(bundle_id)
     if rule_list:
@@ -333,6 +357,8 @@ def get_bundle():
             "message": f"No bundle found with id {bundle_id}",
             "success": False
         }, 404
+    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+        abort(403)
 
     rules_ids_from_bundle = BundleModel.get_rule_ids_by_bundle(bundle_id)
     if isinstance(rules_ids_from_bundle, dict) and "error" in rules_ids_from_bundle:
@@ -948,6 +974,19 @@ def get_all_vulnerabilities_usage():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
     
+@bundle_blueprint.route('/get_bundle_creators_usage')
+def get_bundle_creators_usage():
+    from app.core.db_class.db import Bundle, User
+    from sqlalchemy import func
+    from app import db
+    results = (db.session.query(User.first_name, func.count(Bundle.id).label('cnt'))
+               .join(Bundle, Bundle.user_id == User.id)
+               .group_by(User.id, User.first_name)
+               .order_by(func.count(Bundle.id).desc())
+               .all())
+    return jsonify([{'name': r.first_name, 'count': r.cnt} for r in results if r.first_name])
+
+
 @bundle_blueprint.route("/get_tags/<int:bundle_id>")
 def get_bundle_tags(bundle_id):
     try:
@@ -1005,8 +1044,9 @@ def get_bundle_page():
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if not bundle:
         return {"message": f"No bundle found with id {bundle_id}", "success": False}, 404
+    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+        abort(403)
 
-   
     pagination = BundleModel.get_paginated_rules_info_by_bundle(bundle_id, page)
     
     
@@ -1033,18 +1073,6 @@ def get_bundle_page():
 @bundle_blueprint.route("/bundle/add-single-rule", methods=['POST'])
 @login_required
 def add_single_rule_to_bundle():
-    """
-    Ajoute une règle unique à un bundle existant ou en crée un nouveau.
-    
-    Body JSON attendu :
-    {
-        "rule_id": int,
-        "existing_bundle_id": int | null,
-        "new_bundle_name": str,
-        "new_bundle_description": str,
-        "is_public": bool
-    }
-    """
     data = request.get_json()
     if not data:
         return {"success": False, "message": "Missing JSON body", "toast_class": "danger-subtle"}, 400
@@ -1055,7 +1083,6 @@ def add_single_rule_to_bundle():
     new_bundle_description = data.get("new_bundle_description", "").strip()
     is_public = data.get("is_public", True)
 
-    # --- Validation de base ---
     if not rule_id:
         return {"success": False, "message": "Missing rule_id", "toast_class": "danger-subtle"}, 400
 
@@ -1070,7 +1097,6 @@ def add_single_rule_to_bundle():
             "toast_class": "danger-subtle"
         }, 400
 
-    # --- Mode : bundle existant ---
     if existing_bundle_id:
         bundle = BundleModel.get_bundle_by_id(existing_bundle_id)
         if not bundle:
@@ -1083,6 +1109,13 @@ def add_single_rule_to_bundle():
         if not success:
             return {"success": False, "message": "Failed to add rule to bundle", "toast_class": "danger-subtle"}, 500
 
+        log_activity(
+            "bundle.rule_added",
+            f"Added rule id={rule_id} to bundle '{bundle.name}' (id={existing_bundle_id})",
+            target_type="bundle", target_id=existing_bundle_id, target_uuid=bundle.uuid,
+            extra={"rule_id": rule_id, "bundle_id": existing_bundle_id},
+            is_public=False,
+        )
         return {
             "success": True,
             "message": f"Rule added to bundle \"{bundle.name}\"",
@@ -1090,7 +1123,6 @@ def add_single_rule_to_bundle():
             "uuid": bundle.uuid
         }, 200
 
-    # --- Mode : nouveau bundle ---
     form_dict = {
         "name": new_bundle_name,
         "description": new_bundle_description,
@@ -1104,9 +1136,175 @@ def add_single_rule_to_bundle():
     if not success:
         return {"success": False, "message": "Bundle created but failed to add rule", "toast_class": "warning-subtle"}, 500
 
+    log_activity(
+        "bundle.create",
+        f"Created bundle '{new_bundle.name}' and added rule id={rule_id}",
+        target_type="bundle", target_id=new_bundle.id, target_uuid=new_bundle.uuid,
+        extra={"rule_id": rule_id, "bundle_name": new_bundle.name},
+        is_public=True,
+    )
     return {
         "success": True,
         "message": f"Bundle \"{new_bundle.name}\" created and rule added",
         "toast_class": "success-subtle",
         "uuid": new_bundle.uuid
     }, 200
+
+
+# ── BundleList component endpoint ──────────────────────────────────────────
+
+@bundle_blueprint.route("/data_table", methods=['GET'])
+def bundle_data_table():
+    """Standardised paginated endpoint consumed by the BundleList Vue component."""
+    from app.core.db_class.db import Bundle, Tag, BundleTagAssociation
+    from sqlalchemy import asc, desc, or_
+
+    page     = request.args.get('page',     1,    type=int)
+    per_page = request.args.get('per_page', 12,   type=int)
+    search   = (request.args.get('search',  '',   type=str) or '').strip()
+    sort_by  = request.args.get('sort',     'created_at', type=str)
+    sort_dir = request.args.get('dir',      'desc', type=str)
+    user_id  = request.args.get('user_id',  None, type=int)
+    tags_raw     = request.args.get('tags',         '',   type=str) or ''
+    vulns_raw    = request.args.get('vulnerabilities', '', type=str) or ''
+    creators_raw = request.args.get('creators',    '',   type=str) or ''
+    attacks_raw  = request.args.get('attacks',     '',   type=str) or ''
+    access       = request.args.get('access',      '',   type=str)  # 'public' | 'private' | ''
+
+    tag_names    = [t.strip() for t in tags_raw.split(',')      if t.strip()]
+    vuln_list    = [v.strip() for v in vulns_raw.split(',')     if v.strip()]
+    creator_list = [c.strip() for c in creators_raw.split(',')  if c.strip()]
+    attack_ids   = [a.strip().upper() for a in attacks_raw.split(',') if a.strip()]
+
+    query = Bundle.query
+
+    if search:
+        like = f'%{search}%'
+        query = query.filter(or_(Bundle.name.ilike(like), Bundle.description.ilike(like)))
+
+    if tag_names:
+        query = (query
+                 .join(BundleTagAssociation, BundleTagAssociation.bundle_id == Bundle.id)
+                 .join(Tag, Tag.id == BundleTagAssociation.tag_id)
+                 .filter(Tag.name.in_(tag_names))
+                 .distinct())
+
+    if vuln_list:
+        query = query.filter(or_(
+            *[Bundle.vulnerability_identifiers.ilike(f'%"{v}"%') for v in vuln_list]
+        ))
+
+    if user_id:
+        query = query.filter(Bundle.user_id == user_id)
+
+    if creator_list:
+        from app.core.db_class.db import User
+        query = (query
+                 .join(User, User.id == Bundle.user_id, isouter=False)
+                 .filter(User.first_name.in_(creator_list)))
+
+    if attack_ids:
+        from app.core.db_class.db import BundleRuleAssociation, RuleAttackAssociation
+        query = (query
+                 .join(BundleRuleAssociation, BundleRuleAssociation.bundle_id == Bundle.id)
+                 .join(RuleAttackAssociation, RuleAttackAssociation.rule_id == BundleRuleAssociation.rule_id)
+                 .filter(RuleAttackAssociation.technique_id.in_(attack_ids))
+                 .distinct())
+
+    if access == 'public':
+        query = query.filter(Bundle.access.is_(True))
+    elif access == 'private':
+        if current_user.is_authenticated:
+            query = query.filter(Bundle.access.is_(False), Bundle.user_id == current_user.id)
+        else:
+            query = query.filter(False)
+    else:
+        if current_user.is_authenticated:
+            if not current_user.is_admin():
+                query = query.filter(or_(Bundle.access.is_(True), Bundle.user_id == current_user.id))
+        else:
+            query = query.filter(Bundle.access.is_(True))
+
+    _sort_map = {
+        'created_at': Bundle.created_at,
+        'updated_at': Bundle.updated_at,
+        'name':       Bundle.name,
+        'vote_up':    Bundle.vote_up,
+        'view_count': Bundle.view_count,
+    }
+    sort_col = _sort_map.get(sort_by, Bundle.created_at)
+    query = query.order_by(desc(sort_col) if sort_dir == 'desc' else asc(sort_col))
+
+    per_page = min(max(per_page, 1), 100)
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    items = []
+    for b in pagination.items:
+        j = b.to_json()
+        j['tags'] = BundleModel.get_tags_for_bundle_json(b.id)
+        items.append(j)
+
+    try:
+        from app.features.attack.attack_core import get_techniques_for_bundles_batch
+        atk_map = get_techniques_for_bundles_batch([b.id for b in pagination.items])
+        for item in items:
+            item['attacks'] = atk_map.get(item['id'], [])
+    except Exception:
+        pass
+
+    return jsonify({
+        'items':       items,
+        'total':       pagination.total,
+        'total_pages': pagination.pages,
+    })
+
+
+@bundle_blueprint.route('/attacks_usage')
+def bundle_attacks_usage():
+    """Return techniques used in at least one bundle's rules (for the filter dropdown)."""
+    from app import db
+    from app.core.db_class.db import (
+        BundleRuleAssociation, RuleAttackAssociation, AttackTechnique
+    )
+    from sqlalchemy import func
+
+    rows = (
+        db.session.query(
+            RuleAttackAssociation.technique_id,
+            func.count(RuleAttackAssociation.id).label('count'),
+        )
+        .join(BundleRuleAssociation, BundleRuleAssociation.rule_id == RuleAttackAssociation.rule_id)
+        .group_by(RuleAttackAssociation.technique_id)
+        .order_by(func.count(RuleAttackAssociation.id).desc())
+        .all()
+    )
+    tech_ids = [r.technique_id for r in rows]
+    count_map = {r.technique_id: r.count for r in rows}
+
+    techs = AttackTechnique.query.filter(AttackTechnique.technique_id.in_(tech_ids)).all()
+    tech_map = {t.technique_id: t for t in techs}
+
+    result = []
+    for tid, cnt in [(r.technique_id, r.count) for r in rows]:
+        tech = tech_map.get(tid)
+        if not tech:
+            continue
+        result.append({
+            'id':         tech.technique_id,
+            'name':       tech.name,
+            'tactic_keys': tech.tactic_keys or [],
+            'count':      cnt,
+        })
+
+    return jsonify({'techniques': result})
+
+
+@bundle_blueprint.route('/attack_coverage/<int:bundle_id>')
+def attack_coverage(bundle_id):
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return jsonify({'error': 'Bundle not found'}), 404
+    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+        abort(403)
+    data = BundleModel.get_attack_coverage(bundle_id)
+    return jsonify(data)

@@ -1,9 +1,11 @@
 import os
+import secrets
+import hashlib
 from werkzeug.utils import secure_filename
- 
+
 
 import datetime , random
-from datetime import timezone, timedelta 
+from datetime import timezone, timedelta
 from typing import  Tuple
 from flask_login import current_user
 from sqlalchemy import func, or_
@@ -11,7 +13,7 @@ from flask_mail import Message
 from app import mail
 
 from ... import db
-from ...core.db_class.db import Bundle, BundleVote, Gamification, RequestOwnerRule, Rule, RuleEditProposal, RuleFavoriteUser, RuleUpdateHistory, RuleVote, User
+from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleEditProposal, RuleFavoriteUser, RuleUpdateHistory, RuleVote, Tag, User, UserConfig
 from ...core.utils.utils import generate_api_key
 from ..rule import rule_core as RuleModel
 import uuid
@@ -29,6 +31,7 @@ MAX_AVATAR_SIZE_MB = 2
 # CRUD
 
 TIME_EMAIL_EXPIRATION = timedelta(minutes=30)
+TIME_RESET_EXPIRATION = timedelta(hours=1)
 
 # Create
 
@@ -57,7 +60,13 @@ def add_user_core(form_dict) -> tuple:
  
     db.session.add(user)
     db.session.commit()
- 
+
+    try:
+        from ..config.config_core import create_default_config_core
+        create_default_config_core(user.id)
+    except Exception:
+        pass
+
     success, message = send_verify_email(user, code)
     if not success:
         return message, False
@@ -70,7 +79,7 @@ def resend_verification_code_core(user_id) -> bool:
     user = get_user(user_id)
     if user:
         user.verification_code = str(random.randint(100000, 999999))
-        user.verification_expiration = datetime.now(timezone.utc).replace(tzinfo=None) + TIME_EMAIL_EXPIRATION
+        user.verification_expiration = datetime.datetime.now(timezone.utc).replace(tzinfo=None) + TIME_EMAIL_EXPIRATION
         db.session.commit()
         
         success , message = send_verify_email(user, user.verification_code)
@@ -132,6 +141,83 @@ def send_verify_email(user, code):
    except Exception as e:
         return False , str(e)
 
+
+def request_password_reset_core(email: str) -> bool:
+    """Generate a password reset token and email it. Always returns True to prevent enumeration."""
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.is_verified:
+        return True  # silent — prevent email enumeration
+    raw_token = secrets.token_urlsafe(32)
+    hashed    = hashlib.sha256(raw_token.encode()).hexdigest()
+    user.password_reset_token      = hashed
+    user.password_reset_expiration = datetime.datetime.now(timezone.utc).replace(tzinfo=None) + TIME_RESET_EXPIRATION
+    db.session.commit()
+    send_reset_email(user, raw_token)
+    return True
+
+
+def reset_password_core(raw_token: str, new_password: str) -> tuple:
+    """Validate reset token and set new password. Returns (success, message)."""
+    hashed = hashlib.sha256(raw_token.encode()).hexdigest()
+    user = User.query.filter_by(password_reset_token=hashed).first()
+    if not user:
+        return False, "Invalid or expired link."
+    now = datetime.datetime.now(timezone.utc).replace(tzinfo=None)
+    if not user.password_reset_expiration or now > user.password_reset_expiration:
+        user.password_reset_token      = None
+        user.password_reset_expiration = None
+        db.session.commit()
+        return False, "This link has expired. Please request a new one."
+    user.password              = new_password
+    user.password_reset_token  = None
+    user.password_reset_expiration = None
+    db.session.commit()
+    return True, "Password reset successfully."
+
+
+def send_reset_email(user, raw_token: str) -> tuple:
+    from flask import url_for
+    try:
+        reset_url = url_for('account.reset_password', token=raw_token, _external=True)
+        msg = Message(
+            "Reset your Rulezet password",
+            sender="noreply@rulezet.org",
+            recipients=[user.email]
+        )
+        msg.body = (
+            f"Hello {user.first_name},\n\n"
+            f"Click the link below to reset your password. It expires in 1 hour.\n\n"
+            f"{reset_url}\n\n"
+            "If you didn't request this, you can safely ignore this email."
+        )
+        msg.html = f"""
+        <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:600px;margin:0 auto;border:1px solid #eeeeee;border-radius:12px;overflow:hidden;">
+            <div style="text-align:center;padding:20px 0 0;">
+                <img src="https://rulezet.org/static/image/logo.png" alt="Rulezet" style="width:140px;height:auto;">
+            </div>
+            <div style="background:#0a58ca;padding:30px;text-align:center;">
+                <h1 style="color:#fff;margin:0;font-size:22px;letter-spacing:1px;">Password Reset Request</h1>
+            </div>
+            <div style="padding:40px 30px;line-height:1.7;color:#333;background:#fff;">
+                <p style="font-size:16px;">Hi {user.first_name},</p>
+                <p style="font-size:15px;">We received a request to reset your password. Click the button below — the link expires in <strong>1 hour</strong>.</p>
+                <div style="text-align:center;margin:36px 0;">
+                    <a href="{reset_url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#0a58ca,#0d6efd);color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;letter-spacing:.3px;">Reset Password</a>
+                </div>
+                <p style="font-size:13px;color:#888;text-align:center;">If you didn't request this, you can safely ignore this email. Your password won't change.</p>
+                <p style="font-size:12px;color:#aaa;word-break:break-all;">Or copy this link: {reset_url}</p>
+            </div>
+            <div style="background:#f8f9fa;padding:20px;text-align:center;font-size:12px;color:#bdc3c7;border-top:1px solid #eee;">
+                <p style="margin:5px 0;">&copy; 2026 Rulezet. All rights reserved.</p>
+            </div>
+        </div>
+        """
+        mail.send(msg)
+        return True, "Email sent"
+    except Exception as e:
+        return False, str(e)
+
+
 def verify_user_core(id) -> bool:
     """Verify the user in the DB"""
     user = get_user(id)
@@ -152,45 +238,144 @@ def update_last_seen(user_id) -> None:
 
 
 
-def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> bool:
-    """Edit the user in the DB, optionally updating or removing the profile picture."""
+def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> tuple:
+    """Edit the user in the DB. Returns (success, pending_email_or_None).
+    If the email changed, the new address is NOT applied immediately — caller must
+    call request_email_change_core() to send the confirmation link."""
     user = get_user(id)
     if not user:
-        return False
- 
-    user.first_name  = form_dict["first_name"]
-    user.last_name   = form_dict["last_name"]
-    user.email       = form_dict["email"]
- 
+        return False, None
+
+    user.first_name = form_dict["first_name"]
+    user.last_name  = form_dict["last_name"]
+
+    # Detect email change but don't apply it yet
+    new_email = form_dict["email"]
+    pending_email = None
+    if new_email != user.email:
+        pending_email = new_email
+    else:
+        user.email = new_email
+
     if form_dict.get("password"):
         user.password = form_dict["password"]
- 
-    # optional profile fields
+
     user.username    = form_dict.get("username") or None
     user.bio         = form_dict.get("bio") or None
     user.location    = form_dict.get("location") or None
     user.website_url = form_dict.get("website_url") or None
     user.github_url  = form_dict.get("github_url") or None
     user.twitter_url = form_dict.get("twitter_url") or None
- 
-    # --- avatar logic ---
+
     if remove_avatar and user.profile_picture:
         _delete_avatar_file(user.profile_picture)
         user.profile_picture = None
- 
     elif avatar_file and avatar_file.filename:
         ext = avatar_file.filename.rsplit(".", 1)[-1].lower()
         if ext in ALLOWED_AVATAR_EXTENSIONS:
             os.makedirs(AVATAR_UPLOAD_FOLDER, exist_ok=True)
-            # remove old file first
             if user.profile_picture:
                 _delete_avatar_file(user.profile_picture)
             filename = f"{uuid.uuid4().hex}.{ext}"
             avatar_file.save(os.path.join(AVATAR_UPLOAD_FOLDER, filename))
             user.profile_picture = filename
- 
+
     db.session.commit()
+    return True, pending_email
+
+
+def request_email_change_core(user_id: int, new_email: str) -> bool:
+    """Store a pending email change and send a confirmation link to the new address."""
+    user = get_user(user_id)
+    if not user:
+        return False
+    conflict = User.query.filter(User.email == new_email, User.id != user_id).first()
+    if conflict:
+        return False
+    raw_token = secrets.token_urlsafe(32)
+    hashed    = hashlib.sha256(raw_token.encode()).hexdigest()
+    user.pending_email          = new_email
+    user.email_change_token     = hashed
+    user.email_change_expiration = (
+        datetime.datetime.now(timezone.utc).replace(tzinfo=None) + TIME_RESET_EXPIRATION
+    )
+    db.session.commit()
+    send_email_change_email(user, new_email, raw_token)
     return True
+
+
+def confirm_email_change_core(raw_token: str) -> tuple:
+    """Validate an email-change token and apply the new address. Returns (success, message)."""
+    hashed = hashlib.sha256(raw_token.encode()).hexdigest()
+    user   = User.query.filter_by(email_change_token=hashed).first()
+    if not user:
+        return False, "Invalid or expired link."
+    now = datetime.datetime.now(timezone.utc).replace(tzinfo=None)
+    if not user.email_change_expiration or now > user.email_change_expiration:
+        user.email_change_token      = None
+        user.email_change_expiration = None
+        user.pending_email           = None
+        db.session.commit()
+        return False, "This confirmation link has expired. Please update your email again."
+    new_email = user.pending_email
+    conflict  = User.query.filter(User.email == new_email, User.id != user.id).first()
+    if conflict:
+        user.email_change_token      = None
+        user.email_change_expiration = None
+        user.pending_email           = None
+        db.session.commit()
+        return False, "This email address is already in use by another account."
+    user.email               = new_email
+    user.pending_email       = None
+    user.email_change_token  = None
+    user.email_change_expiration = None
+    db.session.commit()
+    return True, "Email address updated successfully."
+
+
+def send_email_change_email(user, new_email: str, raw_token: str) -> tuple:
+    from flask import url_for
+    try:
+        confirm_url = url_for('account.confirm_email_change', token=raw_token, _external=True)
+        msg = Message(
+            "Confirm your new Rulezet email address",
+            sender="noreply@rulezet.org",
+            recipients=[new_email]
+        )
+        msg.body = (
+            f"Hello {user.first_name},\n\n"
+            f"Someone requested to change the email address on your Rulezet account to this address.\n\n"
+            f"Click the link below to confirm the change. It expires in 1 hour.\n\n"
+            f"{confirm_url}\n\n"
+            "If you didn't request this, you can safely ignore this email — "
+            "your current email address will not change."
+        )
+        msg.html = f"""
+        <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:600px;margin:0 auto;border:1px solid #eeeeee;border-radius:12px;overflow:hidden;">
+            <div style="text-align:center;padding:20px 0 0;">
+                <img src="https://rulezet.org/static/image/logo.png" alt="Rulezet" style="width:140px;height:auto;">
+            </div>
+            <div style="background:#0a58ca;padding:30px;text-align:center;">
+                <h1 style="color:#fff;margin:0;font-size:22px;letter-spacing:1px;">Confirm New Email Address</h1>
+            </div>
+            <div style="padding:40px 30px;line-height:1.7;color:#333;background:#fff;">
+                <p style="font-size:16px;">Hi {user.first_name},</p>
+                <p style="font-size:15px;">Click the button below to confirm <strong>{new_email}</strong> as your new email address. The link expires in <strong>1 hour</strong>.</p>
+                <div style="text-align:center;margin:36px 0;">
+                    <a href="{confirm_url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#0a58ca,#0d6efd);color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;letter-spacing:.3px;">Confirm Email Change</a>
+                </div>
+                <p style="font-size:13px;color:#888;text-align:center;">If you didn't request this, ignore this email — your current address remains unchanged.</p>
+                <p style="font-size:12px;color:#aaa;word-break:break-all;">Or copy this link: {confirm_url}</p>
+            </div>
+            <div style="background:#f8f9fa;padding:20px;text-align:center;font-size:12px;color:#bdc3c7;border-top:1px solid #eee;">
+                <p style="margin:5px 0;">&copy; 2026 Rulezet. All rights reserved.</p>
+            </div>
+        </div>
+        """
+        mail.send(msg)
+        return True, "Email sent"
+    except Exception as e:
+        return False, str(e)
  
  
 def _delete_avatar_file(filename: str) -> None:
@@ -243,15 +428,36 @@ def delete_user_core(id) -> bool:
     """Delete the user from the DB and clean up their avatar file."""
     rules = RuleModel.get_rules_of_user_with_id(id)
     RuleModel.give_all_right_to_admin(rules)
- 
+
     user = get_user(id)
     if not user:
         return False
- 
+
+    # Resolve FK constraints before deleting the user row.
+    # UserConfig has non-nullable user_id → must delete the row.
+    UserConfig.query.filter(
+        (UserConfig.user_id == id) | (UserConfig.created_by == id)
+    ).delete(synchronize_session=False)
+
+    # Tag.created_by and BackgroundJob.created_by are NOT NULL → reassign to admin.
+    admin = get_admin_user()
+    if admin and admin.id != id:
+        Tag.query.filter_by(created_by=id).update(
+            {'created_by': admin.id}, synchronize_session=False
+        )
+        BackgroundJob.query.filter_by(created_by=id).update(
+            {'created_by': admin.id}, synchronize_session=False
+        )
+
+    # CustomTheme.created_by is nullable → set NULL.
+    CustomTheme.query.filter_by(created_by=id).update(
+        {'created_by': None}, synchronize_session=False
+    )
+
     # clean up avatar file before DB delete
     if user.profile_picture:
         _delete_avatar_file(user.profile_picture)
- 
+
     db.session.delete(user)
     db.session.commit()
     return True

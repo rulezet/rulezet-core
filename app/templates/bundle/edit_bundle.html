@@ -1,485 +1,213 @@
 {% extends "base.html" %}
 {% block title %}Edit Bundle — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-3" id="page-app" v-cloak>
-    <div class="mx-3 mb-4 d-flex align-items-center justify-content-between border-bottom pb-3">
-        <div class="d-flex align-items-center">
-            <a :href="'/bundle/detail/' + bundleId"
-                class="btn btn-outline-secondary btn-sm rounded-circle me-3 shadow-sm" title="Back to Detail">
-                <i class="fas fa-arrow-left"></i>
-            </a>
+<div class="container-fluid px-4" id="page-app" v-cloak>
+
+    <!-- ── Banner ── -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-layer-group banner-watermark"></i>
+
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
+                <li class="breadcrumb-item">
+                    <a href="{{ url_for('bundle.detail', bundle_id=bundle.id) }}"
+                       class="text-decoration-none text-muted">{{ bundle.name | truncate(35) }}</a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Edit</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex align-items-center gap-3 mb-2">
+            <div class="banner-icon"><i class="fa-solid fa-layer-group"></i></div>
             <div>
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb mb-1" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
-                        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                        <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
-                        <li class="breadcrumb-item"><a :href="'/bundle/detail/' + bundleId" class="text-decoration-none text-muted">[[truncateText("{{bundle.name}}", 40)]]</a></li>
-                        <li class="breadcrumb-item active text-muted" aria-current="page">Edit</li>
-                    </ol>
-                </nav>
-                <div>
-                    <h3 class="fw-bold mb-0 text-dark">
-                        <i class="fas fa-box-open text-primary me-2"></i>[[truncateText("{{bundle.name}}", 40)]]
-                    </h3>
-                    <div class="text-muted font-monospace" style="font-size: 11px; letter-spacing: 0.5px;">UUID: {{
-                        bundle.uuid }}</div>
-                </div>
+                <h2 class="fw-bold mb-1">{{ bundle.name | truncate(50) }}</h2>
+                <div class="banner-accent"></div>
             </div>
+            
         </div>
+        <code class="ms-auto text-muted" style="font-size:.7rem;opacity:.6;">{{ bundle.uuid }}</code>
+            <p class="text-muted mb-0" style="font-size:.9rem;">
+                Edit the structure, settings and tags of this bundle.
+            </p>
     </div>
 
-    <ul class="nav nav-underline justify-content-center w-100 mb-4" id="workspaceTabs" role="tablist">
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link active fw-bold px-4" id="structure-tab" data-bs-toggle="tab" href="#structure-pane"
-                role="tab" aria-controls="structure-pane" aria-selected="true" style="color: var(--text-color);">
-                <i class="fas fa-sitemap me-2"></i>Edit Structure
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link fw-bold px-4" id="settings-tab" data-bs-toggle="tab" href="#settings-pane" role="tab"
-                aria-controls="settings-pane" aria-selected="false" style="color: var(--text-color);">
-                <i class="fas fa-cog me-2"></i>Bundle Settings
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link fw-bold px-4" id="tags-tab" data-bs-toggle="tab" href="#tags-pane" role="tab"
-                aria-controls="tags-pane" aria-selected="false" style="color: var(--text-color);">
-                <i class="fas fa-tags me-2"></i>Add Tags
-            </a>
-        </li>
-    </ul>
+    <!-- ── Tabs ── -->
+    <nav class="dr-nav" id="editTabs" role="tablist">
+        <a class="dr-nav__item active" data-bs-toggle="tab" href="#structure-pane" role="tab">
+            <i class="fa-solid fa-sitemap"></i>
+            <span>Edit Structure</span>
+        </a>
+        <a class="dr-nav__item" data-bs-toggle="tab" href="#settings-pane" role="tab">
+            <i class="fa-solid fa-cog"></i>
+            <span>Bundle Settings</span>
+        </a>
+        <a class="dr-nav__item" data-bs-toggle="tab" href="#tags-pane" role="tab">
+            <i class="fa-solid fa-tags"></i>
+            <span>Tags</span>
+        </a>
+    </nav>
 
-    <div class="tab-content" id="workspaceTabsContent">
-        <!-- Structure Pane -->
-        <div class="tab-pane fade show active" id="structure-pane" role="tabpanel" aria-labelledby="structure-tab">
-            <div class="card border-0 shadow-lg p-3 mb-4 " style="border-radius: 12px;">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center">
-                        <h4 class="fw-bold mb-4 text-dark"><i class="fas fa-info-circle text-primary me-2"></i>Bundle
-                            Structure
-                        </h4>
-                    </div>
-                    <!-- Save Button -->
-                    <div class="d-flex align-items-center">
-                        <button class="btn btn-success  shadow-sm fw-bold text-center" @click="saveStructure"
-                            title="Save the changes">
-                            <template v-if="save_loading"> <i class="fas fa-spinner fa-spin me-2"></i> Saving...
-                            </template>
-                            <template v-else>
-                                <i class="fas fa-save me-2"></i> Save Workspace
-                            </template>
-                        </button>
-                    </div>
-                </div>
+    <div class="tab-content">
 
-                <div class="row g-3 px-2 mb-3" style="height: 48vh;">
-                    <!-- Bundle Explorer -->
-                    <div class="col-md-6 h-100">
-                        <div class="card shadow-sm h-100 overflow-hidden border">
-                            <div
-                                class="card-header  py-2 d-flex justify-content-between align-items-center border-bottom">
-                                <div>
-                                    <span class="fw-bold small text-uppercase text-primary"><i
-                                            class="fas fa-folder-tree me-2"></i>Bundle Explorer</span>
-                                    <div class="text-muted" style="font-size: 10px;">Drag and drop to reorganize</div>
-                                </div>
-                                <div class="btn-group shadow-sm">
-                                    <button class="btn btn-xs btn-outline-primary" @click="prepareAddTarget(treeData)"
-                                        data-bs-toggle="modal" data-bs-target="#add_folder_modal_unique"
-                                        title="Add Folder">
-                                        <i class="fas fa-folder-plus"></i>
-                                    </button>
+        <!-- ══════════════════════════════════════════════
+             TAB 1 — Edit Structure
+             ══════════════════════════════════════════════ -->
+        <div class="tab-pane fade show active" id="structure-pane" role="tabpanel">
+            <div>
 
-                                    <button class="btn btn-xs btn-outline-dark" @click="prepareAddTarget(treeData)"
-                                        data-bs-toggle="modal" data-bs-target="#create_file_modal" title="Create File">
-                                        <i class="fas fa-file-code"></i>
-                                    </button>
-                                    <label class="btn btn-xs btn-outline-success mb-0 cursor-pointer"
-                                        title="Import File">
-                                        <i class="fas fa-upload"></i>
-                                        <input type="file" @change="importFile($event, treeData)" hidden>
-                                    </label>
-                                </div>
-                            </div>
-                            <!-- Modal create a file-->
-                            <div class="modal fade" id="create_file_modal" tabindex="-1" aria-hidden="true"
-                                style="z-index: 2000;">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
-                                        <div class="modal-header border-0 pb-0">
-                                            <h5 class="modal-title fw-bold text-dark">Create New File</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <div class="modal-body py-4">
-                                            <div class="row g-2">
-                                                <div class="col-8">
-                                                    <input type="text" class="form-control rounded-pill shadow-sm"
-                                                        placeholder="File name" v-model="addFileText"
-                                                        @keyup.enter="addFile">
-                                                </div>
-                                                <div class="col-4">
-                                                    <select class="form-select rounded-pill shadow-sm"
-                                                        v-model="addFileFormat">
-                                                        <option value=".txt">.txt</option>
-                                                        <option value=".json">.json</option>
-                                                        <option value=".yaml">.yaml</option>
-                                                        <option value=".md">.md</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div class="text-center mt-2">
-                                                <small class="text-muted">Final name: <strong>[[ addFileText ]][[
-                                                        addFileFormat ]]</strong></small>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer border-0 pt-0 justify-content-center pb-4">
-                                            <button type="button" class="btn btn-light rounded-pill px-4"
-                                                data-bs-dismiss="modal">Cancel</button>
-                                            <button class="btn btn-success rounded-pill px-4 shadow"
-                                                @click="addFile">Create</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Modal add folder-->
-                            <div class="modal fade" id="add_folder_modal_unique" tabindex="-1" aria-hidden="true"
-                                style="z-index: 2000;">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
-                                        <div class="modal-header border-0 pb-0">
-                                            <h5 class="modal-title fw-bold text-dark">Add Folder</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <div class="modal-body py-4 text-center">
-                                            <input type="text" class="form-control rounded-pill shadow-sm"
-                                                placeholder="Folder name" v-model="addFolderText"
-                                                @keyup.enter="addFolder">
-                                        </div>
-                                        <div class="modal-footer border-0 pt-0 justify-content-center pb-4">
-                                            <button type="button" class="btn btn-light rounded-pill px-4"
-                                                data-bs-dismiss="modal">Cancel</button>
-                                            <button class="btn btn-success rounded-pill px-4 shadow"
-                                                @click="addFolder">create</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Modal remove folder / file-->
-                            <div class="modal fade" id="remove_modal" tabindex="-1" aria-hidden="true"
-                                style="z-index: 2000;">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
-                                        <div class="modal-header border-0 pb-0">
-                                            <h5 class="modal-title fw-bold text-dark">Remove Confirmation</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <div class="modal-body py-4 text-center">
-                                            <div class="text-dark ">
-                                                <i class="fa fa-info-circle me-2 fa-3x"></i>
-                                            </div>
-                                            <p class="mb-0 text-dark">
-                                                Are you sure you want to remove <br>
-                                                <strong class="text-primary">[[ nodeToDelete?.name ]]</strong> from this
-                                                bundle ?
-                                            </p>
-                                            <small v-if="nodeToDelete?.type === 'folder'" class="text-muted">
-                                                This will also delete all files inside this folder.
-                                            </small>
-                                        </div>
-                                        <div class="modal-footer border-0 pt-0 justify-content-center pb-4">
-                                            <button type="button" class="btn btn-light rounded-pill px-4"
-                                                data-bs-dismiss="modal">Cancel</button>
-                                            <button class="btn btn-danger rounded-pill px-4 shadow"
-                                                @click="confirmDelete">Remove</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Rename file/folder-->
-                            <div class="modal fade" id="rename_modal" tabindex="-1" aria-hidden="true"
-                                style="z-index: 2000;">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
-                                        <div class="modal-header border-0 pb-0">
-                                            <h5 class="modal-title fw-bold text-dark">Rename Item</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <div class="modal-body py-4 text-center">
-                                            <input type="text" class="form-control rounded-pill shadow-sm"
-                                                v-model="renameText" @keyup.enter="confirmRename">
-                                        </div>
-                                        <div class="modal-footer border-0 pt-0 justify-content-center pb-4">
-                                            <button type="button" class="btn btn-light rounded-pill px-4"
-                                                data-bs-dismiss="modal">Cancel</button>
-                                            <button class="btn btn-primary rounded-pill px-4 shadow"
-                                                @click="confirmRename">Rename</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                <!-- BundleStructureEditor with BundleRuleSelector in the rule-selector slot -->
+                <bundle-structure-editor
+                    ref="structureEditor"
+                    :bundle-id="bundleId"
+                    :csrf-token="csrfToken"
+                    @tree-ready="onTreeReady"
+                    @tree-saved="onTreeSaved">
 
-                            <div class="card-body p-2 overflow-auto bg-light">
-                                <draggable v-model="treeData" group="nested" :item-key="item => item.id" tag="ul"
-                                    class="list-unstyled ps-0 mb-0" :animation="200">
-                                    <template #item="{ element }">
-                                        <tree-item :node="element" :selected-id="selectedNode?.id" @select="selectNode"
-                                            @rename="renameNode" @add-sub-folder="prepareAddFolder"
-                                            @remove="prepareDelete" /> </template>
-                                </draggable>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Global rules -->
-                    <div class="col-md-6 h-100">
-                        <div class="card shadow-sm h-100 overflow-hidden border">
-                            <div
-                                class="card-header bg-white py-2 border-bottom d-flex justify-content-between align-items-center">
-                                <div>
-                                    <span class="fw-bold small text-uppercase text-secondary"><i
-                                            class="fas fa-database me-2"></i>Global Rules</span>
-                                    <div class="text-muted" style="font-size: 10px;">Filter rules to add to bundle</div>
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <input type="text" v-model="searchQuery"
-                                        class="form-control form-control-sm shadow-sm" style="width: 150px;"
-                                        @keyup.enter="onEnterKey" placeholder="Search..." @input="onSearchInput">
+                    <template #rule-selector>
+                        <bundle-rule-selector
+                            fetch-url="/rule/data_table"
+                            :initial-per-page="12"
+                            :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
+                            :exclude-ids="bundleRuleIds"
+                            @add-rules="onAddRules"
+                            @preview-rule="onPreviewRule">
+                        </bundle-rule-selector>
+                    </template>
 
+                </bundle-structure-editor>
 
-                                    <select class="form-select form-select-sm shadow-sm" v-model="ruleType"
-                                        @change="fetchRules(1)" style="width: 150px;">
-                                        <option value="">All Formats ([[ number_rules_formats ]])</option>
-                                        <option v-for="format in rules_formats" :key="format" :value="format.name">[[
-                                            format.name
-                                            ]]</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="card-body p-0 overflow-auto">
-                                <template v-if="is_loading">
-                                    <div v-for="rule in (rules_list.rules || rules_list)" :key="rule.id"
-                                        class="p-2 border-bottom d-flex justify-content-between align-items-center hover-bg"
-                                        @click="setPreview(rule)">
-                                        <div class="text-truncate" style="max-width: 80%; cursor: pointer;">
-                                            <span class="fw-bold small text-dark">[[ rule.title ]]</span>
-                                            <span class="badge bg-light text-muted border ms-2" style="font-size: 9px;">
-                                                [[ rule.format ]]
-                                            </span>
-                                        </div>
-
-                                        <div @click.stop="triggerDisabledMessage">
-                                            <button class="btn btn-xs btn-primary rounded-circle shadow-sm"
-                                                title="Add this rule to the bundle" @click.stop="addRuleToBundle(rule)"
-                                                :disabled="!selectedNode || selectedNode.type !== 'folder'">
-                                                <i class="fas fa-plus"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div v-if="!selectedNode || selectedNode.type !== 'folder'">
-                                        <div class="p-4 text-center text-muted small " style="color: black">
-                                            Select a folder
-                                            to
-                                            add rules.
-                                        </div>
-                                    </div>
-                                </template>
-                                <template v-else>
-                                    <div class="p-4 text-center text-muted small">
-                                        <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
-                                        <p>Loading rules...</p>
-                                    </div>
-                                </template>
-                            </div>
-                            <div v-if="rules_list.length === 0" class="p-4 text-center text-muted small">No rules
-                                found.</div>
-                            <div
-                                class="card-footer py-1 d-flex justify-content-between align-items-center small font-monospace">
-                                <button class="btn btn-link btn-xs text-decoration-none"
-                                    @click="fetchRules(current_page - 1)" :disabled="current_page <= 1">Prev</button>
-                                <span>[[ current_page ]] / [[ total_pages ]]</span>
-                                <button class="btn btn-link btn-xs text-decoration-none"
-                                    @click="fetchRules(current_page + 1)"
-                                    :disabled="current_page >= total_pages">Next</button>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
             </div>
-            <!-- Preview & Editor -->
-            <div class="row px-2 mt-3" style="height: 35vh;">
-                <div class="col-12 h-100">
-                    <div class="card shadow-sm  h-100 overflow-hidden bg-dark">
-                        <div v-if="!selectedNode && !previewContent" class="m-auto text-center opacity-50 text-light">
-                            <i class="fas fa-terminal fa-3x mb-2 text-secondary"></i>
-                            <h5 class="text-white">Preview & Editor</h5>
-                            <p class="text-white">Select a file from the explorer or a rule from the database.</p>
-                        </div>
-                        <div v-else class="d-flex flex-column h-100">
-                            <div class="card-header text-white  d-flex justify-content-between align-items-center ">
-                                <span class="small font-monospace">
-                                    <i v-if="selectedNode"
-                                        :class="selectedNode.type === 'folder' ? 'fas fa-folder text-warning' : 'fas fa-file-code text-info'"
-                                        class="me-2"></i>
-                                    <i v-else class="fas fa-eye text-success me-2"></i>
-                                    [[ selectedNode ? truncateText(selectedNode.name, 90) : 'Preview: ' +
-                                    previewName.substring(0, 80) ]]
-                                </span>
-                                <div class="d-flex gap-2 align-items-center">
-                                    <span v-if="!selectedNode || isRule(selectedNode)"
-                                        class="badge bg-secondary">Read-Only</span>
-                                    <span v-else class="badge bg-primary text-uppercase"
-                                        style="font-size: 9px;">Editable</span>
-                                    <button class="btn btn-xs btn-outline-light " @click="clearDisplay"><i
-                                            class="fas fa-times"></i></button>
-                                </div>
-                            </div>
-                            <div class="flex-grow-1 overflow-hidden">
-                                <textarea v-if="selectedNode && selectedNode.type === 'file'"
-                                    v-model="selectedNode.content" :readonly="isRule(selectedNode)" wrap="off"
-                                    class="form-control  h-100 font-monospace p-3 bg-dark text-success custom-textarea-scroll"
-                                    style="resize:none; font-size: 13px; line-height: 1.6; overflow: auto; white-space: pre;"></textarea>
-
-                                <textarea v-else-if="previewContent" :value="previewContent" readonly wrap="off"
-                                    class="form-control  h-100 font-monospace p-3 bg-dark text-success custom-textarea-scroll"
-                                    style="resize:none; font-size: 13px; overflow: auto; white-space: pre;"></textarea>
-
-                                <div v-else
-                                    class="p-5 text-center text-muted h-100 d-flex flex-column justify-content-center">
-                                    <i class="fas fa-folder-open fa-2x mb-2 opacity-25 text-light"></i>
-                                    <p class="text-light opacity-50">Folder <strong>[[
-                                            truncateText(selectedNode.name, 50) ]]</strong>
-                                        is selected.<br><small>Click a file to edit or add a rule here.</small></p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-
         </div>
-        <!-- Settings Pane -->
-        <div class="tab-pane fade" id="settings-pane" role="tabpanel" aria-labelledby="settings-tab">
-            <div class="card border-0 shadow-lg p-3 mb-4 " style="border-radius: 12px;">
-                <h4 class="fw-bold mb-4 text-dark"><i class="fas fa-info-circle text-primary me-2"></i>General Bundle
-                    Details</h4>
+
+        <!-- ══════════════════════════════════════════════
+             TAB 2 — Bundle Settings
+             ══════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="settings-pane" role="tabpanel">
+            <div class="card border-0 shadow-sm p-4 mb-4" style="border-radius:12px;border:1px solid var(--border-color)!important;">
+                <h5 class="fw-bold mb-4 d-flex align-items-center gap-2">
+                    <i class="fas fa-info-circle text-primary"></i>General Bundle Details
+                </h5>
                 <form method="POST" action="">
                     {{ form.hidden_tag() }}
                     <div class="mb-4">
-                        <label for="name" class="form-label fw-bold text-muted small text-uppercase">Bundle Name</label>
-                        {{ form.name(class="form-control form-control-lg shadow-sm", id="name", placeholder="e.g.
-                        Ransomware Detection Bundle") }}
-                        {% for error in form.name.errors %}
-                        <div class="text-danger small mt-1">[[ error ]]</div>
+                        <label class="form-label fw-bold text-muted small text-uppercase">Bundle Name</label>
+                        {{ form.name(class="form-control form-control-lg shadow-sm", placeholder="e.g. Ransomware Detection Bundle") }}
+                        {% for e in form.name.errors %}
+                        <div class="text-danger small mt-1">{{ e }}</div>
                         {% endfor %}
                     </div>
                     <div class="mb-4">
-                        <label for="description"
-                            class="form-label fw-bold text-muted small text-uppercase">Description</label>
-                        {{ form.description(class="form-control shadow-sm", id="description", rows="5",
-                        placeholder="Enter bundle description...") }}
-                        {% for error in form.description.errors %}
-                        <div class="text-danger small mt-1">[[ error ]]</div>
+                        <label class="form-label fw-bold text-muted small text-uppercase">Description</label>
+                        {{ form.description(class="form-control shadow-sm", rows="5", placeholder="Enter bundle description...") }}
+                        {% for e in form.description.errors %}
+                        <div class="text-danger small mt-1">{{ e }}</div>
                         {% endfor %}
                     </div>
-                    <div class="mb-4 text-start">
-                        <vulnerability-input v-model="detectedVulnerabilities" target-type="bundle"
-                            :target-id="bundleId">
+                    <div class="mb-4">
+                        <vulnerability-input v-model="detectedVulnerabilities"
+                            target-type="bundle" :target-id="bundleId">
                         </vulnerability-input>
-
                         <input type="hidden" name="vulnerabilities" :value="JSON.stringify(detectedVulnerabilities)">
                     </div>
                     <div class="form-check form-switch mb-5 p-3 bg-light rounded shadow-sm border">
                         <div class="ms-4">
                             {{ form.public(class="form-check-input", id="publicSwitch") }}
                             <label class="form-check-label fw-bold" for="publicSwitch">Public Access</label>
-                            <p class="text-muted small mb-0">Allow other workspace users to view and export this bundle.
-                            </p>
+                            <p class="text-muted small mb-0">Allow other users to view and export this bundle.</p>
                         </div>
-                        {% for error in form.public.errors %}
-                        <div class="text-danger small">[[ error ]]</div>
-                        {% endfor %}
                     </div>
                     <div class="text-end">
                         <button type="submit" class="btn btn-primary px-5 fw-bold shadow">
-                            <i class="fas fa-check-circle me-2"></i> Update Bundle
+                            <i class="fas fa-check-circle me-2"></i>Update Bundle
                         </button>
                     </div>
                 </form>
             </div>
         </div>
-        <!-- Add Tags Pane -->
-        <div class="tab-pane fade" id="tags-pane" role="tabpanel" aria-labelledby="tags-tab">
-            <div class="card border-0 shadow-lg p-4 mb-4" style="border-radius: 12px;">
+
+        <!-- ══════════════════════════════════════════════
+             TAB 3 — Add Tags
+             ══════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="tags-pane" role="tabpanel">
+            <div class="card border-0 shadow-sm p-4 mb-4" style="border-radius:12px;border:1px solid var(--border-color)!important;">
 
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h4 class="fw-bold text-dark mb-0 ">
-                        <i class="fas fa-tags text-primary me-2"></i>Manage Tags
-                        <span class="badge bg-secondary ms-2" style="font-size: 0.5em;">[[ total_tags ]]</span>
-                    </h4>
+                    <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
+                        <i class="fas fa-tags text-primary"></i>Manage Tags
+                        <span class="badge bg-secondary ms-1" style="font-size:.55em;">[[ total_tags ]]</span>
+                    </h5>
                     <div class="d-flex align-items-center gap-3">
-                        <button class="btn btn-primary shadow-sm fw-bold rounded-pill px-4" data-bs-toggle="modal"
-                            data-bs-target="#add_tag_modal_">
-                            <i class="fas fa-plus me-2"></i> Add New Tag
+                        <button class="btn btn-primary shadow-sm fw-bold rounded-pill px-4"
+                                data-bs-toggle="modal" data-bs-target="#add_tag_modal_">
+                            <i class="fas fa-plus me-2"></i>Add New Tag
                         </button>
-
-                        <tag-create-modal @tag-created="handleRefreshList" csrf="{{ csrf_token() }}"></tag-create-modal>
-                        <div class="d-flex align-items-center">
-                            <button class="btn btn-success shadow-sm fw-bold text-center" @click="saveTags"
+                        <tag-create-modal @tag-created="handleRefreshList" csrf="{{ csrf_token() }}">
+                        </tag-create-modal>
+                        <button class="btn btn-success shadow-sm fw-bold" @click="saveTags"
                                 :disabled="save_loading_tags">
-                                <template v-if="save_loading_tags">
-                                    <i class="fas fa-spinner fa-spin me-2"></i> Saving...
-                                </template>
-                                <template v-else>
-                                    <i class="fas fa-save me-2"></i> Save Workspace
-                                </template>
-                            </button>
-                        </div>
+                            <i :class="save_loading_tags ? 'fas fa-spinner fa-spin' : 'fas fa-save'" class="me-2"></i>
+                            [[ save_loading_tags ? 'Saving…' : 'Save Tags' ]]
+                        </button>
                     </div>
-
                 </div>
 
+                <!-- Selected tags display -->
                 <div class="mb-4" v-if="allSelectedTagsObjects.length > 0">
-                    <label class="form-label text-muted small fw-bold text-uppercase">Currently Selected & Active
-                        Tags</label>
-                    <div class="d-flex flex-wrap gap-2 p-3 bg-light border-dashed rounded-3"
-                        style="border: 2px dashed #dee2e6;">
-
-                        <template v-for="tag in allSelectedTagsObjects.slice(0, 20)" :key="'selected-' + tag.id">
-                            <span class="badge d-flex align-items-center px-3 py-2 shadow-sm"
-                                :style="{ backgroundColor: tag.color, color: getContrastYIQ(tag.color) }">
-                                <i :class="['fas', tag.icon || 'fa-tag', 'me-2']"></i>
-                                [[ tag.name ]]
-                                <i class="fas fa-times-circle ms-2 cursor-pointer opacity-75"
-                                    @click.stop="toggleSelection(tag.id)" style="cursor: pointer;"></i>
-                            </span>
-                        </template>
-
-                        <span v-if="allSelectedTagsObjects.length > 20"
-                            class="text-muted small fw-bold align-self-center">
-                            ... and [[ allSelectedTagsObjects.length - 20 ]] more
+                    <label class="form-label text-muted small fw-bold text-uppercase">
+                        Currently Selected Tags
+                    </label>
+                    <div class="d-flex flex-wrap gap-2 p-3 bg-light rounded-3"
+                         style="border:2px dashed #dee2e6;">
+                        <span v-for="tag in allSelectedTagsObjects.slice(0, 20)" :key="'s-' + tag.id"
+                              class="badge d-flex align-items-center px-3 py-2 shadow-sm"
+                              :style="{ backgroundColor: tag.color, color: getContrastYIQ(tag.color) }">
+                            <i :class="['fas', tag.icon || 'fa-tag', 'me-2']"></i>
+                            [[ tag.name ]]
+                            <i class="fas fa-times-circle ms-2" @click.stop="toggleSelection(tag.id)"
+                               style="cursor:pointer;opacity:.75;"></i>
+                        </span>
+                        <span v-if="allSelectedTagsObjects.length > 20" class="text-muted small fw-bold align-self-center">
+                            … and [[ allSelectedTagsObjects.length - 20 ]] more
                         </span>
                     </div>
                 </div>
 
+                <!-- Search -->
                 <div class="input-group mb-3">
-                    <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
+                    <span class="input-group-text bg-white border-end-0">
+                        <i class="fas fa-search text-muted"></i>
+                    </span>
                     <input type="text" v-model="searchQueryTags" @input="fetchTags(1)"
-                        class="form-control border-start-0" placeholder="Search tags by name...">
+                           class="form-control border-start-0" placeholder="Search tags by name…">
                 </div>
 
+                <!-- Selected count alert -->
                 <div v-if="selectedTags.length > 0"
-                    class="alert alert-primary d-flex justify-content-between align-items-center py-2">
-                    <span><i class="fas fa-check-circle me-2"></i><strong>[[ selectedTags.length ]]</strong> tag(s)
-                        selected</span>
+                     class="alert alert-primary d-flex justify-content-between align-items-center py-2">
+                    <span><i class="fas fa-check-circle me-2"></i>
+                        <strong>[[ selectedTags.length ]]</strong> tag(s) selected</span>
                     <button class="btn btn-sm btn-outline-primary" @click="clearSelection">Clear All</button>
                 </div>
 
+                <!-- Tags table -->
                 <div class="table-responsive">
                     <table class="table table-hover align-middle">
                         <thead class="table-light text-secondary">
                             <tr>
-                                <th style="width: 40px;"></th>
+                                <th style="width:40px;"></th>
                                 <th>Tag</th>
                                 <th>Description</th>
                                 <th>Created At</th>
@@ -489,28 +217,27 @@
                         <tbody>
                             <template v-if="load_tags">
                                 <tr v-for="tag in tags" :key="tag.id" @click="toggleSelection(tag)"
-                                    style="cursor: pointer;">
+                                    style="cursor:pointer;">
                                     <td>
                                         <input type="checkbox" class="form-check-input" :value="tag.id"
-                                            v-model="selectedTags" @click.stop="toggleSelection(tag)">
+                                               v-model="selectedTags" @click.stop="toggleSelection(tag)">
                                     </td>
                                     <td>
                                         <span class="badge px-3 py-2 shadow-sm border"
-                                            :style="{ backgroundColor: tag.color, color: getContrastYIQ(tag.color) }">
+                                              :style="{ backgroundColor: tag.color, color: getContrastYIQ(tag.color) }">
                                             <i :class="['fas', tag.icon || 'fa-tag', 'me-1']"></i>
                                             [[ tag.name ]]
                                         </span>
                                     </td>
                                     <td>
-                                        <small class="text-muted d-inline-block text-truncate" style="max-width: 400px;"
-                                            :title="tag.description">
+                                        <small class="text-muted d-inline-block text-truncate"
+                                               style="max-width:400px;" :title="tag.description">
                                             [[ tag.description ]]
                                         </small>
                                     </td>
                                     <td><small class="text-muted">[[ tag.created_at ]]</small></td>
                                     <td class="text-end">
-                                        <span v-if="tag.is_active"
-                                            class="badge rounded-pill bg-success text-white">Active</span>
+                                        <span v-if="tag.is_active" class="badge rounded-pill bg-success">Active</span>
                                         <span v-else class="badge rounded-pill bg-light text-muted">Inactive</span>
                                     </td>
                                 </tr>
@@ -518,12 +245,11 @@
                                     <td colspan="5" class="text-center py-5 text-muted">No tags found.</td>
                                 </tr>
                             </template>
-
                             <template v-else>
                                 <tr>
                                     <td colspan="5" class="text-center py-5">
                                         <i class="fas fa-spinner fa-spin fa-2x text-primary mb-2"></i>
-                                        <p class="text-muted">Loading tags...</p>
+                                        <p class="text-muted">Loading tags…</p>
                                     </td>
                                 </tr>
                             </template>
@@ -531,651 +257,216 @@
                     </table>
                 </div>
 
+                <!-- Tags pagination -->
                 <nav v-if="total_pages_tags > 1" class="d-flex justify-content-center mt-3">
                     <ul class="pagination">
                         <li class="page-item" :class="{ disabled: current_page_tags === 1 }">
-                            <button class="page-link" @click="fetchTags(current_page_tags - 1)"><i
-                                    class="fas fa-angle-left"></i></button>
+                            <button class="page-link" @click="fetchTags(current_page_tags - 1)">
+                                <i class="fas fa-angle-left"></i>
+                            </button>
                         </li>
-                        <li class="page-item" v-for="page in visiblePagesTags" :key="page"
-                            :class="{ active: page === current_page_tags, disabled: page === '...' }">
-                            <button class="page-link" v-if="page !== '...'" @click="fetchTags(page)">[[ page ]]</button>
-                            <span class="page-link" v-else>...</span>
+                        <li class="page-item" v-for="pg in visiblePagesTags" :key="pg"
+                            :class="{ active: pg === current_page_tags, disabled: pg === '...' }">
+                            <button class="page-link" v-if="pg !== '...'" @click="fetchTags(pg)">[[ pg ]]</button>
+                            <span class="page-link" v-else>…</span>
                         </li>
                         <li class="page-item" :class="{ disabled: current_page_tags === total_pages_tags }">
-                            <button class="page-link" @click="fetchTags(current_page_tags + 1)"><i
-                                    class="fas fa-angle-right"></i></button>
+                            <button class="page-link" @click="fetchTags(current_page_tags + 1)">
+                                <i class="fas fa-angle-right"></i>
+                            </button>
                         </li>
                     </ul>
                 </nav>
+
             </div>
         </div>
-    </div>
+
+    </div><!-- /tab-content -->
 
 </div>
-<!-- 
-    <div class="d-flex justify-content-center mt-5 mb-5">
-        <a :href="'/bundle/detail/' + bundleId"
-            class="btn btn-secondary btn-sm d-inline-flex align-items-center shadow-sm px-4 py-2 rounded-pill">
-            <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
-        </a>
-    </div> -->
-<!-- Template to fetch folder and file from structure-->
-<template id="tree-item-template">
-    <li class="mb-1">
-        <div class="node-row d-flex align-items-center p-1 rounded cursor-pointer transition-all"
-            :style="selectedId === node.id ? 'background-color: var(--selected-color)' : 'hover-bg border-bottom border-light'"
-            @click.stop="$emit('select', node)">
-
-            <i :class="[
-                node.type === 'folder' ? 'fas fa-folder text-warning' : 
-                (isRule(node) ? 'fas fa-file-code text-secondary' : 'fas fa-file-signature text-success'),
-                {'text-primary': selectedId === node.id}
-            ]" class="me-2"></i>
-
-            <span class="flex-grow-1 small fw-bold text-truncate">[[ node.name ]]</span>
-
-            <div class="node-actions btn-group">
-                <button v-if="!isRule(node)" class="btn btn-link btn-xs p-0 px-1" title="Rename" data-bs-toggle="modal"
-                    data-bs-target="#rename_modal" @click.stop="$emit('rename', node)">
-                    <i class="fas fa-edit" :class="selectedId === node.id ? 'text-dark' : 'text-secondary'"></i>
-                </button>
-
-                <button v-if="node.type === 'folder'" class="btn btn-link btn-xs p-0 px-1 text-success"
-                    title="Add folder" data-bs-toggle="modal" data-bs-target="#add_folder_modal_unique"
-                    @click.stop="$emit('add-sub-folder', node.children)">
-                    <i class="fas fa-folder-plus"></i>
-                </button>
-
-                <button v-if="node.type === 'folder'" class="btn btn-link btn-xs p-0 px-1 text-dark"
-                    title="Create a file" data-bs-toggle="modal" data-bs-target="#create_file_modal"
-                    @click.stop="$emit('add-sub-folder', node.children)">
-                    <i class="fas fa-file-medical"></i>
-                </button>
-
-                <button class="btn btn-link btn-xs p-0 text-danger px-1" data-bs-toggle="modal" title="Remove"
-                    data-bs-target="#remove_modal" @click.stop="$emit('remove', node)">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
-            </div>
-        </div>
-
-        <div v-if="node.type === 'folder'" class="ps-3 border-start ms-2 mt-1">
-            <draggable v-model="node.children" group="nested" :item-key="item => item.id" tag="ul"
-                class="list-unstyled mb-0" :animation="200">
-                <template #item="{ element }">
-                    <tree-item :node="element" :selected-id="selectedId" @select="(n) => $emit('select', n)"
-                        @rename="(n) => $emit('rename', n)" @add-sub-folder="(arr) => $emit('add-sub-folder', arr)"
-                        @remove="(node) => $emit('remove', node)" />
-                </template>
-            </draggable>
-        </div>
-    </li>
-</template>
 
 <div id="bundle-info" data-bundle-id="{{ bundle.id }}"></div>
 {% endblock %}
 
 {% block script %}
+<!-- UMD bundles: must run synchronously BEFORE the ES module below -->
+<script src="{{ url_for('static', filename='js/bundle/jsdelivr_sortablejs.js') }}"></script>
+<script src="{{ url_for('static', filename='js/bundle/jsdelivr_vuedraggable.js') }}"></script>
 <script type="module">
-    const { createApp, ref, onMounted, computed } = Vue;
-    import { message_list, create_message } from '/static/js/toaster.js';
-    // import for the tree component
-    import { } from '/static/js/bundle/jsdelivr_sortablejs.js';
-    import { } from '/static/js/bundle/jsdelivr_vuedraggable.js';
-    import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js';
-    import TagCreateModal from '/static/js/tags/tagCreateModal.js';
-    const TreeItem = {
-        name: 'tree-item',
-        props: ['node', 'selectedId'],
-        template: '#tree-item-template',
-        delimiters: ['[[', ']]'],
-        emits: ['add-sub-folder', 'remove', 'select', 'rename'],
-        components: { draggable: window.vuedraggable },
-        methods: {
-            isRule(node) {
-                return node && node.id && String(node.id).startsWith('rule_');
+import { create_message }    from '/static/js/toaster.js'
+import BundleStructureEditor from '/static/js/bundle/BundleStructureEditor.js'
+import BundleRuleSelector    from '/static/js/bundle/BundleRuleSelector.js'
+import VulnerabilityInput    from '/static/js/vulnerability/vulnerabilityInput.js'
+import TagCreateModal        from '/static/js/tags/tagCreateModal.js'
+
+const { createApp, ref, computed, onMounted } = Vue
+const _BUNDLE_ID = {{ bundle.id | tojson }}
+
+createApp({
+    delimiters: ['[[', ']]'],
+    components: {
+        'bundle-structure-editor': BundleStructureEditor,
+        'bundle-rule-selector':    BundleRuleSelector,
+        'vulnerability-input':     VulnerabilityInput,
+        'tag-create-modal':        TagCreateModal,
+    },
+
+    setup() {
+        const bundleId  = ref(_BUNDLE_ID)
+        const csrfToken = "{{ csrf_token() }}"
+
+        // ── Structure ──────────────────────────────────────────────
+        const structureEditor = ref(null)
+        const bundleRuleIds   = ref(new Set())
+
+        function onAddRules(rules) {
+            if (structureEditor.value) structureEditor.value.addRules(rules)
+            // Optimistic: immediately exclude these rules from the selector
+            const updated = new Set(bundleRuleIds.value)
+            rules.forEach(r => updated.add(r.id))
+            bundleRuleIds.value = updated
+        }
+
+        function onPreviewRule(rule) {
+            if (structureEditor.value) structureEditor.value.setPreview(rule)
+        }
+
+        // Called by BSE after tree loads or saves — keep excluded IDs in sync
+        function onTreeReady(ids) { bundleRuleIds.value = new Set(ids) }
+        function onTreeSaved(ids) { if (ids) bundleRuleIds.value = new Set(ids) }
+
+        // ── Tags ───────────────────────────────────────────────────
+        const tags                 = ref([])
+        const total_tags           = ref(0)
+        const total_pages_tags     = ref(1)
+        const current_page_tags    = ref(1)
+        const save_loading_tags    = ref(false)
+        const load_tags            = ref(false)
+        const searchQueryTags      = ref('')
+        const sort_order           = ref('asc')
+        const selectedTags         = ref([])
+        const allSelectedTagsObjects = ref([])
+
+        async function fetchTags(page) {
+            load_tags.value = false
+            const params = new URLSearchParams({
+                page,
+                search: searchQueryTags.value,
+                sort_order: sort_order.value,
+                user_id: "{{ current_user.id }}"
+            })
+            const res  = await fetch('/tags/get_tags_bundle?' + params)
+            const data = await res.json()
+            if (res.ok) {
+                tags.value              = data.tags
+                total_tags.value        = data.total_tags
+                total_pages_tags.value  = data.total_pages
+                current_page_tags.value = page
+            }
+            load_tags.value = true
+        }
+
+        async function initBundleTags() {
+            try {
+                const res  = await fetch(`/bundle/get_bundle_tags_display/${bundleId.value}`)
+                const data = await res.json()
+                if (data.success) {
+                    selectedTags.value          = data.tags.map(t => t.id)
+                    allSelectedTagsObjects.value = data.tags
+                }
+            } catch {}
+        }
+
+        function toggleSelection(tag) {
+            const tagId = typeof tag === 'object' ? tag.id : tag
+            const idx   = selectedTags.value.indexOf(tagId)
+            if (idx > -1) {
+                selectedTags.value.splice(idx, 1)
+                const oi = allSelectedTagsObjects.value.findIndex(t => t.id === tagId)
+                if (oi > -1) allSelectedTagsObjects.value.splice(oi, 1)
+            } else {
+                selectedTags.value.push(tagId)
+                if (typeof tag === 'object') {
+                    allSelectedTagsObjects.value.push(tag)
+                } else {
+                    const found = tags.value.find(t => t.id === tagId)
+                    if (found) allSelectedTagsObjects.value.push(found)
+                }
             }
         }
-    };
 
-    createApp({
-        delimiters: ['[[', ']]'],
-        components: { 'tree-item': TreeItem, 'draggable': window.vuedraggable, 'vulnerability-input': VulnerabilityInput, 'tag-create-modal': TagCreateModal },
-
-        setup() {
-
-            /**
-            * #################
-            * #  INITIALIZE   #
-            * #################
-            * */
-
-
-            onMounted(async () => {
-                const el = document.getElementById('bundle-info');
-                if (el) {
-                    bundleId.value = el.dataset.bundleId;
-                    await loadBundleData();
-                }
-                fetchFormat();
-                fetchRules(1);
-                fetchTags(1);
-                initBundleTags();
-            });
-
-            const csrf_token = "{{ csrf_token() }}"
-            const is_loading = ref(false);
-
-
-            const handleRefreshList = (newlyCreatedTag) => {
-                if (!newlyCreatedTag) return;
-                // add to selection if not already there
-                if (!selectedTags.value.includes(newlyCreatedTag.id)) {
-                    selectedTags.value.push(newlyCreatedTag.id);
-                    allSelectedTagsObjects.value.push(newlyCreatedTag);
-                }
-                create_message("Tag created and selected.", "success-subtle");
-                saveTags();
-                fetchTags(1);
-
-            };
-
-            /**
-             * #################
-             * #   TAGS LIST   #
-             * #################
-             * */
-            const detectedVulnerabilities = ref([]);
-
-
-
-            const tags = ref([]);
-            const total_tags = ref(0);
-            const total_pages_tags = ref(1);
-            const current_page_tags = ref(1);
-            const save_loading_tags = ref(false);
-            const load_tags = ref(false);
-
-            // Filter & Sort
-            const searchQueryTags = ref('');
-            const sort_order = ref('asc');
-
-            // Selection Management
-            const selectedTags = ref([]); // Stores IDs only for checkboxes/API
-            const allSelectedTagsObjects = ref([]); // Stores full objects for display across pages
-
-            /**
-             * Fetch tags for the table (paginated)
-             */
-            async function fetchTags(page) {
-                load_tags.value = false;
-                const params = new URLSearchParams({
-                    page,
-                    search: searchQueryTags.value,
-                    sort_order: sort_order.value,
-                    user_id: "{{ current_user.id }}"
-                });
-                const res = await fetch('/tags/get_tags_bundle?' + params.toString());
-                const data = await res.json();
-                if (res.status === 200) {
-                    tags.value = data.tags;
-                    total_tags.value = data.total_tags;
-                    total_pages_tags.value = data.total_pages;
-                    current_page_tags.value = page;
-                }
-                load_tags.value = true;
-            }
-
-
-            /**
-             * Initialize tags already associated with the bundle
-             * This uses the "display" route to get full objects (name, color, etc.)
-             */
-            async function initBundleTags() {
-                try {
-                    const res = await fetch(`/bundle/get_bundle_tags_display/${bundleId.value}`);
-                    const data = await res.json();
-                    if (data.success) {
-                        // Populate both lists to ensure they are visible immediately
-                        selectedTags.value = data.tags.map(t => t.id);
-                        allSelectedTagsObjects.value = data.tags;
-                    }
-                } catch (error) {
-                    console.error("Initialization error:", error);
-                }
-            }
-
-            function toggleSelection(tag) {
-                const tagId = typeof tag === 'object' ? tag.id : tag;
-                const index = selectedTags.value.indexOf(tagId);
-
-                if (index > -1) {
-                    selectedTags.value.splice(index, 1);
-                    const objIndex = allSelectedTagsObjects.value.findIndex(t => t.id === tagId);
-                    if (objIndex > -1) {
-                        allSelectedTagsObjects.value.splice(objIndex, 1);
-                    }
-                } else {
-                    selectedTags.value.push(tagId);
-                    if (typeof tag === 'object') {
-                        allSelectedTagsObjects.value.push(tag);
-                    } else {
-                        const found = tags.value.find(t => t.id === tagId);
-                        if (found) allSelectedTagsObjects.value.push(found);
-                    }
-                }
-            }
-
-            function clearSelection() {
-                selectedTags.value = [];
-                allSelectedTagsObjects.value = [];
-            }
-
-            function getContrastYIQ(hexcolor) {
-                if (!hexcolor) return '#000';
-                hexcolor = hexcolor.replace("#", "");
-                const r = parseInt(hexcolor.substr(0, 2), 16);
-                const g = parseInt(hexcolor.substr(2, 2), 16);
-                const b = parseInt(hexcolor.substr(4, 2), 16);
-                const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-                return (yiq >= 128) ? '#000000' : '#ffffff';
-            }
-
-            const visiblePagesTags = computed(() => {
-                const pages = [];
-                const total = total_pages_tags.value;
-                const current = current_page_tags.value;
-                if (total <= 7) {
-                    for (let i = 1; i <= total; i++) pages.push(i);
-                } else {
-                    if (current <= 4) {
-                        pages.push(1, 2, 3, 4, 5, '...', total);
-                    } else if (current >= total - 3) {
-                        pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total);
-                    } else {
-                        pages.push(1, '...', current - 1, current, current + 1, '...', total);
-                    }
-                }
-                return pages;
-            });
-
-            async function saveTags() {
-                if (save_loading_tags.value) return;
-                save_loading_tags.value = true;
-                try {
-                    const res = await fetch(`/bundle/update_bundle_tags/${bundleId.value}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': csrf_token
-                        },
-                        body: JSON.stringify({ tag_ids: selectedTags.value })
-                    });
-                    const data = await res.json();
-                    if (res.status === 200 && data.success) {
-                        create_message("Tags saved successfully.", "success-subtle");
-                    } else {
-                        create_message(data.message || "Error saving tags.", "danger-subtle");
-                    }
-                } catch (e) {
-                    create_message("Network error.", "danger-subtle");
-                }
-                save_loading_tags.value = false;
-            }
-
-
-
-            /**
-             * #################
-             * #  RULES LIST   #
-             * #################
-             * */
-
-            const rules_list = ref([]);
-            const searchQuery = ref('');
-            const ruleType = ref("");
-            const current_page = ref(1);
-            const total_pages = ref(1);
-
-            const isRule = (node) => node && node.id && String(node.id).startsWith('rule_');
-
-
-
-            const fetchRules = async (page) => {
-                is_loading.value = false;
-                const params = new URLSearchParams({ page, search: searchQuery.value, rule_type: ruleType.value, bundle_id: bundleId.value });
-                const res = await fetch('/rule/get_rules_page_filter_bundle?' + params.toString());
-                const data = await res.json();
-                rules_list.value = data.rules || data.rule || [];
-                total_pages.value = data.total_pages || 1;
-                current_page.value = page;
-                is_loading.value = true;
-            };
-
-
-            const rules_formats = ref([]);
-            const number_rules_formats = ref(0);
-            const fetchFormat = async () => {
-                const res = await fetch('/rule/get_rules_formats');
-                const data = await res.json();
-                if (res.status === 200) {
-                    rules_formats.value = data.formats;
-                    number_rules_formats.value = data.length | 0;
-                }
-            }
-
-            /**
-             * #######################
-             * #  BUNDLE STRUCTURE   #
-             * #######################
-             * */
-
-            const bundleId = ref(null);
-            const treeData = ref([{ id: 'root', name: 'Main Bundle', type: 'folder', children: [], content: '' }]);
-
-            // get the structure of the bundle
-            const loadBundleData = async () => {
-                const res = await fetch(`/bundle/get_bundle_json/${bundleId.value}`);
-                const data = await res.json();
-                if (data.success && data.structure) treeData.value = data.structure;
-            };
-
-
-            /**
-             * #######################
-             * #  ACTION STRUCTURE   #
-             * #######################
-             * */
-
-            // display the content of a rule
-
-            const setPreview = (rule) => {
-                selectedNode.value = null;
-                previewContent.value = rule.to_string;
-                previewName.value = rule.title;
-            };
-
-            // add a rule to the bundle
-
-            const addRuleToBundle = async (rule) => {
-                if (!selectedNode.value || selectedNode.value.type !== 'folder') {
-                    create_message('Action Denied: Select a folder in the explorer first.', 'warning-subtle');
-                    return;
-                }
-                const ext = rule.format === 'yara' ? '.yar' : '.yaml';
-                const newNode = {
-                    id: 'rule_' + rule.id + '_' + Date.now(),
-                    rule_id: rule.id,
-                    name: rule.title + ext,
-                    type: 'file',
-                    content: rule.to_string,
-                    children: []
-                };
-                selectedNode.value.children.push(newNode);
-                selectNode(newNode);
-
-                const isSaved = await saveStructure();
-
-                if (isSaved) {
-                    await fetchRules(current_page.value);
-                }
-            };
-
-
-            // select a node
-
-            const selectNode = (n) => { previewContent.value = ""; selectedNode.value = n; };
-            const clearDisplay = () => { selectedNode.value = null; previewContent.value = ""; };
-            const selectedNode = ref(null);
-            const previewContent = ref("");
-            const previewName = ref("");
-
-            // rename a node
-
-            const renameText = ref("");
-            const nodeToRename = ref(null);
-
-            const renameNode = (node) => {
-                nodeToRename.value = node;
-                renameText.value = node.name;
-            };
-
-            const confirmRename = () => {
-                if (nodeToRename.value && renameText.value.trim() !== "") {
-                    nodeToRename.value.name = renameText.value.trim();
-
-                    const modalElement = document.getElementById('rename_modal');
-                    const modalInstance = bootstrap.Modal.getInstance(modalElement);
-                    if (modalInstance) modalInstance.hide();
-
-                    saveStructure();
-                    nodeToRename.value = null;
-                    renameText.value = "";
-                }
-            };
-
-            // add a folder (from a folder and from the root)
-
-            const addFolderText = ref("");
-            const currentParentArray = ref(null);
-
-            const prepareAddFolder = (targetArray) => {
-                currentParentArray.value = targetArray;
-                addFolderText.value = "";
-
-            };
-
-            function addFolder() {
-                const name = addFolderText.value;
-                const target = currentParentArray.value || treeData.value;
-
-                if (!name) {
-                    create_message("Folder name cannot be empty", "danger-subtle");
-                    const modalEl = document.getElementById('add_folder_modal_unique');
-                    const modal = bootstrap.Modal.getInstance(modalEl);
-                    if (modal) modal.hide();
-                    return;
-                }
-
-                create_message("Folder added", "success-subtle");
-
-                const modalEl = document.getElementById('add_folder_modal_unique');
-                const modal = bootstrap.Modal.getInstance(modalEl);
-                if (modal) modal.hide();
-
-                const f = { id: 'f_' + Date.now(), name, type: 'folder', children: [], content: '' };
-                target.push(f);
-                selectNode(f);
-
-                addFolderText.value = "";
-                saveStructure();
-            }
-
-            // add a file
-
-            const addFileText = ref("");
-            const addFileFormat = ref(".txt");
-
-            function addFile() {
-                const baseName = addFileText.value.trim();
-                const extension = addFileFormat.value;
-                const target = currentParentArray.value || treeData.value;
-
-                if (!baseName) {
-                    create_message("Please enter a file name", "danger-subtle");
-                    return;
-                }
-
-                const fullName = baseName.endsWith(extension) ? baseName : baseName + extension;
-
-                const f = {
-                    id: 'fi_' + Date.now(),
-                    name: fullName,
-                    type: 'file',
-                    children: [],
-                    content: ''
-                };
-
-                target.push(f);
-                selectNode(f);
-                create_message(`File ${fullName} created`, "success-subtle");
-
-                const modalEl = document.getElementById('create_file_modal');
-                const modal = bootstrap.Modal.getInstance(modalEl);
-                if (modal) modal.hide();
-
-
-                addFileText.value = "";
-                addFileFormat.value = ".txt";
-                saveStructure();
-            }
-
-            const prepareAddTarget = (targetArray) => {
-                currentParentArray.value = targetArray;
-                addFolderText.value = "";
-                addFileText.value = "";
-            };
-
-            // import a file
-
-            const importFile = (event, targetArray) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const newNode = { id: 'imp_' + Date.now(), name: file.name, type: 'file', content: e.target.result, children: [] };
-                    targetArray.push(newNode);
-                    selectNode(newNode);
-                };
-                reader.readAsText(file);
-                event.target.value = '';
-                saveStructure();
-            };
-
-            // delete a node
-
-            const nodeToDelete = ref(null);
-
-            const prepareDelete = (node) => {
-                nodeToDelete.value = node;
-            };
-
-            const confirmDelete = async () => {
-                if (!nodeToDelete.value) {
-                    create_message("No item selected", "danger-subtle");
-
-                    const modalEl = document.getElementById('remove_modal');
-                    const modal = bootstrap.Modal.getInstance(modalEl);
-                    if (modal) modal.hide();
-                    return;
-                }
-
-                const id = nodeToDelete.value.id;
-
-                const findAndRemove = (list) => {
-                    const idx = list.findIndex(i => i.id === id);
-                    if (idx > -1) {
-                        list.splice(idx, 1);
-                        return true;
-                    }
-                    for (let item of list) {
-                        if (item.children && findAndRemove(item.children)) return true;
-                    }
-                    return false;
-                };
-
-                const success = findAndRemove(treeData.value);
-
-                if (success) {
-                    create_message("Item deleted successfully", "success-subtle");
-                    if (selectedNode.value?.id === id) clearDisplay();
-                }
-
-                const modalEl = document.getElementById('remove_modal');
-                const modal = bootstrap.Modal.getInstance(modalEl);
-                if (modal) modal.hide();
-
-                nodeToDelete.value = null;
-
-                const isSaved = await saveStructure();
-
-                if (isSaved) {
-                    await fetchRules(current_page.value);
-                }
-            };
-
-            // save the structure
-            const save_loading = ref(false);
-
-            const saveStructure = async () => {
-                save_loading.value = true;
-                try {
-                    const response = await fetch(`/bundle/save_workspace/${bundleId.value}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
-
-                        body: JSON.stringify({ structure: treeData.value })
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                        create_message("Structure saved", "success-subtle");
-                        return true;
-                    }
-                } catch (error) {
-                    create_message("Error saving structure", "danger-subtle");
-                    return false;
-                } finally {
-                    save_loading.value = false;
-                }
-            };
-
-            /**
-             * ########################
-             * #  UTILITY FUNCTIONS   #
-             * ########################
-             * */
-
-            const truncateText = (text, limit) => {
-                if (!text) return '';
-                if (text.length <= limit) return text;
-                return text.substring(0, limit);
-            };
-            async function onSearchInput() {
-                if (searchQuery.value.trim() === "") {
-                    await fetchRules(1)
-                }
-            }
-
-            async function onEnterKey() {
-                // if the key pressed is enter launch the request
-                if (event.key === 'Enter') {
-                    await fetchRules(1)
-                }
-
-            }
-
-            const triggerDisabledMessage = () => {
-                if (!selectedNode.value || selectedNode.value.type !== 'folder') {
-                    create_message(
-                        "Target folder required: Select a folder in the explorer before adding a rule.",
-                        "warning-subtle"
-                    );
-                }
-            };
-
-            return {
-                treeData, selectedNode, previewContent, previewName, rules_list, searchQuery, ruleType, current_page, total_pages, message_list,
-                fetchRules, addRuleToBundle, importFile, addFolder, addFile, selectNode, setPreview, clearDisplay, saveStructure, isRule, renameNode, addFolderText,
-                bundleId, truncateText, prepareAddFolder, save_loading, prepareDelete, confirmDelete, nodeToDelete, prepareDelete, confirmDelete,
-                prepareAddTarget, addFileText, addFileFormat, triggerDisabledMessage, renameText, confirmRename, nodeToRename, onEnterKey, onSearchInput, is_loading,
-                rules_formats, number_rules_formats, fetchFormat,
-
-                // tags
-                tags, total_tags, total_pages_tags, current_page_tags, searchQueryTags, sort_order, fetchTags, selectedTags, toggleSelection, clearSelection, getContrastYIQ, visiblePagesTags,
-                load_tags, save_loading_tags, saveTags, allSelectedTagsObjects, initBundleTags, detectedVulnerabilities, handleRefreshList
-            };
+        function clearSelection() {
+            selectedTags.value          = []
+            allSelectedTagsObjects.value = []
         }
-    }).mount('#page-app');
+
+        function getContrastYIQ(hex) {
+            if (!hex) return '#000'
+            hex = hex.replace('#', '')
+            const r = parseInt(hex.substr(0, 2), 16)
+            const g = parseInt(hex.substr(2, 2), 16)
+            const b = parseInt(hex.substr(4, 2), 16)
+            return ((r * 299 + g * 587 + b * 114) / 1000) >= 128 ? '#000' : '#fff'
+        }
+
+        const visiblePagesTags = computed(() => {
+            const pages = [], total = total_pages_tags.value, cur = current_page_tags.value
+            if (total <= 7) { for (let i = 1; i <= total; i++) pages.push(i) }
+            else if (cur <= 4) { pages.push(1, 2, 3, 4, 5, '...', total) }
+            else if (cur >= total - 3) { pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total) }
+            else { pages.push(1, '...', cur - 1, cur, cur + 1, '...', total) }
+            return pages
+        })
+
+        async function saveTags() {
+            if (save_loading_tags.value) return
+            save_loading_tags.value = true
+            try {
+                const res  = await fetch(`/bundle/update_bundle_tags/${bundleId.value}`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body:    JSON.stringify({ tag_ids: selectedTags.value }),
+                })
+                const data = await res.json()
+                create_message(
+                    data.success ? 'Tags saved.' : (data.message || 'Error saving tags.'),
+                    data.success ? 'success-subtle' : 'danger-subtle'
+                )
+            } catch { create_message('Network error.', 'danger-subtle') }
+            save_loading_tags.value = false
+        }
+
+        function handleRefreshList(newTag) {
+            if (!newTag) return
+            if (!selectedTags.value.includes(newTag.id)) {
+                selectedTags.value.push(newTag.id)
+                allSelectedTagsObjects.value.push(newTag)
+            }
+            create_message('Tag created and selected.', 'success-subtle')
+            saveTags()
+            fetchTags(1)
+        }
+
+        // ── Vulnerabilities (settings tab) ─────────────────────────
+        const detectedVulnerabilities = ref([])
+
+        // ── Init ───────────────────────────────────────────────────
+        onMounted(async () => {
+            fetchTags(1)
+            initBundleTags()
+        })
+
+        return {
+            bundleId, csrfToken, structureEditor, bundleRuleIds,
+            onAddRules, onPreviewRule, onTreeReady, onTreeSaved,
+            tags, total_tags, total_pages_tags, current_page_tags,
+            save_loading_tags, load_tags, searchQueryTags, sort_order,
+            selectedTags, allSelectedTagsObjects,
+            fetchTags, initBundleTags, toggleSelection, clearSelection,
+            getContrastYIQ, visiblePagesTags, saveTags, handleRefreshList,
+            detectedVulnerabilities,
+        }
+    },
+}).mount('#page-app')
 </script>
 {% endblock %}

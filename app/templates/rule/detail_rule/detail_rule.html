@@ -1,0 +1,1241 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Rulezet{% endblock %}
+{% block head %}
+<style>
+@keyframes comment-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255,193,7,.7); outline: 2px solid #ffc107; }
+  70%  { box-shadow: 0 0 0 10px rgba(255,193,7,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,193,7,0); outline: 2px solid transparent; }
+}
+.comment-highlight { animation: comment-pulse 1.4s ease 3; background: rgba(255,193,7,.07) !important; border-radius: .5rem; }
+</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/graph-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/attack-display.css') }}">
+
+<script>
+window.__rule_json   = {{ rule_to_json | tojson | safe }};
+{% if rule_misp_object %}window.__misp_object = {{ rule_misp_object | tojson | safe }};{% endif %}
+{% if rule_misp_event  %}window.__misp_event  = {{ rule_misp_event  | tojson | safe }};{% endif %}
+</script>
+
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+{% endblock %}
+{% import 'macros/form_macros.html' as f %}
+{% import 'macros/detail_rule_nav.html' as nav %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-shield-halved banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">{% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div>
+                <h2 class="fw-bold mb-1">
+                    {% if rule.title|length > 60 %}{{ rule.title[:60] }}…{% else %}{{ rule.title }}{% endif %}
+                </h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <code class="ms-auto text-muted" style="font-size: 0.7rem; opacity: 0.6;" >{{ rule.uuid }}</code>
+        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+            Propose edits, view related rules, and engage with the community through comments.
+        </p>
+    </div>
+
+
+    {{ nav.detail_rule_nav(rule, 'detail', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
+
+    <div>
+            <template v-if="detail_page_1_is_loading">
+                <div class="card h-100  border-0 card-security-premium-detail mb-4 card_detail border-top shadow-lg"
+                    style="border-radius: 12px;">
+
+
+                    <div class="card-watermark-detail">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+
+                    <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2 z-index-2">
+                        {% if current_user.id == rule.user_id %}
+                        <span class="badge bg-success shadow-sm pt-1" title="You are the owner">
+                            <i class="fa-solid fa-crown me-1"></i> OWNER
+                        </span>
+                        {% endif %}
+                        {% if current_user.is_admin() %}
+                        <span class="badge bg-warning   shadow-sm pt-1"
+                            title="You are an admin, you have all the rights on this rule">
+                            <i class="fa-solid fa-crown me-1"></i> ADMIN
+                        </span>
+                        {% endif %}
+                        <span class="badge rounded-pill bg-dark pt-1 shadow-sm">[[ currentRule.format.toUpperCase()
+                            ]]</span>
+                    </div>
+
+                    <div class="card-body d-flex flex-column p-4 z-index-1">
+                        <div class="mb-4 pe-5">
+                            <h3 class="fw-bold mb-1">
+                                <a :href="`/rule/detail_rule/${currentRule.id}`"
+                                    class="fw-bold h5 border-start border-primary border-4 ps-3 custom-rule-link text-decoration-none d-block">
+                                    [[ currentRule.title ]]
+                                </a>
+                            </h3>
+                            <div class="d-flex align-items-center gap-2 mt-2">
+                                <user-chip
+                                    :user-id="currentRule.user_id"
+                                    :username="currentRule.editor"
+                                    :avatar="currentRule.editor_avatar"
+                                    size="xs"
+                                ></user-chip>
+                                <span class="text-muted opacity-50">|</span>
+                                <small class="text-muted"> [[ dayjs.utc(currentRule.last_modif).fromNow() ]]</small>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <p class="text-muted small lh-base mb-0">
+                                <i class="fas fa-quote-left me-2 opacity-50 text-primary"></i>
+                                [[ currentRule.description ]]
+                            </p>
+                        </div>
+
+                        <div class=" rounded-3 p-3 mb-4">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-file-code me-2 text-secondary w-20px"></i>
+                                        <small class="text-muted me-2">Original UUID:</small>
+                                        <template v-if="currentRule.original_uuid === null || currentRule.original_uuid === '' || currentRule.original_uuid === 'Unknown'">
+                                            <small class="text-muted">Unknown</small>
+                                        </template>
+                                        <template v-else>
+                                            <small class="text-break fw-mono"> {{ rule.original_uuid }} </small>
+                                        </template>
+                                    </div>
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-key me-2 text-secondary w-20px"></i>
+                                        <small class="text-muted me-2">UUID:</small>
+                                        <small class="text-break fw-mono"> {{ rule.uuid }} </small>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-calendar-plus me-2 text-secondary w-20px"></i>
+                                        <small class="text-muted me-2">Created:</small>
+                                        <small> {{ rule.creation_date.strftime('%d/%m/%Y') }} </small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-balance-scale me-2 text-secondary w-20px"></i>
+                                        <small class="text-muted me-2">License:</small>
+                                        <small class="fw-medium"> {{ rule.license }} </small>
+                                    </div>
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-link me-2 text-secondary w-20px"></i>
+                                        <template
+                                            v-if="currentRule.source === None || currentRule.source === 'Unknown' || currentRule.source === '' || currentRule.source === null">
+                                            <small class="text-muted me-2">Source:</small>
+                                            <small class="text-muted">Unknown</small>
+                                            </small>
+                                        </template>
+                                        <template v-else>
+                                            <small class="text-muted me-2">Source:</small>
+                                            <small class="text-truncate">
+                                                <template
+                                                    v-if="currentRule.source && currentRule.source.startsWith('http')">
+                                                    <a :href="currentRule.source" rel="noreferrer" target="_blank"
+                                                        class="text-primary text-decoration-none">
+                                                        [[ currentRule.source ]]
+                                                    </a>
+                                                </template>
+
+                                                <template v-else>
+                                                    [[ currentRule.source ]]
+                                                </template>
+                                            </small>
+                                        </template>
+                                    </div>
+                                    <div v-if="currentRule.sync_instance_url" class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-plug me-2 text-secondary w-20px"></i>
+                                        <small class="text-muted me-2">Synced from:</small>
+                                        <small class="text-truncate">
+                                            <a :href="currentRule.sync_instance_url" rel="noreferrer" target="_blank"
+                                               class="text-primary text-decoration-none">
+                                                [[ currentRule.sync_instance_url ]]
+                                            </a>
+                                        </small>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <i class="fas fa-user-edit text-secondary w-20px"></i>
+                                        <small class="text-muted">Author:</small>
+                                        <small v-if="currentRule.author && currentRule.author !== 'Unknown'">[[ currentRule.author ]]</small>
+                                        <small v-else class="text-muted">Unknown</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <!-- Taxonomies-->
+                        <div class="mt-2">
+                            <vulnerability-display :vulnerabilities="displayVulnerabilities"
+                                :loading="loadingDisplayVulnerabilities" section-title="Security Identifiers"
+                                css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
+                            </vulnerability-display>
+                        </div>
+                        <div class="mt-2">
+                            <!-- Tags Component -->
+                            <tag-display :tags="displayTags" :loading="loadingDisplayTags"
+                                section-title="Workspace Tags"
+                                css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
+                            </tag-display>
+                        </div>
+                        <!-- ATT&CK Techniques -->
+                        <div class="mt-2 mb-4">
+                            <attack-display :rule-id="{{ rule.id }}"></attack-display>
+                        </div>
+
+                        <!-- Rule Content Card -->
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                                        <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                                            <i class="fa-solid fa-code me-1"></i>Rule Content
+                                        </span>
+                                    </div>
+                                    <!-- badge to see the version [[currentRule.version]]-->
+                                    <span class="badge bg-light text-primary rounded-pill border px-3"
+                                        title="Version of the rule">
+                                        <template v-if="currentRule.version == 'Unknown'">
+                                            v 1.0
+                                        </template>
+                                        <template v-else>
+                                            v [[ currentRule.version ]]
+                                        </template>
+
+                                    </span>
+                                </div>
+
+
+                            </div>
+
+                            <div class="border rounded-3 overflow-hidden shadow-sm">
+
+
+                                <ul class="nav nav-tabs nav-fill border-bottom" id="ruleTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active small fw-bold py-2 border-0" id="normal-tab"
+                                            data-bs-toggle="tab" data-bs-target="#normal" type="button" role="tab">
+                                            <i class="fas fa-file-code"></i> Normal
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link small fw-bold py-2 border-0" id="json-tab"
+                                            data-bs-toggle="tab" data-bs-target="#json" type="button" role="tab">
+                                            <i class="fas fa-code"></i> JSON
+                                        </button>
+                                    </li>
+                                    {% if rule_misp_object %}
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link small fw-bold py-2 border-0" id="misp_object-tab"
+                                            data-bs-toggle="tab" data-bs-target="#misp_object" type="button" role="tab">
+                                            <i class="fas fa-project-diagram"></i> MISP Object
+                                        </button>
+                                    </li>
+                                    {% endif %}
+                                    {% if rule_misp_event %}
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link small fw-bold py-2 border-0" id="misp_event-tab"
+                                            data-bs-toggle="tab" data-bs-target="#misp_event" type="button" role="tab">
+                                            <i class="fas fa-project-diagram"></i> MISP Event
+                                        </button>
+                                    </li>
+                                    {% endif %}
+                                    <template v-if="rule_stix">
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link small fw-bold py-2 border-0" id="stix-tab"
+                                                data-bs-toggle="tab" data-bs-target="#stix" type="button" role="tab">
+                                                <i class="fas fa-shield-halved"></i> STIX Object
+                                            </button>
+                                        </li>
+                                    </template>
+
+
+                                </ul>
+
+                                <div class="tab-content" id="ruleTabsContent">
+                                    <div class="tab-pane fade show active" id="normal" role="tabpanel">
+                                        <code-viewer
+                                            :code="currentRule.to_string || ''"
+                                            :language="currentRule.format || 'auto'"
+                                            max-height="600px">
+                                        </code-viewer>
+                                    </div>
+                                    <div class="tab-pane fade" id="json" role="tabpanel">
+                                        <code-viewer
+                                            :code="ruleJsonData"
+                                            language="json"
+                                            title="rule.json"
+                                            max-height="600px">
+                                        </code-viewer>
+                                    </div>
+                                    {% if rule_misp_object %}
+                                    <div class="tab-pane fade" id="misp_object" role="tabpanel">
+                                        <code-viewer
+                                            :code="mispObjectData"
+                                            language="json"
+                                            title="misp-object.json"
+                                            max-height="600px">
+                                        </code-viewer>
+                                    </div>
+                                    {% endif %}
+                                    {% if rule_misp_event %}
+                                    <div class="tab-pane fade" id="misp_event" role="tabpanel">
+                                        <code-viewer
+                                            :code="mispEventData"
+                                            language="json"
+                                            title="misp-event.json"
+                                            max-height="600px">
+                                        </code-viewer>
+                                    </div>
+                                    {% endif %}
+                                    <div class="tab-pane fade" id="stix" role="tabpanel">
+                                        <code-viewer
+                                            :code="rule_stix || ''"
+                                            language="json"
+                                            title="stix.json"
+                                            max-height="600px">
+                                        </code-viewer>
+                                    </div>
+                                </div>
+                            </div>
+
+                            
+                        </div>
+
+                        <!-- Actions bar -->
+                        <div class="mt-4 mb-3 rounded-3 border" style="background: var(--light-bg-color);">
+                            <div class="px-3 pt-3 pb-2 d-flex align-items-center gap-2" style="border-bottom:1px solid var(--border-color);">
+                                <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                                <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                                    <i class="fa-solid fa-bolt me-1"></i>Actions
+                                </span>
+                            </div>
+                            <div class="p-3 d-flex flex-wrap align-items-center gap-2">
+
+                                <!-- Votes -->
+                                <div class="btn-group rounded-pill overflow-hidden" style="border:1px solid var(--border-color);">
+                                    <button @click="vote('up', currentRule.id); animateClick($event)"
+                                            class="btn btn-sm px-3 border-0 border-end shadow-none btn-animate"
+                                            style="background:transparent; color:var(--text-color);"
+                                            title="Vote up">
+                                        <i class="fas fa-thumbs-up text-primary me-1"></i>[[ currentRule.vote_up ]]
+                                    </button>
+                                    <button @click="vote('down', currentRule.id); animateClick($event)"
+                                            class="btn btn-sm px-3 border-0 shadow-none btn-animate"
+                                            style="background:transparent; color:var(--text-color);"
+                                            title="Vote down">
+                                        <i class="fas fa-thumbs-down text-danger me-1"></i>[[ currentRule.vote_down ]]
+                                    </button>
+                                </div>
+
+                                <!-- Favorite -->
+                                <button @click="favorite(currentRule.id)"
+                                        class="btn btn-sm rounded-pill px-3"
+                                        :style="currentRule.is_favorited
+                                            ? 'background:transparent; border:1px solid var(--border-color); color:var(--text-color);'
+                                            : 'background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);'"
+                                        :title="currentRule.is_favorited ? 'Remove from favorites' : 'Add to favorites'">
+                                    <i class="me-1" :class="currentRule.is_favorited ? 'fas fa-star text-warning' : 'far fa-star'"></i>
+                                    [[ currentRule.is_favorited ? 'Favorited' : 'Favorite' ]]
+                                </button>
+
+                                <!-- Download -->
+                                <div class="dropdown">
+                                    <button class="btn btn-sm rounded-pill px-3 dropdown-toggle"
+                                            style="background:transparent; border:1px solid var(--border-color); color:var(--text-color);"
+                                            data-bs-toggle="dropdown"
+                                            title="Download this rule in various formats">
+                                        <i class="fas fa-download me-1"></i>Download
+                                    </button>
+                                    <ul class="dropdown-menu shadow border-0" style="border-radius:12px; background:var(--card-bg-color);">
+                                        <li><button class="dropdown-item small" @click="download_rule('txt')" style="color:var(--text-color);"><i class="fas fa-file-alt me-2 opacity-50"></i>Rule file</button></li>
+                                        {% if rule_misp_object %}
+                                        <li><button class="dropdown-item small" @click="download_rule('misp')" style="color:var(--text-color);"><i class="fas fa-project-diagram me-2 opacity-50"></i>MISP Object</button></li>
+                                        {% endif %}
+                                        {% if rule_misp_event %}
+                                        <li><button class="dropdown-item small" @click="download_rule('misp_event')" style="color:var(--text-color);"><i class="fas fa-project-diagram me-2 opacity-50"></i>MISP Event</button></li>
+                                        {% endif %}
+                                        <li><button class="dropdown-item small" @click="download_rule('json')" style="color:var(--text-color);"><i class="fas fa-code me-2 opacity-50"></i>JSON</button></li>
+                                        <template v-if="rule_stix">
+                                            <li><button class="dropdown-item small" @click="download_rule('stix')" style="color:var(--text-color);"><i class="fas fa-street-view me-2 opacity-50"></i>STIX</button></li>
+                                        </template>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><button class="dropdown-item small" @click="download_rule('all')" style="color:var(--text-color);"><i class="fas fa-download me-2 opacity-50"></i>Download all</button></li>
+                                    </ul>
+                                </div>
+
+                                <!-- GitHub source -->
+                                <a v-if="currentRule.github_path"
+                                   :href="currentRule.source.replace(/\.git$/, '') + '/blob/HEAD/' + currentRule.github_path"
+                                   target="_blank" rel="noopener noreferrer"
+                                   class="btn btn-sm rounded-pill px-3"
+                                   style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                   title="View source file on GitHub">
+                                    <i class="fab fa-github me-1"></i>GitHub
+                                </a>
+
+                                <!-- Report -->
+                                {% if current_user.is_authenticated %}
+                                <report-modal
+                                    object-type="rule"
+                                    :object-id="currentRule.id"
+                                    :object-label="currentRule.title"
+                                    csrf-token="{{ csrf_token() }}">
+                                    <template #trigger="{ open }">
+                                        <button @click="open"
+                                            class="btn btn-sm rounded-pill px-3"
+                                            style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                            title="Report an issue with this rule">
+                                            <i class="fas fa-flag me-1"></i>Report
+                                        </button>
+                                    </template>
+                                </report-modal>
+                                {% endif %}
+
+                                {% if current_user.is_authenticated and rule.user_id != current_user.id %}
+                                <button class="btn btn-sm rounded-pill px-3"
+                                        style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                        data-bs-toggle="modal" :data-bs-target="'#ownershipModal' + currentRule.id"
+                                        title="Request to become the owner of this rule">
+                                    <i class="fas fa-user-shield me-1"></i>Ownership
+                                </button>
+                                {% endif %}
+
+                                {% if current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}
+                                <button @click="toggleLock"
+                                        class="btn btn-sm rounded-pill px-3"
+                                        :style="is_lock
+                                            ? 'background:transparent; border:1px solid #0d6efd55; color:var(--text-color);'
+                                            : 'background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);'"
+                                        :title="is_lock ? 'Unlock — allow auto-updates from source' : 'Lock — prevent auto-updates from source'">
+                                    <i class="fas me-1" :class="is_lock ? 'fa-lock text-primary' : 'fa-lock-open'"></i>
+                                    [[ is_lock ? 'Locked' : 'Unlocked' ]]
+                                </button>
+                                {% endif %}
+
+                                <div class="ms-auto d-flex gap-2">
+                                    {% if current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}
+                                    <a :href="`/rule/edit_rule/${currentRule.id}`"
+                                       class="btn btn-sm rounded-pill px-3"
+                                       style="background:transparent; border:1px solid #0d6efd55; color:#0d6efd;"
+                                       title="Edit this rule">
+                                        <i class="fas fa-pen me-1"></i>Edit
+                                    </a>
+                                    <button class="btn btn-sm rounded-pill px-3"
+                                            style="background:transparent; border:1px solid #dc354555; color:#dc3545;"
+                                            data-bs-toggle="modal" :data-bs-target="'#delete_rule_modal_'+currentRule.id"
+                                            title="Delete this rule">
+                                        <i class="fa-solid fa-trash me-1"></i>Delete
+                                    </button>
+                                    {% endif %}
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <!-- Contributors -->
+                        <div class="mb-3 mt-3">
+                            <template v-if="contributor_list.length > 0">
+                                <div class="rounded-3 border overflow-hidden position-relative" style="background:var(--light-bg-color);">
+                                    <div class="contributor-watermark"><i class="fa-solid fa-users-gear"></i></div>
+                                    <div class="p-4 position-relative" style="z-index:1;">
+                                        <div class="d-flex justify-content-between align-items-center mb-4">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                                                <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                                                    <i class="fa-solid fa-users-gear me-1"></i>Contributors
+                                                </span>
+                                            </div>
+                                            <a :href="'/rule/detail_rule/' + currentRule.id + '/propose_edit'"
+                                               class="btn btn-sm rounded-pill px-3"
+                                               style="background:transparent; border:1px solid #0d6efd55; color:#0d6efd; font-size:.8rem;"
+                                               title="Submit an edit proposal to become a contributor">
+                                                <i class="fas fa-plus me-1"></i>Become a contributor
+                                            </a>
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-4 justify-content-start">
+                                            <div v-for="contributor in contributor_list" :key="contributor.id" class="d-flex flex-column align-items-center">
+                                                <user-chip
+                                                    :user-id="contributor.user_id"
+                                                    :username="contributor.user_name"
+                                                    :avatar="contributor.user_avatar"
+                                                    size="md"
+                                                    :show-name="true"
+                                                ></user-chip>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        <!-- Related bundles -->
+                        <div class="mt-3 rounded-4 overflow-hidden border position-relative mb-4" style="background:var(--light-bg-color);">
+                            <template v-if="bundleListRule.length > 0">
+                                <div class="contributor-watermark">
+                                    <i class="fa-solid fa-boxes-stacked"></i>
+                                </div>
+                                <div class="p-4 position-relative" style="z-index: 1;">
+                                    <div class="d-flex justify-content-between align-items-center mb-4">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                                            <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                                                <i class="fa-solid fa-layer-group me-1"></i>Related Bundles
+                                            </span>
+                                        </div>
+                                        <span class="badge rounded-pill px-3" style="background:var(--light-bg-color); color:var(--subtle-text-color); border:1px solid var(--border-color); font-size:.75rem;">
+                                            [[ bundleListRule.length ]] Total
+                                        </span>
+                                    </div>
+
+                                    <template v-if="bundleListRule.length === 0">
+                                        <div class="card border-dashed text-center py-4 rounded-3">
+                                            <i class="fa-solid fa-folder-open text-muted mb-2 d-block fa-2x"></i>
+                                            <p class="text-muted small mb-0">No bundles found for this rule.</p>
+                                        </div>
+                                    </template>
+
+                                    <div v-else class="row g-3">
+                                        <div class="col-md-6" v-for="bundle in bundleListRule" :key="bundle.id">
+                                            <a :href="`/bundle/detail/${bundle.id}`"
+                                                class="text-decoration-none h-100 d-block">
+                                                <div
+                                                    class="card h-100 border shadow-none hover-shadow transition-all rounded-3 overflow-hidden">
+                                                    <div class="card-body p-3">
+                                                        <div class="d-flex align-items-start gap-3">
+                                                            <div class="avatar-circle-sm bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center rounded-circle shadow-sm"
+                                                                style="min-width: 42px; height: 42px;">
+                                                                <i class="fas fa-layer-group"></i>
+                                                            </div>
+
+                                                            <div class="flex-grow-1 min-w-0">
+                                                                <div
+                                                                    class="d-flex justify-content-between align-items-start gap-2">
+                                                                    <h6 class="fw-bold mb-1"
+                                                                        style="word-break: break-word; color:var(--text-color);">
+                                                                        [[ bundle.name ]]
+                                                                    </h6>
+                                                                    <span
+                                                                        class="badge bg-dark rounded-pill flex-shrink-0"
+                                                                        style="font-size: 0.65rem;">
+                                                                        [[ bundle.number_of_rules ]] Rules
+                                                                    </span>
+                                                                </div>
+
+                                                                <p class="text-muted small mb-2" style="font-size: 0.8rem; 
+                                                                    line-height: 1.4; 
+                                                                    display: -webkit-box; 
+                                                                    -webkit-line-clamp: 3; 
+                                                                    -webkit-box-orient: vertical; 
+                                                                    overflow: hidden; 
+                                                                    word-break: break-word;">
+                                                                    [[ bundle.description ]]
+                                                                </p>
+
+                                                                <div
+                                                                    class="d-flex align-items-center justify-content-between mt-2">
+                                                                    <div class="d-flex align-items-center gap-2">
+                                                                        <div class="avatar-circle-xs d-flex align-items-center justify-content-center bg-light border rounded-circle"
+                                                                            style="width: 20px; height: 20px; font-size: 0.6rem;">
+                                                                            [[ (bundle.author || 'A')[0].toUpperCase()
+                                                                            ]]
+                                                                        </div>
+                                                                        <small class="text-muted"
+                                                                            style="font-size: 0.7rem;">[[ bundle.author
+                                                                            ]]</small>
+                                                                    </div>
+                                                                    <div
+                                                                        class="d-flex gap-1 flex-wrap justify-content-end">
+                                                                        <span
+                                                                            v-for="format in bundle.list_of_format_of_rules"
+                                                                            :key="format"
+                                                                            class="badge bg-outline-secondary border text-uppercase"
+                                                                            style="font-size: 0.6rem; color: #6c757d; padding: 2px 5px;">
+                                                                            [[ format ]]
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Visualization -->
+                        <div class="mt-3 rounded-4 overflow-hidden border position-relative mb-2" style="background:var(--light-bg-color);">
+                            <div class="contributor-watermark"><i class="fa-solid fa-diagram-project"></i></div>
+                            <div class="p-4 position-relative" style="z-index:1;">
+                                <div class="d-flex align-items-center gap-2 mb-3">
+                                    <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
+                                    <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                                        <i class="fa-solid fa-diagram-project me-1"></i>Visualization
+                                    </span>
+                                </div>
+
+                                <div class="border rounded-3 overflow-hidden shadow-sm">
+                                    <!-- <ul class="nav nav-tabs nav-fill border-bottom" id="vizTabs" role="tablist">
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link {% if rule_misp_event %}active{% endif %} small fw-bold py-2 border-0" id="viz-graph-tab"
+                                                data-bs-toggle="tab" data-bs-target="#viz-graph" type="button" role="tab">
+                                                <i class="fas fa-share-nodes me-1"></i>Graph
+                                            </button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link {% if not rule_misp_event %}active{% endif %} small fw-bold py-2 border-0"
+                                                data-bs-toggle="tab" data-bs-target="#viz-json" type="button" role="tab">
+                                                <i class="fas fa-code me-1"></i>JSON
+                                            </button>
+                                        </li>
+                                    </ul> -->
+                                    <ul class="nav nav-tabs nav-fill border-bottom" id="ruleTabs" role="tablist">
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link active small fw-bold py-2 border-0" id="normal-tab"
+                                                data-bs-toggle="tab" data-bs-target="#viz-graph" type="button" role="tab">
+                                                <i class="fas fa-file-code"></i> Graph
+                                            </button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link small fw-bold py-2 border-0" id="json-tab"
+                                                data-bs-toggle="tab" data-bs-target="#viz-json" type="button" role="tab">
+                                                <i class="fas fa-code"></i> JSON
+                                            </button>
+                                        </li>
+                                    </ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                    <div class="tab-content">
+                                        <div class="tab-pane fade {% if rule_misp_event %}show active{% endif %}" id="viz-graph" role="tabpanel">
+                                            {% if rule_misp_event %}
+                                            <div v-if="vizGraphLoading" class="text-center py-5">
+                                                <div class="spinner-border text-primary" role="status"></div>
+                                                <div class="text-muted mt-2 small">Loading graph…</div>
+                                            </div>
+                                            <!-- Plain div — Pivotick initialized directly by bundleMispGraph.js -->
+                                            <div id="rule-viz-graph-container" style="height:520px;width:100%;"></div>
+                                            {% else %}
+                                            <div class="text-center py-5" style="color:var(--subtle-text-color);">
+                                                <i class="fas fa-circle-info fa-2x mb-3 d-block opacity-50"></i>
+                                                <span class="small">No MISP event available for this rule.</span>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="tab-pane fade {% if not rule_misp_event %}show active{% endif %}" id="viz-json" role="tabpanel">
+                                            <code-viewer
+                                                :code="ruleJsonData"
+                                                language="json"
+                                                title="rule.json"
+                                                max-height="520px">
+                                            </code-viewer>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                <div class="modal fade" :id="'delete_rule_modal_'+currentRule.id" tabindex="-1" aria-hidden="true"
+                    style="z-index: 2000;">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
+                            <div class="modal-header border-0 pb-0">
+                                <h5 class="modal-title fw-bold text-dark">Confirm Deletion</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body py-4 text-center">
+                                <div class="text-danger mb-3"><i class="fas fa-exclamation-triangle fa-3x"></i></div>
+                                <p class="mb-0 text-dark">Are you sure you want to delete <br><strong
+                                        class="text-primary">[[ currentRule.title ]]</strong> ?</p>
+                            </div>
+                            <div class="modal-footer border-0 pt-0 justify-content-center pb-4">
+                                <button type="button" class="btn btn-light rounded-pill px-4"
+                                    data-bs-dismiss="modal">Cancel</button>
+                                <button class="btn btn-danger rounded-pill px-4 shadow"
+                                    @click="deleteRule(currentRule.id)">
+                                    Confirm Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Modal -->
+                <div class="modal fade" :id="'ownershipModal' + currentRule.id" tabindex="-1" aria-hidden="true"
+                    style="z-index: 2000;">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
+                            <div class="modal-header border-0 pb-0">
+                                <h5 class="modal-title fw-bold text-dark w-100 text-center">Request
+                                    Ownership</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                    aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body py-4">
+                                <div class="text-center mb-4">
+                                    <div class="icon-box-md bg-warning-subtle rounded-circle d-inline-flex p-3 mb-2">
+                                        <i class="fas fa-user-shield fa-2x text-warning"></i>
+                                    </div>
+                                    <p class="text-muted">Choose the scope of your ownership request
+                                        :</p>
+                                </div>
+
+                                <div class="card bg-light border-0 mb-3">
+                                    <div class="card-body">
+                                        <ul class="mb-0 small text-dark">
+                                            <li class="mb-2"><strong>This specific rule :</strong>
+                                                Target only this entry.</li>
+                                            <li><strong>All rules from source :</strong>
+                                                <code>[[ currentRule.source ]]</code>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer border-0 pt-0 flex-column gap-2 pb-4">
+                                <button class="btn btn-warning rounded-pill w-100 fw-bold py-2"
+                                    @click="Ownership(currentRule.id, 1)" data-bs-dismiss="modal">
+                                    Only this rule
+                                </button>
+                                <button class="btn btn-primary rounded-pill w-100 fw-bold py-2"
+                                    @click="Ownership(currentRule.id, 2)" data-bs-dismiss="modal">
+                                    All rules from this source
+                                </button>
+                                <button type="button" class="btn btn-link text-muted small text-decoration-none"
+                                    data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Comment section -->
+                <div class="mt-5">
+                    <h4 class="fw-bold mb-4 border-start border-primary border-4 ps-3">Community Discussion</h4>
+                    <comment-thread
+                        object-type="rule"
+                        :object-id="{{ rule.id }}"
+                        :can-create="{{ current_user.is_authenticated | tojson }}"
+                        :can-edit-own="{{ current_user.is_authenticated | tojson }}"
+                        :can-delete-own="{{ current_user.is_authenticated | tojson }}"
+                        :can-moderate="{{ current_user.is_admin() | tojson }}"
+                        :current-user-id="{{ current_user.id if current_user.is_authenticated else 0 }}"
+                        csrf-token="{{ csrf_token() }}">
+                    </comment-thread>
+                </div>
+            </template>
+
+            <template v-else>
+                <div class="col-12 text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </template>
+
+
+
+            <div id="rule_id" data-rule-id="{{ rule.id }}"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+
+<script type="module">
+    const { createApp, ref, onMounted, nextTick, watch } = Vue;
+    import { message_list, create_message } from '/static/js/toaster.js';
+    const rule_id = document.getElementById('rule_id').dataset.ruleId;
+
+    import VulnerabilityDisplay from '/static/js/vulnerability/vulnerabilityDisplay.js';
+    import TagDisplay from '/static/js/tags/tagDisplay.js';
+    import UserChip from '/static/js/components/UserChip.js';
+    import CodeViewer from '/static/js/components/code-viewer.js';
+    import CommentThread from '/static/js/components/comments/comment-thread.js';
+    import { initBundleGraph } from '/static/js/bundle/bundleMispGraph.js';
+    import ReportModal from '/static/js/components/ReportModal.js';
+    import AttackDisplay from '/static/js/components/AttackDisplay.js';
+
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: {
+            'vulnerability-display': VulnerabilityDisplay,
+            'tag-display': TagDisplay,
+            'user-chip': UserChip,
+            'code-viewer': CodeViewer,
+            'comment-thread': CommentThread,
+            'report-modal': ReportModal,
+            'attack-display': AttackDisplay,
+        },
+        setup() {
+            /**
+             * 
+             * ############################################
+             * #    Call all the function to fetch data   #
+             * ############################################
+             * 
+             * */
+
+            const csrf_token = '{{ csrf_token() }}';
+
+            // ── Server-side data passed via window.__ vars ──────────────
+
+            const ruleJsonData   = ref(window.__rule_json   || '');  // already a JSON string from json.dumps
+            const mispObjectData = ref(window.__misp_object ? JSON.stringify(window.__misp_object, null, 4) : '');
+            const mispEventData  = ref(window.__misp_event  ? JSON.stringify(window.__misp_event,  null, 4) : '');
+
+            // ── Rule visualization graph (MISP event via bundleMispGraph) ──
+            const vizGraphLoading = ref(false);
+            let _vizGraphInited = false;
+
+            function _maybeInitVizGraph() {
+                if (_vizGraphInited || !window.__misp_event) return;
+                const container = document.getElementById('rule-viz-graph-container');
+                if (!container) return;
+                _vizGraphInited = true;
+                initBundleGraph('rule-viz-graph-container', JSON.stringify(window.__misp_event), { sizeScale: 0.55 });
+            }
+
+            const detail_page_1_is_loading = ref(false);
+            async function init() {
+                detail_page_1_is_loading.value = false
+                await Promise.all([
+                    checkIfUserIsConnected(),
+                    getCurrentRuleHistoryCount(),
+                    fetchCurrentRule(),
+                    fetchBundleList(),
+                    fetchContributor(),
+
+                    fetchBundleVulnerabilities(),
+                    fetchRuleTags(),
+                    // attack: no fetch needed — AttackDisplay fetches independently via ruleId prop
+
+                ])
+
+                detail_page_1_is_loading.value = true
+
+                await nextTick();
+
+
+            }
+            get_stix_format(rule_id)
+            const rule_stix = ref(null)
+
+            async function get_stix_format(rule_id) {
+                try {
+                    const res = await fetch('/rule/get_stix/' + rule_id);
+                    const data = await res.json();
+
+                    if (data.stix) {
+                        const stixContent = JSON.parse(data.stix);
+                        rule_stix.value = JSON.stringify(stixContent, null, 4);
+                    } else {
+                        rule_stix.value = null;
+                    }
+                } catch (e) {
+                    create_message("Error loading STIX format", "danger");
+                }
+            }
+
+
+            const displayTags = ref([]);
+            const loadingDisplayTags = ref(true);
+
+            const fetchRuleTags = async () => {
+                loadingDisplayTags.value = true;
+                try {
+                    const res = await fetch('/rule/get_tags/' + rule_id);
+                    const data = await res.json();
+                    displayTags.value = data.tags || [];
+                } catch (e) {
+                    create_message("Error loading tags", "danger");
+                } finally {
+                    loadingDisplayTags.value = false;
+                }
+            };
+
+            /**
+             * 
+             * ###########################
+             * #       Vulnerabilities   #
+             * ###########################
+             * 
+             * */
+
+            const displayVulnerabilities = ref([]);
+            const loadingDisplayVulnerabilities = ref(true);
+
+            const fetchBundleVulnerabilities = async () => {
+                loadingDisplayVulnerabilities.value = true;
+                try {
+                    const res = await fetch('/rule/get_rule_vulnerabilities_display/' + rule_id);
+                    const data = await res.json();
+                    displayVulnerabilities.value = data.vulnerabilities || [];
+                } catch (e) {
+                    create_message("Error loading vulnerabilities", "danger");
+                } finally {
+                    loadingDisplayVulnerabilities.value = false;
+                }
+            };
+
+
+            /**
+             * 
+             * ############################################
+             * #       all the function to fetch data     #
+             * ############################################
+             * 
+             * */
+
+            const current_user_is_admin = ref()
+            const current_user_is_connected = ref(false)
+            const currentRuleHistoryCount = ref(0)
+
+
+            async function fetchCurrentUser() {
+                const res = await fetch('/rule/get_current_user')
+                const data = await res.json()
+                current_user_is_admin.value = data.user
+            }
+
+            async function checkIfUserIsConnected() {
+                const res = await fetch('/get_current_user_connected');
+                const data = await res.json();
+                current_user_is_connected.value = data.is_authenticated;
+                if (data.is_authenticated == true) {
+                    fetchCurrentUser()
+                }
+            }
+
+            const bundleListRule = ref([])
+            async function fetchBundleList() {
+                const response = await fetch('/bundle/get_bundle_list_rule_part_of?rule_id=' + rule_id)
+                if (response.ok) {
+                    const data = await response.json();
+                    bundleListRule.value = data.bundles || [];
+                }
+            }
+
+            const currentRule = ref([])
+
+
+            async function fetchCurrentRule() {
+                const response = await fetch('/rule/get_current_rule?rule_id=' + rule_id)
+                if (response.ok) {
+                    const data = await response.json();
+                    currentRule.value = data.rule;
+                }
+            }
+
+            async function getCurrentRuleHistoryCount() {
+                const params = new URLSearchParams({
+                    rule_id
+                })
+                const res = await fetch(`/rule/get_rule_history_count?` + params.toString());
+                if (res.ok) {
+                    const data = await res.json();
+                    currentRuleHistoryCount.value = data.count;
+                }
+            }
+
+            const contributor_list = ref([])
+
+            async function fetchContributor() {
+                const res = await fetch('/rule/get_contributor?rule_id=' + rule_id);
+                if (res) {
+                    const data = await res.json();
+                    if (data) {
+                        contributor_list.value = data.contributors;
+                    }
+
+                }
+            }
+
+
+
+
+
+
+
+
+
+            /**
+             *          ####################
+             *          #   Action rule    #
+             *          ####################
+             * */
+
+
+            async function download_rule(format) {
+                const params = new URLSearchParams({
+                    rule_id: rule_id,
+                    format: format
+                });
+                const res = await fetch('/rule/download_rule?' + params.toString());
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    let blob;
+                    if (data.encoding === 'base64') {
+                        const binary = atob(data.content);
+                        const bytes = new Uint8Array(binary.length);
+                        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                        blob = new Blob([bytes], { type: 'application/zip' });
+                    } else {
+                        blob = new Blob([data.content], { type: 'application/octet-stream' });
+                    }
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = data.filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                }
+                create_message(data.message, data.toast_class);
+            }
+            async function deleteRule() {
+                const params = new URLSearchParams({
+                    id: rule_id
+                })
+                const res = await fetch('/rule/delete_rule?' + params.toString())
+                if (await res.status == 200) {
+                    var myModalEl = document.getElementById('delete_rule_modal_' + rule_id);
+                    var modal = bootstrap.Modal.getInstance(myModalEl)
+                    modal.hide();
+                    window.location.href = `/rule/rules_list`;
+                }
+
+
+            }
+
+            async function vote(voteType) {
+                if (current_user_is_connected.value == true) {
+                    const res = await fetch(`/rule/vote_rule?id=${rule_id}&vote_type=${voteType}`);
+                    const data = await res.json()
+
+                    currentRule.value.vote_up = data.vote_up
+                    currentRule.value.vote_down = data.vote_down
+                } else {
+                    window.location.href = `/account/login`;
+                }
+            }
+
+            async function Ownership(rule_id, choice) {
+                if (choice == 1) {
+                    var source = ""
+                } else {
+                    var source = "{{ rule.source }}"
+                }
+
+                const params = new URLSearchParams({
+                    rule_id,
+                    source,
+                    choice
+                })
+                const response = await fetch('/owner_request?' + params.toString())
+                const data = await response.json();
+                if (await response.status == 200) {
+                    var myModalEle = document.getElementById('ownershipModal' + "{{ rule.id }}");
+                    var modal = bootstrap.Modal.getInstance(myModalEle)
+                    modal.hide();
+                }
+
+                create_message(data.message, data.toast_class);
+            }
+
+
+            async function favorite() {
+                const res = await fetch(`/rule/favorite/${rule_id}`);
+                const data = await res.json();
+
+                if (res.ok) {
+                    currentRule.value.is_favorited = data.is_favorited;
+                }
+
+                const message = {
+                    message: data.message,
+                    toast_class: data.toast_class,
+                    id: Math.random()
+                };
+                create_message(data.message, data.toast_class, false, null, "/rule/owner_rules");
+            }
+
+            // ── Update lock ──────────────────────────────────────────────────
+            const is_lock = ref(false);
+            async function fetchLockState() {
+                const res  = await fetch('/rule/is_lock_for_update?rule_id=' + rule_id);
+                const data = await res.json();
+                is_lock.value = data.is_locked;
+            }
+            fetchLockState();
+
+            async function toggleLock() {
+                const res  = await fetch(`/rule/update_lock/${rule_id}?manuel_submit=${!is_lock.value}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    is_lock.value = data.is_locked;
+                    create_message(data.message, data.toast_class);
+                }
+            }
+
+            onMounted(async () => {
+                init()
+                await fetchCurrentRule();
+                await nextTick();
+
+                // Init viz graph if MISP event available — lazy: only when tab becomes visible
+                if (window.__misp_event) {
+                    nextTick(_maybeInitVizGraph);
+                    const vizTabEl = document.getElementById('viz-graph-tab');
+                    if (vizTabEl) vizTabEl.addEventListener('shown.bs.tab', _maybeInitVizGraph);
+                }
+            });
+
+
+
+
+
+
+            function animateClick(event) {
+                const btn = event.currentTarget;
+                btn.classList.add('click-pop');
+
+                setTimeout(() => {
+                    btn.classList.remove('click-pop');
+                }, 300);
+            }
+
+
+            function getRandomColor(name) {
+                if (!name) return '#6c757d';
+
+
+                let hash = 0;
+                for (let i = 0; i < name.length; i++) {
+                    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+                }
+
+
+                const h = Math.abs(hash % 360);
+                return `hsl(${h}, 60%, 50%)`;
+            }
+
+
+            function goToRuleDetail(ruleId) {
+                window.location.href = `/rule/detail_rule/${ruleId}`;
+            }
+
+            function autoResize(event) {
+                const element = event.target;
+                element.style.height = "auto";
+                element.style.height = element.scrollHeight + "px";
+            }
+
+            function getRandomColor(seed) {
+                const colors = ['0d6efd', '6610f2', '6f42c1', 'd63384', 'dc3545', 'fd7e14', 'ffc107', '198754', '20c997', '0dcaf0'];
+                let hash = 0;
+                for (let i = 0; i < seed.length; i++) {
+                    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                return colors[Math.abs(hash) % colors.length];
+            }
+            function copyContent(tabId) {
+                const pane = document.getElementById(tabId);
+                const text = pane?.querySelector('pre')?.innerText || '';
+                if (!text) return;
+                navigator.clipboard.writeText(text).then(() => {
+                    const btn = pane.querySelector('button span');
+                    const icon = pane.querySelector('button i');
+                    btn.textContent = 'Copied';
+                    icon.classList.replace('fa-copy', 'fa-check');
+                    setTimeout(() => {
+                        btn.textContent = 'Copy';
+                        icon.classList.replace('fa-check', 'fa-copy');
+                    }, 2000);
+                });
+            }
+
+            return {
+                getRandomColor,
+                bundleListRule,
+                Ownership,
+                favorite,
+                current_user_is_admin,
+                message_list,
+                fetchCurrentUser,
+                deleteRule,
+                currentRuleHistoryCount,
+                currentRule,
+                fetchCurrentRule,
+                vote,
+                contributor_list,
+                download_rule,
+                csrf_token,
+                dayjs,
+                init,
+                detail_page_1_is_loading,
+                animateClick,
+                goToRuleDetail,
+                autoResize,
+                displayVulnerabilities,
+                loadingDisplayVulnerabilities,
+                fetchBundleVulnerabilities,
+                displayTags,
+                loadingDisplayTags,
+                fetchRuleTags,
+                rule_stix,
+                ruleJsonData,
+                mispObjectData,
+                mispEventData,
+                is_lock,
+                toggleLock,
+                vizGraphLoading,
+            };
+        }
+    }).mount('#main-container');
+
+</script>
+{% endblock %}

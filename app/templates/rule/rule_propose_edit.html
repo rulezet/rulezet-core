@@ -2,6 +2,8 @@
 {% block title %}Rule Proposals — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/proposal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -84,7 +86,14 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-0">
-                    <div id="modalDiffContainer"></div>
+                    <diff-viewer
+                        :key="diffKey"
+                        :initial-left="diffOldContent"
+                        :initial-right="diffNewContent"
+                        left-label="Current rule"
+                        right-label="Proposed change"
+                        mode="read">
+                    </diff-viewer>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -98,21 +107,23 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, nextTick } = Vue;
+    const { createApp, ref } = Vue;
     import { message_list } from '/static/js/toaster.js';
-    import { renderDiff } from "/static/js/diff_macro.js";
     import ProposalHistoryTable from '/static/js/rule/proposal/ProposalHistoryTable.js';
+    import DiffViewer from '/static/js/components/diff-viewer.js';
 
     createApp({
         delimiters: ['[[', ']]'],
         components: {
             'proposal-history-table': ProposalHistoryTable,
+            'diff-viewer': DiffViewer,
         },
         setup() {
-            const renderedDiffs = new Set();
             const selectedRuleName = ref('');
-
-            const pendingCount = ref(0);
+            const diffOldContent   = ref('');
+            const diffNewContent   = ref('');
+            const diffKey          = ref(0);
+            const pendingCount     = ref(0);
 
             async function fetchPendingCount() {
                 const res = await fetch('/rule/get_rules_propose_edit_page?page=1');
@@ -123,21 +134,14 @@
             }
             fetchPendingCount();
 
-            async function loadDiffInModal(rule) {
+            function loadDiffInModal(rule) {
                 selectedRuleName.value = rule.rule_name;
-                if (renderedDiffs.has(rule.id)) return;
-                await nextTick(() => {
-                    renderDiff(
-                        rule.old_content.trim(),
-                        rule.proposed_content.trim(),
-                        'modalDiffContainer',
-                        "oneText"
-                    );
-                    renderedDiffs.add(rule.id);
-                });
+                diffOldContent.value   = rule.old_content || '';
+                diffNewContent.value   = rule.proposed_content || '';
+                diffKey.value++;
             }
 
-            return { message_list, selectedRuleName, loadDiffInModal, pendingCount, fetchPendingCount };
+            return { message_list, selectedRuleName, loadDiffInModal, pendingCount, fetchPendingCount, diffOldContent, diffNewContent, diffKey };
         }
     }).mount('#main-container');
 </script>

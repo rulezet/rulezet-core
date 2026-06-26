@@ -47,22 +47,39 @@ class Session_class:
                 for file in files:
                     if file.startswith(('.', '_')):
                         continue
-                    
-                    filepath = os.path.join(root, file)
-                    for rule_instance in rule_instances:
-                        if rule_instance.get_rule_files(file):
-                            format_name = rule_instance.format
-                            if format_name not in self.count_per_format:
-                                self.count_per_format[format_name] = {
-                                    "bad_rule": 0, 
-                                    "skipped": 0, 
-                                    "imported": 0
-                                }
 
-                            job_index += 1
-                            # We pass the filepath into the queue
-                            self.jobs.put((job_index, file, filepath, rule_instance))
-                            break
+                    filepath = os.path.join(root, file)
+
+                    # Collect every format that claims this file by extension
+                    candidates = [ri for ri in rule_instances if ri.get_rule_files(file)]
+                    if not candidates:
+                        continue
+
+                    # When multiple formats share an extension (e.g. ATR + Sigma on .yml),
+                    # use each format's detect() method on the file content to pick the
+                    # right one.  Falls back to the first candidate if none self-identify.
+                    if len(candidates) > 1:
+                        try:
+                            with open(filepath, 'r', encoding='utf-8', errors='replace') as _fh:
+                                _sample = _fh.read(8192)
+                            detected = [ri for ri in candidates
+                                        if hasattr(ri, 'detect') and ri.detect(_sample)]
+                            rule_instance = detected[0] if detected else candidates[0]
+                        except Exception:
+                            rule_instance = candidates[0]
+                    else:
+                        rule_instance = candidates[0]
+
+                    format_name = rule_instance.format
+                    if format_name not in self.count_per_format:
+                        self.count_per_format[format_name] = {
+                            "bad_rule": 0,
+                            "skipped": 0,
+                            "imported": 0
+                        }
+
+                    job_index += 1
+                    self.jobs.put((job_index, file, filepath, rule_instance))
 
         self.total = job_index
         app_obj = current_app._get_current_object()
@@ -174,7 +191,7 @@ class Session_class:
         db.session.commit()
 
         try:
-            from app.features.notification.notification_core import notify_github_import_done
+            from app.features.notification.notification_core import notify_github_import_done, update_admin_session_notifications
             notify_github_import_done(
                 user_id    = self.current_user.id,
                 imported   = self.imported,
@@ -182,7 +199,12 @@ class Session_class:
                 bad_rules  = self.bad_rules,
                 result_uuid = self.uuid,
             )
+            update_admin_session_notifications(
+                session_uuid = self.uuid,
+                summary      = f'{self.imported} imported · {self.skipped} skipped · {self.bad_rules} invalid',
+                link         = f'/rule/import_loading/{self.uuid}',
+            )
         except Exception as e:
-            print(f"[session_class] notify_github_import_done error: {e}")
+            print(f"[session_class] notify error: {e}")
 
         return result_entry

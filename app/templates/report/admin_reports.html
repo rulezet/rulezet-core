@@ -1,0 +1,544 @@
+{% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
+{% block title %}Reports — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+{% endblock %}
+
+{% block content %}
+{% if current_user.is_admin() %}
+<div class="container-fluid my-4" id="reports-app" v-cloak>
+
+  <!-- Banner -->
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-triangle-exclamation banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Reports</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">Reports</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">Manage user reports for rules, bundles and comments.</p>
+  </div>
+
+  {{ anav.admin_nav('reports') }}
+
+  <!-- Stats row -->
+  <div class="d-flex gap-2 flex-wrap mb-3">
+    <span class="badge rounded-pill px-3 py-2" style="font-size:.78rem;background:rgba(13,110,253,.12);color:#0d6efd;border:1px solid rgba(13,110,253,.2);">
+      <i class="fa-solid fa-list me-1"></i>Total: [[ stats.total ]]
+    </span>
+    <span class="badge rounded-pill px-3 py-2" style="font-size:.78rem;background:rgba(255,193,7,.15);color:#856404;border:1px solid rgba(255,193,7,.3);">
+      <i class="fa-solid fa-clock me-1"></i>Pending: [[ stats.pending ]]
+    </span>
+    <span class="badge rounded-pill px-3 py-2" style="font-size:.78rem;background:rgba(13,202,240,.12);color:#0a58ca;border:1px solid rgba(13,202,240,.3);">
+      <i class="fa-solid fa-eye me-1"></i>Checked: [[ stats.checked ]]
+    </span>
+    <span class="badge rounded-pill px-3 py-2" style="font-size:.78rem;background:rgba(25,135,84,.12);color:#146c43;border:1px solid rgba(25,135,84,.25);">
+      <i class="fa-solid fa-check-circle me-1"></i>Resolved: [[ stats.resolved ]]
+    </span>
+    <span class="badge rounded-pill px-3 py-2" style="font-size:.78rem;background:rgba(108,117,125,.1);color:var(--subtle-text-color);border:1px solid rgba(108,117,125,.2);">
+      <i class="fa-solid fa-eye-slash me-1"></i>Dismissed: [[ stats.dismissed ]]
+    </span>
+  </div>
+
+  <!-- Filter toolbar row -->
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <span class="small fw-semibold" style="color:var(--subtle-text-color);">
+      [[ total ]] report[[ total === 1 ? '' : 's' ]]
+    </span>
+    <button class="btn btn-sm btn-outline-secondary" @click="showFilters = !showFilters"
+            style="font-size:.78rem;">
+      <i class="fa-solid fa-filter me-1"></i>
+      [[ showFilters ? 'Hide filters' : 'Show filters' ]]
+      <i class="fa-solid ms-1" :class="showFilters ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+    </button>
+  </div>
+
+  <!-- Filters bar (collapsible) -->
+  <div v-show="showFilters" class="card mb-3 border-0 shadow-sm" style="border-radius:12px;background:var(--card-bg-color);">
+    <div class="card-body py-3 px-4">
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-4">
+          <label class="form-label small fw-semibold mb-1" style="color:var(--subtle-text-color);">Search</label>
+          <div class="dt-search">
+            <i class="fa-solid fa-magnifying-glass dt-search-icon"></i>
+            <input type="text" class="dt-search-input w-100" placeholder="Reason, message, reporter…"
+                   v-model="search" @keyup.enter="doSearch">
+            <button v-if="search" class="dt-search-clear" @click="search=''; doSearch()">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small fw-semibold mb-1" style="color:var(--subtle-text-color);">Type</label>
+          <select class="form-select form-select-sm" v-model="filterType" @change="doSearch"
+                  style="background:var(--card-bg-color);color:var(--text-color);border-color:var(--border-color);">
+            <option value="">All types</option>
+            <option value="rule">Rule</option>
+            <option value="bundle">Bundle</option>
+            <option value="comment">Comment</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small fw-semibold mb-1" style="color:var(--subtle-text-color);">Status</label>
+          <select class="form-select form-select-sm" v-model="filterStatus" @change="doSearch"
+                  style="background:var(--card-bg-color);color:var(--text-color);border-color:var(--border-color);">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="checked">Checked</option>
+            <option value="resolved">Resolved</option>
+            <option value="dismissed">Dismissed</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small fw-semibold mb-1" style="color:var(--subtle-text-color);">Per page</label>
+          <select class="form-select form-select-sm" v-model="perPage" @change="doSearch"
+                  style="background:var(--card-bg-color);color:var(--text-color);border-color:var(--border-color);">
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2 d-flex gap-2">
+          <button class="btn btn-sm btn-primary flex-grow-1" @click="doSearch">
+            <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" @click="resetFilters" title="Reset filters">
+            <i class="fa-solid fa-rotate-left"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk selection bar -->
+  <transition name="rpt-bar-fade">
+    <div v-if="selectedIds.length" class="rpt-sel-bar mb-3">
+      <span class="fw-semibold me-2" style="font-size:.85rem;">[[ selectedIds.length ]] selected</span>
+      <button class="btn btn-sm btn-outline-info me-1" @click="bulkAction('check')" title="Mark selected as checked">
+        <i class="fa-solid fa-eye me-1"></i>Check
+      </button>
+      <button class="btn btn-sm btn-outline-secondary me-1" @click="bulkAction('uncheck')" title="Revert checked → pending">
+        <i class="fa-solid fa-eye-slash me-1"></i>Uncheck
+      </button>
+      <button class="btn btn-sm btn-outline-warning me-1" @click="bulkAction('delete_target')">
+        <i class="fa-solid fa-bullseye me-1"></i><i class="fa-solid fa-trash me-1"></i>Delete targets
+      </button>
+      <button class="btn btn-sm btn-outline-danger me-1" @click="bulkAction('delete')">
+        <i class="fa-solid fa-trash me-1"></i>Delete reports
+      </button>
+      <button class="btn btn-sm btn-link text-muted" @click="selectedIds = []">
+        <i class="fa-solid fa-xmark me-1"></i>Clear
+      </button>
+    </div>
+  </transition>
+
+  <!-- Table card -->
+  <div class="dt-wrapper">
+
+    <!-- Loading overlay -->
+    <div v-if="loading" class="dt-loading-overlay">
+      <div class="dt-spinner"></div>
+    </div>
+
+    <div class="dt-table-wrap">
+
+      <!-- Empty state -->
+      <div v-if="!loading && !items.length" class="text-center py-5" style="color:var(--subtle-text-color);">
+        <i class="fa-solid fa-inbox fa-2x mb-3 d-block opacity-50"></i>
+        <div class="fw-semibold">No reports found</div>
+        <div class="small mt-1">Try adjusting the filters</div>
+      </div>
+
+      <table v-else class="dt-table">
+        <thead class="dt-thead">
+          <tr>
+            <th class="dt-th" style="width:36px;padding-left:.9rem;">
+              <input type="checkbox" class="form-check-input" @change="toggleAll" :checked="allSelected">
+            </th>
+            <th class="dt-th rpt-th-sort" @click="setSort('object_type')" :class="sortClass('object_type')">
+              Type <i class="fa-solid ms-1" :class="sortIcon('object_type')"></i>
+            </th>
+            <th class="dt-th">Reported object</th>
+            <th class="dt-th rpt-th-sort" @click="setSort('reporter_name')" :class="sortClass('reporter_name')">
+              Reporter <i class="fa-solid ms-1" :class="sortIcon('reporter_name')"></i>
+            </th>
+            <th class="dt-th rpt-th-sort" @click="setSort('reason')" :class="sortClass('reason')">
+              Reason <i class="fa-solid ms-1" :class="sortIcon('reason')"></i>
+            </th>
+            <th class="dt-th">Message</th>
+            <th class="dt-th rpt-th-sort" @click="setSort('created_at')" :class="sortClass('created_at')">
+              Date <i class="fa-solid ms-1" :class="sortIcon('created_at')"></i>
+            </th>
+            <th class="dt-th rpt-th-sort" @click="setSort('status')" :class="sortClass('status')">
+              Status <i class="fa-solid ms-1" :class="sortIcon('status')"></i>
+            </th>
+            <th class="dt-th">Checked by</th>
+            <th class="dt-th pe-3 text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in items" :key="r.id" class="rpt-row" :class="r.status === 'pending' ? 'rpt-row--pending' : ''">
+            <!-- Checkbox -->
+            <td class="rpt-td" style="width:36px;padding-left:.9rem;">
+              <input type="checkbox" class="form-check-input" :value="r.id" v-model="selectedIds">
+            </td>
+            <!-- Type -->
+            <td class="rpt-td">
+              <span class="badge rounded-pill"
+                :class="r.object_type === 'rule'   ? 'text-bg-primary' :
+                        r.object_type === 'bundle' ? 'bg-info text-dark' : 'bg-secondary'"
+                style="font-size:.7rem;">
+                <i class="fa-solid me-1"
+                  :class="r.object_type === 'rule'   ? 'fa-shield-halved' :
+                          r.object_type === 'bundle' ? 'fa-layer-group' : 'fa-comment'"></i>
+                [[ r.object_type ]]
+              </span>
+              <span v-if="r.is_legacy"
+                    class="ms-1 badge bg-secondary-subtle text-secondary-emphasis rounded-pill"
+                    style="font-size:.6rem;">legacy</span>
+            </td>
+            <!-- Object -->
+            <td class="rpt-td" style="max-width:210px;">
+              <a v-if="r.object_url && r.object_url !== '#'" :href="r.object_url" target="_blank"
+                 class="text-decoration-none small fw-semibold" style="color:var(--text-color);"
+                 :title="r.object_label">
+                <span style="display:inline-block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;">
+                  [[ r.object_label || ('id=' + r.object_id) ]]
+                </span>
+                <i class="fa-solid fa-arrow-up-right-from-square ms-1 opacity-50" style="font-size:.6rem;"></i>
+              </a>
+              <span v-else class="small" style="color:var(--subtle-text-color);">id=[[ r.object_id ]]</span>
+            </td>
+            <!-- Reporter -->
+            <td class="rpt-td">
+              <user-chip v-if="r.user_id"
+                :user-id="r.user_id"
+                :username="r.reporter_name || ''"
+                :avatar="r.user_avatar || null"
+                size="sm">
+              </user-chip>
+              <span v-else class="small" style="color:var(--subtle-text-color);">—</span>
+            </td>
+            <!-- Reason -->
+            <td class="rpt-td small">[[ r.reason ]]</td>
+            <!-- Message -->
+            <td class="rpt-td" style="max-width:180px;">
+              <span class="small" :title="r.message || ''"
+                    style="color:var(--subtle-text-color);display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;">
+                [[ r.message || '—' ]]
+              </span>
+            </td>
+            <!-- Date -->
+            <td class="rpt-td small text-nowrap" style="color:var(--subtle-text-color);">[[ r.created_at || '—' ]]</td>
+            <!-- Status -->
+            <td class="rpt-td">
+              <span class="badge rounded-pill"
+                :class="r.status === 'pending'  ? 'bg-warning text-dark' :
+                        r.status === 'checked'  ? 'bg-info text-dark' :
+                        r.status === 'resolved' ? 'bg-success' : 'bg-secondary'"
+                style="font-size:.72rem;">[[ r.status ]]</span>
+            </td>
+            <!-- Checked by -->
+            <td class="rpt-td">
+              <template v-if="r.checked_by_id">
+                <user-chip
+                  :user-id="r.checked_by_id"
+                  :username="r.checked_by_name || ''"
+                  :avatar="r.checked_by_avatar || null"
+                  size="sm">
+                </user-chip>
+                <div class="small mt-1" style="color:var(--subtle-text-color);font-size:.68rem;">[[ r.checked_at ]]</div>
+              </template>
+              <span v-else style="color:var(--subtle-text-color);">—</span>
+            </td>
+            <!-- Actions -->
+            <td class="rpt-td pe-3 text-end text-nowrap">
+              <button v-if="r.status === 'pending' && !r.is_legacy"
+                      class="btn btn-outline-success me-1" style="padding:.2rem .45rem;font-size:.75rem;"
+                      @click="singleCheck(r)" title="Mark as checked">
+                <i class="fa-solid fa-eye me-1"></i>Check
+              </button>
+              <button v-if="r.status === 'checked' && !r.is_legacy"
+                      class="btn btn-outline-secondary me-1" style="padding:.2rem .45rem;font-size:.75rem;"
+                      @click="singleUncheck(r)" title="Revert to pending">
+                <i class="fa-solid fa-eye-slash me-1"></i>Uncheck
+              </button>
+              <button class="btn btn-outline-danger me-1" style="padding:.2rem .45rem;font-size:.75rem;"
+                      @click="singleAction(r.id, 'delete')" title="Delete this report record only">
+                <i class="fa-solid fa-trash me-1"></i>Del. report
+              </button>
+              <button class="btn btn-outline-warning" style="padding:.2rem .45rem;font-size:.75rem;"
+                      @click="singleDeleteTarget(r)" :title="'Delete the reported ' + r.object_type + ' and its reports'">
+                <i class="fa-solid fa-bullseye me-1"></i>Del. [[ r.object_type ]]
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+    </div><!-- /dt-table-wrap -->
+
+    <!-- Pagination -->
+    <div v-if="totalPages > 1"
+         class="d-flex align-items-center justify-content-between py-2 px-4 mt-0"
+         style="border:1px solid var(--border-color);border-top:none;border-radius:0 0 12px 12px;background:var(--card-bg-color);">
+      <span class="small" style="color:var(--subtle-text-color);">
+        Page [[ page ]] / [[ totalPages ]] &nbsp;·&nbsp; [[ total ]] reports
+      </span>
+      <div class="d-flex gap-1">
+        <button class="btn btn-sm btn-outline-secondary" style="padding:.2rem .45rem;font-size:.75rem;"
+                :disabled="page === 1" @click="goPage(page - 1)">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <button v-for="p in pagesToShow" :key="p"
+                class="btn btn-sm" style="padding:.2rem .45rem;font-size:.75rem;"
+                :class="p === page ? 'btn-primary' : 'btn-outline-secondary'"
+                @click="goPage(p)">[[ p ]]</button>
+        <button class="btn btn-sm btn-outline-secondary" style="padding:.2rem .45rem;font-size:.75rem;"
+                :disabled="page === totalPages" @click="goPage(page + 1)">
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /dt-wrapper -->
+
+</div><!-- /reports-app -->
+{% else %}
+<div class="container mt-5 text-center">
+  <h3 class="text-danger">Access denied</h3>
+</div>
+{% endif %}
+
+<style>
+[v-cloak] { display: none; }
+.rpt-row {
+    border-bottom: 1px solid var(--border-color);
+    transition: background .1s;
+}
+.rpt-row:hover { background: var(--light-bg-color); }
+.rpt-row--pending { background: rgba(255, 193, 7, .04); }
+.rpt-td {
+    padding: .55rem .75rem;
+    font-size: .86rem;
+    color: var(--text-color);
+    vertical-align: middle;
+}
+.rpt-sel-bar {
+    background: rgba(13, 110, 253, .07);
+    border: 1px solid rgba(13, 110, 253, .2);
+    border-radius: 10px;
+    padding: .55rem 1rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+.rpt-bar-fade-enter-active,
+.rpt-bar-fade-leave-active { transition: opacity .2s, transform .2s; }
+.rpt-bar-fade-enter-from,
+.rpt-bar-fade-leave-to { opacity: 0; transform: translateY(-4px); }
+
+/* Sortable column headers */
+.rpt-th-sort {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.rpt-th-sort:hover { background: var(--light-bg-color); }
+.rpt-th-sort--active { color: #0d6efd; }
+.rpt-th-sort .fa-sort { opacity: .3; }
+</style>
+
+<script type="module">
+import { create_message } from '/static/js/toaster.js'
+import UserChip from '/static/js/components/UserChip.js'
+const { createApp, ref, computed, onMounted } = Vue
+const CSRF = '{{ csrf_token() }}'
+
+createApp({
+    delimiters: ['[[', ']]'],
+    components: { UserChip },
+    setup() {
+        const items        = ref([])
+        const loading      = ref(false)
+        const total        = ref(0)
+        const page         = ref(1)
+        const perPage      = ref(20)
+        const totalPages   = ref(1)
+        const search       = ref('')
+        const filterType   = ref('')
+        const filterStatus = ref('')
+        const selectedIds  = ref([])
+        const stats        = ref({ total: 0, pending: 0, checked: 0, resolved: 0, dismissed: 0 })
+        const showFilters  = ref(true)
+        const sortField    = ref('created_at')
+        const sortDir      = ref('desc')
+
+        const allSelected = computed(() =>
+            items.value.length > 0 && items.value.every(r => selectedIds.value.includes(r.id))
+        )
+
+        const pagesToShow = computed(() => {
+            const pages = []
+            const start = Math.max(1, page.value - 2)
+            const end   = Math.min(totalPages.value, page.value + 2)
+            for (let i = start; i <= end; i++) pages.push(i)
+            return pages
+        })
+
+        function setSort(field) {
+            if (sortField.value === field) {
+                sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+            } else {
+                sortField.value = field
+                sortDir.value = 'desc'
+            }
+            page.value = 1
+            fetchData()
+        }
+
+        function sortIcon(field) {
+            if (sortField.value !== field) return 'fa-sort'
+            return sortDir.value === 'asc' ? 'fa-sort-up' : 'fa-sort-down'
+        }
+
+        function sortClass(field) {
+            return sortField.value === field ? 'rpt-th-sort--active' : ''
+        }
+
+        async function fetchStats() {
+            try {
+                const res  = await fetch('/report/admin/stats')
+                const data = await res.json()
+                const t = (data.pending || 0) + (data.checked || 0) + (data.resolved || 0) + (data.dismissed || 0)
+                stats.value = { pending: 0, checked: 0, resolved: 0, dismissed: 0, ...data, total: t }
+            } catch {}
+        }
+
+        async function fetchData() {
+            loading.value = true
+            try {
+                const params = new URLSearchParams({
+                    page:        page.value,
+                    per_page:    perPage.value,
+                    search:      search.value,
+                    object_type: filterType.value,
+                    status:      filterStatus.value,
+                    sort:        sortField.value,
+                    dir:         sortDir.value,
+                })
+                const res  = await fetch(`/report/admin/data?${params}`)
+                const data = await res.json()
+                items.value      = data.items || []
+                total.value      = data.total  || 0
+                totalPages.value = data.pages  || 1
+            } finally {
+                loading.value = false
+            }
+        }
+
+        function doSearch()  { page.value = 1; fetchData(); fetchStats() }
+        function goPage(p)   { page.value = p; fetchData() }
+
+        function toggleAll(e) {
+            selectedIds.value = e.target.checked ? items.value.map(r => r.id) : []
+        }
+
+        function resetFilters() {
+            search.value = ''
+            filterType.value = ''
+            filterStatus.value = ''
+            page.value = 1
+            fetchData()
+            fetchStats()
+        }
+
+        async function _post(url, body = null) {
+            const opts = {
+                method:  'POST',
+                headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+            }
+            if (body) opts.body = JSON.stringify(body)
+            const res  = await fetch(url, opts)
+            const data = await res.json()
+            create_message(data.message, data.toast_class || (res.ok ? 'success' : 'danger'))
+            return { ok: res.ok, data }
+        }
+
+        function singleAction(id, action) {
+            if (action === 'delete' && !confirm('Delete this report?')) return
+            _post(`/report/admin/${id}/${action}`).then(({ ok }) => {
+                if (ok) { fetchData(); fetchStats() }
+            })
+        }
+
+        async function singleCheck(r) {
+            const { ok, data } = await _post(`/report/admin/${r.id}/check`)
+            if (ok) {
+                r.status           = 'checked'
+                r.checked_by_name  = data.checked_by_name
+                r.checked_at       = data.checked_at
+                fetchStats()
+            }
+        }
+
+        async function singleUncheck(r) {
+            const { ok } = await _post(`/report/admin/${r.id}/uncheck`)
+            if (ok) {
+                r.status          = 'pending'
+                r.checked_by_name = null
+                r.checked_at      = null
+                fetchStats()
+            }
+        }
+
+        function singleDeleteTarget(r) {
+            if (!confirm(`Delete the reported ${r.object_type}? This action may be irreversible.`)) return
+            _post(`/report/admin/${r.id}/delete_target`).then(({ ok }) => {
+                if (ok) { fetchData(); fetchStats() }
+            })
+        }
+
+        async function bulkAction(action) {
+            const ids = selectedIds.value
+            if (!ids.length) return
+            if (action === 'delete' && !confirm(`Delete ${ids.length} report(s)?`)) return
+            if (action === 'delete_target' && !confirm(`Delete the reported objects for ${ids.length} report(s)? This may be irreversible.`)) return
+            const res  = await fetch('/report/admin/bulk', {
+                method:  'POST',
+                headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ action, ids }),
+            })
+            const data = await res.json()
+            create_message(data.message, data.toast_class || (res.ok ? 'success' : 'danger'))
+            if (res.ok) { selectedIds.value = []; fetchData(); fetchStats() }
+        }
+
+        onMounted(() => { fetchData(); fetchStats() })
+
+        return {
+            items, loading, total, page, perPage, totalPages,
+            search, filterType, filterStatus, selectedIds, stats,
+            showFilters, sortField, sortDir,
+            allSelected, pagesToShow,
+            setSort, sortIcon, sortClass,
+            doSearch, goPage, toggleAll, resetFilters,
+            singleAction, singleCheck, singleUncheck, singleDeleteTarget, bulkAction,
+        }
+    }
+}).mount('#reports-app')
+</script>
+{% endblock %}

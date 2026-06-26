@@ -1,0 +1,436 @@
+/*
+  graph-viewer.css — Wrapper styles for the graph-viewer Vue component.
+  Pivotick vendor CSS loaded separately (pivotick.css).
+  All colors via CSS theme vars — no hardcoded values.
+*/
+
+/*---ROOT---*/
+
+.gv-root {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    resize: vertical;           /* user can drag the bottom edge to resize */
+    min-height: 300px;
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-sm);
+}
+
+/*---DEV HEADER (filter chips + search)---*/
+
+.gv-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    min-height: 42px;
+    gap: 8px;
+}
+
+.gv-filters {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.gv-filters-label {
+    font-size: .65rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* Node type filter chip */
+.gv-type-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: .68rem;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background var(--transition), opacity var(--transition), border-color var(--transition);
+}
+
+.gv-type-chip:hover {
+    background: var(--bg-body);
+    color: var(--text-main);
+    border-color: var(--text-muted);
+}
+
+.gv-type-chip.is-hidden {
+    opacity: .4;
+    text-decoration: line-through;
+}
+
+.gv-chip-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--chip-color, var(--brand));
+    flex-shrink: 0;
+}
+
+.gv-type-chip.is-hidden .gv-chip-dot { opacity: .25; }
+
+.gv-chip-count {
+    font-size: .6rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+/* Right side: search + stats */
+.gv-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.gv-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    padding: 3px 8px;
+    min-width: 140px;
+    transition: border-color var(--transition);
+}
+
+.gv-search-wrap:focus-within { border-color: var(--brand); }
+
+.gv-search-wrap > i { font-size: .6rem; color: var(--text-muted); flex-shrink: 0; }
+
+.gv-search-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-main);
+    font-size: .73rem;
+    font-family: var(--font-sans);
+    flex: 1;
+    min-width: 60px;
+}
+
+.gv-search-input::placeholder { color: var(--text-muted); }
+
+.gv-search-clear {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    font-size: .6rem;
+    display: flex;
+    align-items: center;
+    transition: color var(--transition);
+}
+.gv-search-clear:hover { color: var(--text-main); }
+
+.gv-stat {
+    font-size: .65rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.gv-stat-f { font-style: italic; }
+
+/*---CANVAS (fills remaining space)---*/
+
+.gv-canvas {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-surface);
+}
+
+/* Pivotick's dedicated mount point — never removed by Vue */
+.gv-pvt-inner {
+    position: absolute;
+    inset: 0;
+}
+
+/* Pivotick's inner container fills its mount point */
+.gv-pvt-inner .pivotick {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Override Pivotick's min-height so it respects our layout */
+.gv-pvt-inner .pvt-canvas {
+    min-height: unset !important;
+}
+
+/*---OVERLAYS (loading / error)---*/
+
+.gv-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    font-size: .82rem;
+    font-family: var(--font-sans);
+}
+
+.gv-overlay > i { font-size: 1.3rem; }
+
+.gv-overlay--error { color: var(--danger, #dc2626); }
+
+/*---EDIT BUTTON (visible in header when editable=true)---*/
+
+.gv-edit-open-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    font-size: .68rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
+    flex-shrink: 0;
+}
+.gv-edit-open-btn:hover {
+    background: var(--bg-body);
+    color: var(--brand);
+    border-color: var(--brand-glow);
+}
+.gv-edit-open-btn--label { gap: 6px; padding: 4px 12px; }
+.gv-header-spacer { flex: 1; }
+
+/*---MODAL (Teleported to body)---*/
+
+.gv-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    background: rgba(0, 0, 0, .48);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    backdrop-filter: blur(2px);
+}
+
+.gv-modal {
+    display: flex;
+    flex-direction: column;
+    width: 680px;
+    max-width: 100%;
+    max-height: 80vh;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 16px 48px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.12);
+    overflow: hidden;
+}
+
+.gv-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    flex-shrink: 0;
+}
+
+.gv-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: var(--font-display);
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.gv-modal-title i {
+    color: var(--brand);
+    font-size: .85rem;
+}
+
+.gv-modal-close {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: .85rem;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition), color var(--transition);
+    display: flex;
+    align-items: center;
+}
+.gv-modal-close:hover { background: var(--bg-body); color: var(--text-main); }
+
+.gv-modal-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    flex-shrink: 0;
+}
+
+.gv-modal-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    font-size: .72rem;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.gv-modal-tab:hover { background: var(--bg-body); color: var(--text-main); }
+.gv-modal-tab.is-active {
+    background: var(--brand-dim);
+    color: var(--brand);
+    border-color: var(--brand-glow);
+    font-weight: 600;
+}
+.gv-modal-tab i { font-size: .62rem; }
+
+.gv-modal-tab-hint {
+    margin-left: auto;
+    font-size: .65rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+.gv-modal-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.gv-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elevated);
+    flex-shrink: 0;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.gv-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+/*---EDIT BUTTONS---*/
+
+.gv-edit-error {
+    font-size: .68rem;
+    color: var(--danger, #dc2626);
+    font-family: var(--font-mono);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.gv-edit-error i { margin-right: 3px; }
+
+.gv-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: .72rem;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.gv-edit-btn i { font-size: .6rem; }
+
+.gv-edit-btn--reset {
+    background: var(--bg-surface);
+    color: var(--text-muted);
+}
+.gv-edit-btn--reset:hover { background: var(--bg-body); color: var(--text-main); }
+
+.gv-edit-btn--apply {
+    background: var(--brand-dim);
+    color: var(--brand);
+    border-color: var(--brand-glow);
+    font-weight: 600;
+}
+.gv-edit-btn--apply:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+/*---JSON TEXTAREA (inside modal body)---*/
+
+.gv-edit-ta {
+    flex: 1;
+    display: block;
+    width: 100%;
+    min-height: 300px;
+    resize: none;
+    border: none;
+    outline: none;
+    background: var(--bg-surface);
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: .75rem;
+    line-height: 1.65;
+    padding: 12px 16px;
+    box-sizing: border-box;
+    caret-color: var(--brand);
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+.gv-edit-ta::-webkit-scrollbar { width: 5px; }
+.gv-edit-ta::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/*---RESPONSIVE---*/
+
+@media (max-width: 600px) {
+    .gv-header { padding: 5px 8px; }
+    .gv-search-wrap { min-width: 100px; }
+    .gv-edit-bar { flex-wrap: wrap; gap: 6px; }
+}

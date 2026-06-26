@@ -72,7 +72,6 @@ const MultiTagFilter = {
                 if (res.ok) {
                     const data = await res.json();
                     listTags.value = data.tags || [];
-                    // re-sync: si modelValue était déjà rempli avant le chargement
                     if (props.modelValue && props.modelValue.length > 0) {
                         selectedTagNames.value = [...props.modelValue];
                     }

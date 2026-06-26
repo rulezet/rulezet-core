@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Proposals — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<style>
+.proposal-card {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+.proposal-card:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: inherit;
+}
+.proposal-card__stripe {
+    height: 4px;
+    width: 100%;
+}
+.proposal-card__body {
+    padding: 1rem 1.25rem;
+}
+.proposal-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+}
+.proposal-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+.proposal-card__status-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.28rem 0.65rem;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.proposal-card__message {
+    font-size: 0.875rem;
+    color: var(--text-color);
+    background: var(--light-bg-color);
+    border-left: 3px solid var(--border-color);
+    border-radius: 0 6px 6px 0;
+    padding: 0.5rem 0.75rem;
+    margin: 0.5rem 0 0.75rem;
+    line-height: 1.5;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+.proposal-card__footer {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border-color);
+}
+.proposal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 0.2rem 0.55rem;
+    border-radius: 20px;
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+    border: 1px solid var(--border-color);
+}
+.proposal-score {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    color: var(--subtle-text-color);
+}
+.proposal-score__bar {
+    width: 60px;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 99px;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: middle;
+}
+.proposal-score__fill {
+    display: block;
+    height: 6px;
+    border-radius: 99px;
+    transition: width 0.3s ease;
+}
+.proposal-card__time {
+    font-size: 0.72rem;
+    color: var(--subtle-text-color);
+    white-space: nowrap;
+}
+.proposal-comments-badge {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--subtle-text-color);
+    font-weight: 500;
+}
+.proposal-comments-badge.has-comments {
+    color: #0d6efd;
+}
+/* Status stripe colors */
+.stripe-pending  { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+.stripe-approved,
+.stripe-accepted { background: linear-gradient(90deg, #198754, #20c997); }
+.stripe-rejected { background: linear-gradient(90deg, #dc3545, #c71f37); }
+
+/* Status badge colors */
+.status-pending  { background: #ffc107; color: #000; border: none; }
+.status-approved,
+.status-accepted { background: #198754; color: #fff; border: none; }
+.status-rejected { background: #dc3545; color: #fff; border: none; }
+</style>
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-code-pull-request banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+                        {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Proposals</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-code-pull-request"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Proposals</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
+            Community edit proposals for this rule. Review, discuss, and vote on suggested changes.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'pull_request', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
+
+    <div class="card border-0 shadow-sm rounded-4 p-4">
+
+        <div v-if="loading" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading…</span>
+            </div>
+        </div>
+
+        <template v-else>
+            <div v-if="pull_request_list.length === 0" class="text-center py-5" style="color: var(--subtle-text-color);">
+                <i class="fa-solid fa-code-pull-request fa-2x mb-3 d-block opacity-25"></i>
+                <p class="mb-2">No edit proposals yet for this rule.</p>
+                <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-primary rounded-pill">
+                    <i class="fa-solid fa-pen-to-square me-1"></i>Be the first to suggest an edit
+                </a>
+            </div>
+
+            <div v-else>
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <p class="small fw-semibold mb-0" style="color: var(--subtle-text-color);">
+                        [[ pull_request_list.length ]] proposal[[ pull_request_list.length === 1 ? '' : 's' ]]
+                    </p>
+                    <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-outline-primary rounded-pill">
+                        <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
+                    </a>
+                </div>
+
+                <div class="d-flex flex-column gap-3">
+                    <a v-for="proposal in pull_request_list" :key="proposal.id"
+                        :href="'/rule/proposal_content_discuss?id=' + proposal.id"
+                        class="proposal-card">
+
+                        <!-- Status stripe -->
+                        <div class="proposal-card__stripe"
+                            :class="'stripe-' + proposal.status">
+                        </div>
+
+                        <div class="proposal-card__body">
+
+                            <!-- Header: user + status badge -->
+                            <div class="proposal-card__header">
+                                <div class="proposal-card__meta">
+                                    <!-- Avatar -->
+                                    <div style="width:32px;height:32px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--light-bg-color);display:flex;align-items:center;justify-content:center;">
+                                        <img v-if="proposal.user_avatar"
+                                            :src="proposal.user_avatar"
+                                            :alt="proposal.user_name"
+                                            style="width:100%;height:100%;object-fit:cover;">
+                                        <span v-else style="font-size:0.8rem;font-weight:600;color:var(--subtle-text-color);">
+                                            [[ proposal.user_name ? proposal.user_name[0].toUpperCase() : '?' ]]
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span class="fw-semibold" style="font-size:0.875rem;">[[ proposal.user_name ]]</span>
+                                        <span style="font-size:0.8rem;color:var(--subtle-text-color);margin-left:4px;">proposed an edit</span>
+                                    </div>
+                                </div>
+
+                                <span class="proposal-card__status-badge"
+                                    :class="'status-' + proposal.status">
+                                    <i class="fas me-1"
+                                        :class="{
+                                            'fa-clock': proposal.status === 'pending',
+                                            'fa-check': proposal.status === 'approved' || proposal.status === 'accepted',
+                                            'fa-xmark': proposal.status === 'rejected'
+                                        }"></i>[[ proposal.status ]]
+                                </span>
+                            </div>
+
+                            <!-- Message -->
+                            <div class="proposal-card__message" v-if="proposal.message"
+                                 v-html="proposal._renderedMessage || proposal.message">
+                            </div>
+                            <div class="proposal-card__message" v-else style="color:var(--subtle-text-color);font-style:italic;">
+                                No description provided.
+                            </div>
+
+                            <!-- Footer: meta chips -->
+                            <div class="proposal-card__footer">
+
+                                <!-- Edit type -->
+                                <span v-if="proposal.edit_type" class="proposal-badge"
+                                      :style="'color:' + editTypeMeta(proposal.edit_type).color + ';border-color:' + editTypeMeta(proposal.edit_type).color + '44;background:' + editTypeMeta(proposal.edit_type).color + '12;'">
+                                    <i class="fas fa-xs" :class="editTypeMeta(proposal.edit_type).icon"></i>
+                                    [[ editTypeMeta(proposal.edit_type).label ]]
+                                </span>
+
+                                <!-- Change score -->
+                                <span v-if="proposal.change_score !== null && proposal.change_score !== undefined" class="proposal-score">
+                                    <span style="color:var(--subtle-text-color)">diff</span>
+                                    <span class="proposal-score__bar">
+                                        <span class="proposal-score__fill" :style="{ width: proposal.change_score + '%', backgroundColor: scoreColor(proposal.change_score) }"></span>
+                                    </span>
+                                    <span>[[ Math.round(proposal.change_score) ]]%</span>
+                                </span>
+
+                                <!-- Timestamp -->
+                                <span class="proposal-card__time">
+                                    <i class="fa-regular fa-clock me-1"></i>[[ formatDate(proposal.timestamp) ]]
+                                </span>
+
+                                <!-- Comments -->
+                                <span class="proposal-comments-badge" :class="{ 'has-comments': proposal.comment_count > 0 }">
+                                    <i class="fa-regular fa-comment"></i>
+                                    [[ proposal.comment_count ]]
+                                </span>
+
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <nav v-if="total_pages > 1" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item" :class="{ disabled: current_page === 1 }">
+                            <a class="page-link" href="#" @click.prevent="fetchPullRequest(current_page - 1)">Previous</a>
+                        </li>
+                        <li class="page-item disabled">
+                            <span class="page-link">[[ current_page ]] / [[ total_pages ]]</span>
+                        </li>
+                        <li class="page-item" :class="{ disabled: current_page === total_pages }">
+                            <a class="page-link" href="#" @click.prevent="fetchPullRequest(current_page + 1)">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </template>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, onMounted } = Vue;
+
+    const rule_id = {{ rule.id }};
+
+    let _marked = null;
+    let _purify = null;
+
+    async function getMarked() {
+        if (!_marked) {
+            const m = await import('/static/js/marked.min.js');
+            _marked = m.marked || m.default || window.marked;
+        }
+        return _marked;
+    }
+
+    async function getPurify() {
+        if (!_purify) {
+            const m = await import('/static/js/purify.min.js');
+            _purify = m.default || window.DOMPurify;
+        }
+        return _purify;
+    }
+
+    async function renderMarkdown(text) {
+        const mk     = await getMarked();
+        const purify = await getPurify();
+        const html   = mk.parse ? mk.parse(text) : mk(text);
+        return purify.sanitize(html);
+    }
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        setup() {
+            const pull_request_list = ref([]);
+            const current_page = ref(1);
+            const total_pages = ref(1);
+            const loading = ref(true);
+
+            const EDIT_TYPE_META = {
+                content_update: { label: 'Content update',  icon: 'fa-code',           color: '#0d6efd' },
+                typo:           { label: 'Typo / syntax',   icon: 'fa-spell-check',    color: '#6f42c1' },
+                security:       { label: 'Security fix',    icon: 'fa-shield-halved',  color: '#dc3545' },
+                documentation:  { label: 'Documentation',   icon: 'fa-book',           color: '#198754' },
+                legal:          { label: 'Legal / license', icon: 'fa-scale-balanced', color: '#fd7e14' },
+                other:          { label: 'Other',           icon: 'fa-ellipsis',       color: '#6c757d' },
+            };
+            function editTypeMeta(type) {
+                return EDIT_TYPE_META[type] || { label: type || 'General', icon: 'fa-pen', color: '#6c757d' };
+            }
+
+            function formatDate(iso) {
+                if (!iso) return '';
+                const d = new Date(iso);
+                const now = new Date();
+                const diff = Math.floor((now - d) / 1000);
+                if (diff < 60)   return 'just now';
+                if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+                if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+                if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
+                return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            }
+
+            async function fetchPullRequest(page) {
+                loading.value = true;
+                try {
+                    const res = await fetch('/rule/get_rules_propose_page?page=' + page + '&rule_id=' + rule_id);
+                    const data = await res.json();
+                    if (data) {
+                        const list = data.rules_list || [];
+                        // Pre-render messages as sanitized markdown
+                        for (const p of list) {
+                            if (p.message) p._renderedMessage = await renderMarkdown(p.message);
+                        }
+                        pull_request_list.value = list;
+                        total_pages.value = data.total_pages_pending;
+                        current_page.value = page;
+                    }
+                } finally {
+                    loading.value = false;
+                }
+            }
+
+            function scoreColor(score) {
+                if (score <= 30) return '#198754';
+                if (score <= 60) return '#fd7e14';
+                return '#dc3545';
+            }
+
+            onMounted(() => fetchPullRequest(1));
+
+            return { pull_request_list, current_page, total_pages, loading, fetchPullRequest, formatDate, scoreColor, editTypeMeta };
+        }
+    }).mount('#main-container');
+</script>
+{% endblock %}

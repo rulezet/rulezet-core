@@ -64,9 +64,12 @@ class TestingConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
-    SQLALCHEMY_DATABASE_URI = "postgresql:///rulezet" 
+    SQLALCHEMY_DATABASE_URI = "postgresql:///rulezet"
     SESSION_TYPE = "sqlalchemy"
     SESSION_SQLALCHEMY_TABLE = "flask_sessions"
+    SESSION_COOKIE_SECURE   = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
 
     @classmethod
     def init_app(cls, app):

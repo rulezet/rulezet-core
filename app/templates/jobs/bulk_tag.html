@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
 {% block title %}Bulk Tag Rules — Rulezet{% endblock %}
 {% block content %}
 <div class="container-fluid mt-3 px-4" id="main-container" v-cloak>
@@ -34,6 +35,8 @@
             Filter rules precisely, pick tags, and apply them in the background.
         </p>
     </div>
+
+    {{ anav.admin_nav('bulk_tag') }}
 
     <div class="row g-4">
 

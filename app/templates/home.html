@@ -2,44 +2,241 @@
 {% block title %}Security Intelligence Repository — Rulezet{% endblock %}
 {% import 'macros/form_macros.html' as f %}
 {% block head %}
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" as="script" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" async></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rulesCarousel.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tag/tags.css') }}">
 <style>
-.feed-item { border-radius: .75rem; transition: all .15s; border: 1px solid transparent; }
-.feed-item:hover { background: var(--bs-primary-bg-subtle, rgba(13,110,253,.06)) !important;
-                   border-color: rgba(13,110,253,.12); cursor: pointer; }
-.feed-item.no-link:hover { background: transparent !important; border-color: transparent; cursor: default; }
-.feed-icon { width: 38px; height: 38px; display:flex; align-items:center; justify-content:center;
-             border-radius: 50%; flex-shrink: 0; font-size: .9rem; }
-.feed-scroll { max-height: 360px; overflow-y: auto; scrollbar-width: thin; }
-.feed-scroll::-webkit-scrollbar { width: 4px; }
-.feed-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 4px; }
-.feed-username { font-weight: 600; color: var(--bs-primary); text-decoration:none; }
-.feed-username:hover { text-decoration: underline; }
-.feed-dot { width:6px; height:6px; border-radius:50%; background:#198754; display:inline-block; }
-@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
-.feed-dot { animation: pulse-dot 2s ease infinite; }
+/* ── Hero ── */
+.home-hero {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 22px;
+    padding: 3.75rem 3rem;
+    position: relative;
+    overflow: hidden;
+}
+.home-hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, transparent 0%, #0d6efd 25%, #60a5fa 75%, transparent 100%);
+}
+/* Ambient glow orbs */
+.hero-orb {
+    position: absolute; border-radius: 50%;
+    pointer-events: none; filter: blur(70px);
+}
+.hero-orb-1 {
+    width: 420px; height: 420px;
+    background: radial-gradient(circle, rgba(13,110,253,.13), transparent 65%);
+    top: -160px; left: -130px;
+}
+.hero-orb-2 {
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(96,165,250,.1), transparent 65%);
+    bottom: -100px; right: 8%;
+}
+/* Dot-grid texture */
+.hero-grid {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(circle, rgba(13,110,253,.055) 1px, transparent 1px);
+    background-size: 28px 28px;
+}
+/* Brand badge */
+.hero-brand-badge {
+    display: inline-flex; align-items: center; gap: .45rem;
+    font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: #0d6efd;
+    background: rgba(13,110,253,.08);
+    border: 1px solid rgba(13,110,253,.22);
+    border-radius: 50px; padding: .3rem .9rem;
+}
+/* Big headline */
+.hero-big-title {
+    font-size: clamp(1.9rem, 4vw, 2.75rem);
+    font-weight: 900; line-height: 1.08;
+    color: var(--text-color); letter-spacing: -.025em;
+}
+.hero-title-gradient {
+    background: linear-gradient(135deg, #0d6efd 0%, #60a5fa 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.home-hero-sub { font-size: .93rem; color: var(--subtle-text-color); line-height: 1.7; }
+/* KPI big cards */
+.hero-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; }
+.hero-kpi-big {
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px; padding: 1.25rem .9rem;
+    text-align: center; position: relative; overflow: hidden;
+    transition: transform .18s cubic-bezier(.22,1,.36,1), box-shadow .18s;
+    cursor: pointer;
+    user-select: none;
+}
+.hero-kpi-big:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 28px rgba(0,0,0,.1); }
+.hero-kpi-big:active { transform: scale(.97); }
+.hkb-top { position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 14px 14px 0 0; }
+.hkb-num { font-size: 2rem; font-weight: 900; line-height: 1; margin-bottom: .25rem; transition: transform .18s; }
+.hero-kpi-big:hover .hkb-num { transform: scale(1.06); }
+.hkb-icon { font-size: 1rem; margin-bottom: .3rem; opacity: .75; transition: opacity .18s, transform .18s; }
+.hero-kpi-big:hover .hkb-icon { opacity: 1; transform: scale(1.15); }
+.hkb-lbl { font-size: .62rem; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color); font-weight: 600; }
+
+/* Format pills */
+.hero-formats { display: flex; flex-wrap: wrap; gap: .4rem; }
+.hero-fmt-pill {
+    font-size: .6rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+    padding: .22rem .6rem; border-radius: 4px;
+    background: rgba(13,110,253,.06); color: #0d6efd;
+    border: 1px solid rgba(13,110,253,.16);
+    font-family: 'Space Mono', monospace; text-decoration: none;
+    transition: background .13s;
+}
+.hero-fmt-pill:hover { background: rgba(13,110,253,.12); }
+
+/* ── CTA buttons ── */
+.btn-home-primary {
+    background: linear-gradient(135deg,#0d6efd,#0a58ca);
+    color: #fff !important; border: none;
+    padding: .5rem 1.25rem; border-radius: 50px;
+    font-size: .83rem; font-weight: 600;
+    text-decoration: none;
+    display: inline-flex; align-items: center; gap: .4rem;
+    box-shadow: 0 4px 12px rgba(13,110,253,.28);
+    transition: opacity .14s, box-shadow .14s, transform .14s;
+}
+.btn-home-primary:hover { opacity: .88; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(13,110,253,.36); }
+.btn-home-outline {
+    background: transparent; color: #0d6efd !important;
+    border: 1px solid rgba(13,110,253,.32);
+    padding: .5rem 1.25rem; border-radius: 50px;
+    font-size: .83rem; font-weight: 600; text-decoration: none;
+    display: inline-flex; align-items: center; gap: .4rem;
+    transition: background .14s, border-color .14s;
+}
+.btn-home-outline:hover { background: rgba(13,110,253,.07); border-color: #0d6efd; }
+
+/* ── Action cards ── */
+.home-action-card {
+    display: flex; align-items: center; gap: .8rem;
+    padding: .9rem 1rem;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 13px; text-decoration: none;
+    height: 100%;
+    transition: border-color .16s, transform .16s, box-shadow .16s;
+}
+.home-action-card:hover {
+    border-color: rgba(13,110,253,.3);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,.07);
+}
+.action-icon { width: 40px; height: 40px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: .9rem; flex-shrink: 0; }
+.action-title { font-size: .85rem; font-weight: 700; color: var(--text-color); margin-bottom: 1px; }
+.action-sub { font-size: .72rem; color: var(--subtle-text-color); line-height: 1.4; }
+.action-arrow { margin-left: auto; font-size: .7rem; opacity: .3; flex-shrink: 0; transition: opacity .13s, transform .13s; }
+.home-action-card:hover .action-arrow { opacity: .65; transform: translateX(3px); }
+
+/* ── Stats card ── */
+.home-stats-card {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px; overflow: hidden;
+    height: 100%;
+}
+.home-stats-header {
+    padding: .8rem 1.1rem .4rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex; align-items: center; gap: .5rem;
+}
+.home-stats-tab {
+    font-size: .78rem; font-weight: 600;
+    padding: .32rem .75rem; border-radius: 7px;
+    cursor: pointer; border: none; background: transparent;
+    color: var(--subtle-text-color);
+    transition: background .13s, color .13s;
+}
+.home-stats-tab.active {
+    background: rgba(13,110,253,.1); color: #0d6efd;
+}
+.home-stats-tab:hover:not(.active) { background: var(--light-bg-color); color: var(--text-color); }
+
+/* ── Activity feed ── */
+.home-feed-card {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px; overflow: hidden;
+    display: flex; flex-direction: column;
+    height: 100%;
+}
+.home-feed-header {
+    padding: .8rem 1.1rem .55rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+}
+.home-feed-title { font-size: .85rem; font-weight: 700; color: var(--text-color); display: flex; align-items: center; gap: .45rem; }
+.feed-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #198754; flex-shrink: 0; animation: pulse-dot 2s ease infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+.home-feed-scroll { flex: 1; overflow-y: auto; padding: .4rem .5rem; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,.1) transparent; }
+.home-feed-scroll::-webkit-scrollbar { width: 3px; }
+.home-feed-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,.1); border-radius: 3px; }
+.feed-row {
+    display: flex; align-items: flex-start; gap: .55rem;
+    padding: .45rem .5rem; border-radius: 8px;
+    cursor: pointer; transition: background .11s;
+}
+.feed-row:hover { background: rgba(13,110,253,.06); }
+.feed-row.no-link { cursor: default; }
+.feed-row.no-link:hover { background: transparent; }
+.feed-bubble { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .68rem; flex-shrink: 0; margin-top: 1px; }
+.feed-action { font-size: .73rem; color: var(--subtle-text-color); }
+.feed-desc { font-size: .7rem; color: var(--subtle-text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-time { font-size: .64rem; color: var(--subtle-text-color); opacity: .65; margin-top: 1px; }
+.feed-uname { font-weight: 600; color: #0d6efd; text-decoration: none; font-size: .73rem; }
+.feed-uname:hover { text-decoration: underline; }
+
+/* ── Section header ── */
+.home-sh {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: .9rem;
+}
+.home-sh-title { font-size: 1rem; font-weight: 700; color: var(--text-color); display: flex; align-items: center; gap: .5rem; }
+.home-sh-dot { width: 7px; height: 7px; border-radius: 50%; background: #0d6efd; flex-shrink: 0; }
+.home-sh-sub { font-size: .76rem; color: var(--subtle-text-color); }
+.home-divider { border: none; border-top: 1px solid var(--border-color); margin: 2rem 0; }
+
+/* ── See more ── */
+.btn-see-more {
+    background: transparent; color: #0d6efd !important;
+    border: 1px solid rgba(13,110,253,.28); font-size: .83rem;
+    transition: background .13s, border-color .13s, box-shadow .13s;
+}
+.btn-see-more:hover { background: rgba(13,110,253,.06); border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13,110,253,.09); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-5" id="main-container">
+<div class="container py-4" id="main-container">
 
     {% if show_import_hint %}
-    <div class="alert alert-primary alert-dismissible d-flex align-items-center gap-3 rounded-3 shadow-sm mb-4 border-0"
+    <div class="alert alert-dismissible d-flex align-items-center gap-3 rounded-3 mb-4"
          role="alert"
-         style="background:linear-gradient(135deg,rgba(13,110,253,.1),rgba(10,88,202,.07));border-left:4px solid #0d6efd !important;border:1px solid rgba(13,110,253,.2);">
+         style="background:rgba(13,110,253,.07);border:1px solid rgba(13,110,253,.2);border-left:3px solid #0d6efd;">
         <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
-             style="width:42px;height:42px;background:rgba(13,110,253,.15);">
-            <i class="fa-solid fa-circle-arrow-down text-primary fs-5"></i>
+             style="width:38px;height:38px;background:rgba(13,110,253,.12);">
+            <i class="fa-solid fa-circle-arrow-down text-primary"></i>
         </div>
         <div class="flex-grow-1">
-            <div class="fw-bold mb-1">Your instance has no rules yet.</div>
-            <div class="text-muted" style="font-size:.88rem;">
-                Pull from <strong>Rulezet Official</strong> to instantly populate your instance with the full community rule set.
-            </div>
+            <div class="fw-bold mb-1" style="font-size:.88rem;">Your instance has no rules yet.</div>
+            <div class="text-muted" style="font-size:.8rem;">Pull from <strong>Rulezet Official</strong> to instantly populate your instance with the full community rule set.</div>
         </div>
-        <a href="/connector/list" class="btn btn-primary btn-sm rounded-pill px-3 flex-shrink-0">
-            <i class="fa-solid fa-plug me-1"></i>Go to Connectors
+        <a href="/connector/list" class="btn-home-primary flex-shrink-0" style="font-size:.78rem;padding:.4rem .9rem;">
+            <i class="fa-solid fa-plug"></i>Go to Connectors
         </a>
         <button type="button" class="btn-close ms-1" data-bs-dismiss="alert"></button>
     </div>
@@ -47,214 +244,281 @@
 
     <template v-if="is_loading">
 
-        <!-- ── Hero ── -->
-        <div class="row mb-4 align-items-center">
-            <div class="col-lg-8">
-                <h1 class="display-5 fw-bold text-dark mb-2">
-                    Security Intelligence <span class="text-primary">Repository </span>
-                    <small class="fw-light opacity-50">with </small>
-                    <span class="rulezet-brand"> RULEZET</span>
-                    <span class="badge rounded-pill bg-light text-muted fw-normal border ms-2"
-                        style="font-size: 0.9rem; vertical-align: middle;">v{{ app_version }}</span>
-                </h1>
-                <p class="lead text-muted">
-                    <a href="/why_choose_rulezet" class="ms-2" title="Why choose Rulezet?"
-                        style="font-size:medium; vertical-align: middle; text-decoration: underline;">
-                        <i class="fa-solid fa-question-circle text-muted"></i> Why choose Rulezet?
-                    </a><br>
-                    Explore the latest community-contributed detection rules. Stay ahead of threats with real-time updates.
-                </p>
+        <!-- ══ HERO ══════════════════════════════════════════════════════════ -->
+        <div class="home-hero mb-4">
+            <div class="hero-orb hero-orb-1"></div>
+            <div class="hero-orb hero-orb-2"></div>
+            <div class="hero-grid"></div>
+
+            <div class="row g-5 align-items-center" style="position:relative;z-index:1;">
+
+                <!-- Left: brand + title + CTAs + formats -->
+                <div class="col-lg-6">
+                    <div class="hero-brand-badge mb-3">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        RULEZET
+                        <span class="badge rounded-pill border fw-normal ms-1"
+                              style="font-size:.6rem;background:transparent;color:#0d6efd;border-color:rgba(13,110,253,.3)!important;">
+                            v{{ app_version }}
+                        </span>
+                    </div>
+
+                    <h1 class="hero-big-title mb-3">
+                        The Open Source<br>
+                        <span class="hero-title-gradient">Security Intelligence</span><br>
+                        Repository
+                    </h1>
+
+                    <p class="home-hero-sub mb-4">
+                        Explore, share and manage detection rules across all major formats.
+                        Built for security teams who move fast.
+                    </p>
+
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-4">
+                        <a href="/rule/rules_list" class="btn-home-primary" style="padding:.62rem 1.5rem;font-size:.88rem;">
+                            <i class="fa-solid fa-magnifying-glass"></i>Explore Rules
+                        </a>
+                        <a href="/rule/create_rule" class="btn-home-outline" style="padding:.62rem 1.5rem;font-size:.88rem;">
+                            <i class="fa-solid fa-plus"></i>Add a Rule
+                        </a>
+                    </div>
+
+                    <div class="hero-formats">
+                        <span class="hero-fmt-pill">YARA</span>
+                        <span class="hero-fmt-pill">Sigma</span>
+                        <span class="hero-fmt-pill">Suricata</span>
+                        <span class="hero-fmt-pill">Zeek</span>
+                        <span class="hero-fmt-pill">CRS</span>
+                        <span class="hero-fmt-pill">Nova</span>
+                        <span class="hero-fmt-pill">Wazuh</span>
+                        <span class="hero-fmt-pill">ATR</span>
+                        <a href="/why_choose_rulezet" class="hero-fmt-pill" style="opacity:.55;">+ more</a>
+                    </div>
+                </div>
+
+                <!-- Right: big KPI cards -->
+                <div class="col-lg-6">
+                    <div class="hero-kpi-grid mb-3">
+                        <div class="hero-kpi-big" data-kpi-href="/rule/rules_list" data-kpi-type="rules" data-kpi-color="#0d6efd">
+                            <div class="hkb-top" style="background:#0d6efd;"></div>
+                            <div class="hkb-icon" style="color:#0d6efd;"><i class="fa-solid fa-shield-halved"></i></div>
+                            <div class="hkb-num" style="color:#0d6efd;">{{ "{:,}".format(total_rules) }}</div>
+                            <div class="hkb-lbl">Detection Rules</div>
+                        </div>
+                        <div class="hero-kpi-big" data-kpi-href="/bundle/list" data-kpi-type="bundles" data-kpi-color="#198754">
+                            <div class="hkb-top" style="background:#198754;"></div>
+                            <div class="hkb-icon" style="color:#198754;"><i class="fa-solid fa-box"></i></div>
+                            <div class="hkb-num" style="color:#198754;">{{ "{:,}".format(total_bundles) }}</div>
+                            <div class="hkb-lbl">Rule Bundles</div>
+                        </div>
+                        <div class="hero-kpi-big" data-kpi-href="/attack/heatmap" data-kpi-type="attacks" data-kpi-color="#fd7e14">
+                            <div class="hkb-top" style="background:#fd7e14;"></div>
+                            <div class="hkb-icon" style="color:#fd7e14;"><i class="fa-solid fa-crosshairs"></i></div>
+                            <div class="hkb-num" style="color:#fd7e14;">{{ "{:,}".format(total_attacks) }}</div>
+                            <div class="hkb-lbl">ATT&amp;CK Techniques</div>
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <a href="/why_choose_rulezet" class="text-muted" style="font-size:.75rem;text-decoration:none;opacity:.55;">
+                            <i class="fa-solid fa-circle-question me-1"></i>Why choose Rulezet?
+                        </a>
+                    </div>
+                </div>
+
             </div>
         </div>
 
-        <!-- ── Two-column layout: cards + feed ── -->
-        <div class="row g-4 mb-4 align-items-stretch">
-
-            <!-- Left — 3 vertical action cards -->
-            <div class="col-lg-7 d-flex flex-column gap-3">
-
-                <a href="/rule/rules_list" class="text-decoration-none flex-fill">
-                <div class="p-3 rounded-4 shadow-sm d-flex align-items-center gap-3 h-100"
-                     style="background-color:var(--card-bg-color);border-left:4px solid #0d6efd;">
-                    <div class="rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center flex-shrink-0"
-                         style="width:44px;height:44px;">
-                        <i class="fa-solid fa-magnifying-glass-chart text-primary"></i>
-                    </div>
-                    <div>
-                        <div class="fw-bold" style="color:var(--bs-body-color);">Explore Intelligence</div>
-                        <div class="text-muted small">Browse YARA, Sigma and other detection rules shared by the community.</div>
-                    </div>
-                    <i class="fa-solid fa-arrow-right text-primary ms-auto opacity-50"></i>
-                </div>
+        <!-- ══ ACTION CARDS ══════════════════════════════════════════════════ -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-lg-3">
+                <a href="/rule/rules_list" class="home-action-card">
+                    <div class="action-icon" style="background:rgba(13,110,253,.1);color:#0d6efd;"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+                    <div><div class="action-title">Explore</div><div class="action-sub">Browse all detection rules</div></div>
+                    <i class="fa-solid fa-chevron-right action-arrow text-primary"></i>
                 </a>
-
-                <a href="/rule/create_rule" class="text-decoration-none flex-fill">
-                <div class="p-3 rounded-4 shadow-sm d-flex align-items-center gap-3 h-100"
-                     style="background-color:var(--card-bg-color);border-left:4px solid #198754;">
-                    <div class="rounded-circle bg-success-subtle d-flex align-items-center justify-content-center flex-shrink-0"
-                         style="width:44px;height:44px;">
-                        <i class="fa-solid fa-plus text-success"></i>
-                    </div>
-                    <div>
-                        <div class="fw-bold" style="color:var(--bs-body-color);">Contribute Rules</div>
-                        <div class="text-muted small">Upload your own detection assets and help the security community.</div>
-                    </div>
-                    <i class="fa-solid fa-arrow-right text-success ms-auto opacity-50"></i>
-                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <a href="/rule/create_rule" class="home-action-card">
+                    <div class="action-icon" style="background:rgba(25,135,84,.1);color:#198754;"><i class="fa-solid fa-file-circle-plus"></i></div>
+                    <div><div class="action-title">Contribute</div><div class="action-sub">Upload your own rules</div></div>
+                    <i class="fa-solid fa-chevron-right action-arrow text-success"></i>
                 </a>
-
-                <a href="/bundle/list" class="text-decoration-none flex-fill">
-                <div class="p-3 rounded-4 shadow-sm d-flex align-items-center gap-3 h-100"
-                     style="background-color:var(--card-bg-color);border-left:4px solid #ffc107;">
-                    <div class="rounded-circle bg-warning-subtle d-flex align-items-center justify-content-center flex-shrink-0"
-                         style="width:44px;height:44px;">
-                        <i class="fa-solid fa-boxes text-warning"></i>
-                    </div>
-                    <div>
-                        <div class="fw-bold" style="color:var(--bs-body-color);">Bundle Rules</div>
-                        <div class="text-muted small">Organize detection assets into bundles for easy sharing and management.</div>
-                    </div>
-                    <i class="fa-solid fa-arrow-right text-warning ms-auto opacity-50"></i>
-                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <a href="/bundle/list" class="home-action-card">
+                    <div class="action-icon" style="background:rgba(255,193,7,.12);color:#b45309;"><i class="fa-solid fa-boxes-stacked"></i></div>
+                    <div><div class="action-title">Bundles</div><div class="action-sub">Organize into shareable sets</div></div>
+                    <i class="fa-solid fa-chevron-right action-arrow" style="color:#b45309;"></i>
                 </a>
-
-                {% if current_user.is_authenticated and current_user.is_admin() %}
-                <a href="/connector/list" class="text-decoration-none flex-fill">
-                <div class="p-3 rounded-4 shadow-sm d-flex align-items-center gap-3 h-100"
-                     style="background-color:var(--card-bg-color);border-left:4px solid #6f42c1;">
-                    <div class="rounded-circle bg-purple-subtle d-flex align-items-center justify-content-center flex-shrink-0"
-                         style="width:44px;height:44px;background:rgba(111,66,193,.12)!important;">
-                        <i class="fa-solid fa-plug" style="color:#6f42c1;"></i>
-                    </div>
-                    <div>
-                        <div class="fw-bold" style="color:var(--bs-body-color);">Connectors</div>
-                        <div class="text-muted small">Sync detection rules from remote Rulezet instances.</div>
-                    </div>
-                    <i class="fa-solid fa-arrow-right ms-auto opacity-50" style="color:#6f42c1;"></i>
-                </div>
+            </div>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+            <div class="col-6 col-lg-3">
+                <a href="/connector/list" class="home-action-card">
+                    <div class="action-icon" style="background:rgba(111,66,193,.1);color:#6f42c1;"><i class="fa-solid fa-plug"></i></div>
+                    <div><div class="action-title">Connectors</div><div class="action-sub">Sync from remote instances</div></div>
+                    <i class="fa-solid fa-chevron-right action-arrow" style="color:#6f42c1;"></i>
                 </a>
-                {% endif %}
+            </div>
+            {% else %}
+            <div class="col-6 col-lg-3">
+                <a href="/platform/insights" class="home-action-card">
+                    <div class="action-icon" style="background:rgba(13,202,240,.1);color:#0891b2;"><i class="fa-solid fa-chart-pie"></i></div>
+                    <div><div class="action-title">Insights</div><div class="action-sub">Platform analytics & stats</div></div>
+                    <i class="fa-solid fa-chevron-right action-arrow" style="color:#0891b2;"></i>
+                </a>
+            </div>
+            {% endif %}
+        </div>
 
+        <!-- ══ CHARTS + FEED ══════════════════════════════════════════════════ -->
+        <div class="row g-4 mb-4" style="min-height:370px;">
+
+            <!-- Charts card -->
+            <div class="col-lg-8 d-flex flex-column">
+                <div class="home-stats-card flex-grow-1">
+                    <div class="home-stats-header">
+                        <i class="fa-solid fa-chart-line text-primary me-1" style="font-size:.8rem;"></i>
+                        <span style="font-size:.82rem;font-weight:700;color:var(--text-color);">Platform Stats</span>
+                        <div class="ms-auto d-flex gap-1 flex-wrap">
+                            <button class="home-stats-tab" :class="{active: chartTab==='timeline'}"
+                                    @click="switchTab('timeline')">
+                                <i class="fa-solid fa-chart-area me-1"></i>Timeline
+                            </button>
+                            <button class="home-stats-tab" :class="{active: chartTab==='formats'}"
+                                    @click="switchTab('formats')">
+                                <i class="fa-solid fa-chart-pie me-1"></i>Formats
+                            </button>
+                            <button class="home-stats-tab" :class="{active: chartTab==='top_cve'}"
+                                    @click="switchTab('top_cve')">
+                                <i class="fa-solid fa-shield-virus me-1"></i>CVEs
+                            </button>
+                            <button class="home-stats-tab" :class="{active: chartTab==='top_atk'}"
+                                    @click="switchTab('top_atk')">
+                                <i class="fa-solid fa-crosshairs me-1"></i>ATT&amp;CK
+                            </button>
+                        </div>
+                        <a href="/platform/insights" class="ms-3 text-muted" style="font-size:.72rem;text-decoration:none;opacity:.65;" title="Full insights">
+                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                        </a>
+                    </div>
+
+                    <div v-if="chartsLoading" class="d-flex align-items-center justify-content-center" style="height:310px;">
+                        <div class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm text-primary mb-2"></div>
+                            <p class="small mb-0">Loading charts…</p>
+                        </div>
+                    </div>
+
+                    <template v-else>
+                        <div v-show="chartTab==='timeline'" style="padding:.5rem .75rem;">
+                            <chart-viewer v-if="charts.timeline" :data="charts.timeline" views="area" height="300px"
+                                @chart-click="goToRuleList"></chart-viewer>
+                        </div>
+                        <div v-show="chartTab==='formats'" style="padding:.5rem .75rem;">
+                            <chart-viewer v-if="charts.formats" :data="charts.formats" views="bar-h" height="300px"
+                                @chart-click="onFormatClick"></chart-viewer>
+                        </div>
+                        <div v-show="chartTab==='top_cve'" style="padding:.5rem .75rem;">
+                            <chart-viewer v-if="charts.top_cve" :data="charts.top_cve" views="bar-h" height="300px"
+                                @chart-click="onCveClick"></chart-viewer>
+                        </div>
+                        <div v-show="chartTab==='top_atk'" style="padding:.5rem .75rem;">
+                            <chart-viewer v-if="charts.top_atk" :data="charts.top_atk" views="bar-h" height="300px"
+                                @chart-click="onAtkClick"></chart-viewer>
+                        </div>
+                    </template>
+                </div>
             </div>
 
-            <!-- Right — public activity feed (10 max, no pagination) -->
-            <div class="col-lg-5">
-                <div class="card border-0 shadow-sm rounded-4 h-100" style="background-color: var(--card-bg-color);">
-                    <div class="card-body p-3 d-flex flex-column">
-
-                        <!-- Header -->
-                        <div class="d-flex align-items-center justify-content-between mb-3 flex-shrink-0">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="feed-dot"></span>
-                                <h5 class="fw-bold mb-0">Community Activity</h5>
-                            </div>
-                            <span class="badge rounded-pill border text-muted fw-normal"
-                                  style="font-size:.72rem;background:var(--card-bg-color);">
-                                [[ feed.length ]] events
-                            </span>
+            <!-- Activity feed -->
+            <div class="col-lg-4 d-flex flex-column">
+                <div class="home-feed-card flex-grow-1">
+                    <div class="home-feed-header">
+                        <div class="home-feed-title">
+                            <span class="feed-live-dot"></span>
+                            Community Activity
                         </div>
+                        <span class="badge rounded-pill border fw-normal"
+                              style="font-size:.68rem;background:var(--card-bg-color);color:var(--subtle-text-color);">
+                            [[ feed.length ]] events
+                        </span>
+                    </div>
 
-                        <!-- Loading -->
+                    <div class="home-feed-scroll" style="max-height:330px;">
                         <template v-if="feedLoading">
-                            <div class="d-flex align-items-center justify-content-center flex-grow-1">
+                            <div class="d-flex align-items-center justify-content-center py-5">
                                 <div class="text-center text-muted">
                                     <div class="spinner-border spinner-border-sm text-primary mb-2"></div>
-                                    <p class="small mb-0">Loading activity…</p>
+                                    <p class="small mb-0">Loading…</p>
                                 </div>
                             </div>
                         </template>
-
-                        <!-- Empty -->
                         <template v-else-if="feed.length === 0">
-                            <div class="d-flex align-items-center justify-content-center flex-grow-1">
-                                <div class="text-center text-muted py-4">
-                                    <i class="fa-solid fa-satellite-dish fa-2x mb-3 d-block opacity-25"></i>
-                                    <p class="small mb-0">No public activity yet.<br>Be the first to contribute!</p>
+                            <div class="d-flex align-items-center justify-content-center py-5">
+                                <div class="text-center text-muted">
+                                    <i class="fa-solid fa-satellite-dish fa-2x mb-3 d-block opacity-20"></i>
+                                    <p class="small mb-0">No activity yet.<br>Be the first to contribute!</p>
                                 </div>
                             </div>
                         </template>
-
-                        <!-- Feed list -->
-                        <div v-else class="feed-scroll flex-grow-1">
-                            <div v-for="(item, idx) in feed" :key="item.id"
-                                :class="['feed-item d-flex align-items-start gap-3 p-2 px-3 mb-1',
-                                         feedUrl(item) ? '' : 'no-link']"
-                                @click="feedUrl(item) && openFeedItem(item)">
-
-                                <!-- Icon bubble -->
-                                <div class="feed-icon mt-1 shadow-sm" :style="feedBubbleStyle(item.action)">
-                                    <i :class="item.icon || 'fa-solid fa-circle-dot'" style="font-size:.85rem;"></i>
+                        <template v-else>
+                            <div v-for="item in feed" :key="item.id"
+                                 :class="['feed-row', feedUrl(item) ? '' : 'no-link']"
+                                 @click="feedUrl(item) && openFeedItem(item)">
+                                <div class="feed-bubble" :style="feedBubbleStyle(item.action)">
+                                    <i :class="item.icon || 'fa-solid fa-circle-dot'"></i>
                                 </div>
-
-                                <!-- Content -->
                                 <div class="flex-grow-1 min-width-0">
                                     <div class="d-flex align-items-baseline gap-1 flex-wrap">
                                         <user-chip v-if="item.user_id" :user-id="item.user_id" :username="item.username" size="xs" @click.stop></user-chip>
-                                        <span v-else class="feed-username small text-muted">Someone</span>
-                                        <span class="text-muted small">[[ friendlyAction(item.action) ]]</span>
+                                        <span v-else class="feed-uname">Someone</span>
+                                        <span class="feed-action">[[ friendlyAction(item.action) ]]</span>
                                     </div>
-                                    <p v-if="item.description" class="mb-0 text-truncate"
-                                       style="font-size:.78rem;color:var(--bs-secondary-color,#6c757d);max-width:95%;"
-                                       :title="item.description">
-                                        [[ item.description ]]
-                                    </p>
-                                    <div class="d-flex align-items-center gap-2 mt-1">
-                                        <small class="text-muted" style="font-size:.7rem;">
-                                            <i class="fa-regular fa-clock me-1 opacity-50"></i>[[ formatTime(item.created_at) ]]
-                                        </small>
-                                        <span v-if="feedUrl(item)"
-                                              class="badge rounded-pill text-muted border"
-                                              style="font-size:.62rem;background:var(--card-bg-color);">
-                                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>view
-                                        </span>
-                                    </div>
+                                    <div v-if="item.description" class="feed-desc" :title="item.description">[[ item.description ]]</div>
+                                    <div class="feed-time"><i class="fa-regular fa-clock me-1 opacity-40"></i>[[ formatTime(item.created_at) ]]</div>
                                 </div>
-
                             </div>
-
-                        </div>
-
+                        </template>
                     </div>
                 </div>
             </div>
 
-        </div><!-- end 2-col -->
-
-        <hr class="fading-line-2 my-5">
-
-        <div class="d-flex align-items-center justify-content-between mb-4">
-            <h4 class="fw-bold mb-0">Recently Added <span class="text-primary">Intelligence</span></h4>
-            <p class="text-muted small mb-0 d-none d-lg-block">Review the latest 12 assets updated by the community.</p>
         </div>
 
+        <!-- ══ RECENTLY ADDED ════════════════════════════════════════════════ -->
+        <hr class="home-divider">
+        <div class="home-sh mb-3">
+            <div class="home-sh-title"><span class="home-sh-dot"></span>Recently Added <span class="text-primary ms-1">Intelligence</span></div>
+            <div class="home-sh-sub d-none d-md-block">Latest community contributions</div>
+        </div>
         <rules-carousel route="/get_last_rules" :current-user-id="currentUserId"
             :current-user-is-admin="current_user_is_admin" :current-user-is-connected="current_user_is_connected">
         </rules-carousel>
 
-        <hr class="opacity-10 mb-5 mt-5">
-        <div class="d-flex align-items-center justify-content-between mb-4">
-            <h4 class="fw-bold mb-0">Recently CVE <span class="text-primary">reports</span></h4>
-            <p class="text-muted small mb-0 d-none d-lg-block">Review the latest 12 assets connected with CVE.</p>
+        <!-- ══ CVE COVERAGE ══════════════════════════════════════════════════ -->
+        <hr class="home-divider">
+        <div class="home-sh mb-3">
+            <div class="home-sh-title"><span class="home-sh-dot" style="background:#dc3545;"></span>Recent <span class="text-danger ms-1">CVE Coverage</span></div>
+            <div class="home-sh-sub d-none d-md-block">Rules linked to known vulnerabilities</div>
         </div>
-
         <rules-carousel route="/rule/get_last_cve_rules" :current-user-id="currentUserId"
             :current-user-is-admin="current_user_is_admin" :current-user-is-connected="current_user_is_connected">
         </rules-carousel>
 
-        <div class="text-center mt-5 mb-4">
-            <a href="/rule/rules_list" class="btn btn-more-rules px-4 py-2 rounded-pill fw-bold">
-                <span>See more rules</span>
-                <i class="fa-solid fa-arrow-right ms-2 transition-arrow"></i>
+        <!-- ══ SEE MORE ══════════════════════════════════════════════════════ -->
+        <div class="text-center mt-4 mb-2">
+            <a href="/rule/rules_list" class="btn btn-see-more px-4 py-2 rounded-pill fw-semibold">
+                <i class="fa-solid fa-layer-group me-2 opacity-60"></i>Browse all rules
+                <i class="fa-solid fa-arrow-right ms-2 opacity-50"></i>
             </a>
         </div>
 
     </template>
 
     <template v-else>
-        <div class="col-12 text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
         </div>
     </template>
 </div>
@@ -266,24 +530,20 @@
     import { message_list, create_message } from '/static/js/toaster.js'
     import RulesCarousel from '/static/js/rule/rulesCarousel.js'
     import UserChip from '/static/js/components/UserChip.js'
+    import ChartViewer from '/static/js/components/chart-viewer.js'
 
-    // ── Action → friendly label ──────────────────────────────────────────────
+    // Pre-warm the two chart renderers used on this page so get_renderer() hits the cache
+    import('/static/js/components/charts/chart-area.js').catch(() => {})
+    import('/static/js/components/charts/chart-bar-h.js').catch(() => {})
+
     const ACTION_LABELS = {
-        'rule.create':            'created a rule',
-        'rule.edit':              'edited a rule',
-        'rule.vote_up':           'upvoted a rule',
-        'rule.vote_down':         'downvoted a rule',
-        'rule.favorite':          'favorited a rule',
-        'rule.download':          'downloaded a rule',
-        'bundle.create':          'created a bundle',
-        'bundle.edit':            'updated a bundle',
-        'comment.add':            'commented',
-        'user.register':          'joined Rulezet',
-        'tag.create':             'created a tag',
-        'github.import_started':  'started a GitHub import',
+        'rule.create': 'created a rule', 'rule.edit': 'edited a rule',
+        'rule.vote_up': 'upvoted a rule', 'rule.vote_down': 'downvoted a rule',
+        'rule.favorite': 'favorited a rule', 'bundle.create': 'created a bundle',
+        'bundle.edit': 'updated a bundle', 'comment.add': 'commented',
+        'user.register': 'joined Rulezet', 'tag.create': 'created a tag',
+        'github.import_started': 'started a GitHub import',
     }
-
-    // ── Action → bubble color ────────────────────────────────────────────────
     const ACTION_COLORS = {
         'rule':    { bg: 'rgba(13,110,253,.12)',  color: '#0d6efd' },
         'bundle':  { bg: 'rgba(255,193,7,.15)',   color: '#ca8a04' },
@@ -293,15 +553,12 @@
     }
 
     function feedBubbleStyle(action) {
-        const prefix = action.split('.')[0]
-        const c = ACTION_COLORS[prefix] || { bg: 'rgba(108,117,125,.1)', color: '#6c757d' }
+        const c = ACTION_COLORS[action.split('.')[0]] || { bg: 'rgba(108,117,125,.1)', color: '#6c757d' }
         return `background:${c.bg};color:${c.color};`
     }
-
     function friendlyAction(action) {
         return ACTION_LABELS[action] || action.replace('.', ' ').replace(/_/g, ' ')
     }
-
     function feedUrl(item) {
         if (item.target_type === 'rule') {
             if (item.target_uuid) return `/rule/detail_rule/${item.target_uuid}`
@@ -327,34 +584,73 @@
         }
         return null
     }
-
     function formatTime(ts) {
         if (!ts) return ''
-        // dayjs is loaded globally — handles UTC correctly
         return dayjs.utc(ts).fromNow()
     }
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'rules-carousel': RulesCarousel, 'user-chip': UserChip },
+        components: {
+            'rules-carousel': RulesCarousel,
+            'user-chip':      UserChip,
+            'chart-viewer':   ChartViewer,
+        },
         setup() {
-            const is_loading              = ref(false)
-            const current_user_is_admin   = ref(false)
+            const is_loading                = ref(false)
+            const current_user_is_admin     = ref(false)
             const current_user_is_connected = ref(false)
-            const currentUserId           = ref(null)
-
-            // ── Feed ────────────────────────────────────────────────────────
-            const feed        = ref([])
-            const feedLoading = ref(true)
+            const currentUserId             = ref(null)
+            const feed                      = ref([])
+            const feedLoading               = ref(true)
+            const charts                    = ref({})
+            const chartsLoading             = ref(false)
+            const chartTab                  = ref('timeline')
 
             async function fetchFeed() {
                 feedLoading.value = true
                 try {
-                    const res  = await fetch('/activity_feed?page=1&per_page=10')
+                    const res  = await fetch('/activity_feed?page=1&per_page=20')
                     const data = await res.json()
                     feed.value = data.logs || []
                 } catch {}
                 feedLoading.value = false
+            }
+
+            async function switchTab(tab) {
+                chartTab.value = tab
+                if (charts.value[tab]) return
+                chartsLoading.value = true
+                try {
+                    const res  = await fetch('/home_charts/' + tab)
+                    charts.value = { ...charts.value, [tab]: await res.json() }
+                } catch {}
+                chartsLoading.value = false
+            }
+
+            function goToRuleList() {
+                window.location.href = '/rule/rules_list';
+            }
+
+            function onFormatClick(item) {
+                const fmt = (item.name || '').trim().toLowerCase();
+                window.location.href = fmt
+                    ? '/rule/rules_list?rule_type=' + encodeURIComponent(fmt)
+                    : '/rule/rules_list';
+            }
+
+            function onCveClick(item) {
+                const cve = (item.name || '').trim();
+                window.location.href = cve
+                    ? '/rule/rules_list?vulnerabilities=' + encodeURIComponent(cve)
+                    : '/rule/rules_list';
+            }
+
+            function onAtkClick(item) {
+                const tid = (item.name || '').trim();
+                window.location.href = tid
+                    ? '/rule/rules_list?attacks=' + encodeURIComponent(tid)
+                    : '/rule/rules_list';
             }
 
             function openFeedItem(item) {
@@ -362,24 +658,25 @@
                 if (url) window.open(url, '_blank')
             }
 
-            // ── User detection ───────────────────────────────────────────────
             async function checkIfUserIsConnected() {
-                const res = await fetch('/get_current_user_connected')
+                const res  = await fetch('/get_current_user_connected')
                 const data = await res.json()
                 current_user_is_connected.value = data.is_authenticated
                 if (data.is_authenticated) {
-                    const userRes = await fetch('/rule/get_current_user')
-                    const userData = await userRes.json()
-                    current_user_is_admin.value = userData.user
-                    currentUserId.value = userData.id ?? null
+                    const ur = await fetch('/rule/get_current_user')
+                    const ud = await ur.json()
+                    current_user_is_admin.value = ud.user
+                    currentUserId.value = ud.id ?? null
                 }
             }
 
             async function init() {
                 is_loading.value = false
+                // Load default tab immediately
+                switchTab('timeline')
+                fetchFeed()
                 await checkIfUserIsConnected()
                 is_loading.value = true
-                fetchFeed()
             }
 
             onMounted(() => init())
@@ -387,11 +684,13 @@
             return {
                 message_list, is_loading,
                 current_user_is_admin, current_user_is_connected, currentUserId,
-                feed, feedLoading,
-                fetchFeed, openFeedItem,
+                feed, feedLoading, charts, chartsLoading, chartTab,
+                openFeedItem, goToRuleList, onFormatClick, onCveClick, onAtkClick, switchTab,
                 feedBubbleStyle, friendlyAction, feedUrl, formatTime,
             }
         }
     }).mount('#main-container')
 </script>
+
+<script src="{{ url_for('static', filename='js/home/kpiTransition.js') }}" defer></script>
 {% endblock %}

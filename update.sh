@@ -37,7 +37,13 @@ fi
 
 # 3.1 SUBMODULES UPDATE
 echo -e "\n${YELLOW}Updating Git submodules...${NC}"
-git submodule update --remote
+# Update all submodules except cti (too large for --remote; cti data is refreshed via the admin UI)
+git submodule update --remote app/modules/rulezet-cast app/modules/pivotick app/modules/misp-taxonomies app/modules/misp-galaxy 2>/dev/null || git submodule update --remote
+# Update cti with shallow fetch to keep the footprint small
+echo -e "${YELLOW}Pulling latest MITRE CTI data (shallow)...${NC}"
+git submodule update --remote --depth 1 app/modules/cti 2>/dev/null && \
+    echo -e "${GREEN}✔ CTI data updated.${NC}" || \
+    echo -e "${RED}⚠ CTI update skipped (no network or submodule not initialised).${NC}"
 
 # 4. REQUIREMENTS CHECK
 echo -e "\n${YELLOW}[4/5] Checking and installing requirements...${NC}"

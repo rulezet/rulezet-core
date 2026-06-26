@@ -7,8 +7,8 @@ Usage:
     log_activity("rule.create", f"Created rule '{rule.title}'",
                  target_type="rule", target_id=rule.id, target_uuid=rule.uuid)
 
-`is_public` and `icon` are auto-determined from the action if not provided.
-Never raises — failures are silently swallowed.
+`is_public`, `icon`, `title`, `category` and `level` are auto-determined
+from the action if not provided. Never raises — failures are silently swallowed.
 """
 
 from __future__ import annotations
@@ -69,14 +69,112 @@ _PUBLIC_ACTIONS: frozenset[str] = frozenset({
     "rule.vote_down",
     "rule.favorite",
     "rule.download",
-    "bundle.create",          # may be overridden to False for private bundles
-    "bundle.edit",            # may be overridden to False for private bundles
+    "bundle.create",
+    "bundle.edit",
     "comment.add",
     "user.register",
     "tag.create",
-    "github.import_started",  # imports are public — new rules added to the community
-    # github.update_started is intentionally NOT here — private operation
+    "github.import_started",
 })
+
+# Human-readable titles for known actions
+_TITLES: dict[str, str] = {
+    "rule.create":              "Rule Created",
+    "rule.edit":                "Rule Edited",
+    "rule.delete":              "Rule Deleted",
+    "rule.bulk_delete":         "Rules Bulk Deleted",
+    "rule.permanent_delete":    "Rule Permanently Deleted",
+    "rule.permanent_delete_bulk": "Rules Permanently Deleted",
+    "rule.restore":             "Rule Restored",
+    "rule.restore_bulk":        "Rules Bulk Restored",
+    "rule.conflict_resolved":   "Trash Conflict Resolved",
+    "rule.vote_up":             "Rule Upvoted",
+    "rule.vote_down":           "Rule Downvoted",
+    "rule.favorite":            "Rule Favorited",
+    "rule.unfavorite":          "Rule Unfavorited",
+    "rule.download":            "Rule Downloaded",
+    "rule.scope_add":           "Environment Scope Added",
+    "rule.scope_update":        "Environment Scope Updated",
+    "rule.scope_delete":        "Environment Scope Removed",
+    "rule.propose_edit":        "Edit Proposal Submitted",
+    "rule.proposal_approved":   "Edit Proposal Approved",
+    "rule.proposal_rejected":   "Edit Proposal Rejected",
+    "rule.bad_rule_edited":     "Invalid Rule Fixed",
+    "rule.bad_rule_deleted":    "Invalid Rule Deleted",
+    "rule.report":              "Rule Reported",
+    "bundle.create":            "Bundle Created",
+    "bundle.edit":              "Bundle Edited",
+    "bundle.delete":            "Bundle Deleted",
+    "bundle.tags_updated":      "Bundle Tags Updated",
+    "bundle.rule_added":        "Rule Added to Bundle",
+    "comment.add":              "Comment Added",
+    "comment.delete":           "Comment Deleted",
+    "bundle_comment.add":       "Bundle Comment Added",
+    "bundle_comment.delete":    "Bundle Comment Deleted",
+    "user.register":            "User Registered",
+    "user.login":               "User Logged In",
+    "user.logout":              "User Logged Out",
+    "user.edit_profile":        "Profile Updated",
+    "user.verified":            "Account Verified",
+    "user.owner_request":       "Ownership Request Submitted",
+    "tag.create":               "Tag Created",
+    "tag.edit":                 "Tag Edited",
+    "tag.delete":               "Tag Deleted",
+    "tag.bulk_delete":          "Tags Bulk Deleted",
+    "tag.family_delete":        "Tag Family Deleted",
+    "tag.toggle_visibility":    "Tag Visibility Toggled",
+    "tag.toggle_status":        "Tag Status Toggled",
+    "job.create":               "Job Created",
+    "job.cancel":               "Job Cancelled",
+    "job.pause":                "Job Paused",
+    "job.resume":               "Job Resumed",
+    "job.delete":               "Job Deleted",
+    "github.import_started":    "GitHub Import Started",
+    "github.update_started":    "GitHub Update Started",
+    "github.source_deleted":    "GitHub Source Deleted",
+    "admin.update_misp":        "MISP Data Updated",
+    "admin.promote_user":       "User Promoted to Admin",
+    "admin.demote_user":        "Admin Rights Removed",
+    "admin.delete_user":        "User Deleted",
+    "admin.request_approved":   "Ownership Request Approved",
+    "admin.request_rejected":   "Ownership Request Rejected",
+    "admin.owner_request":      "Ownership Request Submitted",
+    "admin.logs_bulk_delete":   "Logs Bulk Delete Queued",
+    "admin.submodule_update":   "Submodules Updated",
+    "admin.settings_changed":   "Admin Settings Changed",
+    "admin.test_email_sent":    "Test Email Sent",
+    "admin.instance_init":      "Instance Config Refreshed",
+    "admin.import_tag_families":"Tag Families Imported",
+    "connector.create":         "Connector Created",
+    "connector.update":         "Connector Updated",
+    "connector.delete":         "Connector Deleted",
+    "connector.test_ok":        "Connector Test Passed",
+    "connector.pull_triggered": "Connector Pull Triggered",
+    "connector.pull_done":      "Connector Pull Completed",
+    "admin.replace_format":     "Rule Format Replaced",
+    "admin.delete_reports":     "Reports Bulk Deleted",
+    "api.request":              "API Request",
+}
+
+# Known category prefixes (first segment of action)
+_KNOWN_CATEGORIES = frozenset({
+    'rule', 'bundle', 'bundle_comment', 'user', 'tag', 'job',
+    'github', 'admin', 'comment', 'connector', 'api',
+})
+
+# Prefix to display category mapping
+_CATEGORY_MAP: dict[str, str] = {
+    'bundle_comment': 'comment',
+}
+
+_WARNING_KEYWORDS = (
+    'delete', 'trash', 'demote', 'reject', 'ban', 'bulk_delete', 'logs_bulk_delete',
+    'source_deleted', 'remove_user', 'family_delete',
+)
+_SUCCESS_KEYWORDS = (
+    'create', 'register', 'add', 'approved', 'promote', 'import_started', 'pull_done',
+    'restored', 'verified',
+)
 
 
 def _default_icon(action: str) -> str:
@@ -94,9 +192,34 @@ def _default_icon(action: str) -> str:
         return "fa-solid fa-gears"
     if action.startswith("tag."):
         return "fa-solid fa-tag"
-    if action.startswith("comment."):
+    if action.startswith(("comment.", "bundle_comment.")):
         return "fa-solid fa-comment"
+    if action.startswith("connector."):
+        return "fa-solid fa-plug"
     return "fa-solid fa-circle-dot"
+
+
+def _auto_category(action: str) -> str:
+    prefix = action.split('.')[0] if '.' in action else 'system'
+    if prefix not in _KNOWN_CATEGORIES:
+        return 'system'
+    return _CATEGORY_MAP.get(prefix, prefix)
+
+
+def _auto_level(action: str) -> str:
+    a = action.lower()
+    if any(k in a for k in _WARNING_KEYWORDS):
+        return 'warning'
+    if any(k in a for k in _SUCCESS_KEYWORDS):
+        return 'success'
+    return 'info'
+
+
+def _auto_title(action: str) -> str:
+    if action in _TITLES:
+        return _TITLES[action]
+    parts = action.replace('.', ' ').replace('_', ' ').split()
+    return ' '.join(p.capitalize() for p in parts)
 
 
 def log_activity(
@@ -108,6 +231,9 @@ def log_activity(
     extra: dict[str, Any] | None = None,
     is_public: bool | None = None,
     icon: str | None = None,
+    title: str | None = None,
+    category: str | None = None,
+    level: str | None = None,
 ) -> None:
     with suppress(Exception):
         from app import db
@@ -120,23 +246,31 @@ def log_activity(
             if current_user.is_authenticated:
                 user_id = current_user.id
 
-        ip = method = url = None
+        ip = method = url = user_agent = None
         with suppress(Exception):
-            ip     = freq.remote_addr
-            url    = freq.path[:512]
-            method = freq.method
+            ip         = freq.remote_addr
+            url        = freq.path[:512]
+            method     = freq.method
+            user_agent = (freq.headers.get('User-Agent') or '')[:256] or None
 
-        resolved_public = is_public if is_public is not None else (action in _PUBLIC_ACTIONS)
-        resolved_icon   = icon if icon is not None else _default_icon(action)
+        resolved_public    = is_public if is_public is not None else (action in _PUBLIC_ACTIONS)
+        resolved_icon      = icon if icon is not None else _default_icon(action)
+        resolved_title     = title if title is not None else _auto_title(action)
+        resolved_category  = category if category is not None else _auto_category(action)
+        resolved_level     = level if level is not None else _auto_level(action)
 
         entry = ActivityLog(
             uuid        = str(uuid_mod.uuid4()),
             user_id     = user_id,
             action      = action,
+            title       = resolved_title,
             description = description,
+            category    = resolved_category,
+            level       = resolved_level,
             ip_address  = ip,
             url         = url,
             method      = method,
+            user_agent  = user_agent,
             target_type = target_type,
             target_id   = target_id,
             target_uuid = target_uuid,

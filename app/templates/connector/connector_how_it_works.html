@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import 'macros/admin_nav.html' as anav %}
 
 {% block title %}How Connectors Work — Rulezet{% endblock %}
 
@@ -135,6 +136,8 @@
       exact logic used to sync rules and bundles between instances.
     </p>
   </div>
+
+  {{ anav.admin_nav('connectors') }}
 
   <div class="row g-4">
 

@@ -1,0 +1,408 @@
+/*
+  timeline.css — Tree-style vertical timeline with collapse per item.
+*/
+
+/*---TIMELINE_BASE---*/
+
+.tl {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/*---TIMELINE_CONTROLS---*/
+
+.tl-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.tl-ctrl-btn {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 99px;
+    padding: 3px 10px;
+    font-size: .7rem;
+    font-family: var(--font-sans);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background var(--transition), color var(--transition);
+}
+
+.tl-ctrl-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-main);
+}
+
+/*---TIMELINE_GROUP---*/
+
+.tl-group { margin-bottom: 4px; }
+
+.tl-day-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0 10px;
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+}
+
+.tl-day-header::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-subtle);
+}
+
+/*---TIMELINE_TRUNK (tree connector)---*/
+
+.tl-trunk {
+    position: relative;
+    padding-left: 36px;
+}
+
+/* Continuous vertical trunk line */
+.tl-trunk::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 10px;
+    bottom: 12px;
+    width: 2px;
+    background: var(--border);
+    border-radius: 1px;
+}
+
+/*---TIMELINE_ITEM---*/
+
+.tl-item {
+    position: relative;
+    padding-bottom: 2px;
+}
+
+.tl-item:last-child {
+    padding-bottom: 0;
+}
+
+/*---TIMELINE_BRANCH (dot + horizontal connector)---*/
+
+.tl-branch {
+    position: absolute;
+    left: -36px;
+    top: 0;
+    width: 36px;
+    height: 22px;
+    pointer-events: none;
+}
+
+/* Horizontal connector from dot to content */
+.tl-branch::after {
+    content: '';
+    position: absolute;
+    left: 22px;
+    top: 10px;
+    width: 14px;
+    height: 2px;
+    background: var(--border-subtle);
+}
+
+/*---TIMELINE_DOT---*/
+
+.tl-dot {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .5rem;
+    flex-shrink: 0;
+    border: 2px solid var(--bg-body);
+    z-index: 1;
+}
+
+.tl-dot--info    { background: #3b82f6; color: #fff; }
+.tl-dot--success { background: #22c55e; color: #fff; }
+.tl-dot--warning { background: #f59e0b; color: #fff; }
+.tl-dot--error   { background: #ef4444; color: #fff; }
+
+/*---TIMELINE_CONTENT---*/
+
+.tl-content {
+    padding: 0 0 12px;
+    min-width: 0;
+}
+
+/*---TIMELINE_HEADER (clickable)---*/
+
+.tl-header {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition);
+    margin-bottom: 0;
+}
+
+.tl-header:hover { background: var(--bg-elevated); }
+
+.tl-title {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text-main);
+    font-family: var(--font-sans);
+    flex: 1;
+    min-width: 0;
+    line-height: 1.4;
+}
+
+.tl-badges {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+/*---TIMELINE_DELETE---*/
+
+.tl-delete-btn {
+    background: none;
+    border: none;
+    padding: 2px 5px;
+    color: var(--text-muted);
+    font-size: .6rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    opacity: 0;
+    transition: opacity .15s, color .15s, background .15s;
+}
+
+.tl-header:hover .tl-delete-btn { opacity: 1; }
+.tl-delete-btn:hover { color: #ef4444; background: rgba(239,68,68,.08); }
+
+/*---TIMELINE_CHEVRON---*/
+
+.tl-chevron {
+    background: none;
+    border: none;
+    padding: 0 2px;
+    color: var(--text-muted);
+    font-size: .65rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform .18s ease, color .18s ease;
+    margin-top: 2px;
+}
+
+.tl-chevron--open {
+    transform: rotate(90deg);
+    color: var(--brand);
+}
+
+/*---TIMELINE_BADGES---*/
+
+.tl-cat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .64rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 99px;
+    padding: 1px 7px;
+    font-family: var(--font-sans);
+}
+
+.tl-cat-badge i { font-size: .55rem; }
+
+.tl-level-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: .62rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 99px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-family: var(--font-sans);
+}
+
+.tl-level-badge--info    { background: rgba(59,130,246,.12);  color: #3b82f6; }
+.tl-level-badge--success { background: rgba(34,197,94,.12);   color: #22c55e; }
+.tl-level-badge--warning { background: rgba(245,158,11,.12);  color: #f59e0b; }
+.tl-level-badge--error   { background: rgba(239,68,68,.12);   color: #ef4444; }
+
+/*---TIMELINE_BODY (collapsible)---*/
+
+.tl-body {
+    padding: 2px 6px 4px;
+}
+
+/*---TIMELINE_META---*/
+
+.tl-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 4px;
+}
+
+.tl-actor {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .72rem;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+}
+
+.tl-actor-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--brand-dim);
+    border: 1px solid var(--brand-glow);
+    color: var(--brand);
+    font-size: .5rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.tl-actor--system { color: var(--text-muted); }
+.tl-actor--system i { font-size: .6rem; }
+
+.tl-sep  { color: var(--text-muted); font-size: .65rem; }
+
+.tl-time {
+    font-size: .7rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    cursor: default;
+}
+
+.tl-action {
+    font-size: .68rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0 5px;
+}
+
+/*---TIMELINE_DESCRIPTION---*/
+
+.tl-desc {
+    font-size: .75rem;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    line-height: 1.55;
+    margin-top: 2px;
+}
+
+/*---TIMELINE_DIFF_HINT---*/
+
+.tl-diff-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .7rem;
+    color: #3b82f6;
+    margin-top: 6px;
+    padding: 2px 8px;
+    background: rgba(59,130,246,.08);
+    border: 1px solid rgba(59,130,246,.2);
+    border-radius: 99px;
+}
+
+.tl-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .7rem;
+    color: #0d6efd;
+    text-decoration: none;
+    font-weight: 600;
+    padding: 2px 8px;
+    background: rgba(13,110,253,.08);
+    border: 1px solid rgba(13,110,253,.2);
+    border-radius: 99px;
+    transition: background .12s;
+}
+.tl-action-btn:hover {
+    background: rgba(13,110,253,.15);
+    color: #0d6efd;
+}
+
+/*---TIMELINE_EMPTY---*/
+
+.tl-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 48px 24px;
+    color: var(--text-muted);
+    font-size: .85rem;
+    font-family: var(--font-sans);
+}
+
+.tl-empty i { font-size: 1.2rem; }
+
+/*---TIMELINE_SKELETON---*/
+
+.tl-skeleton {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+    animation: tl-pulse 1.4s ease-in-out infinite;
+}
+
+.tl-skeleton-dot {
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--bg-elevated);
+}
+
+.tl-skeleton-body { flex: 1; }
+
+.tl-skeleton-title {
+    height: 13px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    width: 60%;
+    margin-bottom: 8px;
+}
+
+.tl-skeleton-meta {
+    height: 10px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    width: 35%;
+}
+
+@keyframes tl-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .45; }
+}

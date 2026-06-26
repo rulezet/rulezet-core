@@ -1,85 +1,77 @@
 {% extends 'base.html' %}
-{% import 'macros/form_macros.html' as f %}
+{% block title %}Log in | Rulezet{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/account/login.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/auth.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="container login-wrapper">
-    <div class="col-md-5 col-lg-4">
+<div class="auth-wrapper">
+  <div style="max-width:400px;width:100%;">
 
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="auth-brand-icon"><i class="fa-solid fa-shield-halved"></i></span>
+      </div>
+      <h1 class="auth-title">Welcome back</h1>
+      <p class="auth-subtitle">Log in to your Rulezet account</p>
 
-        <div class="login-card">
-            <div class="login-underline mt-3"></div>
-            <h2 class="login-title">Login</h2>
-            <div class="login-underline"></div>
+      <form action="" method="post">
+        {{ form.hidden_tag() }}
 
-            <form action="" method="post">
-                {{ form.hidden_tag() }}
-
-                <!-- Email -->
-                <div class="mb-3">
-                    <label for="email" class="form-label">
-                        {{ form.email.label }} <span class="text-danger">*</span>
-                    </label>
-                    {{ form.email(class_="form-control", id="email", placeholder="Enter your email") }}
-                    {% if form.email.errors %}
-                    <div class="text-danger small mt-1">{{ form.email.errors[0] | safe }}</div>
-                    {% endif %}
-                </div>
-
-                <!-- Password -->
-                <div class="mb-3">
-                    <label for="password" class="form-label">
-                        {{ form.password.label }} <span class="text-danger">*</span>
-                    </label>
-                    <div class="input-group">
-                        {{ form.password(class_="form-control", id="password", placeholder="Enter your password") }}
-                        <span class="input-group-text" style="cursor:pointer;" onclick="togglePassword()">
-                            <i id="togglePasswordIcon" class="fa fa-eye"></i>
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Remember me -->
-                <div class="form-check mb-3">
-                    {{ form.remember_me(class_="form-check-input", id="remember_me") }}
-                    <label class="form-check-label" for="remember_me">
-                        {{ form.remember_me.label.text }}
-                    </label>
-                </div>
-
-                <!-- Submit -->
-                <button type="submit" class="btn-login mb-3">
-                    <i class="fa-solid fa-right-to-bracket me-1"></i>
-                    {{ form.submit.label.text }}
-                </button>
-
-                <!-- Register link -->
-                <div class="text-center">
-                    <a href="/account/register" class="login-register-link text-decoration-none small">
-                        <i class="fa fa-user-plus me-1"></i> Create an account
-                    </a>
-                </div>
-
-            </form>
+        <div class="mb-3">
+          <label for="email" class="form-label">Email</label>
+          {{ form.email(class_="form-control", id="email", placeholder="you@example.com", autocomplete="email") }}
+          {% if form.email.errors %}
+          <div class="field-error">{{ form.email.errors[0] }}</div>
+          {% endif %}
         </div>
 
-        <p class="text-center mt-3 small" style="color: var(--subtle-text-color);">
-            © 2025 RULEZET. All rights reserved.
-        </p>
+        <div class="mb-1">
+          <label for="password" class="form-label">Password</label>
+          <div class="input-group">
+            {{ form.password(class_="form-control", id="password", placeholder="••••••••", autocomplete="current-password") }}
+            <span class="input-group-text" onclick="togglePwd('password','pwdIcon')">
+              <i id="pwdIcon" class="fa fa-eye fa-fw"></i>
+            </span>
+          </div>
+          {% if form.password.errors %}
+          <div class="field-error">{{ form.password.errors[0] }}</div>
+          {% endif %}
+        </div>
 
+        <div class="d-flex align-items-center justify-content-between mb-4 mt-2">
+          <div class="form-check mb-0">
+            {{ form.remember_me(class_="form-check-input", id="remember_me") }}
+            <label class="form-check-label" for="remember_me" style="font-size:.855rem;">Keep me logged in</label>
+          </div>
+          <a href="/account/forgot-password" class="auth-link">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="btn-auth mb-3">
+          <i class="fa-solid fa-right-to-bracket me-1"></i> Log in
+        </button>
+      </form>
+
+      <div class="auth-footer-row">
+        Don't have an account?
+        <a href="/account/register" class="auth-link fw-semibold ms-1">Create one</a>
+      </div>
     </div>
+
+    <p class="text-center mt-3" style="font-size:.78rem;color:var(--subtle-text-color);">
+      &copy; 2026 Rulezet. All rights reserved.
+    </p>
+  </div>
 </div>
 
 <script>
-    function togglePassword() {
-        const input = document.getElementById("password");
-        const icon = document.getElementById("togglePasswordIcon");
-        input.type = input.type === "password" ? "text" : "password";
-        icon.classList.toggle("fa-eye");
-        icon.classList.toggle("fa-eye-slash");
-    }
+function togglePwd(inputId, iconId) {
+    const inp = document.getElementById(inputId);
+    const ico = document.getElementById(iconId);
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+    ico.classList.toggle('fa-eye');
+    ico.classList.toggle('fa-eye-slash');
+}
 </script>
 {% endblock %}

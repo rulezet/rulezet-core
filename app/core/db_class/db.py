@@ -31,12 +31,17 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(64), unique=True, index=True)
     admin = db.Column(db.Boolean, default=False, index=True)
     password_hash = db.Column(db.String(165))
-    api_key = db.Column(db.String(60), index=True)
+    api_key = db.Column(db.String(128), index=True)
     is_connected = db.Column(db.Boolean, default=False, index=True)
 
     is_verified = db.Column(db.Boolean, default=False)
     verification_code = db.Column(db.String(6), nullable=True)
     verification_expiration = db.Column(db.DateTime, nullable=True)
+    password_reset_token = db.Column(db.String(64), nullable=True, index=True)
+    password_reset_expiration = db.Column(db.DateTime, nullable=True)
+    pending_email = db.Column(db.String(64), nullable=True)
+    email_change_token = db.Column(db.String(64), nullable=True, index=True)
+    email_change_expiration = db.Column(db.DateTime, nullable=True)
 
     # --- NEW FIELDS ---
 
@@ -161,6 +166,9 @@ class Rule(db.Model):
     remote_rule_uuid   = db.Column(db.String(36), nullable=True, index=True)  # UUID on the remote instance
     sync_instance_url  = db.Column(db.String(255), nullable=True)             # Instance URL the rule was pulled from (persisted even if connector deleted)
 
+    # Rule lifecycle status (personal management)
+    status = db.Column(db.String(20), nullable=False, default='draft', index=True)
+
     #edit
     def get_rule_user_first_name_by_id(self):
         user = User.query.get(self.user_id)  
@@ -198,9 +206,9 @@ class Rule(db.Model):
             "cve_id": self.cve_id if self.cve_id is not None else [],
             "editor": self.get_rule_user_first_name_by_id(),
             "github_path": self.github_path if self.github_path else None,
-            "editor": self.get_rule_user_first_name_by_id(),
             "editor_avatar": submitter_avatar,
             "sync_instance_url": self.sync_instance_url,
+            "status": self.status or 'draft',
         }
 
     def get_extension(self):
@@ -653,14 +661,21 @@ class RuleEditProposal(db.Model):
             'rule_name': self.get_rule_title(),
             'user_id': self.user_id,
             'user_name': f"{self.user.first_name} {self.user.last_name}" if self.user else "Unknown",
+            'user_avatar': self.user.get_avatar_url() if self.user else None,
             'proposed_content': self.proposed_content,
             'old_content': self.old_content,
             'message': self.message,
             'status': self.status,
             'edit_type': self.edit_type,
             'change_score': self.change_score,
+            'comment_count': UnifiedComment.query.filter_by(
+                object_type='proposal', object_id=self.id, is_active=True
+            ).count(),
             'timestamp': self.timestamp.isoformat(),
             'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
+            'reviewed_by_id': self.reviewed_by_id,
+            'reviewed_by_name': f"{self.reviewer.first_name} {self.reviewer.last_name}" if self.reviewer else None,
+            'reviewed_by_avatar': self.reviewer.get_avatar_url() if self.reviewer else None,
             'rejection_reason': self.rejection_reason,
             'comments': [comment.to_json() for comment in self.comments.order_by(RuleEditComment.created_at.asc())] if hasattr(self, 'comments') else []
         }
@@ -750,12 +765,92 @@ class RepportRule(db.Model):
                 "rule_id": self.rule_id,
                 "rule_name": self.rule.title if self.rule else None,
                 "rule_user_owner": self.rule.get_rule_user_first_name_by_id() if self.rule else None,
+                "rule_owner_id": self.rule.user_id if self.rule else None,
+                "rule_owner_avatar": User.query.get(self.rule.user_id).get_avatar_url() if self.rule and self.rule.user_id else None,
+                "rule_format": self.rule.format if self.rule else None,
                 "message": self.message,
                 'created_at': self.created_at.strftime('%Y-%m-%d %H:%M'),
                 "reason": self.reason,
                 "content": self.rule.to_string if self.rule else None
             }
     
+
+class Report(db.Model):
+    """Unified report model for rules, bundles, and comments."""
+    __tablename__ = 'report'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    object_type = db.Column(db.String(20), nullable=False, index=True)   # 'rule' | 'bundle' | 'comment'
+    object_id   = db.Column(db.Integer, nullable=False, index=True)
+    reason      = db.Column(db.String(100), nullable=False)
+    message     = db.Column(db.Text, nullable=True)
+    created_at  = db.Column(db.DateTime,
+                            default=lambda: datetime.datetime.now(datetime.timezone.utc),
+                            index=True)
+    status        = db.Column(db.String(20), default='pending', nullable=False, index=True)
+    checked_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    checked_at    = db.Column(db.DateTime, nullable=True)
+
+    user       = db.relationship('User', foreign_keys=[user_id], backref=db.backref('reports_submitted', lazy='dynamic'))
+    checked_by = db.relationship('User', foreign_keys=[checked_by_id], backref=db.backref('reports_checked', lazy='dynamic'))
+
+    def get_object_label(self):
+        """Human-readable name of the reported object."""
+        try:
+            if self.object_type == 'rule':
+                obj = Rule.query.get(self.object_id)
+                return obj.title if obj else f'Rule #{self.object_id}'
+            if self.object_type == 'bundle':
+                obj = Bundle.query.get(self.object_id)
+                return obj.name if obj else f'Bundle #{self.object_id}'
+            if self.object_type == 'comment':
+                obj = UnifiedComment.query.get(self.object_id)
+                if obj and obj.object_type == 'proposal':
+                    return f'Comment on proposal #{obj.object_id}'
+                return f'Comment #{self.object_id}'
+        except Exception:
+            pass
+        return f'{self.object_type} #{self.object_id}'
+
+    def get_object_url(self):
+        if self.object_type == 'rule':
+            return f'/rule/detail_rule/{self.object_id}'
+        if self.object_type == 'bundle':
+            return f'/bundle/detail/{self.object_id}'
+        if self.object_type == 'comment':
+            c = UnifiedComment.query.get(self.object_id)
+            if c:
+                if c.object_type == 'rule':
+                    return f'/rule/detail_rule/{c.object_id}?comment={c.id}'
+                if c.object_type == 'bundle':
+                    return f'/bundle/detail/{c.object_id}?comment={c.id}'
+                if c.object_type == 'proposal':
+                    return f'/rule/proposal_content_discuss?id={c.object_id}&comment={c.id}'
+        return '#'
+
+    def to_json(self):
+        reporter = self.user
+        checker  = self.checked_by
+        return {
+            'id':               self.id,
+            'user_id':          self.user_id,
+            'reporter_name':    reporter.get_username() if reporter else '?',
+            'user_avatar':      reporter.get_avatar_url() if reporter else None,
+            'object_type':      self.object_type,
+            'object_id':        self.object_id,
+            'object_label':     self.get_object_label(),
+            'object_url':       self.get_object_url(),
+            'reason':           self.reason,
+            'message':          self.message,
+            'created_at':       self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'status':           self.status,
+            'checked_by_id':    self.checked_by_id,
+            'checked_by_name':  checker.get_username() if checker else None,
+            'checked_by_avatar': checker.get_avatar_url() if checker else None,
+            'checked_at':       self.checked_at.strftime('%Y-%m-%d %H:%M') if self.checked_at else None,
+        }
+
 
 class RuleUpdateHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -1324,15 +1419,21 @@ class RuleStatus(db.Model):
     error = db.Column(db.Boolean, default=False)
 
     history_id = db.Column(db.String, nullable=True)
-    def get_format(self):
-        """Return the format of the rule associated with this RuleStatus."""
+    def _get_rule(self):
         if not self.rule_id:
             return None
+        try:
+            return Rule.query.filter_by(id=int(self.rule_id)).first()
+        except (ValueError, TypeError):
+            return None
 
-        rule = Rule.query.get(self.rule_id)
-        return rule.format if rule else None
+    def get_format(self):
+        r = self._get_rule()
+        return r.format if r else None
 
-         
+    def get_title(self):
+        r = self._get_rule()
+        return r.title if r else None
 
     def to_json(self):
         return {
@@ -1341,6 +1442,7 @@ class RuleStatus(db.Model):
             "update_result_id": self.update_result_id,
             "date": self.date.strftime('%Y-%m-%d %H:%M') if self.date else None,
             "name_rule": self.name_rule,
+            "rule_title": self.get_title(),
             "rule_id": self.rule_id,
             "message": self.message,
             "found": self.found,
@@ -1716,11 +1818,15 @@ class ActivityLog(db.Model):
 
     # e.g. "rule.create", "rule.delete", "user.login", "bundle.edit", "admin.promote_user"
     action      = db.Column(db.String(64), nullable=False, index=True)
+    title       = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
+    category    = db.Column(db.String(32), nullable=True, index=True)
+    level       = db.Column(db.String(16), nullable=True, index=True)
 
     ip_address  = db.Column(db.String(45), nullable=True)   # IPv4 or IPv6
     url         = db.Column(db.String(512), nullable=True)
     method      = db.Column(db.String(8), nullable=True)
+    user_agent  = db.Column(db.String(256), nullable=True)
 
     # What entity was acted on
     target_type = db.Column(db.String(32), nullable=True, index=True)  # "rule" | "bundle" | "user" | "tag" | "job"
@@ -1750,9 +1856,14 @@ class ActivityLog(db.Model):
             "uuid":        self.uuid,
             "user_id":     self.user_id,
             "username":    username,
+            "actor_name":  username,
             "action":      self.action,
+            "title":       self.title or '',
+            "category":    self.category or 'system',
+            "level":       self.level or 'info',
             "description": self.description,
             "ip_address":  self.ip_address,
+            "user_agent":  self.user_agent,
             "url":         self.url,
             "method":      self.method,
             "target_type": self.target_type,
@@ -1761,7 +1872,7 @@ class ActivityLog(db.Model):
             "extra":       self.extra,
             "is_public":   self.is_public,
             "icon":        self.icon,
-            "created_at":  self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "created_at":  self.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
         }
     
     def to_json_public(self):
@@ -2086,4 +2197,489 @@ class Notification(db.Model):
             'is_read':      self.is_read,
             'is_job_active': self.is_job_active(),
             'created_at':   self.created_at.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Unified comment system
+# ─────────────────────────────────────────────────────────────────────────────
+
+import uuid as _uuid_mod
+
+
+def _gen_comment_uuid():
+    return str(_uuid_mod.uuid4())
+
+
+class UnifiedComment(db.Model):
+    """Single polymorphic comment table for rules, bundles, and edit proposals."""
+    __tablename__ = 'comment_v2'
+
+    id               = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid             = db.Column(db.String(36), unique=True, nullable=False, index=True, default=_gen_comment_uuid)
+    content          = db.Column(db.Text, nullable=False)
+    content_original = db.Column(db.Text, nullable=True)
+
+    # Thread structure
+    parent_id = db.Column(db.Integer, db.ForeignKey('comment_v2.id', ondelete='SET NULL'), nullable=True, index=True)
+    depth     = db.Column(db.Integer, default=0, nullable=False)
+    root_id   = db.Column(db.Integer, nullable=True, index=True)
+
+    # Polymorphic target — object_type: 'rule' | 'bundle' | 'proposal'
+    object_type = db.Column(db.String(64), nullable=False, index=True)
+    object_id   = db.Column(db.Integer,    nullable=False, index=True)
+
+    is_public   = db.Column(db.Boolean, default=True,  nullable=False)
+    is_active   = db.Column(db.Boolean, default=True,  nullable=False)
+    deleted_at  = db.Column(db.DateTime, nullable=True)
+    deleted_by  = db.Column(db.Integer, nullable=True)
+
+    created_at  = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+    updated_at  = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_by  = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+
+    author = db.relationship(
+        'User',
+        foreign_keys=[created_by],
+        lazy='joined',
+        primaryjoin='UnifiedComment.created_by == User.id',
+    )
+    reactions = db.relationship(
+        'UnifiedCommentReaction',
+        backref='comment',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+    )
+    replies = db.relationship(
+        'UnifiedComment',
+        backref=db.backref('parent_comment', remote_side='UnifiedComment.id'),
+        lazy='dynamic',
+        foreign_keys=[parent_id],
+        cascade='all, delete-orphan',
+    )
+
+    @property
+    def reply_count(self):
+        return UnifiedComment.query.filter_by(parent_id=self.id, is_active=True).count()
+
+    @property
+    def like_count(self):
+        return self.reactions.filter_by(reaction='like').count()
+
+    @property
+    def dislike_count(self):
+        return self.reactions.filter_by(reaction='dislike').count()
+
+    def to_json(self, current_user_id=None):
+        author = self.author
+        if author:
+            initials = ''
+            if author.first_name:
+                initials += author.first_name[0].upper()
+            if author.last_name:
+                initials += author.last_name[0].upper()
+            author_dict = {
+                'id':       author.id,
+                'name':     author.get_username(),
+                'avatar':   author.profile_picture,
+                'initials': initials or '?',
+                'handle':   author.username,
+            }
+        else:
+            author_dict = {'id': None, 'name': 'Deleted user', 'avatar': None, 'initials': '?', 'handle': None}
+
+        user_reaction = None
+        if current_user_id:
+            rxn = self.reactions.filter_by(user_id=current_user_id).first()
+            if rxn:
+                user_reaction = rxn.reaction
+
+        return {
+            'id':            self.id,
+            'uuid':          self.uuid,
+            'content':       self.content if self.is_active else '[deleted]',
+            'parent_id':     self.parent_id,
+            'depth':         self.depth,
+            'root_id':       self.root_id,
+            'object_type':   self.object_type,
+            'object_id':     self.object_id,
+            'is_public':     self.is_public,
+            'created_at':    self.created_at.isoformat() if self.created_at else None,
+            'updated_at':    self.updated_at.isoformat() if self.updated_at else None,
+            'created_by':    self.created_by,
+            'is_active':     self.is_active,
+            'is_deleted':    not self.is_active,
+            'deleted_at':    self.deleted_at.isoformat() if self.deleted_at else None,
+            'reply_count':   self.reply_count,
+            'like_count':    self.like_count,
+            'dislike_count': self.dislike_count,
+            'user_reaction': user_reaction,
+            'author':        author_dict,
+            'is_admin':      author.is_admin() if author else False,
+        }
+
+
+class UnifiedCommentReaction(db.Model):
+    __tablename__ = 'comment_reaction'
+    __table_args__ = (
+        db.UniqueConstraint('comment_id', 'user_id', name='uq_comment_reaction_user'),
+    )
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey('comment_v2.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id',       ondelete='CASCADE'), nullable=False, index=True)
+    reaction   = db.Column(db.String(16), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+
+    user = db.relationship('User', backref=db.backref('unified_comment_reactions', lazy='dynamic'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  User Config & Custom Themes
+# ─────────────────────────────────────────────────────────────────────────────
+
+import uuid as _uuid_mod
+import re as _re
+
+
+def _gen_uuid():
+    return str(_uuid_mod.uuid4())
+
+
+def _slugify(name):
+    s = name.lower().strip()
+    s = _re.sub(r'[^a-z0-9]+', '-', s)
+    return s.strip('-')[:48]
+
+
+THEME_CHOICES = ('system', 'light', 'dark')
+
+
+class UserConfig(db.Model):
+    __tablename__ = 'user_config'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    uuid       = db.Column(db.String(36), unique=True, nullable=False, default=_gen_uuid)
+
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    is_active  = db.Column(db.Boolean, default=True)
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    meta       = db.Column(db.JSON, nullable=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
+    theme   = db.Column(db.String(64), default='system')
+
+    def to_json(self):
+        return {
+            'id':      self.id,
+            'uuid':    self.uuid,
+            'user_id': self.user_id,
+            'theme':   self.theme,
+        }
+
+
+class NotificationPreference(db.Model):
+    """Per-user opt-in/out for each notification category."""
+    __tablename__ = 'notification_preference'
+
+    id      = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'),
+                        nullable=False, unique=True, index=True)
+
+    # Follow-based (someone I follow does something)
+    pref_follow_new_rule    = db.Column(db.Boolean, nullable=False, default=True)
+    pref_follow_new_bundle  = db.Column(db.Boolean, nullable=False, default=True)
+    pref_follow_new_comment = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Ownership-based (someone interacts with my content)
+    pref_rule_comment   = db.Column(db.Boolean, nullable=False, default=True)
+    pref_bundle_comment = db.Column(db.Boolean, nullable=False, default=True)
+
+    # System
+    pref_job_done  = db.Column(db.Boolean, nullable=False, default=True)
+    pref_proposal  = db.Column(db.Boolean, nullable=False, default=True)
+
+    # Proposals & replies
+    pref_proposal_comment  = db.Column(db.Boolean, nullable=False, default=True)
+    pref_proposal_accepted = db.Column(db.Boolean, nullable=False, default=True)
+    pref_comment_reply     = db.Column(db.Boolean, nullable=False, default=True)
+
+    user = db.relationship('User', backref=db.backref(
+        'notification_preference', uselist=False, cascade='all, delete-orphan'))
+
+    def to_json(self):
+        return {
+            'follow_new_rule':    self.pref_follow_new_rule,
+            'follow_new_bundle':  self.pref_follow_new_bundle,
+            'follow_new_comment': self.pref_follow_new_comment,
+            'rule_comment':       self.pref_rule_comment,
+            'bundle_comment':     self.pref_bundle_comment,
+            'job_done':           self.pref_job_done,
+            'proposal':           self.pref_proposal,
+            'proposal_comment':   self.pref_proposal_comment,
+            'proposal_accepted':  self.pref_proposal_accepted,
+            'comment_reply':      self.pref_comment_reply,
+        }
+
+
+class CustomTheme(db.Model):
+    __tablename__ = 'custom_theme'
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid       = db.Column(db.String(36), unique=True, nullable=False, default=_gen_uuid)
+    name       = db.Column(db.String(64), nullable=False)
+    css_key    = db.Column(db.String(64), unique=True, nullable=False)
+    icon       = db.Column(db.String(64), nullable=False, default='fa-palette')
+    is_dark    = db.Column(db.Boolean, default=False, nullable=False)
+    is_builtin = db.Column(db.Boolean, default=False, nullable=False)
+    is_public  = db.Column(db.Boolean, default=False, nullable=False)
+    css_vars   = db.Column(db.JSON, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    is_active  = db.Column(db.Boolean, default=True, nullable=False)
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    deleted_by = db.Column(db.Integer, nullable=True)
+    meta       = db.Column(db.JSON, nullable=True)
+
+    def to_json(self):
+        return {
+            'id':         self.id,
+            'uuid':       self.uuid,
+            'name':       self.name,
+            'css_key':    self.css_key,
+            'icon':       self.icon,
+            'is_dark':    self.is_dark,
+            'is_builtin': self.is_builtin,
+            'css_vars':   self.css_vars or {},
+            'is_public':  self.is_public,
+            'is_active':  self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  MITRE ATT&CK
+# ─────────────────────────────────────────────────────────────────────────────
+
+class AttackTechnique(db.Model):
+    __tablename__ = 'attack_technique'
+
+    id                  = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    technique_id        = db.Column(db.String(20), unique=True, nullable=False, index=True)  # T1059 / T1059.001
+    name                = db.Column(db.String(300), nullable=False)
+    tactic_keys         = db.Column(db.JSON, nullable=True)   # ["execution", "defense-evasion"]
+    description         = db.Column(db.Text, nullable=True)
+    url                 = db.Column(db.String(500), nullable=True)
+    is_subtechnique     = db.Column(db.Boolean, default=False)
+    parent_technique_id = db.Column(db.String(20), nullable=True)   # T1059 for T1059.001
+    deprecated          = db.Column(db.Boolean, default=False)
+    updated_at          = db.Column(db.DateTime, nullable=True)
+
+    def to_json(self):
+        return {
+            'id':                  self.id,
+            'technique_id':        self.technique_id,
+            'name':                self.name,
+            'tactic_keys':         self.tactic_keys or [],
+            'description':         self.description,
+            'url':                 self.url,
+            'is_subtechnique':     self.is_subtechnique,
+            'parent_technique_id': self.parent_technique_id,
+            'deprecated':          self.deprecated,
+            'updated_at':          self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class RuleAttackAssociation(db.Model):
+    __tablename__ = 'rule_attack_association'
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    rule_id     = db.Column(db.Integer, db.ForeignKey('rule.id'), nullable=False)
+    technique_id = db.Column(db.String(20), db.ForeignKey('attack_technique.technique_id'), nullable=False)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)   # null = auto-parsed
+    added_at    = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc))
+    source      = db.Column(db.String(20), default='manual')   # 'manual' | 'auto'
+
+    rule      = db.relationship('Rule', backref=db.backref('attack_assocs', lazy='dynamic', cascade='all, delete-orphan'))
+    technique = db.relationship('AttackTechnique', backref=db.backref('rule_assocs', lazy='dynamic'))
+    user      = db.relationship('User', backref=db.backref('user_attack_assocs', lazy='dynamic'))
+
+    __table_args__ = (
+        db.UniqueConstraint('rule_id', 'technique_id', name='uq_rule_attack_technique'),
+    )
+
+    def to_json(self):
+        t = self.technique
+        return {
+            'id':           self.id,
+            'uuid':         self.uuid,
+            'rule_id':      self.rule_id,
+            'technique_id': self.technique_id,
+            'name':         t.name if t else None,
+            'tactic_keys':  t.tactic_keys if t else [],
+            'url':          t.url if t else None,
+            'is_subtechnique': t.is_subtechnique if t else False,
+            'parent_technique_id': t.parent_technique_id if t else None,
+            'user_id':      self.user_id,
+            'added_at':     self.added_at.strftime('%Y-%m-%d %H:%M') if self.added_at else None,
+            'source':       self.source,
+        }
+
+
+class FieldParserConfig(db.Model):
+    """Saved configurations for the bulk field parser admin tool."""
+    __tablename__ = 'field_parser_config'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(100), nullable=False)
+    config     = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+
+    user = db.relationship('User', backref=db.backref('field_parser_configs', lazy='dynamic'))
+
+    def to_json(self):
+        return {
+            'id':         self.id,
+            'name':       self.name,
+            'config':     self.config,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'user_id':    self.user_id,
+        }
+
+
+
+########################################
+#   Workspace                          #
+########################################
+
+class WorkspaceTagAssociation(db.Model):
+    __tablename__ = 'workspace_tag_association'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    tag_id       = db.Column(db.Integer, db.ForeignKey('tag.id', ondelete='CASCADE'), nullable=False)
+    user_id      = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    tag          = db.relationship('Tag', foreign_keys=[tag_id], lazy='joined')
+    __table_args__ = (db.UniqueConstraint('workspace_id', 'tag_id'),)
+
+
+class WorkspaceAttackAssociation(db.Model):
+    __tablename__ = 'workspace_attack_association'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    technique_id = db.Column(db.String(20), db.ForeignKey('attack_technique.technique_id', ondelete='CASCADE'), nullable=False)
+    technique    = db.relationship('AttackTechnique', foreign_keys=[technique_id], lazy='joined')
+    __table_args__ = (db.UniqueConstraint('workspace_id', 'technique_id'),)
+
+
+class Workspace(db.Model):
+    """Personal rule workspace — grouping owned rules by context."""
+    __tablename__ = 'workspace'
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    name        = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    icon        = db.Column(db.String(50), nullable=False, default='fa-folder')
+    color       = db.Column(db.String(20), nullable=False, default='#0d6efd')
+    url         = db.Column(db.Text, nullable=True)
+    cve_id      = db.Column(db.Text, nullable=True)
+    other       = db.Column(db.Text, nullable=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at  = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    updated_at  = db.Column(db.DateTime,
+                             default=lambda: datetime.datetime.now(tz=datetime.timezone.utc),
+                             onupdate=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    owner       = db.relationship('User', backref=db.backref('workspaces', lazy='dynamic'))
+    rules_assoc = db.relationship('WorkspaceRule', backref='workspace', lazy='dynamic',
+                                   cascade='all, delete-orphan')
+    tag_assocs  = db.relationship('WorkspaceTagAssociation', backref='workspace',
+                                   cascade='all, delete-orphan', foreign_keys='WorkspaceTagAssociation.workspace_id')
+    attack_assocs = db.relationship('WorkspaceAttackAssociation', backref='workspace',
+                                     cascade='all, delete-orphan', foreign_keys='WorkspaceAttackAssociation.workspace_id')
+
+    def rule_count(self):
+        return self.rules_assoc.count()
+
+    def to_json(self):
+        import json as _json
+        return {
+            'id':          self.id,
+            'uuid':        self.uuid,
+            'name':        self.name,
+            'description': self.description,
+            'icon':        self.icon,
+            'color':       self.color,
+            'url':         self.url,
+            'cves':        _json.loads(self.cve_id) if self.cve_id else [],
+            'user_id':     self.user_id,
+            'owner_name':  self.owner.username if self.owner else None,
+            'rule_count':  self.rule_count(),
+            'created_at':  self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
+            'updated_at':  self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
+        }
+
+
+class WorkspaceRule(db.Model):
+    """Association table between Workspace and Rule."""
+    __tablename__ = 'workspace_rule'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    rule_id      = db.Column(db.Integer, db.ForeignKey('rule.id',      ondelete='CASCADE'), nullable=False)
+    added_at     = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    note         = db.Column(db.Text, nullable=True)
+    __table_args__ = (db.UniqueConstraint('workspace_id', 'rule_id'),)
+
+    def to_json(self):
+        return {
+            'id':           self.id,
+            'workspace_id': self.workspace_id,
+            'rule_id':      self.rule_id,
+            'note':         self.note,
+            'added_at':     self.added_at.strftime('%Y-%m-%d %H:%M') if self.added_at else None,
+        }
+
+
+class WorkspaceDocument(db.Model):
+    __tablename__ = 'workspace_document'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    title        = db.Column(db.String(200), nullable=False, default='Untitled')
+    content      = db.Column(db.Text, nullable=False, default='')
+    created_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    updated_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc),
+                              onupdate=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    def to_json(self):
+        return {
+            'id':         self.id,
+            'title':      self.title,
+            'content':    self.content,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
+        }
+
+
+class WorkspaceLink(db.Model):
+    __tablename__ = 'workspace_link'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False)
+    title        = db.Column(db.String(200), nullable=False)
+    url          = db.Column(db.String(1000), nullable=False)
+    description  = db.Column(db.String(500), nullable=True)
+    created_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    def to_json(self):
+        return {
+            'id':          self.id,
+            'title':       self.title,
+            'url':         self.url,
+            'description': self.description,
+            'created_at':  self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
         }

@@ -46,19 +46,134 @@ def why():
 @home_blueprint.route("/")
 def home() -> render_template:
     """Go to home page"""
+    from app.core.db_class.db import Rule, Bundle, User
     get_flashed_messages()
     show_import_hint = (
         current_user.is_authenticated
         and current_user.is_admin()
         and RuleModel.get_total_rules_count() == 0
     )
-    return render_template("home.html", show_import_hint=show_import_hint)
+    from app.core.db_class.db import AttackTechnique
+    total_rules   = Rule.query.filter_by(is_deleted=False).count()
+    total_bundles = Bundle.query.count()
+    total_attacks = AttackTechnique.query.count()
+    return render_template("home.html",
+        show_import_hint=show_import_hint,
+        total_rules=total_rules,
+        total_bundles=total_bundles,
+        total_attacks=total_attacks,
+    )
+
+@home_blueprint.route("/home_charts/<tab>")
+def home_charts(tab):
+    """Lazy chart loader — fetches only the requested tab's data."""
+    import datetime, json as _json
+    from sqlalchemy import func
+    from app.core.db_class.db import Rule
+    from app import db
+
+    if tab == 'timeline':
+        now = datetime.datetime.utcnow()
+        labels, nice = [], []
+        d = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        for _ in range(6):
+            labels.append(d.strftime('%Y-%m'))
+            d = (d - datetime.timedelta(days=1)).replace(day=1)
+        labels.reverse()
+        for l in labels:
+            try: nice.append(datetime.datetime.strptime(l, '%Y-%m').strftime('%b %Y'))
+            except: nice.append(l)
+        cutoff = now - datetime.timedelta(days=186)
+        month_expr = (func.to_char(Rule.creation_date, 'YYYY-MM')
+                      if db.engine.dialect.name == 'postgresql'
+                      else func.strftime('%Y-%m', Rule.creation_date))
+        rows = (db.session.query(month_expr.label('m'), func.count(Rule.id))
+                .filter(Rule.is_deleted == False, Rule.creation_date >= cutoff)
+                .group_by('m').all())
+        bucket = {r[0]: r[1] for r in rows if r[0]}
+        return jsonify({'title': 'Rules Added / Month', 'subtitle': 'Last 6 months',
+                        'categories': nice, 'series': [{'name': 'Rules Added', 'values': [bucket.get(l, 0) for l in labels]}]})
+
+    if tab == 'formats':
+        rows = (db.session.query(Rule.format, func.count(Rule.id))
+                .filter(Rule.is_deleted == False)
+                .group_by(Rule.format)
+                .order_by(func.count(Rule.id).desc())
+                .limit(10).all())
+        return jsonify({'title': 'Rules by Format',
+                        'categories': [r[0] or 'Unknown' for r in rows],
+                        'series': [{'name': 'Rules', 'values': [r[1] for r in rows]}]})
+
+    if tab == 'top_cve':
+        raws = (db.session.query(Rule.cve_id)
+                .filter(Rule.is_deleted == False, Rule.cve_id.isnot(None),
+                        Rule.cve_id != '[]', Rule.cve_id != '').all())
+        counter: dict = {}
+        for (raw,) in raws:
+            try:
+                ids = _json.loads(raw) if raw else []
+            except Exception:
+                ids = []
+            for cid in ids:
+                if cid:
+                    counter[cid] = counter.get(cid, 0) + 1
+        top = sorted(counter.items(), key=lambda x: x[1], reverse=True)[:10]
+        return jsonify({'title': 'CVEs with the most rules',
+                        'categories': [c[0] for c in top],
+                        'series': [{'name': 'Rules', 'values': [c[1] for c in top]}]})
+
+    if tab == 'top_atk':
+        from app.core.db_class.db import RuleAttackAssociation
+        rows = (db.session.query(RuleAttackAssociation.technique_id,
+                                 func.count(RuleAttackAssociation.id).label('n'))
+                .join(Rule, Rule.id == RuleAttackAssociation.rule_id)
+                .filter(Rule.is_deleted == False)
+                .group_by(RuleAttackAssociation.technique_id)
+                .order_by(func.count(RuleAttackAssociation.id).desc())
+                .limit(10).all())
+        return jsonify({'title': 'ATT&CK techniques with the most rules',
+                        'categories': [r[0] for r in rows],
+                        'series': [{'name': 'Rules', 'values': [r[1] for r in rows]}]})
+
+    return jsonify({}), 400
+
 
 @home_blueprint.route("/get_last_rules", methods=['GET'])
 def get_last_rules() -> dict:
     """Get the last 10 rules create or update"""
     rules = RuleModel.get_last_rules_from_db()
-    return {'rules': [r.to_json() for r in rules], 'success': True}, 200
+    rule_ids = [r.id for r in rules]
+    serialized = [r.to_json() for r in rules]
+
+    try:
+        from app.features.attack.attack_core import get_techniques_for_rules_batch
+        atk_map = get_techniques_for_rules_batch(rule_ids)
+        for item in serialized:
+            item['attacks'] = atk_map.get(item['id'], [])
+    except Exception:
+        pass
+
+    try:
+        tags_map = RuleModel.get_tags_for_rules_batch(rule_ids)
+        for item in serialized:
+            item['tags'] = [
+                {'id': t.id, 'name': t.name, 'color': t.color, 'icon': t.icon}
+                for t in tags_map.get(item['id'], [])
+            ]
+    except Exception:
+        for item in serialized:
+            item.setdefault('tags', [])
+
+    import json as _json
+    for item in serialized:
+        raw = item.get('cve_id') or '[]'
+        try:
+            parsed = _json.loads(raw) if isinstance(raw, str) else []
+            item['cves'] = parsed if isinstance(parsed, list) else []
+        except Exception:
+            item['cves'] = []
+
+    return {'rules': serialized, 'success': True}, 200
 
 @home_blueprint.route("/get_current_user_connected", methods=['GET'])
 def get_current_user_connected() -> jsonify:
@@ -86,6 +201,18 @@ def owner_request() -> redirect:
         if current_user.id != rule.user_id:
             request_ = AccountModel.create_request(rule_id=rule_id, source="")
             if request_:
+                log_activity(
+                    "user.owner_request",
+                    f"Requested ownership of rule id={rule_id}",
+                    target_type="rule", target_id=int(rule_id),
+                    extra={"rule_id": rule_id, "choice": 1},
+                    is_public=False,
+                )
+                try:
+                    from app.features.notification.notification_core import notify_ownership_requested
+                    notify_ownership_requested(request_, rule, current_user)
+                except Exception as _e:
+                    print(f"[home] notify_ownership_requested error: {_e}")
                 return {"success": True, "message": "Ownership request submitted successfully !" , "toast_class" : "success-subtle"}, 200
         return {"success": False, "message": "You can create a request for your own rule !" , "toast_class" : "danger-subtle"}, 200
     elif choice == 2:
@@ -96,7 +223,21 @@ def owner_request() -> redirect:
         rules = RuleModel.get_rule_by_source(source)
         if not rules:
             return {"success": False, "message": "No rule with this source!" , "toast_class" : "danger-subtle"}, 200
-        AccountModel.create_request(rule_id=None, source=source)
+        created_requests = AccountModel.create_request(rule_id=None, source=source)
+        log_activity(
+            "user.owner_request",
+            f"Requested ownership of rules from source '{source}'",
+            extra={"source": source, "choice": 2},
+            is_public=False,
+        )
+        try:
+            from app.features.notification.notification_core import notify_ownership_requested
+            req_list = created_requests if isinstance(created_requests, list) else [created_requests]
+            for req in req_list:
+                if req:
+                    notify_ownership_requested(req, None, current_user)
+        except Exception as _e:
+            print(f"[home] notify_ownership_requested (source) error: {_e}")
         return {"success": True, "message": "Ownership request submitted successfully !" , "toast_class" : "success-subtle"}, 200
     else:
         return {"success": False, "message": "Error system" , "toast_class" : "danger-subtle"}, 500
@@ -177,7 +318,7 @@ def get_request() -> json:
     request_id = request.args.get('request_id', 1, type=int)
     request_ = AccountModel.get_request_by_id(request_id)
     if request_:
-        if current_user.is_admin() or request_.user_id_to_send == current_user.id:
+        if current_user.is_admin() or request_.user_id_to_send == current_user.id or request_.user_id == current_user.id:
             return {
                 "success": True,
                 "current_request": request_.to_json() 
@@ -273,6 +414,47 @@ def get_made_requests_page() -> json:
     return {"message": "No requests found"}, 200
 
 
+@home_blueprint.route("/update_request_bulk", methods=["POST"])
+@login_required
+def update_request_bulk() -> jsonify:
+    """Dispatch an ownership_transfer_bulk background job for large transfers."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "Invalid JSON"}), 400
+
+    request_id = data.get('request_id')
+    rule_ids   = data.get('rule_ids', [])
+
+    if not request_id or not rule_ids:
+        return jsonify({"success": False, "error": "Missing request_id or rule_ids"}), 400
+
+    request_ = AccountModel.get_request_by_id(request_id)
+    if not request_:
+        return jsonify({"success": False, "error": "Request not found"}), 404
+
+    is_the_owner = AccountModel.is_the_owner(request_id)
+    if not (current_user.is_admin() or is_the_owner):
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type   = 'ownership_transfer_bulk',
+        payload    = {'request_id': request_id, 'rule_ids': rule_ids},
+        label      = f"Ownership transfer — {len(rule_ids)} rules (request #{request_id})",
+        created_by = current_user.id,
+        total      = len(rule_ids),
+    )
+    if not job:
+        return jsonify({"success": False, "error": "Failed to create job"}), 500
+
+    log_activity(
+        "admin.request_approved",
+        f"Approved ownership request id={request_id} — {len(rule_ids)} rules queued for transfer",
+        extra={"request_id": request_id, "job_uuid": job.uuid, "rule_count": len(rule_ids)},
+    )
+    return jsonify({"success": True, "job_uuid": job.uuid}), 200
+
+
 @home_blueprint.route("/update_request", methods=["POST" ])
 @login_required
 def update_request_status() -> jsonify:
@@ -327,12 +509,26 @@ def update_request_status() -> jsonify:
                     #             request__.user_id_to_send = ownership_request.user_id   
                 
 
+            try:
+                from app.features.notification.notification_core import notify_ownership_decision
+                ownership_request = AccountModel.get_request_by_id(request_id)
+                rule_title = rules[0].title if rules else None
+                notify_ownership_decision(ownership_request, approved=True, rule_title=rule_title)
+            except Exception as _e:
+                print(f"[home] notify_ownership_decision (approved) error: {_e}")
             flash(f"Request Accepted! {len(rules)} rules are impacted", "success")
         else:
             if updated:
                 log_activity("admin.request_rejected",
                              f"Rejected ownership request id={request_id}",
                              extra={"request_id": request_id})
+                try:
+                    from app.features.notification.notification_core import notify_ownership_decision
+                    ownership_request = AccountModel.get_request_by_id(request_id)
+                    rule_title = rules[0].title if rules else None
+                    notify_ownership_decision(ownership_request, approved=False, rule_title=rule_title)
+                except Exception as _e:
+                    print(f"[home] notify_ownership_decision (rejected) error: {_e}")
             flash('Request decline with success!', 'success')
         return jsonify({"success": updated}), 200 if updated else 400
     else:
@@ -436,29 +632,73 @@ def get_logs_page():
     from app.core.db_class.db import ActivityLog
     from app import db
 
+    from sqlalchemy import or_
+    from datetime import datetime
     page      = request.args.get('page', 1, type=int)
-    per_page  = request.args.get('per_page', 50, type=int)
+    per_page  = min(100, request.args.get('per_page', 25, type=int))
     search    = request.args.get('search', '', type=str).strip()
     action    = request.args.get('action', '', type=str).strip()
+    category  = request.args.get('category', '', type=str).strip()
+    level     = request.args.get('level', '', type=str).strip()
     user_id_f = request.args.get('user_id', None, type=int)
+    sort_key  = request.args.get('sort', 'created_at', type=str)
+    sort_dir  = request.args.get('dir', 'desc', type=str)
+    date_from = request.args.get('date_from', '', type=str).strip()
+    date_to   = request.args.get('date_to',   '', type=str).strip()
+
+    _allowed_sorts = {'id', 'created_at', 'category', 'level', 'action'}
+    if sort_key not in _allowed_sorts:
+        sort_key = 'created_at'
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = 'desc'
 
     q = ActivityLog.query
     if search:
-        q = q.filter(ActivityLog.description.ilike(f'%{search}%'))
+        like = f'%{search}%'
+        q = q.filter(or_(
+            ActivityLog.title.ilike(like),
+            ActivityLog.action.ilike(like),
+            ActivityLog.description.ilike(like),
+        ))
     if action:
         q = q.filter(ActivityLog.action.ilike(f'%{action}%'))
+    if category:
+        q = q.filter(ActivityLog.category == category)
+    if level:
+        q = q.filter(ActivityLog.level == level)
     if user_id_f:
         q = q.filter(ActivityLog.user_id == user_id_f)
+    if date_from:
+        try:
+            dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+            q = q.filter(ActivityLog.created_at >= dt_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_to = datetime.strptime(date_to, '%Y-%m-%d')
+            # include the full day
+            from datetime import timedelta
+            dt_to = dt_to + timedelta(days=1)
+            q = q.filter(ActivityLog.created_at < dt_to)
+        except ValueError:
+            pass
 
-    q = q.order_by(ActivityLog.created_at.desc())
-    paginated = q.paginate(page=page, per_page=per_page, error_out=False)
+    sort_col = getattr(ActivityLog, sort_key)
+    q = q.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())
+
+    total       = q.count()
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page        = min(page, total_pages)
+    items       = q.offset((page - 1) * per_page).limit(per_page).all()
 
     return jsonify({
-        "logs":        [l.to_json() for l in paginated.items],
-        "total":       paginated.total,
+        "items":       [l.to_json() for l in items],
+        "logs":        [l.to_json() for l in items],  # backward compat
+        "total":       total,
         "page":        page,
         "per_page":    per_page,
-        "total_pages": paginated.pages,
+        "total_pages": total_pages,
     }), 200
 
 
@@ -789,6 +1029,207 @@ def admin_settings_instance_init():
         'endpoint_uuid':   cfg.uuid,
         'version':         cfg.version,
         'last_started_at': cfg.last_started_at.strftime('%Y-%m-%d %H:%M:%S'),
+    })
+
+
+@home_blueprint.route('/platform/insights')
+def platform_insights():
+    return render_template('platform/stats.html')
+
+
+@home_blueprint.route('/platform/insights_data')
+def platform_insights_data():
+    import datetime
+    from collections import defaultdict
+    from sqlalchemy import func
+    from app.core.db_class.db import (
+        Rule, Bundle, User, Tag, Comment, RuleVote,
+        RuleEditProposal, ActivityLog, RuleTagAssociation,
+    )
+    from app import db
+
+    now = datetime.datetime.utcnow()
+
+    # ── KPIs ──────────────────────────────────────────────────────────
+    total_rules     = Rule.query.filter_by(is_deleted=False).count()
+    total_deleted   = Rule.query.filter_by(is_deleted=True).count()
+    total_bundles   = Bundle.query.count()
+    total_users     = User.query.count()
+    online_users    = User.query.filter_by(is_connected=True).count()
+    admin_users     = User.query.filter_by(admin=True).count()
+    total_tags      = Tag.query.count()
+    total_comments  = Comment.query.count()
+    total_votes     = RuleVote.query.count()
+    total_proposals = RuleEditProposal.query.count()
+    total_activity  = ActivityLog.query.count()
+
+    # ── Monthly helper (Python-side grouping, DB-agnostic) ─────────────
+    def monthly(date_col, months=12, extra_filter=None):
+        cutoff = now - datetime.timedelta(days=months * 31)
+        q = db.session.query(date_col)
+        if extra_filter is not None:
+            q = q.filter(extra_filter)
+        q = q.filter(date_col >= cutoff)
+        rows = [r[0] for r in q.all()]
+
+        bucket = defaultdict(int)
+        for dt in rows:
+            if dt:
+                if isinstance(dt, str):
+                    try: dt = datetime.datetime.fromisoformat(dt)
+                    except: continue
+                bucket[dt.strftime('%Y-%m')] += 1
+
+        labels = []
+        d = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        for _ in range(months):
+            labels.append(d.strftime('%Y-%m'))
+            d = (d - datetime.timedelta(days=1)).replace(day=1)
+        labels.reverse()
+
+        nice = []
+        for l in labels:
+            try: nice.append(datetime.datetime.strptime(l, '%Y-%m').strftime('%b %Y'))
+            except: nice.append(l)
+        return nice, [bucket.get(l, 0) for l in labels]
+
+    rule_cats,     rule_vals     = monthly(Rule.creation_date,    extra_filter=Rule.is_deleted == False)
+    user_cats,     user_vals     = monthly(User.created_at)
+    bundle_cats,   bundle_vals   = monthly(Bundle.created_at)
+    activity_cats, activity_vals = monthly(ActivityLog.created_at)
+
+    # ── Rules by format ────────────────────────────────────────────────
+    fmt_rows = (db.session.query(Rule.format, func.count(Rule.id))
+                .filter(Rule.is_deleted == False)
+                .group_by(Rule.format)
+                .order_by(func.count(Rule.id).desc())
+                .limit(15).all())
+    fmt_cats = [r[0] or 'Unknown' for r in fmt_rows]
+    fmt_vals = [r[1] for r in fmt_rows]
+
+    # ── Top tags ───────────────────────────────────────────────────────
+    tag_rows = (db.session.query(Tag.name, func.count(RuleTagAssociation.id))
+                .join(RuleTagAssociation, RuleTagAssociation.tag_id == Tag.id)
+                .group_by(Tag.id, Tag.name)
+                .order_by(func.count(RuleTagAssociation.id).desc())
+                .limit(15).all())
+    tag_cats = [r[0] for r in tag_rows]
+    tag_vals = [r[1] for r in tag_rows]
+
+    # ── Top contributors ───────────────────────────────────────────────
+    contrib_rows = (db.session.query(User.first_name, func.count(Rule.id))
+                    .join(Rule, Rule.user_id == User.id)
+                    .filter(Rule.is_deleted == False)
+                    .group_by(User.id, User.first_name)
+                    .order_by(func.count(Rule.id).desc())
+                    .limit(10).all())
+    contrib_cats = [r[0] or 'Unknown' for r in contrib_rows]
+    contrib_vals = [r[1] for r in contrib_rows]
+
+    # ── Proposal status ────────────────────────────────────────────────
+    prop_rows = (db.session.query(RuleEditProposal.status, func.count(RuleEditProposal.id))
+                 .group_by(RuleEditProposal.status).all())
+    prop_cats = [r[0] or 'unknown' for r in prop_rows]
+    prop_vals = [r[1] for r in prop_rows]
+
+    # ── Activity heatmap (last 90 days — day-of-week × hour) ──────────
+    cutoff_90 = now - datetime.timedelta(days=90)
+    act_rows  = (db.session.query(ActivityLog.created_at)
+                 .filter(ActivityLog.created_at >= cutoff_90).all())
+    hm = defaultdict(lambda: defaultdict(int))
+    for (dt,) in act_rows:
+        if dt:
+            if isinstance(dt, str):
+                try: dt = datetime.datetime.fromisoformat(dt)
+                except: continue
+            hm[dt.weekday()][dt.hour] += 1
+
+    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    heatmap_series = [
+        {'name': days[d], 'values': [hm[d][h] for h in range(24)]}
+        for d in range(7)
+    ]
+    heatmap_cats = [f'{h:02d}h' for h in range(24)]
+
+    # ── MITRE ATT&CK coverage ──────────────────────────────────────────
+    attack_kpi = {'techniques': 0, 'rules_covered': 0, 'coverage_pct': 0, 'total_assocs': 0}
+    attack_charts = {}
+    try:
+        from app.features.attack.attack_core import get_analytics_data as _atk_analytics
+        atk = _atk_analytics()
+        tc  = atk.get('tactic_coverage', [])
+        tot = sum(x['total'] for x in tc)
+        cov = sum(x['covered'] for x in tc)
+        attack_kpi = {
+            'techniques':   tot,
+            'rules_covered': sum(x['rule_count'] for x in tc),
+            'coverage_pct': round(cov / tot * 100, 1) if tot else 0,
+            'total_assocs': sum(x['rule_count'] for x in tc),
+        }
+        top = atk.get('top_techniques', [])
+        attack_charts = {
+            'top_techniques': {
+                'title': 'Top Techniques',
+                'subtitle': 'by rule count',
+                'categories': [x['id'] + ' — ' + x['name'][:28] for x in top[:15]],
+                'series': [{'name': 'Rules', 'values': [x['count'] for x in top[:15]]}],
+            },
+            'tactic_coverage': {
+                'title': 'Coverage % per Tactic',
+                'categories': [x['label'] for x in tc],
+                'series': [{'name': 'Coverage %', 'values': [x['pct'] for x in tc]}],
+            },
+            'tactic_rules': {
+                'title': 'Rule Associations by Tactic',
+                'categories': [x['label'] for x in tc if x['rule_count'] > 0],
+                'series': [{'values': [x['rule_count'] for x in tc if x['rule_count'] > 0]}],
+            },
+            'covered_donut': {
+                'title': 'Techniques Covered',
+                'categories': ['Covered', 'Uncovered'],
+                'series': [{'values': [cov, tot - cov]}],
+            },
+        }
+    except Exception:
+        pass
+
+    def chart(title, cats, vals, subtitle=None):
+        c = {'title': title, 'categories': cats, 'series': [{'name': title, 'values': vals}]}
+        if subtitle: c['subtitle'] = subtitle
+        return c
+
+    return jsonify({
+        'kpi': {
+            'total_rules':     total_rules,
+            'total_deleted':   total_deleted,
+            'total_bundles':   total_bundles,
+            'total_users':     total_users,
+            'online_users':    online_users,
+            'admin_users':     admin_users,
+            'total_tags':      total_tags,
+            'total_comments':  total_comments,
+            'total_votes':     total_votes,
+            'total_proposals': total_proposals,
+            'total_activity':  total_activity,
+        },
+        'charts': {
+            'rules_over_time':    {'title': 'Rules Added', 'subtitle': 'Last 12 months', 'categories': rule_cats,     'series': [{'name': 'Rules',    'values': rule_vals}]},
+            'users_over_time':    {'title': 'New Users',   'subtitle': 'Last 12 months', 'categories': user_cats,     'series': [{'name': 'Users',    'values': user_vals}]},
+            'bundles_over_time':  {'title': 'Bundles Created', 'subtitle': 'Last 12 months', 'categories': bundle_cats,   'series': [{'name': 'Bundles',  'values': bundle_vals}]},
+            'activity_over_time': {'title': 'Platform Events', 'subtitle': 'Last 12 months', 'categories': activity_cats, 'series': [{'name': 'Events',   'values': activity_vals}]},
+            'formats':    chart('Rules by Format',    fmt_cats,     fmt_vals),
+            'top_tags':   chart('Top Tags',           tag_cats,     tag_vals,     'by rule count'),
+            'top_contribs': chart('Top Contributors', contrib_cats, contrib_vals, 'by active rules'),
+            'proposals':  {'title': 'Edit Proposals', 'categories': prop_cats, 'series': [{'name': 'Proposals', 'values': prop_vals}]},
+            'rule_health':  {'title': 'Rule Health',  'categories': ['Active', 'Deleted'], 'series': [{'name': 'Rules', 'values': [total_rules, total_deleted]}]},
+            'user_roles':   {'title': 'User Roles',   'categories': ['Regular', 'Admins'],  'series': [{'name': 'Users', 'values': [total_users - admin_users, admin_users]}]},
+            'heatmap': {'title': 'Activity Heatmap', 'subtitle': 'Last 90 days — hour × day', 'categories': heatmap_cats, 'series': heatmap_series},
+            'attack_top_techniques': attack_charts.get('top_techniques', {}),
+            'attack_tactic_coverage': attack_charts.get('tactic_coverage', {}),
+            'attack_tactic_rules': attack_charts.get('tactic_rules', {}),
+            'attack_covered_donut': attack_charts.get('covered_donut', {}),
+        },
+        'attack_kpi': attack_kpi,
     })
 
 

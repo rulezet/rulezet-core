@@ -1,0 +1,119 @@
+{% macro admin_nav(active, requests_count=0, reports_count=0, jobs_count=0) %}
+
+<!-- Row 1 — Community -->
+<nav class="dr-nav mb-2">
+    <span class="dr-nav__label">Community</span>
+
+    <a href="/account/admin/all_users"
+       class="dr-nav__item {% if active == 'users' %}active{% endif %}">
+        <i class="fa-solid fa-users"></i>
+        <span>Users</span>
+    </a>
+
+    <a href="/admin/request"
+       class="dr-nav__item {% if active == 'requests' %}active{% endif %}">
+        <i class="fa-solid fa-envelope"></i>
+        <span>Requests</span>
+        {% if requests_count > 0 %}
+        <span class="dr-nav__badge">{{ requests_count }}</span>
+        {% endif %}
+    </a>
+
+    <a href="/report/admin"
+       class="dr-nav__item {% if active == 'reports' %}active{% endif %}">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>Reports</span>
+        {% if reports_count > 0 %}
+        <span class="dr-nav__badge">{{ reports_count }}</span>
+        {% endif %}
+    </a>
+</nav>
+
+<!-- Row 2 — Content -->
+<nav class="dr-nav mb-2">
+    <span class="dr-nav__label">Content</span>
+
+    <a href="/rule/admin/manage_format_rule"
+       class="dr-nav__item {% if active == 'formats' %}active{% endif %}">
+        <i class="fa-solid fa-file-code"></i>
+        <span>Formats</span>
+    </a>
+
+    <a href="/tags/admin/list"
+       class="dr-nav__item {% if active == 'tags' %}active{% endif %}">
+        <i class="fa-solid fa-tags"></i>
+        <span>Tags</span>
+    </a>
+
+    <a href="/attack/admin/list"
+       class="dr-nav__item {% if active == 'attack' %}active{% endif %}">
+        <i class="fa-solid fa-crosshairs"></i>
+        <span>ATT&amp;CK</span>
+    </a>
+
+    <a href="/admin/similar_rules"
+       class="dr-nav__item {% if active == 'similar' %}active{% endif %}">
+        <i class="fa-solid fa-copy"></i>
+        <span>Duplicates</span>
+    </a>
+
+    <a href="/rule/trash"
+       class="dr-nav__item {% if active == 'trash' %}active{% endif %}">
+        <i class="fa-solid fa-trash-can-arrow-up"></i>
+        <span>Trash</span>
+    </a>
+
+    <a href="/rule/bulk_tag"
+       class="dr-nav__item {% if active == 'bulk_tag' %}active{% endif %}">
+        <i class="fa-solid fa-tag"></i>
+        <span>Bulk Tag</span>
+    </a>
+
+    <a href="/account/admin/bulk_parse_fields"
+       class="dr-nav__item {% if active == 'bulk_parse_fields' %}active{% endif %}">
+        <i class="fa-solid fa-wand-magic-sparkles"></i>
+        <span>Field Parser</span>
+    </a>
+</nav>
+
+<!-- Row 3 — System -->
+<nav class="dr-nav mb-4">
+    <span class="dr-nav__label">System</span>
+
+    <a href="/connector/list"
+       class="dr-nav__item {% if active == 'connectors' %}active{% endif %}">
+        <i class="fa-solid fa-plug"></i>
+        <span>Connectors</span>
+    </a>
+
+    <a href="/admin/jobs/list"
+       class="dr-nav__item {% if active == 'jobs' %}active{% endif %}">
+        <i class="fa-solid fa-gears"></i>
+        <span>Jobs</span>
+        {% if jobs_count > 0 %}
+        <span class="dr-nav__badge">{{ jobs_count }}</span>
+        {% endif %}
+    </a>
+
+    <a href="/admin/logs"
+       class="dr-nav__item {% if active == 'logs' %}active{% endif %}">
+        <i class="fa-solid fa-scroll"></i>
+        <span>Logs</span>
+    </a>
+
+    {% if is_official %}
+    <a href="/account/admin/instances"
+       class="dr-nav__item {% if active == 'instances' %}active{% endif %}">
+        <i class="fa-solid fa-earth-americas"></i>
+        <span>Instances</span>
+    </a>
+    {% endif %}
+
+    <a href="/admin/settings"
+       class="dr-nav__item {% if active == 'settings' %}active{% endif %}">
+        <i class="fa-solid fa-sliders"></i>
+        <span>Server Settings</span>
+    </a>
+</nav>
+
+{% endmacro %}

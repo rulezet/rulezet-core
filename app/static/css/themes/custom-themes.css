@@ -1,0 +1,77 @@
+/* Auto-generated custom themes — do not edit manually */
+
+html[data-theme="ocean"],
+html[data-theme="ocean"] body {
+    --bg-color: #edf4fb;
+    --card-bg-color: #f8fbff;
+    --light-bg-color: #ddeaf7;
+    --code-bg-color: #e4f0fa;
+    --card-header-bg-color: #d0e5f5;
+    --navbar-bg-color: #f8fbff;
+    --bar-bg-color: #ddeaf7;
+    --text-color: #0d2a40;
+    --subtle-text-color: #4a7fa5;
+    --navbar-text-color: #0d2a40;
+    --border-color: rgba(30, 120, 180, 0.18);
+    --selected-color: rgba(30, 120, 180, 0.12);
+    --page-selected-color: #1878b4;
+    --sidebar-color: #0a2c45;
+    --rule-name-color: #1565c0;
+}
+
+html[data-theme="forest"],
+html[data-theme="forest"] body {
+    --bg-color: #eef5ee;
+    --card-bg-color: #f7fbf7;
+    --light-bg-color: #daeeda;
+    --code-bg-color: #e5f2e5;
+    --card-header-bg-color: #cce6cc;
+    --navbar-bg-color: #f7fbf7;
+    --bar-bg-color: #daeeda;
+    --text-color: #102210;
+    --subtle-text-color: #3d7040;
+    --navbar-text-color: #102210;
+    --border-color: rgba(40, 130, 50, 0.18);
+    --selected-color: rgba(40, 130, 50, 0.12);
+    --page-selected-color: #288232;
+    --sidebar-color: #092b0b;
+    --rule-name-color: #1b6e22;
+}
+
+html[data-theme="midnight"],
+html[data-theme="midnight"] body {
+    --bg-color: #080d18;
+    --card-bg-color: #0f1729;
+    --light-bg-color: #151f38;
+    --code-bg-color: #050912;
+    --card-header-bg-color: #151f38;
+    --navbar-bg-color: #0a1122;
+    --bar-bg-color: #0f1729;
+    --text-color: #c8d8f0;
+    --subtle-text-color: #6080b0;
+    --navbar-text-color: #c8d8f0;
+    --border-color: rgba(80, 130, 220, 0.14);
+    --selected-color: rgba(80, 130, 220, 0.18);
+    --page-selected-color: #5082dc;
+    --sidebar-color: #040810;
+    --rule-name-color: #6aa0f0;
+}
+
+html[data-theme="sunset"],
+html[data-theme="sunset"] body {
+    --bg-color: #1c1008;
+    --card-bg-color: #281808;
+    --light-bg-color: #362010;
+    --code-bg-color: #140c05;
+    --card-header-bg-color: #362010;
+    --navbar-bg-color: #201408;
+    --bar-bg-color: #281808;
+    --text-color: #f5dfc0;
+    --subtle-text-color: #b87840;
+    --navbar-text-color: #f5dfc0;
+    --border-color: rgba(220, 120, 30, 0.18);
+    --selected-color: rgba(220, 120, 30, 0.20);
+    --page-selected-color: #e07820;
+    --sidebar-color: #0e0804;
+    --rule-name-color: #f09040;
+}

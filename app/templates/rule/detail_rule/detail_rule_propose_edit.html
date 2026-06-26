@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Suggest an Edit — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<style>
+[v-cloak] { display: none; }
+
+/* ── Section cards ─────────────────────────────────────────────── */
+.pe-card {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+}
+.pe-card__header {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .7rem 1.1rem;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+}
+.pe-card__accent { width: 3px; height: 15px; background: #0d6efd; border-radius: 2px; flex-shrink: 0; }
+.pe-card__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color); }
+.pe-card__body { padding: 1.1rem; }
+
+/* ── Edit-type pill selector ───────────────────────────────────── */
+.pe-type-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: .5rem;
+}
+.pe-type-pill {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .5rem .75rem;
+    border-radius: 10px;
+    border: 1.5px solid var(--border-color);
+    background: var(--light-bg-color);
+    cursor: pointer;
+    transition: border-color .12s, background .12s, box-shadow .12s;
+    font-size: .8rem;
+    font-weight: 500;
+    color: var(--text-color);
+    user-select: none;
+}
+.pe-type-pill:hover { border-color: #0d6efd44; box-shadow: 0 0 0 3px rgba(13,110,253,.07); }
+.pe-type-pill.active {
+    border-color: #0d6efd;
+    background: rgba(13,110,253,.08);
+    color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,.1);
+}
+.pe-type-pill__icon {
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .72rem;
+    flex-shrink: 0;
+    background: rgba(13,110,253,.1);
+    color: #0d6efd;
+    transition: background .12s;
+}
+.pe-type-pill.active .pe-type-pill__icon { background: rgba(13,110,253,.18); }
+
+/* ── Collapsible original content ──────────────────────────────── */
+.pe-orig-toggle {
+    display: flex; align-items: center; gap: .5rem;
+    cursor: pointer;
+    font-size: .78rem; font-weight: 600;
+    color: var(--subtle-text-color);
+    padding: .5rem 0;
+    user-select: none;
+}
+.pe-orig-toggle:hover { color: var(--text-color); }
+.pe-orig-toggle i.chevron { transition: transform .2s; }
+.pe-orig-toggle.open i.chevron { transform: rotate(90deg); }
+</style>
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav %}
+
+{% block content %}
+<div class="container mt-4" id="pe-app" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-pen-to-square banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+                        {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Suggest an Edit</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-pen-to-square"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Suggest an Edit</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+            Propose a correction or improvement. Your suggestion will be reviewed by the community before being applied.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'propose_edit', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
+
+    {% if current_user.is_authenticated %}
+    <form id="proposalForm" action="{{ url_for('rule.propose_edit', rule_id=rule.id) }}" method="post" @submit.prevent>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="edit_type" :value="editType" />
+
+        <!-- ── 1. Change context ─────────────────────────────────── -->
+        <div class="pe-card">
+            <div class="pe-card__header">
+                <div class="pe-card__accent"></div>
+                <span class="pe-card__title"><i class="fa-solid fa-tags me-1"></i>1 — Change context</span>
+            </div>
+            <div class="pe-card__body">
+
+                <!-- Edit type -->
+                <label class="d-block fw-semibold mb-2" style="font-size:.85rem;">
+                    Type of change <span class="text-danger">*</span>
+                </label>
+                <div class="pe-type-grid mb-4">
+                    <div v-for="t in editTypes" :key="t.value"
+                         class="pe-type-pill"
+                         :class="{ active: editType === t.value }"
+                         @click="editType = t.value">
+                        <div class="pe-type-pill__icon"><i :class="t.icon"></i></div>
+                        <span>[[ t.label ]]</span>
+                    </div>
+                </div>
+
+                <!-- Justification -->
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <label class="fw-semibold mb-0" style="font-size:.85rem;">
+                        Justification
+                        <span class="text-muted fw-normal" style="font-size:.75rem;">— describe what you changed and why</span>
+                    </label>
+                    <!-- Mode toggle — inline next to label -->
+                    <div class="d-flex align-items-center gap-1"
+                         style="background:var(--light-bg-color);border:1px solid var(--border-color);border-radius:8px;padding:.15rem .25rem;">
+                        <button v-for="m in messageModes" :key="m.value" type="button"
+                                class="btn btn-sm rounded-pill"
+                                :class="messageMode === m.value ? 'btn-primary shadow-sm' : ''"
+                                :style="messageMode !== m.value ? 'background:transparent;border:none;color:var(--subtle-text-color);' : ''"
+                                style="font-size:.7rem;padding:.15rem .55rem;line-height:1.4;"
+                                @click="messageMode = m.value">
+                            <i :class="m.icon + ' me-1'"></i>[[ m.label ]]
+                        </button>
+                    </div>
+                </div>
+                <smart-editor
+                    v-model="proposalMessage"
+                    :mode="messageMode"
+                    name="message"
+                    placeholder="Explain the changes you're proposing, add references, links or code snippets…"
+                    min-height="140px"
+                    max-height="400px">
+                </smart-editor>
+
+            </div>
+        </div>
+
+        <!-- ── 2. Proposed rule content ──────────────────────────── -->
+        <div class="pe-card">
+            <div class="pe-card__header">
+                <div class="pe-card__accent" style="background:#6f42c1;"></div>
+                <span class="pe-card__title"><i class="fa-solid fa-code me-1"></i>2 — Proposed rule content <span class="text-danger">*</span></span>
+                <span class="ms-auto badge rounded-pill px-2" style="font-size:.68rem;background:rgba(13,110,253,.1);color:#0d6efd;border:1px solid rgba(13,110,253,.2);">
+                    {{ rule.format | upper }}
+                </span>
+            </div>
+            <div class="pe-card__body">
+                <!-- Inline error -->
+                <div v-if="submitError" class="d-flex align-items-start gap-2 mb-3 px-3 py-2 rounded-3"
+                     style="background:rgba(220,53,69,.08);border:1px solid rgba(220,53,69,.3);font-size:.83rem;color:#dc3545;">
+                    <i class="fa-solid fa-circle-exclamation mt-1 flex-shrink-0"></i>
+                    <span>[[ submitError ]]</span>
+                    <button type="button" class="btn-close btn-close-sm ms-auto" style="font-size:.6rem;filter:invert(27%) sepia(99%) saturate(1200%) hue-rotate(330deg);" @click="submitError = null"></button>
+                </div>
+
+                <smart-editor
+                    v-model="proposalContent"
+                    mode="code"
+                    :language="ruleFormat"
+                    name="rule_content"
+                    placeholder="Paste or write the corrected rule here…"
+                    min-height="360px"
+                    max-height="700px">
+                </smart-editor>
+
+                <!-- Toggles: original + diff -->
+                <div class="mt-3 pt-3 d-flex gap-2" style="border-top:1px solid var(--border-color);">
+                    <div class="pe-orig-toggle" :class="{ open: showOriginal }" @click="showOriginal = !showOriginal; if(showOriginal) showDiff = false;">
+                        <i class="fa-solid fa-chevron-right chevron"></i>
+                        <i class="fa-solid fa-file-code text-muted"></i>
+                        Show original
+                        <span class="ms-2 badge" style="font-size:.65rem;background:var(--light-bg-color);color:var(--subtle-text-color);border:1px solid var(--border-color);border-radius:6px;">
+                            [[ originalContent ? originalContent.length + ' chars' : '' ]]
+                        </span>
+                    </div>
+                    <div class="pe-orig-toggle ms-3" :class="{ open: showDiff }" @click="showDiff = !showDiff; if(showDiff) showOriginal = false;">
+                        <i class="fa-solid fa-chevron-right chevron"></i>
+                        <i class="fa-solid fa-code-compare text-muted"></i>
+                        Show diff preview
+                    </div>
+                </div>
+
+                <div v-if="showOriginal" class="mt-2">
+                    <smart-editor
+                        :model-value="originalContent"
+                        mode="code"
+                        :language="ruleFormat"
+                        min-height="200px"
+                        max-height="400px"
+                        :read-only="true">
+                    </smart-editor>
+                </div>
+
+                <div v-if="showDiff" class="mt-2">
+                    <diff-viewer
+                        :initial-left="originalContent"
+                        :initial-right="proposalContent"
+                        left-label="Current rule"
+                        right-label="Your proposal"
+                        mode="read">
+                    </diff-viewer>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Submit ────────────────────────────────────────────── -->
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="/rule/detail_rule/{{ rule.id }}/pull_request"
+               class="btn btn-sm rounded-pill px-3"
+               style="background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);">
+                <i class="fa-solid fa-arrow-left me-1"></i>View all proposals
+            </a>
+            <button type="button" @click="submitProposal" :disabled="submitting"
+                    class="btn btn-primary rounded-pill px-4 shadow-sm fw-bold">
+                <span v-if="submitting" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="fas fa-paper-plane me-1"></i>
+                [[ submitting ? 'Submitting…' : 'Submit Proposal' ]]
+            </button>
+        </div>
+
+    </form>
+
+    {% else %}
+    <div class="pe-card text-center py-5">
+        <i class="fa-solid fa-lock fa-2x mb-3 text-muted d-block opacity-50"></i>
+        <p class="mb-0">Please <a href="{{ url_for('account.login') }}" class="text-primary">log in</a> to propose an edit.</p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+import SmartEditor from '/static/js/components/smart-editor.js';
+import DiffViewer  from '/static/js/components/diff-viewer.js';
+import { create_message } from '/static/js/toaster.js';
+const { createApp, ref, onMounted } = Vue;
+
+const RULE_ID     = {{ rule.id }};
+const RULE_FORMAT = '{{ rule.format or "text" }}';
+const CSRF        = '{{ csrf_token() }}';
+
+createApp({
+    delimiters: ['[[', ']]'],
+    components: { SmartEditor, DiffViewer },
+    setup() {
+        const proposalContent  = ref('');
+        const originalContent  = ref('');
+        const ruleFormat       = ref(RULE_FORMAT);
+        const showOriginal     = ref(false);
+        const showDiff         = ref(false);
+        const editType         = ref('content_update');
+        const proposalMessage  = ref('');
+        const messageMode      = ref('text');
+        const submitting       = ref(false);
+        const submitError      = ref(null);
+
+        const editTypes = [
+            { value: 'content_update', label: 'Content update',  icon: 'fa-solid fa-code' },
+            { value: 'typo',           label: 'Typo / syntax',   icon: 'fa-solid fa-spell-check' },
+            { value: 'security',       label: 'Security fix',    icon: 'fa-solid fa-shield-halved' },
+            { value: 'documentation',  label: 'Documentation',   icon: 'fa-solid fa-book' },
+            { value: 'legal',          label: 'Legal / license', icon: 'fa-solid fa-scale-balanced' },
+            { value: 'other',          label: 'Other',           icon: 'fa-solid fa-ellipsis' },
+        ];
+
+        const messageModes = [
+            { value: 'text',     label: 'Text',     icon: 'fa-solid fa-font' },
+            { value: 'markdown', label: 'Markdown', icon: 'fa-brands fa-markdown' },
+        ];
+
+        onMounted(async () => {
+            try {
+                const res  = await fetch('/rule/get_current_rule?rule_id=' + RULE_ID);
+                const data = await res.json();
+                if (data.rule) {
+                    proposalContent.value = data.rule.to_string || '';
+                    originalContent.value = data.rule.to_string || '';
+                    ruleFormat.value      = data.rule.format || RULE_FORMAT;
+                }
+            } catch {
+                create_message('Could not load rule content', 'danger');
+            }
+        });
+
+        async function submitProposal() {
+            if (submitting.value) return;
+            submitting.value = true;
+            submitError.value = null;
+            try {
+                const fd = new FormData();
+                fd.append('csrf_token',   CSRF);
+                fd.append('rule_content', proposalContent.value);
+                fd.append('message',      proposalMessage.value);
+                fd.append('edit_type',    editType.value);
+
+                const res  = await fetch(`/rule/propose_edit/${RULE_ID}`, {
+                    method:  'POST',
+                    headers: { 'Accept': 'application/json' },
+                    body:    fd,
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    submitError.value = data.message || 'An error occurred.';
+                    create_message(data.message, 'danger');
+                } else {
+                    create_message(data.message, data.toast_class || 'success');
+                    if (data.redirect_url) {
+                        setTimeout(() => { window.location.href = data.redirect_url; }, 900);
+                    }
+                }
+            } catch {
+                const msg = 'Network error — please try again.';
+                submitError.value = msg;
+                create_message(msg, 'danger');
+            } finally {
+                submitting.value = false;
+            }
+        }
+
+        return {
+            proposalContent, originalContent, ruleFormat,
+            showOriginal, showDiff, editType, editTypes,
+            proposalMessage, messageMode, messageModes,
+            submitting, submitError, submitProposal,
+        };
+    }
+}).mount('#pe-app');
+</script>
+{% endblock %}

@@ -1,12 +1,13 @@
 from typing import Union
 import datetime
 from ...core.db_class.db import User, RegisteredInstance, InstanceConfig
+from ... import db
 from flask import Blueprint, jsonify, render_template, redirect, url_for, request, flash
-from .form import LoginForm, EditUserForm, AddNewUserForm
+from .form import LoginForm, EditUserForm, AddNewUserForm, ForgotPasswordForm, ResetPasswordForm
 from ..rule import rule_core as RuleModel
 from . import account_core as AccountModel
 from ..bundle import bundle_core as BundleModel
-from ...core.utils.utils import form_to_dict, generate_api_key
+from ...core.utils.utils import form_to_dict, generate_api_key, safe_referrer
 from ...core.utils.activity_log import log_activity
 from flask_login import current_user, login_required, login_user, logout_user
 from datetime import datetime, timedelta, timezone
@@ -104,7 +105,7 @@ def detail_user(user_id) -> render_template:
     if not user:
         flash("User not found.", "error")
         # redirect to the previous page
-        return redirect(request.referrer)
+        return redirect(safe_referrer())
     return render_template("account/detail_user.html" , user=user.to_json())
 
 @account_blueprint.route("/user_mini/<int:user_id>")
@@ -150,12 +151,13 @@ def get_user_donne() -> jsonify:
         return jsonify({"success": False, "message": "User not found"})
 
 
-@account_blueprint.route("/promote_remove_admin")
+@account_blueprint.route("/promote_remove_admin", methods=['POST'])
 @login_required
 def promote_remove_admin() -> jsonify:
     """Return the user activity and metadata."""
-    user_id = request.args.get('userId', type=int)
-    action = request.args.get('action', type=str)
+    data    = request.get_json() or {}
+    user_id = int(data.get('userId', 0)) or None
+    action  = str(data.get('action', ''))
 
     if current_user.is_admin():
         response = AccountModel.promote_remove_user_admin(user_id, action)
@@ -173,11 +175,12 @@ def promote_remove_admin() -> jsonify:
     else:
         return render_template("access_denied.html")
 
-@account_blueprint.route("/delete_user")
+@account_blueprint.route("/delete_user", methods=['POST'])
 @login_required
 def delete_user() -> render_template:
     """Delete an user"""
-    user_id = request.args.get('id', 1, type=int)
+    data    = request.get_json() or {}
+    user_id = int(data.get('id', 0)) or None
     if current_user.is_admin():
         delete = AccountModel.delete_user_core(user_id)
         if delete:
@@ -191,6 +194,63 @@ def delete_user() -> render_template:
                 "toast_class" : "danger-subtle"}, 500
     else:
         return render_template("access_denied.html")
+
+@account_blueprint.route("/users_data_table")
+@login_required
+def users_data_table():
+    """Paginated user list for the admin UserList component."""
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 403
+
+    from sqlalchemy import asc, desc, or_
+    from app.core.db_class.db import Rule
+
+    page     = request.args.get('page',     1,        type=int)
+    per_page = min(request.args.get('per_page', 20,   type=int), 100)
+    search   = (request.args.get('search',  '')  or '').strip()
+    f_admin  = request.args.get('admin',    '')
+    f_conn   = request.args.get('connected','')
+    f_verif  = request.args.get('verified', '')
+    sort_by  = request.args.get('sort',     'created_at')
+    sort_dir = request.args.get('dir',      'desc')
+
+    query = User.query
+
+    if search:
+        like = f'%{search}%'
+        query = query.filter(or_(
+            User.first_name.ilike(like), User.last_name.ilike(like),
+            User.email.ilike(like),      User.username.ilike(like),
+        ))
+
+    if f_admin == 'true':    query = query.filter(User.admin.is_(True))
+    elif f_admin == 'false': query = query.filter(User.admin.is_(False))
+
+    if f_conn == 'true':    query = query.filter(User.is_connected.is_(True))
+    elif f_conn == 'false': query = query.filter(User.is_connected.is_(False))
+
+    if f_verif == 'true':    query = query.filter(User.is_verified.is_(True))
+    elif f_verif == 'false': query = query.filter(User.is_verified.is_(False))
+
+    _sort_map = {
+        'created_at': User.created_at, 'last_seen': User.last_seen,
+        'first_name': User.first_name,  'id': User.id,
+    }
+    sort_col = _sort_map.get(sort_by, User.created_at)
+    query = query.order_by(desc(sort_col) if sort_dir == 'desc' else asc(sort_col))
+
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    items = []
+    for u in pagination.items:
+        j = u.to_json()
+        from app.core.db_class.db import Bundle
+        j['rule_count']   = Rule.query.filter_by(user_id=u.id, is_deleted=False).count()
+        j['bundle_count'] = Bundle.query.filter_by(user_id=u.id).count()
+        items.append(j)
+
+    return jsonify({'items': items, 'total': pagination.total, 'total_pages': pagination.pages})
+
 
 @account_blueprint.route("/get_all_users")
 @login_required
@@ -227,19 +287,34 @@ def edit_user():
     """Edit the user"""
     form = EditUserForm()
     if form.validate_on_submit():
-        form_dict = form_to_dict(form)
-        avatar_file   = form.profile_picture.data          # FileStorage or None
+        form_dict     = form_to_dict(form)
+        avatar_file   = form.profile_picture.data
         remove_avatar = request.form.get("remove_avatar") == "1"
-        AccountModel.edit_user_core(
+        success, pending_email = AccountModel.edit_user_core(
             form_dict,
             current_user.id,
             avatar_file=avatar_file,
             remove_avatar=remove_avatar
         )
-        log_activity("user.edit_profile", "Updated profile",
-                     target_type="user", target_id=current_user.id)
-        flash('Profile updated successfully!', 'success')
-        return redirect("/account")
+        if success:
+            log_activity("user.edit_profile", "Updated profile",
+                         target_type="user", target_id=current_user.id)
+            if pending_email:
+                email_ok = AccountModel.request_email_change_core(current_user.id, pending_email)
+                if email_ok:
+                    flash(
+                        f'Profile updated. A confirmation link was sent to {pending_email}. '
+                        'Your email address will be updated once you confirm it.',
+                        'info'
+                    )
+                else:
+                    flash(
+                        f'Profile updated, but the email address {pending_email} is already in use by another account.',
+                        'warning'
+                    )
+            else:
+                flash('Profile updated successfully!', 'success')
+            return redirect("/account")
     else:
         form.first_name.data  = current_user.first_name
         form.last_name.data   = current_user.last_name
@@ -250,8 +325,22 @@ def edit_user():
         form.website_url.data = current_user.website_url
         form.github_url.data  = current_user.github_url
         form.twitter_url.data = current_user.twitter_url
- 
+
     return render_template("account/edit_user.html", form=form)
+
+
+@account_blueprint.route('/confirm-email-change/<token>')
+@login_required
+def confirm_email_change(token):
+    """Apply a pending email change after the user clicks the confirmation link."""
+    success, message = AccountModel.confirm_email_change_core(token)
+    if success:
+        log_activity("user.email_change", "Changed email address",
+                     target_type="user", target_id=current_user.id)
+        flash(message, 'success')
+    else:
+        flash(message, 'danger')
+    return redirect('/account')
 
  
 
@@ -359,6 +448,12 @@ def verify(user_id):
             if not success:
                 flash("Failed to verify account.", "error")
                 return redirect("/account/login")
+            log_activity(
+                "user.verified",
+                f"User '{user.get_username()}' verified their account",
+                target_type="user", target_id=user_id,
+                is_public=False,
+            )
             flash("Account verified!", "success")
             login_user(user, remember=True)
             return redirect("/")
@@ -382,6 +477,34 @@ def resend_verification_code(user_id):
         return redirect(f"/account/verify/{user_id}")
     flash("Verification code resent.", "success")
     return render_template("account/verify.html", user_id=user_id)
+
+
+@account_blueprint.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect('/')
+    form = ForgotPasswordForm()
+    if form.validate_on_submit():
+        AccountModel.request_password_reset_core(form.email.data)
+        flash('If this email is registered, a reset link has been sent. Check your inbox.', 'info')
+        return redirect('/account/forgot-password')
+    return render_template('account/forgot_password.html', form=form)
+
+
+@account_blueprint.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    if current_user.is_authenticated:
+        return redirect('/')
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        success, message = AccountModel.reset_password_core(token, form.password.data)
+        if success:
+            flash('Password reset successfully. You can now log in.', 'success')
+            return redirect('/account/login')
+        flash(message, 'danger')
+        return redirect(f'/account/reset-password/{token}')
+    return render_template('account/reset_password.html', form=form, token=token)
+
 
 ############
 # Favorite #
@@ -409,6 +532,12 @@ def remove_rule_favorite() -> jsonify:
     rule_id = request.args.get('id', 1, type=int)
     rep = AccountModel.remove_favorite(current_user.id, rule_id)
     if rep:
+        log_activity(
+            "rule.unfavorite",
+            f"Removed rule id={rule_id} from favorites",
+            target_type="rule", target_id=rule_id,
+            is_public=False,
+        )
         return jsonify({"success": True, "message": "Rule deleted!"})
     return jsonify({"success": False, "message": "Access denied"}), 403
 
@@ -483,11 +612,13 @@ def get_my_contributions():
     return jsonify(data)
 
 
-@account_blueprint.route('/user_contributions/<user_id>', methods=['GET'])
+@account_blueprint.route('/user_contributions/<int:user_id>', methods=['GET'])
 @login_required
 def get_user_contributions(user_id):
     """Recup the user contributions"""
-   
+    if current_user.id != user_id and not current_user.is_admin():
+        return jsonify({"error": "Forbidden"}), 403
+
     data = AccountModel.get_user_contributions_data(user_id=user_id)
     
     if not data or not data.get('user_stats'):
@@ -536,10 +667,107 @@ def admin():
     return jsonify({"message": "Access denied", "success": False , "toast_class" : "danger-subtle"}), 403
 
 
+# ── Bulk Field Parser ────────────────────────────────────────────────────────
+
+@account_blueprint.route('/admin/bulk_parse_fields', methods=['GET'])
+@login_required
+def bulk_parse_fields_page():
+    if not current_user.is_admin():
+        from flask import abort
+        abort(403)
+    from app.features.rule.field_parser_core import FIELD_META, PARSEABLE_FIELD_KEYS
+    return render_template('admin/bulk_parse_fields.html',
+                           field_meta=FIELD_META,
+                           parseable_fields=PARSEABLE_FIELD_KEYS)
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/trigger', methods=['POST'])
+@login_required
+def bulk_parse_fields_trigger():
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'Admin only'}), 403
+    from app.features.jobs.jobs_core import create_job
+    data = request.get_json(force=True)
+    rule_ids      = data.get('rule_ids', 'ALL')
+    fields_config = data.get('fields_config', {})
+    format_filter = (data.get('format_filter') or '').strip() or None
+    if not fields_config:
+        return jsonify({'success': False, 'message': 'No fields configured'}), 400
+    enabled = [k for k, v in fields_config.items() if v.get('enabled')]
+    if not enabled:
+        return jsonify({'success': False, 'message': 'No fields enabled'}), 400
+    count = len(rule_ids) if isinstance(rule_ids, list) else (format_filter or 'ALL')
+    job = create_job(
+        job_type='bulk_parse_fields',
+        label=f'Bulk parse fields ({", ".join(enabled)})',
+        payload={'rule_ids': rule_ids, 'format_filter': format_filter, 'fields_config': fields_config},
+        created_by=current_user.id,
+    )
+    log_activity('admin.bulk_parse_fields', f'Triggered bulk field parse for {count} rules, fields: {", ".join(enabled)}',
+                 target_type='job', target_id=job.id)
+    return jsonify({'success': True, 'job_uuid': job.uuid})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/configs', methods=['GET'])
+@login_required
+def bulk_parse_fields_configs_list():
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.features.rule.field_parser_core import get_all_configs
+    cfgs = get_all_configs()
+    return jsonify({'configs': [c.to_json() for c in cfgs]})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/configs', methods=['POST'])
+@login_required
+def bulk_parse_fields_configs_save():
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.features.rule.field_parser_core import save_config
+    data = request.get_json(force=True)
+    name = (data.get('name') or '').strip()
+    config = data.get('config', {})
+    if not name:
+        return jsonify({'success': False, 'message': 'Name is required'}), 400
+    cfg = save_config(name=name, config=config, user_id=current_user.id)
+    return jsonify({'success': True, 'config': cfg.to_json()})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/configs/<int:config_id>', methods=['PATCH'])
+@login_required
+def bulk_parse_fields_configs_update(config_id):
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.features.rule.field_parser_core import get_config
+    cfg = get_config(config_id)
+    if not cfg:
+        return jsonify({'success': False, 'message': 'Config not found'}), 404
+    data = request.get_json(force=True)
+    if 'name' in data:
+        cfg.name = data['name'].strip() or cfg.name
+    if 'config' in data:
+        cfg.config = data['config']
+    db.session.commit()
+    return jsonify({'success': True, 'config': cfg.to_json()})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/configs/<int:config_id>', methods=['DELETE'])
+@login_required
+def bulk_parse_fields_configs_delete(config_id):
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app.features.rule.field_parser_core import delete_config
+    ok = delete_config(config_id)
+    return jsonify({'success': ok})
+
+
 
 
 @account_blueprint.route('/user_activity_stats/<int:user_id>')
+@login_required
 def get_user_activity_stats(user_id):
+    if current_user.id != user_id and not current_user.is_admin():
+        return jsonify({"error": "Forbidden"}), 403
     user_rules = RuleModel.get_all_rules_by_user(user_id)
     user_bundles = BundleModel.get_all_bundles_by_user(user_id)
     
@@ -577,7 +805,10 @@ def get_user_activity_stats(user_id):
     })
 
 @account_blueprint.route('/user_edit_proposals/<int:user_id>')
+@login_required
 def get_user_edit_proposals(user_id):
+    if current_user.id != user_id and not current_user.is_admin():
+        return jsonify({"error": "Forbidden"}), 403
     proposals = RuleModel.get_all_rule_proposal_user_id(user_id)
 
     if not proposals:

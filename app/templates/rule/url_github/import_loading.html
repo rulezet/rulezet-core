@@ -102,22 +102,24 @@
                                 <td><b>[[result_data.query_date]]</b></td>
                             </tr>
                             <template v-for="format, key in result_data.count_per_format">
-                                <tr>
-                                    <td class="text-end"><b>[[key]]</b></td>
-                                    <td></td>
-                                </tr>
-                                <tr>
-                                    <td></td>
-                                    <td>Bad rules: [[format.bad_rule]]</td>
-                                </tr>
-                                <tr>
-                                    <td></td>
-                                    <td>Imported: [[format.imported]]</td>
-                                </tr>
-                                <tr>
-                                    <td></td>
-                                    <td>Skipped: [[format.skipped]]</td>
-                                </tr>
+                                <template v-if="format.bad_rule > 0 || format.imported > 0 || format.skipped > 0">
+                                    <tr>
+                                        <td class="text-end"><b>[[key]]</b></td>
+                                        <td></td>
+                                    </tr>
+                                    <tr v-if="format.bad_rule > 0">
+                                        <td></td>
+                                        <td>Bad rules: [[format.bad_rule]]</td>
+                                    </tr>
+                                    <tr v-if="format.imported > 0">
+                                        <td></td>
+                                        <td>Imported: [[format.imported]]</td>
+                                    </tr>
+                                    <tr v-if="format.skipped > 0">
+                                        <td></td>
+                                        <td>Skipped: [[format.skipped]]</td>
+                                    </tr>
+                                </template>
                             </template>
                         </table>
                     </div>

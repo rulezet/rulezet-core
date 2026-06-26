@@ -1,0 +1,214 @@
+/* ── ATT&CK Display Component ─────────────────────────────────────────────── */
+
+.ad-root { font-family: inherit; }
+
+/* Section header */
+.ad-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: .6rem;
+}
+.ad-section-header:hover .fa-chevron-down { opacity: .8 !important; }
+
+/* Add button */
+.ad-btn-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 1.5px solid var(--border-color);
+    border-radius: 99px;
+    background: var(--card-bg-color);
+    color: var(--subtle-text-color);
+    font-size: .7rem;
+    cursor: pointer;
+    transition: all .12s;
+    padding: 0;
+}
+.ad-btn-add:hover, .ad-btn-add.active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+/* Body */
+.ad-body {
+    padding-left: 11px;
+}
+
+/* Loading / empty */
+.ad-loading {
+    display: flex;
+    align-items: center;
+    padding: .5rem 0;
+    font-size: .82rem;
+}
+.ad-empty {
+    font-size: .82rem;
+    color: var(--subtle-text-color);
+    padding: .4rem 0;
+    font-style: italic;
+}
+
+/* Chips container */
+.ad-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+
+/* Technique chip */
+.ad-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .22rem .55rem;
+    border-radius: 7px;
+    border: 1px solid;
+    font-size: .78rem;
+    text-decoration: none;
+    transition: filter .12s, transform .1s;
+    position: relative;
+    max-width: 280px;
+}
+.ad-chip:hover {
+    filter: brightness(.93);
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+.ad-chip-id {
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    font-size: .75rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.ad-chip-sep {
+    opacity: .4;
+    flex-shrink: 0;
+}
+.ad-chip-name {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 160px;
+}
+.ad-chip-auto {
+    opacity: .5;
+    flex-shrink: 0;
+    margin-left: .1rem;
+}
+
+/* Remove button inside chip */
+.ad-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 99px;
+    background: rgba(0,0,0,.12);
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity .12s;
+    margin-left: .1rem;
+}
+.ad-chip:hover .ad-chip-remove { opacity: 1; }
+.ad-chip-remove:hover { background: rgba(0,0,0,.25); }
+
+/* ── Search sub-component ──────────────────────────────────────────────────── */
+.ad-search-section {
+    margin-bottom: .6rem;
+}
+.ad-search-wrap {
+    position: relative;
+}
+.ad-search-input-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .35rem .75rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: 9px;
+    background: var(--card-bg-color);
+    transition: border-color .15s;
+}
+.ad-search-input-row:focus-within {
+    border-color: #0d6efd;
+}
+.ad-search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: .82rem;
+    color: var(--text-color);
+    min-width: 0;
+}
+.ad-search-input::placeholder { color: var(--subtle-text-color); }
+
+.ad-search-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    overflow: hidden;
+    max-height: 280px;
+    overflow-y: auto;
+}
+.ad-search-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .45rem .75rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    font-size: .8rem;
+    color: var(--text-color);
+    transition: background .1s;
+    border-bottom: 1px solid var(--border-color);
+}
+.ad-search-item:last-child { border-bottom: none; }
+.ad-search-item:hover { background: var(--light-bg-color); }
+
+.ad-tid {
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    font-size: .73rem;
+    padding: .15rem .45rem;
+    border-radius: 5px;
+    border: 1px solid;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.ad-tname {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+.ad-ttactic {
+    font-size: .7rem;
+    color: var(--subtle-text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
+}

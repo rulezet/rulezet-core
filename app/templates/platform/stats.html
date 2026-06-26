@@ -1,0 +1,443 @@
+{% extends 'base.html' %}
+{% block title %}Platform Insights — Rulezet{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
+<style>
+/* ── Page-level layout ── */
+.pi-kpi-row    { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .85rem; margin-bottom: 1.5rem; }
+.pi-grid-2     { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.pi-grid-3     { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem; }
+.pi-grid-full  { margin-bottom: 1rem; }
+
+@media (max-width: 992px) {
+    .pi-grid-2, .pi-grid-3 { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+    .pi-kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── KPI card override (compact) ── */
+.ud-kpi-card { cursor: default; }
+
+/* ── Loading overlay ── */
+.pi-loading {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 300px; color: var(--subtle-text-color);
+    flex-direction: column; gap: 1rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4" id="pi-app" v-cloak>
+
+    <!-- ── Banner ── -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-chart-pie banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Platform Insights</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-chart-pie"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Platform Insights</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            Live statistics and trends for the Rulezet platform — rules, users, formats, community activity and more.
+        </p>
+    </div>
+
+    <!-- ── Global loading ── -->
+    <div v-if="loading" class="pi-loading">
+        <div class="spinner-border text-primary" style="width:3rem;height:3rem;"></div>
+        <span>Crunching numbers…</span>
+    </div>
+
+    <template v-else>
+
+        <!-- ══════════════════════════════════════════════
+             KPI CARDS
+             ══════════════════════════════════════════════ -->
+        <div class="pi-kpi-row">
+            <div class="ud-kpi-card ud-kpi-card--blue">
+                <div class="ud-kpi-icon"><i class="fas fa-shield-halved"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(kpi.total_rules) ]]</div>
+                    <div class="ud-kpi-label">Active Rules</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--teal">
+                <div class="ud-kpi-icon"><i class="fas fa-layer-group"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(kpi.total_bundles) ]]</div>
+                    <div class="ud-kpi-label">Bundles</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--green">
+                <div class="ud-kpi-icon"><i class="fas fa-users"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(kpi.total_users) ]]</div>
+                    <div class="ud-kpi-label">Users</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--gold">
+                <div class="ud-kpi-icon"><i class="fas fa-tags"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(kpi.total_tags) ]]</div>
+                    <div class="ud-kpi-label">Tags</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--purple">
+                <div class="ud-kpi-icon"><i class="fas fa-circle" style="font-size:.6rem;"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(kpi.online_users) ]]</div>
+                    <div class="ud-kpi-label">Online Now</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--orange">
+                <div class="ud-kpi-icon"><i class="fas fa-thumbs-up"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(kpi.total_votes) ]]</div>
+                    <div class="ud-kpi-label">Votes</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--blue">
+                <div class="ud-kpi-icon"><i class="fas fa-comments"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(kpi.total_comments) ]]</div>
+                    <div class="ud-kpi-label">Comments</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--teal">
+                <div class="ud-kpi-icon"><i class="fas fa-bolt"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(kpi.total_activity) ]]</div>
+                    <div class="ud-kpi-label">Log Events</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             SECTION: GROWTH
+             ══════════════════════════════════════════════ -->
+        <div class="ud-section-header mb-3">
+            <i class="fas fa-arrow-trend-up ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">Growth</div>
+                <div class="ud-section-sub">Rules, users and bundles added over time</div>
+            </div>
+        </div>
+
+        <div class="pi-grid-2 mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-blue">
+                <chart-viewer :data="charts.rules_over_time" views="area" height="260px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-green">
+                <chart-viewer :data="charts.users_over_time" views="area" height="260px"></chart-viewer>
+            </div>
+        </div>
+
+        <div class="pi-grid-2 mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-teal">
+                <chart-viewer :data="charts.bundles_over_time" views="bar" height="240px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-purple">
+                <chart-viewer :data="charts.activity_over_time" views="area" height="240px"></chart-viewer>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             SECTION: CONTENT
+             ══════════════════════════════════════════════ -->
+        <div class="ud-section-header mb-3 mt-2">
+            <i class="fas fa-file-code ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">Content</div>
+                <div class="ud-section-sub">Format distribution and rule health</div>
+            </div>
+        </div>
+
+        <div class="pi-grid-3 mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-blue">
+                <chart-viewer :data="charts.formats" views="donut" height="280px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-orange">
+                <chart-viewer :data="charts.rule_health" views="donut" height="280px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-gold">
+                <chart-viewer :data="charts.proposals" views="donut" height="280px"></chart-viewer>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             SECTION: COMMUNITY
+             ══════════════════════════════════════════════ -->
+        <div class="ud-section-header mb-3 mt-2">
+            <i class="fas fa-people-group ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">Community</div>
+                <div class="ud-section-sub">Top contributors, tags and user distribution</div>
+            </div>
+        </div>
+
+        <div class="pi-grid-2 mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-purple">
+                <chart-viewer :data="charts.top_contribs" views="bar-h" height="340px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-teal">
+                <chart-viewer :data="charts.top_tags" views="bar-h" height="340px"></chart-viewer>
+            </div>
+        </div>
+
+        <div class="pi-grid-2 mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-green">
+                <chart-viewer :data="charts.user_roles" views="pie" height="240px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-blue">
+                <chart-viewer :data="charts.formats" views="bar-h" height="240px"></chart-viewer>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             SECTION: MITRE ATT&CK COVERAGE
+             ══════════════════════════════════════════════ -->
+        <div class="ud-section-header mb-3 mt-2">
+            <i class="fas fa-crosshairs ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">MITRE ATT&amp;CK Coverage</div>
+                <div class="ud-section-sub">Detection rule coverage across the ATT&amp;CK Enterprise matrix</div>
+            </div>
+        </div>
+
+        <div class="pi-kpi-row mb-3">
+            <div class="ud-kpi-card ud-kpi-card--blue">
+                <div class="ud-kpi-icon"><i class="fas fa-crosshairs"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(attackKpi.techniques) ]]</div>
+                    <div class="ud-kpi-label">Techniques Indexed</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--green">
+                <div class="ud-kpi-icon"><i class="fas fa-shield-halved"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ fmt(attackKpi.rules_covered) ]]</div>
+                    <div class="ud-kpi-label">Rules with ATT&amp;CK</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--purple">
+                <div class="ud-kpi-icon"><i class="fas fa-percent"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ attackKpi.coverage_pct ]]%</div>
+                    <div class="ud-kpi-label">Techniques Covered</div>
+                </div>
+            </div>
+            <div class="ud-kpi-card ud-kpi-card--orange" style="cursor:pointer;" @click="goHeatmap">
+                <div class="ud-kpi-icon"><i class="fas fa-grid-2"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value" style="font-size:1rem;">Navigator</div>
+                    <div class="ud-kpi-label">Open Heatmap</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="pi-grid-2 mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-blue">
+                <chart-viewer :data="charts.attack_top_techniques" views="bar-h" height="360px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-teal">
+                <chart-viewer :data="charts.attack_tactic_coverage" views="bar" height="360px"></chart-viewer>
+            </div>
+        </div>
+        <div class="pi-grid-2 mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-purple">
+                <chart-viewer :data="charts.attack_tactic_rules" views="donut" height="280px"></chart-viewer>
+            </div>
+            <div class="ud-chart-card ud-chart-card--accent-green">
+                <chart-viewer :data="charts.attack_covered_donut" views="donut" height="280px"></chart-viewer>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             SECTION: ACTIVITY HEATMAP
+             ══════════════════════════════════════════════ -->
+        <div class="ud-section-header mb-3 mt-2">
+            <i class="fas fa-calendar-days ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">Activity Heatmap</div>
+                <div class="ud-section-sub">Platform events by hour of day and day of week (last 90 days)</div>
+            </div>
+        </div>
+
+        <div class="pi-grid-full mb-4">
+            <div class="ud-chart-card ud-chart-card--accent-orange">
+                <chart-viewer :data="charts.heatmap" views="heatmap" height="300px"></chart-viewer>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════
+             SECTION: DETAIL INFO CELLS
+             ══════════════════════════════════════════════ -->
+        <div class="ud-section-header mb-3 mt-2">
+            <i class="fas fa-circle-info ud-section-icon"></i>
+            <div>
+                <div class="ud-section-title">Platform Summary</div>
+                <div class="ud-section-sub">Detailed breakdown at a glance</div>
+            </div>
+        </div>
+
+        <div class="ud-info-grid mb-4">
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(13,110,253,.1);color:#0d6efd;">
+                    <i class="fas fa-shield-halved"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Active Rules</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.total_rules) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(220,53,69,.1);color:#dc3545;">
+                    <i class="fas fa-trash"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Deleted (Trash)</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.total_deleted) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(32,201,151,.1);color:#20c997;">
+                    <i class="fas fa-layer-group"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Bundles</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.total_bundles) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(25,135,84,.1);color:#198754;">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Total Users</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.total_users) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(25,135,84,.1);color:#198754;">
+                    <i class="fas fa-circle" style="font-size:.5rem;"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Online Now</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.online_users) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(220,53,69,.1);color:#dc3545;">
+                    <i class="fas fa-shield-halved"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Admins</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.admin_users) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(255,193,7,.1);color:#ffc107;">
+                    <i class="fas fa-tags"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Tags</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.total_tags) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(111,66,193,.1);color:#6f42c1;">
+                    <i class="fas fa-comments"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Comments</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.total_comments) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(13,202,240,.1);color:#0dcaf0;">
+                    <i class="fas fa-thumbs-up"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Total Votes</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.total_votes) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(253,126,20,.1);color:#fd7e14;">
+                    <i class="fas fa-lightbulb"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Edit Proposals</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.total_proposals) ]]</div>
+                </div>
+            </div>
+            <div class="ud-info-cell">
+                <div class="ud-info-cell-icon" style="background:rgba(13,110,253,.1);color:#0d6efd;">
+                    <i class="fas fa-bolt"></i>
+                </div>
+                <div class="ud-info-cell-body">
+                    <div class="ud-info-cell-label">Activity Log Events</div>
+                    <div class="ud-info-cell-value">[[ fmt(kpi.total_activity) ]]</div>
+                </div>
+            </div>
+        </div>
+
+    </template>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, onMounted } = Vue
+    import ChartViewer from '/static/js/components/chart-viewer.js'
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'chart-viewer': ChartViewer },
+        setup() {
+            const loading   = ref(true)
+            const kpi       = ref({})
+            const charts    = ref({})
+            const attackKpi = ref({ techniques: 0, rules_covered: 0, coverage_pct: 0 })
+
+            function fmt(n) {
+                if (n === undefined || n === null) return '—'
+                return Number(n).toLocaleString()
+            }
+
+            function goHeatmap() {
+                window.location.href = '/attack/heatmap'
+            }
+
+            async function load() {
+                try {
+                    const res  = await fetch('/platform/insights_data')
+                    const data = await res.json()
+                    kpi.value       = data.kpi        || {}
+                    charts.value    = data.charts     || {}
+                    attackKpi.value = data.attack_kpi || { techniques: 0, rules_covered: 0, coverage_pct: 0 }
+                } finally {
+                    loading.value = false
+                }
+            }
+
+            onMounted(load)
+
+            return { loading, kpi, charts, attackKpi, goHeatmap, fmt }
+        }
+    }).mount('#pi-app')
+</script>
+{% endblock %}

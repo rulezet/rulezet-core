@@ -23,15 +23,21 @@ const RuleExportAction = {
         // Hide the trigger button (modal opened programmatically by the host)
         showButton: { type: Boolean, default: true },
         modalId: { type: String, default: 'exportActionModal' },
+        // Open modal at a specific view (programmatic trigger from host)
+        startView: { type: String, default: 'main' },
     },
     delimiters: ['[[', ']]'],
     setup(props) {
-        const MAX_LIMIT = 100;
+        const MAX_LIMIT = 200;
         const isProcessing = Vue.ref(false);
         const currentView = Vue.ref('main');
+
+        Vue.watch(() => props.startView, v => { if (v) currentView.value = v });
         const csrfToken = Vue.ref(props.csrfToken);
-        const isOverLimit = Vue.computed(() => props.totalRules > MAX_LIMIT);
         const hasIdSelection = Vue.computed(() => !!(props.ruleIds && props.ruleIds.length));
+        // For the limit check: when specific IDs are selected use that count, else totalRules
+        const effectiveCount = Vue.computed(() => hasIdSelection.value ? props.ruleIds.length : props.totalRules);
+        const isOverLimit = Vue.computed(() => effectiveCount.value > MAX_LIMIT);
         
         const current_user_is_authenticated = Vue.ref(props.currentUserIsAuthenticated);
        
@@ -112,6 +118,7 @@ const RuleExportAction = {
             downloadFormat,
             isOverLimit,
             MAX_LIMIT,
+            effectiveCount,
             currentFilters,
             onBundleCompleted,
             uuid,
@@ -150,7 +157,15 @@ const RuleExportAction = {
 
                         <div class="modal-body p-4">
                             <div v-if="currentView === 'main'" class="row g-3">
-                                <p class="text-muted small mb-2 text-center">Matching <strong>[[ totalRules ]]</strong> rules. Choose an action:</p>
+                                <p class="text-muted small mb-2 text-center">
+                                    <span v-if="hasIdSelection">
+                                        <strong>[[ ruleIds.length ]]</strong> rule(s) selected.
+                                    </span>
+                                    <span v-else>
+                                        Matching <strong>[[ totalRules ]]</strong> rules.
+                                    </span>
+                                    Choose an action:
+                                </p>
                                 <div class="col-12">
                                     <div class="p-3 border rounded-4 cursor-pointer transition-all shadow-sm-hover" @click="currentView = 'download'">
                                         <div class="d-flex align-items-center text-start">
@@ -201,11 +216,12 @@ const RuleExportAction = {
                             </div>
                             <template v-if="current_user_is_authenticated === 'True'">
                                 <div v-if="currentView === 'bundle'">
-                                    <rule-bundle-manager 
-                                        :total-rules="totalRules"
+                                    <rule-bundle-manager
+                                        :total-rules="effectiveCount"
                                         :is-over-limit="isOverLimit"
                                         :max-limit="MAX_LIMIT"
-                                        :filters="currentFilters"
+                                        :filters="hasIdSelection ? null : currentFilters"
+                                        :rule-ids="hasIdSelection ? ruleIds : null"
                                         @processing="(val) => isProcessing = val"
                                         @completed="onBundleCompleted"
                                         :csrf="csrfToken"

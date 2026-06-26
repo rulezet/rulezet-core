@@ -51,6 +51,9 @@ def create_app(start_worker=True):
     from app.features.jobs.jobs import jobs_blueprint
     from app.features.connector.connector import connector_blueprint
     from app.features.notification.notification import notification_blueprint
+    from app.features.report.report import report_blueprint
+    from app.features.attack.attack import attack_blueprint
+    from app.features.workspace.workspace import workspace_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
     app.register_blueprint(account_blueprint, url_prefix="/account")
@@ -60,13 +63,23 @@ def create_app(start_worker=True):
     app.register_blueprint(jobs_blueprint, url_prefix='/jobs')
     app.register_blueprint(connector_blueprint, url_prefix='/connector')
     app.register_blueprint(notification_blueprint, url_prefix='/notifications')
+    app.register_blueprint(report_blueprint, url_prefix='/report')
+    app.register_blueprint(attack_blueprint, url_prefix='/attack')
+    app.register_blueprint(workspace_blueprint, url_prefix='/workspace')
 
     from app.api.api import api_blueprint
 
+    # Blanket-exempt the API blueprint from Flask-WTF's automatic CSRF check.
+    # External API-key consumers can't supply a CSRF token, so we can't enforce
+    # it globally.  A before_request hook in app/api/api.py re-enforces it
+    # selectively for session-authenticated browser calls.
     csrf.exempt(api_blueprint)
-   
+
     app.register_blueprint(api_blueprint, url_prefix="/api")
 
+
+    from app.features.config.config import config_blueprint
+    app.register_blueprint(config_blueprint, url_prefix='/')
 
     from app.features.jobs import job_handlers  # noqa
     if start_worker:
@@ -79,6 +92,30 @@ def create_app(start_worker=True):
             seed_official_connector()
         except Exception:
             pass
+        try:
+            from app.features.config.config_core import seed_default_themes
+            seed_default_themes()
+        except Exception:
+            pass
+
+    @app.context_processor
+    def inject_user_config():
+        from flask_login import current_user as _cu
+        from app.features.config.config_core import get_user_config, get_all_custom_themes
+        config = None
+        themes_js = []
+        if _cu.is_authenticated:
+            try:
+                config = get_user_config()
+                themes = get_all_custom_themes(admin_view=_cu.is_admin())
+                themes_js = [{'css_key': t.css_key, 'is_dark': t.is_dark, 'name': t.name} for t in themes if not t.is_builtin]
+            except Exception:
+                pass
+        return {
+            'user_config': config,
+            'custom_themes_for_js': themes_js,
+            'is_admin': _cu.is_authenticated and _cu.is_admin(),
+        }
 
     @app.context_processor
     def inject_globals():

@@ -1,0 +1,258 @@
+/* ── History Logo Page ── */
+
+/* Hero */
+.history-hero {
+    background: linear-gradient(140deg, #f0f4ff 0%, #eaf0ff 60%, #f6f0ff 100%);
+    min-height: 360px;
+}
+
+#history-hero-canvas {
+    top: 0; left: 0;
+}
+
+/* ── Timeline item scroll reveal ── */
+.timeline-item {
+    opacity: 0;
+    will-change: opacity, transform;
+    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.timeline-item.from-left  { transform: translateX(-52px); }
+.timeline-item.from-right { transform: translateX(52px); }
+
+.timeline-item.anim-visible {
+    opacity: 1;
+    transform: none;
+}
+
+/* Era badge entrance */
+.timeline-card .badge {
+    display: inline-block;
+    transform: scale(0.75);
+    opacity: 0;
+    transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0.32s,
+                opacity 0.38s ease 0.32s;
+}
+
+.timeline-item.anim-visible .timeline-card .badge {
+    transform: scale(1);
+    opacity: 1;
+}
+
+/* ── Timeline dot effects ── */
+.timeline-dot {
+    position: absolute;
+    transition: box-shadow 0.4s ease;
+}
+
+/* Ripple ring */
+.timeline-dot::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    opacity: 0;
+}
+
+.timeline-dot.dot-active::after {
+    animation: dot-ripple 2.8s ease-out infinite;
+}
+
+@keyframes dot-ripple {
+    0%   { transform: scale(0.75); opacity: 0.55; }
+    100% { transform: scale(1.9);  opacity: 0; }
+}
+
+.timeline-dot.dot-active {
+    animation: dot-breathe 3.5s ease-in-out infinite;
+}
+
+@keyframes dot-breathe {
+    0%,100% { box-shadow: 0 0 0 0 rgba(13,110,253,0); }
+    50%     { box-shadow: 0 0 0 7px rgba(13,110,253,0.13); }
+}
+
+/* ── Timeline progress line ── */
+#timeline-line-wrap {
+    position: absolute;
+    top: 0; bottom: 0; left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: #e2e8f0;
+    z-index: 1;
+}
+
+#timeline-line-fill {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 0%;
+    background: linear-gradient(180deg, #0d6efd 0%, #6610f2 100%);
+    transition: height 0.12s linear;
+    border-radius: 1px;
+    box-shadow: 0 0 8px rgba(13,110,253,0.35);
+}
+
+#timeline-line-glow {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #0d6efd;
+    box-shadow: 0 0 14px 5px rgba(13,110,253,0.55);
+    z-index: 3;
+    transition: top 0.12s linear;
+    pointer-events: none;
+}
+
+/* ── Logo image + lightbox trigger ── */
+.timeline-img-wrap {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    cursor: zoom-in;
+}
+
+.timeline-img-wrap::after {
+    content: '\f00e';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    color: white;
+    background: rgba(13,110,253,0.0);
+    opacity: 0;
+    transition: background 0.25s ease, opacity 0.25s ease;
+    pointer-events: none;
+    border-radius: 0.75rem;
+}
+
+.timeline-img-wrap:hover::after {
+    background: rgba(13,110,253,0.28);
+    opacity: 1;
+}
+
+/* Scan line sweeps over image on reveal */
+.img-scan-overlay {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    top: -3px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(13,110,253,0.85) 25%,
+        rgba(255,255,255,0.95) 50%,
+        rgba(13,110,253,0.85) 75%,
+        transparent 100%);
+    pointer-events: none;
+    opacity: 0;
+    box-shadow: 0 0 10px rgba(13,110,253,0.55);
+}
+
+.timeline-item.anim-visible .img-scan-overlay {
+    animation: scan-sweep 1.15s ease-in 0.18s forwards;
+}
+
+@keyframes scan-sweep {
+    0%   { top: -3px;             opacity: 1; }
+    95%  { top: calc(100% + 3px); opacity: 0.7; }
+    100% { top: calc(100% + 3px); opacity: 0; }
+}
+
+/* ── Card hover ── */
+.timeline-card {
+    transition: transform 0.26s ease, box-shadow 0.26s ease;
+}
+
+.timeline-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 16px 36px rgba(13,110,253,0.11) !important;
+}
+
+/* ── Lightbox ── */
+.lb-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(6, 10, 24, 0.88);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    cursor: zoom-out;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.lb-overlay.lb-open {
+    opacity: 1;
+}
+
+.lb-inner {
+    position: relative;
+    max-width: min(90vw, 1000px);
+    max-height: 90vh;
+    cursor: default;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.lb-img {
+    max-width: 100%;
+    max-height: 78vh;
+    object-fit: contain;
+    border-radius: 10px;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.55);
+    transform: scale(0.92);
+    transition: transform 0.28s cubic-bezier(0.22,1,0.36,1);
+}
+
+.lb-overlay.lb-open .lb-img {
+    transform: scale(1);
+}
+
+.lb-caption {
+    color: rgba(255,255,255,0.78);
+    font-size: 0.88rem;
+    letter-spacing: 0.03em;
+    text-align: center;
+}
+
+.lb-caption strong {
+    color: #fff;
+}
+
+.lb-close {
+    position: absolute;
+    top: -44px; right: 0;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.6);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.lb-close:hover { color: #fff; }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+    .timeline-item.from-left,
+    .timeline-item.from-right {
+        transform: translateY(32px);
+    }
+    .timeline-item.anim-visible { transform: none; }
+    #timeline-line-wrap,
+    #timeline-line-glow { display: none; }
+}

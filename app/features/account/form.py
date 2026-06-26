@@ -7,7 +7,7 @@ from wtforms.fields import (
     BooleanField, PasswordField, StringField,
     SubmitField, EmailField, TextAreaField
 )
-from wtforms.validators import Email, InputRequired, Length, Regexp, Optional, URL
+from wtforms.validators import Email, EqualTo, InputRequired, Length, Regexp, Optional, URL
 from ...core.db_class.db import User
 
 
@@ -113,3 +113,23 @@ class AddNewUserForm(FlaskForm):
                 'Email already registered. (Did you mean to '
                 '<a href="{}">log in</a> instead?)'.format(url_for('account.index'))
             )
+
+
+class ForgotPasswordForm(FlaskForm):
+    email = EmailField('Email', validators=[InputRequired(), Email()])
+    submit = SubmitField('Send reset link')
+
+
+class ResetPasswordForm(FlaskForm):
+    password = PasswordField('New password', validators=[
+        InputRequired(),
+        Length(min=8, max=64, message="Password must be between 8 and 64 characters."),
+        Regexp(r'.*[A-Z].*', message="Must contain at least one uppercase letter."),
+        Regexp(r'.*[a-z].*', message="Must contain at least one lowercase letter."),
+        Regexp(r'.*\d.*', message="Must contain at least one digit."),
+    ])
+    confirm = PasswordField('Confirm password', validators=[
+        InputRequired(),
+        EqualTo('password', message='Passwords must match.')
+    ])
+    submit = SubmitField('Reset password')

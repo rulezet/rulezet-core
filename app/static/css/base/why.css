@@ -1,214 +1,99 @@
 
-/* ── Page-scoped variables ── */
+/* ── Page-scoped accent ── */
 .why-page {
-    --accent: rgb(10, 88, 202);
-    --accent-light: rgba(10, 88, 202, 0.08);
-    --accent-border: rgba(10, 88, 202, 0.25);
-    font-family: 'Sora', sans-serif;
+    --why-accent: #0d6efd;
+    --why-accent-light: rgba(13, 110, 253, 0.08);
+    --why-accent-border: rgba(13, 110, 253, 0.22);
 }
 
-/* ── Hero ── */
-.why-hero {
-    padding: 4rem 0 3.5rem;
-    border-bottom: 1px solid var(--border-color);
-    position: relative;
-    overflow: hidden;
+/* ══════════════════════════════════════
+   KPI STRIP (hero row left column)
+══════════════════════════════════════ */
+.why-kpi-row {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 1rem 1.25rem;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
 }
 
-.why-hero::before {
-    content: '';
-    position: absolute;
-    top: -100px;
-    right: -100px;
-    width: 480px;
-    height: 480px;
-    border-radius: 50%;
-    background: var(--accent-light);
-    filter: blur(90px);
-    pointer-events: none;
-    z-index: 0;
+.why-kpi-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    text-align: center;
 }
 
-.why-hero>.container {
-    position: relative;
-    z-index: 1;
-}
-
-.why-badge {
-    display: inline-block;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 4px 12px;
-    border-radius: 4px;
-    background: var(--accent-light);
-    border: 1px solid var(--accent-border);
-    color: var(--accent);
-    margin-bottom: 1.25rem;
-}
-
-.why-hero h1 {
-    font-family: 'Space Mono', monospace;
-    font-size: clamp(1.8rem, 4.5vw, 3rem);
+.why-kpi-num {
+    font-size: 1.7rem;
     font-weight: 700;
-    line-height: 1.15;
-    color: var(--text-color);
-    margin-bottom: 1.1rem;
+    color: var(--why-accent);
+    line-height: 1;
 }
 
-.why-hero h1 .accent-word {
-    color: var(--rule-name-color);
+.why-kpi-icon {
+    font-size: 1.4rem;
+    color: var(--why-accent);
 }
 
-.why-hero .why-lead {
-    font-size: 1rem;
-    line-height: 1.75;
+.why-kpi-lbl {
+    font-size: 0.7rem;
     color: var(--subtle-text-color);
-    max-width: 540px;
-    font-weight: 300;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
 }
 
-/* Format tags */
+.why-kpi-sep {
+    width: 1px;
+    height: 36px;
+    background: var(--border-color);
+    flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════
+   FORMAT TAGS
+══════════════════════════════════════ */
 .format-tags-row {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 1.75rem;
-}
-
-.fmt-tag:hover {
-    background: var(--accent-border);
-    color: var(--accent);
-    border-color: var(--accent-border);
 }
 
 .fmt-tag {
-    font-family: 'Space Mono', monospace;
     font-size: 0.65rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     padding: 4px 11px;
     border-radius: 4px;
-    background: var(--accent-light);
-    color: var(--accent);
-    border: 1px solid var(--accent-border);
+    background: var(--why-accent-light);
+    color: var(--why-accent);
+    border: 1px solid var(--why-accent-border);
+    font-family: 'Space Mono', 'JetBrains Mono', monospace;
 }
 
-/* Hero code snippet */
-.hero-snippet {
-    background: var(--code-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 1rem 1.25rem;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.72rem;
-    line-height: 1.75;
-    color: var(--text-color);
+.fmt-tag:hover {
+    background: var(--why-accent-border);
 }
 
-.hero-snippet .dot-row {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 10px;
-    align-items: center;
-}
+a:has(.fmt-tag) { text-decoration: none; }
 
-.dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-}
-
-.dot-red {
-    background: #ff5f57;
-}
-
-.dot-amber {
-    background: #febc2e;
-}
-
-.dot-green {
-    background: #28c840;
-}
-
-.dot-file {
-    font-size: 0.62rem;
-    color: var(--subtle-text-color);
-    margin-left: 6px;
-}
-
-.snip-kw {
-    color: var(--rule-name-color);
-}
-
-.snip-str {
-    color: #2e7d32;
-}
-
-.snip-num {
-    color: #e65100;
-}
-
-/* Stats row */
-.hero-stat-box {
-    text-align: center;
-    padding: 1.25rem 0.5rem;
-}
-
-.hero-stat-num {
-    font-family: 'Space Mono', monospace;
-    font-size: 1.9rem;
-    font-weight: 700;
-    color: var(--rule-name-color);
-    display: block;
-}
-
-.hero-stat-lbl {
-    font-size: 0.7rem;
-    color: var(--subtle-text-color);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-}
-
-/* ── Section labels ── */
-.section-eyebrow {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.68rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--subtle-text-color);
-    border-left: 3px solid var(--rule-name-color);
-    padding-left: 10px;
-    margin-bottom: 0.85rem;
-}
-
-.section-heading {
-    font-family: 'Space Mono', monospace;
-    font-size: 1.45rem;
-    font-weight: 700;
-    color: var(--text-color);
-    margin-bottom: 0.4rem;
-}
-
-.section-sub {
-    font-size: 0.9rem;
-    color: var(--subtle-text-color);
-    margin-bottom: 2.25rem;
-    font-weight: 300;
-}
-
-/* ── Why quote block ── */
+/* ══════════════════════════════════════
+   QUOTE BLOCK
+══════════════════════════════════════ */
 .why-quote {
     background: var(--card-bg-color);
     border: 1px solid var(--border-color);
-    border-left: 4px solid var(--rule-name-color);
+    border-left: 4px solid var(--why-accent);
     border-radius: 0 12px 12px 0;
-    padding: 1.5rem 1.75rem;
-    font-size: 1rem;
+    padding: 1.4rem 1.75rem;
+    font-size: .95rem;
     line-height: 1.8;
     color: var(--subtle-text-color);
-    margin: 2.5rem 0;
 }
 
 .why-quote strong {
@@ -216,66 +101,97 @@
     font-weight: 600;
 }
 
-/* ── Profile cards ── */
+/* ══════════════════════════════════════
+   SECTION LABELS
+══════════════════════════════════════ */
+.section-eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--subtle-text-color);
+    border-left: 3px solid var(--why-accent);
+    padding-left: 10px;
+    margin-bottom: 0.75rem;
+    font-family: 'Space Mono', 'JetBrains Mono', monospace;
+}
+
+.section-heading {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-color);
+    margin-bottom: 0.4rem;
+}
+
+.section-sub {
+    font-size: 0.88rem;
+    color: var(--subtle-text-color);
+    margin-bottom: 2rem;
+}
+
+/* ══════════════════════════════════════
+   PROFILE CARDS
+══════════════════════════════════════ */
 .profile-card-why {
     background: var(--card-bg-color);
     border: 1px solid var(--border-color);
-    border-radius: 16px;
-    padding: 1.5rem;
+    border-radius: 14px;
+    padding: 1.4rem;
     height: 100%;
-    transition: border-color 0.25s, transform 0.25s;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
 .profile-card-why:hover {
-    border-color: var(--accent-border);
+    border-color: var(--why-accent-border);
     transform: translateY(-4px);
-    box-shadow: 0 12px 28px rgba(10, 88, 202, 0.08);
+    box-shadow: 0 10px 24px rgba(13, 110, 253, 0.08);
 }
 
 .profile-icon-circle {
-    width: 44px;
-    height: 44px;
+    width: 42px;
+    height: 42px;
     border-radius: 50%;
-    background: var(--accent-light);
-    border: 1px solid var(--accent-border);
-    color: var(--accent);
+    background: var(--why-accent-light);
+    border: 1px solid var(--why-accent-border);
+    color: var(--why-accent);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 17px;
-    margin-bottom: 0.9rem;
+    font-size: 16px;
+    margin-bottom: 0.85rem;
 }
 
 .profile-role-label {
-    font-family: 'Space Mono', monospace;
     font-size: 0.62rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--rule-name-color);
+    color: var(--why-accent);
     margin-bottom: 0.35rem;
     display: block;
+    font-family: 'Space Mono', 'JetBrains Mono', monospace;
 }
 
 .profile-card-why h5 {
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-color);
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.5rem;
 }
 
 .profile-card-why p {
-    font-size: 0.83rem;
+    font-size: 0.82rem;
     line-height: 1.65;
     color: var(--subtle-text-color);
     margin: 0;
 }
 
-/* ── Feature items ── */
+/* ══════════════════════════════════════
+   FEATURE ITEMS
+══════════════════════════════════════ */
 .feature-why {
     display: flex;
     gap: 14px;
     align-items: flex-start;
-    padding: 1.1rem 1.15rem;
+    padding: 1rem 1.1rem;
     background: var(--card-bg-color);
     border: 1px solid var(--border-color);
     border-radius: 12px;
@@ -284,15 +200,15 @@
 }
 
 .feature-why:hover {
-    border-color: var(--accent-border);
+    border-color: var(--why-accent-border);
 }
 
 .feature-icon-sq {
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    background: var(--accent-light);
-    color: var(--accent);
+    background: var(--why-accent-light);
+    color: var(--why-accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -314,11 +230,47 @@
     line-height: 1.55;
 }
 
-/* ── OSS banner ── */
+/* Clickable feature items */
+.feature-clickable {
+    position: relative;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.feature-clickable:hover {
+    border-color: var(--why-accent) !important;
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(13, 110, 253, 0.1);
+}
+
+.feature-arrow {
+    position: absolute;
+    bottom: 12px;
+    right: 14px;
+    font-size: 0.7rem;
+    color: var(--why-accent);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.feature-clickable:hover .feature-arrow {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* Keep text colors consistent inside the <a> */
+a:has(.feature-clickable) h6 { color: var(--text-color); }
+a:has(.feature-clickable) p  { color: var(--subtle-text-color); }
+a:has(.feature-clickable) .feature-icon-sq { color: var(--why-accent); }
+
+/* ══════════════════════════════════════
+   OPEN SOURCE BANNER
+══════════════════════════════════════ */
 .oss-banner-why {
-    background: var(--card-header-bg-color);
+    background: var(--card-bg-color);
     border: 1px solid var(--border-color);
-    border-radius: 16px;
+    border-radius: 14px;
     padding: 1.75rem 2rem;
     display: flex;
     align-items: flex-start;
@@ -327,13 +279,12 @@
 
 .oss-banner-why .oss-fa-icon {
     font-size: 2rem;
-    color: var(--rule-name-color);
+    color: var(--why-accent);
     flex-shrink: 0;
-    margin-top: 2px;
+    margin-top: 3px;
 }
 
 .oss-banner-why h5 {
-    font-family: 'Space Mono', monospace;
     font-size: 0.95rem;
     font-weight: 700;
     color: var(--text-color);
@@ -347,118 +298,25 @@
     margin: 0 0 0.9rem;
 }
 
-/* ── CTA buttons ── */
-.btn-why-primary {
-    background: var(--rule-name-color);
-    color: #fff !important;
-    border: none;
-    border-radius: 8px;
-    padding: 10px 22px;
-    font-family: 'Sora', sans-serif;
-    font-size: 0.87rem;
-    font-weight: 500;
-    transition: background 0.2s, transform 0.15s;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-}
-
-.btn-why-primary:hover {
-    background: #0849a8;
-    transform: translateY(-1px);
-}
-
-.btn-why-outline {
-    background: transparent;
-    color: var(--text-color) !important;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 10px 22px;
-    font-family: 'Sora', sans-serif;
-    font-size: 0.87rem;
-    font-weight: 500;
-    transition: all 0.2s;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-}
-
-.btn-why-outline:hover {
-    background: var(--light-bg-color);
-    border-color: var(--accent-border);
-}
-
-/* ── Animations ── */
-@keyframes fadeUpWhy {
-    from {
-        opacity: 0;
-        transform: translateY(18px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.anim-up {
-    animation: fadeUpWhy 0.5s ease both;
-}
-
-.d1 {
-    animation-delay: 0.05s;
-}
-
-.d2 {
-    animation-delay: 0.15s;
-}
-
-.d3 {
-    animation-delay: 0.25s;
-}
-
-.d4 {
-    animation-delay: 0.35s;
-}
-
-/* ── Divider ── */
+/* ══════════════════════════════════════
+   DIVIDER
+══════════════════════════════════════ */
 .why-hr {
     border: none;
     border-top: 1px solid var(--border-color);
     margin: 0;
 }
 
-  .feature-clickable {
-    position: relative;
-    cursor: pointer;
-    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
-  }
- 
-  .feature-clickable:hover {
-    border-color: var(--rule-name-color) !important;
-    transform: translateY(-3px);
-    box-shadow: 0 8px 20px rgba(10, 88, 202, 0.1);
-  }
- 
-  .feature-arrow {
-    position: absolute;
-    bottom: 12px;
-    right: 14px;
-    font-size: 0.7rem;
-    color: var(--rule-name-color);
-    opacity: 0;
-    transform: translateX(-4px);
-    transition: opacity 0.2s, transform 0.2s;
-  }
- 
-  .feature-clickable:hover .feature-arrow {
-    opacity: 1;
-    transform: translateX(0);
-  }
- 
-  /* Keep text colors consistent inside the <a> */
-  a:has(.feature-clickable) h6 { color: var(--text-color); }
-  a:has(.feature-clickable) p  { color: var(--subtle-text-color); }
-  a:has(.feature-clickable) .feature-icon-sq { color: rgb(10, 88, 202); }
+/* ══════════════════════════════════════
+   ANIMATIONS
+══════════════════════════════════════ */
+@keyframes fadeUpWhy {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.anim-up { animation: fadeUpWhy 0.45s ease both; }
+.d1 { animation-delay: 0.05s; }
+.d2 { animation-delay: 0.15s; }
+.d3 { animation-delay: 0.25s; }
+.d4 { animation-delay: 0.35s; }

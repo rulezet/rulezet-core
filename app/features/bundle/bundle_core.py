@@ -58,7 +58,13 @@ def create_bundle(form_dict , user) -> Bundle:
     except Exception as e:
         db.session.rollback()
         raise e
-        
+
+    try:
+        from app.features.notification.notification_core import notify_followers_new_bundle
+        notify_followers_new_bundle(new_bundle, user.id)
+    except Exception:
+        pass
+
     return new_bundle
 
 def add_rules_to_bundle(bundle_id: int, rule_ids: list[int]) -> bool:
@@ -871,6 +877,30 @@ def add_comment_to_bundle(bundle_id: int, user: User, content: str , parent_comm
         )
         db.session.add(new_comment)
         db.session.commit()
+
+        try:
+            bundle = Bundle.query.get(bundle_id)
+            link   = f'/bundle/detail/{bundle_id}'
+            is_public = bool(bundle.access) if bundle else True
+            from app.features.notification.notification_core import (
+                notify_owner_new_comment, notify_followers_new_comment, notify_comment_reply)
+            if bundle:
+                # Always notify the owner of comment on their bundle (even private — they own it)
+                notify_owner_new_comment(
+                    bundle.user_id, user.id, 'bundle_comment', bundle.name, link)
+            # Followers only see activity on public bundles
+            notify_followers_new_comment(user.id, bundle.name if bundle else '', link,
+                                         is_public=is_public)
+            if parent_comment_id:
+                from app.core.db_class.db import CommentBundle
+                parent = CommentBundle.query.get(parent_comment_id)
+                # Reply notification: only if the parent author can access the bundle
+                # (i.e. they're the bundle owner, or the bundle is public)
+                if parent and (is_public or parent.user_id == (bundle.user_id if bundle else None)):
+                    notify_comment_reply(parent.user_id, user.id, bundle.name if bundle else '', link)
+        except Exception as _e:
+            print(f"[bundle_core] add_comment_to_bundle notification error: {_e}")
+
         return "Comment added successfully", True
     except Exception as e:
         db.session.rollback()
@@ -1118,3 +1148,247 @@ def get_bundle_by_id(bundle_id: int):
 
 def get_only_root_nodes(bundle_id: int):
     return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).all()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ATT&CK Coverage
+# ─────────────────────────────────────────────────────────────────────────────
+
+import re as _re
+from collections import defaultdict as _dd
+
+_TACTIC_ORDER = [
+    'reconnaissance', 'resource-development', 'initial-access', 'execution',
+    'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access',
+    'discovery', 'lateral-movement', 'collection', 'command-and-control',
+    'exfiltration', 'impact',
+]
+
+_TACTIC_LABELS = {
+    'reconnaissance':      'Reconnaissance',
+    'resource-development':'Resource Development',
+    'initial-access':      'Initial Access',
+    'execution':           'Execution',
+    'persistence':         'Persistence',
+    'privilege-escalation':'Privilege Escalation',
+    'defense-evasion':     'Defense Evasion',
+    'credential-access':   'Credential Access',
+    'discovery':           'Discovery',
+    'lateral-movement':    'Lateral Movement',
+    'collection':          'Collection',
+    'command-and-control': 'Command and Control',
+    'exfiltration':        'Exfiltration',
+    'impact':              'Impact',
+}
+
+_TACTIC_ALIASES = {
+    'resource_development':  'resource-development',
+    'initial_access':        'initial-access',
+    'privilege_escalation':  'privilege-escalation',
+    'defense_evasion':       'defense-evasion',
+    'credential_access':     'credential-access',
+    'lateral_movement':      'lateral-movement',
+    'command_and_control':   'command-and-control',
+}
+
+_TECH_RE = _re.compile(r'\bT(\d{4})(?:\.(\d{3}))?\b', _re.IGNORECASE)
+
+
+def _norm_tactic(raw: str) -> str:
+    k = raw.lower().replace(' ', '-').replace('_', '-')
+    return _TACTIC_ALIASES.get(k.replace('-', '_'), k)
+
+
+def _parse_sigma(content: str):
+    """Return (tactics: list[str], techniques: list[str]) from a Sigma rule."""
+    tactics, techs = [], []
+    in_tags = False
+    for line in content.split('\n'):
+        s = line.strip()
+        if s.startswith('tags:'):
+            in_tags = True
+            continue
+        if in_tags:
+            if s.startswith('- attack.'):
+                val = s[9:].strip().lower()
+                m = _re.match(r'^(t\d{4})(\.\d{3})?$', val)
+                if m:
+                    techs.append(val.upper())
+                else:
+                    tactics.append(_norm_tactic(val))
+            elif s and not s.startswith('-') and not s.startswith('#'):
+                in_tags = False
+    return tactics, techs
+
+
+def _parse_generic(content: str):
+    """Extract technique IDs from any rule content (YARA meta, comments, etc.)."""
+    return [f"T{m.group(1)}" + (f".{m.group(2)}" if m.group(2) else '')
+            for m in _TECH_RE.finditer(content)]
+
+
+def get_attack_coverage(bundle_id: int) -> dict:
+    """
+    Return MITRE ATT&CK coverage data for all rules in a bundle.
+    Reads from RuleAttackAssociation (populated by the auto-parse job).
+    Falls back to on-the-fly parsing when the DB has no associations yet.
+    """
+    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
+
+    bundle = Bundle.query.get(bundle_id)
+    if not bundle:
+        return None
+
+    # All rule IDs in the bundle
+    rule_rows = (
+        db.session.query(Rule.id, Rule.title, Rule.uuid)
+        .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
+        .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
+        .all()
+    )
+    total_rules = len(rule_rows)
+    rule_map = {r.id: {'id': r.id, 'name': r.title or '', 'uuid': str(r.uuid) if r.uuid else ''}
+                for r in rule_rows}
+    rule_ids = list(rule_map.keys())
+
+    # Fetch associations from DB
+    assoc_rows = (
+        db.session.query(
+            RuleAttackAssociation.rule_id,
+            RuleAttackAssociation.technique_id,
+            AttackTechnique.tactic_keys,
+        )
+        .join(AttackTechnique, RuleAttackAssociation.technique_id == AttackTechnique.technique_id)
+        .filter(RuleAttackAssociation.rule_id.in_(rule_ids))
+        .all()
+    ) if rule_ids else []
+
+    # If no DB associations, fall back to parsing
+    use_fallback = not assoc_rows and rule_ids
+
+    if use_fallback:
+        return _get_attack_coverage_parsed(bundle_id, rule_map, total_rules)
+
+    # tactic_key -> technique_id -> list of rule dicts
+    coverage: dict = _dd(lambda: _dd(list))
+    rules_with_attack: set = set()
+
+    for rule_id, technique_id, tactic_keys in assoc_rows:
+        info = rule_map.get(rule_id)
+        if not info:
+            continue
+        rules_with_attack.add(rule_id)
+        tactics = tactic_keys or ['unknown']
+        for tac in tactics:
+            coverage[tac][technique_id].append(info)
+
+    # Build ordered output
+    tactics_out = []
+    all_techs: set = set()
+    covered_count = 0
+
+    for key in _TACTIC_ORDER:
+        tac_techs = coverage.get(key, {})
+        techs_out = []
+        for tid, rules in tac_techs.items():
+            if tid:
+                all_techs.add(tid)
+                techs_out.append({'id': tid, 'count': len(rules),
+                                  'rules': rules})
+        techs_out.sort(key=lambda x: x['id'])
+        is_covered = bool(techs_out)
+        if is_covered:
+            covered_count += 1
+        tactics_out.append({
+            'key':            key,
+            'label':          _TACTIC_LABELS.get(key, key.replace('-', ' ').title()),
+            'covered':        is_covered,
+            'technique_count': len(techs_out),
+            'rule_count':     sum(t['count'] for t in techs_out),
+            'techniques':     techs_out,
+        })
+
+    return {
+        'tactics': tactics_out,
+        'stats': {
+            'covered_tactics':    covered_count,
+            'total_tactics':      len(_TACTIC_ORDER),
+            'unique_techniques':  len(all_techs),
+            'rules_with_attack':  len(rules_with_attack) if isinstance(rules_with_attack, set) else rules_with_attack,
+            'total_rules':        total_rules,
+        },
+    }
+
+
+def _get_attack_coverage_parsed(bundle_id: int, rule_map: dict, total_rules: int) -> dict:
+    """Fallback: parse rule content directly when no DB associations exist yet."""
+    rows = (
+        db.session.query(Rule.id, Rule.format, Rule.to_string)
+        .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
+        .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
+        .all()
+    )
+
+    coverage: dict = _dd(lambda: _dd(list))
+    rules_with_attack: set = set()
+
+    for rule_id, fmt, content in rows:
+        info = rule_map.get(rule_id, {'id': rule_id, 'name': '', 'uuid': ''})
+        content = content or ''
+
+        if fmt == 'sigma':
+            tactics, techs = _parse_sigma(content)
+        else:
+            tactics, techs = [], _parse_generic(content)
+
+        if not tactics and not techs:
+            continue
+        rules_with_attack.add(rule_id)
+
+        if tactics and techs:
+            for tac in tactics:
+                for tech in techs:
+                    coverage[tac][tech].append(info)
+        elif tactics:
+            for tac in tactics:
+                coverage[tac][''].append(info)
+        else:
+            for tech in techs:
+                coverage['unknown'][tech].append(info)
+
+    # Build ordered output (shared logic)
+    tactics_out = []
+    all_techs: set = set()
+    covered_count = 0
+
+    for key in _TACTIC_ORDER:
+        tac_techs = coverage.get(key, {})
+        techs_out = []
+        for tid, rule_list in tac_techs.items():
+            if tid:
+                all_techs.add(tid)
+                techs_out.append({'id': tid, 'count': len(rule_list), 'rules': rule_list})
+        techs_out.sort(key=lambda x: x['id'])
+        is_covered = bool(techs_out)
+        if is_covered:
+            covered_count += 1
+        tactics_out.append({
+            'key': key,
+            'label': _TACTIC_LABELS.get(key, key.replace('-', ' ').title()),
+            'covered': is_covered,
+            'technique_count': len(techs_out),
+            'rule_count': sum(t['count'] for t in techs_out),
+            'techniques': techs_out,
+        })
+
+    return {
+        'tactics': tactics_out,
+        'stats': {
+            'covered_tactics':   covered_count,
+            'total_tactics':     len(_TACTIC_ORDER),
+            'unique_techniques': len(all_techs),
+            'rules_with_attack': len(rules_with_attack),
+            'total_rules':       total_rules,
+            'source':            'parsed',   # hint for frontend
+        },
+    }

@@ -1,0 +1,321 @@
+/* ==========================================================================
+   userList.css — Admin user list component (ul-* namespace)
+   Depends on: core.css, dataTable.css (dt-*), ruleList.css (rl-*)
+   ========================================================================== */
+
+/* ── Wrapper / toolbar ── */
+.ul-wrapper  { position: relative; }
+.ul-toolbar  { display: flex; justify-content: space-between; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .85rem; }
+.ul-toolbar-left, .ul-toolbar-right { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; }
+
+/* ── Filter pill groups ── */
+.ul-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: .22rem;
+}
+.ul-toggle-group {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--light-bg-color);
+}
+.ul-toggle-btn {
+    padding: .28rem .75rem;
+    font-size: .75rem;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+}
+.ul-toggle-btn:hover { background: var(--border-color); color: var(--text-color); }
+.ul-toggle-btn--active { background: #0d6efd; color: #fff; }
+.ul-toggle-btn--active:hover { background: #0a58ca; color: #fff; }
+
+/* ── Card grid ── */
+.ul-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* ── User card ── */
+.ul-user-card {
+    position: relative;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: .65rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    transition: box-shadow .18s, border-color .18s, transform .15s;
+    overflow: hidden;
+}
+.ul-user-card:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,.1);
+    border-color: rgba(13,110,253,.3);
+    transform: translateY(-2px);
+}
+.ul-user-card--self  { border-color: rgba(13,202,240,.45); }
+.ul-user-card--admin { border-top-color: #f0c040; }
+
+/* Top accent bar */
+.ul-card-accent {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #0d6efd, #0a58ca);
+    border-radius: 16px 16px 0 0;
+}
+.ul-user-card--admin .ul-card-accent { background: linear-gradient(90deg, #f0c040, #e0a020); }
+.ul-user-card--self  .ul-card-accent { background: linear-gradient(90deg, #0dcaf0, #0a9ab5); }
+
+/* Dark mode */
+.dark-mode .ul-user-card { background: #1e2433; border-color: rgba(255,255,255,.1); box-shadow: 0 2px 12px rgba(0,0,0,.45); }
+.dark-mode .ul-user-card:hover { border-color: rgba(13,110,253,.5); background: #212840; }
+
+/* ── Card top row (avatar + badges) ── */
+.ul-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-top: .25rem;
+}
+.ul-card-badges { display: flex; flex-direction: column; gap: .3rem; align-items: flex-end; }
+
+/* ── Avatar ── */
+.ul-avatar-wrap { position: relative; flex-shrink: 0; }
+.ul-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background-color: #0d6efd;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid var(--card-bg-color);
+    box-shadow: 0 0 0 2px var(--border-color);
+    flex-shrink: 0;
+}
+.ul-avatar-initials {
+    color: #fff;
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+.ul-avatar-initials--sm { font-size: .75rem; font-weight: 700; }
+
+/* Table avatar */
+.ul-table-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background-color: #0d6efd;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+}
+
+/* ── Status dot ── */
+.ul-status-dot {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    border: 2px solid var(--card-bg-color);
+}
+.ul-status-dot--table { width: 10px; height: 10px; bottom: 0; right: 0; }
+.ul-status-dot--on  { background: #28a745; }
+.ul-status-dot--off { background: #adb5bd; }
+
+/* ── Status label (table) ── */
+.ul-status-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .76rem;
+    font-weight: 600;
+    padding: .2rem .5rem;
+    border-radius: 999px;
+}
+.ul-status-label--on  { color: #198754; background: rgba(25,135,84,.1); }
+.ul-status-label--off { color: #6c757d; background: rgba(108,117,125,.1); }
+
+/* ── Card identity ── */
+.ul-card-identity { display: flex; flex-direction: column; gap: .12rem; }
+.ul-card-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-color);
+    text-decoration: none;
+    line-height: 1.2;
+}
+.ul-card-name:hover { color: #0d6efd; }
+.ul-card-username { font-size: .78rem; color: var(--subtle-text-color); }
+.ul-card-email {
+    font-size: .75rem;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    transition: filter .1s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Bio ── */
+.ul-card-bio {
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+    line-height: 1.45;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* ── Meta strip ── */
+.ul-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem .75rem;
+    padding-top: .5rem;
+    border-top: 1px solid var(--border-color);
+}
+.ul-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .72rem;
+    color: var(--subtle-text-color);
+}
+.ul-meta-item i { font-size: .65rem; width: .85rem; text-align: center; opacity: .7; }
+
+/* ── External links ── */
+.ul-card-links { display: flex; gap: .35rem; }
+.ul-link-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .78rem;
+    text-decoration: none;
+    transition: background .12s, color .12s, border-color .12s;
+}
+.ul-link-btn:hover { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+
+/* ── Card actions ── */
+.ul-card-actions {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin-top: auto;
+    padding-top: .5rem;
+    border-top: 1px solid var(--border-color);
+}
+.ul-action-primary {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: .38rem .75rem;
+    border-radius: 999px;
+    background: rgba(13,110,253,.1);
+    color: #0d6efd;
+    font-size: .78rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background .12s;
+}
+.ul-action-primary:hover { background: #0d6efd; color: #fff; }
+
+.ul-action-secondary {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--subtle-text-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .75rem;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+    flex-shrink: 0;
+}
+.ul-action-secondary:hover           { background: var(--light-bg-color); color: var(--text-color); }
+.ul-action-secondary--warn           { color: #f0a020; border-color: rgba(240,160,32,.4); }
+.ul-action-secondary--warn:hover     { background: rgba(240,160,32,.1); color: #c0820a; }
+.ul-action-secondary--danger         { color: #dc3545; border-color: rgba(220,53,69,.3); }
+.ul-action-secondary--danger:hover   { background: rgba(220,53,69,.1); }
+
+/* ── Table helpers ── */
+.ul-table-user { display: flex; align-items: center; gap: .55rem; }
+.ul-table-identity { display: flex; flex-direction: column; gap: .05rem; min-width: 0; }
+.ul-table-name {
+    font-size: .84rem;
+    font-weight: 700;
+    color: var(--text-color);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ul-table-name:hover { color: #0d6efd; }
+.ul-table-username { font-size: .7rem; color: var(--subtle-text-color); }
+
+.ul-row--self  td:first-child { box-shadow: inset 3px 0 0 #0dcaf0; }
+.ul-row--admin td:first-child { box-shadow: inset 3px 0 0 #f0c040; }
+
+.dt-action-btn--warn { color: #f0a020 !important; }
+.dt-action-btn--warn:hover { background: rgba(240,160,32,.1) !important; }
+
+/* ── Blur effect ── */
+.ul-blurred {
+    filter: blur(5px);
+    user-select: none;
+    transition: filter .15s;
+    cursor: pointer;
+}
+.ul-blurred:hover { filter: blur(3px); }
+
+/* ── Blur toggle (table header) ── */
+.ul-blur-toggle {
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--subtle-text-color);
+    border-radius: 6px;
+    padding: .18rem .42rem;
+    font-size: .72rem;
+    cursor: pointer;
+    transition: background .1s;
+}
+.ul-blur-toggle:hover { background: var(--border-color); }

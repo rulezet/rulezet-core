@@ -1,0 +1,1370 @@
+{% extends 'base.html' %}
+{% block title %}Settings — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/config/config.css') }}">
+{% endblock %}
+
+{% block content %}
+<div id="settings-app" v-cloak>
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-sliders banner-watermark"></i>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-sliders"></i></div>
+            <div class="flex-1">
+                <h2 class="fw-bold mb-1">Settings</h2>
+                <div class="banner-accent"></div>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @click="resetAllSettings"
+                    style="white-space:nowrap;flex-shrink:0;">
+                <i class="fas fa-rotate-left me-1"></i>Reset to defaults
+            </button>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
+            Personalise the interface. Your preferences are saved automatically.
+        </p>
+    </div>
+
+    <div class="row g-3">
+
+        <!-- ── Left column ────────────────────────────────── -->
+        <div class="col-12 col-lg-8">
+
+            {% if is_admin %}
+            <!-- Theme Studio (admin only) — collapsible, collapsed by default -->
+            <div class="card mb-3" id="section-studio">
+                <div class="card-body" style="padding-bottom:0;">
+                    <div class="settings-card-header studio-header" @click="studio_open = !studio_open">
+                        <div class="settings-card-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+                        <div class="flex-1">
+                            <h6 class="settings-section-title mb-0">Theme Studio</h6>
+                            <p class="text-muted small mb-0">Create custom themes and override built-in ones.</p>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 ms-2">
+                            <button class="btn btn-sm btn-primary" @click.stop="openCreateModal()">
+                                <i class="fas fa-plus me-1"></i>New theme
+                            </button>
+                            <i class="fas fa-chevron-down studio-chevron" :class="{ 'studio-chevron--open': studio_open }"></i>
+                        </div>
+                    </div>
+                    <div class="studio-collapse" :class="{ 'studio-collapse--open': studio_open }">
+                        <div class="pt-3 pb-1">
+
+                            <p class="settings-sub-label">Custom themes</p>
+                            <div v-if="studio_themes === null" class="text-muted small mb-4" style="min-height:2rem;">
+                                <i class="fas fa-spinner fa-spin me-1 opacity-50"></i>Loading…
+                            </div>
+                            <div class="ts-theme-list mb-4" v-else-if="studio_themes.filter(t => !t.is_builtin).length">
+                                <div v-for="t in studio_themes.filter(t => !t.is_builtin)" :key="t.uuid"
+                                     class="ts-theme-row">
+                                    <div class="ts-theme-icon">
+                                        <i :class="'fas ' + t.icon"></i>
+                                    </div>
+                                    <div class="ts-theme-info">
+                                        <div class="ts-theme-name">[[ t.name ]]</div>
+                                        <div class="ts-theme-meta">
+                                            <span class="badge rounded-pill"
+                                                  :class="t.is_dark ? 'bg-secondary-subtle text-secondary-emphasis' : 'bg-warning-subtle text-warning-emphasis'">
+                                                [[ t.is_dark ? 'Dark' : 'Light' ]]
+                                            </span>
+                                            <span class="ms-1 font-mono small">[[ t.css_key ]]</span>
+                                        </div>
+                                    </div>
+                                    <div class="ts-theme-actions">
+                                        <button class="settings-toggle-btn me-1"
+                                                :class="{ active: t.is_public }"
+                                                :title="t.is_public ? 'Public — click to make private' : 'Private — click to publish'"
+                                                @click="toggleVisibility(t)">
+                                            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                        </button>
+                                        <span class="small me-2"
+                                              :class="t.is_public ? 'text-success' : 'text-muted'"
+                                              style="font-size:0.72rem;min-width:42px;">
+                                            [[ t.is_public ? 'Public' : 'Private' ]]
+                                        </span>
+                                        <button class="btn-icon me-1" title="Edit" @click="openEditModal(t)">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                        <button class="btn-icon" title="Delete" @click="deleteTheme(t)">
+                                            <i class="fas fa-trash text-danger"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <p v-else class="text-muted small mb-4">No custom themes yet. Click "New theme" to create one.</p>
+
+                            <p class="settings-sub-label">Override built-in themes</p>
+                            <div class="ts-builtin-grid mb-1">
+                                <div v-for="key in builtin_keys" :key="key"
+                                     class="ts-builtin-card"
+                                     @click="openBuiltinModal(key)">
+                                    <i :class="'fas ' + builtin_meta[key].icon"></i>
+                                    <span>[[ builtin_meta[key].label ]]</span>
+                                    <span v-if="studio_themes && studio_themes.find(t => t.css_key === key && t.is_builtin)"
+                                          class="badge bg-primary-subtle text-primary-emphasis"
+                                          style="font-size:0.6rem;">Modified</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Theme picker -->
+            <div class="card mb-3" id="section-theme">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-palette"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Theme</h6>
+                            <p class="text-muted small mb-0">Choose the colour scheme for the interface.</p>
+                        </div>
+                    </div>
+
+                    <div class="settings-theme-group">
+                        <div v-for="option in theme_options" :key="option.value"
+                             class="settings-theme-card"
+                             :class="{ active: theme === option.value }"
+                             @click="setTheme(option.value)">
+                            <div class="theme-preview"
+                                 :class="option.is_custom ? 'theme-preview--custom' : 'theme-preview--' + option.value"
+                                 :style="option.is_custom ? getPreviewStyle(option) : {}">
+                                <!-- Navbar -->
+                                <div class="tp-navbar">
+                                    <div class="tp-nav-logo"></div>
+                                    <div class="tp-nav-links">
+                                        <div class="tp-nav-link tp-nav-link--active"></div>
+                                        <div class="tp-nav-link"></div>
+                                        <div class="tp-nav-link"></div>
+                                    </div>
+                                    <div class="tp-nav-avatar"></div>
+                                </div>
+                                <!-- Sidebar + content -->
+                                <div class="tp-body-row">
+                                    <div class="tp-sidebar">
+                                        <div class="tp-sb-item tp-sb-item--active"></div>
+                                        <div class="tp-sb-item"></div>
+                                        <div class="tp-sb-item"></div>
+                                    </div>
+                                    <div class="tp-content">
+                                        <div class="tp-card">
+                                            <div class="tp-line tp-line--title"></div>
+                                            <div class="tp-line"></div>
+                                            <div class="tp-line tp-line--short"></div>
+                                        </div>
+                                        <div class="tp-card tp-card--sm">
+                                            <div class="tp-line"></div>
+                                            <div class="tp-line tp-line--short"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + option.icon"></i>
+                                <span>[[ option.label ]]</span>
+                                <i v-if="theme === option.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation style -->
+            <div class="card mb-3" id="section-nav">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-bars"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Navigation</h6>
+                            <p class="text-muted small mb-0">Choose how the navigation bar behaves as you scroll.</p>
+                        </div>
+                    </div>
+
+                    <div class="settings-theme-group">
+                        <div v-for="opt in nav_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: nav_style === opt.value }"
+                             @click="setNavStyle(opt.value)">
+                            <!-- Mini visual preview -->
+                            <div class="nav-preview" :class="'nav-preview--' + opt.value">
+                                <div class="np-bar"></div>
+                                <div class="np-content">
+                                    <div class="np-line"></div>
+                                    <div class="np-line np-line--short"></div>
+                                    <div class="np-line"></div>
+                                </div>
+                                <div v-if="opt.value === 'collapsible'" class="np-badge">
+                                    <i class="fas fa-chevron-up" style="font-size:.45rem;"></i>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + opt.icon"></i>
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="nav_style === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0" style="font-size:.75rem;">
+                        <i class="fas fa-info-circle me-1 text-primary opacity-75"></i>
+                        <template v-if="nav_style === 'default'">The navbar scrolls with the page.</template>
+                        <template v-else-if="nav_style === 'sticky'">The navbar stays fixed at the top, always accessible while scrolling.</template>
+                        <template v-else>The navbar is fixed and can be hidden with the <i class="fas fa-chevron-up" style="font-size:.65rem;"></i> button. A floating tab brings it back.</template>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Notification style -->
+            <div class="card mb-3" id="section-notif">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-bell"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Notifications</h6>
+                            <p class="text-muted small mb-0">Choose how unread notifications are shown.</p>
+                        </div>
+                    </div>
+
+                    <div class="settings-theme-group">
+                        <div v-for="opt in notif_style_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: notif_style === opt.value }"
+                             @click="setNotifStyle(opt.value)">
+                            <div class="nav-preview" :class="'notif-style-preview--' + opt.value">
+                                <div class="nsp-bell">
+                                    <i class="fas fa-bell" style="font-size:1rem;color:#0d6efd;"></i>
+                                    <span class="nsp-badge">3</span>
+                                </div>
+                                <div v-if="opt.value === 'prominent'" class="nsp-banner">
+                                    <span>3 unread</span>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + opt.icon"></i>
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="notif_style === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0" style="font-size:.75rem;">
+                        <i class="fas fa-info-circle me-1 text-primary opacity-75"></i>
+                        <template v-if="notif_style === 'discrete'">A small badge on the bell icon shows your unread count.</template>
+                        <template v-else>A banner appears at the top of the page when you have unread notifications.</template>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Toast settings -->
+            <div class="card mb-3" id="section-toast">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-layer-group"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Toast Notifications</h6>
+                            <p class="text-muted small mb-0">Choose where and how toast messages appear.</p>
+                        </div>
+                    </div>
+
+                    <!-- Position -->
+                    <p class="settings-sub-label mb-2">Position</p>
+                    <div class="settings-theme-group settings-pos-group mb-4">
+                        <div v-for="pos in toast_pos_options" :key="pos.value"
+                             class="settings-theme-card settings-pos-card"
+                             :class="{ active: toast_pos === pos.value }"
+                             @click="setToastPosition(pos.value)">
+                            <div class="toast-pos-preview">
+                                <div class="tpp-screen">
+                                    <div class="tpp-dot" :class="'tpp-dot--' + pos.value"></div>
+                                    <div class="tpp-dot tpp-dot--fade" :class="'tpp-dot--' + pos.value" style="opacity:.25;"></div>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <span style="font-size:.72rem;">[[ pos.label ]]</span>
+                                <i v-if="toast_pos === pos.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Style -->
+                    <p class="settings-sub-label mb-2">Style</p>
+                    <div class="settings-theme-group">
+                        <div v-for="sty in toast_style_options" :key="sty.value"
+                             class="settings-theme-card"
+                             :class="{ active: toast_sty === sty.value }"
+                             @click="setToastStyle(sty.value)">
+                            <div class="toast-style-preview" :class="'tsp--' + sty.value">
+                                <div class="tsp-toast">
+                                    <div class="tsp-left-bar"></div>
+                                    <i class="fas fa-check tsp-icon"></i>
+                                    <span class="tsp-text">Saved</span>
+                                </div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + sty.icon"></i>
+                                <span>[[ sty.label ]]</span>
+                                <i v-if="toast_sty === sty.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0" style="font-size:.75rem;">
+                        <i class="fas fa-info-circle me-1 text-primary opacity-75"></i>
+                        <template v-if="toast_sty === 'default'">Tinted background with a colored left accent border.</template>
+                        <template v-else-if="toast_sty === 'minimal'">Clean card look on the page background, accent border only.</template>
+                        <template v-else>Solid colored background — high contrast.</template>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Default list view -->
+            <div class="card mb-3" id="section-view">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-rectangle-list"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Default list view</h6>
+                            <p class="text-muted small mb-0">How rule lists appear when no view is forced by the page.</p>
+                        </div>
+                    </div>
+                    <div class="settings-theme-group">
+                        <div v-for="opt in list_view_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: list_view === opt.value }"
+                             @click="setListView(opt.value)">
+                            <div class="view-preview">
+                                <template v-if="opt.value === 'card'">
+                                    <div class="vp-card-grid">
+                                        <div class="vp-card-item"></div>
+                                        <div class="vp-card-item"></div>
+                                        <div class="vp-card-item"></div>
+                                        <div class="vp-card-item"></div>
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <div class="vp-table">
+                                        <div class="vp-table-row vp-table-row--header"></div>
+                                        <div class="vp-table-row"></div>
+                                        <div class="vp-table-row"></div>
+                                        <div class="vp-table-row"></div>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="settings-theme-label">
+                                <i :class="'fas ' + opt.icon"></i>
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="list_view === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Code font -->
+            <div class="card mb-3" id="section-font">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-code"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Code font</h6>
+                            <p class="text-muted small mb-0">Font used in rule content, diffs, and code viewers.</p>
+                        </div>
+                    </div>
+                    <div class="settings-theme-group">
+                        <div v-for="opt in font_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: code_font === opt.value }"
+                             @click="setCodeFont(opt.value)">
+                            <div class="font-preview" :style="opt.css ? { fontFamily: opt.css } : { fontFamily: 'var(--font-mono)' }">
+                                <div style="font-weight:500;font-size:.9rem;">[[ opt.sample ]]</div>
+                                <div style="font-size:.72rem;opacity:.6;">0Oo 1lI != =&gt;</div>
+                            </div>
+                            <div class="settings-theme-label">
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="code_font === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Default pagination -->
+            <div class="card mb-3" id="section-pagination">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-list-ol"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">Default pagination</h6>
+                            <p class="text-muted small mb-0">Items per page when not explicitly set by the page.</p>
+                        </div>
+                    </div>
+
+                    <p class="settings-sub-label mb-2">Card view</p>
+                    <div class="d-flex gap-2 flex-wrap mb-4">
+                        <button v-for="n in [8, 12, 24, 48]" :key="n"
+                                class="per-page-chip"
+                                :class="{ active: per_page_card === n }"
+                                @click="setPerPageCard(n)">
+                            [[ n ]]
+                            <i v-if="per_page_card === n" class="fas fa-check" style="font-size:.65rem;"></i>
+                        </button>
+                    </div>
+
+                    <p class="settings-sub-label mb-2">Table view</p>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button v-for="n in [10, 25, 50, 100]" :key="n"
+                                class="per-page-chip"
+                                :class="{ active: per_page_table === n }"
+                                @click="setPerPageTable(n)">
+                            [[ n ]]
+                            <i v-if="per_page_table === n" class="fas fa-check" style="font-size:.65rem;"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- JSON colour theme -->
+            <div class="card mb-3" id="section-json-theme">
+                <div class="card-body">
+                    <div class="settings-card-header mb-3">
+                        <div class="settings-card-icon"><i class="fas fa-brackets-curly"></i></div>
+                        <div>
+                            <h6 class="settings-section-title mb-0">JSON colour theme</h6>
+                            <p class="text-muted small mb-0">Syntax colours used in JSON viewers and code blocks.</p>
+                        </div>
+                    </div>
+                    <div class="settings-theme-group">
+                        <div v-for="opt in json_theme_options" :key="opt.value"
+                             class="settings-theme-card"
+                             :class="{ active: json_theme === opt.value }"
+                             @click="setJsonTheme(opt.value)">
+                            <div class="json-theme-preview"
+                                 :style="{ '--prev-key': opt.key, '--prev-str': opt.str, '--prev-num': opt.num, '--prev-bool': opt.bool, '--prev-null': opt.null_, '--prev-punct': opt.punct }">
+                                <span class="pv-punct">{</span><br>
+                                <span class="pv-punct">&nbsp;&nbsp;</span><span class="pv-key">"name"</span><span class="pv-punct">: </span><span class="pv-str">"rule"</span><span class="pv-punct">,</span><br>
+                                <span class="pv-punct">&nbsp;&nbsp;</span><span class="pv-key">"score"</span><span class="pv-punct">: </span><span class="pv-num">9</span><span class="pv-punct">,</span><br>
+                                <span class="pv-punct">&nbsp;&nbsp;</span><span class="pv-key">"active"</span><span class="pv-punct">: </span><span class="pv-bool">true</span><br>
+                                <span class="pv-punct">}</span>
+                            </div>
+                            <div class="settings-theme-label">
+                                <span>[[ opt.label ]]</span>
+                                <i v-if="json_theme === opt.value" class="fas fa-circle-check ms-auto text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0" style="font-size:.75rem;">
+                        <i class="fas fa-info-circle me-1 text-primary opacity-75"></i>
+                        Changes apply instantly — no reload needed.
+                    </p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ── Right column: settings recap ─────────────────── -->
+        <div class="col-12 col-lg-4">
+            <div style="position:sticky;top:80px;">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="settings-section-title mb-3">
+                            <i class="fas fa-sliders me-2 text-primary"></i>Current settings
+                        </h6>
+
+                        <!-- Theme row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-palette"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Theme</div>
+                                <div class="recap-value">
+                                    <i :class="'fas ' + (theme_options.find(t => t.value === theme)?.icon || 'fa-circle-half-stroke')" class="me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ theme_options.find(t => t.value === theme)?.label || theme ]]
+                                </div>
+                            </div>
+                            <div class="recap-status" :class="save_status">
+                                <i v-if="save_status === 'saving'" class="fas fa-spinner fa-spin text-muted"></i>
+                                <i v-else-if="save_status === 'saved'" class="fas fa-circle-check text-success"></i>
+                                <i v-else-if="save_status === 'error'" class="fas fa-circle-xmark text-danger"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Navigation row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-bars"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Navigation</div>
+                                <div class="recap-value">
+                                    <i :class="'fas ' + (nav_options.find(o => o.value === nav_style)?.icon || 'fa-minus')" class="me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ nav_options.find(o => o.value === nav_style)?.label || nav_style ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="nav_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Notification style row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-bell"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Notifications</div>
+                                <div class="recap-value">
+                                    <i :class="'fas ' + (notif_style_options.find(o => o.value === notif_style)?.icon || 'fa-bell')" class="me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ notif_style_options.find(o => o.value === notif_style)?.label || notif_style ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="notif_style_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Toast row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-layer-group"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Toast</div>
+                                <div class="recap-value">
+                                    <i class="fas fa-location-dot me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ toast_pos_options.find(o => o.value === toast_pos)?.label || toast_pos ]]
+                                    <span class="ms-1 opacity-50">·</span>
+                                    <i :class="'fas ' + (toast_style_options.find(o => o.value === toast_sty)?.icon || 'fa-layer-group')" class="ms-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ toast_style_options.find(o => o.value === toast_sty)?.label || toast_sty ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="toast_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- List view row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-rectangle-list"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">List view</div>
+                                <div class="recap-value">
+                                    <i :class="'fas ' + (list_view_options.find(o => o.value === list_view)?.icon || 'fa-rectangle-list')" class="me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ list_view_options.find(o => o.value === list_view)?.label || list_view ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="list_view_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Code font row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-code"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Code font</div>
+                                <div class="recap-value">
+                                    [[ font_options.find(o => o.value === code_font)?.label || code_font ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="code_font_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- Pagination row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-list-ol"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">Pagination</div>
+                                <div class="recap-value">
+                                    <i class="fas fa-rectangle-list me-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ per_page_card ]]
+                                    <span class="ms-1 opacity-50">·</span>
+                                    <i class="fas fa-table-cells-large ms-1 text-primary" style="font-size:.75rem;"></i>
+                                    [[ per_page_table ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="per_page_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                        <div class="recap-divider"></div>
+
+                        <!-- JSON theme row -->
+                        <div class="recap-row">
+                            <div class="recap-icon"><i class="fas fa-brackets-curly"></i></div>
+                            <div class="recap-body">
+                                <div class="recap-label">JSON theme</div>
+                                <div class="recap-value">
+                                    [[ json_theme_options.find(o => o.value === json_theme)?.label || json_theme ]]
+                                </div>
+                            </div>
+                            <div class="recap-status">
+                                <i v-if="json_theme_saved" class="fas fa-circle-check text-success"></i>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+{% if is_admin %}
+<!-- Theme Studio modal -->
+<div class="modal fade" id="themeStudioModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" style="background:var(--card-bg-color);border-color:var(--border-color);">
+            <div class="modal-header" style="border-color:var(--border-color);">
+                <h5 class="modal-title">
+                    <i class="fas fa-wand-magic-sparkles me-2 text-primary"></i>
+                    [[ modal_title ]]
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body ts-modal-body">
+
+                <!-- Name / icon / mode — custom themes only -->
+                <div v-if="!modal_is_builtin" class="row g-3 mb-3">
+                    <div class="col-12 col-md-5">
+                        <label class="form-label">Theme name</label>
+                        <input type="text" class="form-control" v-model="modal_form.name"
+                               placeholder="My Theme" maxlength="64">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Icon</label>
+                        <div class="ip-wrapper" v-click-outside="() => show_icon_picker = false">
+                            <div class="ip-trigger" @click="show_icon_picker = !show_icon_picker">
+                                <i :class="'fas ' + (modal_form.icon || 'fa-palette')"></i>
+                                <span>[[ modal_form.icon || 'fa-palette' ]]</span>
+                                <i class="fas fa-chevron-down ip-caret"></i>
+                            </div>
+                            <div v-if="show_icon_picker" class="ip-dropdown mt-1">
+                                <input type="text" class="form-control form-control-sm ip-search"
+                                       v-model="icon_search" placeholder="Search icons…" autofocus>
+                                <div class="ip-grid">
+                                    <button v-for="ic in filteredIcons" :key="ic"
+                                            class="ip-btn"
+                                            :class="{ active: modal_form.icon === ic }"
+                                            :title="ic"
+                                            @click="pickIcon(ic)">
+                                        <i :class="'fas ' + ic"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label">Mode</label>
+                        <select class="form-select" v-model="modal_form.is_dark">
+                            <option :value="false">Light</option>
+                            <option :value="true">Dark</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Live preview -->
+                <div class="ts-preview-row mb-3">
+                    <div class="ts-preview-label">Preview</div>
+                    <div class="theme-preview theme-preview--custom ts-live-preview"
+                         :style="livePreviewStyle">
+                        <div class="tp-navbar">
+                            <div class="tp-nav-logo"></div>
+                            <div class="tp-nav-links">
+                                <div class="tp-nav-link tp-nav-link--active"></div>
+                                <div class="tp-nav-link"></div>
+                                <div class="tp-nav-link"></div>
+                            </div>
+                            <div class="tp-nav-avatar"></div>
+                        </div>
+                        <div class="tp-body-row">
+                            <div class="tp-sidebar">
+                                <div class="tp-sb-item tp-sb-item--active"></div>
+                                <div class="tp-sb-item"></div>
+                                <div class="tp-sb-item"></div>
+                            </div>
+                            <div class="tp-content">
+                                <div class="tp-card">
+                                    <div class="tp-line tp-line--title"></div>
+                                    <div class="tp-line"></div>
+                                    <div class="tp-line tp-line--short"></div>
+                                </div>
+                                <div class="tp-card tp-card--sm">
+                                    <div class="tp-line"></div>
+                                    <div class="tp-line tp-line--short"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else class="alert alert-info py-2 px-3 mb-3" style="font-size:0.82rem;">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Editing <strong>[[ modal_title ]]</strong>. Leave a field empty to use the default value.
+                    <button v-if="modal_editing_uuid" class="btn btn-sm btn-outline-danger ms-2" @click="resetBuiltin()">
+                        Reset to defaults
+                    </button>
+                </div>
+
+                <!-- Tabs -->
+                <ul class="nav nav-tabs mb-0">
+                    <li class="nav-item">
+                        <a class="nav-link" :class="{ active: modal_tab === 'manual' }"
+                           href="javascript:void(0)" @click="modal_tab = 'manual'">
+                            <i class="fas fa-sliders me-1"></i>Fill manually
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" :class="{ active: modal_tab === 'paste' }"
+                           href="javascript:void(0)" @click="modal_tab = 'paste'">
+                            <i class="fas fa-paste me-1"></i>Paste CSS
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- Tab: Paste CSS -->
+                <div v-if="modal_tab === 'paste'" class="tab-content pt-3">
+                    <p class="text-muted small mb-2">
+                        Paste a CSS block like <code>[data-theme="name"] {{ '{' }} ... {{ '}' }}</code>
+                        — the variables will be extracted automatically.
+                    </p>
+                    <textarea class="form-control font-mono mb-3" v-model="paste_input" rows="12"
+                              style="font-size:0.78rem;resize:vertical;"
+                              placeholder="[data-theme=&quot;my-theme&quot;] {&#10;    --bg-color: #1e293b;&#10;    --text-color: #e2e8f0;&#10;    ...&#10;}"></textarea>
+
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <button class="btn btn-sm btn-primary" @click="parsePaste()">
+                            <i class="fas fa-wand-sparkles me-1"></i>Import variables
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" @click="paste_input = ''; paste_result = null">
+                            Clear
+                        </button>
+                    </div>
+
+                    <div v-if="paste_result" class="p-3 rounded"
+                         style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="badge bg-success-subtle text-success-emphasis">
+                                <i class="fas fa-check me-1"></i>[[ paste_result.found ]] vars imported
+                            </span>
+                            <span v-if="paste_result.missing.length"
+                                  class="badge bg-warning-subtle text-warning-emphasis">
+                                <i class="fas fa-triangle-exclamation me-1"></i>[[ paste_result.missing.length ]] missing
+                            </span>
+                        </div>
+                        <div v-if="paste_result.missing.length">
+                            <p class="text-muted small mb-1">Missing — will use defaults:</p>
+                            <div class="d-flex flex-wrap gap-1">
+                                <code v-for="v in paste_result.missing" :key="v"
+                                      class="badge bg-secondary-subtle text-secondary-emphasis"
+                                      style="font-size:0.68rem;">[[ v ]]</code>
+                            </div>
+                        </div>
+                        <p v-else class="text-success small mb-0">
+                            <i class="fas fa-circle-check me-1"></i>All variables found.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Tab: Fill manually -->
+                <div v-if="modal_tab === 'manual'" class="tab-content pt-3">
+                    <div v-for="group in var_groups" :key="group.label" class="ts-var-group">
+                        <div class="ts-var-group-label">[[ group.label ]]</div>
+                        <div class="ts-vars-grid">
+                            <div v-for="v in group.vars" :key="v" class="ts-var-row">
+                                <label class="ts-var-label">[[ v ]]</label>
+                                <input type="text" class="form-control form-control-sm ts-var-input"
+                                       v-model="modal_form.css_vars[v]"
+                                       :class="{ 'border-success': modal_form.css_vars[v] }"
+                                       :placeholder="var_placeholders[v] || ''">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer" style="border-color:var(--border-color);">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" @click="saveTheme()" :disabled="modal_saving">
+                    <span v-if="modal_saving" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="fas fa-floppy-disk me-1"></i>Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+</div>{# end #settings-app #}
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, reactive, computed, onMounted } = Vue
+    import { create_message, toast_position as _toastPos, toast_style as _toastSty } from '/static/js/toaster.js'
+
+    const IS_ADMIN     = {{ 'true' if is_admin else 'false' }}
+    const BUILTIN_KEYS = {{ ['dark'] | tojson | safe }}
+    const BUILTIN_META = { dark: { label: 'Dark', icon: 'fa-moon' } }
+
+    const VAR_GROUPS = [
+        { label: 'Backgrounds',       vars: ['--bg-color', '--card-bg-color', '--light-bg-color', '--code-bg-color', '--card-header-bg-color', '--navbar-bg-color', '--bar-bg-color'] },
+        { label: 'Text & Links',      vars: ['--text-color', '--subtle-text-color', '--navbar-text-color', '--rule-name-color'] },
+        { label: 'Borders & States',  vars: ['--border-color', '--selected-color', '--page-selected-color'] },
+        { label: 'Sidebar',           vars: ['--sidebar-color'] },
+    ]
+    const VAR_PLACEHOLDERS = {
+        '--bg-color': '#f7f7f7', '--card-bg-color': '#f9f9f9',
+        '--light-bg-color': '#f1f1f1', '--code-bg-color': '#f8f9fa',
+        '--card-header-bg-color': 'rgb(207,226,255)', '--navbar-bg-color': '#ffffff',
+        '--bar-bg-color': 'rgb(226,231,237)', '--text-color': '#1e1e1e',
+        '--subtle-text-color': '#6c757d', '--navbar-text-color': '#000000',
+        '--rule-name-color': 'rgb(10,88,202)', '--border-color': '#dee2e6',
+        '--selected-color': 'rgb(207,226,255)', '--page-selected-color': 'rgba(13,110,253,1)',
+        '--sidebar-color': 'rgb(15,23,42)',
+    }
+    const ALL_VARS = VAR_GROUPS.flatMap(g => g.vars)
+
+    const ICON_LIST = [
+        'fa-palette','fa-paintbrush','fa-wand-magic-sparkles','fa-star','fa-moon','fa-sun',
+        'fa-water','fa-tree','fa-leaf','fa-fire','fa-snowflake','fa-cloud',
+        'fa-bolt','fa-rainbow','fa-mountain','fa-wind','fa-layer-group',
+        'fa-circle-half-stroke','fa-adjust','fa-eye','fa-heart','fa-diamond',
+        'fa-gem','fa-crown','fa-trophy','fa-medal','fa-rocket','fa-globe',
+        'fa-earth-americas','fa-map','fa-compass','fa-cube','fa-cubes',
+        'fa-shapes','fa-code','fa-terminal','fa-microchip','fa-robot','fa-brain',
+        'fa-flask','fa-atom','fa-dna','fa-infinity','fa-music','fa-headphones',
+        'fa-camera','fa-film','fa-tv','fa-gamepad','fa-chess','fa-dice',
+        'fa-coffee','fa-mug-hot','fa-utensils','fa-book','fa-bookmark',
+        'fa-pen','fa-pencil','fa-feather','fa-lock','fa-shield-halved','fa-key',
+        'fa-user','fa-users','fa-bell','fa-flag','fa-tag','fa-tags',
+        'fa-circle','fa-square','fa-chart-bar','fa-chart-line','fa-chart-pie',
+    ]
+
+    function emptyVars() {
+        const o = {}
+        ALL_VARS.forEach(v => { o[v] = '' })
+        return o
+    }
+
+    const _API_KEY = {{ (current_user.api_key or '') | tojson }}
+    function apiFetch(url, method, body) {
+        const csrf = document.getElementById('csrf_token')
+        return fetch(url, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf ? csrf.value : '',
+                'X-API-KEY': _API_KEY,
+            },
+            body: body ? JSON.stringify(body) : undefined,
+        })
+    }
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        setup() {
+            const theme      = ref('{{ config.theme if config else "system" }}')
+            const save_status = ref('')
+            let save_timer   = null
+
+            // ── Navigation style (localStorage only, no server round-trip) ──
+            const nav_style = ref(localStorage.getItem('rz-nav-style') || 'default')
+            const nav_saved = ref(false)
+            const nav_options = [
+                { value: 'default',     label: 'Default',     icon: 'fa-minus' },
+                { value: 'sticky',      label: 'Sticky',      icon: 'fa-thumbtack' },
+                { value: 'collapsible', label: 'Collapsible', icon: 'fa-compress-alt' },
+            ]
+            function setNavStyle(value) {
+                if (value === nav_style.value) return
+                nav_style.value = value
+                if (typeof rzSetNavStyle === 'function') rzSetNavStyle(value)
+                nav_saved.value = true
+                // Brief flash of the checkmark then reload so the new nav style is visible
+                setTimeout(() => { window.location.reload() }, 500)
+            }
+
+            // ── Toast position & style (localStorage only) ───────────────────
+            const toast_pos  = ref(localStorage.getItem('rz-toast-position') || 'top-right')
+            const toast_sty  = ref(localStorage.getItem('rz-toast-style')    || 'default')
+            const toast_saved = ref(false)
+            const toast_pos_options = [
+                { value: 'top-left',      label: 'Top Left'      },
+                { value: 'top-center',    label: 'Top Center'    },
+                { value: 'top-right',     label: 'Top Right'     },
+                { value: 'bottom-left',   label: 'Bottom Left'   },
+                { value: 'bottom-center', label: 'Bottom Center' },
+                { value: 'bottom-right',  label: 'Bottom Right'  },
+            ]
+            const toast_style_options = [
+                { value: 'default', label: 'Default', icon: 'fa-layer-group' },
+                { value: 'minimal', label: 'Minimal', icon: 'fa-minus'       },
+                { value: 'filled',  label: 'Filled',  icon: 'fa-fill-drip'   },
+            ]
+            function setToastPosition(value) {
+                if (value === toast_pos.value) return
+                toast_pos.value  = value
+                _toastPos.value  = value
+                localStorage.setItem('rz-toast-position', value)
+                toast_saved.value = true
+                setTimeout(() => { toast_saved.value = false }, 2000)
+                create_message('Toast position updated', 'success')
+            }
+            function setToastStyle(value) {
+                if (value === toast_sty.value) return
+                toast_sty.value  = value
+                _toastSty.value  = value
+                localStorage.setItem('rz-toast-style', value)
+                toast_saved.value = true
+                setTimeout(() => { toast_saved.value = false }, 2000)
+                create_message('Toast style updated', 'success')
+            }
+
+            // ── Notification style (localStorage only) ────────────────────────
+            const notif_style = ref(localStorage.getItem('rz-notif-style') || 'discrete')
+            const notif_style_saved = ref(false)
+            const notif_style_options = [
+                { value: 'discrete',  label: 'Discrete',  icon: 'fa-bell' },
+                { value: 'prominent', label: 'Prominent', icon: 'fa-bell-exclamation' },
+            ]
+            function setNotifStyle(value) {
+                if (value === notif_style.value) return
+                notif_style.value = value
+                localStorage.setItem('rz-notif-style', value)
+                notif_style_saved.value = true
+                create_message('Notification style saved', 'success')
+                setTimeout(() => { notif_style_saved.value = false }, 2000)
+            }
+
+            // ── List view (localStorage only) ─────────────────────────────────
+            const list_view = ref(localStorage.getItem('rz-list-view') || 'card')
+            const list_view_saved = ref(false)
+            const list_view_options = [
+                { value: 'card',  label: 'Card',  icon: 'fa-rectangle-list' },
+                { value: 'table', label: 'Table', icon: 'fa-table-cells-large' },
+            ]
+            function setListView(value) {
+                if (value === list_view.value) return
+                list_view.value = value
+                localStorage.setItem('rz-list-view', value)
+                list_view_saved.value = true
+                setTimeout(() => { list_view_saved.value = false }, 2000)
+                create_message('Default list view saved', 'success')
+            }
+
+            // ── Code font (localStorage only) ─────────────────────────────────
+            const FONT_OPTS = [
+                { value: 'system',    label: 'System',         sample: 'SFMono',        css: null },
+                { value: 'jetbrains', label: 'JetBrains Mono', sample: 'JetBrains',     css: "'JetBrains Mono', monospace" },
+                { value: 'fira',      label: 'Fira Code',      sample: 'Fira Code',     css: "'Fira Code', monospace" },
+                { value: 'courier',   label: 'Courier New',    sample: 'Courier New',   css: "'Courier New', Courier, monospace" },
+            ]
+            const stored_font_css = localStorage.getItem('rz-code-font')
+            const code_font = ref(FONT_OPTS.find(o => o.css === stored_font_css)?.value || 'system')
+            const code_font_saved = ref(false)
+            const font_options = FONT_OPTS
+            function setCodeFont(value) {
+                if (value === code_font.value) return
+                code_font.value = value
+                const opt = FONT_OPTS.find(o => o.value === value)
+                if (!opt) return
+                if (opt.css) {
+                    localStorage.setItem('rz-code-font', opt.css)
+                    document.documentElement.style.setProperty('--font-mono', opt.css)
+                } else {
+                    localStorage.removeItem('rz-code-font')
+                    document.documentElement.style.removeProperty('--font-mono')
+                }
+                code_font_saved.value = true
+                setTimeout(() => { code_font_saved.value = false }, 2000)
+                create_message('Code font saved', 'success')
+            }
+
+            // ── Pagination (localStorage only) ────────────────────────────────
+            const per_page_card  = ref(Number(localStorage.getItem('rz-per-page-card'))  || 12)
+            const per_page_table = ref(Number(localStorage.getItem('rz-per-page-table')) || 25)
+            const per_page_saved = ref(false)
+            function setPerPageCard(n) {
+                if (n === per_page_card.value) return
+                per_page_card.value = n
+                localStorage.setItem('rz-per-page-card', String(n))
+                per_page_saved.value = true
+                setTimeout(() => { per_page_saved.value = false }, 2000)
+                create_message('Card pagination saved', 'success')
+            }
+            function setPerPageTable(n) {
+                if (n === per_page_table.value) return
+                per_page_table.value = n
+                localStorage.setItem('rz-per-page-table', String(n))
+                per_page_saved.value = true
+                setTimeout(() => { per_page_saved.value = false }, 2000)
+                create_message('Table pagination saved', 'success')
+            }
+
+            // ── JSON colour theme (localStorage only) ────────────────────────
+            const JSON_THEME_OPTS = [
+                { value: 'default',   label: 'Default',   key: 'var(--cv-key)',     str: 'var(--cv-string)', num: 'var(--cv-number)', bool: 'var(--cv-bool)', null_: 'var(--cv-null)',   punct: 'var(--cv-punct)' },
+                { value: 'monokai',   label: 'Monokai',   key: '#f92672',           str: '#e6db74',          num: '#ae81ff',         bool: '#ae81ff',        null_: '#66d9e8',          punct: '#75715e' },
+                { value: 'dracula',   label: 'Dracula',   key: '#ff79c6',           str: '#f1fa8c',          num: '#bd93f9',         bool: '#50fa7b',        null_: '#8be9fd',          punct: '#6272a4' },
+                { value: 'one-dark',  label: 'One Dark',  key: '#e06c75',           str: '#98c379',          num: '#d19a66',         bool: '#56b6c2',        null_: '#c678dd',          punct: '#abb2bf' },
+                { value: 'nord',      label: 'Nord',      key: '#bf616a',           str: '#a3be8c',          num: '#b48ead',         bool: '#88c0d0',        null_: '#81a1c1',          punct: '#4c566a' },
+                { value: 'solarized', label: 'Solarized', key: '#dc322f',           str: '#2aa198',          num: '#268bd2',         bool: '#6c71c4',        null_: '#d33682',          punct: '#586e75' },
+            ]
+            const json_theme = ref(localStorage.getItem('rz-json-theme') || 'default')
+            const json_theme_saved = ref(false)
+            const json_theme_options = JSON_THEME_OPTS
+            function setJsonTheme(value) {
+                if (value === json_theme.value) return
+                json_theme.value = value
+                if (value === 'default') {
+                    localStorage.removeItem('rz-json-theme')
+                    document.documentElement.removeAttribute('data-json-theme')
+                } else {
+                    localStorage.setItem('rz-json-theme', value)
+                    document.documentElement.setAttribute('data-json-theme', value)
+                }
+                json_theme_saved.value = true
+                setTimeout(() => { json_theme_saved.value = false }, 2000)
+                create_message('JSON theme saved', 'success')
+            }
+
+            // Theme options — base built-ins
+            const theme_options = reactive([
+                { value: 'system', label: 'System', icon: 'fa-circle-half-stroke' },
+                { value: 'light',  label: 'Light',  icon: 'fa-sun'  },
+                { value: 'dark',   label: 'Dark',   icon: 'fa-moon' },
+            ])
+
+            // Studio state
+            const studio_open        = ref(false)
+            const studio_themes      = ref(null)
+            const modal_title        = ref('')
+            const modal_is_builtin   = ref(false)
+            const modal_editing_uuid = ref(null)
+            const modal_builtin_key  = ref(null)
+            const modal_saving       = ref(false)
+            const modal_tab          = ref('manual')
+            const paste_input        = ref('')
+            const paste_result       = ref(null)
+            const show_icon_picker   = ref(false)
+            const icon_search        = ref('')
+            const modal_form         = reactive({ name: '', icon: 'fa-palette', is_dark: false, css_vars: emptyVars() })
+
+            const builtin_keys = BUILTIN_KEYS
+            const builtin_meta = BUILTIN_META
+            const var_groups   = VAR_GROUPS
+            const var_placeholders = VAR_PLACEHOLDERS
+
+            const filteredIcons = computed(() => {
+                const q = icon_search.value.toLowerCase()
+                return q ? ICON_LIST.filter(ic => ic.includes(q)) : ICON_LIST
+            })
+
+            // Named built-in themes (CSS in theme.css — no css_vars needed for preview)
+            const BUILTIN_NAMED_KEYS = new Set(['ocean', 'forest', 'midnight', 'sunset'])
+
+            const named_theme_options = computed(() => theme_options.filter(t => t.is_named))
+            const custom_theme_options = computed(() => theme_options.filter(t => t.is_custom))
+
+            const livePreviewStyle = computed(() => {
+                const v = modal_form.css_vars || {}
+                const dk = modal_form.is_dark
+                return {
+                    '--tp-navbar':   v['--navbar-bg-color'] || (dk ? '#1a2d42' : '#ffffff'),
+                    '--tp-body':     v['--bg-color']         || (dk ? '#1e293b' : '#f7f7f7'),
+                    '--tp-surface':  v['--card-bg-color']    || (dk ? '#2d3f55' : '#ffffff'),
+                    '--tp-sidebar':  v['--sidebar-color']    || 'rgb(15,23,42)',
+                    '--tp-brand':    v['--rule-name-color']  || '#0d6efd',
+                    '--tp-border':   v['--border-color']     || (dk ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.08)'),
+                    '--tp-line':     v['--light-bg-color']   || (dk ? 'rgba(255,255,255,.12)' : '#e5e7eb'),
+                    '--tp-text-dim': dk ? 'rgba(255,255,255,.22)' : 'rgba(0,0,0,.18)',
+                }
+            })
+
+            let _modal = null
+
+            // ── Helpers ──────────────────────────────────────
+            function getPreviewStyle(option) {
+                const v = option.css_vars || {}
+                const dk = option.is_dark
+                return {
+                    '--tp-navbar':   v['--navbar-bg-color'] || (dk ? '#1a2d42' : '#ffffff'),
+                    '--tp-body':     v['--bg-color']         || (dk ? '#1e293b' : '#f7f7f7'),
+                    '--tp-surface':  v['--card-bg-color']    || (dk ? '#2d3f55' : '#ffffff'),
+                    '--tp-sidebar':  v['--sidebar-color']    || 'rgb(15,23,42)',
+                    '--tp-brand':    v['--rule-name-color']  || '#0d6efd',
+                    '--tp-border':   v['--border-color']     || (dk ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.07)'),
+                    '--tp-line':     v['--light-bg-color']   || (dk ? 'rgba(255,255,255,.12)' : '#e5e7eb'),
+                    '--tp-text-dim': dk ? 'rgba(255,255,255,.22)' : 'rgba(0,0,0,.18)',
+                }
+            }
+
+            async function loadStudioThemes() {
+                const res = await fetch('/config/themes-data', {
+                    headers: { 'Content-Type': 'application/json' },
+                })
+                if (res.ok) {
+                    const data = await res.json()
+                    if (IS_ADMIN) studio_themes.value = data.themes || []
+                    const existing = new Set(theme_options.map(t => t.value))
+                    for (const t of data.themes) {
+                        if (!t.is_builtin && !existing.has(t.css_key)) {
+                            const is_named = BUILTIN_NAMED_KEYS.has(t.css_key)
+                            theme_options.push({
+                                value:    t.css_key,
+                                label:    t.name,
+                                icon:     t.icon,
+                                is_named:  is_named,
+                                is_custom: !is_named,
+                                is_dark:   t.is_dark,
+                                css_vars:  t.css_vars || {},
+                            })
+                            existing.add(t.css_key)
+                        }
+                    }
+                }
+            }
+
+            function parsePaste() {
+                const text = paste_input.value
+                const found_vars = [], missing = []
+                for (const v of ALL_VARS) {
+                    const re = new RegExp(v.replace(/[-]/g, '\\-') + '\\s*:\\s*([^;\\n]+);')
+                    const m  = text.match(re)
+                    if (m) {
+                        modal_form.css_vars[v] = m[1].trim()
+                        found_vars.push(v)
+                    } else {
+                        missing.push(v)
+                    }
+                }
+                const sm = text.match(/\[data-theme="([^"]+)"\]/)
+                if (sm && !modal_form.name) {
+                    const key = sm[1]
+                    modal_form.name = key.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                }
+                paste_result.value = { found: found_vars.length, missing }
+            }
+
+            function buildCssBlock(cssKey, cssVars) {
+                const lines = [
+                    `html[data-theme="${cssKey}"],`,
+                    `html[data-theme="${cssKey}"] body {`,
+                ]
+                for (const group of VAR_GROUPS) {
+                    lines.push(`\n    /* ${group.label} */`)
+                    for (const v of group.vars) {
+                        const val = (cssVars || {})[v]
+                        if (val) lines.push(`    ${v}: ${val};`)
+                    }
+                }
+                lines.push('}')
+                return lines.join('\n')
+            }
+
+            function _resetForm() {
+                modal_form.name = ''; modal_form.icon = 'fa-palette'; modal_form.is_dark = false
+                const vars = emptyVars()
+                Object.keys(modal_form.css_vars).forEach(k => { modal_form.css_vars[k] = vars[k] })
+                modal_tab.value = 'manual'; paste_input.value = ''; paste_result.value = null
+                show_icon_picker.value = false; icon_search.value = ''
+            }
+
+            function _fillForm(t) {
+                modal_form.name = t.name; modal_form.icon = t.icon; modal_form.is_dark = t.is_dark
+                const vars = emptyVars()
+                for (const k of Object.keys(vars))
+                    modal_form.css_vars[k] = (t.css_vars || {})[k] || ''
+                paste_input.value = buildCssBlock(t.css_key, t.css_vars)
+                paste_result.value = null
+                modal_tab.value = 'manual'
+            }
+
+            function pickIcon(ic) { modal_form.icon = ic; show_icon_picker.value = false; icon_search.value = '' }
+
+            function openCreateModal() {
+                _resetForm()
+                modal_title.value = 'New custom theme'; modal_is_builtin.value = false
+                modal_editing_uuid.value = null; modal_builtin_key.value = null
+                _modal.show()
+            }
+            function openEditModal(t) {
+                _fillForm(t)
+                modal_title.value = `Edit "${t.name}"`; modal_is_builtin.value = false
+                modal_editing_uuid.value = t.uuid; modal_builtin_key.value = null
+                _modal.show()
+            }
+            function openBuiltinModal(key) {
+                _resetForm()
+                const existing = studio_themes.value.find(t => t.css_key === key && t.is_builtin)
+                if (existing) {
+                    _fillForm(existing)
+                } else {
+                    paste_input.value = `[data-theme="${key}"] {\n    /* paste your overrides here */\n}`
+                }
+                modal_title.value = `Override "${BUILTIN_META[key].label}" theme`
+                modal_is_builtin.value = true
+                modal_editing_uuid.value = existing ? existing.uuid : null
+                modal_builtin_key.value = key
+                _modal.show()
+            }
+
+            async function saveTheme() {
+                modal_saving.value = true
+                const css_vars = {}
+                for (const [k, v] of Object.entries(modal_form.css_vars)) { if (v) css_vars[k] = v }
+                let res
+                if (modal_is_builtin.value) {
+                    res = await apiFetch(`/api/config/themes/builtin/${modal_builtin_key.value}`, 'PUT', { css_vars })
+                } else if (modal_editing_uuid.value) {
+                    res = await apiFetch(`/api/config/themes/${modal_editing_uuid.value}`, 'PUT',
+                        { name: modal_form.name, icon: modal_form.icon, is_dark: modal_form.is_dark, css_vars })
+                } else {
+                    res = await apiFetch('/api/config/themes', 'POST',
+                        { name: modal_form.name, icon: modal_form.icon, is_dark: modal_form.is_dark, css_vars })
+                }
+                modal_saving.value = false
+                if (res.ok) {
+                    _modal.hide()
+                    create_message('Theme saved', 'success')
+                    await loadStudioThemes()
+                    setTimeout(() => window.location.reload(), 800)
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Error saving theme', 'danger')
+                }
+            }
+
+            async function toggleVisibility(t) {
+                const next = !t.is_public
+                const res  = await apiFetch(`/api/config/themes/${t.uuid}/visibility`, 'PATCH', { is_public: next })
+                if (res.ok) {
+                    t.is_public = next
+                    create_message(next ? `"${t.name}" is now public` : `"${t.name}" is now private`, 'success')
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Error', 'danger')
+                }
+            }
+
+            async function deleteTheme(t) {
+                if (!confirm(`Delete theme "${t.name}"? This cannot be undone.`)) return
+                const res = await apiFetch(`/api/config/themes/${t.uuid}`, 'DELETE')
+                if (res.ok) {
+                    create_message('Theme deleted', 'success')
+                    await loadStudioThemes()
+                    setTimeout(() => window.location.reload(), 800)
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Error', 'danger')
+                }
+            }
+
+            async function resetBuiltin() {
+                if (!confirm('Reset this theme to default values?')) return
+                const res = await apiFetch(`/api/config/themes/builtin/${modal_builtin_key.value}`, 'DELETE')
+                if (res.ok) {
+                    _modal.hide()
+                    create_message('Theme reset to defaults', 'success')
+                    await loadStudioThemes()
+                    setTimeout(() => window.location.reload(), 800)
+                } else {
+                    const d = await res.json()
+                    create_message(d.message || 'Error', 'danger')
+                }
+            }
+
+            // ── Theme save ────────────────────────────────────
+            async function savePreference(payload) {
+                save_status.value = 'saving'
+                clearTimeout(save_timer)
+                const res = await apiFetch('/config/update', 'POST', payload)
+                if (res.ok) {
+                    save_status.value = 'saved'
+                    save_timer = setTimeout(() => { save_status.value = '' }, 2000)
+                } else {
+                    save_status.value = 'error'
+                    create_message('Failed to save settings', 'danger')
+                }
+            }
+
+            async function setTheme(value) {
+                theme.value = value
+                if (typeof applyTheme === 'function') applyTheme(value)
+                if (typeof updateThemeIcon === 'function') updateThemeIcon(value)
+                await savePreference({ theme: value })
+            }
+
+            async function resetAllSettings() {
+                if (!confirm('Reset all settings to their defaults? This cannot be undone.')) return
+
+                // localStorage-only preferences
+                localStorage.removeItem('rz-nav-style')
+                localStorage.removeItem('rz-toast-position')
+                localStorage.removeItem('rz-toast-style')
+                localStorage.removeItem('rz-notif-style')
+                localStorage.removeItem('rz-list-view')
+                localStorage.removeItem('rz-code-font')
+                localStorage.removeItem('rz-per-page-card')
+                localStorage.removeItem('rz-per-page-table')
+                localStorage.removeItem('rz-json-theme')
+
+                // Reset CSS vars / attributes immediately
+                document.documentElement.style.removeProperty('--font-mono')
+                document.documentElement.removeAttribute('data-json-theme')
+
+                // Server-side preference (theme)
+                await savePreference({ theme: 'system' })
+
+                create_message('Settings reset to defaults', 'success')
+                setTimeout(() => { window.location.reload() }, 600)
+            }
+
+            onMounted(async () => {
+                const modalEl = document.getElementById('themeStudioModal')
+                if (modalEl) _modal = new bootstrap.Modal(modalEl)
+                await loadStudioThemes()
+            })
+
+            return {
+                theme, save_status, theme_options,
+                nav_style, nav_saved, nav_options, setNavStyle,
+                toast_pos, toast_sty, toast_saved,
+                toast_pos_options, toast_style_options,
+                setToastPosition, setToastStyle,
+                notif_style, notif_style_saved, notif_style_options, setNotifStyle,
+                list_view, list_view_saved, list_view_options, setListView,
+                code_font, code_font_saved, font_options, setCodeFont,
+                per_page_card, per_page_table, per_page_saved, setPerPageCard, setPerPageTable,
+                json_theme, json_theme_saved, json_theme_options, setJsonTheme,
+                resetAllSettings,
+                named_theme_options, custom_theme_options,
+                livePreviewStyle,
+                setTheme, getPreviewStyle,
+                // Studio
+                studio_open, studio_themes, modal_title, modal_is_builtin, modal_editing_uuid,
+                modal_saving, modal_form, modal_tab, paste_input, paste_result,
+                show_icon_picker, icon_search, filteredIcons,
+                builtin_keys, builtin_meta, var_groups, var_placeholders,
+                openCreateModal, openEditModal, openBuiltinModal,
+                saveTheme, deleteTheme, resetBuiltin, getPreviewStyle, parsePaste,
+                pickIcon, toggleVisibility,
+            }
+        },
+    }).directive('click-outside', {
+        mounted(el, binding) {
+            el._clickOutside = (e) => { if (!el.contains(e.target)) binding.value(e) }
+            document.addEventListener('mousedown', el._clickOutside)
+        },
+        unmounted(el) { document.removeEventListener('mousedown', el._clickOutside) },
+    }).mount('#settings-app')
+</script>
+{% endblock %}

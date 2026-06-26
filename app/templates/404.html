@@ -1,36 +1,40 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends 'base.html' %}
+{% block title %}404 — Not Found | Rulezet{% endblock %}
 
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Not Found</title>
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='bootstrap-5.3.0/css/bootstrap.min.css') }}">
-</head>
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/error.css') }}">
+{% endblock %}
 
-<body>
-    <div class="d-flex align-items-center justify-content-center vh-100">
-        <div class="text-center">
-            <h1 class="display-1 fw-bold">404</h1>
-            <p class="fs-3"> <span class="text-danger">Opps!</span> Page not found.</p>
-            <p class="lead">
-                The page you're looking for doesn't exist.
-            </p>
+{% block content %}
+<div class="error-page">
+    <div class="error-card">
 
-            <div class="d-flex justify-content-center gap-3 mt-4 mb-3">
-                <a href="javascript:history.back()" style="width: auto;"
-                    class="btn btn-secondary btn-sm d-inline-flex align-items-center shadow-sm px-3 py-2 rounded-pill">
-                    Go Back
-                </a>
-                <a href="/"
-                    class="btn btn-primary btn-sm d-inline-flex align-items-center shadow-sm px-3 py-2 rounded-pill">Go
-                    Home</a>
-            </div>
-
+        <div class="error-icon-wrap">
+            <i class="fa-solid fa-link-slash error-icon"></i>
         </div>
+
+        <div class="error-code">404</div>
+
+        <h1 class="error-title">Page not found</h1>
+
+        <p class="error-desc">
+            The page you're looking for doesn't exist or has been moved.
+            Double-check the URL or head back to a safe place.
+        </p>
+
+        <div class="error-actions">
+            <a href="javascript:history.back()"
+               class="btn btn-outline-secondary rounded-pill px-4">
+                <i class="fas fa-arrow-left me-2"></i>Go back
+            </a>
+            <a href="/" class="btn btn-primary rounded-pill px-4">
+                <i class="fas fa-house me-2"></i>Home
+            </a>
+            <a href="/rule/rules_list" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="fas fa-shield-halved me-2"></i>Browse rules
+            </a>
+        </div>
+
     </div>
-</body>
-
-
-</html>
+</div>
+{% endblock %}

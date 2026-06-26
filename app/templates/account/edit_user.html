@@ -1,223 +1,273 @@
 {% extends 'base.html' %}
 {% block title %}Edit Profile — Rulezet{% endblock %}
-{% import 'macros/form_macros.html' as f %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/auth.css') }}">
+<style>
+.edit-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 3rem;
+  position: relative;
+}
+.edit-wrapper::before {
+  content: '';
+  position: fixed;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 800px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(10,88,202,.10) 0%, transparent 68%);
+  pointer-events: none;
+  z-index: 0;
+}
+/* Widen the auth-card when inside edit-wrapper */
+.edit-wrapper .auth-card {
+  max-width: 760px;
+}
+.edit-section-divider {
+  border: 0;
+  border-top: 1px solid var(--border-color, #dee2e6);
+  margin: 1.75rem 0;
+}
+.edit-section-label {
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--subtle-text-color);
+  margin-bottom: .75rem;
+}
+.edit-section-label i {
+  margin-right: .35rem;
+  color: #0d6efd;
+}
+</style>
+{% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb" class="mb-4">
-    <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
-        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-        <li class="breadcrumb-item"><a href="/account" class="text-decoration-none text-muted">Account</a></li>
-        <li class="breadcrumb-item active text-muted" aria-current="page">Edit Profile</li>
-    </ol>
+<nav aria-label="breadcrumb" class="mb-3 mt-2">
+  <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+    <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+    <li class="breadcrumb-item"><a href="/account" class="text-decoration-none text-muted">Account</a></li>
+    <li class="breadcrumb-item active text-muted" aria-current="page">Edit Profile</li>
+  </ol>
 </nav>
-<div class="explorer-banner mb-4">
-    <i class="fa-solid fa-user-pen banner-watermark"></i>
-    <div class="d-flex align-items-center gap-3 mb-3">
-        <div class="banner-icon"><i class="fa-solid fa-user-pen"></i></div>
-        <div>
-            <h2 class="fw-bold mb-1">Edit Profile</h2>
-            <div class="banner-accent"></div>
-        </div>
+
+<div class="edit-wrapper" id="edit-app">
+  <div class="auth-card">
+
+    <!-- Card header -->
+    <div class="auth-brand mb-3">
+      <span class="auth-brand-icon"><i class="fa-solid fa-user-pen"></i></span>
     </div>
-    <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-        Update your account information below. Make sure to save your changes once you're done.
-    </p>
+    <h1 class="auth-title">Edit Profile</h1>
+    <p class="auth-subtitle">Update your account information. Changes save immediately except email address.</p>
+
+    <form action="" method="post" enctype="multipart/form-data">
+      {{ form.hidden_tag() }}
+      <input type="hidden" name="remove_avatar" id="removeAvatarFlag" value="0">
+
+      <!-- ===== Avatar ===== -->
+      <div class="edit-section-label"><i class="fa-solid fa-image"></i>Profile picture</div>
+      <div class="d-flex align-items-center gap-3 flex-wrap mb-2">
+        <div id="avatarWrapper">
+          {% if current_user.profile_picture %}
+            <img id="avatarPreview"
+                 src="{{ current_user.get_avatar_url() }}"
+                 class="rounded-circle"
+                 style="width:72px;height:72px;object-fit:cover;border:2px solid #0d6efd;">
+          {% else %}
+            <div id="avatarPreview"
+                 class="rounded-circle d-flex align-items-center justify-content-center"
+                 style="width:72px;height:72px;font-size:1.6rem;font-weight:700;color:#0d6efd;background:rgba(13,110,253,.1);border:2px solid #0d6efd;">
+              {{ current_user.first_name[0] }}{{ current_user.last_name[0] }}
+            </div>
+          {% endif %}
+        </div>
+        <div class="d-flex flex-column gap-2">
+          {{ form.profile_picture(class_="form-control", id="avatarInput", style="max-width:300px;") }}
+          <small style="color:var(--subtle-text-color);font-size:.8rem;">JPG, PNG, GIF or WebP · max 2 MB</small>
+          {% if form.profile_picture.errors %}
+            <div class="field-error">{{ form.profile_picture.errors[0] }}</div>
+          {% endif %}
+          {% if current_user.profile_picture %}
+            <button type="button" id="removeAvatarBtn" class="btn btn-sm btn-outline-danger" style="width:fit-content;">
+              <i class="fa-solid fa-trash me-1"></i>Remove picture
+            </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <hr class="edit-section-divider">
+
+      <!-- ===== Name ===== -->
+      <div class="edit-section-label"><i class="fa-solid fa-id-card"></i>Name</div>
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <label class="form-label">First name <span class="text-danger">*</span></label>
+          {{ form.first_name(class_="form-control", placeholder="Alice") }}
+          {% if form.first_name.errors %}
+            <div class="field-error">{{ form.first_name.errors[0] }}</div>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Last name <span class="text-danger">*</span></label>
+          {{ form.last_name(class_="form-control", placeholder="Smith") }}
+          {% if form.last_name.errors %}
+            <div class="field-error">{{ form.last_name.errors[0] }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- ===== Username + Email ===== -->
+      <div class="row g-3 mb-2">
+        <div class="col-md-6">
+          <label class="form-label">Username</label>
+          {{ form.username(class_="form-control", placeholder="john_doe") }}
+          {% if form.username.errors %}
+            <div class="field-error">{{ form.username.errors[0] }}</div>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Email <span class="text-danger">*</span></label>
+          {{ form.email(class_="form-control", autocomplete="email") }}
+          {% if form.email.errors %}
+            <div class="field-error">{{ form.email.errors[0] }}</div>
+          {% endif %}
+          {% if current_user.pending_email %}
+            <div class="mt-1" style="font-size:.8rem;color:#0a58ca;">
+              <i class="fa-solid fa-clock me-1"></i>Pending confirmation for <strong>{{ current_user.pending_email }}</strong>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="mb-2" style="font-size:.8rem;color:var(--subtle-text-color);">
+        <i class="fa-solid fa-circle-info me-1" style="color:#0d6efd;"></i>Changing your email sends a confirmation link to the new address before the change is applied.
+      </div>
+
+      <hr class="edit-section-divider">
+
+      <!-- ===== Bio ===== -->
+      <div class="edit-section-label"><i class="fa-solid fa-pen-to-square"></i>About</div>
+      <div class="mb-3">
+        <label class="form-label">Bio</label>
+        {{ form.bio(class_="form-control", rows=3,
+           placeholder="A short description about yourself…",
+           **{"v-model": "bio", "maxlength": "500"}) }}
+        <div class="d-flex justify-content-end mt-1">
+          <small style="color:var(--subtle-text-color);font-size:.8rem;">[[ bio.length ]] / 500</small>
+        </div>
+        {% if form.bio.errors %}
+          <div class="field-error">{{ form.bio.errors[0] }}</div>
+        {% endif %}
+      </div>
+
+      <!-- ===== Location ===== -->
+      <div class="mb-2">
+        <label class="form-label"><i class="fa-solid fa-location-dot me-1"></i>Location</label>
+        {{ form.location(class_="form-control", placeholder="Paris, France") }}
+      </div>
+
+      <hr class="edit-section-divider">
+
+      <!-- ===== External links ===== -->
+      <div class="edit-section-label"><i class="fa-solid fa-link"></i>External links</div>
+      <div class="row g-3 mb-2">
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.85rem;"><i class="fa-solid fa-globe me-1"></i>Website</label>
+          {{ form.website_url(class_="form-control", placeholder="https://example.com") }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-github me-1"></i>GitHub</label>
+          {{ form.github_url(class_="form-control", placeholder="https://github.com/you") }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-x-twitter me-1"></i>Twitter / X</label>
+          {{ form.twitter_url(class_="form-control", placeholder="https://x.com/you") }}
+        </div>
+      </div>
+
+      <hr class="edit-section-divider">
+
+      <!-- ===== Password ===== -->
+      <div class="edit-section-label"><i class="fa-solid fa-lock"></i>Change password</div>
+      <div class="mb-3">
+        <label class="form-label">New password <span style="color:var(--subtle-text-color);font-weight:400;font-size:.85rem;">(leave blank to keep current)</span></label>
+        <div class="input-group">
+          {{ form.password(class_="form-control", id="password", placeholder="••••••••",
+             **{"v-model": "password", "autocomplete": "new-password"}) }}
+          <span class="input-group-text" style="cursor:pointer;" @click="togglePwd">
+            <i :class="showPwd ? 'fa fa-eye-slash fa-fw' : 'fa fa-eye fa-fw'"></i>
+          </span>
+        </div>
+        {% if form.password.errors %}
+          <div class="field-error">{{ form.password.errors[0] }}</div>
+        {% endif %}
+        <ul class="pw-checks mt-2" v-if="password">
+          <li :class="password.length >= 8 ? 'text-success' : 'text-danger'">
+            <i :class="password.length >= 8 ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i> At least 8 characters
+          </li>
+          <li :class="/[A-Z]/.test(password) ? 'text-success' : 'text-danger'">
+            <i :class="/[A-Z]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i> One uppercase letter
+          </li>
+          <li :class="/[a-z]/.test(password) ? 'text-success' : 'text-danger'">
+            <i :class="/[a-z]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i> One lowercase letter
+          </li>
+          <li :class="/[0-9]/.test(password) ? 'text-success' : 'text-danger'">
+            <i :class="/[0-9]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i> One digit
+          </li>
+        </ul>
+      </div>
+
+      <!-- ===== Actions ===== -->
+      <div class="d-flex gap-2 align-items-center mt-2">
+        <button type="submit" class="btn-auth" style="flex:1;" :disabled="!!password && !passwordValid">
+          <i class="fa-solid fa-floppy-disk me-1"></i> Save changes
+        </button>
+        <a href="/account" class="btn btn-outline-secondary" style="padding:.65rem 1.25rem;border-radius:10px;">
+          Cancel
+        </a>
+      </div>
+
+    </form>
+  </div>
+
+  <p class="text-center mt-3" style="font-size:.78rem;color:var(--subtle-text-color);">
+    &copy; 2026 Rulezet. All rights reserved.
+  </p>
 </div>
-
-<form action="" method="post" enctype="multipart/form-data">
-    {{ form.hidden_tag() }}
-    <!-- hidden flag: set to "1" by JS when user clicks "Remove" -->
-    <input type="hidden" name="remove_avatar" id="removeAvatarFlag" value="0">
-
-    <div class="modal-body bg-light p-4 rounded shadow-sm">
-
-        <!-- ===== Profile Picture ===== -->
-        <div class="mb-4 pb-3 border-bottom">
-            <label class="col-form-label text-primary fw-semibold">Profile Picture</label>
-            <div class="d-flex align-items-center gap-3 mt-2 flex-wrap">
-
-                <!-- preview -->
-                <div id="avatarWrapper">
-                    {% if current_user.profile_picture %}
-                        <img id="avatarPreview"
-                             src="{{ current_user.get_avatar_url() }}"
-                             class="rounded-circle border border-2 border-primary"
-                             style="width:80px;height:80px;object-fit:cover;">
-                    {% else %}
-                        <div id="avatarPreview"
-                             class="rounded-circle border border-2 border-primary d-flex align-items-center justify-content-center bg-white"
-                             style="width:80px;height:80px;font-size:2rem;color:#0d6efd;font-weight:600;">
-                            {{ current_user.first_name[0] }}{{ current_user.last_name[0] }}
-                        </div>
-                    {% endif %}
-                </div>
-
-                <div class="d-flex flex-column gap-2">
-                    {{ form.profile_picture(class_="form-control border-primary", id="avatarInput", style="max-width:320px;") }}
-                    <small class="text-muted">JPG, PNG, GIF or WebP · max 2 MB</small>
-                    {% if form.profile_picture.errors %}
-                        <div class="text-danger small">{{ form.profile_picture.errors[0] | safe }}</div>
-                    {% endif %}
-                    {% if current_user.profile_picture %}
-                        <button type="button" id="removeAvatarBtn"
-                                class="btn btn-sm btn-outline-danger" style="width:fit-content;">
-                            <i class="fa-solid fa-trash me-1"></i>Remove picture
-                        </button>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== Name row ===== -->
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <label for="{{ form.first_name.id }}" class="col-form-label text-primary">{{ form.first_name.label }}</label>
-                <span style="color:red">*</span>
-                {{ form.first_name(class_="form-control border-primary") }}
-                {% if form.first_name.errors %}
-                    <div class="text-danger">{{ form.first_name.errors[0] | safe }}</div>
-                {% endif %}
-            </div>
-            <div class="col-md-6 mb-3">
-                <label for="{{ form.last_name.id }}" class="col-form-label text-primary">{{ form.last_name.label }}</label>
-                <span style="color:red">*</span>
-                {{ form.last_name(class_="form-control border-primary") }}
-                {% if form.last_name.errors %}
-                    <div class="text-danger">{{ form.last_name.errors[0] | safe }}</div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- ===== Username + Email row ===== -->
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <label for="{{ form.username.id }}" class="col-form-label text-primary">{{ form.username.label }}</label>
-                {{ form.username(class_="form-control border-primary", placeholder="e.g. john_doe") }}
-                {% if form.username.errors %}
-                    <div class="text-danger">{{ form.username.errors[0] | safe }}</div>
-                {% endif %}
-            </div>
-            <div class="col-md-6 mb-3">
-                <label for="{{ form.email.id }}" class="col-form-label text-primary">{{ form.email.label }}</label>
-                <span style="color:red">*</span>
-                {{ form.email(class_="form-control border-primary") }}
-                {% if form.email.errors %}
-                    <div class="text-danger">{{ form.email.errors[0] | safe }}</div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- ===== Bio ===== -->
-        <div class="mb-3" id="bio-container">
-            <label for="{{ form.bio.id }}" class="col-form-label text-primary">{{ form.bio.label }}</label>
-            {{ form.bio(class_="form-control border-primary", rows=3,
-               placeholder="A short description about yourself…",
-               **{"v-model": "bio", "maxlength": "500"}) }}
-            <div class="d-flex justify-content-end">
-                <small class="text-muted">[[ bio.length ]] / 500</small>
-            </div>
-            {% if form.bio.errors %}
-                <div class="text-danger">{{ form.bio.errors[0] | safe }}</div>
-            {% endif %}
-        </div>
-
-        <!-- ===== Location ===== -->
-        <div class="mb-3">
-            <label for="{{ form.location.id }}" class="col-form-label text-primary">
-                <i class="fa-solid fa-location-dot me-1"></i>{{ form.location.label }}
-            </label>
-            {{ form.location(class_="form-control border-primary", placeholder="Paris, France") }}
-        </div>
-
-        <!-- ===== External links ===== -->
-        <div class="mb-4 pb-3 border-bottom">
-            <label class="col-form-label text-primary fw-semibold">External Links</label>
-            <div class="row mt-1">
-                <div class="col-md-4 mb-2">
-                    <label class="text-muted small"><i class="fa-solid fa-globe me-1"></i>Website</label>
-                    {{ form.website_url(class_="form-control border-primary", placeholder="https://example.com") }}
-                </div>
-                <div class="col-md-4 mb-2">
-                    <label class="text-muted small"><i class="fa-brands fa-github me-1"></i>GitHub</label>
-                    {{ form.github_url(class_="form-control border-primary", placeholder="https://github.com/username") }}
-                </div>
-                <div class="col-md-4 mb-2">
-                    <label class="text-muted small"><i class="fa-brands fa-x-twitter me-1"></i>Twitter / X</label>
-                    {{ form.twitter_url(class_="form-control border-primary", placeholder="https://x.com/username") }}
-                </div>
-            </div>
-        </div>
-
-        <!-- ===== Password ===== -->
-        <div class="col mb-3" id="password-container">
-            <label for="password" class="col-form-label text-primary">{{ form.password.label }}</label>
-            <span class="text-muted">(Leave blank to keep current password)</span>
-            <div class="position-relative">
-                {{ form.password(class_="form-control pe-5 border-primary", **{"v-model": "password"}) }}
-                <i class="fa fa-eye position-absolute top-50 end-0 translate-middle-y me-3"
-                   style="cursor: pointer"
-                   id="togglePasswordIcon"
-                   @click="togglePassword"></i>
-            </div>
-            {% if form.password.errors %}
-                <div style="color: red;">{{ form.password.errors[0] | safe }}</div>
-            {% endif %}
-            <ul style="margin-top: 10px; padding-left: 20px; list-style: none;" v-if="password">
-                <li :class="password.length >= 8 ? 'text-success' : 'text-danger'">
-                    <i :class="password.length >= 8 ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>
-                    At least 8 characters
-                </li>
-                <li :class="/[A-Z]/.test(password) ? 'text-success' : 'text-danger'">
-                    <i :class="/[A-Z]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>
-                    At least one uppercase letter
-                </li>
-                <li :class="/[a-z]/.test(password) ? 'text-success' : 'text-danger'">
-                    <i :class="/[a-z]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>
-                    At least one lowercase letter
-                </li>
-                <li :class="/[0-9]/.test(password) ? 'text-success' : 'text-danger'">
-                    <i :class="/[0-9]/.test(password) ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>
-                    At least one digit
-                </li>
-            </ul>
-        </div>
-
-        <div class="modal-footer mt-3">
-            {{ form.submit(class_="btn btn-success", id='submitBtn') }}
-            <a href="/account" class="btn btn-outline-secondary ms-2">Cancel</a>
-        </div>
-
-    </div>
-</form>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-const { createApp, ref } = Vue;
+const { createApp, ref, computed } = Vue;
 
-// Bio character counter
 createApp({
     delimiters: ['[[', ']]'],
     setup() {
-        const bio = ref({{ (form.bio.data or 'I love coding!') | tojson }});
-        return { bio };
-    }
-}).mount('#bio-container');
-
-// Password strength validator + toggle
-createApp({
-    setup() {
+        const bio      = ref({{ (form.bio.data or '') | tojson }});
         const password = ref('');
-        const togglePassword = () => {
-            const input = document.getElementById("password");
-            const icon  = document.getElementById("togglePasswordIcon");
-            input.type = input.type === "password" ? "text" : "password";
-            icon.classList.toggle("fa-eye");
-            icon.classList.toggle("fa-eye-slash");
+        const showPwd  = ref(false);
+
+        const passwordValid = computed(() =>
+            password.value.length >= 8 &&
+            /[A-Z]/.test(password.value) &&
+            /[a-z]/.test(password.value) &&
+            /[0-9]/.test(password.value)
+        );
+
+        const togglePwd = () => {
+            showPwd.value = !showPwd.value;
+            document.getElementById('password').type = showPwd.value ? 'text' : 'password';
         };
-        return { password, togglePassword };
+
+        return { bio, password, showPwd, passwordValid, togglePwd };
     }
-}).mount('#password-container');
+}).mount('#edit-app');
 
 // Avatar live preview
 document.getElementById('avatarInput').addEventListener('change', function () {
@@ -227,27 +277,24 @@ document.getElementById('avatarInput').addEventListener('change', function () {
     reader.onload = e => {
         document.getElementById('avatarWrapper').innerHTML =
             `<img id="avatarPreview" src="${e.target.result}"
-             class="rounded-circle border border-2 border-primary"
-             style="width:80px;height:80px;object-fit:cover;">`;
+             class="rounded-circle"
+             style="width:72px;height:72px;object-fit:cover;border:2px solid #0d6efd;">`;
     };
     reader.readAsDataURL(file);
-    // if user picks a new file, cancel any pending remove
     document.getElementById('removeAvatarFlag').value = '0';
     const removeBtn = document.getElementById('removeAvatarBtn');
     if (removeBtn) removeBtn.classList.remove('d-none');
 });
 
-// Remove avatar button
+// Remove avatar
 const removeBtn = document.getElementById('removeAvatarBtn');
 if (removeBtn) {
     removeBtn.addEventListener('click', () => {
-        // reset to initials placeholder
         const initials = `{{ current_user.first_name[0] }}{{ current_user.last_name[0] }}`;
         document.getElementById('avatarWrapper').innerHTML =
-            `<div class="rounded-circle border border-2 border-danger d-flex align-items-center justify-content-center bg-white"
-                  style="width:80px;height:80px;font-size:2rem;color:#dc3545;font-weight:600;">${initials}</div>`;
+            `<div class="rounded-circle d-flex align-items-center justify-content-center"
+                  style="width:72px;height:72px;font-size:1.6rem;font-weight:700;color:#dc3545;background:rgba(220,53,69,.1);border:2px solid #dc3545;">${initials}</div>`;
         document.getElementById('removeAvatarFlag').value = '1';
-        // clear file input so no new upload is sent
         document.getElementById('avatarInput').value = '';
         removeBtn.classList.add('d-none');
     });

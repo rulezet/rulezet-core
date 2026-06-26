@@ -1,4 +1,10 @@
 {% extends 'base.html' %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+{% endblock %}
 {% block content %}
 
 <div v-if="info_session">
@@ -97,21 +103,42 @@
                         <td>Total Not Found</td>
                         <td><b>[[result_data.not_found]]</b></td>
                     </tr>
-                    <tr v-if="result_data.updated" style="background-color: #f2e7c3;">
-                        <td>Updated found</td>
+                    <!-- Updates row -->
+                    <tr v-if="updatesAvailable > 0 || (activeJobUuid && bulkUpdating)" style="background-color: #f2e7c3;">
+                        <td>Updates</td>
                         <td>
-                            <span class="badge bg-primary ms-1">
-                                [[result_data.updated]]
-                            </span>
+                            <template v-if="activeJobUuid && bulkUpdating">
+                                <span class="spinner-border spinner-border-sm text-primary me-1" style="width:.8rem;height:.8rem;"></span>
+                                <span class="fw-semibold">[[activeJobDone]] / [[activeJobTotal]]</span>
+                                <span class="text-muted ms-1 small">([[activeJobPct]]%)</span>
+                            </template>
+                            <template v-else>
+                                <span class="badge bg-warning text-dark ms-1">[[updatesAvailable]] pending</span>
+                            </template>
                         </td>
                     </tr>
                     <tr v-else>
-                        <td>Updated</td>
+                        <td>Updates</td>
+                        <td><span class="badge bg-success ms-1">All processed</span></td>
+                    </tr>
+
+                    <!-- New Rules row -->
+                    <tr v-if="total_new_rules > 0 || (activeJobUuid && bulkNewRules)" style="background-color: #e8f4ec;">
+                        <td>New Rules</td>
                         <td>
-                            <span class="badge bg-success ms-1">
-                                No update found
-                            </span>
+                            <template v-if="activeJobUuid && bulkNewRules">
+                                <span class="spinner-border spinner-border-sm text-success me-1" style="width:.8rem;height:.8rem;"></span>
+                                <span class="fw-semibold">[[activeJobDone]] / [[activeJobTotal]]</span>
+                                <span class="text-muted ms-1 small">([[activeJobPct]]%)</span>
+                            </template>
+                            <template v-else>
+                                <span class="badge bg-success ms-1">[[total_new_rules]] pending</span>
+                            </template>
                         </td>
+                    </tr>
+                    <tr v-else>
+                        <td>New Rules</td>
+                        <td><span class="badge bg-secondary ms-1">All processed</span></td>
                     </tr>
                     <tr v-if="result_data.skipped">
                         <td>Skipped</td>
@@ -130,8 +157,8 @@
                 <a class="nav-link active" id="github-tab" data-bs-toggle="tab" href="#github-pane" role="tab"
                     aria-controls="github" aria-selected="true" style="color: var(--text-color);">
                     Rule Status
-                    <span v-if="rules && rules.length" class="badge bg-primary ms-1">
-                        [[ result_data.updated ]]
+                    <span v-if="updatesAvailable > 0" class="badge bg-primary ms-1">
+                        [[ updatesAvailable ]]
                     </span>
                 </a>
             </li>
@@ -148,214 +175,456 @@
         <div class="tab-content" id="exampleTabsContent">
             <div class="tab-pane fade show active" id="github-pane" role="tabpanel" aria-labelledby="github-tab">
                 <div class="card p-3">
-                    <div v-if="rules && rules.length">
-                        <div class="table-responsive">
-                            <table class="table table-striped table-hover mb-0">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Format</th>
-                                        <th>Name</th>
-                                        <th>Found</th>
-                                        <th>Update Available</th>
-                                        <th>Valid Syntax</th>
-                                        <th>No Error</th>
-                                        <th>Message</th>
-                                        <th>
-                                            Action
-                                            <!-- Accepted all the pending change detected -->
-                                            <template v-if="rules.some(rule => rule.update_available)">
-                                                <button type="button" class="btn btn-sm btn-success float-end"
-                                                    @click="acceptAll()" title="Accept all changes">
-                                                    <i class="fas fa-check text-white"></i>All
-                                                </button>
-                                            </template>
+                    <!-- Toolbar (ruleList style) -->
+                    <div class="rl-toolbar mb-0">
+                        <div class="rl-toolbar-left">
+                            <span class="text-muted small ms-1">
+                                <strong>[[ total_rules ]]</strong> result<span v-if="total_rules!==1">s</span>
+                            </span>
+                        </div>
+                        <div class="rl-toolbar-right">
+                            <!-- Bulk actions — only shown when updates are pending -->
+                            <template v-if="updatesAvailable > 0">
+                            <button class="dt-toolbar-btn dt-toolbar-btn--primary"
+                                @click="bulkUpdateDecision('accept')" :disabled="bulkUpdating">
+                                <span v-if="bulkUpdating && bulkUpdateAction==='accept'" class="spinner-border spinner-border-sm"></span>
+                                <i v-else class="fas fa-check"></i>
+                                <span>Accept all<span v-if="rsActiveFilterCount>0"> (filtered)</span></span>
+                            </button>
+                            <button class="dt-toolbar-btn" style="color:#dc3545;border-color:#dc3545;"
+                                @click="bulkUpdateDecision('reject')" :disabled="bulkUpdating">
+                                <span v-if="bulkUpdating && bulkUpdateAction==='reject'" class="spinner-border spinner-border-sm"></span>
+                                <i v-else class="fas fa-times"></i>
+                                <span>Reject all<span v-if="rsActiveFilterCount>0"> (filtered)</span></span>
+                            </button>
+                            </template>
+                            <!-- Filters toggle -->
+                            <button class="dt-toolbar-btn"
+                                :class="{'dt-toolbar-btn--active': rsFiltersOpen}"
+                                @click="rsFiltersOpen = !rsFiltersOpen">
+                                <i class="fas fa-sliders"></i>
+                                <span>Filters</span>
+                                <span v-if="rsActiveFilterCount>0" class="rl-filter-badge ms-1">[[ rsActiveFilterCount ]]</span>
+                            </button>
+                        </div>
+                    </div>
 
+                    <!-- Filter panel (ruleList style) -->
+                    <div v-show="rsFiltersOpen" class="rl-filter-panel">
+                        <div class="rl-fp-row">
+                            <div class="rl-fp-item">
+                                <label class="rl-fp-multi-label mb-1"><i class="fas fa-arrow-up-from-bracket me-1 text-primary"></i>Update</label>
+                                <select v-model="rsFilter.update_available" class="rl-fp-select" @change="getRules(1)">
+                                    <option value="">All</option>
+                                    <option value="true">Update available</option>
+                                    <option value="false">Up to date</option>
+                                </select>
+                            </div>
+                            <div class="rl-fp-item">
+                                <label class="rl-fp-multi-label mb-1"><i class="fas fa-location-dot me-1 text-success"></i>Found</label>
+                                <select v-model="rsFilter.found" class="rl-fp-select" @change="getRules(1)">
+                                    <option value="">All</option>
+                                    <option value="true">Found in repo</option>
+                                    <option value="false">Not found</option>
+                                </select>
+                            </div>
+                            <div class="rl-fp-item">
+                                <label class="rl-fp-multi-label mb-1"><i class="fas fa-code me-1 text-info"></i>Syntax</label>
+                                <select v-model="rsFilter.syntax_valid" class="rl-fp-select" @change="getRules(1)">
+                                    <option value="">All</option>
+                                    <option value="true">Valid</option>
+                                    <option value="false">Invalid</option>
+                                </select>
+                            </div>
+                            <div class="rl-fp-item">
+                                <label class="rl-fp-multi-label mb-1"><i class="fas fa-triangle-exclamation me-1 text-danger"></i>Error</label>
+                                <select v-model="rsFilter.error" class="rl-fp-select" @change="getRules(1)">
+                                    <option value="">All</option>
+                                    <option value="true">Has error</option>
+                                    <option value="false">No error</option>
+                                </select>
+                            </div>
+                            <button v-if="rsActiveFilterCount>0" class="rl-fp-reset" @click="rsClearFilters()">
+                                <i class="fas fa-rotate-left"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ── Active bulk-job progress bar ── -->
+                    <div v-if="activeJobUuid" class="rounded-3 p-3 mb-3"
+                         style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span v-if="activeJobStatus!=='done'" class="spinner-border spinner-border-sm text-primary"></span>
+                            <i v-else class="fas fa-circle-check text-success"></i>
+                            <span class="fw-semibold small">[[ activeJobLabel ]]</span>
+                            <span class="ms-auto small text-muted">[[ activeJobPct ]]%</span>
+                        </div>
+                        <div class="progress" style="height:6px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 :class="activeJobStatus==='done'?'bg-success':''"
+                                 role="progressbar"
+                                 :style="'width:'+activeJobPct+'%'"
+                                 :aria-valuenow="activeJobPct" aria-valuemin="0" aria-valuemax="100">
+                            </div>
+                        </div>
+                        <div class="text-muted" style="font-size:.72rem;margin-top:4px;">
+                            <span v-if="activeJobStatus==='pending'"><i class="fas fa-clock me-1"></i>Queued…</span>
+                            <span v-else-if="activeJobStatus==='running'"><i class="fas fa-circle-notch fa-spin me-1"></i>Running…</span>
+                            <span v-else-if="activeJobStatus==='done'" class="text-success"><i class="fas fa-check me-1"></i>Completed</span>
+                        </div>
+                    </div>
+
+                    <div v-if="rules && rules.length">
+
+                        <!-- dt-table Rule Status -->
+                        <div class="dt-table-wrap rl-table-wrap">
+                            <table class="dt-table" role="grid">
+                                <thead class="dt-thead">
+                                    <tr>
+                                        <th class="dt-th dt-th--sortable" style="width:90px;"
+                                            :class="{'dt-th--sorted': rsSort==='format'}"
+                                            @click="setRsSort('format')">
+                                            <div class="dt-th-inner">Format <i class="fas dt-sort-icon" :class="rsSortDir==='asc'&&rsSort==='format'?'fa-sort-up':rsSortDir==='desc'&&rsSort==='format'?'fa-sort-down':'fa-sort'"></i></div>
                                         </th>
+                                        <th class="dt-th dt-th--sortable"
+                                            :class="{'dt-th--sorted': rsSort==='name_rule'}"
+                                            @click="setRsSort('name_rule')">
+                                            <div class="dt-th-inner">Rule <i class="fas dt-sort-icon" :class="rsSortDir==='asc'&&rsSort==='name_rule'?'fa-sort-up':rsSortDir==='desc'&&rsSort==='name_rule'?'fa-sort-down':'fa-sort'"></i></div>
+                                        </th>
+                                        <th class="dt-th dt-th--sortable" style="width:140px;"
+                                            :class="{'dt-th--sorted': rsSort==='found'}"
+                                            @click="setRsSort('found')">
+                                            <div class="dt-th-inner">Status <i class="fas dt-sort-icon" :class="rsSortDir==='asc'&&rsSort==='found'?'fa-sort-up':rsSortDir==='desc'&&rsSort==='found'?'fa-sort-down':'fa-sort'"></i></div>
+                                        </th>
+                                        <th class="dt-th dt-th--sortable" style="width:190px;"
+                                            :class="{'dt-th--sorted': rsSort==='update_available'}"
+                                            @click="setRsSort('update_available')">
+                                            <div class="dt-th-inner">Update <i class="fas dt-sort-icon" :class="rsSortDir==='asc'&&rsSort==='update_available'?'fa-sort-up':rsSortDir==='desc'&&rsSort==='update_available'?'fa-sort-down':'fa-sort'"></i></div>
+                                        </th>
+                                        <th class="dt-th dt-th--sortable" style="width:200px;"
+                                            :class="{'dt-th--sorted': rsSort==='message'}"
+                                            @click="setRsSort('message')">
+                                            <div class="dt-th-inner">Message <i class="fas dt-sort-icon" :class="rsSortDir==='asc'&&rsSort==='message'?'fa-sort-up':rsSortDir==='desc'&&rsSort==='message'?'fa-sort-down':'fa-sort'"></i></div>
+                                        </th>
+                                        <th class="dt-th dt-th--actions" style="width:130px;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="rule in rules" :key="rule.id"
-                                        :class="{'table-warning': rule.update_available, 'cursor-pointer': true}"
-                                        @click="gotoRuleDetail(rule.rule_id)">
-                                        <td><span class="badge bg-primary">[[rule.format]]</span></td>
-                                        <td>[[ rule.name_rule ]]</td>
-                                        <td class="text-center" v-if="rule.found !== undefined">
-                                            <i v-if="rule.found" class="fas fa-check text-success"></i>
-                                            <i v-else class="fas fa-times text-danger"></i>
-                                        </td>
-                                        <td class="text-center" v-else>-</td>
-                                        <td class="text-center" v-if="rule.update_available !== undefined">
-                                            <i v-if="rule.update_available" class="fas fa-check text-success"></i>
-                                            <i v-else class="fas fa-times text-danger"></i>
-                                        </td>
-                                        <td class="text-center" v-else>-</td>
-                                        <td class="text-center" v-if="rule.rule_syntax_valid !== undefined">
-                                            <i v-if="rule.rule_syntax_valid" class="fas fa-check text-success"></i>
-                                            <i v-else class="fas fa-times text-danger"></i>
-                                        </td>
-                                        <td class="text-center" v-else>-</td>
-                                        <td class="text-center" v-if="rule.error !== undefined">
-                                            <i v-if="rule.error" class="fas fa-times text-danger"></i>
-                                            <i v-else class="fas fa-check text-success"></i>
-                                        </td>
-                                        <td v-else>-</td>
-                                        <td v-if="rule.message !== undefined">[[ rule.message ]]</td>
-                                        <td v-else>-</td>
-                                        <td @click.stop>
-                                            <template v-if="rule.update_available === false">
-                                                <span><i class="fas fa-ban text-secondary"></i></span>
-                                            </template>
-                                            <template v-else>
-                                                <div class="d-flex gap-2 justify-content-center">
-                                                    <a class="btn btn-primary text-center" style="width: 40px;"
-                                                        :href="'/rule/update_github/choose_changes?id=' + rule.history_id"
-                                                        title="Compare the change">
-                                                        <i class="fas fa-code-branch"></i>
-                                                    </a>
-
-                                                    <template v-if="rule.rule_syntax_valid != false">
-                                                        <button class="btn btn-success text-center" style="width: 40px;"
-                                                            @click="decisionRule(rule.history_id , 'accepted')"
-                                                            title="Accept the change">
+                                    <template v-for="rule in rsSorted" :key="rule.id">
+                                        <tr class="dt-row"
+                                            :class="{
+                                                'dt-row--selected': rule.update_available,
+                                                'dt-row--expanded': rsExpanded.has(rule.id),
+                                            }">
+                                            <!-- Format -->
+                                            <td class="dt-td">
+                                                <span v-if="rule.format" class="badge rounded-pill bg-dark pt-1 shadow-sm">
+                                                    [[ rule.format.toUpperCase() ]]
+                                                </span>
+                                                <span v-else class="text-muted">—</span>
+                                            </td>
+                                            <!-- Rule name -->
+                                            <td class="dt-td" style="max-width:220px;word-break:break-word;">
+                                                <a v-if="rule.rule_id" :href="'/rule/detail_rule/'+rule.rule_id" class="dt-rule-title">[[ rule.name_rule ]]</a>
+                                                <span v-else class="fw-semibold text-muted">[[ rule.name_rule ]]</span>
+                                            </td>
+                                            <!-- Found + syntax -->
+                                            <td class="dt-td">
+                                                <div class="d-flex flex-column gap-1">
+                                                    <span class="badge rounded-pill px-2" style="font-size:.67rem;"
+                                                        :class="rule.found?'bg-success-subtle text-success':'bg-secondary-subtle text-secondary'">
+                                                        <i :class="rule.found?'fas fa-check':'fas fa-minus'" class="me-1"></i>[[ rule.found?'Found':'Not found' ]]
+                                                    </span>
+                                                    <span v-if="rule.rule_syntax_valid===false" class="badge rounded-pill px-2 bg-danger-subtle text-danger" style="font-size:.67rem;">
+                                                        <i class="fas fa-code me-1"></i>Invalid syntax
+                                                    </span>
+                                                    <span v-if="rule.error" class="badge rounded-pill px-2 bg-danger-subtle text-danger" style="font-size:.67rem;">
+                                                        <i class="fas fa-triangle-exclamation me-1"></i>Error
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <!-- Update badge -->
+                                            <td class="dt-td">
+                                                <span class="badge rounded-pill px-2 fw-semibold" style="font-size:.7rem;"
+                                                    :class="rule.update_available?'bg-warning-subtle text-warning-emphasis border border-warning-subtle':'bg-success-subtle text-success'">
+                                                    <i :class="rule.update_available?'fas fa-arrow-up-from-bracket':'fas fa-circle-check'" class="me-1"></i>
+                                                    [[ rule.update_available?'Update available':'Up to date' ]]
+                                                </span>
+                                            </td>
+                                            <!-- Message -->
+                                            <td class="dt-td dt-td--truncate">
+                                                <span class="text-muted" style="font-size:.8rem;">[[ rule.message||'—' ]]</span>
+                                            </td>
+                                            <!-- Actions -->
+                                            <td class="dt-td dt-td--actions" @click.stop>
+                                                <div class="dt-actions">
+                                                    <!-- Expand for inline diff -->
+                                                    <button v-if="rule.update_available"
+                                                        class="dt-action-btn dt-action-btn--expand"
+                                                        :class="{'is-expanded': rsExpanded.has(rule.id)}"
+                                                        title="View diff inline"
+                                                        @click="toggleRsExpand(rule)">
+                                                        <i class="fas fa-chevron-down dt-expand-chevron" style="font-size:.65rem;"></i>
+                                                    </button>
+                                                    <template v-if="rule.update_available">
+                                                        <button v-if="rule.rule_syntax_valid!==false"
+                                                            class="dt-action-btn" style="color:#198754;"
+                                                            @click="decisionRule(rule.history_id,'accepted')" title="Accept update">
                                                             <i class="fas fa-check"></i>
                                                         </button>
-                                                    </template>
-
-                                                    <button class="btn btn-danger text-center" style="width: 40px;"
-                                                        @click="decisionRule(rule.history_id , 'rejected')"
-                                                        title="Refuse the change">
-                                                        <i class="fas fa-times"></i>
-                                                    </button>
-
-                                                </div>
-                                            </template>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <nav v-if="total_pages_rules > 1" aria-label="GitHub pagination">
-                            <ul class="pagination justify-content-center">
-                                <li class="page-item" :class="{ disabled: current_page_rules === 1 }">
-                                    <button class="page-link" @click="getRules(current_page_rules - 1)"
-                                        :disabled="current_page_rules === 1">Previous</button>
-                                </li>
-
-                                <li v-for="page in visiblePagesRules" :key="page" class="page-item"
-                                    :class="{ active: page === current_page_rules, disabled: page === '...' }">
-                                    <button class="page-link" v-if="page !== '...'" @click="getRules(page)">[[ page
-                                        ]]</button>
-                                    <span class="page-link" v-else>...</span>
-                                </li>
-
-                                <li class="page-item" :class="{ disabled: current_page_rules === total_pages_rules }">
-                                    <button class="page-link" @click="getNewRules(current_page_rules + 1)"
-                                        :disabled="current_page_rules === total_pages_rules">Next</button>
-                                </li>
-                            </ul>
-                        </nav>
-                    </div>
-                    <div v-else class="card shadow border-0 mb-4 p-3 text-center text-muted">
-                        <h5 class="fw-bold">No Update available</h5>
-                        <p class="mb-0">There are currently no new update for rules to display.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="tab-pane fade" id="rule-pane" role="tabpanel" aria-labelledby="rule-tab">
-                <div class="card p-3">
-                    <div v-if="new_rules && new_rules.length" class="card shadow border-0 mb-4 p-3">
-                        <h3 class="fw-bold mb-3">New Rules</h3>
-                        <div class="table-responsive">
-                            <table class="table  table-bordered">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Syntax Valid</th>
-                                        <th>Error</th>
-                                        <th>Message</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <template v-for="nr in new_rules" :key="nr.id">
-                                        <tr :class="{
-                                                'bg-success bg-opacity-25': nr.rule_syntax_valid === true,
-                                                'bg-danger bg-opacity-25': nr.rule_syntax_valid === false,
-                                                'cursor-pointer': true
-                                            }" @click="nr.showContent = !nr.showContent">
-                                            <td>[[ nr.name_rule ]]</td>
-                                            <td class="text-center">
-                                                <i v-if="nr.rule_syntax_valid === true"
-                                                    class="fas fa-check text-success"></i>
-                                                <i v-else-if="nr.rule_syntax_valid === false"
-                                                    class="fas fa-times text-danger"></i>
-                                                <i v-else class="fas fa-circle text-secondary"></i>
-                                            </td>
-                                            <td class="text-center">
-                                                <i v-if="nr.error === true" class="fas fa-times text-danger"></i>
-                                                <i v-else class="fas fa-ban text-secondary"></i>
-                                            </td>
-                                            <td>
-                                                <span v-if="nr.message && nr.message.length">[[ nr.message ]]</span>
-                                                <span v-else class="badge bg-success">
-                                                    <i class="fas fa-check me-1"></i>Ready to be added
-                                                </span>
-
-                                            </td>
-                                            <td class="text-center">
-                                                <template v-if="nr.rule_syntax_valid === false">
-                                                    <button @click.stop class="btn btn-sm btn-danger me-1 "
-                                                        title="Fix the rule" @click="fixRule(nr.id)">
-                                                        <i class="fas fa-wrench text-white"></i>
-                                                    </button>
-                                                </template>
-                                                <template v-else-if="nr.rule_syntax_valid === true">
-                                                    <template v-if="loading_rule_id === nr.id">
-                                                        <span class="spinner-border spinner-border-sm"
-                                                            aria-hidden="true"></span>
-                                                    </template>
-
-                                                    <template v-else>
-                                                        <button @click.stop class="btn btn-sm btn-success"
-                                                            title="Add the rule" @click="addRule(nr.id)">
-                                                            <i class="fas fa-plus text-white"></i>
+                                                        <button class="dt-action-btn" style="color:#dc3545;"
+                                                            @click="decisionRule(rule.history_id,'rejected')" title="Reject update">
+                                                            <i class="fas fa-times"></i>
                                                         </button>
                                                     </template>
-                                                </template>
-
+                                                    <template v-else>
+                                                        <i class="fas fa-ban opacity-25"></i>
+                                                    </template>
+                                                </div>
                                             </td>
                                         </tr>
-                                        <tr v-if="nr.showContent" :class="{
-                                            'bg-success bg-opacity-10': nr.rule_syntax_valid === true,
-                                            'bg-danger bg-opacity-10': nr.rule_syntax_valid === false
-                                        }">
-                                            <td colspan="5">
-                                                <pre class="mb-0 p-2"
-                                                    style="white-space: pre-wrap;">[[ nr.rule_content ]]</pre>
+                                        <!-- Inline diff expand row -->
+                                        <tr v-if="rsExpanded.has(rule.id)" :key="'diff-'+rule.id" class="dt-row-expand">
+                                            <td colspan="6" class="dt-expand-cell p-0">
+                                                <div class="rl-expand-wrap p-3">
+                                                    <div v-if="rsDiffLoading.has(rule.id)" class="d-flex justify-content-center py-4">
+                                                        <span class="spinner-border text-primary"></span>
+                                                    </div>
+                                                    <diff-viewer v-else-if="rsDiffData[rule.id]"
+                                                        left-label="Current version"
+                                                        right-label="Incoming update"
+                                                        :initial-left="rsDiffData[rule.id].old_content||''"
+                                                        :initial-right="rsDiffData[rule.id].new_content||''"
+                                                        style="border-radius:8px;overflow:hidden;">
+                                                    </diff-viewer>
+                                                    <div v-else class="text-muted text-center py-3 small">
+                                                        <i class="fas fa-exclamation-circle me-1"></i>Diff data unavailable.
+                                                    </div>
+                                                </div>
                                             </td>
                                         </tr>
                                     </template>
                                 </tbody>
                             </table>
                         </div>
-                        <nav v-if="total_pages_new_rules > 1" aria-label="GitHub pagination">
-                            <ul class="pagination justify-content-center">
-                                <li class="page-item" :class="{ disabled: current_page_new_rules === 1 }">
-                                    <button class="page-link" @click="getNewRules(current_page_new_rules - 1)"
-                                        :disabled="current_page_new_rules === 1">Previous</button>
-                                </li>
 
+                        <!-- Pagination -->
+                        <nav v-if="total_pages_rules > 1" class="mt-3" aria-label="Rule status pagination">
+                            <ul class="pagination justify-content-center mb-0">
+                                <li class="page-item" :class="{ disabled: current_page_rules === 1 }">
+                                    <button class="page-link" @click="getRules(current_page_rules - 1)">Previous</button>
+                                </li>
+                                <li v-for="page in visiblePagesRules" :key="page" class="page-item"
+                                    :class="{ active: page === current_page_rules, disabled: page === '...' }">
+                                    <button class="page-link" v-if="page !== '...'" @click="getRules(page)">[[ page ]]</button>
+                                    <span class="page-link" v-else>…</span>
+                                </li>
+                                <li class="page-item" :class="{ disabled: current_page_rules === total_pages_rules }">
+                                    <button class="page-link" @click="getRules(current_page_rules + 1)">Next</button>
+                                </li>
+                            </ul>
+                        </nav>
+                    </div>
+
+                    <div v-else class="text-center py-5 text-muted">
+                        <i class="fas fa-circle-check fa-3x text-success mb-3 d-block opacity-75"></i>
+                        <h5 class="fw-bold">All rules up to date</h5>
+                        <p class="mb-0 small">No pending updates found.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="rule-pane" role="tabpanel" aria-labelledby="rule-tab">
+                <div class="card p-3">
+                    <div v-if="new_rules && new_rules.length || nrActiveFilterCount > 0" class="card shadow border-0 mb-4 p-3">
+
+                        <!-- Toolbar (ruleList style) -->
+                        <div class="rl-toolbar mb-0">
+                            <div class="rl-toolbar-left">
+                                <span class="text-muted small ms-1">
+                                    <strong>[[ total_new_rules ]]</strong> result<span v-if="total_new_rules!==1">s</span>
+                                </span>
+                            </div>
+                            <div class="rl-toolbar-right">
+                                <button class="dt-toolbar-btn dt-toolbar-btn--primary"
+                                    @click="bulkNewRulesDecision('add')" :disabled="bulkNewRules"
+                                    title="Add all valid new rules as background job">
+                                    <span v-if="bulkNewRules && bulkNewAction==='add'" class="spinner-border spinner-border-sm"></span>
+                                    <i v-else class="fas fa-plus"></i>
+                                    <span>Add all</span>
+                                </button>
+                                <button class="dt-toolbar-btn" style="color:#dc3545;border-color:#dc3545;"
+                                    @click="bulkNewRulesDecision('reject')" :disabled="bulkNewRules"
+                                    title="Reject all new rules as background job">
+                                    <span v-if="bulkNewRules && bulkNewAction==='reject'" class="spinner-border spinner-border-sm"></span>
+                                    <i v-else class="fas fa-times"></i>
+                                    <span>Remove all</span>
+                                </button>
+                                <!-- Filters toggle -->
+                                <button class="dt-toolbar-btn"
+                                    :class="{'dt-toolbar-btn--active': nrFiltersOpen}"
+                                    @click="nrFiltersOpen = !nrFiltersOpen">
+                                    <i class="fas fa-sliders"></i>
+                                    <span>Filters</span>
+                                    <span v-if="nrActiveFilterCount>0" class="rl-filter-badge ms-1">[[ nrActiveFilterCount ]]</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Filter panel -->
+                        <div v-show="nrFiltersOpen" class="rl-filter-panel">
+                            <div class="rl-fp-row">
+                                <div class="rl-fp-item">
+                                    <label class="rl-fp-multi-label mb-1"><i class="fas fa-code me-1 text-info"></i>Syntax</label>
+                                    <select v-model="nrFilter.syntax_valid" class="rl-fp-select" @change="getNewRules(1)">
+                                        <option value="">All</option>
+                                        <option value="true">Valid</option>
+                                        <option value="false">Invalid</option>
+                                    </select>
+                                </div>
+                                <div class="rl-fp-item">
+                                    <label class="rl-fp-multi-label mb-1"><i class="fas fa-circle-check me-1 text-success"></i>Status</label>
+                                    <select v-model="nrFilter.accept" class="rl-fp-select" @change="getNewRules(1)">
+                                        <option value="">All</option>
+                                        <option value="false">Not imported</option>
+                                        <option value="true">Imported</option>
+                                    </select>
+                                </div>
+                                <div class="rl-fp-item">
+                                    <label class="rl-fp-multi-label mb-1"><i class="fas fa-triangle-exclamation me-1 text-danger"></i>Error</label>
+                                    <select v-model="nrFilter.error" class="rl-fp-select" @change="getNewRules(1)">
+                                        <option value="">All</option>
+                                        <option value="true">Has error</option>
+                                        <option value="false">No error</option>
+                                    </select>
+                                </div>
+                                <button v-if="nrActiveFilterCount>0" class="rl-fp-reset" @click="nrClearFilters()">
+                                    <i class="fas fa-rotate-left"></i> Reset
+                                </button>
+                            </div>
+                        </div>
+                        <!-- dt-table New Rules -->
+                        <div class="dt-table-wrap rl-table-wrap">
+                            <table class="dt-table" role="grid">
+                                <thead class="dt-thead">
+                                    <tr>
+                                        <th class="dt-th dt-th--sortable" style="width:90px;"
+                                            :class="{'dt-th--sorted': nrSort==='format'}"
+                                            @click="setNrSort('format')">
+                                            <div class="dt-th-inner">Format <i class="fas dt-sort-icon" :class="nrSortDir==='asc'&&nrSort==='format'?'fa-sort-up':nrSortDir==='desc'&&nrSort==='format'?'fa-sort-down':'fa-sort'"></i></div>
+                                        </th>
+                                        <th class="dt-th dt-th--sortable"
+                                            :class="{'dt-th--sorted': nrSort==='name_rule'}"
+                                            @click="setNrSort('name_rule')">
+                                            <div class="dt-th-inner">Rule <i class="fas dt-sort-icon" :class="nrSortDir==='asc'&&nrSort==='name_rule'?'fa-sort-up':nrSortDir==='desc'&&nrSort==='name_rule'?'fa-sort-down':'fa-sort'"></i></div>
+                                        </th>
+                                        <th class="dt-th dt-th--sortable" style="width:150px;"
+                                            :class="{'dt-th--sorted': nrSort==='rule_syntax_valid'}"
+                                            @click="setNrSort('rule_syntax_valid')">
+                                            <div class="dt-th-inner">Syntax <i class="fas dt-sort-icon" :class="nrSortDir==='asc'&&nrSort==='rule_syntax_valid'?'fa-sort-up':nrSortDir==='desc'&&nrSort==='rule_syntax_valid'?'fa-sort-down':'fa-sort'"></i></div>
+                                        </th>
+                                        <th class="dt-th dt-th--sortable" style="width:155px;"
+                                            :class="{'dt-th--sorted': nrSort==='message'}"
+                                            @click="setNrSort('message')">
+                                            <div class="dt-th-inner">Import status <i class="fas dt-sort-icon" :class="nrSortDir==='asc'&&nrSort==='message'?'fa-sort-up':nrSortDir==='desc'&&nrSort==='message'?'fa-sort-down':'fa-sort'"></i></div>
+                                        </th>
+                                        <th class="dt-th dt-th--actions" style="width:100px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template v-for="nr in nrSorted" :key="nr.id">
+                                        <tr class="dt-row" :class="{'dt-row--expanded': nr.showContent}">
+                                            <!-- Format -->
+                                            <td class="dt-td">
+                                                <span v-if="nr.format" class="badge rounded-pill bg-dark pt-1 shadow-sm">
+                                                    [[ nr.format.toUpperCase() ]]
+                                                </span>
+                                                <span v-else class="text-muted">—</span>
+                                            </td>
+                                            <!-- Name -->
+                                            <td class="dt-td" style="max-width:240px;word-break:break-word;">
+                                                <span class="fw-semibold">[[ nr.name_rule ]]</span>
+                                            </td>
+                                            <!-- Syntax -->
+                                            <td class="dt-td">
+                                                <span class="badge rounded-pill px-2" style="font-size:.67rem;"
+                                                    :class="nr.rule_syntax_valid===true?'bg-success-subtle text-success':nr.rule_syntax_valid===false?'bg-danger-subtle text-danger':'bg-secondary-subtle text-secondary'">
+                                                    <i :class="nr.rule_syntax_valid===true?'fas fa-check':nr.rule_syntax_valid===false?'fas fa-times':'fas fa-circle'" class="me-1"></i>
+                                                    [[ nr.rule_syntax_valid===true?'Valid':nr.rule_syntax_valid===false?'Invalid':'Unknown' ]]
+                                                </span>
+                                                <span v-if="nr.error" class="ms-1 badge rounded-pill px-2 bg-danger-subtle text-danger" style="font-size:.67rem;">
+                                                    <i class="fas fa-triangle-exclamation me-1"></i>Error
+                                                </span>
+                                            </td>
+                                            <!-- Import status -->
+                                            <td class="dt-td">
+                                                <span v-if="!nr.message||nr.message===''" class="badge rounded-pill px-2 bg-success-subtle text-success" style="font-size:.67rem;">
+                                                    <i class="fas fa-circle-plus me-1"></i>Ready to add
+                                                </span>
+                                                <span v-else-if="nr.message==='imported'" class="badge rounded-pill px-2 bg-primary-subtle text-primary" style="font-size:.67rem;">
+                                                    <i class="fas fa-check-double me-1"></i>Imported
+                                                </span>
+                                                <span v-else-if="nr.message==='rejected'" class="badge rounded-pill px-2 bg-secondary-subtle text-secondary" style="font-size:.67rem;">
+                                                    <i class="fas fa-ban me-1"></i>Rejected
+                                                </span>
+                                                <span v-else class="badge rounded-pill px-2 bg-secondary-subtle text-secondary" style="font-size:.67rem;">
+                                                    <i class="fas fa-hourglass me-1"></i>Pending
+                                                </span>
+                                            </td>
+                                            <!-- Actions -->
+                                            <td class="dt-td dt-td--actions" @click.stop>
+                                                <div class="dt-actions">
+                                                    <button class="dt-action-btn dt-action-btn--expand"
+                                                        :class="{'is-expanded': nr.showContent}"
+                                                        title="View rule content"
+                                                        @click="nr.showContent = !nr.showContent">
+                                                        <i class="fas fa-chevron-down dt-expand-chevron" style="font-size:.65rem;"></i>
+                                                    </button>
+                                                    <button v-if="nr.rule_syntax_valid===false"
+                                                        class="dt-action-btn" style="color:#fd7e14;"
+                                                        @click="fixRule(nr.id)" title="Fix this rule">
+                                                        <i class="fas fa-wrench"></i>
+                                                    </button>
+                                                    <button v-else-if="nr.rule_syntax_valid===true&&(!nr.message||(nr.message!=='imported'&&nr.message!=='rejected'))"
+                                                        class="dt-action-btn" style="color:#198754;"
+                                                        @click="addRule(nr.id)" :disabled="loading_rule_id===nr.id"
+                                                        title="Add this rule">
+                                                        <span v-if="loading_rule_id===nr.id" class="spinner-border spinner-border-sm"></span>
+                                                        <i v-else class="fas fa-plus"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <!-- Expanded: CodeViewer -->
+                                        <tr v-if="nr.showContent" :key="'expand-'+nr.id" class="dt-row-expand">
+                                            <td colspan="5" class="dt-expand-cell p-0">
+                                                <div class="rl-expand-wrap p-3">
+                                                    <code-viewer
+                                                        :code="nr.rule_content||''"
+                                                        :language="nr.format||'text'"
+                                                        :title="nr.name_rule"
+                                                        max-height="380px">
+                                                    </code-viewer>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <nav v-if="total_pages_new_rules > 1" class="mt-3" aria-label="New rules pagination">
+                            <ul class="pagination justify-content-center mb-0">
+                                <li class="page-item" :class="{ disabled: current_page_new_rules === 1 }">
+                                    <button class="page-link" @click="getNewRules(current_page_new_rules - 1)">Previous</button>
+                                </li>
                                 <li v-for="page in visiblePagesNewRules" :key="page" class="page-item"
                                     :class="{ active: page === current_page_new_rules, disabled: page === '...' }">
-                                    <button class="page-link" v-if="page !== '...'" @click="getNewRules(page)">[[ page
-                                        ]]</button>
-                                    <span class="page-link" v-else>...</span>
+                                    <button class="page-link" v-if="page !== '...'" @click="getNewRules(page)">[[ page ]]</button>
+                                    <span class="page-link" v-else>…</span>
                                 </li>
-
-                                <li class="page-item"
-                                    :class="{ disabled: current_page_new_rules === total_pages_new_rules }">
-                                    <button class="page-link" @click="getNewRules(current_page_new_rules + 1)"
-                                        :disabled="current_page_new_rules === total_pages_new_rules">Next</button>
+                                <li class="page-item" :class="{ disabled: current_page_new_rules === total_pages_new_rules }">
+                                    <button class="page-link" @click="getNewRules(current_page_new_rules + 1)">Next</button>
                                 </li>
                             </ul>
                         </nav>
@@ -384,9 +653,12 @@
 <script type="module">
     const { createApp, ref, onMounted, computed } = Vue;
     import { message_list, create_message } from '/static/js/toaster.js';
+    import CodeViewer from '/static/js/components/code-viewer.js';
+    import DiffViewer from '/static/js/components/diff-viewer.js';
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { CodeViewer, DiffViewer },
         setup() {
             const progress = ref(0)
             const status_site = ref("")
@@ -422,15 +694,172 @@
              * 
              * */
 
-            async function acceptAll() {
-                const res = await fetch('/rule/accept_all_update/{{sid}}')
-                const data = await res.json()
+            const bulkUpdating    = ref(false)
+            const bulkUpdateAction = ref('')
+            const bulkNewRules    = ref(false)
+            const bulkNewAction   = ref('')
+            const csrf_token = '{{ csrf_token() }}'
 
+            // ── Active bulk job tracker ─────────────────────────────────────
+            const activeJobUuid   = ref(null)
+            const activeJobPct    = ref(0)
+            const activeJobStatus = ref('')
+            const activeJobLabel  = ref('')
+            const activeJobDone   = ref(0)
+            const activeJobTotal  = ref(0)
+            let   _jobPollTimer   = null
 
-                create_message(data.message, data.toast_class)
+            async function _pollActiveJob() {
+                if (!activeJobUuid.value) return
+                try {
+                    const res  = await fetch('/jobs/status/' + activeJobUuid.value)
+                    if (!res.ok) return
+                    const data = await res.json()
+                    activeJobPct.value    = data.progress_pct ?? 0
+                    activeJobStatus.value = data.status
+                    activeJobDone.value   = data.done  ?? 0
+                    activeJobTotal.value  = data.total ?? 0
+                    if (['done', 'failed', 'cancelled'].includes(data.status)) {
+                        clearInterval(_jobPollTimer); _jobPollTimer = null
+                        bulkUpdating.value = false
+                        bulkNewRules.value = false
+                        if (data.status === 'done') {
+                            getRules(1)
+                            getNewRules(1)
+                        }
+                        setTimeout(() => { activeJobUuid.value = null; activeJobPct.value = 0; activeJobDone.value = 0; activeJobTotal.value = 0 }, 2000)
+                    }
+                } catch {}
+            }
+
+            function _startJobTracking(job_uuid, label) {
+                if (_jobPollTimer) clearInterval(_jobPollTimer)
+                activeJobUuid.value   = job_uuid
+                activeJobPct.value    = 0
+                activeJobDone.value   = 0
+                activeJobTotal.value  = 0
+                activeJobStatus.value = 'pending'
+                activeJobLabel.value  = label
+                _jobPollTimer = setInterval(_pollActiveJob, 2000)
+            }
+
+            // ── Rule Status: server-side filters ───────────────────────────
+            const rsFiltersOpen = ref(false)
+            const rsFilter = ref({ update_available: '', found: '', syntax_valid: '', error: '' })
+            const rsActiveFilterCount = computed(() =>
+                Object.values(rsFilter.value).filter(v => v !== '').length
+            )
+            function rsClearFilters() {
+                rsFilter.value = { update_available: '', found: '', syntax_valid: '', error: '' }
                 getRules(1)
-                getNewRules(1)
-                pollScan();
+            }
+
+            // ── Rule Status: sort + inline diff expand ──────────────────────
+            const rsSort    = ref('update_available')
+            const rsSortDir = ref('desc')
+            function setRsSort(col) {
+                if (rsSort.value === col) rsSortDir.value = rsSortDir.value === 'asc' ? 'desc' : 'asc'
+                else { rsSort.value = col; rsSortDir.value = 'asc' }
+            }
+            const rsSorted = computed(() => {
+                const arr = [...rules.value]
+                const k = rsSort.value, d = rsSortDir.value === 'asc' ? 1 : -1
+                return arr.sort((a, b) => {
+                    const av = a[k] ?? '', bv = b[k] ?? ''
+                    if (typeof av === 'boolean') return d * (av === bv ? 0 : av ? 1 : -1)
+                    return d * String(av).localeCompare(String(bv), undefined, { sensitivity: 'base' })
+                })
+            })
+
+            const rsExpanded   = ref(new Set())
+            const rsDiffData   = ref({})
+            const rsDiffLoading = ref(new Set())
+
+            async function toggleRsExpand(rule) {
+                const id = rule.id
+                const next = new Set(rsExpanded.value)
+                if (next.has(id)) { next.delete(id); rsExpanded.value = next; return }
+                next.add(id); rsExpanded.value = next
+                if (!rsDiffData.value[id] && rule.history_id) {
+                    const loading = new Set(rsDiffLoading.value); loading.add(id); rsDiffLoading.value = loading
+                    try {
+                        const res  = await fetch('/rule/update_github/history_json/' + rule.history_id)
+                        const data = await res.json()
+                        rsDiffData.value = { ...rsDiffData.value, [id]: data }
+                    } finally {
+                        const l2 = new Set(rsDiffLoading.value); l2.delete(id); rsDiffLoading.value = l2
+                    }
+                }
+            }
+
+            // ── New Rules: sort ─────────────────────────────────────────────
+            const nrSort    = ref('rule_syntax_valid')
+            const nrSortDir = ref('desc')
+            function setNrSort(col) {
+                if (nrSort.value === col) nrSortDir.value = nrSortDir.value === 'asc' ? 'desc' : 'asc'
+                else { nrSort.value = col; nrSortDir.value = 'asc' }
+            }
+            const nrSorted = computed(() => {
+                const arr = [...new_rules.value]
+                const k = nrSort.value, d = nrSortDir.value === 'asc' ? 1 : -1
+                return arr.sort((a, b) => {
+                    const av = a[k] ?? '', bv = b[k] ?? ''
+                    if (typeof av === 'boolean') return d * (av === bv ? 0 : av ? 1 : -1)
+                    return d * String(av).localeCompare(String(bv), undefined, { sensitivity: 'base' })
+                })
+            })
+
+            async function bulkUpdateDecision(action) {
+                bulkUpdating.value     = true
+                bulkUpdateAction.value = action
+                const f   = rsFilter.value
+                const tri = v => v === 'true' ? true : v === 'false' ? false : null
+                try {
+                    const res  = await fetch('/rule/bulk_update_decision/{{sid}}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
+                        body: JSON.stringify({
+                            action,
+                            f_found:        tri(f.found),
+                            f_error:        tri(f.error),
+                            f_syntax_valid: tri(f.syntax_valid),
+                        }),
+                    })
+                    const data = await res.json()
+                    create_message(data.message, data.toast_class)
+                    if (res.status === 201 && data.job_uuid) {
+                        _startJobTracking(data.job_uuid, (action === 'accept' ? 'Accept all' : 'Reject all') + ' updates')
+                    } else {
+                        bulkUpdating.value     = false
+                        bulkUpdateAction.value = ''
+                    }
+                } catch {
+                    bulkUpdating.value = false
+                    bulkUpdateAction.value = ''
+                }
+            }
+
+            async function bulkNewRulesDecision(action) {
+                bulkNewRules.value  = true
+                bulkNewAction.value = action
+                try {
+                    const res  = await fetch('/rule/bulk_new_rules_decision/{{sid}}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
+                        body: JSON.stringify({ action }),
+                    })
+                    const data = await res.json()
+                    create_message(data.message, data.toast_class)
+                    if (res.status === 201 && data.job_uuid) {
+                        _startJobTracking(data.job_uuid, (action === 'add' ? 'Add all' : 'Reject all') + ' new rules')
+                    } else {
+                        bulkNewRules.value  = false
+                        bulkNewAction.value = ''
+                    }
+                } catch {
+                    bulkNewRules.value  = false
+                    bulkNewAction.value = ''
+                }
             }
 
             async function decisionRule(rule_id, decision) {
@@ -489,10 +918,23 @@
             const total_pages_new_rules = ref(1)
             const total_new_rules = ref(0)
 
+            // ── New Rules filters ───────────────────────────────────────────
+            const nrFiltersOpen = ref(false)
+            const nrFilter = ref({ syntax_valid: '', accept: '', error: '' })
+            const nrActiveFilterCount = computed(() =>
+                Object.values(nrFilter.value).filter(v => v !== '').length
+            )
+            function nrClearFilters() {
+                nrFilter.value = { syntax_valid: '', accept: '', error: '' }
+                getNewRules(1)
+            }
+
             async function getNewRules(page) {
-                const params = new URLSearchParams({
-                    page
-                })
+                const f = nrFilter.value
+                const params = new URLSearchParams({ page })
+                if (f.syntax_valid !== '') params.set('syntax_valid', f.syntax_valid)
+                if (f.accept !== '')       params.set('accept', f.accept)
+                if (f.error !== '')        params.set('error', f.error)
                 const res = await fetch('/rule/update_loading_status/{{sid}}/get_news_rules?' + params.toString())
                 if (res.status === 200) {
                     const data = await res.json()
@@ -535,17 +977,22 @@
             const current_page_rules = ref(1)
             const total_pages_rules = ref(1)
             const total_rules = ref(0)
+            const updatesAvailable = ref(0)
 
             async function getRules(page) {
-                const params = new URLSearchParams({
-                    page
-                })
+                const f = rsFilter.value
+                const params = new URLSearchParams({ page })
+                if (f.update_available !== '') params.set('update_available', f.update_available)
+                if (f.found !== '')            params.set('found', f.found)
+                if (f.syntax_valid !== '')     params.set('syntax_valid', f.syntax_valid)
+                if (f.error !== '')            params.set('error', f.error)
                 const res = await fetch('/rule/update_loading_status/{{sid}}/get_rules?' + params.toString())
                 if (res.status === 200) {
                     const data = await res.json()
                     rules.value = data.rules || []
                     total_pages_rules.value = data.total_pages || 1
                     total_rules.value = data.total_rules || 0
+                    updatesAvailable.value = data.updates_available ?? 0
                     current_page_rules.value = page
                 } else {
                     create_message((await res.json()).message, (await res.json()).toast_class)
@@ -619,12 +1066,23 @@
                 total_pages_rules,
                 visiblePagesRules,
                 getRules,
+                updatesAvailable,
                 fixRule,
                 addRule,
 
-                acceptAll,
+                bulkUpdateDecision, bulkUpdating, bulkUpdateAction,
+                bulkNewRulesDecision, bulkNewRules, bulkNewAction,
                 decisionRule,
-                loading_rule_id
+                loading_rule_id,
+
+                activeJobUuid, activeJobPct, activeJobStatus, activeJobLabel, activeJobDone, activeJobTotal,
+
+                rsFiltersOpen, rsFilter, rsActiveFilterCount, rsClearFilters,
+                rsSort, rsSortDir, setRsSort, rsSorted,
+                rsExpanded, rsDiffData, rsDiffLoading, toggleRsExpand,
+
+                nrFiltersOpen, nrFilter, nrActiveFilterCount, nrClearFilters,
+                nrSort, nrSortDir, setNrSort, nrSorted,
             };
         }
     }).mount('#main-container');
