@@ -156,12 +156,16 @@
                     <div class="d-flex justify-content-between align-items-center pt-4 border-top flex-wrap gap-3">
                         <div class="btn-group shadow-sm border rounded-pill overflow-hidden ">
                             <button @click="vote('up', bundle.id); animateClick($event)"
-                                class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn">
-                                <i class="fas fa-thumbs-up text-primary me-1"></i> [[ bundle.vote_up ]]
+                                class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn"
+                                :style="bundleUserVote === 'up' ? 'background:#0d6efd;color:#fff;border-color:#0d6efd;' : ''"
+                                title="Vote up">
+                                <i class="fas fa-thumbs-up me-1"></i> [[ bundle.vote_up ]]
                             </button>
                             <button @click="vote('down', bundle.id); animateClick($event)"
-                                class="btn btn-sm px-3 border-0 shadow-none btn-animate home-btn">
-                                <i class="fas fa-thumbs-down text-danger me-1"></i> [[ bundle.vote_down ]]
+                                class="btn btn-sm px-3 border-0 shadow-none btn-animate home-btn"
+                                :style="bundleUserVote === 'down' ? 'background:#dc3545;color:#fff;border-color:#dc3545;' : ''"
+                                title="Vote down">
+                                <i class="fas fa-thumbs-down me-1"></i> [[ bundle.vote_down ]]
                             </button>
                         </div>
 
@@ -538,6 +542,7 @@
              */
 
             const bundle = ref(null);
+            const bundleUserVote = ref(null);
             const rules = ref([]);
             const currentPage = ref(1);
             const totalPages = ref(1);
@@ -746,6 +751,7 @@
 
                     bundle.value.vote_up = data.vote_up
                     bundle.value.vote_down = data.vote_down
+                    bundleUserVote.value = data.user_vote ?? null
                 } else {
                     window.location.href = `/account/login`;
                 }
@@ -940,7 +946,7 @@
             return {
                 csrfToken,
                 init, detail_page_1_is_loading, animateClick, dayjs, bundle, rules, message_list, bundle_id, is_admin, copyToClipboard,
-                vote, edit_access, deleteBundle, saveNewDescription, DownloadBundle, DownloadBundleStructure, current_user_is_connected,
+                vote, bundleUserVote, edit_access, deleteBundle, saveNewDescription, DownloadBundle, DownloadBundleStructure, current_user_is_connected,
                 goToRule, showFullDesc, truncateText, stats, update,
 
                 treeData, fileTreeNodes,

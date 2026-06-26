@@ -540,9 +540,14 @@ def evaluate():
             _ = AccountModel.update_like_gamification(profil_game_user.id, "add_one_to_dislike")
             _ = AccountModel.update_like_gamification(profil_game_user.id, "remove_one_to_like")
 
+    from app.core.db_class.db import BundleVote as _BV
+    new_bv = _BV.query.filter_by(bundle_id=bundle_id, user_id=current_user.id).first()
+    user_vote = new_bv.vote_type if new_bv else None
+
     return jsonify({
         "vote_up": bundle.vote_up,
-        "vote_down": bundle.vote_down
+        "vote_down": bundle.vote_down,
+        "user_vote": user_vote
     }), 200
 
 #########################

@@ -314,9 +314,15 @@ def vote_rule() -> jsonify:
     log_activity(f"rule.vote_{vote_type}", f"Voted {vote_type} on rule id={rule_id}",
                  target_type="rule", target_id=rule_id,
                  target_uuid=rule.uuid if rule else None)
+
+    from app.core.db_class.db import RuleVote as _RuleVote
+    new_vote = _RuleVote.query.filter_by(rule_id=rule_id, user_id=current_user.id).first()
+    user_vote = new_vote.vote_type if new_vote else None
+
     return jsonify({
         'vote_up': vote_up,
         'vote_down': vote_down,
+        'user_vote': user_vote,
         'message': 'Vote updated successfully',
         'toast_class': 'success-subtle'
     }), 200
@@ -3289,6 +3295,15 @@ def rules_data_table():
                 {'technique_id': tid, 'name': tname, 'tactic_keys': tkeys or []}
             )
 
+    from app.core.db_class.db import RuleVote as _RV
+    votes_map = {}
+    if rule_ids and current_user.is_authenticated:
+        rows = _RV.query.filter(
+            _RV.rule_id.in_(rule_ids),
+            _RV.user_id == current_user.id
+        ).all()
+        votes_map = {v.rule_id: v.vote_type for v in rows}
+
     items = []
     for r in pagination.items:
         d = r.to_json()
@@ -3299,6 +3314,7 @@ def rules_data_table():
         except (ValueError, TypeError):
             d['cves'] = []
         d['attacks'] = attacks_by_rule.get(r.id, [])
+        d['user_vote'] = votes_map.get(r.id)
         items.append(d)
 
     return jsonify({
