@@ -39,6 +39,9 @@ class User(UserMixin, db.Model):
     verification_expiration = db.Column(db.DateTime, nullable=True)
     password_reset_token = db.Column(db.String(64), nullable=True, index=True)
     password_reset_expiration = db.Column(db.DateTime, nullable=True)
+    pending_email = db.Column(db.String(64), nullable=True)
+    email_change_token = db.Column(db.String(64), nullable=True, index=True)
+    email_change_expiration = db.Column(db.DateTime, nullable=True)
 
     # --- NEW FIELDS ---
 

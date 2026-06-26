@@ -287,19 +287,34 @@ def edit_user():
     """Edit the user"""
     form = EditUserForm()
     if form.validate_on_submit():
-        form_dict = form_to_dict(form)
-        avatar_file   = form.profile_picture.data          # FileStorage or None
+        form_dict     = form_to_dict(form)
+        avatar_file   = form.profile_picture.data
         remove_avatar = request.form.get("remove_avatar") == "1"
-        AccountModel.edit_user_core(
+        success, pending_email = AccountModel.edit_user_core(
             form_dict,
             current_user.id,
             avatar_file=avatar_file,
             remove_avatar=remove_avatar
         )
-        log_activity("user.edit_profile", "Updated profile",
-                     target_type="user", target_id=current_user.id)
-        flash('Profile updated successfully!', 'success')
-        return redirect("/account")
+        if success:
+            log_activity("user.edit_profile", "Updated profile",
+                         target_type="user", target_id=current_user.id)
+            if pending_email:
+                email_ok = AccountModel.request_email_change_core(current_user.id, pending_email)
+                if email_ok:
+                    flash(
+                        f'Profile updated. A confirmation link was sent to {pending_email}. '
+                        'Your email address will be updated once you confirm it.',
+                        'info'
+                    )
+                else:
+                    flash(
+                        f'Profile updated, but the email address {pending_email} is already in use by another account.',
+                        'warning'
+                    )
+            else:
+                flash('Profile updated successfully!', 'success')
+            return redirect("/account")
     else:
         form.first_name.data  = current_user.first_name
         form.last_name.data   = current_user.last_name
@@ -310,8 +325,22 @@ def edit_user():
         form.website_url.data = current_user.website_url
         form.github_url.data  = current_user.github_url
         form.twitter_url.data = current_user.twitter_url
- 
+
     return render_template("account/edit_user.html", form=form)
+
+
+@account_blueprint.route('/confirm-email-change/<token>')
+@login_required
+def confirm_email_change(token):
+    """Apply a pending email change after the user clicks the confirmation link."""
+    success, message = AccountModel.confirm_email_change_core(token)
+    if success:
+        log_activity("user.email_change", "Changed email address",
+                     target_type="user", target_id=current_user.id)
+        flash(message, 'success')
+    else:
+        flash(message, 'danger')
+    return redirect('/account')
 
  
 
