@@ -207,13 +207,18 @@ def process_and_import_fixed_rule(bad_rule_obj: InvalidRuleModel, raw_content: s
 
 
         if validation_result.ok:
-            success , msg = RuleModel.add_rule_core(result_dict["rule"], current_user)
+            success, msg = RuleModel.add_rule_core(result_dict["rule"], current_user)
             if success:
                 db.session.delete(bad_rule_obj)
                 db.session.commit()
                 return True, "", success
             else:
-                return False, "Rule already exists or failed to insert.", None
+                msg_str = str(msg)
+                # Duplicate — not an invalid rule, clean up the bad_rule entry
+                if "already exists" in msg_str.lower() or msg_str.startswith("TRASH_CONFLICT"):
+                    db.session.delete(bad_rule_obj)
+                    db.session.commit()
+                return False, msg_str or "Failed to insert rule.", None
         else:
             return False, "Validate has been out passed! The rule syntax is corrupt.", None
 
@@ -279,13 +284,17 @@ def parse_rule_by_format(rule_content: str, user: User, format_name: str, url_re
     if rule:
         return True, "Rule created", rule
     else:
+        msg_str = str(msg)
+        # Duplicate — silently skip, no bad_rule entry needed
+        if "already exists" in msg_str.lower() or msg_str.startswith("TRASH_CONFLICT"):
+            return False, msg_str, None
         if github_path:
             metadata["github_path"] = github_path
         BadRuleModel.save_invalid_rule(
             form_dict=metadata,
             to_string=rule_content,
             rule_type=format_name,
-            error=["Failed to insert rule into DB"],
+            error=[msg_str],
             user=user,
         )
         return False, "Failed to insert rule", None
