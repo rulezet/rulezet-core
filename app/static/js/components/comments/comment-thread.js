@@ -89,7 +89,7 @@ const CommentItem = {
             }
             repliesLoading.value = true
             const res = await apiFetch(
-                `/api/comments?object_type=${props.comment.object_type}&object_id=${props.comment.object_id}&parent_id=${props.comment.id}&page=${repliesPage.value}&per_page=20`
+                `/api/comments/?object_type=${props.comment.object_type}&object_id=${props.comment.object_id}&parent_id=${props.comment.id}&page=${repliesPage.value}&per_page=20`
             )
             if (res.ok) {
                 const d = await res.json()
@@ -104,7 +104,7 @@ const CommentItem = {
         async function submitReply() {
             if (!replyContent.value.trim()) return
             submitting.value = true
-            const res = await apiFetch('/api/comments', 'POST', {
+            const res = await apiFetch('/api/comments/', 'POST', {
                 object_type: props.comment.object_type,
                 object_id: props.comment.object_id,
                 content: replyContent.value,
@@ -411,7 +411,7 @@ const CommentThread = {
             }
             loading.value = true
             const res = await apiFetch(
-                `/api/comments?object_type=${props.objectType}&object_id=${props.objectId}&page=${page.value}&per_page=20`
+                `/api/comments/?object_type=${props.objectType}&object_id=${props.objectId}&page=${page.value}&per_page=20`
             )
             if (res.ok) {
                 const d = await res.json()
@@ -426,7 +426,7 @@ const CommentThread = {
         async function submitComment() {
             if (!newContent.value.trim()) return
             submitting.value = true
-            const res = await apiFetch('/api/comments', 'POST', {
+            const res = await apiFetch('/api/comments/', 'POST', {
                 object_type: props.objectType,
                 object_id: props.objectId,
                 content: newContent.value,
