@@ -1,6 +1,6 @@
 import json
 import os
-from flask import Blueprint, request as freq
+from flask import Blueprint, request as freq, jsonify
 from flask_restx import Api
 
 # -------------------------------------------------------------
@@ -133,6 +133,34 @@ api.add_namespace(comment_ns, path="/comments")
 from .log.log_api import log_ns  # noqa
 _hide_ns(log_ns)
 api.add_namespace(log_ns, path="/log")
+
+
+# ─── CSRF enforcement for session-authenticated API calls ────────────────────
+# csrf.exempt(api_blueprint) is set in create_app() to allow external API-key
+# consumers.  This hook re-enforces CSRF for logged-in browser sessions that
+# don't carry an API key — those are the calls an attacker could forge.
+@api_blueprint.before_request
+def _enforce_csrf_for_session_api():
+    if freq.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
+        return
+
+    from app.core.utils.utils import get_user_from_api
+    if get_user_from_api(freq.headers):
+        return  # API-key request — immune to CSRF
+
+    from flask_login import current_user as _cu
+    if not _cu.is_authenticated:
+        return  # anonymous/server-to-server — no session to forge
+
+    from flask_wtf.csrf import validate_csrf, ValidationError
+    token = (freq.headers.get('X-CSRFToken')
+             or freq.headers.get('X-CSRF-Token')
+             or '')
+    try:
+        validate_csrf(token)
+    except ValidationError:
+        return jsonify({'message': 'CSRF token missing or invalid',
+                        'error': 'csrf'}), 400
 
 
 # ─── API request audit hook ──────────────────────────────────────────────────

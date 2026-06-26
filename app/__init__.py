@@ -71,45 +71,9 @@ def create_app(start_worker=True):
 
     # Blanket-exempt the API blueprint from Flask-WTF's automatic CSRF check.
     # External API-key consumers can't supply a CSRF token, so we can't enforce
-    # it globally.  The before_request hook below re-enforces it selectively.
+    # it globally.  A before_request hook in app/api/api.py re-enforces it
+    # selectively for session-authenticated browser calls.
     csrf.exempt(api_blueprint)
-
-    @api_blueprint.before_request
-    def _enforce_csrf_for_session_api():
-        """Re-apply CSRF protection for session-authenticated API calls.
-
-        The blanket csrf.exempt above is required for external API-key consumers.
-        However, endpoints in comment_api, log_api, and config_api are called from
-        the browser with a session cookie — they are forgeable without a CSRF check.
-
-        Rule:
-          • Safe methods (GET/HEAD/…)        → always pass.
-          • Request carries X-API-KEY        → non-forgeable (custom headers cannot
-                                               be set cross-origin without a preflight
-                                               that the server won't allow) → pass.
-          • No active user session           → nothing to forge → pass.
-          • Logged-in, no API key            → validate X-CSRFToken header.
-        """
-        if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
-            return
-
-        from app.core.utils.utils import get_user_from_api
-        if get_user_from_api(request.headers):
-            return  # API-key request — immune to CSRF
-
-        from flask_login import current_user as _cu
-        if not _cu.is_authenticated:
-            return  # anonymous/server-to-server — no session to forge
-
-        from flask_wtf.csrf import validate_csrf, ValidationError
-        token = (request.headers.get('X-CSRFToken')
-                 or request.headers.get('X-CSRF-Token')
-                 or '')
-        try:
-            validate_csrf(token)
-        except ValidationError:
-            return jsonify({'message': 'CSRF token missing or invalid',
-                            'error': 'csrf'}), 400
 
     app.register_blueprint(api_blueprint, url_prefix="/api")
 
