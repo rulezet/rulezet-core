@@ -1646,10 +1646,12 @@ def changes_decision() -> jsonify:
     """Update a rule from github"""
     history_id = request.args.get('history_id')
     decision = request.args.get('decision')
-    
+
 
     history = RuleModel.get_history_rule_by_id(history_id)
     rule_ = RuleModel.get_rule(history.rule_id)
+    if not rule_:
+        return jsonify({"success": False, "message": "Rule not found", "toast_class": "danger-subtle"}), 404
 
     if current_user.is_admin() or rule_.user_id == current_user.id:
         # change all the RuleStatue from Update with this same rule_id
@@ -1692,10 +1694,13 @@ def update_github_rule() -> render_template:
     """Update a rule from github"""
     history_id = request.args.get('rule_id')
     decision = request.args.get('decision')
-    
+
 
     history = RuleModel.get_history_rule_by_id(history_id)
     rule_ = RuleModel.get_rule(history.rule_id)
+    if not rule_:
+        flash('Rule not found', 'danger')
+        return redirect(safe_referrer())
 
     if current_user.is_admin() or rule_.user_id == current_user.id:
         if decision == 'accepted':

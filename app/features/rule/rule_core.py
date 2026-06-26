@@ -439,8 +439,9 @@ def add_rule_core(form_dict, user) -> tuple[bool, str] | tuple[Rule, str]:
     except Exception as e:
         return False, e
 
-def get_rule_by_uuid(uuid):
-    return Rule.query.filter_by(uuid=uuid).first()
+def get_rule_by_uuid(uuid, include_deleted=False):
+    q = Rule.query if include_deleted else _active()
+    return q.filter(Rule.uuid == uuid).first()
 
 def get_rule_by_content(content):
     if not content:
@@ -666,9 +667,11 @@ def get_rules_of_user_with_id_page(user_id, page, search, sort_by, rule_type) ->
 
     return query.paginate(page=page, per_page=20, max_per_page=20)
 
-def get_rule(id) -> Rule:
+def get_rule(id, include_deleted=False) -> Rule:
     """Return the rule from id"""
-    return Rule.query.get(id)
+    if include_deleted:
+        return Rule.query.get(id)
+    return _active().filter(Rule.id == id).first()
 
 def get_rule_type_count(user_id):
     """Return JSON of the different rule types and total"""
@@ -2848,7 +2851,7 @@ def get_rule_update_from_updater_by_rule_id_and_change_statue(rule_id, updater_i
 
 def get_format_name(id):
     rule = RuleStatus.query.filter_by(rule_id=id).first()
-    reel_rule = get_rule(rule.rule_id)
+    reel_rule = get_rule(rule.rule_id, include_deleted=True)
     return reel_rule.format or "no format"
 
 def get_updater_result_by_id(sid: int):
