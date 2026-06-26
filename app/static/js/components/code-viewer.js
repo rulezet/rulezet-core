@@ -142,6 +142,7 @@ const KNOWN_HLJS_LANGS = new Set([
 const LANG_ALIASES = {
     nse: 'lua',       // Nmap Script Engine = Lua
     sigma: 'yaml',    // Sigma rules are YAML
+    atr: 'yaml',      // ATR format is YAML
     wazuh: 'xml',     // Wazuh rules are XML
     yara: 'text',     // no hljs yara grammar
     suricata: 'text',
