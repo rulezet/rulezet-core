@@ -3,7 +3,7 @@ import datetime
 from ...core.db_class.db import User, RegisteredInstance, InstanceConfig
 from ... import db
 from flask import Blueprint, jsonify, render_template, redirect, url_for, request, flash
-from .form import LoginForm, EditUserForm, AddNewUserForm
+from .form import LoginForm, EditUserForm, AddNewUserForm, ForgotPasswordForm, ResetPasswordForm
 from ..rule import rule_core as RuleModel
 from . import account_core as AccountModel
 from ..bundle import bundle_core as BundleModel
@@ -448,6 +448,34 @@ def resend_verification_code(user_id):
         return redirect(f"/account/verify/{user_id}")
     flash("Verification code resent.", "success")
     return render_template("account/verify.html", user_id=user_id)
+
+
+@account_blueprint.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect('/')
+    form = ForgotPasswordForm()
+    if form.validate_on_submit():
+        AccountModel.request_password_reset_core(form.email.data)
+        flash('If this email is registered, a reset link has been sent. Check your inbox.', 'info')
+        return redirect('/account/forgot-password')
+    return render_template('account/forgot_password.html', form=form)
+
+
+@account_blueprint.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    if current_user.is_authenticated:
+        return redirect('/')
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        success, message = AccountModel.reset_password_core(token, form.password.data)
+        if success:
+            flash('Password reset successfully. You can now log in.', 'success')
+            return redirect('/account/login')
+        flash(message, 'danger')
+        return redirect(f'/account/reset-password/{token}')
+    return render_template('account/reset_password.html', form=form, token=token)
+
 
 ############
 # Favorite #

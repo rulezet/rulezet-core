@@ -1,9 +1,11 @@
 import os
+import secrets
+import hashlib
 from werkzeug.utils import secure_filename
- 
+
 
 import datetime , random
-from datetime import timezone, timedelta 
+from datetime import timezone, timedelta
 from typing import  Tuple
 from flask_login import current_user
 from sqlalchemy import func, or_
@@ -11,7 +13,7 @@ from flask_mail import Message
 from app import mail
 
 from ... import db
-from ...core.db_class.db import Bundle, BundleVote, Gamification, RequestOwnerRule, Rule, RuleEditProposal, RuleFavoriteUser, RuleUpdateHistory, RuleVote, User
+from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleEditProposal, RuleFavoriteUser, RuleUpdateHistory, RuleVote, Tag, User, UserConfig
 from ...core.utils.utils import generate_api_key
 from ..rule import rule_core as RuleModel
 import uuid
@@ -29,6 +31,7 @@ MAX_AVATAR_SIZE_MB = 2
 # CRUD
 
 TIME_EMAIL_EXPIRATION = timedelta(minutes=30)
+TIME_RESET_EXPIRATION = timedelta(hours=1)
 
 # Create
 
@@ -137,6 +140,83 @@ def send_verify_email(user, code):
 
    except Exception as e:
         return False , str(e)
+
+
+def request_password_reset_core(email: str) -> bool:
+    """Generate a password reset token and email it. Always returns True to prevent enumeration."""
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.is_verified:
+        return True  # silent — prevent email enumeration
+    raw_token = secrets.token_urlsafe(32)
+    hashed    = hashlib.sha256(raw_token.encode()).hexdigest()
+    user.password_reset_token      = hashed
+    user.password_reset_expiration = datetime.datetime.now(timezone.utc).replace(tzinfo=None) + TIME_RESET_EXPIRATION
+    db.session.commit()
+    send_reset_email(user, raw_token)
+    return True
+
+
+def reset_password_core(raw_token: str, new_password: str) -> tuple:
+    """Validate reset token and set new password. Returns (success, message)."""
+    hashed = hashlib.sha256(raw_token.encode()).hexdigest()
+    user = User.query.filter_by(password_reset_token=hashed).first()
+    if not user:
+        return False, "Invalid or expired link."
+    now = datetime.datetime.now(timezone.utc).replace(tzinfo=None)
+    if not user.password_reset_expiration or now > user.password_reset_expiration:
+        user.password_reset_token      = None
+        user.password_reset_expiration = None
+        db.session.commit()
+        return False, "This link has expired. Please request a new one."
+    user.password              = new_password
+    user.password_reset_token  = None
+    user.password_reset_expiration = None
+    db.session.commit()
+    return True, "Password reset successfully."
+
+
+def send_reset_email(user, raw_token: str) -> tuple:
+    from flask import url_for
+    try:
+        reset_url = url_for('account.reset_password', token=raw_token, _external=True)
+        msg = Message(
+            "Reset your Rulezet password",
+            sender="noreply@rulezet.org",
+            recipients=[user.email]
+        )
+        msg.body = (
+            f"Hello {user.first_name},\n\n"
+            f"Click the link below to reset your password. It expires in 1 hour.\n\n"
+            f"{reset_url}\n\n"
+            "If you didn't request this, you can safely ignore this email."
+        )
+        msg.html = f"""
+        <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:600px;margin:0 auto;border:1px solid #eeeeee;border-radius:12px;overflow:hidden;">
+            <div style="text-align:center;padding:20px 0 0;">
+                <img src="https://rulezet.org/static/image/logo.png" alt="Rulezet" style="width:140px;height:auto;">
+            </div>
+            <div style="background:#0a58ca;padding:30px;text-align:center;">
+                <h1 style="color:#fff;margin:0;font-size:22px;letter-spacing:1px;">Password Reset Request</h1>
+            </div>
+            <div style="padding:40px 30px;line-height:1.7;color:#333;background:#fff;">
+                <p style="font-size:16px;">Hi {user.first_name},</p>
+                <p style="font-size:15px;">We received a request to reset your password. Click the button below — the link expires in <strong>1 hour</strong>.</p>
+                <div style="text-align:center;margin:36px 0;">
+                    <a href="{reset_url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#0a58ca,#0d6efd);color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;letter-spacing:.3px;">Reset Password</a>
+                </div>
+                <p style="font-size:13px;color:#888;text-align:center;">If you didn't request this, you can safely ignore this email. Your password won't change.</p>
+                <p style="font-size:12px;color:#aaa;word-break:break-all;">Or copy this link: {reset_url}</p>
+            </div>
+            <div style="background:#f8f9fa;padding:20px;text-align:center;font-size:12px;color:#bdc3c7;border-top:1px solid #eee;">
+                <p style="margin:5px 0;">&copy; 2026 Rulezet. All rights reserved.</p>
+            </div>
+        </div>
+        """
+        mail.send(msg)
+        return True, "Email sent"
+    except Exception as e:
+        return False, str(e)
+
 
 def verify_user_core(id) -> bool:
     """Verify the user in the DB"""
@@ -249,15 +329,36 @@ def delete_user_core(id) -> bool:
     """Delete the user from the DB and clean up their avatar file."""
     rules = RuleModel.get_rules_of_user_with_id(id)
     RuleModel.give_all_right_to_admin(rules)
- 
+
     user = get_user(id)
     if not user:
         return False
- 
+
+    # Resolve FK constraints before deleting the user row.
+    # UserConfig has non-nullable user_id → must delete the row.
+    UserConfig.query.filter(
+        (UserConfig.user_id == id) | (UserConfig.created_by == id)
+    ).delete(synchronize_session=False)
+
+    # Tag.created_by and BackgroundJob.created_by are NOT NULL → reassign to admin.
+    admin = get_admin_user()
+    if admin and admin.id != id:
+        Tag.query.filter_by(created_by=id).update(
+            {'created_by': admin.id}, synchronize_session=False
+        )
+        BackgroundJob.query.filter_by(created_by=id).update(
+            {'created_by': admin.id}, synchronize_session=False
+        )
+
+    # CustomTheme.created_by is nullable → set NULL.
+    CustomTheme.query.filter_by(created_by=id).update(
+        {'created_by': None}, synchronize_session=False
+    )
+
     # clean up avatar file before DB delete
     if user.profile_picture:
         _delete_avatar_file(user.profile_picture)
- 
+
     db.session.delete(user)
     db.session.commit()
     return True

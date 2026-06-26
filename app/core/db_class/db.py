@@ -37,6 +37,8 @@ class User(UserMixin, db.Model):
     is_verified = db.Column(db.Boolean, default=False)
     verification_code = db.Column(db.String(6), nullable=True)
     verification_expiration = db.Column(db.DateTime, nullable=True)
+    password_reset_token = db.Column(db.String(64), nullable=True, index=True)
+    password_reset_expiration = db.Column(db.DateTime, nullable=True)
 
     # --- NEW FIELDS ---
 
