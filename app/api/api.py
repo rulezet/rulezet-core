@@ -144,6 +144,10 @@ def _enforce_csrf_for_session_api():
     if freq.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
         return
 
+    from flask import current_app
+    if not current_app.config.get('WTF_CSRF_ENABLED', True):
+        return  # CSRF globally disabled (e.g. testing environment)
+
     from app.core.utils.utils import get_user_from_api
     if get_user_from_api(freq.headers):
         return  # API-key request — immune to CSRF
