@@ -5,7 +5,7 @@ import faiss
 import time
 from uuid import uuid4
 from queue import Queue
-from threading import Thread
+from threading import Thread, Event, Lock
 from concurrent.futures import ProcessPoolExecutor
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sqlalchemy import delete, or_
@@ -63,6 +63,10 @@ class Similarity_class:
         self.total = 0
         self.similar_pairs_found = 0
         self.watched = False  # set True when user visits the progress page
+        self._stop_lock    = Lock()
+        self._finalized    = False
+        self._save_done    = Event()
+        self._workers_done = 0
         
         # Percentage management
         self.indexing_progress = 0  
@@ -211,6 +215,25 @@ class Similarity_class:
                     self.jobs.task_done()
                 except Exception as e:
                     if not self.jobs.empty(): self.jobs.task_done()
+
+        # Detect last worker — same pattern as session_class.py
+        with self._stop_lock:
+            self._workers_done += 1
+            is_last = (self._workers_done >= self.thread_count and not self._finalized)
+            if is_last:
+                self._finalized = True
+
+        if is_last:
+            with loc_app.app_context():
+                try:
+                    self.save_final_stats()
+                except Exception:
+                    pass
+                finally:
+                    self._save_done.set()
+            if self in sessions:
+                sessions.remove(self)
+
         return True
 
     def status(self):
@@ -250,7 +273,8 @@ class Similarity_class:
             self.jobs.queue.clear()
         for worker in self.threads:
             worker.join(timeout=0.5)
-        self.save_final_stats()
+        self._save_done.wait(timeout=30)
+        self.threads.clear()
         if self in sessions:
             sessions.remove(self)
 
@@ -267,19 +291,12 @@ class Similarity_class:
             db.session.rollback()
 
         try:
-            from app.features.notification.notification_core import (
-                update_admin_session_notifications, notify_similarity_done
-            )
-            update_admin_session_notifications(
+            from app.features.notification.notification_core import notify_similarity_done
+            notify_similarity_done(
+                user_id      = self.user_id,
                 session_uuid = self.uuid,
-                summary      = f'{self.total} rules processed · {self.similar_pairs_found} similar pairs found',
+                total        = self.total,
+                pairs_found  = self.similar_pairs_found,
             )
-            if self.watched:
-                notify_similarity_done(
-                    user_id      = self.user_id,
-                    session_uuid = self.uuid,
-                    total        = self.total,
-                    pairs_found  = self.similar_pairs_found,
-                )
-        except Exception as e:
-            print(f"[similarity_class] notify done error: {e}")
+        except Exception:
+            pass

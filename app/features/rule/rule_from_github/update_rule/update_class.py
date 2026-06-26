@@ -2,7 +2,7 @@ import datetime
 import json
 import os
 from queue import Queue
-from threading import Thread, Lock
+from threading import Thread, Lock, Event
 from typing import Optional, List, Dict, Any
 from uuid import uuid4
 
@@ -48,6 +48,7 @@ class Update_class:
 
         self.mode = mode
         self.current_user = user
+        self.user_id      = user.id if user else None
         self.info = info
         self.repo_cache = {}
         self.count_per_format = {}
@@ -71,6 +72,9 @@ class Update_class:
         # NEW RULE SYSTEM
         self.new_rules_list = []
         self._import_done_for_repo = set()
+        self._finalized    = False
+        self._save_done    = Event()
+        self._workers_done = 0
 
     # ------------------ MAIN METHODS ------------------
 
@@ -250,41 +254,11 @@ class Update_class:
     # ------------------ STOP ------------------
 
     def stop(self):
-        # Only process remaining jobs if the queue is empty (finished naturally)
         if self.jobs.empty():
             for worker in self.threads:
                 worker.join(3.5)
-            self.threads.clear()
-
-        # Add rules from Rulezet that were not found in the repository to status list
-        with self.lock:
-            remaining_rules = self.rules_to_process[:]
-            for rule in remaining_rules:
-                # Log status for the rule not found in the repository
-                self.rule_status_list.append({
-                    "update_result_uuid": self.uuid,
-                    "name_rule": rule["title"],
-                    "rule_id": rule["id"],
-                    "message": "Rule from Rulezet not found in the repository.",
-                    "found": False,
-                    "update_available": False,
-                    "rule_syntax_valid": False,
-                    "error": True, 
-                    "history_id": None 
-                })
-                # Remove it now that it has been handled
-                self.rules_to_process.remove(rule)
-
-            # Re-calculate final statistics based on the complete rule_status_list
-            self.found = sum(1 for r in self.rule_status_list if r["found"])
-            self.updated = sum(1 for r in self.rule_status_list if r["update_available"])
-            self.not_found = sum(1 for r in self.rule_status_list if r["error"] and not r["found"])
-            self.skipped = sum(1 for r in self.rule_status_list if r["found"] and not r["update_available"])
-
-        self.save_info()
-        sessions.remove(self)
-        delete_existing_repo_folder("app/rule_from_github/Rules_Github")
-        del self
+        self._save_done.wait(timeout=30)
+        self.threads.clear()
 
     # ------------------ UPDATE PROCESS ------------------
     def process(self, loc_app, user: User):
@@ -562,6 +536,52 @@ class Update_class:
                         
 
             self.jobs.task_done()
+
+        # Detect last worker — finalize exactly once regardless of whether the user
+        # stays on the page (same pattern as session_class.py)
+        with self.lock:
+            self._workers_done += 1
+            is_last = (self._workers_done >= self.thread_count and not self._finalized)
+            if is_last:
+                self._finalized = True
+
+        if is_last:
+            with self.lock:
+                remaining_rules = self.rules_to_process[:]
+                for rule in remaining_rules:
+                    self.rule_status_list.append({
+                        "update_result_uuid": self.uuid,
+                        "name_rule": rule["title"],
+                        "rule_id": rule["id"],
+                        "message": "Rule from Rulezet not found in the repository.",
+                        "found": False,
+                        "update_available": False,
+                        "rule_syntax_valid": False,
+                        "error": True,
+                        "history_id": None
+                    })
+                    self.rules_to_process.remove(rule)
+
+                self.found     = sum(1 for r in self.rule_status_list if r["found"])
+                self.updated   = sum(1 for r in self.rule_status_list if r["update_available"])
+                self.not_found = sum(1 for r in self.rule_status_list if r["error"] and not r["found"])
+                self.skipped   = sum(1 for r in self.rule_status_list if r["found"] and not r["update_available"])
+
+            with loc_app.app_context():
+                try:
+                    self.save_info()
+                except Exception:
+                    pass
+                finally:
+                    self._save_done.set()
+
+            if self in sessions:
+                sessions.remove(self)
+            try:
+                delete_existing_repo_folder("app/rule_from_github/Rules_Github")
+            except Exception:
+                pass
+
         return True
 
 
@@ -579,7 +599,7 @@ class Update_class:
 
         s = UpdateResult(
             uuid=self.uuid,
-            user_id=self.current_user.id,
+            user_id=self.user_id,
             mode=self.mode,
             info=json.dumps(extended_info),
             repo_sources=json.dumps(self.repo_sources),
@@ -611,20 +631,15 @@ class Update_class:
         db.session.commit()
 
         try:
-            from app.features.notification.notification_core import notify_github_update_done, update_admin_session_notifications
+            from app.features.notification.notification_core import notify_github_update_done
             notify_github_update_done(
-                user_id   = self.current_user.id,
+                user_id   = self.user_id,
                 updated   = self.updated,
                 found     = self.found,
                 result_id = s.id,
             )
-            update_admin_session_notifications(
-                session_uuid = self.uuid,
-                summary      = f'{self.found} checked · {self.updated} update(s) found',
-                link         = f'/rule/update_loading/{self.uuid}',
-            )
-        except Exception as e:
-            print(f"[update_class] notify error: {e}")
+        except Exception:
+            pass
 
 
 # ------------------ RULE UPDATE CHECKER ------------------
