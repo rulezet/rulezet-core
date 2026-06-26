@@ -451,14 +451,31 @@
     const RULE_ID     = {{ rule.id }};
     const PROPOSAL_ID = {{ rule_edit_id }};
 
-    // Lazy-load marked for message rendering
+    // Lazy-load marked + DOMPurify for safe message rendering
     let _marked = null;
+    let _purify = null;
+
     async function getMarked() {
         if (!_marked) {
             const m = await import('/static/js/marked.min.js');
             _marked = m.marked || m.default || window.marked;
         }
         return _marked;
+    }
+
+    async function getPurify() {
+        if (!_purify) {
+            const m = await import('/static/js/purify.min.js');
+            _purify = m.default || window.DOMPurify;
+        }
+        return _purify;
+    }
+
+    async function renderMarkdown(text) {
+        const mk     = await getMarked();
+        const purify = await getPurify();
+        const html   = mk.parse ? mk.parse(text) : mk(text);
+        return purify.sanitize(html);
     }
 
     const EDIT_TYPE_META = {
@@ -522,8 +539,7 @@
                         isFavorited.value = data.proposal.is_favorited ?? false;
                         // Render message as markdown
                         if (data.proposal.message) {
-                            const mk = await getMarked();
-                            renderedMessage.value = mk.parse ? mk.parse(data.proposal.message) : mk(data.proposal.message);
+                            renderedMessage.value = await renderMarkdown(data.proposal.message);
                         }
                     }
                 } catch (e) {

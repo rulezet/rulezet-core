@@ -308,12 +308,29 @@
     const rule_id = {{ rule.id }};
 
     let _marked = null;
+    let _purify = null;
+
     async function getMarked() {
         if (!_marked) {
             const m = await import('/static/js/marked.min.js');
             _marked = m.marked || m.default || window.marked;
         }
         return _marked;
+    }
+
+    async function getPurify() {
+        if (!_purify) {
+            const m = await import('/static/js/purify.min.js');
+            _purify = m.default || window.DOMPurify;
+        }
+        return _purify;
+    }
+
+    async function renderMarkdown(text) {
+        const mk     = await getMarked();
+        const purify = await getPurify();
+        const html   = mk.parse ? mk.parse(text) : mk(text);
+        return purify.sanitize(html);
     }
 
     createApp({
@@ -355,13 +372,9 @@
                     const data = await res.json();
                     if (data) {
                         const list = data.rules_list || [];
-                        // Pre-render messages as markdown
-                        if (list.some(p => p.message)) {
-                            const mk = await getMarked();
-                            const parse = mk.parse ? mk.parse.bind(mk) : mk;
-                            list.forEach(p => {
-                                if (p.message) p._renderedMessage = parse(p.message);
-                            });
+                        // Pre-render messages as sanitized markdown
+                        for (const p of list) {
+                            if (p.message) p._renderedMessage = await renderMarkdown(p.message);
                         }
                         pull_request_list.value = list;
                         total_pages.value = data.total_pages_pending;
