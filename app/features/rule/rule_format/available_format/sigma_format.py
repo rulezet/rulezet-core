@@ -143,6 +143,28 @@ class SigmaRule(RuleType):
             }
 
     ##############################
+    #        FORMAT DETECT       #
+    ##############################
+    def detect(self, content: str) -> bool:
+        """
+        Identify a Sigma rule by its mandatory top-level fields.
+        Both `logsource` and `detection` are required by the Sigma spec and
+        are absent from every other YAML-based format (ATR, Wazuh, …).
+        This prevents the alphabetical-load fallback from mis-assigning
+        Sigma files to ATR when both formats claim .yml/.yaml.
+        """
+        try:
+            doc = yaml.safe_load(content)
+        except Exception:
+            return False
+        if not isinstance(doc, dict):
+            return False
+        return (
+            isinstance(doc.get('logsource'), dict) and
+            isinstance(doc.get('detection'), dict)
+        )
+
+    ##############################
     #         FILE LISTING       #
     ##############################
     def get_rule_files(self, file: str) -> bool:
