@@ -1055,7 +1055,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                 if (current_user_is_connected.value == true) {
                     const res = await fetch('/rule/vote_rule', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
                         body: JSON.stringify({ id: rule_id, vote_type: voteType })
                     });
                     const data = await res.json()
