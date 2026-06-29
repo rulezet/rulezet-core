@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 
 from . import blog_core as BlogModel
 from app.core.utils.activity_log import log_activity
+from app.features.notification.notification_core import notify_blog_published
 
 # ── File upload security constants ───────────────────────────────────────────
 _ALLOWED_MIME_TYPES = {
@@ -197,12 +198,15 @@ def admin_toggle_access(post_uuid):
     if not post:
         return jsonify({'success': False, 'message': 'Post not found.'}), 404
 
+    was_public = post.is_public
     is_public = BlogModel.toggle_public(post)
     log_activity(
         'blog.toggle_access',
         f"Toggled post '{post.title}' to {'public' if is_public else 'private'}",
         target_type='blog_post', target_id=post.id, target_uuid=post_uuid,
     )
+    if is_public and not was_public and not post.is_draft:
+        notify_blog_published(post)
     return jsonify({'success': True, 'is_public': is_public})
 
 
@@ -217,12 +221,18 @@ def admin_toggle_draft(post_uuid):
     if not post:
         return jsonify({'success': False, 'message': 'Post not found.'}), 404
 
+    was_draft = post.is_draft
+    was_public = post.is_public
     is_draft, is_public = BlogModel.toggle_draft(post)
     log_activity(
         'blog.toggle_draft',
         f"Toggled post '{post.title}' to {'draft' if is_draft else 'published'}",
         target_type='blog_post', target_id=post.id, target_uuid=post_uuid,
     )
+    if was_draft and not is_draft and is_public:
+        notify_blog_published(post)
+    elif not was_public and is_public and not is_draft:
+        notify_blog_published(post)
     return jsonify({'success': True, 'is_draft': is_draft, 'is_public': is_public})
 
 
@@ -462,6 +472,10 @@ def api_post(post_uuid):
         else:
             return jsonify({'error': 'Forbidden.'}), 403
 
+    if post.is_public and not post.is_draft:
+        log_activity('blog.view', f'Viewed blog post "{post.title}"',
+                     target_type='blog_post', target_id=post.id,
+                     target_uuid=post_uuid, is_public=True)
     data = post.to_json()
     if current_user.is_authenticated and current_user.is_admin():
         data['share_key'] = post.share_key

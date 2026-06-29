@@ -2408,6 +2408,9 @@ class NotificationPreference(db.Model):
     pref_proposal_accepted = db.Column(db.Boolean, nullable=False, default=True)
     pref_comment_reply     = db.Column(db.Boolean, nullable=False, default=True)
 
+    # Platform content
+    pref_blog_published = db.Column(db.Boolean, nullable=False, default=True)
+
     user = db.relationship('User', backref=db.backref(
         'notification_preference', uselist=False, cascade='all, delete-orphan'))
 
@@ -2423,6 +2426,7 @@ class NotificationPreference(db.Model):
             'proposal_comment':   self.pref_proposal_comment,
             'proposal_accepted':  self.pref_proposal_accepted,
             'comment_reply':      self.pref_comment_reply,
+            'blog_published':     self.pref_blog_published,
         }
 
 

@@ -57,6 +57,7 @@ _TYPE_ICON = {
     'ownership_requested':     'fa-solid fa-user-pen',
     'ownership_approved':      'fa-solid fa-user-check',
     'ownership_rejected':      'fa-solid fa-user-xmark',
+    'blog_published':          'fa-solid fa-newspaper',
 }
 
 
@@ -872,3 +873,32 @@ def get_follower_count(user_id):
 
 def get_following_count(user_id):
     return UserFollow.query.filter_by(follower_id=user_id).count()
+
+
+def notify_blog_published(post):
+    """Notify all authenticated users (except the author) when a blog post is published.
+    Respects pref_blog_published (default True). Only fires when post becomes
+    is_draft=False AND is_public=True for the first time.
+    """
+    from app.core.db_class.db import User
+    try:
+        users = User.query.filter(
+            User.id != post.user_id,
+            User.is_active == True,
+        ).all()
+        link = f'/blog/post/{post.uuid}'
+        for user in users:
+            pref = _get_pref(user.id)
+            if not pref.pref_blog_published:
+                continue
+            create_notification(
+                user_id=user.id,
+                notif_type='blog_published',
+                title='New blog post published',
+                body=post.title[:120],
+                link=link,
+            )
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f'[notification_core] notify_blog_published error: {e}')
