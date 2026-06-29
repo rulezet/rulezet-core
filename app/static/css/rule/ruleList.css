@@ -879,7 +879,7 @@
 /* ══════════════════════════════════════
    VOTE ACTIVE STATES
 ══════════════════════════════════════ */
-.rl-vote-btn--active-up   { background: #0d6efd !important; color: #fff !important; border-color: #0d6efd !important; }
+.rl-vote-btn--active-up   { background: #198754 !important; color: #fff !important; border-color: #198754 !important; }
 .rl-vote-btn--active-up i { color: #fff !important; }
 .rl-vote-btn--active-down   { background: #dc3545 !important; color: #fff !important; border-color: #dc3545 !important; }
 .rl-vote-btn--active-down i { color: #fff !important; }

@@ -587,8 +587,15 @@ def detail_rule_by_uuid(rule_uuid):
 
     if not rule_to_json:
         rule_to_json = "No json format for this rule"
+
+    current_user_vote = None
+    if current_user.is_authenticated:
+        from app.core.db_class.db import RuleVote as _RV
+        _rv = _RV.query.filter_by(rule_id=rule.id, user_id=current_user.id).first()
+        current_user_vote = _rv.vote_type if _rv else None
+
     if rule:
-        return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string, rule_misp=rule_misp, rule_to_json=rule_to_json, **_nav_counts(rule.id))
+        return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string, rule_misp=rule_misp, rule_to_json=rule_to_json, current_user_vote=current_user_vote, **_nav_counts(rule.id))
     return render_template("404.html")
 
 
@@ -644,10 +651,16 @@ def detail_rule(rule_id)-> render_template:
     if not rule_to_json:
         rule_to_json = "No json format for this rule"
     active_tab = request.args.get('tab', 'detail')
+    current_user_vote = None
+    if current_user.is_authenticated:
+        from app.core.db_class.db import RuleVote as _RV
+        _rv = _RV.query.filter_by(rule_id=rule.id, user_id=current_user.id).first()
+        current_user_vote = _rv.vote_type if _rv else None
     if rule:
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
                                rule_to_json=rule_to_json, active_tab=active_tab,
+                               current_user_vote=current_user_vote,
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
@@ -2339,6 +2352,17 @@ def get_last_cve_rules() -> dict:
             item['cves'] = parsed if isinstance(parsed, list) else []
         except Exception:
             item['cves'] = []
+
+    if current_user.is_authenticated:
+        from app.core.db_class.db import RuleVote as _RV2
+        votes_map2 = {v.rule_id: v.vote_type for v in _RV2.query.filter(
+            _RV2.rule_id.in_(rule_ids), _RV2.user_id == current_user.id
+        ).all()}
+        for item in serialized:
+            item['user_vote'] = votes_map2.get(item['id'])
+    else:
+        for item in serialized:
+            item['user_vote'] = None
 
     return {"success": True, "rules": serialized, "length": len(serialized)}, 200
 

@@ -173,6 +173,17 @@ def get_last_rules() -> dict:
         except Exception:
             item['cves'] = []
 
+    if current_user.is_authenticated:
+        from app.core.db_class.db import RuleVote as _RV
+        votes_map = {v.rule_id: v.vote_type for v in _RV.query.filter(
+            _RV.rule_id.in_(rule_ids), _RV.user_id == current_user.id
+        ).all()}
+        for item in serialized:
+            item['user_vote'] = votes_map.get(item['id'])
+    else:
+        for item in serialized:
+            item['user_vote'] = None
+
     return {'rules': serialized, 'success': True}, 200
 
 @home_blueprint.route("/get_current_user_connected", methods=['GET'])

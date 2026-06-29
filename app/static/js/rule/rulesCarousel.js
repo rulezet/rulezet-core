@@ -154,13 +154,15 @@ const RulesCarousel = {
                                         <div class="btn-group shadow-sm border rounded-pill overflow-hidden">
                                             <button @click="doVote('up', rule.id); animateClick($event)"
                                                     class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn"
+                                                    :class="rule.user_vote === 'up' ? 'carousel-vote-active-up' : ''"
                                                     title="Like this rule">
-                                                <i class="fas fa-thumbs-up text-primary me-1"></i> [[ rule.vote_up ]]
+                                                <i class="fas fa-thumbs-up me-1"></i> [[ rule.vote_up ]]
                                             </button>
                                             <button @click="doVote('down', rule.id); animateClick($event)"
                                                     class="btn btn-sm px-3 border-0 shadow-none btn-animate home-btn"
+                                                    :class="rule.user_vote === 'down' ? 'carousel-vote-active-down' : ''"
                                                     title="Dislike this rule">
-                                                <i class="fas fa-thumbs-down text-danger me-1"></i> [[ rule.vote_down ]]
+                                                <i class="fas fa-thumbs-down me-1"></i> [[ rule.vote_down ]]
                                             </button>
                                         </div>
 
@@ -351,7 +353,7 @@ const RulesCarousel = {
             })
             const data = await res.json()
             const rule = rules_list.value.find(r => r.id === ruleId)
-            if (rule) { rule.vote_up = data.vote_up; rule.vote_down = data.vote_down }
+            if (rule) { rule.vote_up = data.vote_up; rule.vote_down = data.vote_down; rule.user_vote = data.user_vote ?? null }
         }
 
         async function doFavorite(ruleId) {

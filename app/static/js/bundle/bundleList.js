@@ -464,15 +464,15 @@ export default {
                         <div class="btn-group shadow-sm border rounded-pill overflow-hidden">
                             <button @click="handleVote('up', bundle)"
                                     class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn"
-                                    :class="{ 'rl-vote-disabled': !canVote }"
+                                    :class="{ 'rl-vote-disabled': !canVote, 'rl-vote-btn--active-up': bundle.user_vote === 'up' }"
                                     :title="canVote ? 'Upvote' : 'Login to vote'">
-                                <i class="fas fa-thumbs-up text-primary me-1"></i>{{ bundle.vote_up }}
+                                <i class="fas fa-thumbs-up me-1"></i>{{ bundle.vote_up }}
                             </button>
                             <button @click="handleVote('down', bundle)"
                                     class="btn btn-sm px-3 border-0 shadow-none btn-animate home-btn"
-                                    :class="{ 'rl-vote-disabled': !canVote }"
+                                    :class="{ 'rl-vote-disabled': !canVote, 'rl-vote-btn--active-down': bundle.user_vote === 'down' }"
                                     :title="canVote ? 'Downvote' : 'Login to vote'">
-                                <i class="fas fa-thumbs-down text-danger me-1"></i>{{ bundle.vote_down }}
+                                <i class="fas fa-thumbs-down me-1"></i>{{ bundle.vote_down }}
                             </button>
                         </div>
 
@@ -752,13 +752,13 @@ export default {
                             <td v-show="colVisible.votes" class="dt-td">
                                 <div class="rl-vote-row">
                                     <button class="rl-vote-btn rl-vote-btn--up"
-                                            :class="{ 'rl-vote-disabled': !canVote }"
+                                            :class="{ 'rl-vote-disabled': !canVote, 'rl-vote-btn--active-up': bundle.user_vote === 'up' }"
                                             @click.stop="handleVote('up', bundle)">
                                         <i class="fas fa-thumbs-up"></i>
                                         <span>{{ bundle.vote_up }}</span>
                                     </button>
                                     <button class="rl-vote-btn rl-vote-btn--down"
-                                            :class="{ 'rl-vote-disabled': !canVote }"
+                                            :class="{ 'rl-vote-disabled': !canVote, 'rl-vote-btn--active-down': bundle.user_vote === 'down' }"
                                             @click.stop="handleVote('down', bundle)">
                                         <i class="fas fa-thumbs-down"></i>
                                         <span>{{ bundle.vote_down }}</span>
@@ -1368,6 +1368,7 @@ export default {
                 if (res.ok) {
                     bundle.vote_up   = data.vote_up
                     bundle.vote_down = data.vote_down
+                    bundle.user_vote = data.user_vote ?? null
                     emit('vote', { bundleId: bundle.id, type })
                 }
             } catch {}

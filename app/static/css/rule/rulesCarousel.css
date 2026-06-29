@@ -135,3 +135,8 @@
     border-radius: 4px;
     background: var(--bs-primary, #0d6efd);
 }
+
+.carousel-vote-active-up   { background: #198754 !important; color: #fff !important; }
+.carousel-vote-active-up i { color: #fff !important; }
+.carousel-vote-active-down   { background: #dc3545 !important; color: #fff !important; }
+.carousel-vote-active-down i { color: #fff !important; }

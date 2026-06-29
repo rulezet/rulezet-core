@@ -1061,10 +1061,18 @@ def get_bundle_page():
     else:
         structure = [node.to_tree_json() for node in root_nodes]
 
+    bundle_data = bundle.to_json() if hasattr(bundle, 'to_json') else {}
+    if current_user.is_authenticated:
+        from app.core.db_class.db import BundleVote as _BV
+        _bv = _BV.query.filter_by(bundle_id=bundle_id, user_id=current_user.id).first()
+        bundle_data['user_vote'] = _bv.vote_type if _bv else None
+    else:
+        bundle_data['user_vote'] = None
+
     return {
         "success": True,
-        "bundle": bundle.to_json() if hasattr(bundle, 'to_json') else bundle,
-        "rules": pagination.items, 
+        "bundle": bundle_data,
+        "rules": pagination.items,
         "pagination": {
             "current_page": pagination.page,
             "total_pages": pagination.pages,
@@ -1256,6 +1264,20 @@ def bundle_data_table():
             item['attacks'] = atk_map.get(item['id'], [])
     except Exception:
         pass
+
+    if current_user.is_authenticated:
+        from app.core.db_class.db import BundleVote as _BV
+        bundle_ids = [b.id for b in pagination.items]
+        bv_rows = _BV.query.filter(
+            _BV.bundle_id.in_(bundle_ids),
+            _BV.user_id == current_user.id
+        ).all()
+        bv_map = {v.bundle_id: v.vote_type for v in bv_rows}
+        for item in items:
+            item['user_vote'] = bv_map.get(item['id'])
+    else:
+        for item in items:
+            item['user_vote'] = None
 
     return jsonify({
         'items':       items,
