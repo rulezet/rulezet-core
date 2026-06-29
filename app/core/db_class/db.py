@@ -2071,6 +2071,7 @@ class RegisteredInstance(db.Model):
     id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
     uuid          = db.Column(db.String(36), unique=True, nullable=False, index=True)
     public_url    = db.Column(db.String(512), nullable=True)
+    ip_address    = db.Column(db.String(45),  nullable=True)
     version       = db.Column(db.String(64),  nullable=True)
     rules_count   = db.Column(db.Integer,     nullable=True)
     bundles_count = db.Column(db.Integer,     nullable=True)
@@ -2082,6 +2083,7 @@ class RegisteredInstance(db.Model):
         return {
             'uuid':          self.uuid,
             'public_url':    self.public_url,
+            'ip_address':    self.ip_address,
             'version':       self.version,
             'rules_count':   self.rules_count,
             'bundles_count': self.bundles_count,

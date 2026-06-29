@@ -20,6 +20,9 @@ class InstanceRegister(Resource):
         if not uuid or len(uuid) > 36:
             return {'message': 'uuid required'}, 400
 
+        xff = (request.headers.get('X-Forwarded-For') or '').strip()
+        real_ip = (xff.split(',')[0].strip() if xff else request.remote_addr or '')[:45] or None
+
         now  = datetime.utcnow()
         inst = RegisteredInstance.query.filter_by(uuid=uuid).first()
 
@@ -29,6 +32,7 @@ class InstanceRegister(Resource):
                 return {'message': 'ok', 'status': 'rate_limited'}, 200
             inst.last_seen     = now
             inst.ping_count   += 1
+            inst.ip_address    = real_ip
             url = (data.get('url') or '').strip()
             if url:
                 inst.public_url = url
@@ -43,6 +47,7 @@ class InstanceRegister(Resource):
             inst = RegisteredInstance(
                 uuid          = uuid,
                 public_url    = (data.get('url') or '').strip() or None,
+                ip_address    = real_ip,
                 version       = (data.get('version') or '').strip() or None,
                 rules_count   = data.get('rules_count'),
                 bundles_count = data.get('bundles_count'),

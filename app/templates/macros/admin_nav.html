@@ -101,7 +101,7 @@
         <span>Logs</span>
     </a>
 
-    {% if is_official %}
+    {% if config.IS_OFFICIAL_INSTANCE %}
     <a href="/account/admin/instances"
        class="dr-nav__item {% if active == 'instances' %}active{% endif %}">
         <i class="fa-solid fa-earth-americas"></i>

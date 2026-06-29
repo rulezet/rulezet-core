@@ -113,6 +113,7 @@
                         <th style="width:40px;"></th>
                         <th>UUID</th>
                         <th>URL</th>
+                        <th>IP</th>
                         <th>Version</th>
                         <th class="text-center">Rules</th>
                         <th class="text-center">Bundles</th>
@@ -159,6 +160,13 @@
                             <a href="{{ inst.public_url }}" target="_blank" rel="noopener"
                                class="text-decoration-none text-truncate d-block"
                                style="font-size:.82rem;max-width:200px;">{{ inst.public_url }}</a>
+                            {% else %}
+                            <span class="text-muted" style="font-size:.8rem;">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if inst.ip_address %}
+                            <code style="font-size:.78rem;">{{ inst.ip_address }}</code>
                             {% else %}
                             <span class="text-muted" style="font-size:.8rem;">—</span>
                             {% endif %}
