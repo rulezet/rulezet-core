@@ -124,8 +124,9 @@ def cmd_help() -> None:
                   {D}→ Use this for local development{R}
 
   {G}start-prod{R}    {D}Full production launch:{R}
-                  {D}  backup → git pull → pip install → db upgrade → app.py{R}
-                  {D}→ Use this on the production server{R}
+                  {D}  backup → git pull → pip install → db upgrade{R}
+                  {D}  → flask run --host=0.0.0.0 --port=80{R}
+                  {D}→ Use this on the production server (needs root for port 80){R}
 
   {G}test{R}          {D}Run the full test suite (FLASKENV=testing){R}
 
@@ -221,9 +222,9 @@ def cmd_start_prod() -> None:
     ok("Database schema up to date")
 
     # 3. Start
-    header("Starting Rulezet (production)")
+    header("Starting Rulezet (production — 0.0.0.0:80)")
     try:
-        run([PYTHON, "app.py"], extra_env={"FLASKENV": "production"})
+        run([FLASK, "run", "--host=0.0.0.0", "--port=80"], extra_env={"FLASKENV": "production"})
     except KeyboardInterrupt:
         print("\n\033[0;37m  · Server stopped.\033[0m")
 
