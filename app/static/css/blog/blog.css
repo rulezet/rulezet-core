@@ -130,14 +130,16 @@
 }
 
 /* ── Excerpt card text clamp ── */
-.blog-excerpt {
+.blog-excerpt,
+.blog-preview-text {
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 5;
     -webkit-box-orient: vertical;
     overflow: hidden;
     color: var(--subtle-text-color);
-    font-size: .9rem;
-    line-height: 1.6;
+    font-size: .92rem;
+    line-height: 1.7;
+    min-height: 4.5rem;
 }
 
 /* ── Attached rules/bundles panel ── */

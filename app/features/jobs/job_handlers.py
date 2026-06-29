@@ -2074,101 +2074,361 @@ def _circl_severity(score):
         return 'Unknown'
 
 
+def _parse_circl_v5(raw):
+    """Normalise a CIRCL v5 CVE record into a flat dict used by _render_cve_section."""
+    meta = raw.get('cveMetadata', {})
+    containers = raw.get('containers', {})
+    cna  = containers.get('cna', {})
+    adps = containers.get('adp', []) if isinstance(containers.get('adp'), list) else []
 
-def _render_cve_section(cve_id, data, rule_count=0, bundle_count=0):
-    """Return markdown content for one CVE from CIRCL API response data."""
-    summary  = data.get('summary') or ''
-    cvss     = data.get('cvss3') or data.get('cvss') or ''
-    vector   = data.get('cvss3-vector') or data.get('cvss-vector') or ''
-    cwe      = data.get('cwe') or ''
-    pub      = (data.get('Published') or '')[:10]
-    assigner = data.get('assigner') or ''
-    vendors  = data.get('vendors') or {}
-    credits_ = data.get('credits') or []
-    epss     = data.get('epss') or {}
+    # ── Basic metadata ────────────────────────────────────────────────────
+    cve_id   = meta.get('cveId', '')
+    assigner = meta.get('assignerShortName', '')
+    pub_raw  = meta.get('datePublished', '') or cna.get('datePublic', '')
+    mod_raw  = meta.get('dateUpdated', '')
+    pub      = pub_raw[:10] if pub_raw else ''
+    mod      = mod_raw[:10] if mod_raw else ''
 
+    # ── Title & description ───────────────────────────────────────────────
+    cna_title = cna.get('title', '')
+    descs     = cna.get('descriptions', [])
+    summary   = next((d.get('value', '') for d in descs if d.get('lang', 'en').startswith('en')), '')
+
+    # ── CVSS from CNA metrics ─────────────────────────────────────────────
+    cvss_score, cvss_vector, cvss_sev = '', '', ''
+    for m in (cna.get('metrics') or []):
+        for key in ('cvssV3_1', 'cvssV3_0', 'cvssV4_0', 'cvssV2_0'):
+            if key in m:
+                c = m[key]
+                cvss_score  = str(c.get('baseScore', ''))
+                cvss_vector = c.get('vectorString', '')
+                cvss_sev    = c.get('baseSeverity', _circl_severity(cvss_score))
+                break
+        if cvss_score:
+            break
+
+    # ── CWE ───────────────────────────────────────────────────────────────
+    cwes = []
+    for pt in (cna.get('problemTypes') or []):
+        for d in (pt.get('descriptions') or []):
+            cid  = d.get('cweId', '')
+            cname = d.get('description', '')
+            if cid:
+                cwes.append((cid, cname))
+
+    # ── Affected products ────────────────────────────────────────────────
+    affected = []
+    for a in (cna.get('affected') or []):
+        entry = {
+            'vendor':  a.get('vendor', ''),
+            'product': a.get('product', '') or a.get('packageName', ''),
+            'url':     a.get('collectionURL', ''),
+            'versions': [
+                v for v in (a.get('versions') or [])
+                if v.get('status') == 'affected'
+            ],
+            'default': a.get('defaultStatus', ''),
+        }
+        if entry['product']:
+            affected.append(entry)
+
+    # ── References (CNA + CVE Program ADP) ───────────────────────────────
     refs = []
-    for r in (data.get('references') or []):
-        u = r if isinstance(r, str) else (r.get('url') or r.get('href') or '')
-        if u.startswith('http'):
-            refs.append(u)
-    refs = refs[:6]
+    seen = set()
+    for src in [cna] + adps:
+        for r in (src.get('references') or []):
+            u = r.get('url', '')
+            if u and u not in seen:
+                seen.add(u)
+                refs.append({'url': u, 'name': r.get('name', ''), 'tags': r.get('tags', [])})
 
-    sev = _circl_severity(cvss) if cvss else ''
+    # ── Credits ───────────────────────────────────────────────────────────
+    credits_ = []
+    for c in (cna.get('credits') or []):
+        v = c.get('value', '') or c.get('user', '')
+        if v:
+            credits_.append(v)
+
+    # ── Timeline ──────────────────────────────────────────────────────────
+    timeline = [
+        {'date': t.get('time', '')[:10], 'event': t.get('value', '')}
+        for t in (cna.get('timeline') or [])
+        if t.get('value')
+    ]
+
+    # ── SSVC from CISA ADP ────────────────────────────────────────────────
+    ssvc = {}
+    for adp in adps:
+        for m in (adp.get('metrics') or []):
+            o = m.get('other', {})
+            if o.get('type') == 'ssvc':
+                content = o.get('content', {})
+                for opt in (content.get('options') or []):
+                    for k, v in opt.items():
+                        ssvc[k] = v
+                break
+
+    return {
+        'cve_id':      cve_id,
+        'cna_title':   cna_title,
+        'summary':     summary,
+        'assigner':    assigner,
+        'pub':         pub,
+        'mod':         mod,
+        'cvss_score':  cvss_score,
+        'cvss_vector': cvss_vector,
+        'cvss_sev':    cvss_sev or _circl_severity(cvss_score),
+        'cwes':        cwes,
+        'affected':    affected,
+        'refs':        refs,
+        'credits':     credits_,
+        'timeline':    timeline,
+        'ssvc':        ssvc,
+    }
+
+
+
+def _render_cve_section(cve_id, parsed, epss_pct=None, rule_count=0, bundle_count=0):
+    """Generate rich, human-readable markdown from a parsed CIRCL v5 record."""
+    summary    = parsed.get('summary', '')
+    cna_title  = parsed.get('cna_title', '')
+    cvss_score = parsed.get('cvss_score', '')
+    cvss_vec   = parsed.get('cvss_vector', '')
+    cvss_sev   = parsed.get('cvss_sev', '')
+    cwes       = parsed.get('cwes', [])
+    affected   = parsed.get('affected', [])
+    refs       = parsed.get('refs', [])
+    cred_names = parsed.get('credits', [])
+    timeline   = parsed.get('timeline', [])
+    ssvc       = parsed.get('ssvc', {})
+    assigner   = parsed.get('assigner', '')
+    pub        = parsed.get('pub', '')
+    mod        = parsed.get('mod', '')
+
+    sev = cvss_sev or _circl_severity(cvss_score)
+    sev_lower = sev.lower() if sev else ''
+
     lines = []
 
+    # ── Lead paragraph ────────────────────────────────────────────────────
+    prod_names = list({a['product'] for a in affected if a['product']})[:4]
+    prod_str   = ', '.join(f'**{p}**' for p in prod_names) if prod_names else ''
+
+    if cna_title:
+        lines.append(f'> {cna_title}\n')
+
     if summary:
-        lines += ['## Overview\n', f'{summary}\n']
+        lines.append(summary + '\n')
+    elif prod_str:
+        lines.append(f'{cve_id} is a {sev_lower} vulnerability affecting {prod_str}.\n')
 
-    # Severity table
-    rows = []
-    if cvss:
-        rows.append(('CVSS Score', f'**{cvss}**' + (f' ({sev})' if sev else '')))
-    if vector:
-        rows.append(('CVSS Vector', f'`{vector}`'))
-    if cwe:
-        num = cwe.replace('CWE-', '')
-        rows.append(('CWE', f'[{cwe}](https://cwe.mitre.org/data/definitions/{num}.html)'))
-    if pub:
-        rows.append(('Published', pub))
-    if epss and isinstance(epss, dict):
-        sc = epss.get('score') or epss.get('epss')
-        if sc:
-            try:
-                rows.append(('EPSS Score', f'{float(sc)*100:.2f}%'))
-            except Exception:
-                pass
-    if assigner:
-        rows.append(('Assigner', assigner))
-    if rows:
-        lines += ['\n## Severity & Impact\n', '| Metric | Value |', '|--------|-------|']
-        lines += [f'| {k} | {v} |' for k, v in rows]
+    # ── Severity & Risk Assessment ────────────────────────────────────────
+    lines.append('## Severity & Risk Assessment\n')
 
-    # Products
-    if vendors:
-        lines.append('\n## Affected Products\n')
-        for vendor, prods in vendors.items():
-            for p in (prods if isinstance(prods, list) else [prods]):
-                lines.append(f'- **{vendor}**: {p}')
+    sev_prose = {
+        'Critical': (
+            f'This vulnerability is rated **Critical** (CVSS {cvss_score}) — '
+            'the highest possible severity level. Successful exploitation can lead to '
+            'complete system compromise, often remotely and without authentication.'
+        ),
+        'High': (
+            f'Rated **High** severity (CVSS {cvss_score}), this vulnerability represents '
+            'a significant risk to affected systems and should be treated as a priority.'
+        ),
+        'Medium': (
+            f'This vulnerability carries a **Medium** severity rating (CVSS {cvss_score}). '
+            'Exploitation typically requires specific conditions or user interaction, but it '
+            'should not be ignored in exposed environments.'
+        ),
+        'Low': (
+            f'Classified as **Low** severity (CVSS {cvss_score}), the practical impact of '
+            'this vulnerability is limited in most deployment scenarios.'
+        ),
+    }.get(sev, '')
+    if sev_prose:
+        lines.append(sev_prose + '\n')
 
-    # Detection rules
+    # CVSS breakdown
+    if cvss_vec:
+        # Parse vector components for human explanation
+        parts = {}
+        for segment in cvss_vec.split('/'):
+            if ':' in segment:
+                k, v = segment.split(':', 1)
+                parts[k] = v
+        av_map  = {'N': 'Network (remotely exploitable)', 'A': 'Adjacent network', 'L': 'Local access', 'P': 'Physical access'}
+        ac_map  = {'L': 'Low complexity', 'H': 'High complexity'}
+        pr_map  = {'N': 'No privileges required', 'L': 'Low privileges', 'H': 'High privileges'}
+        ui_map  = {'N': 'No user interaction required', 'R': 'Requires user interaction'}
+        imp_map = {'H': 'High', 'L': 'Low', 'N': 'None'}
+        lines.append('**CVSS v3.1 Breakdown:**\n')
+        lines.append(f'| Attribute | Value |')
+        lines.append(f'|-----------|-------|')
+        lines.append(f'| Score | **{cvss_score}** ({sev}) |')
+        if 'AV' in parts: lines.append(f'| Attack Vector | {av_map.get(parts["AV"], parts["AV"])} |')
+        if 'AC' in parts: lines.append(f'| Attack Complexity | {ac_map.get(parts["AC"], parts["AC"])} |')
+        if 'PR' in parts: lines.append(f'| Privileges Required | {pr_map.get(parts["PR"], parts["PR"])} |')
+        if 'UI' in parts: lines.append(f'| User Interaction | {ui_map.get(parts["UI"], parts["UI"])} |')
+        if 'C'  in parts: lines.append(f'| Confidentiality Impact | {imp_map.get(parts["C"], parts["C"])} |')
+        if 'I'  in parts: lines.append(f'| Integrity Impact | {imp_map.get(parts["I"], parts["I"])} |')
+        if 'A'  in parts: lines.append(f'| Availability Impact | {imp_map.get(parts["A"], parts["A"])} |')
+        lines.append(f'| Vector String | `{cvss_vec}` |\n')
+
+    # EPSS
+    if epss_pct is not None:
+        risk_level = 'extremely high' if epss_pct > 50 else 'high' if epss_pct > 10 else 'moderate' if epss_pct > 1 else 'low'
+        lines.append(
+            f'**EPSS Score: {epss_pct:.2f}%** — {risk_level} probability of real-world exploitation '
+            f'within the next 30 days based on threat intelligence data.\n'
+        )
+
+    # SSVC
+    if ssvc:
+        lines.append('**SSVC Assessment (CISA):**\n')
+        for k, v in ssvc.items():
+            lines.append(f'- **{k}**: {v}')
+        lines.append('')
+
+    # CWE
+    if cwes:
+        lines.append('**Weakness Classification:**\n')
+        for cid, cname in cwes:
+            num = cid.replace('CWE-', '')
+            lines.append(f'- [{cid}](https://cwe.mitre.org/data/definitions/{num}.html) — {cname}')
+        lines.append('')
+
+    # ── Affected products & versions ──────────────────────────────────────
+    if affected:
+        lines.append('## Affected Products & Versions\n')
+        shown = []
+        for a in affected:
+            prod    = a['product']
+            vendor  = a['vendor']
+            vers    = a['versions']
+            default = a['default']
+            url     = a['url']
+
+            if not prod or prod in shown:
+                continue
+            shown.append(prod)
+
+            header = f'**{prod}**'
+            if vendor:
+                header += f' by {vendor}'
+            if url:
+                header += f' ([source]({url}))'
+            lines.append(f'### {header}\n')
+
+            if vers:
+                lines.append('Affected versions:\n')
+                for v in vers[:10]:
+                    ver_str = v.get('version', '')
+                    thru    = v.get('versionEndIncluding', '') or v.get('lessThanOrEqual', '')
+                    lt      = v.get('lessThan', '')
+                    if thru:
+                        lines.append(f'- `{ver_str}` through `{thru}` (inclusive)')
+                    elif lt:
+                        lines.append(f'- `{ver_str}` up to (but not including) `{lt}`')
+                    else:
+                        lines.append(f'- `{ver_str}`')
+                lines.append('')
+            elif default == 'unaffected':
+                lines.append('*Default status: unaffected — specific versions listed above may still be impacted.*\n')
+
+    # ── Timeline ─────────────────────────────────────────────────────────
+    if timeline or pub:
+        lines.append('## Vulnerability Timeline\n')
+        if pub:
+            lines.append(f'- **{pub}** — CVE published by {assigner or "the assigning organization"}')
+        for t in timeline:
+            d, e = t['date'], t['event']
+            if d:
+                lines.append(f'- **{d}** — {e}')
+            else:
+                lines.append(f'- {e}')
+        if mod and mod != pub:
+            lines.append(f'- **{mod}** — Entry last updated')
+        lines.append('')
+
+    # ── Detection with Rulezet ────────────────────────────────────────────
     if rule_count or bundle_count:
+        lines.append('## Detect This Threat with Rulezet\n')
         parts = []
         if rule_count:
             parts.append(f'**{rule_count}** detection rule{"s" if rule_count != 1 else ""}')
         if bundle_count:
-            parts.append(f'**{bundle_count}** bundle{"s" if bundle_count != 1 else ""}')
-        lines += [
-            '\n## Detection Rules\n',
-            f'Rulezet contains {" and ".join(parts)} for {cve_id}. '
-            'They have been automatically attached to this post.',
-        ]
+            parts.append(f'**{bundle_count}** detection bundle{"s" if bundle_count != 1 else ""}')
+        lines.append(
+            f'Rulezet already has {" and ".join(parts)} that cover {cve_id}. '
+            'These have been automatically attached to this post so your security team can deploy '
+            'them immediately. Browse and download them in the **Detection Rules** section below.\n'
+        )
+        if rule_count:
+            lines.append(
+                f'Using these rules you can identify exploitation attempts, post-exploitation '
+                f'activity, and malicious artifacts associated with {cve_id} in your environment.\n'
+            )
 
-    # Remediation
+    # ── What to do ────────────────────────────────────────────────────────
+    lines.append('## What Should You Do?\n')
+    lines.append(
+        '**Patch immediately.** Apply the latest security updates from the vendor. '
+        'If patching is not immediately possible, consider the following interim measures:\n'
+    )
+    lines.append('1. Identify all instances of affected software in your environment')
+    lines.append('2. Apply available workarounds or mitigations from the vendor advisory')
+    lines.append('3. Increase monitoring for indicators of compromise')
+    if rule_count or bundle_count:
+        lines.append('4. Deploy the detection rules available in Rulezet to catch exploitation attempts')
+    lines.append('5. Review access controls and restrict exposure of vulnerable services')
+    lines.append(
+        f'\nFor the latest patch information and affected version ranges, '
+        f'consult the [official {cve_id} advisory](https://vulnerability.circl.lu/vuln/{cve_id.lower()}) '
+        f'on Vulnerability Lookup.\n'
+    )
+
+    # ── References ────────────────────────────────────────────────────────
+    if refs:
+        lines.append('## External References\n')
+        # Categorize
+        advisories, patches, other_refs = [], [], []
+        for r in refs[:20]:
+            u    = r['url']
+            name = r['name'] or u
+            tags = r.get('tags', [])
+            label = r['name'] if r['name'] and r['name'] != u else None
+            entry = f'- [{label or u}]({u})' if label else f'- {u}'
+            if any(t in tags for t in ('vendor-advisory', 'x_refsource_REDHAT', 'x_refsource_DEBIAN')):
+                advisories.append(entry)
+            elif any(t in tags for t in ('patch', 'issue-tracking')):
+                patches.append(entry)
+            else:
+                other_refs.append(entry)
+        if advisories:
+            lines.append('**Vendor Advisories:**\n')
+            lines += advisories + ['']
+        if patches:
+            lines.append('**Patches & Issue Trackers:**\n')
+            lines += patches + ['']
+        if other_refs:
+            lines.append('**Additional Resources:**\n')
+            lines += other_refs[:8] + ['']
+
+    # ── Credits ───────────────────────────────────────────────────────────
+    if cred_names:
+        lines.append('## Credits\n')
+        if len(cred_names) == 1:
+            lines.append(f'This vulnerability was discovered and responsibly disclosed by **{cred_names[0]}**.\n')
+        else:
+            lines.append('Responsibly disclosed by:\n')
+            lines += [f'- {n}' for n in cred_names]
+            lines.append('')
+
     lines += [
-        '\n## Remediation\n',
-        f'Apply the latest patches from the vendor. '
-        f'Monitor the [{cve_id} entry on Vulnerability Lookup]'
-        f'(https://vulnerability.circl.lu/vuln/{cve_id.lower()}) for updates.',
-    ]
-
-    # References
-    lines += ['\n## References\n',
-              f'- [{cve_id} — Vulnerability Lookup](https://vulnerability.circl.lu/vuln/{cve_id.lower()})']
-    lines += [f'- {u}' for u in refs]
-
-    # Credits
-    if credits_:
-        lines.append('\n## Credits\n')
-        for c in (credits_ if isinstance(credits_, list) else [credits_]):
-            name = c if isinstance(c, str) else (c.get('name') or c.get('value') or str(c))
-            lines.append(f'- {name}')
-
-    lines += [
-        '\n---',
-        f'*Auto-generated from [Vulnerability Lookup](https://vulnerability.circl.lu). '
-        f'For up-to-date details visit the [{cve_id} entry]'
-        f'(https://vulnerability.circl.lu/vuln/{cve_id.lower()}).*',
+        '---',
+        f'*Data sourced from [Vulnerability Lookup](https://vulnerability.circl.lu) '
+        f'(assigner: {assigner}). For real-time updates and additional technical details, '
+        f'visit the [{cve_id} entry](https://vulnerability.circl.lu/vuln/{cve_id.lower()}).*',
     ]
     return '\n'.join(lines)
 
@@ -2235,41 +2495,122 @@ def handle_blog_from_cve(job, app):
             log_job(job, f'{len(matched_bundle_ids)} matching bundle(s) found.', event='progress')
 
         # 3. Cover image — use the bundled Vulnerability Lookup default
-        cover_url = '/static/uploads/blog/vendor/Vulnerability-Lookup-default.jpg'
+        cover_url = '/static/uploads/blog/vendor/vulnerability_to_rulezet.png'
 
-        # 4. Generate content
+        # 4. Parse v5 format + fetch EPSS for each CVE
+        parsed_data = {}
+        epss_map    = {}
+        for cve_id in cve_ids:
+            raw = cve_data.get(cve_id, {})
+            parsed_data[cve_id] = _parse_circl_v5(raw) if raw else {}
+            try:
+                er = _req.get(
+                    f'https://vulnerability.circl.lu/api/epss/{cve_id}',
+                    timeout=8,
+                    headers={'Accept': 'application/json', 'User-Agent': 'Rulezet/1.0'},
+                )
+                if er.ok:
+                    edata = er.json().get('data') or []
+                    if edata:
+                        sc = edata[0].get('epss') or edata[0].get('score')
+                        if sc:
+                            epss_map[cve_id] = float(sc) * 100
+            except Exception:
+                pass
+
+        def _make_title(cve_id, parsed, epss_pct, rule_count, bundle_count):
+            """Generate a compelling, specific blog post title."""
+            sev       = parsed.get('cvss_sev', '') or _circl_severity(parsed.get('cvss_score', ''))
+            cvss      = parsed.get('cvss_score', '')
+            cna_title = parsed.get('cna_title', '')
+            affected  = parsed.get('affected', [])
+            prod_names = [a['product'] for a in affected if a['product']]
+
+            sev_label = {
+                'Critical': 'Critical',
+                'High':     'High-Severity',
+                'Medium':   'Medium-Severity',
+                'Low':      'Low-Risk',
+            }.get(sev, sev)
+
+            # Subject = cna_title or first product
+            subject = cna_title or (prod_names[0] if prod_names else '')
+
+            if epss_pct is not None and epss_pct > 50:
+                exploit_note = ' — Active Exploitation Risk'
+            elif epss_pct is not None and epss_pct > 10:
+                exploit_note = ' — High Exploitation Probability'
+            else:
+                exploit_note = ''
+
+            if rule_count or bundle_count:
+                det_parts = []
+                if rule_count:
+                    det_parts.append(f'{rule_count} Rule{"s" if rule_count != 1 else ""}')
+                if bundle_count:
+                    det_parts.append(f'{bundle_count} Bundle{"s" if bundle_count != 1 else ""}')
+                det = f' | {" & ".join(det_parts)} in Rulezet'
+            else:
+                det = ' | What You Need to Know'
+
+            if subject:
+                title = f'{cve_id} ({sev_label} CVSS {cvss}): {subject}{exploit_note}{det}'
+            else:
+                title = f'{cve_id} ({sev_label} CVSS {cvss}){exploit_note}{det}'
+
+            return title[:500]
+
+        def _make_excerpt(cve_id, parsed, epss_pct, rule_count, bundle_count):
+            sev     = parsed.get('cvss_sev', '')
+            cvss    = parsed.get('cvss_score', '')
+            summary = (parsed.get('summary', '') or '')[:300]
+            det = ''
+            if rule_count or bundle_count:
+                parts = []
+                if rule_count:
+                    parts.append(f'{rule_count} detection rule{"s" if rule_count != 1 else ""}')
+                if bundle_count:
+                    parts.append(f'{bundle_count} bundle{"s" if bundle_count != 1 else ""}')
+                det = f' Rulezet contains {" and ".join(parts)} to protect your environment.'
+            epss_note = f' EPSS: {epss_pct:.1f}% exploitation probability.' if epss_pct else ''
+            intro = (
+                f'{cve_id} is a {sev.lower()} vulnerability (CVSS {cvss}).'
+                if cvss else f'Security advisory for {cve_id}.'
+            )
+            return f'{intro}{epss_note} {summary}{"…" if len(summary) == 300 else ""}{det}'.strip()
+
+        # 5. Generate content
         nr, nb = len(matched_rule_ids), len(matched_bundle_ids)
         if len(cve_ids) == 1:
-            cid = cve_ids[0]
-            dat = cve_data.get(cid, {})
-            summary = dat.get('summary', '')
-            cvss    = dat.get('cvss3') or dat.get('cvss') or ''
-            sev     = _circl_severity(cvss) if cvss else ''
-            short   = summary[:70].rstrip() + ('…' if len(summary) > 70 else '')
-            title   = f'{cid}: {short}' if short else cid
-            excerpt = (
-                f'Security advisory for {cid}.'
-                + (f' CVSS {cvss} ({sev}).' if cvss else '')
-                + (f' {summary[:200]}{"…" if len(summary) > 200 else ""}' if summary else '')
-            )
-            content = _render_cve_section(cid, dat, nr, nb)
+            cid     = cve_ids[0]
+            parsed  = parsed_data.get(cid, {})
+            epss_pct = epss_map.get(cid)
+            title   = _make_title(cid, parsed, epss_pct, nr, nb)
+            excerpt = _make_excerpt(cid, parsed, epss_pct, nr, nb)
+            content = _render_cve_section(cid, parsed, epss_pct=epss_pct, rule_count=nr, bundle_count=nb)
         else:
-            cids_str = ', '.join(cve_ids)
-            title    = f'Security Advisory: {cids_str[:80]}{"…" if len(cids_str) > 80 else ""}'
-            excerpt  = f'Combined advisory covering {len(cve_ids)} vulnerabilities: {cids_str[:200]}.'
-            content  = '\n\n---\n\n'.join(
-                f'# {cid}\n\n' + _render_cve_section(cid, cve_data.get(cid, {}))
-                for cid in cve_ids
+            cids_str  = ', '.join(cve_ids)
+            all_sevs  = [p.get('cvss_sev', '') for p in parsed_data.values() if p.get('cvss_sev')]
+            worst_sev = next((s for s in ['Critical', 'High', 'Medium', 'Low'] if s in all_sevs), '')
+            title     = (
+                f'Security Advisory: {cids_str[:70]}{"…" if len(cids_str) > 70 else ""}'
+                + (f' ({worst_sev})' if worst_sev else '')
+                + (f' | {nr} Detection Rule{"s" if nr != 1 else ""} in Rulezet' if nr else '')
             )
-            if nr or nb:
-                parts = []
-                if nr: parts.append(f'**{nr}** detection rule{"s" if nr != 1 else ""}')
-                if nb: parts.append(f'**{nb}** bundle{"s" if nb != 1 else ""}')
-                content += (
-                    f'\n\n## Detection Rules\n\n'
-                    f'Rulezet contains {" and ".join(parts)} for these vulnerabilities. '
-                    'They have been automatically attached to this post.'
+            excerpt = (
+                f'Combined vulnerability advisory covering {len(cve_ids)} CVEs: {cids_str[:200]}.'
+                + (f' {nr} detection rule{"s" if nr != 1 else ""} available in Rulezet.' if nr else '')
+            )
+            sections = []
+            for cid in cve_ids:
+                parsed   = parsed_data.get(cid, {})
+                epss_pct = epss_map.get(cid)
+                sections.append(
+                    f'# {cid}\n\n'
+                    + _render_cve_section(cid, parsed, epss_pct=epss_pct,
+                                          rule_count=nr, bundle_count=nb)
                 )
+            content = '\n\n---\n\n'.join(sections)
 
         # 5. Update the draft post
         post.title           = title[:500]

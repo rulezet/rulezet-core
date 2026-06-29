@@ -277,9 +277,20 @@
                        class="blog-tag text-decoration-none">[[ tag ]]</a>
                 </div>
 
-                <!-- CVE IDs -->
+                <!-- CVE IDs — same badge style as VulnerabilityDisplaysList -->
                 <div v-if="post.cve_ids && post.cve_ids.length" class="d-flex flex-wrap gap-2 mb-4">
-                    <span v-for="cve in post.cve_ids" :key="cve" class="blog-cve-chip">[[ cve ]]</span>
+                    <a v-for="cve in post.cve_ids" :key="cve"
+                       :href="cveUrl(cve)" target="_blank" rel="noopener"
+                       class="d-flex align-items-center rounded-2 shadow-sm text-decoration-none on-hover-lift"
+                       :class="cveColor(cve)"
+                       style="font-size:.75rem;font-family:monospace;overflow:hidden;min-height:26px;transition:transform .2s;">
+                        <div class="px-2 py-1 bg-black bg-opacity-10 text-white border-end border-white border-opacity-10 h-100 d-flex align-items-center">
+                            <i :class="cveIcon(cve)" style="font-size:.7rem;"></i>
+                        </div>
+                        <div class="px-2 py-1 fw-bold text-white">
+                            <span class="opacity-75">[[ cve.split('-')[0].toUpperCase() ]]</span>-[[ cve.replace(/^[A-Za-z_:-]+-/, '') ]]
+                        </div>
+                    </a>
                 </div>
 
                 <!-- ATT&CK techniques -->
@@ -631,6 +642,31 @@
             onMounted(() => { fetchPost(); window.addEventListener('keydown', onKeydown) })
             onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
+            // ── CVE badge helpers (mirrors VulnerabilityDisplaysList) ──────────
+            function cveColor(id) {
+                const v = (id || '').toUpperCase()
+                if (v.startsWith('CVE'))   return 'bg-danger'
+                if (v.startsWith('GHSA'))  return 'bg-warning text-dark'
+                if (v.startsWith('PYSEC')) return 'bg-info text-dark'
+                if (v.startsWith('RHSA'))  return 'bg-danger'
+                if (v.startsWith('GCVE'))  return 'bg-primary'
+                return 'bg-dark'
+            }
+            function cveIcon(id) {
+                const v = (id || '').toUpperCase()
+                if (v.startsWith('CVE'))   return 'fas fa-shield-alt'
+                if (v.startsWith('GHSA'))  return 'fas fa-bug'
+                if (v.startsWith('PYSEC')) return 'fas fa-code'
+                return 'fas fa-exclamation-triangle'
+            }
+            function cveUrl(id) {
+                const v = (id || '').toUpperCase()
+                if (v.startsWith('CVE'))   return `https://vulnerability.circl.lu/vuln/${id.toLowerCase()}`
+                if (v.startsWith('GHSA'))  return `https://github.com/advisories?query=${id}`
+                if (v.startsWith('PYSEC')) return `https://osv.dev/vulnerability/${id}`
+                return `https://www.google.com/search?q=${id}`
+            }
+
             return {
                 post, isLoading, ruleListUrl, bundleListUrl,
                 renderedContent, shareUrl, currentShareUrl, isRegenerating,
@@ -638,6 +674,7 @@
                 isAuthenticated, isAdmin, currentUserId, csrfToken,
                 isShared, regenerateKey, copyShareUrl, toggleAccess, toggleDraft,
                 confirmDelete, deletePost,
+                cveColor, cveIcon, cveUrl,
             }
         }
     }).mount('#main-container')
