@@ -882,10 +882,7 @@ def notify_blog_published(post):
     """
     from app.core.db_class.db import User
     try:
-        users = User.query.filter(
-            User.id != post.user_id,
-            User.is_active == True,
-        ).all()
+        users = User.query.filter(User.id != post.user_id).all()
         link = f'/blog/post/{post.uuid}'
         for user in users:
             pref = _get_pref(user.id)
