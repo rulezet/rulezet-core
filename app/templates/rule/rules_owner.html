@@ -73,7 +73,8 @@
                 { key: 'bundle',   label: 'Add to bundle',  icon: 'fa-layer-group' },
                 { key: 'delete',   label: 'Delete',         icon: 'fa-trash', variant: 'danger' },
             ]"
-            @create="goToAddRule">
+            @create="goToAddRule"
+            @delete="handleDelete">
         </rule-list>
     </div>
 
@@ -123,7 +124,22 @@
 
             function goToAddRule() { window.location.href = '/rule/create_rule' }
 
-            return { activeTab, favOpened, csrfToken, currentUserId, isAdmin, goToAddRule }
+            async function handleDelete(rule) {
+                if (!confirm(`Delete "${rule.title}"?`)) return
+                try {
+                    const res = await fetch('/rule/delete_rule', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ id: rule.id }),
+                    })
+                    const data = await res.json()
+                    create_message(data.message, data.toast_class || (res.ok ? 'success' : 'danger'))
+                } catch (e) {
+                    create_message('Delete failed.', 'danger')
+                }
+            }
+
+            return { activeTab, favOpened, csrfToken, currentUserId, isAdmin, goToAddRule, handleDelete }
         }
     }).mount('#main-container')
 </script>

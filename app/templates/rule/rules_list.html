@@ -56,7 +56,8 @@
         :current-user-is-authenticated="{{ current_user.is_authenticated | tojson }}"
         :csrf-token="csrfToken"
         :sync-url="true"
-        @create="goToAddRule">
+        @create="goToAddRule"
+        @delete="handleDelete">
     </rule-list>
 
 </div>
@@ -80,7 +81,23 @@
         },
         setup() {
             function goToAddRule() { window.location.href = '/rule/create_rule' }
-            return { csrfToken, goToAddRule }
+
+            async function handleDelete(rule) {
+                if (!confirm(`Delete "${rule.title}"?`)) return
+                try {
+                    const res = await fetch('/rule/delete_rule', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ id: rule.id }),
+                    })
+                    const data = await res.json()
+                    create_message(data.message, data.toast_class || (res.ok ? 'success' : 'danger'))
+                } catch (e) {
+                    create_message('Delete failed.', 'danger')
+                }
+            }
+
+            return { csrfToken, goToAddRule, handleDelete }
         }
     }).mount('#main-container')
 </script>

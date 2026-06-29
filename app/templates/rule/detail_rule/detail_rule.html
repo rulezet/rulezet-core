@@ -1051,18 +1051,23 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
                 create_message(data.message, data.toast_class);
             }
             async function deleteRule() {
-                const params = new URLSearchParams({
-                    id: rule_id
-                })
-                const res = await fetch('/rule/delete_rule?' + params.toString())
-                if (await res.status == 200) {
-                    var myModalEl = document.getElementById('delete_rule_modal_' + rule_id);
-                    var modal = bootstrap.Modal.getInstance(myModalEl)
-                    modal.hide();
-                    window.location.href = `/rule/rules_list`;
+                try {
+                    const res = await fetch('/rule/delete_rule', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
+                        body: JSON.stringify({ id: rule_id }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        const myModalEl = document.getElementById('delete_rule_modal_' + rule_id);
+                        if (myModalEl) bootstrap.Modal.getInstance(myModalEl)?.hide();
+                        window.location.href = '/rule/rules_list';
+                    } else {
+                        create_message(data.message || 'Delete failed.', data.toast_class || 'danger');
+                    }
+                } catch (e) {
+                    create_message('Delete failed.', 'danger');
                 }
-
-
             }
 
             async function vote(voteType) {
