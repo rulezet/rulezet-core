@@ -36,5 +36,5 @@ app/rule/output_rules
 /static/uploads/*
 app/modules/*
 !app/modules/cti
-app/static/uploads/*
+app/static/uploads/avatars
 app/uploads/*

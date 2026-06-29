@@ -2057,3 +2057,238 @@ def handle_bulk_parse_fields(job, app):
 
     log_job(job, f'Done — {offset} rules processed, {total_updated} rules updated.',
             level='success', event='done')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# blog_from_cve — auto-generate a blog post from vulnerability data
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _circl_severity(score):
+    try:
+        s = float(score)
+        if s >= 9.0: return 'Critical'
+        if s >= 7.0: return 'High'
+        if s >= 4.0: return 'Medium'
+        return 'Low'
+    except Exception:
+        return 'Unknown'
+
+
+
+def _render_cve_section(cve_id, data, rule_count=0, bundle_count=0):
+    """Return markdown content for one CVE from CIRCL API response data."""
+    summary  = data.get('summary') or ''
+    cvss     = data.get('cvss3') or data.get('cvss') or ''
+    vector   = data.get('cvss3-vector') or data.get('cvss-vector') or ''
+    cwe      = data.get('cwe') or ''
+    pub      = (data.get('Published') or '')[:10]
+    assigner = data.get('assigner') or ''
+    vendors  = data.get('vendors') or {}
+    credits_ = data.get('credits') or []
+    epss     = data.get('epss') or {}
+
+    refs = []
+    for r in (data.get('references') or []):
+        u = r if isinstance(r, str) else (r.get('url') or r.get('href') or '')
+        if u.startswith('http'):
+            refs.append(u)
+    refs = refs[:6]
+
+    sev = _circl_severity(cvss) if cvss else ''
+    lines = []
+
+    if summary:
+        lines += ['## Overview\n', f'{summary}\n']
+
+    # Severity table
+    rows = []
+    if cvss:
+        rows.append(('CVSS Score', f'**{cvss}**' + (f' ({sev})' if sev else '')))
+    if vector:
+        rows.append(('CVSS Vector', f'`{vector}`'))
+    if cwe:
+        num = cwe.replace('CWE-', '')
+        rows.append(('CWE', f'[{cwe}](https://cwe.mitre.org/data/definitions/{num}.html)'))
+    if pub:
+        rows.append(('Published', pub))
+    if epss and isinstance(epss, dict):
+        sc = epss.get('score') or epss.get('epss')
+        if sc:
+            try:
+                rows.append(('EPSS Score', f'{float(sc)*100:.2f}%'))
+            except Exception:
+                pass
+    if assigner:
+        rows.append(('Assigner', assigner))
+    if rows:
+        lines += ['\n## Severity & Impact\n', '| Metric | Value |', '|--------|-------|']
+        lines += [f'| {k} | {v} |' for k, v in rows]
+
+    # Products
+    if vendors:
+        lines.append('\n## Affected Products\n')
+        for vendor, prods in vendors.items():
+            for p in (prods if isinstance(prods, list) else [prods]):
+                lines.append(f'- **{vendor}**: {p}')
+
+    # Detection rules
+    if rule_count or bundle_count:
+        parts = []
+        if rule_count:
+            parts.append(f'**{rule_count}** detection rule{"s" if rule_count != 1 else ""}')
+        if bundle_count:
+            parts.append(f'**{bundle_count}** bundle{"s" if bundle_count != 1 else ""}')
+        lines += [
+            '\n## Detection Rules\n',
+            f'Rulezet contains {" and ".join(parts)} for {cve_id}. '
+            'They have been automatically attached to this post.',
+        ]
+
+    # Remediation
+    lines += [
+        '\n## Remediation\n',
+        f'Apply the latest patches from the vendor. '
+        f'Monitor the [{cve_id} entry on Vulnerability Lookup]'
+        f'(https://vulnerability.circl.lu/vuln/{cve_id.lower()}) for updates.',
+    ]
+
+    # References
+    lines += ['\n## References\n',
+              f'- [{cve_id} — Vulnerability Lookup](https://vulnerability.circl.lu/vuln/{cve_id.lower()})']
+    lines += [f'- {u}' for u in refs]
+
+    # Credits
+    if credits_:
+        lines.append('\n## Credits\n')
+        for c in (credits_ if isinstance(credits_, list) else [credits_]):
+            name = c if isinstance(c, str) else (c.get('name') or c.get('value') or str(c))
+            lines.append(f'- {name}')
+
+    lines += [
+        '\n---',
+        f'*Auto-generated from [Vulnerability Lookup](https://vulnerability.circl.lu). '
+        f'For up-to-date details visit the [{cve_id} entry]'
+        f'(https://vulnerability.circl.lu/vuln/{cve_id.lower()}).*',
+    ]
+    return '\n'.join(lines)
+
+
+@register_handler('blog_from_cve')
+def handle_blog_from_cve(job, app):
+    payload         = job.payload or {}
+    post_id         = payload.get('post_id')
+    cve_ids         = payload.get('cve_ids') or []
+    formats         = payload.get('formats') or []
+    include_rules   = payload.get('include_rules', True)
+    include_bundles = payload.get('include_bundles', True)
+
+    with app.app_context():
+        import requests as _req
+        from app.core.db_class.db import BlogPost, Bundle
+        from app.features.blog.blog_core import _sync_tags, _sync_rules, _sync_bundles, _make_slug
+
+        post = BlogPost.query.get(post_id)
+        if not post:
+            log_job(job, f'BlogPost {post_id} not found.', level='error', event='error')
+            return
+
+        log_job(job, f'Generating CVE post for: {", ".join(cve_ids)}', event='start')
+
+        # 1. Fetch CVE data
+        cve_data = {}
+        for cve_id in cve_ids:
+            try:
+                resp = _req.get(
+                    f'https://vulnerability.circl.lu/api/cve/{cve_id.lower()}',
+                    timeout=15,
+                    headers={'Accept': 'application/json', 'User-Agent': 'Rulezet/1.0'},
+                )
+                if resp.ok:
+                    cve_data[cve_id] = resp.json()
+                    log_job(job, f'Fetched {cve_id} from Vulnerability Lookup.', event='progress')
+                else:
+                    log_job(job, f'CIRCL API {resp.status_code} for {cve_id}.', level='warning', event='warning')
+                    cve_data[cve_id] = {}
+            except Exception as exc:
+                log_job(job, f'Could not fetch {cve_id}: {exc}', level='warning', event='warning')
+                cve_data[cve_id] = {}
+
+        # 2. Match rules / bundles
+        matched_rule_ids, matched_bundle_ids = [], []
+        if include_rules:
+            q = Rule.query.filter(Rule.is_deleted == False)
+            if formats:
+                q = q.filter(Rule.format.in_(formats))
+            for cve_id in cve_ids:
+                for r in q.filter(Rule.cve_id.ilike(f'%{cve_id}%')).all():
+                    if r.id not in matched_rule_ids:
+                        matched_rule_ids.append(r.id)
+            log_job(job, f'{len(matched_rule_ids)} matching rule(s) found.', event='progress')
+
+        if include_bundles:
+            for cve_id in cve_ids:
+                for b in Bundle.query.filter(
+                    Bundle.vulnerability_identifiers.ilike(f'%{cve_id}%')
+                ).all():
+                    if b.id not in matched_bundle_ids:
+                        matched_bundle_ids.append(b.id)
+            log_job(job, f'{len(matched_bundle_ids)} matching bundle(s) found.', event='progress')
+
+        # 3. Cover image — use the bundled Vulnerability Lookup default
+        cover_url = '/static/uploads/blog/vendor/Vulnerability-Lookup-default.jpg'
+
+        # 4. Generate content
+        nr, nb = len(matched_rule_ids), len(matched_bundle_ids)
+        if len(cve_ids) == 1:
+            cid = cve_ids[0]
+            dat = cve_data.get(cid, {})
+            summary = dat.get('summary', '')
+            cvss    = dat.get('cvss3') or dat.get('cvss') or ''
+            sev     = _circl_severity(cvss) if cvss else ''
+            short   = summary[:70].rstrip() + ('…' if len(summary) > 70 else '')
+            title   = f'{cid}: {short}' if short else cid
+            excerpt = (
+                f'Security advisory for {cid}.'
+                + (f' CVSS {cvss} ({sev}).' if cvss else '')
+                + (f' {summary[:200]}{"…" if len(summary) > 200 else ""}' if summary else '')
+            )
+            content = _render_cve_section(cid, dat, nr, nb)
+        else:
+            cids_str = ', '.join(cve_ids)
+            title    = f'Security Advisory: {cids_str[:80]}{"…" if len(cids_str) > 80 else ""}'
+            excerpt  = f'Combined advisory covering {len(cve_ids)} vulnerabilities: {cids_str[:200]}.'
+            content  = '\n\n---\n\n'.join(
+                f'# {cid}\n\n' + _render_cve_section(cid, cve_data.get(cid, {}))
+                for cid in cve_ids
+            )
+            if nr or nb:
+                parts = []
+                if nr: parts.append(f'**{nr}** detection rule{"s" if nr != 1 else ""}')
+                if nb: parts.append(f'**{nb}** bundle{"s" if nb != 1 else ""}')
+                content += (
+                    f'\n\n## Detection Rules\n\n'
+                    f'Rulezet contains {" and ".join(parts)} for these vulnerabilities. '
+                    'They have been automatically attached to this post.'
+                )
+
+        # 5. Update the draft post
+        post.title           = title[:500]
+        post.slug            = _make_slug(title, exclude_id=post.id)
+        post.excerpt         = excerpt
+        post.content         = content
+        post.cover_image_url = cover_url
+        post.cve_ids         = cve_ids
+        post.external_links  = [
+            {'url': f'https://vulnerability.circl.lu/vuln/{c.lower()}',
+             'label': f'{c} — Vulnerability Lookup'}
+            for c in cve_ids
+        ]
+        post.updated_at = datetime.datetime.utcnow()
+        db.session.flush()
+
+        _sync_tags(post, ['vulnerability', 'cve'] + [c.lower() for c in cve_ids])
+        _sync_rules(post, matched_rule_ids)
+        _sync_bundles(post, matched_bundle_ids)
+        db.session.commit()
+
+        log_job(job, f'Post "{title[:80]}" ready.', level='success', event='done')

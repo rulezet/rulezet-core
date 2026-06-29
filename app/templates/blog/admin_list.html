@@ -11,30 +11,51 @@
 <div class="container-fluid mt-4" id="main-container" v-cloak>
 
     <!-- Banner — full width, above the 2-col layout -->
-    <div class="explorer-banner mb-4">
-        <i class="fa-solid fa-newspaper banner-watermark"></i>
-        <nav aria-label="breadcrumb" class="mb-2">
-            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
-                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                <li class="breadcrumb-item"><a href="/admin" class="text-decoration-none text-muted">Admin</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">Blog</li>
-            </ol>
-        </nav>
-        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
-            <div class="d-flex align-items-center gap-3">
+    <div class="position-relative mb-4">
+        <div class="explorer-banner mb-0">
+            <i class="fa-solid fa-newspaper banner-watermark"></i>
+            <nav aria-label="breadcrumb" class="mb-2">
+                <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                    <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                    <li class="breadcrumb-item"><a href="/admin" class="text-decoration-none text-muted">Admin</a></li>
+                    <li class="breadcrumb-item active text-muted" aria-current="page">Blog</li>
+                </ol>
+            </nav>
+            <div class="d-flex align-items-center gap-3 mb-3">
                 <div class="banner-icon"><i class="fa-solid fa-newspaper"></i></div>
                 <div>
                     <h2 class="fw-bold mb-1">Blog Management</h2>
                     <div class="banner-accent"></div>
                 </div>
             </div>
-            <a href="/blog/admin/create" class="btn btn-primary rounded-pill px-4">
-                <i class="fa-solid fa-plus me-2"></i>New Post
-            </a>
+            <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
+                Manage all blog posts — create, edit, toggle visibility, and share private posts.
+            </p>
         </div>
-        <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
-            Manage all blog posts — create, edit, toggle visibility, and share private posts.
-        </p>
+        <!-- Dropdown lives outside the banner so overflow:hidden doesn't clip it -->
+        <div class="dropdown position-absolute" style="top:1.75rem;right:2rem;z-index:10;">
+            <button class="btn btn-primary rounded-pill px-4 dropdown-toggle" type="button"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fa-solid fa-plus me-2"></i>New Post
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end border-0 shadow-lg rounded-3 p-2" style="min-width:220px;">
+                <li>
+                    <a class="dropdown-item rounded-2 px-3 py-2" href="/blog/admin/create">
+                        <i class="fa-solid fa-pen-to-square me-2 text-primary"></i>
+                        <span class="fw-semibold">Manual Post</span>
+                        <div class="text-muted" style="font-size:.73rem;margin-top:1px;">Write from scratch</div>
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider my-1"></li>
+                <li>
+                    <button class="dropdown-item rounded-2 px-3 py-2" type="button" @click="openCveModal()">
+                        <i class="fa-solid fa-shield-halved me-2 text-danger"></i>
+                        <span class="fw-semibold">From Vulnerability</span>
+                        <div class="text-muted" style="font-size:.73rem;margin-top:1px;">Auto-generate from CVE data</div>
+                    </button>
+                </li>
+            </ul>
+        </div>
     </div>
 
     <!-- 2-col layout: admin nav + content -->
@@ -202,6 +223,168 @@
 
         </div>
     </div>
+
+    <!-- ── Create from Vulnerability modal ─────────────────────────────────── -->
+    <div class="modal fade" id="cvePostModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius:16px;background:var(--card-bg-color);">
+
+                <!-- Header -->
+                <div class="modal-header border-0 pb-0 px-4 pt-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="width:40px;height:40px;border-radius:12px;background:#dc354518;display:flex;align-items:center;justify-content:center;">
+                            <i class="fa-solid fa-shield-halved" style="color:#dc3545;"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0" style="color:var(--text-color);">Create Post from Vulnerability</h5>
+                            <div style="font-size:.78rem;color:var(--subtle-text-color);">Auto-generates a blog post from CVE data via Vulnerability Lookup.</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" @click="resetCveModal()"></button>
+                </div>
+
+                <div class="modal-body px-4 py-3">
+
+                    <!-- Step 1: CVE input -->
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <div style="width:22px;height:22px;border-radius:50%;background:#0d6efd;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#fff;font-weight:700;flex-shrink:0;">1</div>
+                            <span class="fw-semibold" style="font-size:.88rem;color:var(--text-color);">Select CVE(s)</span>
+                        </div>
+                        <vulnerability-input
+                            v-model="cveIds"
+                            :target-id="null"
+                            target-type="rule"
+                            placeholder="Type a CVE ID e.g. CVE-2024-3094 and press Enter"
+                            label="">
+                        </vulnerability-input>
+                    </div>
+
+                    <!-- Step 2: Format filter -->
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <div style="width:22px;height:22px;border-radius:50%;background:#0d6efd;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#fff;font-weight:700;flex-shrink:0;">2</div>
+                            <span class="fw-semibold" style="font-size:.88rem;color:var(--text-color);">Rule formats to include</span>
+                            <span class="text-muted" style="font-size:.75rem;">(leave all unchecked = all formats)</span>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 mb-2">
+                            <label v-for="fmt in availableFormats" :key="fmt.id"
+                                   class="d-flex align-items-center px-3 py-2 rounded-pill"
+                                   style="cursor:pointer;transition:all .15s;"
+                                   :style="cveFormats.includes(fmt.id)
+                                       ? 'background:#0d6efd18;border:1.5px solid #0d6efd;'
+                                       : 'background:var(--light-bg-color);border:1.5px solid var(--border-color);'">
+                                <input type="checkbox" class="d-none" :value="fmt.id" v-model="cveFormats">
+                                <span style="font-size:.82rem;"
+                                      :style="cveFormats.includes(fmt.id) ? 'color:#0d6efd;font-weight:600;' : 'color:var(--text-color);'">
+                                    [[ fmt.label ]]
+                                </span>
+                            </label>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" @click="cveFormats = availableFormats.map(f => f.id)"
+                                    class="btn btn-sm rounded-pill px-3" style="font-size:.75rem;border:1px solid var(--border-color);background:transparent;color:var(--subtle-text-color);">
+                                Select all
+                            </button>
+                            <button type="button" @click="cveFormats = []"
+                                    class="btn btn-sm rounded-pill px-3" style="font-size:.75rem;border:1px solid var(--border-color);background:transparent;color:var(--subtle-text-color);">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Options -->
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <div style="width:22px;height:22px;border-radius:50%;background:#0d6efd;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#fff;font-weight:700;flex-shrink:0;">3</div>
+                            <span class="fw-semibold" style="font-size:.88rem;color:var(--text-color);">Options</span>
+                        </div>
+                        <div class="d-flex gap-4 flex-wrap">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="cveIncludeRules"
+                                       v-model="cveIncludeRules" role="switch">
+                                <label class="form-check-label" for="cveIncludeRules" style="font-size:.85rem;color:var(--text-color);">
+                                    <i class="fa-solid fa-scroll me-1 text-primary"></i>Attach matching rules
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="cveIncludeBundles"
+                                       v-model="cveIncludeBundles" role="switch">
+                                <label class="form-check-label" for="cveIncludeBundles" style="font-size:.85rem;color:var(--text-color);">
+                                    <i class="fa-solid fa-layer-group me-1 text-primary"></i>Attach matching bundles
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Match preview (appears after CVE IDs are entered) -->
+                    <div v-if="cveIds.length > 0" class="rounded-3 p-3"
+                         style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+                        <div v-if="cvePreviewLoading" class="text-center py-2">
+                            <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                            <span style="font-size:.82rem;color:var(--subtle-text-color);">Searching rules & bundles…</span>
+                        </div>
+                        <div v-else>
+                            <div class="d-flex gap-2 flex-wrap mb-2">
+                                <div v-if="cveIncludeRules" class="d-flex align-items-center gap-2 px-3 py-2 rounded-3"
+                                     :style="cvePreview.rules > 0 ? 'background:#0d6efd12;border:1px solid #0d6efd33;' : 'background:var(--card-bg-color);border:1px solid var(--border-color);'">
+                                    <i class="fa-solid fa-scroll fa-sm"
+                                       :style="cvePreview.rules > 0 ? 'color:#0d6efd' : 'color:var(--subtle-text-color)'"></i>
+                                    <span class="fw-bold" style="font-size:.95rem;"
+                                          :style="cvePreview.rules > 0 ? 'color:#0d6efd' : 'color:var(--subtle-text-color)'">[[ cvePreview.rules ]]</span>
+                                    <span style="font-size:.75rem;color:var(--subtle-text-color);">rule[[ cvePreview.rules !== 1 ? 's' : '' ]]</span>
+                                </div>
+                                <div v-if="cveIncludeBundles" class="d-flex align-items-center gap-2 px-3 py-2 rounded-3"
+                                     :style="cvePreview.bundles > 0 ? 'background:#19875412;border:1px solid #19875433;' : 'background:var(--card-bg-color);border:1px solid var(--border-color);'">
+                                    <i class="fa-solid fa-layer-group fa-sm"
+                                       :style="cvePreview.bundles > 0 ? 'color:#198754' : 'color:var(--subtle-text-color)'"></i>
+                                    <span class="fw-bold" style="font-size:.95rem;"
+                                          :style="cvePreview.bundles > 0 ? 'color:#198754' : 'color:var(--subtle-text-color)'">[[ cvePreview.bundles ]]</span>
+                                    <span style="font-size:.75rem;color:var(--subtle-text-color);">bundle[[ cvePreview.bundles !== 1 ? 's' : '' ]]</span>
+                                </div>
+                            </div>
+                            <div v-if="cvePreview.ruleSamples && cvePreview.ruleSamples.length" class="mt-1">
+                                <div v-for="r in cvePreview.ruleSamples.slice(0, 3)" :key="r.id"
+                                     class="d-flex align-items-center gap-2 py-1">
+                                    <span class="badge rounded-pill px-2"
+                                          style="font-size:.65rem;background:#0d6efd22;color:#0d6efd;text-transform:uppercase;">[[ r.format ]]</span>
+                                    <span style="font-size:.78rem;color:var(--text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px;">
+                                        [[ r.title ]]
+                                    </span>
+                                </div>
+                                <div v-if="cvePreview.rules > 3"
+                                     style="font-size:.72rem;color:var(--subtle-text-color);margin-top:2px;">
+                                    … and [[ cvePreview.rules - 3 ]] more
+                                </div>
+                            </div>
+                            <div v-if="cvePreview.rules === 0 && cvePreview.bundles === 0"
+                                 style="font-size:.8rem;color:var(--subtle-text-color);">
+                                <i class="fa-solid fa-circle-info me-1"></i>
+                                No matching rules or bundles found for the selected CVE(s).
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer border-0 px-4 pb-4 pt-2 d-flex gap-2">
+                    <button type="button" class="btn btn-sm rounded-pill px-4"
+                            style="background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);"
+                            data-bs-dismiss="modal" @click="resetCveModal()">Cancel</button>
+                    <button type="button" class="btn btn-sm rounded-pill px-4 ms-auto"
+                            style="background:#198754;color:#fff;border:none;"
+                            :disabled="cveIds.length === 0 || cveCreating"
+                            @click="createFromCve()">
+                        <span v-if="cveCreating" class="spinner-border spinner-border-sm me-2"></span>
+                        <i v-else class="fa-solid fa-wand-magic-sparkles me-1"></i>
+                        Create Post
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <!-- Delete confirm modal -->
@@ -235,12 +418,14 @@
 {% block script %}
 <script type="module">
     import { create_message } from '/static/js/toaster.js'
-    const { createApp, ref, computed, onMounted } = Vue
+    import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js'
+    const { createApp, ref, computed, watch, onMounted } = Vue
 
     const csrfToken = '{{ csrf_token() }}'
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { VulnerabilityInput },
         setup() {
             const posts        = ref([])
             const isLoading    = ref(false)
@@ -254,7 +439,30 @@
             const postToDelete = ref(null)
             const PER_PAGE     = 20
             let   _modal       = null
+            let   _cveModal    = null
             let   _searchTimer = null
+
+            // ── CVE modal state ──────────────────────────────────────────
+            const cveIds            = ref([])
+            const cveFormats        = ref([])
+            const cveIncludeRules   = ref(true)
+            const cveIncludeBundles = ref(true)
+            const cveCreating       = ref(false)
+            const cvePreviewLoading = ref(false)
+            const cvePreview        = ref({ rules: 0, bundles: 0, ruleSamples: [] })
+            const availableFormats  = ref([])
+            let   _previewTimer     = null
+
+            async function loadAvailableFormats() {
+                try {
+                    const res  = await fetch('/rule/get_rules_formats')
+                    const data = await res.json()
+                    availableFormats.value = (data.formats || []).map(f => ({
+                        id:    f.name,
+                        label: f.name.charAt(0).toUpperCase() + f.name.slice(1),
+                    }))
+                } catch { /* keep empty */ }
+            }
 
             const stats = computed(() => ({
                 total:   totalPosts.value,
@@ -357,12 +565,97 @@
                 return result
             })
 
-            onMounted(fetchPosts)
+            // ── CVE match preview ────────────────────────────────────────
+            async function loadCvePreview() {
+                if (!cveIds.value.length) {
+                    cvePreview.value = { rules: 0, bundles: 0, ruleSamples: [] }
+                    return
+                }
+                cvePreviewLoading.value = true
+                try {
+                    const params = new URLSearchParams({
+                        cve_ids: cveIds.value.join(','),
+                        formats: cveFormats.value.join(','),
+                    })
+                    const res  = await fetch('/blog/admin/cve_rule_search?' + params)
+                    const data = await res.json()
+                    cvePreview.value = {
+                        rules:       cveIncludeRules.value   ? (data.rules   || []).length : null,
+                        bundles:     cveIncludeBundles.value ? (data.bundles || []).length : null,
+                        ruleSamples: cveIncludeRules.value   ? (data.rules   || []).slice(0, 5) : [],
+                    }
+                } catch (e) {
+                    cvePreview.value = { rules: null, bundles: null, ruleSamples: [] }
+                } finally {
+                    cvePreviewLoading.value = false
+                }
+            }
+
+            watch([cveIds, cveFormats, cveIncludeRules, cveIncludeBundles], () => {
+                clearTimeout(_previewTimer)
+                _previewTimer = setTimeout(loadCvePreview, 400)
+            }, { deep: true })
+
+            function openCveModal() {
+                if (!_cveModal)
+                    _cveModal = new bootstrap.Modal(document.getElementById('cvePostModal'))
+                _cveModal.show()
+            }
+
+            function resetCveModal() {
+                cveIds.value            = []
+                cveFormats.value        = []
+                cveIncludeRules.value   = true
+                cveIncludeBundles.value = true
+                cvePreview.value        = { rules: 0, bundles: 0, ruleSamples: [] }
+                cveCreating.value       = false
+            }
+
+            async function createFromCve() {
+                if (!cveIds.value.length) return
+                cveCreating.value = true
+                try {
+                    const res  = await fetch('/blog/admin/create_from_cve', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body:    JSON.stringify({
+                            cve_ids:         cveIds.value,
+                            formats:         cveFormats.value,
+                            include_rules:   cveIncludeRules.value,
+                            include_bundles: cveIncludeBundles.value,
+                        }),
+                    })
+                    const data = await res.json()
+                    if (res.ok && data.success) {
+                        _cveModal?.hide()
+                        create_message(
+                            'Post draft created — redirecting to editor…',
+                            'success-subtle'
+                        )
+                        setTimeout(() => {
+                            window.location.href = '/blog/admin/edit/' + data.post_uuid
+                                + '?generating=' + data.job_uuid
+                        }, 800)
+                    } else {
+                        create_message(data.message || 'Failed to create post.', 'danger-subtle')
+                        cveCreating.value = false
+                    }
+                } catch {
+                    create_message('Network error.', 'danger-subtle')
+                    cveCreating.value = false
+                }
+            }
+
+            onMounted(() => { fetchPosts(); loadAvailableFormats() })
 
             return {
                 posts, isLoading, isDeleting, togglingId, searchQuery, filterStatus,
                 currentPage, totalPages, totalPosts, postToDelete, stats, paginationRange,
                 debouncedSearch, onFilterChange, goToPage, toggleAccess, confirmDelete, doDelete,
+                // CVE modal
+                availableFormats, cveIds, cveFormats, cveIncludeRules, cveIncludeBundles,
+                cveCreating, cvePreviewLoading, cvePreview,
+                openCveModal, resetCveModal, createFromCve,
             }
         }
     }).mount('#main-container')

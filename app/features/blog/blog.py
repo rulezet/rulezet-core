@@ -468,6 +468,110 @@ def api_post(post_uuid):
     return jsonify(data)
 
 
+# ── CVE-to-post: CIRCL proxy, rule search, and create-from-cve ───────────────
+
+
+@blog_blueprint.route('/admin/circl_proxy/<path:cve_id>')
+@login_required
+def circl_proxy(cve_id):
+    """Proxy CVE data from vulnerability.circl.lu to avoid browser CORS issues."""
+    err = _admin_required()
+    if err:
+        return err
+    import requests
+    try:
+        resp = requests.get(
+            f'https://vulnerability.circl.lu/api/cve/{cve_id.lower()}',
+            timeout=10,
+            headers={'Accept': 'application/json', 'User-Agent': 'Rulezet/1.0'},
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 502
+
+
+@blog_blueprint.route('/admin/cve_rule_search')
+@login_required
+def cve_rule_search():
+    """Return rules and bundles matching the given CVE IDs and optional format filter."""
+    err = _admin_required()
+    if err:
+        return err
+    from app.core.db_class.db import Rule, Bundle
+
+    cve_ids = [c.strip() for c in request.args.get('cve_ids', '').split(',') if c.strip()][:10]
+    formats = [f.strip() for f in request.args.get('formats', '').split(',') if f.strip()]
+
+    seen_rule_ids, matched_rules = set(), []
+    seen_bnd_ids,  matched_bnds = set(), []
+
+    for cve_id in cve_ids:
+        q = Rule.query.filter(Rule.is_deleted == False, Rule.cve_id.ilike(f'%{cve_id}%'))
+        if formats:
+            q = q.filter(Rule.format.in_(formats))
+        for r in q.limit(50).all():
+            if r.id not in seen_rule_ids:
+                seen_rule_ids.add(r.id)
+                matched_rules.append({'id': r.id, 'uuid': r.uuid, 'title': r.title, 'format': r.format})
+
+        for b in Bundle.query.filter(Bundle.vulnerability_identifiers.ilike(f'%{cve_id}%')).limit(20).all():
+            if b.id not in seen_bnd_ids:
+                seen_bnd_ids.add(b.id)
+                matched_bnds.append({'id': b.id, 'uuid': b.uuid, 'name': b.name})
+
+    return jsonify({'rules': matched_rules, 'bundles': matched_bnds})
+
+
+@blog_blueprint.route('/admin/create_from_cve', methods=['POST'])
+@login_required
+def create_from_cve():
+    """Create an empty draft blog post and queue a background job to fill it from CVE data."""
+    err = _admin_required()
+    if err:
+        return err
+    from app.features.jobs.jobs_core import create_job
+
+    data            = request.get_json(silent=True) or {}
+    cve_ids         = [str(c).strip().upper() for c in (data.get('cve_ids') or []) if c][:20]
+    formats         = [str(f).strip().lower() for f in (data.get('formats') or [])]
+    include_rules   = bool(data.get('include_rules', True))
+    include_bundles = bool(data.get('include_bundles', True))
+
+    if not cve_ids:
+        return jsonify({'success': False, 'message': 'At least one CVE ID is required.'}), 400
+
+    # Create a placeholder draft immediately so we have a UUID to redirect to
+    cve_label = ', '.join(cve_ids[:3]) + ('…' if len(cve_ids) > 3 else '')
+    post = BlogModel.create_post({
+        'title':     f'[Generating] {cve_label}',
+        'content':   '',
+        'is_draft':  True,
+        'is_public': False,
+    }, user_id=current_user.id)
+
+    job = create_job(
+        job_type='blog_from_cve',
+        payload={
+            'post_id':         post.id,
+            'cve_ids':         cve_ids,
+            'formats':         formats,
+            'include_rules':   include_rules,
+            'include_bundles': include_bundles,
+        },
+        label=f'Generate blog post from {cve_label}',
+        created_by=current_user.id,
+        total=len(cve_ids),
+    )
+
+    log_activity(
+        action='blog.create_from_cve',
+        description=f'Auto-generated blog post from {cve_label}',
+        extra={'cve_ids': cve_ids, 'post_uuid': post.uuid, 'job_uuid': job.uuid},
+    )
+
+    return jsonify({'success': True, 'post_uuid': post.uuid, 'job_uuid': job.uuid})
+
+
 # ── Cover image upload ────────────────────────────────────────────────────────
 
 @blog_blueprint.route('/admin/resolve_import_refs', methods=['POST'])

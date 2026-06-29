@@ -17,6 +17,21 @@
 {% block content %}
 <div class="container-fluid mt-4" id="main-container" v-cloak>
 
+    <!-- CVE generation in-progress banner -->
+    <div v-if="isGenerating"
+         class="d-flex align-items-center gap-3 rounded-3 px-4 py-3 mb-4"
+         style="background:#0d6efd12;border:1.5px solid #0d6efd44;">
+        <div class="spinner-border spinner-border-sm text-primary flex-shrink-0" role="status"></div>
+        <div>
+            <div class="fw-semibold" style="color:var(--text-color);font-size:.9rem;">
+                Generating post content from CVE data…
+            </div>
+            <div style="font-size:.78rem;color:var(--subtle-text-color);">
+                The page will refresh automatically once ready.
+            </div>
+        </div>
+    </div>
+
     <!-- Banner — full width, above the 2-col layout -->
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-pen-to-square banner-watermark"></i>
@@ -657,7 +672,7 @@
     import RuleList            from '/static/js/rule/ruleList.js'
     import BundleList          from '/static/js/bundle/bundleList.js'
 
-    const { createApp, ref, onMounted } = Vue
+    const { createApp, ref, onMounted, onUnmounted } = Vue
 
     const isAdmin       = {{ current_user.is_admin() | tojson }}
     const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }}
@@ -832,7 +847,36 @@
                 }
             }
 
-            onMounted(() => { if (IS_EDIT) prefillAttached() })
+            // ── CVE generation polling ─────────────────────────────────────────
+            const isGenerating = ref(false)
+            let _pollTimer = null
+
+            function startGenerationPoll(jobUuid) {
+                isGenerating.value = true
+                async function poll() {
+                    try {
+                        const res  = await fetch(`/jobs/status/${jobUuid}`)
+                        const data = await res.json()
+                        if (data.status === 'done' || data.status === 'failed') {
+                            isGenerating.value = false
+                            // Strip ?generating= from URL then hard-reload to get fresh data
+                            history.replaceState(null, '', window.location.pathname)
+                            window.location.reload()
+                            return
+                        }
+                    } catch { /* keep polling */ }
+                    _pollTimer = setTimeout(poll, 2000)
+                }
+                poll()
+            }
+
+            onUnmounted(() => clearTimeout(_pollTimer))
+
+            onMounted(() => {
+                if (IS_EDIT) prefillAttached()
+                const jobUuid = new URLSearchParams(window.location.search).get('generating')
+                if (jobUuid) startGenerationPoll(jobUuid)
+            })
 
             // ── External links ─────────────────────────────────────────────────
             function addLink() {
@@ -1013,6 +1057,7 @@
             }
 
             return {
+                isGenerating,
                 form, selectedTags, selectedAttacks,
                 isSaving, lastSavedAt, shareUrl, isRegenerating,
                 selectedRules, selectedBundles,
