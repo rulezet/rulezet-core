@@ -579,24 +579,54 @@ def detail_rule_by_uuid(rule_uuid):
         return render_template("404.html")
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
-    rule_misp = content_convert_to_misp_object(rule.id)
-    if not rule_misp:
-        return 
+
+
+    rule_misp_object = get_rule_misp_object(rule.id)
+
+    if not rule_misp_object:
+        rule_misp_object = None
+
+    rule_misp_event = get_rule_misp_event(rule.id)
+    if not rule_misp_event:
+        rule_misp_event = None
 
     rule_to_json = json.dumps(rule.to_json_detail(), indent=4)
 
     if not rule_to_json:
         rule_to_json = "No json format for this rule"
-
+    active_tab = request.args.get('tab', 'detail')
     current_user_vote = None
     if current_user.is_authenticated:
         from app.core.db_class.db import RuleVote as _RV
         _rv = _RV.query.filter_by(rule_id=rule.id, user_id=current_user.id).first()
         current_user_vote = _rv.vote_type if _rv else None
-
     if rule:
-        return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string, rule_misp=rule_misp, rule_to_json=rule_to_json, current_user_vote=current_user_vote, **_nav_counts(rule.id))
+        return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
+                               rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
+                               rule_to_json=rule_to_json, active_tab=active_tab,
+                               current_user_vote=current_user_vote,
+                               **_nav_counts(rule.id))
     return render_template("404.html")
+
+    # rule_misp = content_convert_to_misp_object(rule.id)
+    # if not rule_misp:
+    #     return 
+
+    # rule_to_json = json.dumps(rule.to_json_detail(), indent=4)
+
+    # if not rule_to_json:
+    #     rule_to_json = "No json format for this rule"
+
+    # current_user_vote = None
+    # if current_user.is_authenticated:
+    #     from app.core.db_class.db import RuleVote as _RV
+    #     _rv = _RV.query.filter_by(rule_id=rule.id, user_id=current_user.id).first()
+    #     current_user_vote = _rv.vote_type if _rv else None
+
+    # if rule:
+    #     return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string, rule_misp=rule_misp, rule_to_json=rule_to_json, current_user_vote=current_user_vote, **_nav_counts(rule.id))
+    # return render_template("404.html")
+
 
 
 def _rule_similarity_count(rule_id):
