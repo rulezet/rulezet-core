@@ -2260,7 +2260,8 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          search_field='all', exact_match=False, rule_type=None,
                          author=None, vulnerabilities=None, licenses=None,
                          tags=None, editor_names=None, bundle_id=None, attacks=None,
-                         status=None, workspace_uuid=None, exclude_workspace_uuid=None):
+                         status=None, workspace_uuid=None, exclude_workspace_uuid=None,
+                         ids=None):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -2284,6 +2285,10 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         workspace_uuid=workspace_uuid,
         exclude_workspace_uuid=exclude_workspace_uuid,
     )
+
+    if ids:
+        from app.core.db_class.db import Rule as _Rule
+        query = query.filter(_Rule.id.in_(ids))
 
     col = _DATA_TABLE_SORT_KEYS.get(sort)
     if col is not None:

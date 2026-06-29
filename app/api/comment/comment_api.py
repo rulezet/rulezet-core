@@ -22,7 +22,7 @@ from app import db
 
 comment_ns = Namespace('comments', description='Unified comment thread API')
 
-_VALID_OBJECT_TYPES = {'rule', 'bundle', 'proposal'}
+_VALID_OBJECT_TYPES = {'rule', 'bundle', 'proposal', 'blog_post'}
 _PER_PAGE_MAX = 50
 
 
@@ -184,6 +184,21 @@ class CommentList(Resource):
                     # Notify the proposal creator when someone else comments
                     notify_proposal_comment(object_id, proposal.user_id, current_user.id, title,
                                             comment_id=comment.id)
+
+            elif object_type == 'blog_post':
+                from app.core.db_class.db import BlogPost
+                blog_post = BlogPost.query.get(object_id)
+                log_activity("blog_comment.add",
+                             f"Added comment on blog post id={object_id}",
+                             target_type="blog_comment", target_id=comment.id,
+                             extra={"post_id": object_id})
+                if blog_post and blog_post.is_public:
+                    link  = f'/blog/post/{blog_post.uuid}?comment={comment.id}'
+                    notify_followers_new_comment(current_user.id, blog_post.title, link, is_public=True)
+                    if parent_id:
+                        parent_comment = UnifiedComment.query.get(parent_id)
+                        if parent_comment and parent_comment.created_by:
+                            notify_comment_reply(parent_comment.created_by, current_user.id, blog_post.title, link)
 
         except Exception as _e:
             print(f"[comment_api] notification error: {_e}")

@@ -3275,6 +3275,8 @@ def rules_data_table():
     single_author = request.args.get('author', None, type=str)
     author_filter = authors_list or ([single_author] if single_author else None)
 
+    ids_filter = request.args.getlist('ids[]', type=int) or None
+
     pagination = RuleModel.get_rules_data_table(
         page=request.args.get('page', 1, type=int),
         per_page=request.args.get('per_page', 10, type=int),
@@ -3296,6 +3298,7 @@ def rules_data_table():
         status=request.args.get('status', None, type=str),
         workspace_uuid=request.args.get('workspace_uuid', None, type=str),
         exclude_workspace_uuid=request.args.get('exclude_workspace_uuid', None, type=str),
+        ids=ids_filter,
     )
 
     rule_ids = [r.id for r in pagination.items]

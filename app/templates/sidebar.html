@@ -35,6 +35,14 @@
                   </ul>
                </li>
 
+               <!-- ── Blog ── -->
+               <li class="nav-item">
+                  <a class="nav-link custom-nav-link fw-bold {% if request.path.startswith('/blog') %}active{% endif %}"
+                     href="/blog/">
+                     <i class="fa-solid fa-newspaper fa-fw me-1 text-primary"></i>Blog
+                  </a>
+               </li>
+
                <!-- ── Security Rules ── -->
                <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if (request.path.startswith('/rule') and '/github' not in request.path and '/admin' not in request.path) or request.path == '/attack/heatmap' %}active{% endif %}"
@@ -142,6 +150,8 @@
                            <i class="fa-solid fa-trash fa-fw me-2"></i>Trash</a></li>
                      <li><a href="/rule/bulk_tag" class="dropdown-item {% if request.path == '/rule/bulk_tag' %}active{% endif %}">
                            <i class="fa-solid fa-tags fa-fw me-2"></i>Bulk Tags</a></li>
+                     <li><a href="/blog/admin/" class="dropdown-item {% if request.path.startswith('/blog/admin') %}active{% endif %}">
+                           <i class="fa-solid fa-newspaper fa-fw me-2"></i>Blog</a></li>
 
                      <li><hr class="dropdown-divider"></li>
 

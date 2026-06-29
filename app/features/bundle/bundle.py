@@ -1184,12 +1184,17 @@ def bundle_data_table():
     attacks_raw  = request.args.get('attacks',     '',   type=str) or ''
     access       = request.args.get('access',      '',   type=str)  # 'public' | 'private' | ''
 
+    ids_filter   = request.args.getlist('ids[]', type=int)
+
     tag_names    = [t.strip() for t in tags_raw.split(',')      if t.strip()]
     vuln_list    = [v.strip() for v in vulns_raw.split(',')     if v.strip()]
     creator_list = [c.strip() for c in creators_raw.split(',')  if c.strip()]
     attack_ids   = [a.strip().upper() for a in attacks_raw.split(',') if a.strip()]
 
     query = Bundle.query
+
+    if ids_filter:
+        query = query.filter(Bundle.id.in_(ids_filter))
 
     if search:
         like = f'%{search}%'

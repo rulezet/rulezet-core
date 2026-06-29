@@ -1,0 +1,598 @@
+{% extends 'base.html' %}
+{% block title %}{{ post.title if post else 'Post' }} — Rulezet{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/blog/blog.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container py-5" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-newspaper banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/blog/" class="text-decoration-none text-muted">Blog</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">
+                    {% if post.title|length > 40 %}{{ post.title[:40] }}…{% else %}{{ post.title }}{% endif %}
+                </li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-newspaper"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">
+                    {% if post.title|length > 60 %}{{ post.title[:60] }}…{% else %}{{ post.title }}{% endif %}
+                </h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
+            {{ post.excerpt or 'Security blog post from the Rulezet team.' }}
+        </p>
+    </div>
+
+    <div v-if="isLoading" class="d-flex justify-content-center align-items-center" style="min-height:300px;">
+        <div class="spinner-border text-primary" role="status"></div>
+        <span class="ms-3 text-muted">Loading…</span>
+    </div>
+
+    <template v-else>
+
+        <!-- Shared access banner (non-admin viewing via share link) -->
+        <div v-if="isShared && !isAdmin"
+             class="blog-share-banner mb-4 d-flex align-items-center gap-3">
+            <i class="fa-solid fa-link text-primary"></i>
+            <span class="text-muted">You are viewing this private post via a share link.</span>
+        </div>
+
+        <!-- Admin actions bar -->
+        <div v-if="isAdmin" class="mt-0 mb-4 rounded-3 border" style="background:var(--light-bg-color);">
+            <div class="px-3 pt-3 pb-2 d-flex align-items-center gap-2" style="border-bottom:1px solid var(--border-color);">
+                <div style="width:3px;height:14px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
+                <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
+                    <i class="fa-solid fa-bolt me-1"></i>Actions
+                </span>
+            </div>
+            <div class="p-3 d-flex flex-wrap align-items-center gap-2">
+
+                <!-- Draft / Published toggle -->
+                <button @click="toggleDraft"
+                        class="btn btn-sm rounded-pill px-3"
+                        :style="post.is_draft
+                            ? 'background:transparent;border:1px solid #fd7e1455;color:#fd7e14;'
+                            : 'background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);'"
+                        :title="post.is_draft ? 'This post is a draft — click to publish' : 'This post is published — click to revert to draft'">
+                    <i class="fa-solid me-1" :class="post.is_draft ? 'fa-file-pen' : 'fa-circle-check'"></i>
+                    [[ post.is_draft ? 'Draft' : 'Published' ]]
+                </button>
+
+                <!-- Public / Private toggle -->
+                <button @click="toggleAccess"
+                        class="btn btn-sm rounded-pill px-3"
+                        :style="post.is_public
+                            ? 'background:transparent;border:1px solid #19875455;color:#198754;'
+                            : 'background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);'"
+                        :title="post.is_public ? 'Public — click to make private' : 'Private — click to make public'">
+                    <i class="fa-solid me-1" :class="post.is_public ? 'fa-globe' : 'fa-lock'"></i>
+                    [[ post.is_public ? 'Public' : 'Private' ]]
+                </button>
+
+                <!-- Share link toggle (only when private) -->
+                <button v-if="!post.is_public" @click="showSharePanel = !showSharePanel"
+                        class="btn btn-sm rounded-pill px-3"
+                        :style="showSharePanel
+                            ? 'background:transparent;border:1px solid #0d6efd55;color:#0d6efd;'
+                            : 'background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);'"
+                        title="Show private share link">
+                    <i class="fa-solid fa-link me-1"></i>Share link
+                </button>
+
+                <div class="ms-auto d-flex gap-2">
+                    <!-- Edit -->
+                    <a :href="'/blog/admin/edit/' + post.uuid"
+                       class="btn btn-sm rounded-pill px-3"
+                       style="background:transparent;border:1px solid #0d6efd55;color:#0d6efd;"
+                       title="Edit this post">
+                        <i class="fa-solid fa-pen me-1"></i>Edit
+                    </a>
+                    <!-- Delete -->
+                    <button @click="confirmDelete"
+                            class="btn btn-sm rounded-pill px-3"
+                            style="background:transparent;border:1px solid #dc354555;color:#dc3545;"
+                            title="Delete this post">
+                        <i class="fa-solid fa-trash me-1"></i>Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Share link panel (collapsed by default) -->
+        <div v-if="isAdmin && !post.is_public && showSharePanel"
+             class="mb-4 rounded-3 border p-3 d-flex align-items-center gap-3 flex-wrap"
+             style="background:var(--light-bg-color);">
+            <i class="fa-solid fa-link text-primary flex-shrink-0"></i>
+            <input type="text" class="form-control form-control-sm flex-grow-1"
+                   style="font-size:.85rem;font-family:monospace;min-width:0;"
+                   :value="currentShareUrl" readonly
+                   @click="$event.target.select()" title="Click to select">
+            <button @click="copyShareUrl"
+                    class="btn btn-sm rounded-pill px-3 flex-shrink-0"
+                    style="background:transparent;border:1px solid #0d6efd55;color:#0d6efd;">
+                <i class="fa-solid me-1" :class="copied ? 'fa-check' : 'fa-copy'"></i>
+                [[ copied ? 'Copied!' : 'Copy' ]]
+            </button>
+            <button @click="regenerateKey" :disabled="isRegenerating"
+                    class="btn btn-sm rounded-pill px-3 flex-shrink-0"
+                    style="background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);">
+                <i class="fa-solid fa-rotate me-1" :class="{ 'fa-spin': isRegenerating }"></i>Regenerate
+            </button>
+        </div>
+
+        <!-- Delete confirmation modal -->
+        <div class="modal fade" id="deleteBlogModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="background:var(--card-bg-color);border:1px solid var(--border-color);border-radius:16px;">
+                    <div class="modal-header border-0 pb-0">
+                        <h6 class="modal-title fw-bold">Delete post?</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body pt-2">
+                        <p class="mb-0 text-muted">Are you sure you want to permanently delete <strong>"[[ post.title ]]"</strong>? This cannot be undone.</p>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                        <button @click="deletePost" class="btn btn-danger rounded-pill px-4 shadow">
+                            <i class="fa-solid fa-trash me-1"></i>Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main article card -->
+        <div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4"
+             style="border-radius:12px;overflow:hidden;">
+            <div class="card-watermark-detail"><i class="fa-solid fa-newspaper"></i></div>
+
+            <!-- Cover image -->
+            <div v-if="post.cover_image_url" style="height:320px;overflow:hidden;cursor:zoom-in;" @click="lightboxOpen = true">
+                <img :src="post.cover_image_url" :alt="post.title"
+                     style="width:100%;height:100%;object-fit:cover;display:block;"
+                     @error="$event.target.parentElement.style.display='none'">
+            </div>
+
+            <!-- Lightbox -->
+            <teleport to="body">
+                <div v-if="lightboxOpen"
+                     @click.self="lightboxOpen = false"
+                     style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out;">
+                    <img :src="post.cover_image_url" :alt="post.title"
+                         style="max-width:92vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 48px rgba(0,0,0,.6);">
+                    <button @click="lightboxOpen = false"
+                            style="position:fixed;top:16px;right:20px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:1.4rem;width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </teleport>
+
+            <!-- Badges top-right -->
+            <div class="position-absolute d-flex gap-2 flex-wrap justify-content-end"
+                 :style="post.cover_image_url
+                     ? 'top:12px;right:12px;z-index:2;'
+                     : 'top:12px;right:12px;z-index:2;'">
+                <span v-if="post.is_draft"
+                      class="badge shadow-sm pt-1"
+                      style="font-size:.72rem;background:#fd7e14;color:#fff;">
+                    <i class="fa-solid fa-file-pen me-1"></i>DRAFT
+                </span>
+                <span :class="['badge shadow-sm pt-1', post.is_public ? 'blog-status-public' : 'blog-status-private']"
+                      style="font-size:.72rem;">
+                    <i :class="['fa-solid me-1', post.is_public ? 'fa-globe' : 'fa-lock']"></i>
+                    [[ post.is_public ? 'PUBLIC' : 'PRIVATE' ]]
+                </span>
+            </div>
+
+            <div class="card-body p-4 p-md-5">
+                <!-- Meta row -->
+                <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+                    <template v-if="post.author_id">
+                        <user-chip :user-id="post.author_id"
+                                   :username="post.author_username"
+                                   :avatar="post.author_avatar"
+                                   size="sm" :show-name="true"></user-chip>
+                    </template>
+                    <span class="text-muted" style="font-size:.85rem;">
+                        <i class="fa-regular fa-calendar me-1"></i>[[ post.published_at || post.created_at ]]
+                    </span>
+                    <span class="text-muted" style="font-size:.85rem;">
+                        <i class="fa-solid fa-eye me-1"></i>[[ post.view_count ]] view<template v-if="post.view_count !== 1">s</template>
+                    </span>
+                    <span v-if="post.updated_at !== post.created_at" class="text-muted" style="font-size:.85rem;">
+                        <i class="fa-regular fa-clock me-1"></i>Updated [[ post.updated_at ]]
+                    </span>
+                </div>
+
+                <!-- Tags -->
+                <div v-if="post.tag_names && post.tag_names.length" class="d-flex flex-wrap gap-2 mb-4">
+                    <a v-for="tag in post.tag_names" :key="tag"
+                       :href="'/blog/?tag=' + encodeURIComponent(tag)"
+                       class="blog-tag text-decoration-none">[[ tag ]]</a>
+                </div>
+
+                <!-- CVE IDs -->
+                <div v-if="post.cve_ids && post.cve_ids.length" class="d-flex flex-wrap gap-2 mb-4">
+                    <span v-for="cve in post.cve_ids" :key="cve" class="blog-cve-chip">[[ cve ]]</span>
+                </div>
+
+                <!-- ATT&CK techniques -->
+                <div v-if="post.technique_ids && post.technique_ids.length" class="mb-4">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="fa-solid fa-crosshairs text-primary"></i>
+                        <span class="fw-semibold" style="font-size:.9rem;">ATT&amp;CK Techniques</span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a v-for="tid in post.technique_ids" :key="tid"
+                           :href="'https://attack.mitre.org/techniques/' + tid.replace('.','/')"
+                           target="_blank" rel="noopener"
+                           class="badge bg-primary text-decoration-none" style="font-family:monospace;">[[ tid ]]</a>
+                    </div>
+                </div>
+
+                <!-- Markdown content -->
+                <div class="blog-content" v-html="renderedContent"></div>
+            </div>
+        </div>
+
+        <!-- Attached Rules -->
+        <div v-if="post.rule_ids && post.rule_ids.length" class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="fa-solid fa-file-code text-primary"></i>
+                    <h6 class="fw-bold mb-0">Attached Rules</h6>
+                    <span class="badge bg-primary rounded-pill">[[ post.rule_ids.length ]]</span>
+                </div>
+                <rule-list
+                    mode="read"
+                    default-view="table"
+                    :fetch-url="ruleListUrl"
+                    :sync-url="false"
+                    :show-filters="false"
+                    :show-export="false"
+                    :show-create="false"
+                    :current-user-id="currentUserId"
+                    :current-user-is-admin="isAdmin"
+                    :current-user-is-authenticated="isAuthenticated">
+                </rule-list>
+            </div>
+        </div>
+
+        <!-- Attached Bundles -->
+        <div v-if="post.bundle_ids && post.bundle_ids.length" class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="fa-solid fa-box-archive text-primary"></i>
+                    <h6 class="fw-bold mb-0">Attached Bundles</h6>
+                    <span class="badge bg-primary rounded-pill">[[ post.bundle_ids.length ]]</span>
+                </div>
+                <bundle-list
+                    mode="read"
+                    default-view="table"
+                    :fetch-url="bundleListUrl"
+                    :sync-url="false"
+                    :show-filters="false"
+                    :show-export="false"
+                    :show-create="false"
+                    :current-user-id="currentUserId"
+                    :current-user-is-admin="isAdmin"
+                    :current-user-is-authenticated="isAuthenticated">
+                </bundle-list>
+            </div>
+        </div>
+
+        <!-- External Links -->
+        <div v-if="post.external_links && post.external_links.length"
+             class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="fa-solid fa-link text-primary"></i>
+                    <h6 class="fw-bold mb-0">External Links</h6>
+                    <span class="badge bg-primary rounded-pill">[[ post.external_links.length ]]</span>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    <a v-for="link in post.external_links" :key="link.url"
+                       :href="link.url" target="_blank" rel="noopener noreferrer"
+                       class="d-flex align-items-center gap-3 p-3 rounded-3 text-decoration-none"
+                       style="background:var(--light-bg-color);border:1px solid var(--border-color);transition:border-color .15s;"
+                       @mouseover="$event.currentTarget.style.borderColor='#0d6efd55'"
+                       @mouseleave="$event.currentTarget.style.borderColor='var(--border-color)'">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width:36px;height:36px;background:#0d6efd18;">
+                            <i class="fa-solid fa-arrow-up-right-from-square text-primary" style="font-size:.75rem;"></i>
+                        </div>
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="fw-semibold" style="color:var(--text-color);font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                [[ link.label || link.url ]]
+                            </div>
+                            <div class="text-muted" style="font-size:.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                [[ link.url ]]
+                            </div>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-muted flex-shrink-0" style="font-size:.7rem;"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Attachments -->
+        <div v-if="post.files && post.files.length"
+             class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="fa-solid fa-paperclip text-primary"></i>
+                    <h6 class="fw-bold mb-0">Attachments</h6>
+                    <span class="badge bg-primary rounded-pill">[[ post.files.length ]]</span>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    <div v-for="file in post.files" :key="file.uuid"
+                         class="d-flex align-items-center gap-3 p-3 rounded-3"
+                         style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width:36px;height:36px;background:#0d6efd18;">
+                            <i :class="fileIcon(file.mime_type)" class="text-primary" style="font-size:.75rem;"></i>
+                        </div>
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="fw-semibold" style="color:var(--text-color);font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                [[ file.original_name ]]
+                            </div>
+                            <div class="text-muted" style="font-size:.75rem;">
+                                [[ (file.size_bytes / 1024).toFixed(1) ]] KB · [[ file.mime_type ]]
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-shrink-0">
+                            <a :href="'/blog/file/' + file.uuid"
+                               target="_blank" rel="noopener noreferrer"
+                               class="btn btn-sm rounded-pill px-3"
+                               style="background:transparent;border:1px solid #0d6efd55;color:#0d6efd;"
+                               title="Open in new tab">
+                                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Open
+                            </a>
+                            <a :href="'/blog/file/' + file.uuid + '?download=1'"
+                               class="btn btn-sm rounded-pill px-3"
+                               style="background:transparent;border:1px solid #19875455;color:#198754;"
+                               download title="Download">
+                                <i class="fa-solid fa-download me-1"></i>Download
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comments -->
+        <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="fa-solid fa-comments text-primary"></i>
+                    <h6 class="fw-bold mb-0">Comments</h6>
+                </div>
+                <comment-thread
+                    object-type="blog_post"
+                    :object-id="post.id"
+                    :can-create="isAuthenticated"
+                    :can-edit-own="isAuthenticated"
+                    :can-delete-own="isAuthenticated"
+                    :can-moderate="isAdmin"
+                    :current-user-id="currentUserId"
+                    :csrf-token="csrfToken">
+                </comment-thread>
+            </div>
+        </div>
+
+    </template>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    import { create_message }        from '/static/js/toaster.js'
+    import UserChip                  from '/static/js/components/UserChip.js'
+    import CommentThread             from '/static/js/components/comments/comment-thread.js'
+    import RuleList                  from '/static/js/rule/ruleList.js'
+    import BundleList                from '/static/js/bundle/bundleList.js'
+    import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
+    import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
+    const { createApp, ref, computed, onMounted, onUnmounted } = Vue
+
+    const isAuthenticated = {{ current_user.is_authenticated | tojson }}
+    const isAdmin         = {{ current_user.is_admin()        | tojson }}
+    const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
+    const csrfToken       = '{{ csrf_token() }}'
+    const POST_UUID       = '{{ post.uuid }}'
+    const isShared        = {{ shared | tojson }}
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: {
+            'user-chip':                  UserChip,
+            'comment-thread':             CommentThread,
+            'rule-list':                  RuleList,
+            'bundle-list':                BundleList,
+            'tags-displays-list':         TagsDisplaysList,
+            'vulnerability-displays-list': VulnerabilityDisplaysList,
+        },
+        setup() {
+            const post           = ref({})
+            const isLoading      = ref(true)
+            const shareUrl       = ref('')
+            const isRegenerating = ref(false)
+            const showSharePanel = ref(false)
+            const copied         = ref(false)
+            const lightboxOpen   = ref(false)
+
+            const currentShareUrl = computed(() => {
+                if (shareUrl.value) return shareUrl.value
+                if (post.value.share_key) {
+                    return `${window.location.origin}/blog/share/${post.value.uuid}/${post.value.share_key}`
+                }
+                return ''
+            })
+
+            const ruleListUrl = computed(() => {
+                if (!post.value.rule_ids || !post.value.rule_ids.length) return ''
+                return '/rule/data_table?' + post.value.rule_ids.map(id => `ids[]=${id}`).join('&')
+            })
+
+            const bundleListUrl = computed(() => {
+                if (!post.value.bundle_ids || !post.value.bundle_ids.length) return ''
+                return '/bundle/data_table?' + post.value.bundle_ids.map(id => `ids[]=${id}`).join('&')
+            })
+
+            const renderedContent = computed(() => {
+                if (!post.value.content) return ''
+                if (typeof marked === 'undefined') return `<pre>${post.value.content}</pre>`
+                return marked.parse(post.value.content)
+            })
+
+            async function fetchPost() {
+                isLoading.value = true
+                try {
+                    const params = new URLSearchParams()
+                    {% if shared %}
+                    params.set('key', '{{ post.share_key }}')
+                    {% endif %}
+                    const res  = await fetch(`/blog/api/post/${POST_UUID}?${params}`)
+                    const data = await res.json()
+                    if (res.ok) {
+                        post.value = data
+                    } else {
+                        create_message(data.error || 'Failed to load post.', 'danger-subtle')
+                    }
+                } finally {
+                    isLoading.value = false
+                }
+            }
+
+            async function regenerateKey() {
+                isRegenerating.value = true
+                try {
+                    const res  = await fetch(`/blog/admin/regenerate_key/${POST_UUID}`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                        shareUrl.value = data.share_url
+                        create_message('Share link regenerated.', 'success-subtle')
+                    } else {
+                        create_message(data.message || 'Failed.', 'danger-subtle')
+                    }
+                } finally {
+                    isRegenerating.value = false
+                }
+            }
+
+            async function copyShareUrl() {
+                if (!currentShareUrl.value) return
+                try {
+                    await navigator.clipboard.writeText(currentShareUrl.value)
+                    copied.value = true
+                    setTimeout(() => { copied.value = false }, 2000)
+                } catch {
+                    create_message('Could not copy — select and copy manually.', 'warning-subtle')
+                }
+            }
+
+            async function toggleAccess() {
+                try {
+                    const res  = await fetch(`/blog/admin/toggle_access/${POST_UUID}`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                        post.value.is_public = data.is_public
+                        create_message(data.is_public ? 'Post is now public.' : 'Post is now private.', 'success-subtle')
+                    } else {
+                        create_message(data.message || 'Failed.', 'danger-subtle')
+                    }
+                } catch { create_message('Request failed.', 'danger-subtle') }
+            }
+
+            async function toggleDraft() {
+                try {
+                    const res  = await fetch(`/blog/admin/toggle_draft/${POST_UUID}`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                        post.value.is_draft  = data.is_draft
+                        post.value.is_public = data.is_public
+                        create_message(data.is_draft ? 'Post reverted to draft.' : 'Post published.', 'success-subtle')
+                    } else {
+                        create_message(data.message || 'Failed.', 'danger-subtle')
+                    }
+                } catch { create_message('Request failed.', 'danger-subtle') }
+            }
+
+            function confirmDelete() {
+                const modal = new bootstrap.Modal(document.getElementById('deleteBlogModal'))
+                modal.show()
+            }
+
+            async function deletePost() {
+                try {
+                    const res  = await fetch(`/blog/admin/delete/${POST_UUID}`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                        create_message('Post deleted.', 'success-subtle')
+                        setTimeout(() => { window.location.href = '/blog/admin/' }, 800)
+                    } else {
+                        create_message(data.message || 'Failed.', 'danger-subtle')
+                    }
+                } catch { create_message('Request failed.', 'danger-subtle') }
+            }
+
+            function fileIcon(mime) {
+                if (!mime) return 'fa-solid fa-file'
+                if (mime.startsWith('image/'))       return 'fa-solid fa-file-image'
+                if (mime === 'application/pdf')      return 'fa-solid fa-file-pdf'
+                if (mime.includes('zip') || mime.includes('tar') || mime.includes('gzip')) return 'fa-solid fa-file-zipper'
+                if (mime.includes('json') || mime.includes('xml')) return 'fa-solid fa-file-code'
+                if (mime.startsWith('text/'))        return 'fa-solid fa-file-lines'
+                if (mime.includes('word') || mime.includes('docx')) return 'fa-solid fa-file-word'
+                if (mime.includes('sheet') || mime.includes('xlsx')) return 'fa-solid fa-file-excel'
+                return 'fa-solid fa-file'
+            }
+
+            function onKeydown(e) { if (e.key === 'Escape') lightboxOpen.value = false }
+            onMounted(() => { fetchPost(); window.addEventListener('keydown', onKeydown) })
+            onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+
+            return {
+                post, isLoading, ruleListUrl, bundleListUrl,
+                renderedContent, shareUrl, currentShareUrl, isRegenerating,
+                showSharePanel, copied, lightboxOpen, fileIcon,
+                isAuthenticated, isAdmin, currentUserId, csrfToken,
+                isShared, regenerateKey, copyShareUrl, toggleAccess, toggleDraft,
+                confirmDelete, deletePost,
+            }
+        }
+    }).mount('#main-container')
+</script>
+{% endblock %}

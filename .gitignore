@@ -37,3 +37,4 @@ app/rule/output_rules
 app/modules/*
 !app/modules/cti
 app/static/uploads/*
+app/uploads/*

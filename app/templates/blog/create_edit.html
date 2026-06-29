@@ -1,0 +1,891 @@
+{% extends 'base.html' %}
+{% block title %}{% if is_edit %}Edit Post{% else %}New Post{% endif %} — Rulezet{% endblock %}
+
+{% from 'macros/admin_nav.html' import admin_nav %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/blog/blog.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4" id="main-container" v-cloak>
+
+    <!-- Banner — full width, above the 2-col layout -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-pen-to-square banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/blog/admin/" class="text-decoration-none text-muted">Blog Admin</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">
+                    {% if is_edit %}Edit Post{% else %}New Post{% endif %}
+                </li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-pen-to-square"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">{% if is_edit %}Edit Post{% else %}New Post{% endif %}</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:700px;font-size:.95rem;">
+            {% if is_edit %}Edit post content, metadata, and attached resources.{% else %}Fill in the title and content, set the status, then save.{% endif %}
+        </p>
+    </div>
+
+    <!-- Admin nav — full width horizontal bar -->
+    {{ admin_nav('blog') }}
+
+    <!-- Actions bar -->
+    <div class="mb-4 rounded-3 border" style="background:var(--light-bg-color);">
+        <div class="px-3 pt-3 pb-2 d-flex align-items-center gap-2" style="border-bottom:1px solid var(--border-color);">
+            <div style="width:3px;height:14px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
+            <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
+                <i class="fa-solid fa-bolt me-1"></i>Actions
+            </span>
+        </div>
+        <div class="p-3 d-flex flex-wrap align-items-center gap-2">
+
+            <!-- Draft / Published toggle -->
+            <button type="button" @click="toggleDraftMode"
+                    class="btn btn-sm rounded-pill px-3"
+                    :style="form.is_draft
+                        ? 'background:transparent;border:1px solid #fd7e1455;color:#fd7e14;'
+                        : 'background:transparent;border:1px solid #19875455;color:#198754;'"
+                    :title="form.is_draft ? 'Currently a draft — click to mark as published' : 'Currently published — click to revert to draft'">
+                <i class="fa-solid me-1" :class="form.is_draft ? 'fa-file-pen' : 'fa-circle-check'"></i>
+                [[ form.is_draft ? 'Draft' : 'Published' ]]
+            </button>
+
+            <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+                <!-- Last saved timestamp -->
+                <span v-if="lastSavedAt" class="text-muted" style="font-size:.75rem;">
+                    <i class="fa-solid fa-check-circle text-success me-1"></i>Saved [[ lastSavedAt ]]
+                </span>
+                <a href="/blog/admin/"
+                   class="btn btn-sm rounded-pill px-3"
+                   style="background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);">
+                    <i class="fa-solid fa-arrow-left me-1"></i>Back
+                </a>
+                {% if is_edit %}
+                <a href="/blog/post/{{ post.uuid }}" target="_blank"
+                   class="btn btn-sm rounded-pill px-3"
+                   style="background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);">
+                    <i class="fa-solid fa-eye me-1"></i>Preview
+                </a>
+                {% endif %}
+                <button type="button" @click="savePost()" :disabled="isSaving"
+                        class="btn btn-sm rounded-pill px-3"
+                        style="background:transparent;border:1px solid #0d6efd55;color:#0d6efd;">
+                    <span v-if="isSaving" class="spinner-border spinner-border-sm me-1" style="width:.8rem;height:.8rem;"></span>
+                    <i v-else class="fa-solid fa-floppy-disk me-1"></i>Save
+                </button>
+            </div>
+        </div>
+    </div>
+
+            <div class="row g-4">
+
+                <!-- Left: main content -->
+                <div class="col-12 col-xl-8">
+
+                    <!-- Title + Excerpt -->
+                    <div class="card border-0 shadow-sm rounded-3 mb-4">
+                        <div class="card-body p-4">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="color:var(--text-color);">
+                                    Post Title <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control"
+                                       style="background:var(--light-bg-color);color:var(--text-color);border-color:var(--border-color);"
+                                       placeholder="Enter post title…" v-model="form.title">
+                            </div>
+                            <div>
+                                <label class="form-label fw-semibold" style="color:var(--text-color);">
+                                    Excerpt <span class="text-muted fw-normal" style="font-size:.85rem;">(optional, shown in post list)</span>
+                                </label>
+                                <textarea class="form-control"
+                                          style="background:var(--light-bg-color);color:var(--text-color);border-color:var(--border-color);resize:vertical;"
+                                          rows="3" placeholder="Short summary of this post…"
+                                          v-model="form.excerpt"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Content editor -->
+                    <div class="card border-0 shadow-sm rounded-3 mb-4">
+                        <div class="card-body p-4">
+                            <label class="form-label fw-semibold d-block mb-3" style="color:var(--text-color);">
+                                Content <span class="text-muted fw-normal" style="font-size:.85rem;">(Markdown supported)</span>
+                            </label>
+                            <smart-editor
+                                v-model="form.content"
+                                mode="markdown"
+                                placeholder="Write your post content in Markdown…"
+                                min-height="400px"
+                                max-height="80vh">
+                            </smart-editor>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Right: metadata -->
+                <div class="col-12 col-xl-4">
+
+                    <!-- Visibility -->
+                    <div class="card border-0 shadow-sm rounded-3 mb-4">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-3" style="color:var(--text-color);">Visibility</h6>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="isPublicSwitch"
+                                       v-model="form.is_public" role="switch"
+                                       @change="IS_EDIT && autoSave()">
+                                <label class="form-check-label" for="isPublicSwitch" style="color:var(--text-color);">
+                                    <span v-if="form.is_public" class="text-success fw-semibold">
+                                        <i class="fa-solid fa-globe me-1"></i>Public
+                                    </span>
+                                    <span v-else class="text-danger fw-semibold">
+                                        <i class="fa-solid fa-lock me-1"></i>Private
+                                    </span>
+                                </label>
+                            </div>
+                            <p class="text-muted mb-0 mt-2" style="font-size:.82rem;">
+                                <template v-if="form.is_public">Visible to everyone (requires status = Published).</template>
+                                <template v-else>Only admins can view. Share via private link.</template>
+                            </p>
+                            {% if is_edit and post and not post.is_public %}
+                            <div class="mt-3">
+                                <button class="btn btn-sm btn-outline-secondary w-100 rounded-pill"
+                                        @click="regenerateKey" :disabled="isRegenerating">
+                                    <i class="fa-solid fa-rotate me-1"></i>Regenerate share link
+                                </button>
+                                <div v-if="shareUrl" class="mt-2">
+                                    <input type="text" class="form-control form-control-sm"
+                                           style="font-size:.78rem;" :value="shareUrl" readonly
+                                           @click="$event.target.select()">
+                                    <small class="text-muted">Click to select, then copy.</small>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Tags -->
+                    <div class="card border-0 shadow-sm rounded-3 mb-4">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-3" style="color:var(--text-color);">Tags</h6>
+                            <tag-input v-model="selectedTags"
+                                       label=""
+                                       :user-id="currentUserId"
+                                       placeholder="Search or select tags…">
+                            </tag-input>
+                        </div>
+                    </div>
+
+                    <!-- ATT&CK Techniques -->
+                    <div class="card border-0 shadow-sm rounded-3 mb-4">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-3" style="color:var(--text-color);">ATT&amp;CK Techniques</h6>
+                            <attack-input v-model="selectedAttacks"
+                                          label=""
+                                          :csrf-token="csrfToken">
+                            </attack-input>
+                        </div>
+                    </div>
+
+                    <!-- CVE / Vulnerability IDs -->
+                    <div class="card border-0 shadow-sm rounded-3 mb-4">
+                        <div class="card-body p-4">
+                            <vulnerability-input
+                                v-model="form.cve_ids"
+                                :target-id="null"
+                                label="Vulnerabilities (CVE, GHSA…)">
+                            </vulnerability-input>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ── Media / Links / Files row ──────────────────────────────────── -->
+            <div class="row g-4 mb-2">
+
+                <!-- Cover image -->
+                <div class="col-12 col-md-4">
+                    <div class="card border-0 shadow-sm rounded-3 h-100">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                <h6 class="fw-bold mb-0" style="color:var(--text-color);">
+                                    <i class="fa-solid fa-image me-2 text-primary"></i>Cover Image
+                                </h6>
+                                <div class="d-flex rounded-pill overflow-hidden" style="border:1px solid var(--border-color);font-size:.75rem;">
+                                    <button type="button" @click="coverMode = 'url'"
+                                            class="btn btn-sm border-0 px-3 py-1"
+                                            :style="coverMode === 'url' ? 'background:#0d6efd;color:#fff;' : 'background:transparent;color:var(--subtle-text-color);'">
+                                        URL
+                                    </button>
+                                    <button type="button" @click="coverMode = 'upload'"
+                                            class="btn btn-sm border-0 px-3 py-1"
+                                            :style="coverMode === 'upload' ? 'background:#0d6efd;color:#fff;' : 'background:transparent;color:var(--subtle-text-color);'">
+                                        Upload
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- URL mode -->
+                            <div v-if="coverMode === 'url'">
+                                <input type="url" class="form-control form-control-sm"
+                                       style="background:var(--light-bg-color);color:var(--text-color);border-color:var(--border-color);"
+                                       placeholder="https://example.com/image.jpg" v-model="form.cover_image_url"
+                                       @change="IS_EDIT && autoSave()">
+                            </div>
+
+                            <!-- Upload mode -->
+                            <div v-else>
+                                {% if is_edit %}
+                                <label class="btn btn-sm btn-outline-primary rounded-pill w-100 mb-1" style="cursor:pointer;">
+                                    <i class="fa-solid fa-upload me-1"></i>
+                                    <span v-if="!isCoverUploading">Choose image</span>
+                                    <span v-else>
+                                        <span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></span>Uploading…
+                                    </span>
+                                    <input type="file" class="d-none"
+                                           accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp"
+                                           @change="uploadCover" :disabled="isCoverUploading">
+                                </label>
+                                <div class="text-muted" style="font-size:.71rem;">PNG, JPG, GIF, WEBP · max 5 MB</div>
+                                {% else %}
+                                <p class="text-muted mb-0" style="font-size:.82rem;">Save the post first, then upload a cover image.</p>
+                                {% endif %}
+                            </div>
+
+                            <!-- Preview -->
+                            <div class="mt-3 rounded-3 overflow-hidden position-relative"
+                                 style="height:100px;background:var(--light-bg-color);border:1px dashed var(--border-color);">
+                                <img v-if="form.cover_image_url"
+                                     :src="form.cover_image_url" alt="Cover preview"
+                                     style="width:100%;height:100%;object-fit:cover;display:block;"
+                                     @error="$event.target.style.opacity='0'">
+                                <div v-else class="d-flex align-items-center justify-content-center h-100">
+                                    <span class="text-muted" style="font-size:.8rem;">
+                                        <i class="fa-solid fa-image me-1"></i>No cover set
+                                    </span>
+                                </div>
+                                <button v-if="form.cover_image_url"
+                                        type="button" @click="removeCover()"
+                                        class="position-absolute top-0 end-0 m-1 btn btn-sm btn-danger rounded-pill px-2"
+                                        style="font-size:.65rem;opacity:.85;line-height:1.4;" title="Remove cover">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- External links -->
+                <div class="col-12 col-md-4">
+                    <div class="card border-0 shadow-sm rounded-3 h-100">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-3" style="color:var(--text-color);">
+                                <i class="fa-solid fa-link me-2 text-primary"></i>External Links
+                            </h6>
+                            <div v-for="(link, idx) in form.external_links" :key="idx" class="mb-2 d-flex gap-2 align-items-start">
+                                <div class="flex-grow-1">
+                                    <input type="url" class="form-control form-control-sm mb-1"
+                                           style="background:var(--light-bg-color);color:var(--text-color);border-color:var(--border-color);"
+                                           placeholder="https://…" v-model="link.url">
+                                    <input type="text" class="form-control form-control-sm"
+                                           style="background:var(--light-bg-color);color:var(--text-color);border-color:var(--border-color);"
+                                           placeholder="Label (e.g. NVD, GitHub…)" v-model="link.label"
+                                           maxlength="120">
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger rounded-pill flex-shrink-0 mt-1"
+                                        @click="removeLink(idx)" title="Remove">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                            <div v-if="!form.external_links.length" class="text-muted mb-2" style="font-size:.82rem;">No links yet.</div>
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill w-100 mt-1"
+                                    @click="addLink">
+                                <i class="fa-solid fa-plus me-1"></i>Add link
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File attachments -->
+                <div class="col-12 col-md-4">
+                    <div class="card border-0 shadow-sm rounded-3 h-100">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-3" style="color:var(--text-color);">
+                                <i class="fa-solid fa-paperclip me-2 text-primary"></i>Attachments
+                                {% if not is_edit %}<span class="text-muted fw-normal" style="font-size:.82rem;">(available after first save)</span>{% endif %}
+                            </h6>
+                            {% if is_edit %}
+                            <div v-for="file in attachedFiles" :key="file.uuid"
+                                 class="d-flex align-items-center gap-2 mb-2 p-2 rounded-3"
+                                 style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+                                <i class="fa-solid fa-file text-muted flex-shrink-0" style="font-size:.8rem;"></i>
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="fw-semibold" style="font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">[[ file.original_name ]]</div>
+                                    <div class="text-muted" style="font-size:.7rem;">[[ (file.size_bytes / 1024).toFixed(1) ]] KB</div>
+                                </div>
+                                <a :href="file.download_url" class="btn btn-sm btn-outline-secondary rounded-pill px-2" title="Download">
+                                    <i class="fa-solid fa-download" style="font-size:.7rem;"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2"
+                                        @click="deleteFile(file.uuid)" title="Delete">
+                                    <i class="fa-solid fa-trash" style="font-size:.7rem;"></i>
+                                </button>
+                            </div>
+                            <div v-if="!attachedFiles.length" class="text-muted mb-2" style="font-size:.82rem;">No files attached yet.</div>
+                            <label class="btn btn-sm btn-outline-primary rounded-pill w-100 mt-1" style="cursor:pointer;">
+                                <i class="fa-solid fa-upload me-1"></i>
+                                <span v-if="!isUploading">Upload file</span>
+                                <span v-else><span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></span>Uploading…</span>
+                                <input type="file" class="d-none" @change="uploadFile" :disabled="isUploading"
+                                       accept=".pdf,.txt,.csv,.md,.json,.xml,.png,.jpg,.jpeg,.gif,.webp,.svg,.zip,.tar,.gz,.docx,.xlsx">
+                            </label>
+                            <div class="text-muted mt-1" style="font-size:.72rem;">Max 10 MB · PDF, images, JSON, ZIP…</div>
+                            {% else %}
+                            <p class="text-muted mb-0" style="font-size:.85rem;">Save the post first, then you can upload attachments.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ── Attached Rules — full width ─────────────────────────────── -->
+            <div class="card border-0 shadow-sm rounded-3 mb-3">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-file-code text-primary"></i>
+                            <h6 class="fw-bold mb-0" style="color:var(--text-color);">Attached Rules</h6>
+                            <span v-if="form.rule_ids.length" class="badge bg-primary rounded-pill">[[ form.rule_ids.length ]]</span>
+                        </div>
+                        <button class="btn btn-sm rounded-pill px-3"
+                                :class="showRulePicker ? 'btn-primary' : 'btn-outline-primary'"
+                                @click="showRulePicker = !showRulePicker">
+                            <i :class="showRulePicker ? 'fa-solid fa-chevron-up' : 'fa-solid fa-plus'" class="me-1"></i>
+                            [[ showRulePicker ? 'Hide Picker' : 'Add Rules' ]]
+                        </button>
+                    </div>
+                    <!-- Removable chips -->
+                    <div v-if="selectedRules.length" class="mb-3">
+                        <div class="d-flex flex-wrap gap-2 mb-2">
+                            <span v-for="rule in (rulesExpanded ? selectedRules : selectedRules.slice(0, CHIPS_VISIBLE))" :key="rule.id"
+                                  class="badge d-inline-flex align-items-center gap-2 px-3 py-2 rounded-pill"
+                                  style="background:var(--light-bg-color);color:var(--text-color);border:1px solid var(--border-color);font-size:.8rem;font-weight:500;max-width:300px;">
+                                <i class="fa-solid fa-file-code text-primary" style="font-size:.7rem;flex-shrink:0;"></i>
+                                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">[[ rule.title ]]</span>
+                                <i class="fa-solid fa-xmark ms-1" style="cursor:pointer;font-size:.65rem;flex-shrink:0;opacity:.7;"
+                                   @click="removeRule(rule.id)"></i>
+                            </span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:.82rem;">
+                            <button v-if="selectedRules.length > CHIPS_VISIBLE"
+                                    class="btn btn-sm btn-link p-0 text-decoration-none"
+                                    @click="rulesExpanded = !rulesExpanded">
+                                <span v-if="!rulesExpanded"><i class="fa-solid fa-chevron-down me-1"></i>Show [[ selectedRules.length - CHIPS_VISIBLE ]] more…</span>
+                                <span v-else><i class="fa-solid fa-chevron-up me-1"></i>Collapse</span>
+                            </button>
+                            <button class="btn btn-sm btn-link p-0 text-decoration-none text-danger"
+                                    @click="clearAllRules">
+                                <i class="fa-solid fa-trash-can me-1"></i>Deselect all
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="!form.rule_ids.length" class="text-muted text-center py-3" style="font-size:.9rem;">
+                        No rules attached yet. Click <em>Add Rules</em> to open the picker below.
+                    </div>
+                    <rule-list v-else-if="!showRulePicker"
+                        :key="form.rule_ids.join(',')"
+                        mode="read"
+                        default-view="table"
+                        :fetch-url="'/rule/data_table?' + form.rule_ids.map(id => 'ids[]=' + id).join('&')"
+                        :sync-url="false"
+                        :show-filters="false"
+                        :show-export="false"
+                        :show-create="false"
+                        :current-user-id="currentUserId"
+                        :current-user-is-admin="isAdmin"
+                        :current-user-is-authenticated="true">
+                    </rule-list>
+                </div>
+            </div>
+
+            <!-- Rule picker (full width, inline) -->
+            <div v-if="showRulePicker" class="card border-0 shadow-sm rounded-3 mb-4" style="border-top:3px solid var(--bs-primary);">
+                <div class="card-body p-3">
+                    <p class="text-muted mb-3" style="font-size:.85rem;">
+                        <i class="fa-solid fa-info-circle me-1"></i>
+                        Select rules and click <strong>Confirm</strong> to attach them.
+                    </p>
+                    <rule-list
+                        mode="select"
+                        default-view="table"
+                        :sync-url="false"
+                        :show-export="false"
+                        :show-create="false"
+                        :current-user-id="currentUserId"
+                        :current-user-is-admin="isAdmin"
+                        :current-user-is-authenticated="true"
+                        @send="handleRulesSend">
+                    </rule-list>
+                </div>
+            </div>
+
+            <!-- ── Attached Bundles — full width ────────────────────────────── -->
+            <div class="card border-0 shadow-sm rounded-3 mb-3">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-box-archive text-primary"></i>
+                            <h6 class="fw-bold mb-0" style="color:var(--text-color);">Attached Bundles</h6>
+                            <span v-if="form.bundle_ids.length" class="badge bg-primary rounded-pill">[[ form.bundle_ids.length ]]</span>
+                        </div>
+                        <button class="btn btn-sm rounded-pill px-3"
+                                :class="showBundlePicker ? 'btn-primary' : 'btn-outline-primary'"
+                                @click="showBundlePicker = !showBundlePicker">
+                            <i :class="showBundlePicker ? 'fa-solid fa-chevron-up' : 'fa-solid fa-plus'" class="me-1"></i>
+                            [[ showBundlePicker ? 'Hide Picker' : 'Add Bundles' ]]
+                        </button>
+                    </div>
+                    <!-- Removable chips -->
+                    <div v-if="selectedBundles.length" class="mb-3">
+                        <div class="d-flex flex-wrap gap-2 mb-2">
+                            <span v-for="bundle in (bundlesExpanded ? selectedBundles : selectedBundles.slice(0, CHIPS_VISIBLE))" :key="bundle.id"
+                                  class="badge d-inline-flex align-items-center gap-2 px-3 py-2 rounded-pill"
+                                  style="background:var(--light-bg-color);color:var(--text-color);border:1px solid var(--border-color);font-size:.8rem;font-weight:500;max-width:300px;">
+                                <i class="fa-solid fa-box-archive text-primary" style="font-size:.7rem;flex-shrink:0;"></i>
+                                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">[[ bundle.name ]]</span>
+                                <i class="fa-solid fa-xmark ms-1" style="cursor:pointer;font-size:.65rem;flex-shrink:0;opacity:.7;"
+                                   @click="removeBundle(bundle.id)"></i>
+                            </span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:.82rem;">
+                            <button v-if="selectedBundles.length > CHIPS_VISIBLE"
+                                    class="btn btn-sm btn-link p-0 text-decoration-none"
+                                    @click="bundlesExpanded = !bundlesExpanded">
+                                <span v-if="!bundlesExpanded"><i class="fa-solid fa-chevron-down me-1"></i>Show [[ selectedBundles.length - CHIPS_VISIBLE ]] more…</span>
+                                <span v-else><i class="fa-solid fa-chevron-up me-1"></i>Collapse</span>
+                            </button>
+                            <button class="btn btn-sm btn-link p-0 text-decoration-none text-danger"
+                                    @click="clearAllBundles">
+                                <i class="fa-solid fa-trash-can me-1"></i>Deselect all
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="!form.bundle_ids.length" class="text-muted text-center py-3" style="font-size:.9rem;">
+                        No bundles attached yet. Click <em>Add Bundles</em> to open the picker below.
+                    </div>
+                    <bundle-list v-else-if="!showBundlePicker"
+                        :key="form.bundle_ids.join(',')"
+                        mode="read"
+                        default-view="table"
+                        :fetch-url="'/bundle/data_table?' + form.bundle_ids.map(id => 'ids[]=' + id).join('&')"
+                        :sync-url="false"
+                        :show-filters="false"
+                        :show-create="false"
+                        :current-user-id="currentUserId"
+                        :current-user-is-admin="isAdmin"
+                        :current-user-is-authenticated="true">
+                    </bundle-list>
+                </div>
+            </div>
+
+            <!-- Bundle picker (full width, inline) -->
+            <div v-if="showBundlePicker" class="card border-0 shadow-sm rounded-3 mb-4" style="border-top:3px solid var(--bs-primary);">
+                <div class="card-body p-3">
+                    <p class="text-muted mb-3" style="font-size:.85rem;">
+                        <i class="fa-solid fa-info-circle me-1"></i>
+                        Select bundles and click <strong>Confirm</strong> to attach them.
+                    </p>
+                    <bundle-list
+                        mode="select"
+                        default-view="table"
+                        :sync-url="false"
+                        :show-create="false"
+                        :current-user-id="currentUserId"
+                        :current-user-is-admin="isAdmin"
+                        :current-user-is-authenticated="true"
+                        @send="handleBundlesSend">
+                    </bundle-list>
+                </div>
+            </div>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    import { create_message }         from '/static/js/toaster.js'
+    import SmartEditor                from '/static/js/components/smart-editor.js'
+    import TagInput            from '/static/js/tags/tagInput.js'
+    import AttackInput         from '/static/js/attack/attackInput.js'
+    import VulnerabilityInput  from '/static/js/vulnerability/vulnerabilityInput.js'
+    import RuleList            from '/static/js/rule/ruleList.js'
+    import BundleList          from '/static/js/bundle/bundleList.js'
+
+    const { createApp, ref, onMounted } = Vue
+
+    const isAdmin       = {{ current_user.is_admin() | tojson }}
+    const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }}
+    const csrfToken     = '{{ csrf_token() }}'
+    const IS_EDIT       = {{ is_edit | tojson }}
+    {% if is_edit and post %}
+    const EDIT_UUID = '{{ post.uuid }}'
+    {% else %}
+    const EDIT_UUID = null
+    {% endif %}
+
+    {% if is_edit and post %}
+    const INIT_DATA = {
+        title:           {{ post.title | tojson }},
+        excerpt:         {{ (post.excerpt or '') | tojson }},
+        content:         {{ (post.content or '') | tojson }},
+        is_public:       {{ post.is_public | tojson }},
+        is_draft:        {{ post.is_draft | tojson }},
+        cve_ids:         {{ (post.cve_ids or []) | tojson }},
+        cover_image_url: {{ (post.cover_image_url or '') | tojson }},
+        external_links:  {{ (post.external_links or []) | tojson }},
+        tag_names:       {{ post.tags | map(attribute='tag') | map(attribute='name') | list | tojson }},
+        technique_ids:   {{ post.attacks | map(attribute='technique_id') | list | tojson }},
+        rule_ids:        {{ post.rules | map(attribute='rule_id') | list | tojson }},
+        bundle_ids:      {{ post.bundles | map(attribute='bundle_id') | list | tojson }},
+        files:           {{ files_json | tojson }},
+    }
+    {% else %}
+    const INIT_DATA = { title:'', excerpt:'', content:'', is_public:false, is_draft:true, cve_ids:[], cover_image_url:'', external_links:[], tag_names:[], technique_ids:[], rule_ids:[], bundle_ids:[], files:[] }
+    {% endif %}
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: {
+            'smart-editor':        SmartEditor,
+            'tag-input':           TagInput,
+            'attack-input':        AttackInput,
+            'vulnerability-input': VulnerabilityInput,
+            'rule-list':           RuleList,
+            'bundle-list':         BundleList,
+        },
+        setup() {
+            const form = ref({
+                title:           INIT_DATA.title,
+                excerpt:         INIT_DATA.excerpt,
+                content:         INIT_DATA.content,
+                is_public:       INIT_DATA.is_public,
+                is_draft:        INIT_DATA.is_draft,
+                cve_ids:         [...INIT_DATA.cve_ids],
+                cover_image_url: INIT_DATA.cover_image_url,
+                external_links:  INIT_DATA.external_links.map(l => ({ ...l })),
+                rule_ids:        [...INIT_DATA.rule_ids],
+                bundle_ids:      [...INIT_DATA.bundle_ids],
+            })
+            const attachedFiles    = ref([...INIT_DATA.files])
+            const isUploading      = ref(false)
+            const coverMode        = ref('url')
+            const isCoverUploading = ref(false)
+            const selectedTags    = ref(INIT_DATA.tag_names.map(n => n))
+            const selectedAttacks = ref(INIT_DATA.technique_ids.map(id => ({ technique_id: id, name: id, tactic_keys: [] })))
+            const isSaving    = ref(false)
+            const lastSavedAt = ref(null)
+            const shareUrl    = ref('')
+            const isRegenerating   = ref(false)
+            const selectedRules    = ref([])
+            const selectedBundles  = ref([])
+            const showRulePicker   = ref(false)
+            const showBundlePicker = ref(false)
+            const CHIPS_VISIBLE   = 8
+            const rulesExpanded   = ref(false)
+            const bundlesExpanded = ref(false)
+
+            // ── Shared: fetch all items across pages (endpoint caps per_page at 100) ──
+            async function _fetchAllPages(baseUrl) {
+                const sep   = baseUrl.includes('?') ? '&' : '?'
+                const first = await fetch(`${baseUrl}${sep}per_page=100&page=1`)
+                if (!first.ok) return []
+                const d1    = await first.json()
+                const items = [...(d1.items || [])]
+                const pages = d1.total_pages || 1
+                if (pages > 1) {
+                    const rest = await Promise.all(
+                        Array.from({ length: pages - 1 }, (_, i) =>
+                            fetch(`${baseUrl}${sep}per_page=100&page=${i + 2}`).then(r => r.json())
+                        )
+                    )
+                    rest.forEach(d => items.push(...(d.items || [])))
+                }
+                return items
+            }
+
+            // ── Rule helpers ───────────────────────────────────────────────────
+            async function handleRulesSend(ids, filters = {}) {
+                showRulePicker.value = false
+                if (!ids || (Array.isArray(ids) && !ids.length)) return
+                let items = []
+                if (ids === 'ALL') {
+                    const qs = filters.format ? `?format=${encodeURIComponent(filters.format)}` : ''
+                    items = await _fetchAllPages(`/rule/data_table${qs}`)
+                } else {
+                    const qs = Array.from(ids).map(id => `ids[]=${id}`).join('&')
+                    items = await _fetchAllPages(`/rule/data_table?${qs}`)
+                }
+                const newItems = items.filter(r => !form.value.rule_ids.includes(r.id))
+                if (newItems.length) {
+                    form.value.rule_ids = [...form.value.rule_ids, ...newItems.map(r => r.id)]
+                    newItems.forEach(r => {
+                        if (!selectedRules.value.find(x => x.id === r.id))
+                            selectedRules.value.push({ id: r.id, title: r.title })
+                    })
+                    create_message(`${newItems.length} rule${newItems.length > 1 ? 's' : ''} attached.`, 'success-subtle')
+                    if (IS_EDIT) autoSave()
+                }
+            }
+            function removeRule(ruleId) {
+                form.value.rule_ids = form.value.rule_ids.filter(id => id !== ruleId)
+                selectedRules.value  = selectedRules.value.filter(r => r.id !== ruleId)
+                if (IS_EDIT) autoSave()
+            }
+            function clearAllRules() {
+                form.value.rule_ids = []
+                selectedRules.value  = []
+                rulesExpanded.value  = false
+                if (IS_EDIT) autoSave()
+            }
+
+            // ── Bundle helpers ─────────────────────────────────────────────────
+            async function handleBundlesSend(ids) {
+                showBundlePicker.value = false
+                if (!ids || (Array.isArray(ids) && !ids.length)) return
+                let items = []
+                if (ids === 'ALL') {
+                    items = await _fetchAllPages('/bundle/data_table')
+                } else {
+                    const qs = Array.from(ids).map(id => `ids[]=${id}`).join('&')
+                    items = await _fetchAllPages(`/bundle/data_table?${qs}`)
+                }
+                const newItems = items.filter(b => !form.value.bundle_ids.includes(b.id))
+                if (newItems.length) {
+                    form.value.bundle_ids = [...form.value.bundle_ids, ...newItems.map(b => b.id)]
+                    newItems.forEach(b => {
+                        if (!selectedBundles.value.find(x => x.id === b.id))
+                            selectedBundles.value.push({ id: b.id, name: b.name })
+                    })
+                    create_message(`${newItems.length} bundle${newItems.length > 1 ? 's' : ''} attached.`, 'success-subtle')
+                    if (IS_EDIT) autoSave()
+                }
+            }
+            function removeBundle(bundleId) {
+                form.value.bundle_ids = form.value.bundle_ids.filter(id => id !== bundleId)
+                selectedBundles.value  = selectedBundles.value.filter(b => b.id !== bundleId)
+                if (IS_EDIT) autoSave()
+            }
+            function clearAllBundles() {
+                form.value.bundle_ids  = []
+                selectedBundles.value  = []
+                bundlesExpanded.value  = false
+                if (IS_EDIT) autoSave()
+            }
+
+            // ── Prefill chips on edit ──────────────────────────────────────────
+            async function prefillAttached() {
+                if (form.value.rule_ids.length) {
+                    const qs    = form.value.rule_ids.map(id => `ids[]=${id}`).join('&')
+                    const items = await _fetchAllPages(`/rule/data_table?${qs}`)
+                    selectedRules.value = items.map(r => ({ id: r.id, title: r.title }))
+                }
+                if (form.value.bundle_ids.length) {
+                    const qs    = form.value.bundle_ids.map(id => `ids[]=${id}`).join('&')
+                    const items = await _fetchAllPages(`/bundle/data_table?${qs}`)
+                    selectedBundles.value = items.map(b => ({ id: b.id, name: b.name }))
+                }
+            }
+
+            onMounted(() => { if (IS_EDIT) prefillAttached() })
+
+            // ── External links ─────────────────────────────────────────────────
+            function addLink() {
+                form.value.external_links.push({ url: '', label: '' })
+            }
+            function removeLink(idx) {
+                form.value.external_links.splice(idx, 1)
+                if (IS_EDIT) autoSave()
+            }
+
+            // ── File upload/delete ──────────────────────────────────────────────
+            async function uploadFile(event) {
+                const file = event.target.files[0]
+                if (!file || !EDIT_UUID) return
+                event.target.value = ''
+                isUploading.value = true
+                const fd = new FormData()
+                fd.append('file', file)
+                try {
+                    const res  = await fetch(`/blog/admin/file/upload/${EDIT_UUID}`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken },
+                        body: fd,
+                    })
+                    const data = await res.json()
+                    if (res.ok && data.file) {
+                        attachedFiles.value.push(data.file)
+                        create_message(`File "${data.file.original_name}" uploaded.`, 'success-subtle')
+                    } else {
+                        create_message(data.message || 'Upload failed.', 'danger-subtle')
+                    }
+                } catch {
+                    create_message('Upload error.', 'danger-subtle')
+                } finally {
+                    isUploading.value = false
+                }
+            }
+
+            async function uploadCover(event) {
+                const file = event.target.files[0]
+                if (!file || !EDIT_UUID) return
+                event.target.value = ''
+                isCoverUploading.value = true
+                const fd = new FormData()
+                fd.append('file', file)
+                try {
+                    const res  = await fetch(`/blog/admin/upload_cover/${EDIT_UUID}`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken },
+                        body: fd,
+                    })
+                    const data = await res.json()
+                    if (res.ok && data.url) {
+                        form.cover_image_url = data.url
+                        coverMode.value = 'url'
+                        create_message('Cover image uploaded.', 'success-subtle')
+                        if (IS_EDIT) autoSave()
+                    } else {
+                        create_message(data.message || 'Upload failed.', 'danger-subtle')
+                    }
+                } catch {
+                    create_message('Upload error.', 'danger-subtle')
+                } finally {
+                    isCoverUploading.value = false
+                }
+            }
+
+            function removeCover() {
+                form.cover_image_url = ''
+                if (IS_EDIT) autoSave()
+            }
+
+            async function deleteFile(fileUuid) {
+                try {
+                    const res  = await fetch(`/blog/admin/file/delete/${fileUuid}`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                    })
+                    if (res.ok) {
+                        attachedFiles.value = attachedFiles.value.filter(f => f.uuid !== fileUuid)
+                        create_message('File deleted.', 'success-subtle')
+                    } else {
+                        const data = await res.json()
+                        create_message(data.message || 'Delete failed.', 'danger-subtle')
+                    }
+                } catch {
+                    create_message('Network error.', 'danger-subtle')
+                }
+            }
+
+            // ── Save ───────────────────────────────────────────────────────────
+            async function savePost(silent = false) {
+                if (!form.value.title.trim()) {
+                    if (!silent) create_message('Title is required.', 'warning-subtle')
+                    return
+                }
+                isSaving.value = true
+                const payload = {
+                    ...form.value,
+                    uuid:          EDIT_UUID || undefined,
+                    tag_names:     selectedTags.value,
+                    technique_ids: selectedAttacks.value.map(a => a.technique_id),
+                    is_public:     form.value.is_draft ? false : form.value.is_public,
+                }
+                try {
+                    const res  = await fetch('/blog/admin/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify(payload),
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                        const now = new Date()
+                        lastSavedAt.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                        if (!silent) create_message(data.message || 'Saved.', 'success-subtle')
+                        if (!IS_EDIT && data.uuid) {
+                            setTimeout(() => { window.location.href = '/blog/admin/edit/' + data.uuid }, 800)
+                        }
+                    } else {
+                        if (!silent) create_message(data.message || 'Save failed.', 'danger-subtle')
+                    }
+                } catch {
+                    if (!silent) create_message('Network error.', 'danger-subtle')
+                } finally {
+                    isSaving.value = false
+                }
+            }
+
+            // Auto-save after mutations that change post state
+            async function autoSave() { await savePost(true) }
+
+            function toggleDraftMode() {
+                form.value.is_draft = !form.value.is_draft
+                if (IS_EDIT) autoSave()
+            }
+
+            // ── Share key regeneration ─────────────────────────────────────────
+            async function regenerateKey() {
+                if (!EDIT_UUID) return
+                isRegenerating.value = true
+                try {
+                    const res  = await fetch(`/blog/admin/regenerate_key/${EDIT_UUID}`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                        shareUrl.value = data.share_url
+                        create_message('Share link regenerated.', 'success-subtle')
+                    } else {
+                        create_message(data.message || 'Failed.', 'danger-subtle')
+                    }
+                } finally {
+                    isRegenerating.value = false
+                }
+            }
+
+            return {
+                form, selectedTags, selectedAttacks,
+                isSaving, lastSavedAt, shareUrl, isRegenerating,
+                selectedRules, selectedBundles,
+                showRulePicker, showBundlePicker,
+                CHIPS_VISIBLE, rulesExpanded, bundlesExpanded,
+                currentUserId, isAdmin, csrfToken, IS_EDIT,
+                attachedFiles, isUploading, uploadFile, deleteFile,
+                coverMode, isCoverUploading, uploadCover, removeCover,
+                addLink, removeLink,
+                handleRulesSend, removeRule, clearAllRules,
+                handleBundlesSend, removeBundle, clearAllBundles,
+                savePost, autoSave, toggleDraftMode, regenerateKey,
+            }
+        }
+    }).mount('#main-container')
+</script>
+{% endblock %}

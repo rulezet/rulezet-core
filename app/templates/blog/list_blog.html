@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+{% block title %}Security Blog — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/blog/blog.css') }}">
+<style>
+.blog-hero-card {
+    border-radius: 16px;
+    overflow: hidden;
+    transition: transform .2s, box-shadow .2s;
+}
+.blog-hero-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 48px rgba(0,0,0,.12) !important;
+}
+.blog-hero-image {
+    width: 100%;
+    height: 260px;
+    object-fit: cover;
+    display: block;
+}
+.blog-hero-image-placeholder {
+    width: 100%;
+    height: 180px;
+    background: linear-gradient(135deg, #0d6efd18 0%, #0a58ca10 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.blog-preview-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.65;
+    color: var(--subtle-text-color);
+    font-size: .93rem;
+}
+.blog-read-more {
+    font-size: .85rem;
+    font-weight: 600;
+    color: #0d6efd;
+    text-decoration: none;
+    letter-spacing: .02em;
+}
+.blog-read-more:hover { text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <!-- Banner -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-newspaper banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Blog</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-newspaper"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Security Blog</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
+            Intelligence reports, threat analyses, and detection insights from the Rulezet team.
+        </p>
+    </div>
+
+    <!-- Search + filters -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6">
+            <div class="input-group">
+                <span class="input-group-text border-0" style="background:var(--light-bg-color);">
+                    <i class="fa-solid fa-magnifying-glass text-muted"></i>
+                </span>
+                <input type="text" class="form-control border-0"
+                       style="background:var(--light-bg-color);color:var(--text-color);"
+                       placeholder="Search posts…"
+                       v-model="searchQuery" @input="debouncedSearch">
+            </div>
+        </div>
+        <div class="col-12 col-md-6 d-flex align-items-center justify-content-md-end gap-2 flex-wrap">
+            <span v-for="tag in activeTagFilters" :key="tag"
+                  class="blog-tag d-flex align-items-center gap-1"
+                  style="cursor:pointer;" @click="removeTagFilter(tag)">
+                [[ tag ]] <i class="fa-solid fa-xmark ms-1" style="font-size:.6rem;"></i>
+            </span>
+            <span v-if="activeTagFilters.length" class="text-muted" style="font-size:.8rem;">
+                [[ totalPosts ]] result<template v-if="totalPosts !== 1">s</template>
+            </span>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="isLoading" class="d-flex justify-content-center align-items-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <span class="ms-3 text-muted">Loading posts…</span>
+    </div>
+
+    <!-- Empty -->
+    <div v-else-if="posts.length === 0" class="text-center py-5 text-muted">
+        <i class="fa-solid fa-newspaper fa-3x mb-3 opacity-25"></i>
+        <p class="mb-0">No posts found.</p>
+    </div>
+
+    <!-- Post cards — large format -->
+    <div v-else class="d-flex flex-column gap-4 mb-4">
+        <div v-for="post in posts" :key="post.uuid"
+             class="card border-0 shadow-sm blog-hero-card position-relative">
+
+            <!-- Admin badges -->
+            <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+                <span v-if="isAdmin && post.is_draft"
+                      class="badge shadow-sm" style="font-size:.65rem;background:#fd7e14;color:#fff;">
+                    <i class="fa-solid fa-file-pen me-1"></i>DRAFT
+                </span>
+                <span v-if="isAdmin && !post.is_public"
+                      class="badge blog-status-private shadow-sm" style="font-size:.65rem;">
+                    <i class="fa-solid fa-lock me-1"></i>PRIVATE
+                </span>
+            </div>
+
+            <!-- Cover image -->
+            <a :href="'/blog/post/' + post.uuid">
+                <img v-if="post.cover_image_url"
+                     :src="post.cover_image_url" :alt="post.title"
+                     class="blog-hero-image"
+                     @error="$event.target.style.display='none'">
+                <div v-else class="blog-hero-image-placeholder">
+                    <i class="fa-solid fa-newspaper fa-2x" style="color:#0d6efd;opacity:.25;"></i>
+                </div>
+            </a>
+
+            <div class="card-body p-4 p-md-5">
+
+                <!-- Tags -->
+                <div class="d-flex flex-wrap gap-1 mb-3" v-if="post.tag_names && post.tag_names.length">
+                    <span v-for="tag in post.tag_names.slice(0, 5)" :key="tag"
+                          class="blog-tag" style="cursor:pointer;"
+                          @click="addTagFilter(tag)">[[ tag ]]</span>
+                    <span v-if="post.tag_names.length > 5" class="blog-tag text-muted">
+                        +[[ post.tag_names.length - 5 ]]
+                    </span>
+                </div>
+
+                <!-- CVE chips -->
+                <div v-if="post.cve_ids && post.cve_ids.length" class="d-flex flex-wrap gap-1 mb-3">
+                    <span v-for="cve in post.cve_ids.slice(0, 4)" :key="cve" class="blog-cve-chip">[[ cve ]]</span>
+                    <span v-if="post.cve_ids.length > 4" class="blog-cve-chip text-muted">+[[ post.cve_ids.length - 4 ]]</span>
+                </div>
+
+                <!-- Title -->
+                <h3 class="fw-bold mb-3" style="color:var(--text-color);line-height:1.3;">
+                    <a :href="'/blog/post/' + post.uuid"
+                       class="text-decoration-none" style="color:inherit;">[[ post.title ]]</a>
+                </h3>
+
+                <!-- Preview text: excerpt first, then beginning of content -->
+                <p class="blog-preview-text mb-4">
+                    [[ post.excerpt || (post.content ? post.content.replace(/#{1,6}\s/g, '').replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '').slice(0, 400) : '') ]]
+                </p>
+
+                <!-- Footer -->
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-3"
+                     style="border-top:1px solid var(--border-color);padding-top:1rem;">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <img v-if="post.author_avatar" :src="post.author_avatar"
+                                 width="28" height="28"
+                                 style="border-radius:50%;object-fit:cover;" :alt="post.author_name">
+                            <i v-else class="fa-solid fa-user-circle text-muted"></i>
+                            <span class="text-muted" style="font-size:.85rem;">[[ post.author_name || 'Rulezet Team' ]]</span>
+                        </div>
+                        <span class="text-muted" style="font-size:.82rem;">
+                            <i class="fa-regular fa-calendar me-1"></i>[[ post.published_at || post.created_at ]]
+                        </span>
+                        <span v-if="post.view_count" class="text-muted" style="font-size:.82rem;">
+                            <i class="fa-solid fa-eye me-1"></i>[[ post.view_count ]]
+                        </span>
+                    </div>
+                    <a :href="'/blog/post/' + post.uuid" class="blog-read-more">
+                        Read more <i class="fa-solid fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <nav v-if="totalPages > 1" class="d-flex justify-content-center mt-2 mb-4">
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item" :class="{disabled: currentPage === 1}">
+                <button class="page-link" @click="goToPage(currentPage - 1)">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+            </li>
+            <li v-for="p in paginationRange" :key="p"
+                class="page-item" :class="{active: p === currentPage, disabled: p === '…'}">
+                <button class="page-link" @click="typeof p === 'number' && goToPage(p)">[[ p ]]</button>
+            </li>
+            <li class="page-item" :class="{disabled: currentPage === totalPages}">
+                <button class="page-link" @click="goToPage(currentPage + 1)">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </li>
+        </ul>
+    </nav>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    import { create_message } from '/static/js/toaster.js'
+    const { createApp, ref, computed, onMounted } = Vue
+
+    const isAuthenticated = {{ current_user.is_authenticated | tojson }}
+    const isAdmin         = {{ current_user.is_admin()        | tojson }}
+    const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        setup() {
+            const posts          = ref([])
+            const isLoading      = ref(false)
+            const searchQuery    = ref('')
+            const currentPage    = ref(1)
+            const totalPages     = ref(1)
+            const totalPosts     = ref(0)
+            const activeTagFilters = ref([])
+            const PER_PAGE       = 6
+            let   _searchTimer   = null
+
+            async function fetchPosts() {
+                isLoading.value = true
+                const params = new URLSearchParams({
+                    page: currentPage.value,
+                    per_page: PER_PAGE,
+                })
+                if (searchQuery.value.trim())
+                    params.set('search', searchQuery.value.trim())
+                if (activeTagFilters.value.length)
+                    params.set('tags', activeTagFilters.value.join(','))
+
+                try {
+                    const res  = await fetch('/blog/api/posts?' + params)
+                    const data = await res.json()
+                    posts.value      = data.items || []
+                    totalPages.value = data.total_pages || 1
+                    totalPosts.value = data.total || 0
+                } catch {
+                    create_message('Failed to load posts.', 'danger-subtle')
+                } finally {
+                    isLoading.value = false
+                }
+            }
+
+            function debouncedSearch() {
+                clearTimeout(_searchTimer)
+                _searchTimer = setTimeout(() => {
+                    currentPage.value = 1
+                    fetchPosts()
+                }, 350)
+            }
+
+            function goToPage(p) {
+                if (p < 1 || p > totalPages.value) return
+                currentPage.value = p
+                fetchPosts()
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+            }
+
+            function addTagFilter(tag) {
+                if (!activeTagFilters.value.includes(tag)) {
+                    activeTagFilters.value.push(tag)
+                    currentPage.value = 1
+                    fetchPosts()
+                }
+            }
+
+            function removeTagFilter(tag) {
+                activeTagFilters.value = activeTagFilters.value.filter(t => t !== tag)
+                currentPage.value = 1
+                fetchPosts()
+            }
+
+            const paginationRange = computed(() => {
+                const total = totalPages.value
+                const curr  = currentPage.value
+                if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+                const pages = new Set([1, total, curr, curr - 1, curr + 1].filter(p => p >= 1 && p <= total))
+                const sorted = [...pages].sort((a, b) => a - b)
+                const result = []
+                let prev = null
+                for (const p of sorted) {
+                    if (prev && p - prev > 1) result.push('…')
+                    result.push(p)
+                    prev = p
+                }
+                return result
+            })
+
+            onMounted(fetchPosts)
+
+            return {
+                posts, isLoading, searchQuery, currentPage, totalPages, totalPosts,
+                activeTagFilters, paginationRange,
+                debouncedSearch, goToPage, addTagFilter, removeTagFilter,
+                isAuthenticated, isAdmin, currentUserId,
+            }
+        }
+    }).mount('#main-container')
+</script>
+{% endblock %}
