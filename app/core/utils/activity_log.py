@@ -248,10 +248,26 @@ def log_activity(
 
         ip = method = url = user_agent = None
         with suppress(Exception):
-            ip         = freq.remote_addr
+            remote_addr = freq.remote_addr
+            xff = (freq.headers.get('X-Forwarded-For') or '').strip()
+            if xff:
+                # First entry is the original client IP; subsequent entries are proxies
+                ip = xff.split(',')[0].strip()[:45]
+            else:
+                ip = remote_addr
             url        = freq.path[:512]
             method     = freq.method
             user_agent = (freq.headers.get('User-Agent') or '')[:256] or None
+
+        # Merge network metadata into extra without overwriting caller-supplied keys
+        with suppress(Exception):
+            net_meta: dict[str, Any] = {}
+            if xff:
+                net_meta['x_forwarded_for'] = xff[:512]
+            if remote_addr and remote_addr != ip:
+                net_meta['remote_addr'] = remote_addr
+            if net_meta:
+                extra = {**net_meta, **(extra or {})}
 
         resolved_public    = is_public if is_public is not None else (action in _PUBLIC_ACTIONS)
         resolved_icon      = icon if icon is not None else _default_icon(action)
