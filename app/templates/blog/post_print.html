@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --blue:    #1a56db;
+    --red:     #dc2626;
+    --green:   #16a34a;
+    --gray-50: #f9fafb;
+    --gray-100:#f3f4f6;
+    --gray-200:#e5e7eb;
+    --gray-400:#9ca3af;
+    --gray-600:#4b5563;
+    --gray-800:#1f2937;
+    --gray-900:#111827;
+}
+
+html { font-size: 11pt; }
+
+body {
+    font-family: 'Inter', Arial, sans-serif;
+    color: var(--gray-900);
+    background: #fff;
+    line-height: 1.6;
+    padding: 0;
+    margin: 0;
+}
+
+/* ── Page ─────────────────────────────────────────── */
+@page {
+    size: A4;
+    margin: 18mm 20mm 18mm 20mm;
+    @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 8pt;
+        color: var(--gray-400);
+        font-family: 'Inter', Arial, sans-serif;
+    }
+    @top-right {
+        content: "{{ post.title | truncate(60, True, '…') }}";
+        font-size: 7.5pt;
+        color: var(--gray-400);
+        font-family: 'Inter', Arial, sans-serif;
+    }
+}
+
+/* ── Cover image ──────────────────────────────────── */
+.cover-image {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    display: block;
+}
+
+/* ── Header ───────────────────────────────────────── */
+.post-header { margin-bottom: 20px; }
+
+.post-title {
+    font-size: 22pt;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--gray-900);
+    margin-bottom: 10px;
+}
+
+.post-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 8.5pt;
+    color: var(--gray-400);
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.post-excerpt {
+    font-size: 11pt;
+    color: var(--gray-600);
+    font-style: italic;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    border-left: 3px solid var(--blue);
+    background: var(--gray-50);
+    border-radius: 0 6px 6px 0;
+}
+
+/* ── Chips ─────────────────────────────────────────── */
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
+.chip {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 100px;
+    font-size: 7.5pt;
+    font-weight: 600;
+    border: 1px solid;
+}
+.chip-tag   { color: var(--blue);  border-color: #1a56db44; background: #1a56db0d; }
+.chip-cve   { color: var(--red);   border-color: #dc262644; background: #dc26260d; }
+.chip-att   { color: #7c3aed;      border-color: #7c3aed44; background: #7c3aed0d; }
+
+/* ── Section ─────────────────────────────────────── */
+.section {
+    margin-top: 24px;
+    page-break-inside: avoid;
+}
+
+.section-title {
+    font-size: 9pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--gray-400);
+    border-bottom: 1px solid var(--gray-200);
+    padding-bottom: 5px;
+    margin-bottom: 12px;
+}
+
+/* ── Content (rendered markdown) ──────────────────── */
+.content h1, .content h2, .content h3, .content h4 {
+    color: var(--gray-900);
+    font-weight: 700;
+    margin-top: 18px;
+    margin-bottom: 7px;
+    line-height: 1.3;
+}
+.content h1 { font-size: 16pt; }
+.content h2 { font-size: 13pt; }
+.content h3 { font-size: 11pt; }
+.content h4 { font-size: 10pt; }
+
+.content p  { margin-bottom: 10px; }
+.content ul, .content ol { padding-left: 22px; margin-bottom: 10px; }
+.content li { margin-bottom: 3px; }
+.content a  { color: var(--blue); }
+.content hr { border: none; border-top: 1px solid var(--gray-200); margin: 16px 0; }
+
+.content blockquote {
+    border-left: 3px solid var(--blue);
+    padding: 8px 14px;
+    background: var(--gray-50);
+    border-radius: 0 6px 6px 0;
+    color: var(--gray-600);
+    margin: 12px 0;
+}
+
+.content code {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 8.5pt;
+    background: var(--gray-100);
+    border-radius: 3px;
+    padding: 1px 4px;
+    color: #be185d;
+}
+
+.content pre {
+    background: var(--gray-900);
+    color: #e2e8f0;
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow: hidden;
+    margin: 12px 0;
+    font-size: 8pt;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    page-break-inside: avoid;
+}
+.content pre code { background: none; color: inherit; padding: 0; }
+
+.content table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+    margin: 12px 0;
+}
+.content table th, .content table td {
+    border: 1px solid var(--gray-200);
+    padding: 5px 9px;
+    text-align: left;
+}
+.content table th { background: var(--gray-100); font-weight: 600; }
+
+.content img { max-width: 100%; border-radius: 6px; }
+
+/* ── Cards (rules / bundles / links / files) ─────── */
+.card-list { display: flex; flex-direction: column; gap: 7px; }
+
+.card-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 12px;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    background: var(--gray-50);
+    page-break-inside: avoid;
+}
+
+.card-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: var(--gray-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 9pt;
+    font-weight: 700;
+    color: var(--blue);
+    border: 1px solid var(--gray-200);
+}
+
+.card-body { flex: 1; min-width: 0; }
+.card-name  { font-size: 9pt;  font-weight: 600; color: var(--gray-900); }
+.card-sub   { font-size: 7.5pt; color: var(--gray-400); margin-top: 1px; }
+.card-url   { font-size: 7.5pt; color: var(--blue); word-break: break-all; }
+
+/* ── Footer ──────────────────────────────────────── */
+.doc-footer {
+    margin-top: 32px;
+    padding-top: 10px;
+    border-top: 1px solid var(--gray-200);
+    font-size: 7.5pt;
+    color: var(--gray-400);
+    display: flex;
+    justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+{% if post.cover_image_url %}
+<img class="cover-image" src="{{ cover_image_abs }}" alt="{{ post.title }}">
+{% endif %}
+
+<!-- Header -->
+<div class="post-header">
+    <div class="post-title">{{ post.title }}</div>
+    <div class="post-meta">
+        <span>{{ post.author.get_username() if post.author else 'Rulezet Team' }}</span>
+        <span>{{ post.published_at.strftime('%B %d, %Y') if post.published_at else post.created_at.strftime('%B %d, %Y') }}</span>
+        {% if post.view_count %}<span>{{ post.view_count }} views</span>{% endif %}
+        <span>{{ source_url }}/blog/post/{{ post.uuid }}</span>
+    </div>
+
+    {% if post.excerpt %}
+    <div class="post-excerpt">{{ post.excerpt }}</div>
+    {% endif %}
+
+    {% if tags or cve_ids or technique_ids %}
+    <div class="chips">
+        {% for t in tags %}<span class="chip chip-tag">{{ t }}</span>{% endfor %}
+        {% for c in cve_ids %}<span class="chip chip-cve">{{ c }}</span>{% endfor %}
+        {% for a in technique_ids %}<span class="chip chip-att">{{ a }}</span>{% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Content -->
+<div class="content">{{ content_html | safe }}</div>
+
+<!-- External links -->
+{% if external_links %}
+<div class="section">
+    <div class="section-title">External Links</div>
+    <div class="card-list">
+        {% for link in external_links %}
+        <div class="card-item">
+            <div class="card-icon">↗</div>
+            <div class="card-body">
+                <div class="card-name">{{ link.label or link.url }}</div>
+                <div class="card-url">{{ link.url }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Attachments -->
+{% if files %}
+<div class="section">
+    <div class="section-title">Attachments</div>
+    <div class="card-list">
+        {% for f in files %}
+        <div class="card-item">
+            <div class="card-icon">📎</div>
+            <div class="card-body">
+                <div class="card-name">{{ f.original_name }}</div>
+                <div class="card-sub">{{ (f.size_bytes / 1024) | round(1) }} KB · {{ f.mime_type }}</div>
+                <div class="card-url">{{ source_url }}/blog/file/{{ f.uuid }}?download=1</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Referenced rules -->
+{% if rule_refs %}
+<div class="section">
+    <div class="section-title">Referenced Detection Rules ({{ rule_refs | length }})</div>
+    <div class="card-list">
+        {% for r in rule_refs %}
+        <div class="card-item">
+            <div class="card-icon">{{ r.format[:3] | upper if r.format else '◉' }}</div>
+            <div class="card-body">
+                <div class="card-name">{{ r.title }}</div>
+                <div class="card-sub">{{ r.format }} · UUID: {{ r.uuid }}</div>
+                <div class="card-url">{{ source_url }}/rule/detail_rule/{{ r.rule_id }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Referenced bundles -->
+{% if bundle_refs %}
+<div class="section">
+    <div class="section-title">Referenced Bundles ({{ bundle_refs | length }})</div>
+    <div class="card-list">
+        {% for b in bundle_refs %}
+        <div class="card-item">
+            <div class="card-icon">◧</div>
+            <div class="card-body">
+                <div class="card-name">{{ b.name }}</div>
+                <div class="card-sub">UUID: {{ b.uuid }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Footer -->
+<div class="doc-footer">
+    <span>Generated by Rulezet · {{ generated_at }}</span>
+    <span>{{ source_url }}/blog/post/{{ post.uuid }}</span>
+</div>
+
+</body>
+</html>

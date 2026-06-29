@@ -264,6 +264,188 @@ def api_posts():
     })
 
 
+# ── Post downloads (public posts only) ────────────────────────────────────────
+
+def _get_public_post_or_404(post_uuid):
+    post = BlogModel.get_post_by_uuid(post_uuid)
+    if not post or post.is_draft or not post.is_public:
+        abort(404)
+    return post
+
+def _safe_filename(title: str, uuid_prefix: str, ext: str) -> str:
+    import re as _re
+    slug = _re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:40]
+    return f'blog-{slug}-{uuid_prefix}.{ext}'
+
+def _build_render_context(post, base_url: str) -> dict:
+    """Shared context for both PDF and Markdown renderers."""
+    import datetime as _dt
+    from app.core.db_class.db import Rule, Bundle
+
+    cover = post.cover_image_url or ''
+    if cover.startswith('/'):
+        cover = base_url + cover
+
+    rule_refs = []
+    for assoc in post.rules:
+        rule = Rule.query.get(assoc.rule_id)
+        if rule and not rule.is_deleted:
+            rule_refs.append({'uuid': rule.uuid, 'title': rule.title,
+                              'format': rule.format, 'rule_id': rule.id})
+
+    bundle_refs = []
+    for assoc in post.bundles:
+        bundle = Bundle.query.get(assoc.bundle_id)
+        if bundle:
+            bundle_refs.append({'uuid': bundle.uuid, 'name': bundle.name})
+
+    return {
+        'post':            post,
+        'source_url':      base_url,
+        'cover_image_abs': cover,
+        'tags':            [a.tag.name for a in post.tags if a.tag],
+        'cve_ids':         post.cve_ids or [],
+        'technique_ids':   [a.technique_id for a in post.attacks],
+        'external_links':  post.external_links or [],
+        'files':           list(post.files),
+        'rule_refs':       rule_refs,
+        'bundle_refs':     bundle_refs,
+        'generated_at':    _dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC'),
+    }
+
+
+@blog_blueprint.route('/post/<string:post_uuid>/download/pdf')
+def download_post_pdf(post_uuid):
+    """Generate a full PDF of the blog post. Public + published posts only."""
+    import markdown as _md
+    from weasyprint import HTML as WeasyprintHTML
+    from flask import current_app
+
+    post = _get_public_post_or_404(post_uuid)
+    base_url = request.url_root.rstrip('/')
+    ctx = _build_render_context(post, base_url)
+
+    content_html = _md.markdown(
+        post.content or '',
+        extensions=['extra', 'codehilite', 'toc', 'nl2br'],
+    )
+    ctx['content_html'] = content_html
+
+    html_str = render_template('blog/post_print.html', **ctx)
+
+    pdf_bytes = WeasyprintHTML(
+        string=html_str,
+        base_url=base_url,
+    ).write_pdf()
+
+    filename = _safe_filename(post.title, post.uuid[:8], 'pdf')
+    response = current_app.response_class(
+        response=pdf_bytes,
+        status=200,
+        mimetype='application/pdf',
+    )
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    log_activity('blog.download_pdf', f'Downloaded PDF of "{post.title}"',
+                 target_type='blog_post', target_id=post.id, is_public=True)
+    return response
+
+
+@blog_blueprint.route('/post/<string:post_uuid>/download/markdown')
+def download_post_markdown(post_uuid):
+    """Download the blog post as a Markdown file with YAML front-matter."""
+    import datetime as _dt
+    from flask import current_app
+
+    post = _get_public_post_or_404(post_uuid)
+    base_url = request.url_root.rstrip('/')
+    ctx = _build_render_context(post, base_url)
+
+    lines = ['---']
+    lines.append(f'title: "{post.title}"')
+    if post.excerpt:
+        lines.append(f'excerpt: "{post.excerpt}"')
+    if post.published_at:
+        lines.append(f'date: {post.published_at.strftime("%Y-%m-%d")}')
+    if ctx["tags"]:
+        lines.append('tags:')
+        for t in ctx["tags"]:
+            lines.append(f'  - {t}')
+    if ctx["cve_ids"]:
+        lines.append('cve_ids:')
+        for c in ctx["cve_ids"]:
+            lines.append(f'  - {c}')
+    if ctx["technique_ids"]:
+        lines.append('attack_techniques:')
+        for a in ctx["technique_ids"]:
+            lines.append(f'  - {a}')
+    if post.cover_image_url:
+        lines.append(f'cover_image: "{ctx["cover_image_abs"]}"')
+    lines.append(f'source: "{base_url}/blog/post/{post.uuid}"')
+    lines.append(f'exported_at: {_dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}')
+    lines.append('---')
+    lines.append('')
+    lines.append(post.content or '')
+
+    if ctx["external_links"]:
+        lines += ['', '---', '', '## External Links', '']
+        for lnk in ctx["external_links"]:
+            lines.append(f'- [{lnk.get("label") or lnk["url"]}]({lnk["url"]})')
+
+    if ctx["files"]:
+        lines += ['', '## Attachments', '']
+        for f in ctx["files"]:
+            size_kb = round(f.size_bytes / 1024, 1)
+            lines.append(f'- [{f.original_name}]({base_url}/blog/file/{f.uuid}?download=1) ({size_kb} KB, {f.mime_type})')
+
+    if ctx["rule_refs"]:
+        lines += ['', '## Referenced Detection Rules', '']
+        for r in ctx["rule_refs"]:
+            lines.append(f'- **{r["title"]}** ({r["format"]}) — [{base_url}/rule/detail_rule/{r["rule_id"]}]({base_url}/rule/detail_rule/{r["rule_id"]})')
+
+    if ctx["bundle_refs"]:
+        lines += ['', '## Referenced Bundles', '']
+        for b in ctx["bundle_refs"]:
+            lines.append(f'- **{b["name"]}**')
+
+    content = '\n'.join(lines)
+    filename = _safe_filename(post.title, post.uuid[:8], 'md')
+    response = current_app.response_class(
+        response=content.encode('utf-8'),
+        status=200,
+        mimetype='text/markdown; charset=utf-8',
+    )
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    log_activity('blog.download_md', f'Downloaded Markdown of "{post.title}"',
+                 target_type='blog_post', target_id=post.id, is_public=True)
+    return response
+
+
+# ── JSON export ────────────────────────────────────────────────────────────────
+
+@blog_blueprint.route('/post/<string:post_uuid>/export')
+def export_post(post_uuid):
+    """Download a blog post as a portable JSON file. Public + published posts only."""
+    import re as _re
+    from flask import current_app
+    post = _get_public_post_or_404(post_uuid)
+
+    base_url = request.url_root.rstrip('/')
+    data = BlogModel.export_post_json(post, base_url)
+
+    safe_title = _re.sub(r'[^a-z0-9]+', '-', post.title.lower()).strip('-')[:40]
+    filename = f'blog-{safe_title}-{post.uuid[:8]}.json'
+
+    response = current_app.response_class(
+        response=json.dumps(data, ensure_ascii=False, indent=2),
+        status=200,
+        mimetype='application/json',
+    )
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    log_activity('blog.export', f'Exported blog post "{post.title}"',
+                 target_type='blog_post', target_id=post.id, is_public=True)
+    return response
+
+
 @blog_blueprint.route('/api/post/<string:post_uuid>')
 def api_post(post_uuid):
     post = BlogModel.get_post_by_uuid(post_uuid)
@@ -287,6 +469,33 @@ def api_post(post_uuid):
 
 
 # ── Cover image upload ────────────────────────────────────────────────────────
+
+@blog_blueprint.route('/admin/resolve_import_refs', methods=['POST'])
+@login_required
+def resolve_import_refs():
+    """Resolve rule/bundle UUIDs to their local integer IDs for JSON import."""
+    err = _admin_required()
+    if err:
+        return err
+    from app.core.db_class.db import Rule, Bundle
+    data        = request.get_json(silent=True) or {}
+    rule_uuids  = [str(u) for u in (data.get('rule_uuids')  or [])[:100]]
+    bundle_uuids= [str(u) for u in (data.get('bundle_uuids') or [])[:50]]
+
+    rules = []
+    for uuid in rule_uuids:
+        r = Rule.query.filter_by(uuid=uuid, is_deleted=False).first()
+        if r:
+            rules.append({'id': r.id, 'uuid': r.uuid, 'title': r.title, 'format': r.format})
+
+    bundles = []
+    for uuid in bundle_uuids:
+        b = Bundle.query.filter_by(uuid=uuid).first()
+        if b:
+            bundles.append({'id': b.id, 'uuid': b.uuid, 'name': b.name})
+
+    return jsonify({'rules': rules, 'bundles': bundles})
+
 
 @blog_blueprint.route('/admin/upload_cover/<string:post_uuid>', methods=['POST'])
 @login_required

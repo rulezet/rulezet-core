@@ -184,6 +184,71 @@ def get_post_by_uuid_by_id(post_id: int) -> BlogPost | None:
     return BlogPost.query.get(post_id)
 
 
+# ── JSON export ────────────────────────────────────────────────────────────────
+
+EXPORT_SCHEMA_VERSION = '1.0'
+
+def export_post_json(post: BlogPost, base_url: str) -> dict:
+    """Build a portable, safe JSON export of a public blog post.
+
+    Fields intentionally omitted: is_draft, is_public, share_key,
+    view_count, user_id, author info, created_at/updated_at, slug.
+    Rule/bundle associations are included as reference objects (uuid + label)
+    so a receiving instance can match them if the same content exists.
+    """
+    from ...core.db_class.db import Rule, Bundle
+
+    base = base_url.rstrip('/')
+
+    # Make cover URL absolute if it's a local path
+    cover = post.cover_image_url or ''
+    if cover.startswith('/'):
+        cover = base + cover
+
+    # Resolve rule references (uuid + title, not internal IDs)
+    rule_refs = []
+    for assoc in post.rules:
+        rule = Rule.query.get(assoc.rule_id)
+        if rule and not rule.is_deleted:
+            rule_refs.append({'uuid': rule.uuid, 'title': rule.title, 'format': rule.format})
+
+    # Resolve bundle references (uuid + name)
+    bundle_refs = []
+    for assoc in post.bundles:
+        bundle = Bundle.query.get(assoc.bundle_id)
+        if bundle:
+            bundle_refs.append({'uuid': bundle.uuid, 'name': bundle.name})
+
+    return {
+        '_meta': {
+            'schema_version':  EXPORT_SCHEMA_VERSION,
+            'generator':       'Rulezet Blog Export',
+            'exported_at':     datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'source':          base,
+            'post_uuid':       post.uuid,
+        },
+        'title':           post.title,
+        'excerpt':         post.excerpt or '',
+        'content':         post.content or '',
+        'cover_image_url': cover,
+        'tags':            [a.tag.name for a in post.tags if a.tag],
+        'attack_techniques': [a.technique_id for a in post.attacks],
+        'vulnerabilities': post.cve_ids or [],
+        'external_links':  post.external_links or [],
+        'attachments': [
+            {
+                'name':       f.original_name,
+                'mime_type':  f.mime_type,
+                'size_bytes': f.size_bytes,
+                'url':        f'{base}/blog/file/{f.uuid}?download=1',
+            }
+            for f in post.files
+        ],
+        'referenced_rules':   rule_refs,
+        'referenced_bundles': bundle_refs,
+    }
+
+
 def get_posts_paginated(page: int, per_page: int, search: str = None,
                         tag_names: list = None, is_admin: bool = False,
                         status: str = None):

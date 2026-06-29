@@ -54,6 +54,13 @@
         </div>
         <div class="p-3 d-flex flex-wrap align-items-center gap-2">
 
+            <!-- Load from JSON -->
+            <button type="button" @click="openImportModal"
+                    class="btn btn-sm rounded-pill px-3"
+                    style="background:transparent;border:1px solid #6c757d55;color:var(--subtle-text-color);">
+                <i class="fa-solid fa-file-import me-1"></i>Load from JSON
+            </button>
+
             <!-- Draft / Published toggle -->
             <button type="button" @click="toggleDraftMode"
                     class="btn btn-sm rounded-pill px-3"
@@ -525,6 +532,118 @@
                 </div>
             </div>
 
+    <!-- ── Import from JSON modal (inside Vue scope) ──────────────────────── -->
+    <div class="modal fade" id="importJsonModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius:16px;background:var(--card-bg-color);">
+
+                <!-- Header -->
+                <div class="modal-header border-0 pb-0 px-4 pt-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="width:38px;height:38px;border-radius:10px;background:#0d6efd18;display:flex;align-items:center;justify-content:center;">
+                            <i class="fa-solid fa-file-import text-primary"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0" style="color:var(--text-color);">Load from JSON</h5>
+                            <div class="text-muted" style="font-size:.78rem;">Import a Rulezet blog post export — fills all available fields automatically.</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body px-4 pb-2 pt-3">
+
+                    <!-- Tab switcher -->
+                    <div class="d-flex gap-1 mb-3 p-1 rounded-3" style="background:var(--light-bg-color);width:fit-content;">
+                        <button type="button" @click="importActiveTab = 'file'"
+                                class="btn btn-sm rounded-2 px-3" style="font-size:.8rem;"
+                                :style="importActiveTab === 'file' ? 'background:#0d6efd;color:#fff;' : 'background:transparent;color:var(--subtle-text-color);'">
+                            <i class="fa-solid fa-upload me-1"></i>Upload file
+                        </button>
+                        <button type="button" @click="importActiveTab = 'paste'"
+                                class="btn btn-sm rounded-2 px-3" style="font-size:.8rem;"
+                                :style="importActiveTab === 'paste' ? 'background:#0d6efd;color:#fff;' : 'background:transparent;color:var(--subtle-text-color);'">
+                            <i class="fa-solid fa-paste me-1"></i>Paste JSON
+                        </button>
+                    </div>
+
+                    <!-- Upload tab -->
+                    <div v-show="importActiveTab === 'file'">
+                        <label class="d-flex flex-column align-items-center justify-content-center rounded-3 p-4"
+                               style="border:2px dashed var(--border-color);background:var(--light-bg-color);cursor:pointer;min-height:140px;transition:border-color .2s;"
+                               onmouseover="this.style.borderColor='#0d6efd'" onmouseout="this.style.borderColor=''">
+                            <i class="fa-solid fa-file-code fa-2x mb-2 text-primary opacity-75"></i>
+                            <div class="fw-semibold mb-1" style="color:var(--text-color);">Click to choose a .json file</div>
+                            <div class="text-muted" style="font-size:.78rem;">or drag and drop here</div>
+                            <input type="file" accept=".json,application/json" class="d-none" id="import-file-input"
+                                   onchange="window.__importFileChange(this)">
+                        </label>
+                    </div>
+
+                    <!-- Paste tab — SmartEditor in JSON mode -->
+                    <div v-show="importActiveTab === 'paste'">
+                        <smart-editor v-model="importPasteText"
+                                      mode="code"
+                                      language="json"
+                                      min-height="200px"
+                                      placeholder="Paste the exported JSON here…">
+                        </smart-editor>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill mt-2"
+                                @click="importParseText()">
+                            <i class="fa-solid fa-magnifying-glass me-1"></i>Parse
+                        </button>
+                    </div>
+
+                    <!-- Error -->
+                    <div id="import-error" class="d-none mt-3 p-3 rounded-3"
+                         style="background:#dc354512;border:1px solid #dc354540;color:#dc3545;font-size:.82rem;">
+                        <i class="fa-solid fa-circle-exclamation me-2"></i>
+                        <span id="import-error-text"></span>
+                    </div>
+
+                    <!-- Preview -->
+                    <div id="import-preview" class="d-none mt-3">
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                            <div style="width:3px;height:14px;background:#198754;border-radius:2px;"></div>
+                            <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:#198754;">
+                                <i class="fa-solid fa-circle-check me-1"></i>Ready to import
+                            </span>
+                        </div>
+                        <div class="rounded-3 p-3 mb-3" style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+                            <div class="fw-bold mb-1" style="color:var(--text-color);font-size:.95rem;" id="prev-title"></div>
+                            <div class="text-muted mb-3" style="font-size:.8rem;" id="prev-excerpt"></div>
+                            <div class="d-flex flex-wrap gap-2" id="prev-chips"></div>
+                        </div>
+                        <div class="row g-2 mb-2" id="prev-stats"></div>
+                        <div id="prev-attachments-notice" class="d-none p-2 rounded-3 mb-2"
+                             style="background:#fd7e1412;border:1px solid #fd7e1440;font-size:.78rem;color:#fd7e14;">
+                            <i class="fa-solid fa-paperclip me-1"></i>
+                            <span id="prev-attachments-text"></span>
+                        </div>
+                        <div id="prev-refs-notice" class="d-none p-2 rounded-3"
+                             style="background:#0d6efd12;border:1px solid #0d6efd40;font-size:.78rem;color:#0d6efd;">
+                            <i class="fa-solid fa-link me-1"></i>
+                            <span id="prev-refs-text"></span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer border-0 px-4 pb-4 pt-2 d-flex gap-2">
+                    <button type="button" class="btn btn-sm rounded-pill px-3"
+                            style="background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);"
+                            data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="import-apply-btn"
+                            class="btn btn-sm rounded-pill px-3 ms-auto d-none"
+                            style="background:#0d6efd;color:#fff;border:none;"
+                            @click="importApply()">
+                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Apply to form
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 {% endblock %}
 
@@ -871,6 +990,28 @@
                 }
             }
 
+            // ── Import from JSON ────────────────────────────────────────────
+            const importActiveTab  = ref('file')
+            const importPasteText  = ref('')
+
+            function openImportModal() {
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('importJsonModal')).show()
+            }
+
+            function importParseText() {
+                const raw = importPasteText.value.trim()
+                if (!raw) { window.__importShowError('Paste some JSON first.'); return }
+                window.__importParseRaw(raw)
+            }
+
+            async function importApply() {
+                await window.__importApplyFn(() => {
+                    importPasteText.value = ''
+                    const fi = document.getElementById('import-file-input')
+                    if (fi) fi.value = ''
+                })
+            }
+
             return {
                 form, selectedTags, selectedAttacks,
                 isSaving, lastSavedAt, shareUrl, isRegenerating,
@@ -884,8 +1025,156 @@
                 handleRulesSend, removeRule, clearAllRules,
                 handleBundlesSend, removeBundle, clearAllBundles,
                 savePost, autoSave, toggleDraftMode, regenerateKey,
+                importActiveTab, importPasteText,
+                openImportModal, importParseText, importApply,
             }
         }
     }).mount('#main-container')
+</script>
+
+<!-- ── Import JSON — standalone helpers (called from Vue methods) ─────────── -->
+<script>
+;(function () {
+    const SCHEMA_VERSION = '1.0'
+    let _parsed = null
+
+    function showError(msg) {
+        document.getElementById('import-error-text').textContent = msg
+        document.getElementById('import-error').classList.remove('d-none')
+        document.getElementById('import-preview').classList.add('d-none')
+        document.getElementById('import-apply-btn').classList.add('d-none')
+        _parsed = null
+    }
+
+    function showPreview(data) {
+        document.getElementById('import-error').classList.add('d-none')
+
+        document.getElementById('prev-title').textContent = data.title || '(no title)'
+        document.getElementById('prev-excerpt').textContent = data.excerpt
+            ? data.excerpt.slice(0, 160) + (data.excerpt.length > 160 ? '…' : '')
+            : '(no excerpt)'
+
+        const chips = document.getElementById('prev-chips')
+        chips.innerHTML = ''
+        ;(data.tags || []).forEach(t => {
+            const s = document.createElement('span'); s.className = 'blog-tag'; s.textContent = t; chips.appendChild(s)
+        })
+        ;(data.attack_techniques || []).forEach(t => {
+            const s = document.createElement('span'); s.className = 'badge bg-danger rounded-pill'; s.style.fontSize = '.7rem'; s.textContent = t; chips.appendChild(s)
+        })
+        ;(data.vulnerabilities || []).forEach(c => {
+            const s = document.createElement('span'); s.className = 'blog-cve-chip'; s.textContent = c; chips.appendChild(s)
+        })
+
+        const stats = [
+            { icon: 'fa-align-left', label: 'Content',        value: data.content ? `${data.content.length} chars` : '—' },
+            { icon: 'fa-image',      label: 'Cover image',    value: data.cover_image_url ? 'Yes' : 'None' },
+            { icon: 'fa-link',       label: 'External links', value: (data.external_links || []).length },
+            { icon: 'fa-tag',        label: 'Tags',           value: (data.tags || []).length },
+        ]
+        document.getElementById('prev-stats').innerHTML = stats.map(s => `
+            <div class="col-6 col-md-3"><div class="rounded-3 p-2 text-center" style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+                <i class="fa-solid ${s.icon} text-primary mb-1" style="font-size:.85rem;"></i>
+                <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle-text-color);">${s.label}</div>
+                <div class="fw-bold" style="font-size:.85rem;color:var(--text-color);">${s.value}</div>
+            </div></div>`).join('')
+
+        const atts = data.attachments || []
+        document.getElementById('prev-attachments-notice').classList.toggle('d-none', !atts.length)
+        if (atts.length) document.getElementById('prev-attachments-text').textContent =
+            `${atts.length} attachment${atts.length > 1 ? 's' : ''} (${atts.map(a => a.name).join(', ')}) — download links will be added to External Links.`
+
+        const rr = data.referenced_rules || [], br = data.referenced_bundles || []
+        document.getElementById('prev-refs-notice').classList.toggle('d-none', !rr.length && !br.length)
+        if (rr.length || br.length) {
+            const parts = []
+            if (rr.length) parts.push(`${rr.length} rule${rr.length > 1 ? 's' : ''} referenced`)
+            if (br.length) parts.push(`${br.length} bundle${br.length > 1 ? 's' : ''} referenced`)
+            document.getElementById('prev-refs-text').textContent = parts.join(', ') + ' — attach them manually after saving.'
+        }
+
+        document.getElementById('import-preview').classList.remove('d-none')
+        document.getElementById('import-apply-btn').classList.remove('d-none')
+    }
+
+    function parse(raw) {
+        let data
+        try { data = JSON.parse(raw) } catch (e) { showError('Invalid JSON — ' + e.message); return }
+        if (!data.title || typeof data.title !== 'string') { showError('Missing required field "title". Is this a valid Rulezet blog export?'); return }
+        const ver = data._meta && data._meta.schema_version
+        if (ver && ver !== SCHEMA_VERSION) { showError(`Schema version mismatch (expected ${SCHEMA_VERSION}, got ${ver}).`); return }
+        _parsed = data
+        showPreview(data)
+    }
+
+    // Called by Vue method importParseText()
+    window.__importParseRaw  = parse
+    window.__importShowError = showError
+
+    // Called by Vue method importApply()
+    window.__importApplyFn = async function (resetCb) {
+        if (!_parsed) return
+        const d   = _parsed
+        const app = document.getElementById('main-container').__vue_app__
+        if (!app) { alert('Vue app not found.'); return }
+        const vm  = app._instance.proxy
+
+        if (d.title)           vm.form.title           = d.title
+        if (d.excerpt)         vm.form.excerpt         = d.excerpt
+        if (d.content)         vm.form.content         = d.content
+        if (d.cover_image_url) vm.form.cover_image_url = d.cover_image_url
+
+        if (Array.isArray(d.tags))            vm.selectedTags   = [...d.tags]
+        if (Array.isArray(d.vulnerabilities)) vm.form.cve_ids   = [...d.vulnerabilities]
+        if (Array.isArray(d.attack_techniques))
+            vm.selectedAttacks = d.attack_techniques.map(id => ({ technique_id: id, name: id, tactic_keys: [] }))
+
+        const existingUrls = new Set((vm.form.external_links || []).map(l => l.url))
+        const newLinks = [...(vm.form.external_links || [])]
+        ;(d.external_links || []).forEach(l => { if (l.url && !existingUrls.has(l.url)) newLinks.push({ url: l.url, label: l.label || '' }) })
+        ;(d.attachments   || []).forEach(a => { if (a.url && !existingUrls.has(a.url)) newLinks.push({ url: a.url, label: a.name || 'Attachment' }) })
+        vm.form.external_links = newLinks
+
+        // ── Resolve rule / bundle UUIDs → local integer IDs ────────────────
+        const refRules   = d.referenced_rules   || []
+        const refBundles = d.referenced_bundles || []
+        if (refRules.length || refBundles.length) {
+            try {
+                const res = await fetch('/blog/admin/resolve_import_refs', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': vm.csrfToken },
+                    body:    JSON.stringify({
+                        rule_uuids:   refRules.map(r => r.uuid),
+                        bundle_uuids: refBundles.map(b => b.uuid),
+                    }),
+                })
+                const resolved = await res.json()
+                if (resolved.rules   && resolved.rules.length)
+                    vm.form.rule_ids   = resolved.rules.map(r => r.id)
+                if (resolved.bundles && resolved.bundles.length)
+                    vm.form.bundle_ids = resolved.bundles.map(b => b.id)
+            } catch (e) {
+                console.warn('[import] could not resolve rule/bundle refs:', e)
+            }
+        }
+
+        document.getElementById('import-preview').classList.add('d-none')
+        document.getElementById('import-apply-btn').classList.add('d-none')
+        document.getElementById('import-error').classList.add('d-none')
+        _parsed = null
+        if (resetCb) resetCb()
+        bootstrap.Modal.getInstance(document.getElementById('importJsonModal')).hide()
+    }
+
+    window.__importFileChange = function (input) {
+        const file = input.files[0]
+        if (!file) return
+        if (!file.name.endsWith('.json') && file.type !== 'application/json') { showError('Only .json files are accepted.'); return }
+        if (file.size > 5 * 1024 * 1024) { showError('File exceeds 5 MB.'); return }
+        const reader = new FileReader()
+        reader.onload = e => parse(e.target.result)
+        reader.readAsText(file)
+    }
+})()
 </script>
 {% endblock %}

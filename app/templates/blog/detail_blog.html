@@ -221,6 +221,53 @@
                     <span v-if="post.updated_at !== post.created_at" class="text-muted" style="font-size:.85rem;">
                         <i class="fa-regular fa-clock me-1"></i>Updated [[ post.updated_at ]]
                     </span>
+                    <!-- Download dropdown — public posts only -->
+                    <div v-if="post.is_public && !post.is_draft" class="ms-auto dropdown">
+                        <button class="btn btn-sm rounded-pill dropdown-toggle"
+                                style="background:transparent;border:1px solid #6c757d55;color:var(--subtle-text-color);font-size:.78rem;"
+                                type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fa-solid fa-download me-1"></i>Download
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="border-radius:12px;min-width:200px;padding:6px;">
+                            <li>
+                                <a class="dropdown-item rounded-2 d-flex align-items-center gap-2 py-2"
+                                   :href="'/blog/post/' + post.uuid + '/download/pdf'">
+                                    <div style="width:28px;height:28px;border-radius:7px;background:#dc354518;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                        <i class="fa-solid fa-file-pdf" style="color:#dc3545;font-size:.75rem;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:.82rem;font-weight:600;">PDF</div>
+                                        <div style="font-size:.7rem;color:var(--subtle-text-color);">Full post with images &amp; rules</div>
+                                    </div>
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-2 d-flex align-items-center gap-2 py-2"
+                                   :href="'/blog/post/' + post.uuid + '/download/markdown'">
+                                    <div style="width:28px;height:28px;border-radius:7px;background:#0d6efd18;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                        <i class="fa-brands fa-markdown" style="color:#0d6efd;font-size:.75rem;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:.82rem;font-weight:600;">Markdown</div>
+                                        <div style="font-size:.7rem;color:var(--subtle-text-color);">With YAML front-matter</div>
+                                    </div>
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider my-1"></li>
+                            <li>
+                                <a class="dropdown-item rounded-2 d-flex align-items-center gap-2 py-2"
+                                   :href="'/blog/post/' + post.uuid + '/export'">
+                                    <div style="width:28px;height:28px;border-radius:7px;background:#19875418;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                        <i class="fa-solid fa-file-code" style="color:#198754;font-size:.75rem;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:.82rem;font-weight:600;">JSON</div>
+                                        <div style="font-size:.7rem;color:var(--subtle-text-color);">Portable Rulezet format</div>
+                                    </div>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
 
                 <!-- Tags -->
