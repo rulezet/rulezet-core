@@ -7,11 +7,6 @@
 .blog-hero-card {
     border-radius: 16px;
     overflow: hidden;
-    transition: transform .2s, box-shadow .2s;
-}
-.blog-hero-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 16px 48px rgba(0,0,0,.12) !important;
 }
 .blog-hero-image {
     width: 100%;
@@ -169,13 +164,12 @@
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-3"
                      style="border-top:1px solid var(--border-color);padding-top:1rem;">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <img v-if="post.author_avatar" :src="post.author_avatar"
-                                 width="28" height="28"
-                                 style="border-radius:50%;object-fit:cover;" :alt="post.author_name">
-                            <i v-else class="fa-solid fa-user-circle text-muted"></i>
-                            <span class="text-muted" style="font-size:.85rem;">[[ post.author_name || 'Rulezet Team' ]]</span>
-                        </div>
+                        <user-chip v-if="post.author_id"
+                                       :user-id="post.author_id"
+                                       :username="post.author_username"
+                                       :avatar="post.author_avatar"
+                                       size="sm" :show-name="true"></user-chip>
+                        <span v-else class="text-muted" style="font-size:.85rem;">Rulezet Team</span>
                         <span class="text-muted" style="font-size:.82rem;">
                             <i class="fa-regular fa-calendar me-1"></i>[[ post.published_at || post.created_at ]]
                         </span>
@@ -218,6 +212,7 @@
 {% block script %}
 <script type="module">
     import { create_message } from '/static/js/toaster.js'
+    import UserChip           from '/static/js/components/UserChip.js'
     const { createApp, ref, computed, onMounted } = Vue
 
     const isAuthenticated = {{ current_user.is_authenticated | tojson }}
@@ -226,6 +221,7 @@
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { 'user-chip': UserChip },
         setup() {
             const posts          = ref([])
             const isLoading      = ref(false)
