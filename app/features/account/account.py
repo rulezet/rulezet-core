@@ -241,12 +241,31 @@ def users_data_table():
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
+    from sqlalchemy import func
+    from app.core.db_class.db import Bundle
+    from app import db
+
+    user_ids = [u.id for u in pagination.items]
+
+    rule_counts = dict(
+        db.session.query(Rule.user_id, func.count(Rule.id))
+        .filter(Rule.user_id.in_(user_ids), Rule.is_deleted == False)
+        .group_by(Rule.user_id)
+        .all()
+    ) if user_ids else {}
+
+    bundle_counts = dict(
+        db.session.query(Bundle.user_id, func.count(Bundle.id))
+        .filter(Bundle.user_id.in_(user_ids))
+        .group_by(Bundle.user_id)
+        .all()
+    ) if user_ids else {}
+
     items = []
     for u in pagination.items:
         j = u.to_json()
-        from app.core.db_class.db import Bundle
-        j['rule_count']   = Rule.query.filter_by(user_id=u.id, is_deleted=False).count()
-        j['bundle_count'] = Bundle.query.filter_by(user_id=u.id).count()
+        j['rule_count']   = rule_counts.get(u.id, 0)
+        j['bundle_count'] = bundle_counts.get(u.id, 0)
         items.append(j)
 
     return jsonify({'items': items, 'total': pagination.total, 'total_pages': pagination.pages})
