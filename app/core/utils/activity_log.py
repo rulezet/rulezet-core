@@ -258,27 +258,35 @@ def log_activity(
                 user_id = current_user.id
 
         ip = method = url = user_agent = None
+        remote_addr = xff = None
         with suppress(Exception):
             remote_addr = freq.remote_addr
-            xff = (freq.headers.get('X-Forwarded-For') or '').strip()
-            if xff:
-                # First entry is the original client IP; subsequent entries are proxies
-                ip = xff.split(',')[0].strip()[:45]
-            else:
-                ip = remote_addr
+            _xff_raw = (freq.headers.get('X-Forwarded-For') or '').strip()
+            xff = _xff_raw or None
+            # ip_address = real client IP: first XFF entry (client behind proxy) or remote_addr
+            ip = (xff.split(',')[0].strip() if xff else remote_addr)
+            if ip:
+                ip = ip[:45]
             url        = freq.path[:512]
             method     = freq.method
             user_agent = (freq.headers.get('User-Agent') or '')[:256] or None
 
-        # Merge network metadata into extra without overwriting caller-supplied keys
+        # Build extra JSON: IPs (never loopback) + named target key + caller data
         with suppress(Exception):
-            net_meta: dict[str, Any] = {}
+            base: dict[str, Any] = {}
+            # X-Forwarded-For = real client IP chain — always include when present
             if xff:
-                net_meta['x_forwarded_for'] = xff[:512]
-            if remote_addr and remote_addr != ip:
-                net_meta['remote_addr'] = remote_addr
-            if net_meta:
-                extra = {**net_meta, **(extra or {})}
+                base['x_forwarded_for'] = xff[:512]
+            # remote_addr = the direct connecting address (proxy/lb) — skip loopback (127.x / ::1)
+            if remote_addr and remote_addr != '::1' and not remote_addr.startswith('127.'):
+                base['remote_addr'] = remote_addr
+            # Named target IDs (rule_id, comment_id, bundle_id…) from target_type
+            if target_type and target_id is not None:
+                base[f'{target_type}_id'] = target_id
+            if target_type and target_uuid:
+                base[f'{target_type}_uuid'] = target_uuid
+            # Caller-supplied data merged last — wins on key conflicts
+            extra = {**base, **(extra or {})} or None
 
         resolved_public    = is_public if is_public is not None else (action in _PUBLIC_ACTIONS)
         resolved_icon      = icon if icon is not None else _default_icon(action)
