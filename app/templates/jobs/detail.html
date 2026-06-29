@@ -70,8 +70,11 @@
             </p>
         </div>
 
+        {% if current_user.is_admin() %}
+
         {{ anav.admin_nav('jobs', jobs_count=running_jobs_count) }}
 
+        {% endif %}
         <!-- ── Info grid ── -->
         <div class="jobs-detail-grid">
 
