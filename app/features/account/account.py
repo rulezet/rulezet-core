@@ -785,8 +785,6 @@ def bulk_parse_fields_configs_delete(config_id):
 @account_blueprint.route('/user_activity_stats/<int:user_id>')
 @login_required
 def get_user_activity_stats(user_id):
-    if current_user.id != user_id and not current_user.is_admin():
-        return jsonify({"error": "Forbidden"}), 403
     user_rules = RuleModel.get_all_rules_by_user(user_id)
     user_bundles = BundleModel.get_all_bundles_by_user(user_id)
     
@@ -826,8 +824,6 @@ def get_user_activity_stats(user_id):
 @account_blueprint.route('/user_edit_proposals/<int:user_id>')
 @login_required
 def get_user_edit_proposals(user_id):
-    if current_user.id != user_id and not current_user.is_admin():
-        return jsonify({"error": "Forbidden"}), 403
     proposals = RuleModel.get_all_rule_proposal_user_id(user_id)
 
     if not proposals:

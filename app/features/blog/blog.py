@@ -355,7 +355,8 @@ def download_post_pdf(post_uuid):
         mimetype='application/pdf',
     )
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-    log_activity('blog.download_pdf', f'Downloaded PDF of "{post.title}"',
+    short_title = post.title[:80] + ('…' if len(post.title) > 80 else '')
+    log_activity('blog.download_pdf', f'Downloaded PDF of "{short_title}"',
                  target_type='blog_post', target_id=post.id, is_public=False)
     return response
 
@@ -425,7 +426,8 @@ def download_post_markdown(post_uuid):
         mimetype='text/markdown; charset=utf-8',
     )
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-    log_activity('blog.download_md', f'Downloaded Markdown of "{post.title}"',
+    short_title = post.title[:80] + ('…' if len(post.title) > 80 else '')
+    log_activity('blog.download_md', f'Downloaded Markdown of "{short_title}"',
                  target_type='blog_post', target_id=post.id, is_public=False)
     return response
 
@@ -451,7 +453,8 @@ def export_post(post_uuid):
         mimetype='application/json',
     )
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-    log_activity('blog.export', f'Exported blog post "{post.title}"',
+    short_title = post.title[:80] + ('…' if len(post.title) > 80 else '')
+    log_activity('blog.export', f'Exported blog post "{short_title}"',
                  target_type='blog_post', target_id=post.id, is_public=False)
     return response
 
