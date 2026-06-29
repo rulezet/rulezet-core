@@ -139,7 +139,7 @@ def admin_save():
             log_activity(
                 'blog.edit', f"Edited blog post '{post.title}'",
                 target_type='blog_post', target_id=post.id, target_uuid=post.uuid,
-                is_public=post.is_public,
+                is_public=False,
             )
             return jsonify({
                 'success': True,
@@ -152,7 +152,7 @@ def admin_save():
             log_activity(
                 'blog.create', f"Created blog post '{post.title}'",
                 target_type='blog_post', target_id=post.id, target_uuid=post.uuid,
-                is_public=post.is_public,
+                is_public=post.is_public and not post.is_draft,
             )
             return jsonify({
                 'success': True,
@@ -356,7 +356,7 @@ def download_post_pdf(post_uuid):
     )
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     log_activity('blog.download_pdf', f'Downloaded PDF of "{post.title}"',
-                 target_type='blog_post', target_id=post.id, is_public=True)
+                 target_type='blog_post', target_id=post.id, is_public=False)
     return response
 
 
@@ -426,7 +426,7 @@ def download_post_markdown(post_uuid):
     )
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     log_activity('blog.download_md', f'Downloaded Markdown of "{post.title}"',
-                 target_type='blog_post', target_id=post.id, is_public=True)
+                 target_type='blog_post', target_id=post.id, is_public=False)
     return response
 
 
@@ -452,7 +452,7 @@ def export_post(post_uuid):
     )
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     log_activity('blog.export', f'Exported blog post "{post.title}"',
-                 target_type='blog_post', target_id=post.id, is_public=True)
+                 target_type='blog_post', target_id=post.id, is_public=False)
     return response
 
 
@@ -475,7 +475,7 @@ def api_post(post_uuid):
     if post.is_public and not post.is_draft:
         log_activity('blog.view', f'Viewed blog post "{post.title}"',
                      target_type='blog_post', target_id=post.id,
-                     target_uuid=post_uuid, is_public=True)
+                     target_uuid=post_uuid, is_public=False)
     data = post.to_json()
     if current_user.is_authenticated and current_user.is_admin():
         data['share_key'] = post.share_key

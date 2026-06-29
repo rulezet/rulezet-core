@@ -75,6 +75,7 @@ _PUBLIC_ACTIONS: frozenset[str] = frozenset({
     "user.register",
     "tag.create",
     "github.import_started",
+    "blog.create",
 })
 
 # Human-readable titles for known actions
@@ -154,6 +155,16 @@ _TITLES: dict[str, str] = {
     "admin.replace_format":     "Rule Format Replaced",
     "admin.delete_reports":     "Reports Bulk Deleted",
     "api.request":              "API Request",
+    "blog.create":              "Blog Post Published",
+    "blog.edit":                "Blog Post Edited",
+    "blog.delete":              "Blog Post Deleted",
+    "blog.view":                "Blog Post Viewed",
+    "blog.download_pdf":        "Blog Post Downloaded (PDF)",
+    "blog.download_md":         "Blog Post Downloaded (Markdown)",
+    "blog.export":              "Blog Post Exported",
+    "blog.toggle_draft":        "Blog Post Draft Toggled",
+    "blog.toggle_access":       "Blog Post Access Toggled",
+    "blog.create_from_cve":     "Blog Post Generated from CVE",
 }
 
 # Known category prefixes (first segment of action)
