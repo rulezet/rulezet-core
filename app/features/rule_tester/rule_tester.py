@@ -46,19 +46,7 @@ def bulk_test():
 @rule_tester_blueprint.get('/rule/detail_rule/<int:rule_id>/test')
 @login_required
 def rule_test_panel(rule_id):
-    rule = RuleModel.get_rule(rule_id)
-    if not rule:
-        abort(404)
-    if rule.is_deleted:
-        return render_template('rule/rule_in_trash.html', rule=rule)
-    from app.features.rule_tester.drivers import registry
-    capabilities = registry.get_all_capabilities()
-    return render_template(
-        'rule/detail_rule/detail_rule_test.html',
-        rule=rule,
-        capabilities=capabilities,
-        **_nav_counts(rule.id),
-    )
+    return redirect(url_for('rule_tester.rule_test_history', rule_id=rule_id))
 
 
 @rule_tester_blueprint.get('/rule/detail_rule/<int:rule_id>/test_history')

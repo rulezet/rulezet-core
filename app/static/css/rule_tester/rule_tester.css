@@ -426,3 +426,36 @@
   color: var(--subtle-text-color);
   white-space: nowrap;
 }
+
+
+/* ── Section card (pe-card pattern, shared with propose_edit) ────────────── */
+.pe-card {
+  background: var(--card-bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+}
+.pe-card__header {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .7rem 1.1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--light-bg-color);
+}
+.pe-card__accent {
+  width: 3px;
+  height: 15px;
+  background: #0d6efd;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.pe-card__title {
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--subtle-text-color);
+}
+.pe-card__body { padding: 1.1rem; }

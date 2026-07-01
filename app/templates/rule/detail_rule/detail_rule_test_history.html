@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ rule.title }} — Test History — Rulezet{% endblock %}
+{% block title %}{{ rule.title }} — Tests — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/rule_tester.css') }}">
@@ -12,8 +12,9 @@
 {% block content %}
 <div class="container mt-4" id="main-container" v-cloak>
 
+
   <div class="explorer-banner mb-4">
-    <i class="fa-solid fa-clock-rotate-left banner-watermark"></i>
+    <i class="fa-solid fa-flask-vial banner-watermark"></i>
     <nav aria-label="breadcrumb" class="mb-3">
       <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
         <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
@@ -23,11 +24,11 @@
             {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
           </a>
         </li>
-        <li class="breadcrumb-item active text-muted" aria-current="page">Test History</li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Tests</li>
       </ol>
     </nav>
     <div class="d-flex align-items-center gap-3 mb-3">
-      <div class="banner-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+      <div class="banner-icon"><i class="fa-solid fa-flask-vial"></i></div>
       <div>
         <h2 class="fw-bold mb-1">{% if rule.title|length > 60 %}{{ rule.title[:60] }}…{% else %}{{ rule.title }}{% endif %}</h2>
         <div class="banner-accent"></div>
@@ -45,20 +46,18 @@
        scope_count=scope_count,
        test_count=test_count) }}
 
-  <div class="card border-0 shadow-sm rounded-3 mb-4">
-    <div class="card-body p-4">
-      <div class="d-flex align-items-center justify-content-between mb-3">
-        <h6 class="fw-bold mb-0">
-          <i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Test History
-        </h6>
-        {% if current_user.is_authenticated %}
-        <a href="{{ url_for('rule_tester.rule_test_panel', rule_id=rule.id) }}"
-           class="btn btn-primary btn-sm">
-          <i class="fa-solid fa-flask-vial me-1"></i> Run a new test
-        </a>
-        {% endif %}
-      </div>
-
+  <div class="pe-card">
+    <div class="pe-card__header">
+      <div class="pe-card__accent"></div>
+      <span class="pe-card__title">1 — Test History</span>
+      {% if current_user.is_authenticated %}
+      <button type="button" class="btn btn-primary btn-sm rounded-pill ms-auto"
+              data-bs-toggle="modal" data-bs-target="#testModal">
+        <i class="fa-solid fa-flask-vial me-1"></i>Run a new test
+      </button>
+      {% endif %}
+    </div>
+    <div class="pe-card__body">
       <test-history-panel
         rule-uuid="{{ rule.uuid }}"
         :rule-id="{{ rule.id }}"
@@ -69,16 +68,50 @@
       ></test-history-panel>
     </div>
   </div>
+  <!-- ── Test modal ── -->
+  {% if current_user.is_authenticated %}
+  <div class="modal fade" id="testModal" tabindex="-1" aria-labelledby="testModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header border-0 pb-0" style="padding:1.5rem 1.5rem .5rem;">
+        <div class="d-flex align-items-center gap-2">
+          <i class="fa-solid fa-flask-vial text-primary"></i>
+          <h5 class="modal-title fw-bold mb-0" id="testModalLabel">Test this rule</h5>
+          <span class="badge rounded-pill bg-dark ms-1" style="font-size:.7rem;">{{ rule.format | upper }}</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" style="padding:1rem 1.5rem 1.5rem;">
+        <rule-tester-panel
+          rule-uuid="{{ rule.uuid }}"
+          rule-format="{{ rule.format or '' }}"
+          :current-user-id="{{ current_user.id }}"
+          :is-authenticated="true"
+          csrf-token="{{ csrf_token() }}"
+        ></rule-tester-panel>
+      </div>
+    </div>
+  </div>
+  </div>
+  {% endif %}
 
-</div>
+</div><!-- /#main-container -->
 
 <script type="module">
   const { createApp } = Vue
-  import TestHistoryPanel from '{{ url_for("static", filename="js/rule_tester/TestHistoryPanel.js") }}'
+  import TestHistoryPanel   from '{{ url_for("static", filename="js/rule_tester/TestHistoryPanel.js") }}'
+  import RuleTesterPanel    from '{{ url_for("static", filename="js/rule_tester/RuleTesterPanel.js") }}'
+  import InputEditorByFormat from '{{ url_for("static", filename="js/rule_tester/InputEditorByFormat.js") }}'
+  import TestResultDisplay  from '{{ url_for("static", filename="js/rule_tester/TestResultDisplay.js") }}'
 
   createApp({
     delimiters: ['[[', ']]'],
-    components: { 'test-history-panel': TestHistoryPanel },
+    components: {
+      'test-history-panel':    TestHistoryPanel,
+      'rule-tester-panel':     RuleTesterPanel,
+      'input-editor-by-format': InputEditorByFormat,
+      'test-result-display':   TestResultDisplay,
+    },
   }).mount('#main-container')
 </script>
 {% endblock %}

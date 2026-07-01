@@ -2,7 +2,7 @@ import datetime
 import uuid as uuid_mod
 
 from flask_login import current_user
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 
 from app import db
 from app.core.db_class.db import RuleTest, RuleTestResult
@@ -46,7 +46,7 @@ def get_test_by_uuid(uuid: str, viewer=None) -> RuleTest | None:
 
 def get_tests_for_rule(rule_id: int, viewer, page: int = 1, per_page: int = 20):
     # Include single tests targeting this rule AND bulk tests that have a result for it
-    bulk_test_ids = db.session.query(RuleTestResult.test_id).filter_by(rule_id=rule_id).subquery()
+    bulk_test_ids = select(RuleTestResult.test_id).where(RuleTestResult.rule_id == rule_id).scalar_subquery()
     q = _test_query_for_viewer(viewer).filter(
         or_(RuleTest.rule_id == rule_id, RuleTest.id.in_(bulk_test_ids))
     )
@@ -61,7 +61,7 @@ def get_my_tests(user_id: int, page: int = 1, per_page: int = 20):
 
 
 def count_visible_tests_for_rule(rule_id: int, viewer) -> int:
-    bulk_test_ids = db.session.query(RuleTestResult.test_id).filter_by(rule_id=rule_id).subquery()
+    bulk_test_ids = select(RuleTestResult.test_id).where(RuleTestResult.rule_id == rule_id).scalar_subquery()
     return _test_query_for_viewer(viewer).filter(
         or_(RuleTest.rule_id == rule_id, RuleTest.id.in_(bulk_test_ids))
     ).count()
