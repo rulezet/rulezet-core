@@ -2745,11 +2745,19 @@ def handle_rule_test_bulk(job, app):
             p['_resume_offset'] = offset
             job.payload = p
 
-            # log only at 25 / 50 / 75 / 100% checkpoints
+            # log every 2500 rules + at 25/50/75/100% checkpoints
+            LOG_EVERY = 2500
+            prev_log  = ((offset - len(batch_rules)) // LOG_EVERY) * LOG_EVERY
+            curr_log  = (offset // LOG_EVERY) * LOG_EVERY
+            if curr_log > prev_log or offset >= total:
+                log_job(job,
+                        f'{offset:,}/{total:,} rules — {matched_count} match(es) so far',
+                        level='info', event='batch')
+
             for pct in [25, 50, 75, 100]:
                 if pct not in logged_pcts and offset >= int(total * pct / 100):
                     log_job(job,
-                            f'{pct}% — {offset}/{total} rules processed, '
+                            f'{pct}% checkpoint — {offset:,}/{total:,} processed, '
                             f'{matched_count} match(es)',
                             level='info', event='batch')
                     logged_pcts.add(pct)
