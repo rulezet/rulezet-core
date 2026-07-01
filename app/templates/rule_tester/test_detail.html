@@ -1,0 +1,438 @@
+{% extends "base.html" %}
+{% block title %}{{ test.label or (test.test_type|capitalize + ' test') }} — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/rule_tester.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/test_results.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+  <!-- Banner -->
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-flask-vial banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/rule_tester/bulk" class="text-decoration-none text-muted">Rule Tester</a></li>
+        {% if test.rule_id %}
+        <li class="breadcrumb-item">
+          <a href="{{ url_for('rule.detail_rule', rule_id=test.rule_id) }}" class="text-decoration-none text-muted">Rule</a>
+        </li>
+        {% endif %}
+        <li class="breadcrumb-item active text-muted" aria-current="page">
+          {{ test.label or (test.test_type|capitalize + ' test') }}
+        </li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-flask-vial"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">{{ test.label or (test.test_type|capitalize + ' test — ' + test.uuid[:8]) }}</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+      {{ test.test_type | capitalize }} test · {{ test.created_at.strftime('%d %b %Y at %H:%M') }}
+    </p>
+  </div>
+
+  <!-- ── Main detail card ── -->
+  <div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4" style="border-radius:12px;">
+    <div class="card-watermark-detail"><i class="fa-solid fa-flask-vial"></i></div>
+
+    <!-- Top-right badges -->
+    <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+      {% if test.status == 'done' %}
+      <span class="badge bg-success shadow-sm pt-1"><i class="fa-solid fa-circle-check me-1"></i>DONE</span>
+      {% elif test.status == 'running' %}
+      <span class="badge bg-primary shadow-sm pt-1"><i class="fa-solid fa-circle-notch fa-spin me-1"></i>RUNNING</span>
+      {% elif test.status == 'pending' %}
+      <span class="badge bg-secondary shadow-sm pt-1"><i class="fa-solid fa-clock me-1"></i>PENDING</span>
+      {% elif test.status == 'failed' %}
+      <span class="badge bg-danger shadow-sm pt-1"><i class="fa-solid fa-circle-xmark me-1"></i>FAILED</span>
+      {% endif %}
+      <span class="badge rounded-pill bg-dark pt-1 shadow-sm">{{ test.format | upper }}</span>
+    </div>
+
+    <div class="card-body p-4 p-md-5">
+
+      <!-- Title + author -->
+      <div class="mb-4 pe-5">
+        <h3 class="fw-bold mb-2 border-start border-primary border-4 ps-3">
+          {{ test.label or (test.test_type|capitalize + ' test — ' + test.uuid) }}
+        </h3>
+        <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+          {% set author = test.user %}
+          {% if author %}
+          <user-chip
+            :user-id="{{ author.id }}"
+            username="{{ author.get_username() }}"
+            {% if author.get_avatar_url() %}avatar="{{ author.get_avatar_url() }}"{% endif %}
+            size="xs"
+          ></user-chip>
+          <span class="text-muted opacity-50">|</span>
+          {% endif %}
+          <small class="text-muted">{{ test.created_at.strftime('%d %b %Y at %H:%M') }}</small>
+          {% if test.completed_at %}
+          <span class="text-muted opacity-50">·</span>
+          <small class="text-muted">Completed at {{ test.completed_at.strftime('%H:%M:%S') }}</small>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- KPI row -->
+      <div class="rtr-kpi-row mb-4">
+        <div class="rtr-kpi-card">
+          <div class="rtr-kpi-card__label">Type</div>
+          <div class="rtr-kpi-card__value" style="font-size:.95rem;text-transform:capitalize;">{{ test.test_type }}</div>
+        </div>
+        <div class="rtr-kpi-card">
+          <div class="rtr-kpi-card__label">Input</div>
+          <div class="rtr-kpi-card__value" style="font-size:.9rem;">{{ test.input_type }}</div>
+        </div>
+        {% if test.matched_count is not none %}
+        <div class="rtr-kpi-card">
+          <div class="rtr-kpi-card__label">Matched</div>
+          <div class="rtr-kpi-card__value rtr-kpi-card__value--green">{{ test.matched_count }}</div>
+        </div>
+        {% endif %}
+        {% if test.test_type == 'bulk' and test.total_rules %}
+        <div class="rtr-kpi-card">
+          <div class="rtr-kpi-card__label">Total rules</div>
+          <div class="rtr-kpi-card__value rtr-kpi-card__value--blue">{{ test.total_rules }}</div>
+        </div>
+        <div class="rtr-kpi-card">
+          <div class="rtr-kpi-card__label">Match rate</div>
+          <div class="rtr-kpi-card__value">
+            {{ '%.1f' | format((test.matched_count or 0) / test.total_rules * 100) }}%
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- ── Job progress (while running / pending) ── -->
+      <div v-if="jobRunning" class="rounded-3 border p-3 mb-4" style="background:var(--light-bg-color);">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div class="spinner-border spinner-border-sm text-primary"></div>
+          <span class="fw-semibold" style="font-size:.85rem;">Running…</span>
+          <span class="ms-auto badge bg-primary" style="font-size:.65rem;">[[ jobStatusLabel ]]</span>
+        </div>
+        <!-- Progress bar -->
+        <div class="d-flex align-items-center gap-3 mb-1">
+          <div style="flex:1;height:8px;border-radius:6px;background:var(--border-color);overflow:hidden;">
+            <div :style="`width:${jobPct}%;background:#0d6efd;height:100%;border-radius:6px;transition:width .5s ease;`"></div>
+          </div>
+          <span style="font-size:.78rem;font-weight:700;color:var(--text-color);min-width:38px;text-align:right;">
+            [[ jobPct ]]%
+          </span>
+        </div>
+        <div style="font-size:.72rem;color:var(--subtle-text-color);">
+          [[ jobDone.toLocaleString() ]] / [[ jobTotal.toLocaleString() ]] rules
+        </div>
+        <!-- Live logs -->
+        <div v-if="logs.length" class="rtr-log mt-3" ref="logBox" style="max-height:160px;overflow-y:auto;">
+          <div v-for="l in logs" :key="l.id" class="rtr-log-line" :class="'rtr-log-line--' + l.level">
+            <span style="opacity:.4;font-size:.65rem;margin-right:.5em;">[[ l.created_at ? l.created_at.slice(11,19) : '' ]]</span>[[ l.message ]]
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Input preview ── -->
+      <div class="rounded-3 border p-3 mb-4" style="background:var(--light-bg-color);">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fa-solid fa-terminal text-primary" style="font-size:.85rem;"></i>
+          <span class="fw-semibold" style="font-size:.82rem;">Input</span>
+          <span class="badge ms-1" style="background:rgba(13,110,253,.1);color:#0d6efd;font-size:.65rem;">{{ test.input_type }}</span>
+          {% if test.input_label %}
+          <span class="badge bg-secondary" style="font-size:.65rem;">{{ test.input_label }}</span>
+          {% endif %}
+        </div>
+        <details>
+          <summary style="font-size:.78rem;cursor:pointer;color:var(--subtle-text-color);user-select:none;">Show input data</summary>
+          <pre class="rtr-input-preview mt-2">{{ (test.input_data or '') | truncate(2000) }}</pre>
+        </details>
+      </div>
+
+      <!-- ── Single test result ── -->
+      {% set result = test.results.order_by(none).first() %}
+      {% if result and test.test_type == 'single' %}
+      <div class="rounded-3 border p-3 mb-4" style="background:var(--light-bg-color);">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <i class="fa-solid fa-chart-bar text-primary" style="font-size:.85rem;"></i>
+          <span class="fw-semibold" style="font-size:.82rem;">Result</span>
+        </div>
+        <test-result-display :result="resultData"></test-result-display>
+      </div>
+      {% endif %}
+
+      <!-- ── Bulk results table ── -->
+      {% if test.test_type == 'bulk' %}
+      <div class="rounded-3 border p-3 mb-4" style="background:var(--light-bg-color);">
+        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <i class="fa-solid fa-list-check text-primary" style="font-size:.85rem;"></i>
+            <span class="fw-semibold" style="font-size:.82rem;">Results</span>
+            <span class="text-muted" style="font-size:.72rem;">[[ resultsTotal.toLocaleString() ]]</span>
+          </div>
+          <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn"
+                    :class="resultsFilter==='all'     ? 'btn-primary'         : 'btn-outline-secondary'"
+                    @click="setResultsFilter('all')">All</button>
+            <button type="button" class="btn"
+                    :class="resultsFilter==='matched' ? 'btn-success'         : 'btn-outline-secondary'"
+                    @click="setResultsFilter('matched')">
+              <i class="fa-solid fa-check me-1"></i>Matched</button>
+            <button type="button" class="btn"
+                    :class="resultsFilter==='error'   ? 'btn-danger'          : 'btn-outline-secondary'"
+                    @click="setResultsFilter('error')">
+              <i class="fa-solid fa-triangle-exclamation me-1"></i>Errors</button>
+          </div>
+        </div>
+
+        <div v-if="resultsLoading" class="text-center py-3">
+          <div class="spinner-border spinner-border-sm text-primary"></div>
+        </div>
+
+        <div v-else-if="results.length" class="table-responsive">
+          <table class="table table-sm mb-0" style="font-size:.82rem;">
+            <thead><tr>
+              <th style="width:28px;"></th>
+              <th>Rule</th>
+              <th style="width:90px;">Score</th>
+              <th style="width:65px;">Time</th>
+              <th style="width:36px;"></th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="r in results" :key="r.id"
+                  :class="r.matched ? 'table-success' : (r.error ? 'table-danger' : '')">
+                <td class="text-center align-middle">
+                  <i v-if="r.matched"      class="fa-solid fa-check text-success"></i>
+                  <i v-else-if="r.error"   class="fa-solid fa-triangle-exclamation text-danger"></i>
+                  <i v-else                class="fa-solid fa-xmark text-muted"></i>
+                </td>
+                <td class="align-middle">
+                  <a v-if="r.rule_id" :href="'/rule/detail_rule/'+r.rule_id"
+                     class="text-decoration-none fw-semibold" style="color:var(--text-color);">
+                    [[ r.rule_title || r.rule_uuid || '—' ]]
+                  </a>
+                  <span v-else class="text-muted">[[ r.rule_title || r.rule_uuid || '—' ]]</span>
+                  <div v-if="r.error" class="text-danger mt-1" style="font-size:.7rem;">
+                    <i class="fa-solid fa-circle-xmark me-1"></i>[[ r.error ]]
+                  </div>
+                </td>
+                <td class="align-middle">
+                  <div v-if="r.score!=null" class="d-flex align-items-center gap-1">
+                    <div style="height:5px;flex:1;background:var(--border-color);border-radius:3px;overflow:hidden;">
+                      <div :style="`width:${Math.round((r.score||0)*100)}%;height:100%;border-radius:3px;background:${r.score>=.7?'#198754':r.score>=.3?'#ffc107':'#dc3545'};`"></div>
+                    </div>
+                    <span style="font-size:.68rem;white-space:nowrap;">[[ Math.round((r.score||0)*100) ]]%</span>
+                  </div>
+                  <span v-else class="text-muted">—</span>
+                </td>
+                <td class="align-middle text-muted" style="font-size:.72rem;">
+                  [[ r.execution_time_ms!=null ? r.execution_time_ms+'ms' : '—' ]]
+                </td>
+                <td class="align-middle">
+                  <a v-if="r.rule_id" :href="'/rule/detail_rule/'+r.rule_id+'/test'"
+                     class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:.65rem;" title="Test">
+                    <i class="fa-solid fa-flask-vial"></i>
+                  </a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-else class="text-center py-3" style="color:var(--subtle-text-color);font-size:.82rem;">
+          <i class="fa-solid fa-magnifying-glass fa-lg mb-1 d-block opacity-30"></i>
+          No results for this filter.
+        </div>
+
+        <div v-if="resultsPages>1" class="d-flex justify-content-center align-items-center gap-2 mt-3">
+          <button class="btn btn-outline-secondary btn-sm" @click="prevResultsPage" :disabled="resultsPage===1">
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+          <span style="font-size:.78rem;color:var(--subtle-text-color);">[[ resultsPage ]] / [[ resultsPages ]]</span>
+          <button class="btn btn-outline-secondary btn-sm" @click="nextResultsPage" :disabled="resultsPage===resultsPages">
+            <i class="fa-solid fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- ── Notes ── -->
+      <div class="rounded-3 border p-3 mb-4" style="background:var(--light-bg-color);">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fa-solid fa-note-sticky text-primary" style="font-size:.85rem;"></i>
+          <span class="fw-semibold" style="font-size:.82rem;">Notes</span>
+        </div>
+        <p v-if="!editingNotes" style="font-size:.85rem;color:var(--text-color);white-space:pre-wrap;margin-bottom:0;">
+          [[ notes || 'No notes yet.' ]]
+        </p>
+        <textarea v-if="editingNotes" v-model="notes" class="rtr-textarea" rows="4"></textarea>
+        {% if current_user.is_authenticated and (current_user.id == test.user_id or current_user.is_admin()) %}
+        <div class="mt-2 d-flex gap-2">
+          <button v-if="!editingNotes" class="btn btn-outline-secondary btn-sm" @click="editingNotes=true">
+            <i class="fa-solid fa-pen me-1"></i>Edit
+          </button>
+          <button v-if="editingNotes" class="btn btn-primary btn-sm" @click="saveNotes">Save</button>
+          <button v-if="editingNotes" class="btn btn-outline-secondary btn-sm" @click="editingNotes=false">Cancel</button>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- ── Actions ── -->
+      {% if current_user.is_authenticated and (current_user.id == test.user_id or current_user.is_admin()) %}
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-secondary btn-sm" @click="toggleVisibility">
+          <i class="fa-solid" :class="isPublic ? 'fa-lock' : 'fa-globe'"></i>
+          [[ isPublic ? 'Make private' : 'Make public' ]]
+        </button>
+        <button class="btn btn-outline-danger btn-sm" @click="deleteTest">
+          <i class="fa-solid fa-trash me-1"></i>Delete
+        </button>
+      </div>
+      {% endif %}
+
+    </div><!-- /card-body -->
+  </div><!-- /card -->
+
+</div>
+
+<script type="module">
+  const { createApp } = Vue
+  import TestResultDisplay  from '{{ url_for("static", filename="js/rule_tester/TestResultDisplay.js") }}'
+  import UserChip           from '/static/js/components/UserChip.js'
+  import { create_message } from '/static/js/toaster.js'
+
+  {% set result = test.results.order_by(none).first() %}
+  const resultData    = {{ result.to_json() | tojson | safe if result else 'null' }}
+  const initJobUuid   = {{ (test.job.uuid   if test.job else None) | tojson }}
+  const initJobStatus = {{ (test.job.status if test.job else test.status) | tojson }}
+  const initJobDone   = {{ (test.job.done   if test.job else 0) | tojson }}
+  const initJobTotal  = {{ (test.job.total  if test.job else 0) | tojson }}
+  const initJobPct    = {{ (test.job.progress_pct if test.job else 0) | tojson }}
+
+  createApp({
+    delimiters: ['[[', ']]'],
+    components: { 'test-result-display': TestResultDisplay, 'user-chip': UserChip },
+    data() {
+      return {
+        isPublic:     {{ test.is_public | tojson }},
+        notes:        {{ (test.notes or '') | tojson }},
+        editingNotes: false,
+        csrfToken:    '{{ csrf_token() }}',
+        testUuid:     '{{ test.uuid }}',
+        resultData,
+        jobUuid:      initJobUuid,
+        jobStatus:    initJobStatus,
+        jobDone:      initJobDone,
+        jobTotal:     initJobTotal,
+        jobPct:       initJobPct,
+        pollTimer:    null,
+        logSinceId:   0,
+        logs:         [],
+        results:        [],
+        resultsLoading: false,
+        resultsPage:    1,
+        resultsPages:   1,
+        resultsTotal:   0,
+        resultsFilter:  'matched',
+      }
+    },
+    computed: {
+      jobRunning() { return this.jobStatus === 'pending' || this.jobStatus === 'running'; },
+      jobStatusLabel() {
+        return { pending:'Queued', running:'Running', done:'Done', failed:'Failed' }[this.jobStatus] || this.jobStatus;
+      },
+    },
+    async mounted() {
+      if (this.jobRunning && this.jobUuid) this._startPoll();
+      {% if test.test_type == 'bulk' and test.status == 'done' %}
+      await this.loadResults();
+      {% endif %}
+    },
+    beforeUnmount() { this._stopPoll(); },
+    methods: {
+      _startPoll() {
+        this._stopPoll();
+        this._poll();
+        this.pollTimer = setInterval(this._poll, 2500);
+      },
+      _stopPoll() { if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = null; } },
+      async _poll() {
+        if (!this.jobUuid) return;
+        try {
+          const sResp = await fetch(`/jobs/status/${this.jobUuid}`);
+          if (sResp.ok) {
+            const s       = await sResp.json();
+            this.jobStatus = s.status;
+            this.jobDone   = s.done   || 0;
+            this.jobTotal  = s.total  || 0;
+            this.jobPct    = s.progress_pct || 0;
+          }
+          const lResp = await fetch(`/jobs/logs/${this.jobUuid}?since_id=${this.logSinceId}`);
+          if (lResp.ok) {
+            const nl = await lResp.json();
+            if (nl.length) {
+              this.logs.push(...nl);
+              this.logSinceId = nl[nl.length - 1].id;
+              this.$nextTick(() => { const el = this.$refs.logBox; if (el) el.scrollTop = el.scrollHeight; });
+            }
+          }
+          if (this.jobStatus === 'done' || this.jobStatus === 'failed') {
+            this._stopPoll();
+            if (this.jobStatus === 'done') window.location.reload();
+          }
+        } catch (_) {}
+      },
+      async loadResults() {
+        this.resultsLoading = true;
+        try {
+          const p = new URLSearchParams({ page: this.resultsPage, per_page: 25 });
+          if (this.resultsFilter === 'matched') p.set('matched', '1');
+          if (this.resultsFilter === 'error')   p.set('errors_only', '1');
+          const resp = await fetch(`/api/rule_tester/private/test/${this.testUuid}/results?${p}`);
+          const data = await resp.json();
+          this.results      = data.results || [];
+          this.resultsPages = data.pages   || 1;
+          this.resultsTotal = data.total   || 0;
+        } catch (e) { console.error(e); } finally { this.resultsLoading = false; }
+      },
+      setResultsFilter(f) { this.resultsFilter = f; this.resultsPage = 1; this.loadResults(); },
+      prevResultsPage() { if (this.resultsPage > 1)              { this.resultsPage--; this.loadResults(); } },
+      nextResultsPage() { if (this.resultsPage < this.resultsPages) { this.resultsPage++; this.loadResults(); } },
+      async toggleVisibility() {
+        const resp = await fetch(`/api/rule_tester/private/test/${this.testUuid}/visibility`, {
+          method: 'PUT', headers: { 'X-CSRFToken': this.csrfToken },
+        });
+        const data = await resp.json();
+        this.isPublic = data.is_public;
+        create_message(data.is_public ? 'Test is now public.' : 'Test is now private.', 'success');
+      },
+      async saveNotes() {
+        const resp = await fetch(`/api/rule_tester/private/test/${this.testUuid}/notes`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrfToken },
+          body: JSON.stringify({ notes: this.notes }),
+        });
+        if (resp.ok) { this.editingNotes = false; create_message('Notes saved.', 'success'); }
+      },
+      async deleteTest() {
+        if (!confirm('Delete this test and all its results?')) return;
+        const resp = await fetch(`/api/rule_tester/private/test/${this.testUuid}`, {
+          method: 'DELETE', headers: { 'X-CSRFToken': this.csrfToken },
+        });
+        if (resp.ok) {
+          create_message('Test deleted.', 'success');
+          {% if test.rule_id %}window.location = '{{ url_for("rule.detail_rule", rule_id=test.rule_id) }}';
+          {% else %}window.location = '/rule_tester/bulk';{% endif %}
+        }
+      },
+    },
+  }).mount('#main-container')
+</script>
+{% endblock %}

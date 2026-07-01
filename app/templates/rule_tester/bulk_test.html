@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Bulk Rule Tester — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/rule_tester.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/test_results.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+{% endblock %}
+
+{% block content %}
+<div v-cloak>
+
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-flask-vial banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Bulk Tester</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-flask-vial"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">Bulk Rule Tester</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+      Run a test payload against a filtered set of rules in one background job and see which ones match.
+    </p>
+  </div>
+
+  <bulk-tester-panel
+    :is-authenticated="{{ current_user.is_authenticated | tojson }}"
+    csrf-token="{{ csrf_token() }}"
+  ></bulk-tester-panel>
+
+</div>
+
+<script type="module">
+  const { createApp } = Vue
+  import BulkTesterPanel     from '{{ url_for("static", filename="js/rule_tester/BulkTesterPanel.js") }}'
+  import InputEditorByFormat from '{{ url_for("static", filename="js/rule_tester/InputEditorByFormat.js") }}'
+
+  createApp({
+    delimiters: ['[[', ']]'],
+    components: {
+      'bulk-tester-panel':      BulkTesterPanel,
+      'input-editor-by-format': InputEditorByFormat,
+    },
+  }).mount('#main-container')
+</script>
+{% endblock %}

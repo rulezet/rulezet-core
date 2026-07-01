@@ -649,12 +649,19 @@ def _rule_scope_count(rule_id):
     return RuleScope.query.filter_by(rule_id=rule_id).count()
 
 
+def _rule_test_count(rule_id):
+    from flask_login import current_user
+    from app.features.rule_tester import rule_tester_core as TesterModel
+    return TesterModel.count_visible_tests_for_rule(rule_id, current_user)
+
+
 def _nav_counts(rule_id):
     return {
         'similarity_count': _rule_similarity_count(rule_id),
         'history_count':    _rule_history_count(rule_id),
         'proposal_count':   _rule_proposal_count(rule_id),
         'scope_count':      _rule_scope_count(rule_id),
+        'test_count':       _rule_test_count(rule_id),
     }
 
 

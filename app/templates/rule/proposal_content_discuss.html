@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Edit Proposal — Rulezet{% endblock %}
-{% import 'macros/detail_rule_nav.html' as nav %}
+{% import 'macros/detail_rule_nav.html' as nav with context %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">

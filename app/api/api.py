@@ -134,6 +134,12 @@ from .log.log_api import log_ns  # noqa
 _hide_ns(log_ns)
 api.add_namespace(log_ns, path="/log")
 
+# Rule Tester
+from .rule_tester.public_ns import rule_tester_public_ns  # noqa
+from .rule_tester.private_ns import rule_tester_private_ns  # noqa
+api.add_namespace(rule_tester_public_ns,  path="/rule_tester/public")
+api.add_namespace(rule_tester_private_ns, path="/rule_tester/private")
+
 
 # ─── CSRF enforcement for session-authenticated API calls ────────────────────
 # csrf.exempt(api_blueprint) is set in create_app() to allow external API-key

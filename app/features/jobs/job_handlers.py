@@ -2633,3 +2633,177 @@ def handle_blog_from_cve(job, app):
         db.session.commit()
 
         log_job(job, f'Post "{title[:80]}" ready.', level='success', event='done')
+
+
+# ─── rule_test_bulk ───────────────────────────────────────────────────────────
+
+@register_handler('rule_test_bulk')
+def handle_rule_test_bulk(job, app):
+    import time as _time
+    from app.core.db_class.db import RuleTest
+    from app.features.rule_tester import rule_tester_core as TesterModel
+    from app.features.rule_tester.drivers import registry
+
+    payload    = job.payload or {}
+    test_uuid  = payload.get('test_uuid')
+    fmt        = payload.get('format', '').lower()
+    input_type = payload.get('input_type', 'string')
+    input_data = payload.get('input_data', '')
+    filters    = payload.get('bulk_filters', {})
+
+    test = RuleTest.query.filter_by(uuid=test_uuid).first()
+    if not test:
+        raise ValueError(f'RuleTest {test_uuid} not found')
+
+    driver = registry.get_driver(fmt)
+    if not driver:
+        raise ValueError(f'No driver for format: {fmt}')
+
+    rule_query = _build_rule_query(filters)
+    if fmt:
+        rule_query = rule_query.filter(Rule.format.ilike(f'%{fmt}%'))
+
+    # Load only IDs first — avoids pulling 100k ORM objects into memory at once
+    rule_ids = [row[0] for row in rule_query.with_entities(Rule.id).all()]
+    total    = len(rule_ids)
+
+    job.total = total
+    job.done  = 0
+    db.session.commit()
+
+    log_job(job, f'Bulk {fmt.upper()} test — {total} rule(s) found', level='info', event='started')
+    TesterModel.mark_test_running(test)
+
+    if total == 0:
+        log_job(job, 'No rules matched the filters.', level='warning', event='done')
+        TesterModel.mark_test_done(test, matched_count=0, total_rules=0)
+        return
+
+    input_dict    = {'type': input_type, 'value': input_data}
+    matched_count = 0
+
+    # ── YARA: mini-batches of 500 with resume support + 4 checkpoint logs ─────
+    if fmt == 'yara':
+        from app.features.rule_tester.drivers.yara_driver import YaraDriver
+
+        MINI_BATCH  = 500
+        resume_from = (job.payload or {}).get('_resume_offset', 0)
+        if resume_from:
+            log_job(job, f'Resuming from offset {resume_from}', level='info')
+            matched_count = TesterModel.count_matched_results(test.id)
+
+        logged_pcts = set()
+        offset      = resume_from
+
+        while offset < total:
+            _reload(job)
+            if _is_cancelled(job):
+                log_job(job, 'Job cancelled.', level='warning', event='cancelled')
+                return
+            while _should_pause(job):
+                _time.sleep(1)
+                _reload(job)
+
+            batch_ids   = rule_ids[offset:offset + MINI_BATCH]
+            batch_rules = rule_query.filter(Rule.id.in_(batch_ids)).all()
+
+            sources = {str(r.id): r.to_string or '' for r in batch_rules}
+            try:
+                batch_results = YaraDriver.run_batch(sources, input_dict)
+            except Exception as e:
+                log_job(job, f'Compile error at offset {offset}: {e}', level='error')
+                batch_results = {}
+
+            for rule in batch_rules:
+                detail = batch_results.get(str(rule.id))
+                if detail is None:
+                    d_matched, d_score, d_details, d_hints, d_err, d_ms = \
+                        False, 0.0, {}, [], 'No result', 0
+                else:
+                    d_matched  = detail.matched
+                    d_score    = detail.score
+                    d_details  = detail.details
+                    d_hints    = detail.quality_hints
+                    d_err      = detail.error
+                    d_ms       = detail.execution_time_ms
+
+                TesterModel.create_result(
+                    test_id=test.id, rule_id=rule.id, rule_title=rule.title,
+                    rule_uuid=rule.uuid, rule_format=rule.format,
+                    matched=d_matched, score=d_score,
+                    details=d_details, quality_hints=d_hints,
+                    execution_time_ms=d_ms, error=d_err,
+                )
+                if d_matched:
+                    matched_count += 1
+
+            offset   += len(batch_rules)
+            job.done  = offset
+
+            # persist resume point so a server restart can continue here
+            p = dict(job.payload or {})
+            p['_resume_offset'] = offset
+            job.payload = p
+
+            # log only at 25 / 50 / 75 / 100% checkpoints
+            for pct in [25, 50, 75, 100]:
+                if pct not in logged_pcts and offset >= int(total * pct / 100):
+                    log_job(job,
+                            f'{pct}% — {offset}/{total} rules processed, '
+                            f'{matched_count} match(es)',
+                            level='info', event='batch')
+                    logged_pcts.add(pct)
+
+            db.session.commit()
+
+    # ── Other formats: rule-by-rule ────────────────────────────────────────────
+    else:
+        all_rules = rule_query.all()
+        for i, rule in enumerate(all_rules):
+            _reload(job)
+            if _is_cancelled(job):
+                log_job(job, 'Job cancelled.', level='warning', event='cancelled')
+                return
+            while _should_pause(job):
+                _time.sleep(1)
+                _reload(job)
+
+            log_lines = []
+            def _log_fn(level, message):
+                log_lines.append(message)
+
+            try:
+                detail = driver.run_test(rule.to_string or '', input_dict, _log_fn)
+            except Exception as e:
+                TesterModel.create_result(
+                    test_id=test.id, rule_id=rule.id, rule_title=rule.title,
+                    rule_uuid=rule.uuid, rule_format=rule.format,
+                    matched=False, score=0.0, details={}, quality_hints=[],
+                    execution_time_ms=0, error=str(e),
+                )
+                log_job(job, f'[{rule.uuid[:8]}] ERROR: {e}', level='error')
+                job.done += 1
+                db.session.commit()
+                continue
+
+            TesterModel.create_result(
+                test_id=test.id, rule_id=rule.id, rule_title=rule.title,
+                rule_uuid=rule.uuid, rule_format=rule.format,
+                matched=detail.matched, score=detail.score,
+                details=detail.details, quality_hints=detail.quality_hints,
+                execution_time_ms=detail.execution_time_ms, error=detail.error,
+            )
+            if detail.matched:
+                matched_count += 1
+
+            job.done += 1
+            if (i + 1) % 10 == 0 or (i + 1) == total:
+                log_job(job, f'Progress: {job.done}/{total} — {matched_count} match(es)',
+                        level='info', event='batch')
+            db.session.commit()
+
+    test.matched_count = matched_count
+    test.total_rules   = total
+    TesterModel.mark_test_done(test, matched_count=matched_count, total_rules=total)
+    log_job(job, f'Done — {matched_count}/{total} rules matched.',
+            level='success', event='done')

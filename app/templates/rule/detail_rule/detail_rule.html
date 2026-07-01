@@ -29,7 +29,7 @@ window.__rule_json   = {{ rule_to_json | tojson | safe }};
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 {% endblock %}
 {% import 'macros/form_macros.html' as f %}
-{% import 'macros/detail_rule_nav.html' as nav %}
+{% import 'macros/detail_rule_nav.html' as nav with context %}
 
 {% block content %}
 <div class="container mt-4" id="main-container" v-cloak>

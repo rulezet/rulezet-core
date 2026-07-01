@@ -2806,3 +2806,137 @@ class BlogPostFile(db.Model):
             'created_at':    self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
             'download_url':  f'/blog/admin/file/{self.uuid}',
         }
+
+
+########################################
+#   Rule Tester                        #
+########################################
+
+class RuleTest(db.Model):
+    """A single test session: one input tested against one or many rules."""
+    __tablename__ = 'rule_test'
+
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid         = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+
+    # single-rule tests set this; bulk tests leave it null
+    rule_id      = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='SET NULL'),
+                             nullable=True, index=True)
+
+    test_type    = db.Column(db.String(16), nullable=False)   # 'single' | 'bulk'
+    format       = db.Column(db.String(32), nullable=False)   # yara | sigma | suricata | …
+
+    input_type   = db.Column(db.String(32), nullable=False)   # string | hex | file_b64 | json | http
+    input_data   = db.Column(db.Text, nullable=True)
+    input_label  = db.Column(db.String(255), nullable=True)
+
+    bulk_filters = db.Column(db.JSON, nullable=True)
+
+    job_id       = db.Column(db.Integer, db.ForeignKey('background_job.id', ondelete='SET NULL'),
+                             nullable=True)
+
+    # pending | running | done | failed
+    status       = db.Column(db.String(16), nullable=False, default='pending', index=True)
+    matched_count = db.Column(db.Integer, nullable=True)
+    total_rules   = db.Column(db.Integer, nullable=True)
+    error         = db.Column(db.Text, nullable=True)
+
+    is_public    = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    label        = db.Column(db.String(255), nullable=True)
+    notes        = db.Column(db.Text, nullable=True)
+
+    created_at   = db.Column(db.DateTime, nullable=False,
+                             default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    user    = db.relationship('User', backref=db.backref('rule_tests', lazy='dynamic'))
+    rule    = db.relationship('Rule', backref=db.backref('tests', lazy='dynamic'),
+                              foreign_keys=[rule_id])
+    job     = db.relationship('BackgroundJob', foreign_keys=[job_id])
+    results = db.relationship('RuleTestResult', backref='test', lazy='dynamic',
+                              cascade='all, delete-orphan')
+
+    def to_json(self):
+        user_obj = User.query.get(self.user_id)
+        return {
+            'id':            self.id,
+            'uuid':          self.uuid,
+            'user_id':       self.user_id,
+            'user':          {'id': user_obj.id, 'username': user_obj.get_username(),
+                              'avatar': user_obj.get_avatar_url()} if user_obj else None,
+            'rule_id':       self.rule_id,
+            'test_type':     self.test_type,
+            'format':        self.format,
+            'input_type':    self.input_type,
+            'input_label':   self.input_label,
+            'status':        self.status,
+            'matched_count': self.matched_count,
+            'total_rules':   self.total_rules,
+            'is_public':     self.is_public,
+            'label':         self.label,
+            'notes':         self.notes,
+            'job_uuid':      self.job.uuid if self.job else None,
+            'created_at':    self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'completed_at':  self.completed_at.strftime('%Y-%m-%d %H:%M:%S') if self.completed_at else None,
+        }
+
+    def to_json_summary(self):
+        """Compact representation for list views (no input_data)."""
+        return {
+            'uuid':          self.uuid,
+            'user_id':       self.user_id,
+            'rule_id':       self.rule_id,
+            'test_type':     self.test_type,
+            'format':        self.format,
+            'input_type':    self.input_type,
+            'input_label':   self.input_label,
+            'status':        self.status,
+            'matched_count': self.matched_count,
+            'total_rules':   self.total_rules,
+            'is_public':     self.is_public,
+            'label':         self.label,
+            'created_at':    self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'completed_at':  self.completed_at.strftime('%Y-%m-%d %H:%M:%S') if self.completed_at else None,
+        }
+
+
+class RuleTestResult(db.Model):
+    """One rule's outcome inside a RuleTest session."""
+    __tablename__ = 'rule_test_result'
+
+    id      = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    test_id = db.Column(db.Integer, db.ForeignKey('rule_test.id', ondelete='CASCADE'),
+                        nullable=False, index=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='SET NULL'),
+                        nullable=True, index=True)
+
+    matched           = db.Column(db.Boolean, nullable=False, default=False)
+    score             = db.Column(db.Float, nullable=True)
+    details           = db.Column(db.JSON, nullable=True)
+    quality_hints     = db.Column(db.JSON, nullable=True)
+    error             = db.Column(db.Text, nullable=True)
+    execution_time_ms = db.Column(db.Integer, nullable=True)
+
+    # snapshot so history stays stable even when rule is edited later
+    rule_title  = db.Column(db.String(255), nullable=True)
+    rule_uuid   = db.Column(db.String(36), nullable=True)
+    rule_format = db.Column(db.String(32), nullable=True)
+
+    rule = db.relationship('Rule', foreign_keys=[rule_id])
+
+    def to_json(self):
+        return {
+            'id':               self.id,
+            'test_id':          self.test_id,
+            'rule_id':          self.rule_id,
+            'rule_uuid':        self.rule_uuid,
+            'rule_title':       self.rule_title,
+            'rule_format':      self.rule_format,
+            'matched':          self.matched,
+            'score':            self.score,
+            'details':          self.details,
+            'quality_hints':    self.quality_hints,
+            'error':            self.error,
+            'execution_time_ms': self.execution_time_ms,
+        }

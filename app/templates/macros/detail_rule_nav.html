@@ -1,4 +1,4 @@
-{% macro detail_rule_nav(rule, active, similarity_count=0, history_count=0, proposal_count=0, scope_count=0) %}
+{% macro detail_rule_nav(rule, active, similarity_count=0, history_count=0, proposal_count=0, scope_count=0, test_count=0) %}
 <nav class="dr-nav">
     <a href="/rule/detail_rule/{{ rule.id }}"
        class="dr-nav__item {% if active == 'detail' %}active{% endif %}">
@@ -44,5 +44,18 @@
         {% endif %}
     </a>
     {% endif %}
+    {% if current_user.is_authenticated %}
+    <a href="/rule/detail_rule/{{ rule.id }}/test"
+       class="dr-nav__item {% if active == 'test' %}active{% endif %}">
+        <i class="fa-solid fa-flask-vial"></i>
+        <span>Test</span>
+    </a>
+    {% endif %}
+    <a href="/rule/detail_rule/{{ rule.id }}/test_history"
+       class="dr-nav__item {% if active == 'test_history' %}active{% endif %}">
+        <i class="fa-solid fa-flask-vial"></i>
+        <span>Tests</span>
+        <span class="dr-nav__badge">{{ test_count }}</span>
+    </a>
 </nav>
 {% endmacro %}

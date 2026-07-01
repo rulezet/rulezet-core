@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Test History — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/rule_tester.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/test_results.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+{% endblock %}
+
+{% import 'macros/detail_rule_nav.html' as nav with context %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-clock-rotate-left banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+        <li class="breadcrumb-item">
+          <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+            {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+          </a>
+        </li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Test History</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">{% if rule.title|length > 60 %}{{ rule.title[:60] }}…{% else %}{{ rule.title }}{% endif %}</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+      Community test history — past payloads, match results, and scores for this rule.
+    </p>
+  </div>
+
+  {{ nav.detail_rule_nav(rule, 'test_history',
+       similarity_count=similarity_count,
+       history_count=history_count,
+       proposal_count=proposal_count,
+       scope_count=scope_count,
+       test_count=test_count) }}
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h6 class="fw-bold mb-0">
+          <i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Test History
+        </h6>
+        {% if current_user.is_authenticated %}
+        <a href="{{ url_for('rule_tester.rule_test_panel', rule_id=rule.id) }}"
+           class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-flask-vial me-1"></i> Run a new test
+        </a>
+        {% endif %}
+      </div>
+
+      <test-history-panel
+        rule-uuid="{{ rule.uuid }}"
+        :rule-id="{{ rule.id }}"
+        :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
+        :is-admin="{{ current_user.is_admin() | tojson }}"
+        :is-authenticated="{{ current_user.is_authenticated | tojson }}"
+        csrf-token="{{ csrf_token() }}"
+      ></test-history-panel>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  const { createApp } = Vue
+  import TestHistoryPanel from '{{ url_for("static", filename="js/rule_tester/TestHistoryPanel.js") }}'
+
+  createApp({
+    delimiters: ['[[', ']]'],
+    components: { 'test-history-panel': TestHistoryPanel },
+  }).mount('#main-container')
+</script>
+{% endblock %}

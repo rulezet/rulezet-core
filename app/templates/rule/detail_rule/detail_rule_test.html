@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Test — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/rule_tester.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+{% endblock %}
+
+{% import 'macros/detail_rule_nav.html' as nav with context %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-flask-vial banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+        <li class="breadcrumb-item">
+          <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+            {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+          </a>
+        </li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Test</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-flask-vial"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">{% if rule.title|length > 60 %}{{ rule.title[:60] }}…{% else %}{{ rule.title }}{% endif %}</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+      Run this rule against a custom payload and inspect the result in real time.
+    </p>
+  </div>
+
+  {{ nav.detail_rule_nav(rule, 'test',
+       similarity_count=similarity_count,
+       history_count=history_count,
+       proposal_count=proposal_count,
+       scope_count=scope_count,
+       test_count=test_count) }}
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <rule-tester-panel
+        rule-uuid="{{ rule.uuid }}"
+        rule-format="{{ rule.format or '' }}"
+        :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
+        :is-authenticated="{{ current_user.is_authenticated | tojson }}"
+        csrf-token="{{ csrf_token() }}"
+      ></rule-tester-panel>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  const { createApp } = Vue
+  import RuleTesterPanel      from '{{ url_for("static", filename="js/rule_tester/RuleTesterPanel.js") }}'
+  import InputEditorByFormat  from '{{ url_for("static", filename="js/rule_tester/InputEditorByFormat.js") }}'
+  import TestResultDisplay    from '{{ url_for("static", filename="js/rule_tester/TestResultDisplay.js") }}'
+
+  createApp({
+    delimiters: ['[[', ']]'],
+    components: {
+      'rule-tester-panel':      RuleTesterPanel,
+      'input-editor-by-format': InputEditorByFormat,
+      'test-result-display':    TestResultDisplay,
+    },
+  }).mount('#main-container')
+</script>
+{% endblock %}

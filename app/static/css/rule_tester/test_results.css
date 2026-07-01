@@ -1,0 +1,226 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Rule Tester — test results table, history rows, score bars
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Score bar (inline progress) ─────────────────────────────────────────── */
+.rtr-score-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-width: 120px;
+}
+.rtr-score-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--border-color);
+  overflow: hidden;
+}
+.rtr-score-bar__fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .4s ease;
+}
+.rtr-score-bar__fill--high    { background: #198754; }
+.rtr-score-bar__fill--partial { background: #fd7e14; }
+.rtr-score-bar__fill--low     { background: #dc3545; }
+.rtr-score-bar__fill--none    { background: var(--border-color); }
+.rtr-score-pct {
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--subtle-text-color);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ── Status chip ─────────────────────────────────────────────────────────── */
+.rtr-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .15rem .55rem;
+  border-radius: 99px;
+  font-size: .65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+.rtr-status-chip--matched  { background: rgba(25,135,84,.15); color: #198754; }
+.rtr-status-chip--no-match { background: var(--light-bg-color); color: var(--subtle-text-color);
+                              border: 1px solid var(--border-color); }
+.rtr-status-chip--error    { background: rgba(220,53,69,.12); color: #dc3545; }
+.rtr-status-chip--pending  { background: rgba(13,110,253,.1); color: #0d6efd; }
+.rtr-status-chip--running  { background: rgba(13,110,253,.1); color: #0d6efd; }
+
+/* ── Test history row ────────────────────────────────────────────────────── */
+.rtr-history-list { display: flex; flex-direction: column; gap: .5rem; }
+
+.rtr-history-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .65rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--card-bg-color);
+  transition: box-shadow .12s, border-color .12s;
+}
+.rtr-history-row:hover {
+  border-color: rgba(13,110,253,.3);
+  box-shadow: 0 2px 8px rgba(13,110,253,.08);
+}
+
+.rtr-history-row__meta {
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+  min-width: 0;
+  flex: 1;
+}
+.rtr-history-row__date {
+  font-size: .68rem;
+  color: var(--subtle-text-color);
+}
+.rtr-history-row__label {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Visibility toggle ───────────────────────────────────────────────────── */
+.rtr-visibility-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: .2rem .4rem;
+  border-radius: 5px;
+  color: var(--subtle-text-color);
+  font-size: .85rem;
+  transition: color .12s, background .12s;
+}
+.rtr-visibility-btn:hover { color: #0d6efd; background: rgba(13,110,253,.08); }
+.rtr-visibility-btn--public  { color: #198754; }
+.rtr-visibility-btn--private { color: var(--subtle-text-color); }
+
+/* ── Filter tabs (All / Mine / Public) ───────────────────────────────────── */
+.rtr-filter-tabs {
+  display: flex;
+  gap: .35rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.rtr-filter-tab {
+  padding: .22rem .7rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--subtle-text-color);
+  font-size: .72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .12s;
+}
+.rtr-filter-tab:hover { border-color: #0d6efd; color: #0d6efd; }
+.rtr-filter-tab.active {
+  background: #0d6efd;
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+/* ── KPI summary row (test_detail page) ──────────────────────────────────── */
+.rtr-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: .75rem;
+  margin-bottom: 1.5rem;
+}
+.rtr-kpi-card {
+  background: var(--card-bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+.rtr-kpi-card__label {
+  font-size: .65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--subtle-text-color);
+}
+.rtr-kpi-card__value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-color);
+  line-height: 1.1;
+}
+.rtr-kpi-card__value--green  { color: #198754; }
+.rtr-kpi-card__value--blue   { color: #0d6efd; }
+.rtr-kpi-card__value--orange { color: #fd7e14; }
+
+/* ── Bulk results table ──────────────────────────────────────────────────── */
+.rtr-results-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.rtr-results-table th {
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--subtle-text-color);
+  padding: .5rem .75rem;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+  white-space: nowrap;
+}
+.rtr-results-table td {
+  padding: .55rem .75rem;
+  border-bottom: 1px solid var(--border-color);
+  font-size: .82rem;
+  color: var(--text-color);
+  vertical-align: middle;
+}
+.rtr-results-table tr:last-child td { border-bottom: none; }
+.rtr-results-table tr:hover td { background: var(--light-bg-color); }
+
+/* ── Quality hint list (in table) ────────────────────────────────────────── */
+.rtr-quality-hint-list {
+  list-style: none;
+  padding: 0;
+  margin: .25rem 0 0;
+}
+.rtr-quality-hint-list li {
+  font-size: .68rem;
+  color: var(--subtle-text-color);
+  padding: .1rem 0;
+  display: flex;
+  align-items: flex-start;
+  gap: .3rem;
+}
+.rtr-quality-hint-list li::before {
+  content: '›';
+  color: #fd7e14;
+  flex-shrink: 0;
+}
+
+/* ── Input preview (collapsible card in test_detail) ─────────────────────── */
+.rtr-input-preview {
+  background: var(--light-bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  font-family: 'Fira Code', monospace;
+  font-size: .76rem;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-color);
+}
