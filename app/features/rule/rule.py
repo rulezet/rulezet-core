@@ -26,6 +26,7 @@ from app.core.utils.activity_log import log_activity
 from .rule_from_github.update_rule import update_class as UpdateModel
 from .utils.similar_rules import similarity_class as SimilarityModel
 from ..account import account_core as AccountModel
+from .exporters.velociraptor_exporter import generate_velociraptor_artifact, SUPPORTED_FORMATS as VELOCIRAPTOR_SUPPORTED_FORMATS
 
 
 ################################################################################################### 
@@ -590,6 +591,13 @@ def detail_rule_by_uuid(rule_uuid):
     if not rule_misp_event:
         rule_misp_event = None
 
+    rule_velociraptor_artifact = None
+    if (rule.format or '').lower() in VELOCIRAPTOR_SUPPORTED_FORMATS:
+        try:
+            rule_velociraptor_artifact = generate_velociraptor_artifact(rule, base_url=request.host_url)
+        except Exception:
+            rule_velociraptor_artifact = None
+
     rule_to_json = json.dumps(rule.to_json_detail(), indent=4)
 
     if not rule_to_json:
@@ -603,6 +611,7 @@ def detail_rule_by_uuid(rule_uuid):
     if rule:
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
+                               rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote,
                                **_nav_counts(rule.id))
@@ -676,6 +685,13 @@ def detail_rule(rule_id)-> render_template:
     if not rule_misp_event:
         rule_misp_event = None
 
+    rule_velociraptor_artifact = None
+    if (rule.format or '').lower() in VELOCIRAPTOR_SUPPORTED_FORMATS:
+        try:
+            rule_velociraptor_artifact = generate_velociraptor_artifact(rule, base_url=request.host_url)
+        except Exception:
+            rule_velociraptor_artifact = None
+
     rule_to_json = json.dumps(rule.to_json_detail(), indent=4)
 
     if not rule_to_json:
@@ -689,6 +705,7 @@ def detail_rule(rule_id)-> render_template:
     if rule:
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
+                               rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote,
                                **_nav_counts(rule.id))
@@ -938,6 +955,13 @@ def download_rule_unified() -> Response:
                 stix_data = json.loads(object_json) if isinstance(object_json, str) else object_json
                 content = json.dumps(stix_data, indent=2)
                 filename = f"{rule.title}_stix_object.json"
+
+        elif fmt == 'velociraptor':
+            if (rule.format or '').lower() not in VELOCIRAPTOR_SUPPORTED_FORMATS:
+                error_mesg = f"Velociraptor export is not supported for format {rule.format}"
+            else:
+                content = generate_velociraptor_artifact(rule, base_url=request.host_url)
+                filename = f"{rule.title}_velociraptor_artifact.yaml"
 
         elif fmt == 'all':
             zip_buffer = io.BytesIO()
