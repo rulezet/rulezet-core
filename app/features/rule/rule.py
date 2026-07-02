@@ -3729,16 +3729,14 @@ def get_rules_page_filter_bundle() -> jsonify:
 @rule_blueprint.route("/get_all_rules_vulnerabilities_usage", methods=['GET'])
 def get_all_rules_vulnerabilities_usage():
     try:
-
-        user_id = request.args.get('user_id', type=int)
-        source_url = request.args.get('sources', type=str)
-        vulnerabilities = RuleModel.get_rules_vulnerabilities_usage(user_id=user_id, source_url=source_url)
+        filters = RuleModel.parse_facet_filters(request.args, exclude=['vulnerabilities'])
+        vulnerabilities = RuleModel.get_rules_vulnerabilities_usage(filters=filters)
         return jsonify({
             "success": True,
             "vulnerabilities": vulnerabilities
         })
     except Exception as e:
-      
+
         return jsonify({"success": False, "message": str(e)}), 500
     
 
@@ -3766,55 +3764,44 @@ def test():
 
 @rule_blueprint.route('/get_rules_sources_usage')
 def get_rules_sources_usage():
-    """Returns the list of sources, filtered by user_id if provided."""
-    user_id = request.args.get('user_id', type=int) 
+    """Returns the list of sources, scoped to rules matching every other active filter."""
     search_query = request.args.get('q', '').strip()
+    filters = RuleModel.parse_facet_filters(request.args, exclude=['source'])
 
-    sources = RuleModel.get_sources_usage_with_filter(search_query, user_id)
-    
+    sources = RuleModel.get_sources_usage_with_filter(search_query, filters=filters)
+
     return jsonify([{"name": s.source, "count": s.count} for s in sources])
 
 @rule_blueprint.route('/get_rules_licenses_usage')
 def get_rules_licenses_usage():
-    """Returns the list of licenses, filtered by user_id, search query, and source scope."""
-    user_id = request.args.get('user_id', type=int) 
+    """Returns the list of licenses, scoped to rules matching every other active filter."""
     search_query = request.args.get('q', '').strip()
-    source_scope = request.args.get('sources', '').strip()
-    
-    licenses = RuleModel.get_licenses_usage_with_filter(
-        search_query=search_query, 
-        user_id=user_id, 
-        source_scope=source_scope
-    )
-    
+    filters = RuleModel.parse_facet_filters(request.args, exclude=['license'])
+
+    licenses = RuleModel.get_licenses_usage_with_filter(search_query, filters=filters)
+
     return jsonify([{"name": s.license, "count": s.count} for s in licenses])
 
 
 @rule_blueprint.route('/get_rules_authors_usage')
 def get_rules_authors_usage():
-    """Returns distinct rule authors with their rule count."""
-    user_id      = request.args.get('user_id', type=int)
+    """Returns distinct rule authors with their rule count, scoped to rules
+    matching every other active filter."""
     search_query = request.args.get('q', '').strip()
-    source_scope = request.args.get('sources', '').strip()
+    filters = RuleModel.parse_facet_filters(request.args, exclude=['author'])
 
-    authors = RuleModel.get_authors_usage_with_filter(
-        search_query=search_query,
-        user_id=user_id,
-        source_scope=source_scope,
-    )
+    authors = RuleModel.get_authors_usage_with_filter(search_query=search_query, filters=filters)
     return jsonify([{"name": a.author, "count": a.count} for a in authors])
 
 
 @rule_blueprint.route('/get_rules_editors_usage')
 def get_rules_editors_usage():
-    """Returns distinct Rulezet editors (uploaders) with their rule count."""
+    """Returns distinct Rulezet editors (uploaders) with their rule count,
+    scoped to rules matching every other active filter."""
     search_query = request.args.get('q', '').strip()
-    source_scope = request.args.get('sources', '').strip()
+    filters = RuleModel.parse_facet_filters(request.args, exclude=['editor_names'])
 
-    editors = RuleModel.get_editors_usage_with_filter(
-        search_query=search_query,
-        source_scope=source_scope,
-    )
+    editors = RuleModel.get_editors_usage_with_filter(search_query=search_query, filters=filters)
     return jsonify([{"name": e.name, "count": e.count} for e in editors])
 
 
@@ -3837,7 +3824,8 @@ def get_tags(rule_id):
 @rule_blueprint.route('/get_all_tags_usage')
 def get_all_tags_usage():
     try:
-        tags = RuleModel.get_all_used_tags_with_counts()
+        filters = RuleModel.parse_facet_filters(request.args, exclude=['tags'])
+        tags = RuleModel.get_all_used_tags_with_counts(filters=filters)
         return jsonify({
             "success": True,
             "tags": tags
