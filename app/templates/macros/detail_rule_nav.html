@@ -48,7 +48,9 @@
        class="dr-nav__item {% if active == 'test_history' or active == 'test' %}active{% endif %}">
         <i class="fa-solid fa-flask-vial"></i>
         <span>Tests</span>
+        {% if test_count > 0 %}
         <span class="dr-nav__badge">{{ test_count }}</span>
+        {% endif %}
     </a>
 </nav>
 {% endmacro %}
