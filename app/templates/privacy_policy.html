@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% block title %}Privacy Policy — Rulezet{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-user-shield banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Privacy Policy</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-user-shield"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">Privacy Policy</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:700px;font-size:.95rem;">
+      This page explains what data Rulezet collects, why, and how you can control it. Last updated: {{ privacy_last_updated | default('2026') }}.
+    </p>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Rulezet is an open-source, community-driven platform for sharing cybersecurity detection rules.
+        This policy covers the official instance at <strong>rulezet.org</strong>. Anyone can also self-host
+        Rulezet from its source code — if you are using a self-hosted instance, this default policy may have
+        been customized by that instance's operator, who is responsible for it instead of the Rulezet project.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-database text-primary me-2"></i>1. Information We Collect</h5>
+      <ul class="text-muted mb-0" style="font-size:.9rem;line-height:1.7;">
+        <li><strong>Account data</strong> — username, email address, and a securely hashed password (or your SSO identity, if you sign in that way).</li>
+        <li><strong>Content you submit</strong> — detection rules, bundles, comments, tags, votes, and reports you create or upload.</li>
+        <li><strong>API keys</strong> — if you generate one, it is stored to authenticate your programmatic requests. Treat it like a password.</li>
+        <li><strong>Activity logs</strong> — actions such as rule creation, edits, votes, and moderation events are logged for accountability and abuse prevention.</li>
+        <li><strong>Technical data</strong> — standard web server logs (IP address, browser user-agent, timestamps) generated automatically by any web request.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-gears text-primary me-2"></i>2. How We Use It</h5>
+      <ul class="text-muted mb-0" style="font-size:.9rem;line-height:1.7;">
+        <li>To operate your account and let you create, edit, and share detection rules.</li>
+        <li>To keep an audit trail of changes, for transparency and to resolve disputes or abuse.</li>
+        <li>To protect the platform against spam, abuse, and unauthorized access.</li>
+        <li>To send you account-related notifications (for example, comments on your rules).</li>
+        <li>To compile anonymous, aggregate usage statistics (for example, total rule count) shown publicly on the site.</li>
+      </ul>
+      <p class="text-muted mt-3 mb-0" style="font-size:.9rem;">
+        We do not sell your personal data, and we do not use it for third-party advertising.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-share-nodes text-primary me-2"></i>3. Sharing &amp; Federation</h5>
+      <p class="text-muted mb-2" style="font-size:.9rem;">
+        Any rule, bundle, or profile field you mark <strong>public</strong> is visible to every visitor, including
+        anonymous ones. Content you keep <strong>private</strong> is visible only to you and platform administrators.
+      </p>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Rulezet supports optional "connectors" that let instance administrators sync public rules with other
+        Rulezet instances. Only content you have made public can be replicated this way — private data is never
+        federated.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-cookie-bite text-primary me-2"></i>4. Cookies</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        We use a small number of cookies that are strictly necessary to run the site: a session cookie to keep
+        you signed in, a CSRF token to protect your forms, and a local preference for light/dark theme. We do not
+        use third-party tracking or advertising cookies.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-box-archive text-primary me-2"></i>5. Data Retention</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        We keep your account and content for as long as your account is active. Deleted rules are first moved to
+        a trash area (soft delete) and are permanently removed after the retention period configured by the
+        instance, or sooner on request. Activity logs may be retained longer for security and audit purposes.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-user-check text-primary me-2"></i>6. Your Rights</h5>
+      <p class="text-muted mb-2" style="font-size:.9rem;">
+        Depending on where you live, you may have the right to access, correct, export, or delete your personal
+        data (for example, under the EU/UK GDPR or similar laws elsewhere). You can update most of your
+        information directly from your account settings, or contact us to request a full export or deletion of
+        your account.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-shield-halved text-primary me-2"></i>7. Security</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Passwords are stored using a salted hash, never in plain text. We apply role-based access control
+        (anonymous / authenticated / administrator) throughout the platform and log administrative actions.
+        No online service can guarantee absolute security, so please use a strong, unique password.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-child-reaching text-primary me-2"></i>8. Children</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Rulezet is intended for security professionals and researchers, and is not directed at children under 16.
+        We do not knowingly collect personal data from children.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-pen text-primary me-2"></i>9. Changes to This Policy</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        We may update this policy as the platform evolves. Material changes will be announced on the project's
+        GitHub repository. Continued use of Rulezet after an update means you accept the revised policy.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-envelope text-primary me-2"></i>10. Contact</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Questions about this policy or your data? Reach out via
+        <a href="https://github.com/rulezet/rulezet-core/discussions" target="_blank" rel="noreferrer">GitHub Discussions</a>
+        or open an issue on the
+        <a href="https://github.com/rulezet/rulezet-core" target="_blank" rel="noreferrer">rulezet-core</a> repository.
+      </p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

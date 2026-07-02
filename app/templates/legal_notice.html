@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% block title %}Legal Notice — Rulezet{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-scale-balanced banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Legal Notice</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-scale-balanced"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">Legal Notice</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:700px;font-size:.95rem;">
+      Site identification, licensing, and liability information for the Rulezet platform.
+    </p>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-id-card text-primary me-2"></i>1. Site Identification</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Rulezet is an open-source project. The official instance is published at <strong>rulezet.org</strong>.
+        Rulezet is also free software that anyone can deploy on their own infrastructure — a self-hosted
+        instance is operated independently by whoever runs it, who is then the responsible publisher for that
+        instance instead of the Rulezet project.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-user-tie text-primary me-2"></i>2. Publisher</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        The official instance is published and maintained by the Rulezet open-source project and its contributors,
+        coordinated on GitHub at
+        <a href="https://github.com/rulezet/rulezet-core" target="_blank" rel="noreferrer">github.com/rulezet/rulezet-core</a>.
+        For formal legal correspondence regarding a specific instance, contact that instance's operator directly.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-server text-primary me-2"></i>3. Hosting</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Rulezet is self-hostable software; the hosting provider therefore depends on which instance you are
+        using. Details for the official rulezet.org instance are available on request via the contact channels
+        below.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-copyright text-primary me-2"></i>4. Intellectual Property &amp; Licensing</h5>
+      <p class="text-muted mb-2" style="font-size:.9rem;">
+        The Rulezet platform's source code is released under the
+        <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noreferrer">GNU Affero General Public License v3.0 (AGPL-3.0)</a>.
+        You are free to use, study, modify, and redistribute it under the terms of that license.
+      </p>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Detection rules, bundles, and other content submitted by users remain the property of their original
+        authors and are shared under the license each contributor selects for their own submission (shown on the
+        rule's detail page). Rulezet itself claims no ownership over user-submitted rule content.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-triangle-exclamation text-primary me-2"></i>5. Content Disclaimer</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Detection rules hosted on Rulezet are submitted by the community "as is," without warranty of any kind.
+        Rulezet does not guarantee the accuracy, safety, or fitness for any particular purpose of any rule, and
+        is not responsible for how rules are used. Always review and test detection content before deploying it
+        in a production environment.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-gavel text-primary me-2"></i>6. Limitation of Liability</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        To the fullest extent permitted by law, Rulezet, its maintainers, and contributors shall not be liable
+        for any direct, indirect, incidental, or consequential damages arising from the use of the platform or
+        any content hosted on it.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-user-shield text-primary me-2"></i>7. Privacy</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        Information on what personal data is collected and how it is used is available in our
+        <a href="/privacy">Privacy Policy</a>.
+      </p>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-envelope text-primary me-2"></i>8. Contact</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        For legal inquiries, reach out via
+        <a href="https://github.com/rulezet/rulezet-core/discussions" target="_blank" rel="noreferrer">GitHub Discussions</a>
+        or open an issue on the
+        <a href="https://github.com/rulezet/rulezet-core" target="_blank" rel="noreferrer">rulezet-core</a> repository.
+      </p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

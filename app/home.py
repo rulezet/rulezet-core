@@ -551,6 +551,16 @@ def update_request_status() -> jsonify:
 def about() -> render_template:
     return render_template("/about_us.html")
 
+# privacy policy page
+@home_blueprint.route("/privacy")
+def privacy_policy() -> render_template:
+    return render_template("privacy_policy.html")
+
+# legal notice page
+@home_blueprint.route("/legal")
+def legal_notice() -> render_template:
+    return render_template("legal_notice.html")
+
 # version
 @home_blueprint.route("/version")
 def version() -> jsonify:
