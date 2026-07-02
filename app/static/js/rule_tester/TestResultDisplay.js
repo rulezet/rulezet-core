@@ -1,14 +1,21 @@
+import YaraMatchDetail from './YaraMatchDetail.js';
+
 const TestResultDisplay = {
     name: 'TestResultDisplay',
     delimiters: ['[[', ']]'],
+    components: { YaraMatchDetail },
     props: {
         result:  { type: Object, required: true },  // { matched, score, details, quality_hints, execution_time_ms, error }
         testUuid:{ type: String, default: null },
     },
     data() {
-        return { showDetails: false };
+        return { showDetails: false, showRaw: false };
     },
     computed: {
+        hasStructuredYara() {
+            const d = this.result.details || {};
+            return !!(d.strings_matched || d.tags || d.meta);
+        },
         pct()       { return Math.round((this.result.score || 0) * 100); },
         scoreClass() {
             const s = this.result.score || 0;
@@ -95,13 +102,24 @@ const TestResultDisplay = {
     </div>
   </div>
 
-  <!-- details accordion -->
-  <div class="rtr-details">
+  <!-- structured YARA detail -->
+  <div v-if="hasStructuredYara" class="rtr-details">
     <div class="rtr-details-toggle" @click="showDetails = !showDetails">
       <i class="fa-solid" :class="showDetails ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+      Match detail
+    </div>
+    <div v-if="showDetails" class="rtr-details-body" style="font-family:inherit;white-space:normal;">
+      <YaraMatchDetail :details="result.details" :quality-hints="[]" />
+    </div>
+  </div>
+
+  <!-- raw details accordion -->
+  <div class="rtr-details">
+    <div class="rtr-details-toggle" @click="showRaw = !showRaw">
+      <i class="fa-solid" :class="showRaw ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
       Raw details
     </div>
-    <pre v-if="showDetails" class="rtr-details-body">[[ detailsJson ]]</pre>
+    <pre v-if="showRaw" class="rtr-details-body">[[ detailsJson ]]</pre>
   </div>
 </div>
 `,

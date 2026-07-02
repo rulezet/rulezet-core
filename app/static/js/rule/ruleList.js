@@ -56,6 +56,7 @@ import { create_message }       from '/static/js/toaster.js'
 import ReportModal              from '/static/js/components/ReportModal.js'
 import MultiAttackFilter        from '/static/js/attack/multiAttackFilter.js'
 import AttackDisplayList        from '/static/js/attack/attackDisplayList.js'
+import YaraMatchDetail           from '/static/js/rule_tester/YaraMatchDetail.js'
 
 const { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue
 
@@ -76,6 +77,7 @@ export default {
         ReportModal,
         MultiAttackFilter,
         AttackDisplayList,
+        YaraMatchDetail,
     },
 
     props: {
@@ -104,6 +106,17 @@ export default {
         hiddenColumns:      { type: Array,            default: () => [] },
         draggable:          { type: Boolean,          default: false },
         showStatus:         { type: Boolean,          default: false },
+        // Opt-in, page-local extension: when true, each `rule` item is expected to
+        // carry an embedded `test_result` ({ matched, score, execution_time_ms,
+        // quality_hints, details, error }) — used by the Rule Tester's test detail
+        // page only. No effect on any other page that doesn't pass this prop.
+        showTestResults:    { type: Boolean,          default: false },
+        // The payload the tests were run against — { type: 'hex'|'string'|..., value } —
+        // enables the per-string "compare with your input" button. Optional.
+        testInput:          { type: Object,            default: null },
+        // Rule UUID to visually highlight + auto-scroll to once loaded (e.g. when
+        // arriving from that rule's own Test History via ?rule_uuid=...). Optional.
+        highlightUuid:      { type: String,             default: null },
     },
 
     emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'rule-drag-start', 'rule-drag-end', 'status-change'],
@@ -433,7 +446,8 @@ export default {
 
             <div class="card h-100 shadow-sm border-0 mb-4 rl-rule-card"
                  v-for="rule in items" :key="rule.id"
-                 :class="{ 'rl-rule-card--selected': isSelected(rule) }">
+                 :id="highlightUuid && rule.uuid === highlightUuid ? 'rl-highlight-target' : null"
+                 :class="{ 'rl-rule-card--selected': isSelected(rule), 'rl-rule-card--highlighted': highlightUuid && rule.uuid === highlightUuid }">
 
                 <div class="premium-accent-line"></div>
                 <div class="card-watermark-list" v-show="!expandedIds.has(rule.id)">
@@ -442,6 +456,12 @@ export default {
 
                 <!-- Badges top-right -->
                 <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+                    <span v-if="showTestResults && rule.test_result" class="badge shadow-sm pt-1"
+                          :class="rule.test_result.matched ? 'bg-success' : (rule.test_result.error ? 'bg-danger' : 'bg-secondary')">
+                        <i class="fa-solid me-1" :class="rule.test_result.matched ? 'fa-check' : (rule.test_result.error ? 'fa-triangle-exclamation' : 'fa-xmark')"></i>
+                        <template v-if="rule.test_result.score!=null">{{ Math.round((rule.test_result.score||0)*100) }}%</template>
+                        <template v-else>{{ rule.test_result.matched ? 'MATCH' : 'NO MATCH' }}</template>
+                    </span>
                     <span v-if="isOwner(rule)" class="badge bg-success shadow-sm pt-1" title="You own this rule">
                         <i class="fa-solid fa-crown me-1"></i>OWNER
                     </span>
@@ -493,10 +513,18 @@ export default {
                     </div>
 
                     <!-- Description -->
-                    <p class="rl-card-desc mb-3"
+                    <p class="rl-card-desc mb-2"
                        style="-webkit-line-clamp:3;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden;">
                         <span v-html="highlight(rule.description || 'No description.')"></span>
                     </p>
+                    <div v-if="showTestResults && rule.test_result && matchedStringCount(rule) !== null" class="mb-3">
+                        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle-text-color);margin-bottom:.25rem;">
+                            <i class="fa-solid fa-magnifying-glass me-1"></i>Matched Strings
+                        </div>
+                        <span class="badge" style="background:rgba(13,110,253,.12);color:#0d6efd;font-size:.72rem;">
+                            {{ matchedStringCount(rule) }} string{{ matchedStringCount(rule) === 1 ? '' : 's' }} matched
+                        </span>
+                    </div>
 
                     <!-- CVEs -->
                     <div class="mb-2" @click.stop>
@@ -634,11 +662,46 @@ export default {
 
                 <!-- Collapse: rule content -->
                 <div v-if="expandedIds.has(rule.id)" class="rl-rule-collapse border-top">
+                    <div v-if="showTestResults && rule.test_result" class="rl-expand-test-report">
+                        <div class="rl-expand-test-report__title">
+                            <i class="fa-solid fa-flask-vial"></i>
+                            <span>Test report</span>
+                            <span class="ms-auto badge" :class="rule.test_result.matched ? 'bg-success' : (rule.test_result.error ? 'bg-danger' : 'bg-secondary')">
+                                {{ rule.test_result.matched ? 'MATCHED' : (rule.test_result.error ? 'ERROR' : 'NO MATCH') }}
+                            </span>
+                            <span v-if="rule.test_result.score!=null" class="badge bg-dark">
+                                {{ Math.round((rule.test_result.score||0)*100) }}%
+                            </span>
+                            <span v-if="rule.test_result.execution_time_ms!=null" class="badge bg-dark">
+                                {{ rule.test_result.execution_time_ms }}ms
+                            </span>
+                        </div>
+                        <div v-if="rule.test_result.error" class="rtr-hints px-0">
+                            <div class="rtr-hint-item">
+                                <i class="fa-solid fa-circle-exclamation rtr-hint-icon" style="color:#dc3545;"></i>
+                                {{ rule.test_result.error }}
+                            </div>
+                        </div>
+                        <yara-match-detail v-if="rule.format==='yara'"
+                            :details="rule.test_result.details || {}"
+                            :quality-hints="rule.test_result.quality_hints || []"
+                            :test-input="testInput">
+                        </yara-match-detail>
+                        <div v-else-if="rule.test_result.quality_hints && rule.test_result.quality_hints.length" class="rtr-hints px-0">
+                            <div v-for="hint in rule.test_result.quality_hints" :key="hint" class="rtr-hint-item">
+                                <i class="fa-solid fa-lightbulb rtr-hint-icon"></i>{{ hint }}
+                            </div>
+                        </div>
+                        <p v-if="matchedHighlightTerms(rule).length" class="mb-0" style="font-size:.72rem;color:var(--subtle-text-color);">
+                            <i class="fa-solid fa-arrow-down me-1"></i>The matched bytes are highlighted in blue in the rule content below.
+                        </p>
+                    </div>
                     <code-viewer v-if="rule.to_string"
                         :code="rule.to_string"
                         :language="ruleLanguage(rule.format)"
                         :title="rule.title"
                         :initial-search="searchField === 'content' ? search : ''"
+                        :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
                         max-height="380px">
                     </code-viewer>
                     <p v-else class="text-muted text-center py-3 mb-0 small">No content available.</p>
@@ -669,6 +732,7 @@ export default {
                                 Title <i class="fas dt-sort-icon" :class="sortIcon('title')"></i>
                             </div>
                         </th>
+                        <th v-if="showTestResults" class="dt-th" style="width:150px;">Result</th>
                         <th v-show="colVisible.format"
                             class="dt-th dt-th--sortable" style="width:80px;"
                             :class="{ 'dt-th--sorted': sortKey === 'format' }"
@@ -707,10 +771,12 @@ export default {
                 <tbody>
                     <template v-for="rule in items" :key="rule.id">
                         <tr class="dt-row"
+                            :id="highlightUuid && rule.uuid === highlightUuid ? 'rl-highlight-target' : null"
                             :class="{
                                 'dt-row--selected':  isSelected(rule),
                                 'dt-row--expanded':  expandedIds.has(rule.id),
                                 'dt-row--favorited': rule.is_favorited,
+                                'dt-row--highlighted': highlightUuid && rule.uuid === highlightUuid,
                             }"
                             :draggable="draggable"
                             @dragstart="draggable && $emit('rule-drag-start', rule)"
@@ -744,6 +810,23 @@ export default {
                                 </a>
                             </td>
 
+                            <td v-if="showTestResults" class="dt-td">
+                                <div v-if="rule.test_result" class="d-flex align-items-center gap-1">
+                                    <i v-if="rule.test_result.matched"    class="fa-solid fa-check text-success" title="Matched"></i>
+                                    <i v-else-if="rule.test_result.error" class="fa-solid fa-triangle-exclamation text-danger" :title="rule.test_result.error"></i>
+                                    <i v-else                             class="fa-solid fa-xmark text-muted" title="No match"></i>
+                                    <div v-if="rule.test_result.score!=null" style="flex:1;min-width:36px;">
+                                        <div style="height:5px;border-radius:3px;background:var(--border-color);overflow:hidden;">
+                                            <div :style="'width:'+Math.round((rule.test_result.score||0)*100)+'%;height:100%;border-radius:3px;background:'+(rule.test_result.score>=.7?'#198754':rule.test_result.score>=.3?'#ffc107':'#dc3545')+';'"></div>
+                                        </div>
+                                    </div>
+                                    <span style="font-size:.68rem;white-space:nowrap;color:var(--subtle-text-color);">
+                                        <template v-if="rule.test_result.score!=null">{{ Math.round((rule.test_result.score||0)*100) }}%</template>
+                                        <template v-if="rule.test_result.execution_time_ms!=null"> · {{ rule.test_result.execution_time_ms }}ms</template>
+                                    </span>
+                                </div>
+                            </td>
+
                             <td v-show="colVisible.format" class="dt-td">
                                 <span v-if="rule.format"
                                       class="badge rounded-pill bg-dark pt-1 shadow-sm">
@@ -764,6 +847,14 @@ export default {
                             <td v-show="colVisible.description" class="dt-td dt-td--truncate">
                                 <span class="text-muted"
                                       v-html="highlight(rule.description || '—')"></span>
+                                <div v-if="showTestResults && rule.test_result && matchedStringCount(rule) !== null" class="mt-1">
+                                    <div style="font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle-text-color);">
+                                        <i class="fa-solid fa-magnifying-glass me-1"></i>Matched Strings
+                                    </div>
+                                    <span class="badge" style="background:rgba(13,110,253,.12);color:#0d6efd;font-size:.68rem;">
+                                        {{ matchedStringCount(rule) }} string{{ matchedStringCount(rule) === 1 ? '' : 's' }} matched
+                                    </span>
+                                </div>
                             </td>
 
                             <td v-show="colVisible.tags" class="dt-td" @click.stop>
@@ -880,6 +971,42 @@ export default {
                             <td :colspan="tableColspan" class="dt-expand-cell p-0">
                                 <div class="rl-expand-wrap">
 
+                                    <!-- ⓪ Test report (only when showTestResults) -->
+                                    <div v-if="showTestResults && rule.test_result" class="rl-expand-test-report">
+                                        <div class="rl-expand-test-report__title">
+                                            <i class="fa-solid fa-flask-vial"></i>
+                                            <span>Test report</span>
+                                            <span class="ms-auto badge" :class="rule.test_result.matched ? 'bg-success' : (rule.test_result.error ? 'bg-danger' : 'bg-secondary')">
+                                                {{ rule.test_result.matched ? 'MATCHED' : (rule.test_result.error ? 'ERROR' : 'NO MATCH') }}
+                                            </span>
+                                            <span v-if="rule.test_result.score!=null" class="badge bg-dark">
+                                                {{ Math.round((rule.test_result.score||0)*100) }}%
+                                            </span>
+                                            <span v-if="rule.test_result.execution_time_ms!=null" class="badge bg-dark">
+                                                {{ rule.test_result.execution_time_ms }}ms
+                                            </span>
+                                        </div>
+                                        <div v-if="rule.test_result.error" class="rtr-hints px-0">
+                                            <div class="rtr-hint-item">
+                                                <i class="fa-solid fa-circle-exclamation rtr-hint-icon" style="color:#dc3545;"></i>
+                                                {{ rule.test_result.error }}
+                                            </div>
+                                        </div>
+                                        <yara-match-detail v-if="rule.format==='yara'"
+                                            :details="rule.test_result.details || {}"
+                                            :quality-hints="rule.test_result.quality_hints || []"
+                                            :test-input="testInput">
+                                        </yara-match-detail>
+                                        <div v-else-if="rule.test_result.quality_hints && rule.test_result.quality_hints.length" class="rtr-hints px-0">
+                                            <div v-for="hint in rule.test_result.quality_hints" :key="hint" class="rtr-hint-item">
+                                                <i class="fa-solid fa-lightbulb rtr-hint-icon"></i>{{ hint }}
+                                            </div>
+                                        </div>
+                                        <p v-if="matchedHighlightTerms(rule).length" class="mb-0" style="font-size:.72rem;color:var(--subtle-text-color);">
+                                            <i class="fa-solid fa-arrow-right me-1"></i>The matched bytes are highlighted in blue in the rule content, on the right.
+                                        </p>
+                                    </div>
+
                                     <!-- ① Meta strip -->
                                     <div class="rl-expand-meta">
                                         <div class="rl-expand-kv">
@@ -989,6 +1116,7 @@ export default {
                                                 :language="ruleLanguage(rule.format)"
                                                 :title="rule.title"
                                                 :initial-search="searchField === 'content' ? search : ''"
+                                                :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
                                                 max-height="300px">
                                             </code-viewer>
                                             <div v-else
@@ -1169,16 +1297,16 @@ export default {
         }
 
         const activeFilterCount = computed(() =>
-            (ruleType.value ? 1 : 0) +
-            (exactMatch.value ? 1 : 0) +
-            (searchField.value !== 'all' ? 1 : 0) +
+            (!isFilterHidden('format') && ruleType.value ? 1 : 0) +
+            (!isFilterHidden('exact_match') && exactMatch.value ? 1 : 0) +
+            (!isFilterHidden('search_field') && searchField.value !== 'all' ? 1 : 0) +
             (scopeMine.value ? 1 : 0) +
-            selectedTags.value.length +
-            selectedSources.value.length +
-            selectedLicenses.value.length +
-            selectedVulns.value.length +
-            selectedAttacks.value.length +
-            personFilter.value.values.length
+            (isFilterHidden('tags') ? 0 : selectedTags.value.length) +
+            (isFilterHidden('sources') ? 0 : selectedSources.value.length) +
+            (isFilterHidden('licenses') ? 0 : selectedLicenses.value.length) +
+            (isFilterHidden('vulnerabilities') ? 0 : selectedVulns.value.length) +
+            (isFilterHidden('attacks') ? 0 : selectedAttacks.value.length) +
+            (isFilterHidden('person') ? 0 : personFilter.value.values.length)
         )
 
         // ── URL sync ──────────────────────────────────────────────────────
@@ -1252,6 +1380,14 @@ export default {
                     page.value = totalPages.value
                 }
                 syncToUrl()
+                if (props.highlightUuid) {
+                    const target = items.value.find(r => r.uuid === props.highlightUuid)
+                    if (target) expandedIds.add(target.id)
+                    nextTick(() => {
+                        const el = document.getElementById('rl-highlight-target')
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    })
+                }
             } finally {
                 loading.value = false
             }
@@ -1274,16 +1410,17 @@ export default {
         }
 
         function resetFilters() {
-            ruleType.value       = ''
-            searchField.value    = 'all'
-            exactMatch.value     = false
+            // Hidden filters are locked by the parent (e.g. a fixed format) — never clear those.
+            if (!isFilterHidden('format'))          ruleType.value       = ''
+            if (!isFilterHidden('search_field'))    searchField.value    = 'all'
+            if (!isFilterHidden('exact_match'))     exactMatch.value     = false
             scopeMine.value      = false
-            selectedTags.value   = []
-            selectedSources.value = []
-            selectedLicenses.value = []
-            selectedVulns.value   = []
-            selectedAttacks.value = []
-            personFilter.value    = { mode: 'author', values: [] }
+            if (!isFilterHidden('tags'))            selectedTags.value   = []
+            if (!isFilterHidden('sources'))         selectedSources.value = []
+            if (!isFilterHidden('licenses'))        selectedLicenses.value = []
+            if (!isFilterHidden('vulnerabilities')) selectedVulns.value   = []
+            if (!isFilterHidden('attacks'))         selectedAttacks.value = []
+            if (!isFilterHidden('person'))          personFilter.value    = { mode: 'author', values: [] }
             onFilterChange()
         }
 
@@ -1525,6 +1662,7 @@ export default {
             if (isSelectable.value) n++
             if (props.draggable) n++
             if (props.showStatus) n++
+            if (props.showTestResults) n++
             for (const col of TOGGLEABLE_COLS) if (colVisible[col.key]) n++
             return n
         })
@@ -1618,6 +1756,27 @@ export default {
             return map[format.toLowerCase()] || 'auto'
         }
 
+        // ── Test result: matched bytes → highlight terms for CodeViewer ────
+        // Reconstructs "31 F7 40 88 ..." the same way the rule source spells a
+        // hex string, so CodeViewer can find and blue-highlight it verbatim.
+        function matchedHighlightTerms(rule) {
+            const tr = rule.test_result
+            const strings = tr && tr.details && tr.details.strings_matched
+            if (!strings || !strings.length) return []
+            return strings
+                .map(s => (s.value_hex ? s.value_hex.match(/.{1,2}/g).join(' ').toUpperCase() : ''))
+                .filter(Boolean)
+        }
+
+        // Number of strings matched, for the compact badge shown next to Description
+        // (card view) and in the Description column (table view) — null when the
+        // test result predates per-string tracking (nothing to count).
+        function matchedStringCount(rule) {
+            const tr = rule.test_result
+            const strings = tr && tr.details && tr.details.strings_matched
+            return Array.isArray(strings) ? strings.length : null
+        }
+
         // ── Export bar ────────────────────────────────────────────────────
         const hasActiveFilters = computed(() =>
             search.value.trim() !== '' ||
@@ -1701,7 +1860,7 @@ export default {
             toggleExpand,
             handleVote, handleFavorite,
             emitBulkAction, emitSend,
-            fromNow, formatDate, ruleLanguage, highlight,
+            fromNow, formatDate, ruleLanguage, highlight, matchedHighlightTerms, matchedStringCount,
             // Status
             statusIcon, statusLabel, canChangeStatus, cycleStatus,
             // Export

@@ -117,6 +117,10 @@
 
 /* ── Bottom ── */
 .footer-bottom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
     text-align: center;
     color: rgba(255, 255, 255, 0.22);
     font-size: 0.75rem;
@@ -126,6 +130,28 @@
     color: rgba(255, 255, 255, 0.5);
     font-weight: 700;
     letter-spacing: 0.04em;
+}
+
+.footer-legal {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.footer-legal__link {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 0.72rem;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.footer-legal__link:hover {
+    color: #fff;
+}
+
+.footer-legal__sep {
+    color: rgba(255, 255, 255, 0.15);
+    font-size: 0.72rem;
 }
 
 /* ── Theme picker ── */

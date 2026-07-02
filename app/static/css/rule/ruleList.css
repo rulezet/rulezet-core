@@ -418,6 +418,21 @@
     box-shadow: 0 0 0 2px rgba(13,110,253,.22) !important;
 }
 
+/* ── Highlight target: arrived here via ?rule_uuid=... (e.g. from a rule's Test History) ── */
+.rl-rule-card--highlighted,
+.dt-row--highlighted {
+    animation: rl-highlight-pulse 1.8s ease-in-out 2;
+}
+.rl-rule-card--highlighted {
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 3px rgba(13,110,253,.35) !important;
+}
+.dt-row--highlighted { background: rgba(13,110,253,.1) !important; }
+@keyframes rl-highlight-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(13,110,253,.35); }
+    50%      { box-shadow: 0 0 0 6px rgba(13,110,253,.15); }
+}
+
 /* Dark mode — cartes plus contrastées */
 [data-bs-theme="dark"] .rl-rule-card,
 .dark-mode .rl-rule-card {
@@ -678,6 +693,31 @@
     border-top: 2px solid rgba(13,110,253,.15);
     background: var(--light-bg-color);
 }
+
+/* ⓪ Test report (Rule Tester page only, opt-in via showTestResults) —
+   deliberately loud: this is the reason the row is expanded in the first place. */
+.rl-expand-test-report {
+    display: flex;
+    flex-direction: column;
+    gap: .65rem;
+    padding: 1rem 1.1rem;
+    margin-bottom: .5rem;
+    background: rgba(13, 110, 253, 0.06);
+    border: 2px solid rgba(13, 110, 253, 0.3);
+    border-left: 5px solid #0d6efd;
+    border-radius: 10px;
+}
+.rl-expand-test-report__title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .85rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #0d6efd;
+}
+.rl-expand-test-report__title i { font-size: .95rem; }
 
 /* ① Meta strip */
 .rl-expand-meta {

@@ -368,6 +368,25 @@ html[data-json-theme="solarized"] body {
     color: #000;
 }
 
+/* Auto-highlight (extraHighlights prop) — Rulezet blue, no focus/cur_match concept */
+.cv-match--auto {
+    background: rgba(13, 110, 253, 0.32);
+    outline: 1px solid rgba(13, 110, 253, 0.75);
+    border-radius: 2px;
+    padding: 0 1px;
+    color: inherit;
+    font-weight: 600;
+}
+
+[data-bs-theme="dark"] .cv-match--auto,
+[data-theme="forest"]  .cv-match--auto,
+[data-theme="midnight"].cv-match--auto,
+[data-theme="slate"]   .cv-match--auto {
+    background: rgba(59, 145, 255, 0.4);
+    outline-color: rgba(90, 160, 255, 0.9);
+    color: inherit;
+}
+
 /*---JSON_TREE---*/
 
 .cv-json-line {

@@ -44,24 +44,32 @@ def get_test_by_uuid(uuid: str, viewer=None) -> RuleTest | None:
     return test
 
 
-def get_tests_for_rule(rule_id: int, viewer, page: int = 1, per_page: int = 20):
-    # Include single tests targeting this rule AND bulk tests that have a result for it
-    bulk_test_ids = select(RuleTestResult.test_id).where(RuleTestResult.rule_id == rule_id).scalar_subquery()
+def get_tests_for_rule(rule_id: int, viewer, page: int = 1, per_page: int = 20, min_score: float = 0.01):
+    # Include single tests targeting this rule directly (always relevant) AND bulk
+    # tests where this rule actually scored something (>= min_score or matched) —
+    # a bulk sweep where this rule barely registered isn't meaningful history for it.
+    bulk_test_ids = select(RuleTestResult.test_id).where(
+        RuleTestResult.rule_id == rule_id,
+        or_(RuleTestResult.score >= min_score, RuleTestResult.matched == True)
+    ).scalar_subquery()
     q = _test_query_for_viewer(viewer).filter(
         or_(RuleTest.rule_id == rule_id, RuleTest.id.in_(bulk_test_ids))
     )
     return q.order_by(RuleTest.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
 
 
-def get_my_tests(user_id: int, page: int = 1, per_page: int = 20):
-    return (RuleTest.query
-            .filter_by(user_id=user_id)
-            .order_by(RuleTest.created_at.desc())
-            .paginate(page=page, per_page=per_page, error_out=False))
+def get_my_tests(user_id: int, page: int = 1, per_page: int = 20, test_type: str = None):
+    q = RuleTest.query.filter_by(user_id=user_id)
+    if test_type:
+        q = q.filter_by(test_type=test_type)
+    return q.order_by(RuleTest.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
 
 
-def count_visible_tests_for_rule(rule_id: int, viewer) -> int:
-    bulk_test_ids = select(RuleTestResult.test_id).where(RuleTestResult.rule_id == rule_id).scalar_subquery()
+def count_visible_tests_for_rule(rule_id: int, viewer, min_score: float = 0.01) -> int:
+    bulk_test_ids = select(RuleTestResult.test_id).where(
+        RuleTestResult.rule_id == rule_id,
+        or_(RuleTestResult.score >= min_score, RuleTestResult.matched == True)
+    ).scalar_subquery()
     return _test_query_for_viewer(viewer).filter(
         or_(RuleTest.rule_id == rule_id, RuleTest.id.in_(bulk_test_ids))
     ).count()
@@ -81,6 +89,8 @@ def create_test(
     label: str = None,
     notes: str = None,
     is_public: bool = False,
+    is_dangerous: bool = False,
+    danger_description: str = None,
 ) -> RuleTest:
     test = RuleTest(
         uuid         = str(uuid_mod.uuid4()),
@@ -95,6 +105,8 @@ def create_test(
         label        = label,
         notes        = notes,
         is_public    = is_public,
+        is_dangerous       = bool(is_dangerous),
+        danger_description = danger_description if is_dangerous else None,
         status       = 'pending',
     )
     db.session.add(test)

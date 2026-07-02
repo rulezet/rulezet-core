@@ -22,7 +22,10 @@ def generate_api_key(length=60):
     return secrets.token_urlsafe(length)
 
 def get_user_api(api_key):
-    """Get a user by its api key"""
+    """Get a user by its api key. A falsy key must never match — filter_by(api_key=None)
+    would otherwise return the first user row that has no API key set at all."""
+    if not api_key:
+        return None
     return User.query.filter_by(api_key=api_key).first()
 
 def get_user_from_api(headers):

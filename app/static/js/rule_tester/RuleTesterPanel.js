@@ -20,6 +20,8 @@ const RuleTesterPanel = {
       label: '',
       notes: '',
       isPublic: false,
+      isDangerous: false,
+      dangerDescription: '',
       running: false,
       result: null,
       testUuid: null,
@@ -63,6 +65,8 @@ const RuleTesterPanel = {
           label: this.label || null,
           notes: this.notes || null,
           is_public: this.isPublic,
+          is_dangerous: this.isDangerous,
+          danger_description: this.isDangerous ? (this.dangerDescription || null) : null,
         };
 
         const resp = await fetch('/api/rule_tester/private/test', {
@@ -141,6 +145,20 @@ const RuleTesterPanel = {
         <label>Test label</label>
         <input type="text" v-model="label" placeholder="e.g. My first YARA test">
       </div>
+    </div>
+
+    <!-- Dangerous sample flag -->
+    <div class="rtr-danger-toggle mb-3" :class="{ 'rtr-danger-toggle--active': isDangerous }">
+      <label class="d-flex align-items-center gap-2" style="cursor:pointer;margin-bottom:0;">
+        <input type="checkbox" v-model="isDangerous" class="form-check-input m-0">
+        <i class="fa-solid fa-skull-crossbones" :class="isDangerous ? 'text-danger' : ''" style="opacity:.8;"></i>
+        <span class="fw-semibold" style="font-size:.85rem;">This sample is a real malicious/dangerous artifact</span>
+      </label>
+      <small class="rtr-field-hint d-block mt-1">
+        Flags this test so anyone viewing it later sees a warning before handling the sample.
+      </small>
+      <textarea v-if="isDangerous" v-model="dangerDescription" class="rtr-textarea mt-2" rows="2"
+                placeholder="What is it? e.g. &quot;Live malware sample — do not execute outside an isolated sandbox.&quot;"></textarea>
     </div>
 
     <!-- Privacy -->

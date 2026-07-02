@@ -77,6 +77,28 @@ function count_matches(text, term) {
     } catch { return 0 }
 }
 
+// ── Auto-highlight (non-interactive) ────────────────────────────────────────────
+// Independent from the search box: marks every occurrence of the given terms in
+// orange, e.g. to show which YARA string patterns were found in a test. Terms are
+// escaped and OR'd into one pass so overlapping/adjacent matches don't double-wrap.
+
+function escape_re(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function inject_auto_marks(html, terms) {
+    const list = (terms || []).filter(Boolean).map(String)
+    if (!list.length) return html
+    const pattern = list.map(escape_re).join('|')
+    let re
+    try { re = new RegExp(pattern, 'gi') } catch { return html }
+    return html.replace(/>([^<]*)</g, (full, text) => {
+        if (!text) return full
+        const marked = text.replace(re, m => `<mark class="cv-match cv-match--auto">${m}</mark>`)
+        return `>${marked}<`
+    })
+}
+
 // ── JSON tree builder ──────────────────────────────────────────────────────────
 // Builds a flat array of display lines with fold metadata.
 
@@ -181,6 +203,12 @@ export default {
         foldable: { type: Boolean, default: true },
         showLines: { type: Boolean, default: true },
         initialSearch: { type: String, default: '' },
+        // Non-interactive: terms always highlighted, independent of the search box
+        // — e.g. the exact byte sequences a rule test matched.
+        extraHighlights: { type: Array, default: () => [] },
+        // Start with word-wrap on instead of the default horizontal-scroll view —
+        // useful for one long unbroken line (e.g. a raw hex blob).
+        wordWrap: { type: Boolean, default: false },
     },
 
     template: `
@@ -319,7 +347,7 @@ export default {
         // ── Core state ────────────────────────────────────────────────
         const hljs_ready = ref(false)
         const hljs_ref = ref(null)
-        const wrap = ref(false)
+        const wrap = ref(props.wordWrap)
         const copied = ref(false)
         const json_mode = ref(false)
 
@@ -366,9 +394,27 @@ export default {
         // Total matches for current search
         const total_matches = computed(() => count_matches(props.code, search_term.value))
 
-        // Highlighted HTML with search marks injected
+        // Auto-highlighted HTML (extraHighlights only, no interactive search yet)
+        const highlighted_with_extras = computed(() => {
+            const html = highlighted_html.value
+            if (!props.extraHighlights || !props.extraHighlights.length) return html
+            // Plain-text mode (e.g. YARA/text language): no HTML tags to anchor on —
+            // match directly against the escaped code, escaping each term the same way.
+            if (!html.includes('<')) {
+                const terms = props.extraHighlights.filter(Boolean).map(t => esc(String(t)))
+                if (!terms.length) return html
+                let re
+                try { re = new RegExp(terms.map(escape_re).join('|'), 'gi') } catch { return html }
+                return html.replace(re, m => `<mark class="cv-match cv-match--auto">${m}</mark>`)
+            }
+            return inject_auto_marks(html, props.extraHighlights)
+        })
+
+        // Highlighted HTML with search marks injected. A manual search takes over
+        // from the auto-highlights entirely (avoids re-processing already-marked
+        // HTML) — extras come back as soon as the search box is cleared.
         const highlighted_with_search = computed(() => {
-            if (!search_term.value) return highlighted_html.value
+            if (!search_term.value) return highlighted_with_extras.value
             const html = highlighted_html.value
             // Plain-text mode: highlighted_html is just escaped text with no HTML tags.
             // inject_search_marks relies on >text< patterns; none exist here.

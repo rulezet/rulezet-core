@@ -2831,6 +2831,11 @@ class RuleTest(db.Model):
     input_data   = db.Column(db.Text, nullable=True)
     input_label  = db.Column(db.String(255), nullable=True)
 
+    # Flags the sample under test as a real malicious/dangerous artifact, so
+    # anyone viewing this test later is warned before handling it.
+    is_dangerous       = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    danger_description = db.Column(db.Text, nullable=True)
+
     bulk_filters = db.Column(db.JSON, nullable=True)
 
     job_id       = db.Column(db.Integer, db.ForeignKey('background_job.id', ondelete='SET NULL'),
@@ -2870,6 +2875,8 @@ class RuleTest(db.Model):
             'format':        self.format,
             'input_type':    self.input_type,
             'input_label':   self.input_label,
+            'is_dangerous':       self.is_dangerous,
+            'danger_description': self.danger_description,
             'status':        self.status,
             'matched_count': self.matched_count,
             'total_rules':   self.total_rules,
@@ -2891,6 +2898,7 @@ class RuleTest(db.Model):
             'format':        self.format,
             'input_type':    self.input_type,
             'input_label':   self.input_label,
+            'is_dangerous':  self.is_dangerous,
             'status':        self.status,
             'matched_count': self.matched_count,
             'total_rules':   self.total_rules,

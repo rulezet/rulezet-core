@@ -24,9 +24,25 @@ class PublicTestHistory(Resource):
 
         pagination = TesterModel.get_tests_for_rule(rule.id, current_user,
                                                      page=page, per_page=per_page)
+
+        from app.core.db_class.db import RuleTestResult
+        test_ids = [t.id for t in pagination.items if t.test_type == 'bulk']
+        result_by_test = {}
+        if test_ids:
+            rows = RuleTestResult.query.filter(
+                RuleTestResult.test_id.in_(test_ids), RuleTestResult.rule_id == rule.id
+            ).all()
+            result_by_test = {r.test_id: r for r in rows}
+
         items = []
         for t in pagination.items:
             item = t.to_json_summary()
+            # For bulk tests, matched_count/total_rules describe the whole sweep —
+            # surface this rule's own result too, so the UI doesn't show unrelated numbers.
+            if t.test_type == 'bulk':
+                r = result_by_test.get(t.id)
+                item['rule_score']   = r.score if r else None
+                item['rule_matched'] = r.matched if r else None
             # mask user info for private tests if viewer is not owner/admin
             is_own  = current_user.is_authenticated and current_user.id == t.user_id
             is_admin = current_user.is_authenticated and current_user.is_admin()

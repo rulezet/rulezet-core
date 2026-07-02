@@ -55,6 +55,8 @@ class TestCreate(Resource):
         label       = data.get('label')
         notes       = data.get('notes')
         is_public   = bool(data.get('is_public', False))
+        is_dangerous = bool(data.get('is_dangerous', False))
+        danger_description = (data.get('danger_description') or '').strip() or None
         rule_uuid   = data.get('rule_uuid')
         bulk_filters = data.get('bulk_filters')
 
@@ -101,6 +103,8 @@ class TestCreate(Resource):
                 label       = label,
                 notes       = notes,
                 is_public   = is_public,
+                is_dangerous       = is_dangerous,
+                danger_description = danger_description,
             )
             TesterModel.mark_test_running(test)
 
@@ -166,6 +170,8 @@ class TestCreate(Resource):
                 label        = label,
                 notes        = notes,
                 is_public    = is_public,
+                is_dangerous       = is_dangerous,
+                danger_description = danger_description,
             )
 
             from app import db
@@ -258,13 +264,78 @@ class TestResults(Resource):
                        .paginate(page=page, per_page=per_page, error_out=False))
 
         return {
-            'results':  [r.to_json() for r in pagination.items],
-            'total':    pagination.total,
-            'pages':    pagination.pages,
-            'page':     page,
-            'has_next': pagination.has_next,
-            'has_prev': pagination.has_prev,
+            'items':       _enrich_results(pagination.items),
+            'total':       pagination.total,
+            'total_pages': pagination.pages,
+            'page':        page,
+            'has_next':    pagination.has_next,
+            'has_prev':    pagination.has_prev,
         }
+
+
+def _enrich_results(results):
+    """Build RuleList-shaped items (same fields as rule.rules_data_table:
+    tags/cves/attacks/to_string) from RuleTest results, each carrying an
+    embedded `test_result` (matched/score/time/hints/details). Falls back to
+    a minimal snapshot (rule_title/rule_uuid/rule_format) when the underlying
+    rule was deleted since testing."""
+    import json as _json
+    from app.core.db_class.db import (
+        db, Rule, RuleAttackAssociation, AttackTechnique as _AT,
+    )
+
+    rule_ids = [r.rule_id for r in results if r.rule_id]
+    rules_by_id = {r.id: r for r in Rule.query.filter(Rule.id.in_(rule_ids)).all()} if rule_ids else {}
+    tags_by_rule = RuleModel.get_tags_for_rules_batch(rule_ids)
+
+    attacks_by_rule = {}
+    if rule_ids:
+        atk_rows = (
+            db.session.query(RuleAttackAssociation.rule_id, _AT.technique_id, _AT.name, _AT.tactic_keys)
+            .join(_AT, RuleAttackAssociation.technique_id == _AT.technique_id)
+            .filter(RuleAttackAssociation.rule_id.in_(rule_ids))
+            .all()
+        )
+        for rid, tid, tname, tkeys in atk_rows:
+            attacks_by_rule.setdefault(rid, []).append(
+                {'technique_id': tid, 'name': tname, 'tactic_keys': tkeys or []}
+            )
+
+    out = []
+    for r in results:
+        test_result = {
+            'matched':           r.matched,
+            'score':             r.score,
+            'execution_time_ms': r.execution_time_ms,
+            'quality_hints':     r.quality_hints,
+            'details':           r.details,
+            'error':             r.error,
+        }
+
+        rule = rules_by_id.get(r.rule_id) if r.rule_id else None
+        if rule:
+            item = rule.to_json()
+            item['tags']    = [t.to_json() for t in tags_by_rule.get(rule.id, [])]
+            item['attacks'] = attacks_by_rule.get(rule.id, [])
+            try:
+                cves = _json.loads(rule.cve_id) if rule.cve_id else []
+                item['cves'] = cves if isinstance(cves, list) else []
+            except (ValueError, TypeError):
+                item['cves'] = []
+        else:
+            # Rule deleted since this test ran — fall back to the snapshot.
+            item = {
+                'id': None, 'title': r.rule_title, 'format': r.rule_format, 'uuid': r.rule_uuid,
+                'author': None, 'license': None, 'version': None, 'description': None, 'source': None,
+                'creation_date': None, 'last_modif': None, 'vote_up': 0, 'vote_down': 0,
+                'user_id': None, 'editor': None, 'editor_avatar': None, 'to_string': None,
+                'is_favorited': False, 'cve_id': [], 'status': 'draft',
+                'tags': [], 'cves': [], 'attacks': [],
+            }
+
+        item['test_result'] = test_result
+        out.append(item)
+    return out
 
 
 # ── Toggle visibility ─────────────────────────────────────────────────────────
@@ -305,9 +376,10 @@ class TestNotes(Resource):
 class MyTests(Resource):
     def get(self):
         actor    = _get_actor()
-        page     = int(request.args.get('page', 1))
-        per_page = min(int(request.args.get('per_page', 20)), 50)
-        pagination = TesterModel.get_my_tests(actor.id, page=page, per_page=per_page)
+        page      = int(request.args.get('page', 1))
+        per_page  = min(int(request.args.get('per_page', 20)), 50)
+        test_type = request.args.get('test_type') or None
+        pagination = TesterModel.get_my_tests(actor.id, page=page, per_page=per_page, test_type=test_type)
         return {
             'tests':    [t.to_json_summary() for t in pagination.items],
             'total':    pagination.total,

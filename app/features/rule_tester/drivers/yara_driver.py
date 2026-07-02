@@ -188,17 +188,37 @@ class YaraDriver(BaseTesterDriver):
                                            execution_time_ms=scan_ms)
             else:
                 strings_matched = []
+                total_strings   = 0
                 try:
                     for s in m.strings:
+                        total_strings += 1
                         for inst in s.instances:
-                            strings_matched.append({'identifier': s.identifier,
-                                                    'offset': inst.offset})
+                            strings_matched.append({
+                                'identifier': s.identifier,
+                                'offset':     inst.offset,
+                                'value_hex':  inst.matched_data.hex(),
+                                'length':     inst.matched_length,
+                            })
                 except AttributeError:
                     pass
-                results[rid] = MatchDetail(matched=True, score=1.0,
-                                           details={'mode': 'batch_execution',
-                                                    'rule_name': m.rule,
-                                                    'strings_matched': len(strings_matched)},
-                                           quality_hints=[],
+
+                string_coverage = (len(strings_matched) / total_strings) if total_strings > 0 else 1.0
+                hints = []
+                if total_strings > 0 and len(strings_matched) < total_strings:
+                    hints.append(
+                        f'Only {len(strings_matched)} of {total_strings} strings matched — '
+                        'consider loosening conditions for broader detection'
+                    )
+                if total_strings == 0:
+                    hints.append('Rule matched but defines no strings — add strings for higher specificity')
+
+                results[rid] = MatchDetail(matched=True, score=round(min(string_coverage, 1.0), 3),
+                                           details={'mode':            'batch_execution',
+                                                    'rule_name':       m.rule,
+                                                    'tags':            list(m.tags),
+                                                    'meta':            dict(m.meta),
+                                                    'strings_matched': strings_matched,
+                                                    'string_coverage': round(string_coverage, 3)},
+                                           quality_hints=hints,
                                            execution_time_ms=scan_ms)
         return results

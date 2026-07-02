@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Rule Tester — Rulezet{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/rule_tester.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule_tester/test_results.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
@@ -26,27 +30,69 @@
       </div>
     </div>
     <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
-      Run a test payload against a filtered set of rules in one background job and see which ones match.
+      Pick a payload, then filter and pick rules exactly like on the Rules Explorer — run the test against one, a few, or every matching rule in a single background job.
     </p>
   </div>
 
+  <div class="rtr-view-nav">
+    <button type="button" class="rtr-view-nav__item" :class="{ active: activeView === 'tester' }"
+            @click="activeView = 'tester'">
+      <i class="fa-solid fa-vial"></i><span>Tester</span>
+    </button>
+    <button type="button" class="rtr-view-nav__item" :class="{ active: activeView === 'history' }"
+            @click="activeView = 'history'">
+      <i class="fa-solid fa-clock-rotate-left"></i><span>History</span>
+      <span v-if="testCount > 0" class="rtr-view-nav__badge">[[ testCount ]]</span>
+    </button>
+  </div>
+
   <bulk-tester-panel
+    v-if="activeView === 'tester'"
     :is-authenticated="{{ current_user.is_authenticated | tojson }}"
+    :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
+    :current-user-is-admin="{{ current_user.is_admin() | tojson }}"
     csrf-token="{{ csrf_token() }}"
   ></bulk-tester-panel>
+
+  <my-tests-panel
+    v-if="activeView === 'history'"
+    test-type="bulk"
+    :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
+    :is-admin="{{ current_user.is_admin() | tojson }}"
+    :is-authenticated="{{ current_user.is_authenticated | tojson }}"
+    csrf-token="{{ csrf_token() }}"
+    @new-test="activeView = 'tester'"
+    @loaded="testCount = $event"
+  ></my-tests-panel>
 
 </div>
 
 <script type="module">
-  const { createApp } = Vue
+  const { createApp, ref, onMounted } = Vue
   import BulkTesterPanel     from '{{ url_for("static", filename="js/rule_tester/BulkTesterPanel.js") }}'
   import InputEditorByFormat from '{{ url_for("static", filename="js/rule_tester/InputEditorByFormat.js") }}'
+  import MyTestsPanel        from '{{ url_for("static", filename="js/rule_tester/MyTestsPanel.js") }}'
 
   createApp({
     delimiters: ['[[', ']]'],
     components: {
       'bulk-tester-panel':      BulkTesterPanel,
       'input-editor-by-format': InputEditorByFormat,
+      'my-tests-panel':         MyTestsPanel,
+    },
+    setup() {
+      const activeView = ref('tester')
+      const testCount  = ref(0)
+
+      onMounted(async () => {
+        try {
+          const resp = await fetch('/api/rule_tester/private/my-tests?test_type=bulk&per_page=1')
+          const data = await resp.json()
+          testCount.value = data.total || 0
+        } catch (e) { /* badge stays hidden */ }
+      })
+
+      return { activeView, testCount }
     },
   }).mount('#main-container')
 </script>
