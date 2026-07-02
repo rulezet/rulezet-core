@@ -178,7 +178,7 @@ const BulkTesterPanel = {
 <div class="rtr-panel">
   <div class="rtr-panel__header">
     <i class="fa-solid fa-flask-vial text-primary"></i>
-    <span class="rtr-panel__title">Bulk Rule Tester</span>
+    <span class="rtr-panel__title">Rule Tester</span>
     <span v-if="jobStatus" class="ms-auto" :class="statusBadgeClass(jobStatus)">
       [[ jobStatus.toUpperCase() ]]
     </span>
@@ -290,7 +290,7 @@ const BulkTesterPanel = {
       </div>
       <div class="rtr-field">
         <label>Job label</label>
-        <input type="text" v-model="label" placeholder="e.g. YARA bulk test v1" :disabled="isRunning">
+        <input type="text" v-model="label" placeholder="e.g. YARA test v1" :disabled="isRunning">
       </div>
     </div>
 
@@ -309,7 +309,7 @@ const BulkTesterPanel = {
             @click="submit" :disabled="submitting || isRunning || !format">
       <i class="fa-solid fa-rocket rtr-run-icon"></i>
       <i class="fa-solid fa-circle-notch rtr-spin"></i>
-      [[ submitting ? 'Queuing…' : (isRunning ? 'Job running…' : 'Launch Bulk Test') ]]
+      [[ submitting ? 'Queuing…' : (isRunning ? 'Job running…' : 'Launch Test') ]]
     </button>
 
   </div>
