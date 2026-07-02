@@ -156,6 +156,22 @@ function _nodeProperties(node) {
     return props.filter(p => p.value !== '')
 }
 
+// Pure helper — given the plain data + id of a selected node (as handed to
+// opts.onSelect), returns the rules_list URL it maps to, or null. Kept
+// outside Pivotick so the caller's own "View rules" button can use it
+// without touching Pivotick's internal panels.
+export function rulesUrlForSelection(nodeData, nodeId) {
+    if (!nodeData) return null
+    if (nodeData.type === 'tactic') {
+        const ids = (nodeData.raw?.techniques || []).filter(t => t.count > 0).map(t => t.id).join(',')
+        return ids ? `/rule/rules_list?attacks=${ids}` : null
+    }
+    if (nodeData.type === 'technique' || nodeData.type === 'subtechnique') {
+        return nodeId ? `/rule/rules_list?attacks=${nodeId}` : null
+    }
+    return null
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Public: initAttackGraph
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,10 +181,19 @@ function _nodeProperties(node) {
  * Must be called when the container is visible (view/tab shown) — lazily
  * injects pivotick.iife.js on first use so it never loads on page mount.
  *
- * @param {string} containerId  DOM id of the target div
- * @param {object} coverage     The /attack/heatmap_data payload
+ * Left untouched on purpose: no custom entry in Pivotick's own selection
+ * panel/menu. We only listen for selection changes and hand the plain node
+ * data back to the caller via opts.onSelect — the caller renders its own
+ * "View rules" button (see rulesUrlForSelection) wherever it wants.
+ *
+ * @param {string} containerId    DOM id of the target div
+ * @param {object} coverage       The /attack/heatmap_data payload
+ * @param {object} [opts]
+ * @param {(data: object|null, id: string|null) => void} [opts.onSelect]
+ *        Called with (nodeData, nodeId) when a node is clicked, or (null, null)
+ *        when the selection is cleared (canvas click).
  */
-export function initAttackGraph(containerId, coverage) {
+export function initAttackGraph(containerId, coverage, opts = {}) {
     const container = document.getElementById(containerId)
     if (!container) return
 
@@ -193,7 +218,7 @@ export function initAttackGraph(containerId, coverage) {
             attempts++
             if (typeof window.Pivotick === 'function') {
                 clearInterval(poll)
-                initAttackGraph(containerId, coverage)
+                initAttackGraph(containerId, coverage, opts)
             } else if (attempts > 50) {
                 clearInterval(poll)
                 container.innerHTML = '<p style="padding:2rem;text-align:center;color:#888">Could not load the graph engine.</p>'
@@ -248,14 +273,12 @@ export function initAttackGraph(containerId, coverage) {
                 },
             },
             callbacks: {
+                // Just report the selection — no navigation, no Pivotick UI changes.
                 onNodeClick: (_evt, node) => {
-                    const d = node.getData()
-                    if (d?.type === 'tactic') {
-                        const ids = (d.raw?.techniques || []).filter(t => t.count > 0).map(t => t.id).join(',')
-                        if (ids) window.location.href = `/rule/rules_list?attacks=${ids}`
-                    } else if (d?.type === 'technique' || d?.type === 'subtechnique') {
-                        window.location.href = `/rule/rules_list?attacks=${node.id}`
-                    }
+                    opts.onSelect?.(node.getData() ?? null, String(node.id))
+                },
+                onCanvasClick: () => {
+                    opts.onSelect?.(null, null)
                 },
             },
         })
@@ -265,7 +288,7 @@ export function initAttackGraph(containerId, coverage) {
         _themeObserver = new MutationObserver(() => {
             _themeObserver.disconnect()
             _themeObserver = null
-            initAttackGraph(containerId, coverage)
+            initAttackGraph(containerId, coverage, opts)
         })
         _themeObserver.observe(document.documentElement, {
             attributes: true,

@@ -88,13 +88,23 @@
                     <h6 class="fw-bold mb-1" style="color:var(--text-color);">
                         <i class="fa-solid fa-diagram-project me-2 text-primary"></i>Tactic → Technique Graph
                     </h6>
-                    <p class="text-muted small mb-0">Every covered tactic, technique and sub-technique, connected. Click a node to explore its rules.</p>
+                    <p class="text-muted small mb-0">Every covered tactic, technique and sub-technique, connected. Click a node to select it.</p>
                 </div>
-                <button @click="toggleGraphFullscreen" class="btn btn-sm rounded-pill px-3"
-                        style="background:transparent;border:1px solid var(--border-color);color:var(--text-color);">
-                    <i class="fa-solid" :class="isGraphFullscreen ? 'fa-compress' : 'fa-expand'"></i>
-                    <span class="ms-1">[[ isGraphFullscreen ? 'Exit fullscreen' : 'Fullscreen' ]]</span>
-                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <button @click="goToSelectedRules" :disabled="!selectedNode" class="btn btn-sm rounded-pill px-3"
+                            :style="selectedNode
+                                ? 'background:#0d6efd;border:1px solid #0d6efd;color:#fff;'
+                                : 'background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);cursor:not-allowed;'">
+                        <i class="fa-solid fa-shield-halved me-1"></i>
+                        <span v-if="selectedNode">View rules — [[ selectedNode.label ]]</span>
+                        <span v-else>Select a node</span>
+                    </button>
+                    <button @click="toggleGraphFullscreen" class="btn btn-sm rounded-pill px-3"
+                            style="background:transparent;border:1px solid var(--border-color);color:var(--text-color);">
+                        <i class="fa-solid" :class="isGraphFullscreen ? 'fa-compress' : 'fa-expand'"></i>
+                        <span class="ms-1">[[ isGraphFullscreen ? 'Exit fullscreen' : 'Fullscreen' ]]</span>
+                    </button>
+                </div>
             </div>
             <div id="attack-graph-container"
                  style="width:100%;height:calc(100vh - 260px);min-height:620px;background:var(--light-bg-color);border-radius:12px;overflow:hidden;">
@@ -168,7 +178,7 @@
     const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
     import AttackMatrix from '/static/js/components/attack-matrix.js';
     import ChartViewer  from '/static/js/components/chart-viewer.js';
-    import { initAttackGraph, destroyAttackGraph } from '/static/js/attack/attackGraph.js';
+    import { initAttackGraph, destroyAttackGraph, rulesUrlForSelection } from '/static/js/attack/attackGraph.js';
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -177,6 +187,7 @@
             const coverage    = ref(null);
             const loading     = ref(true);
             const isGraphFullscreen = ref(false);
+            const selectedNode = ref(null);
             const viewMode    = ref('matrix');
             const searchQuery = ref('');
 
@@ -261,11 +272,22 @@
             // container div is destroyed by v-else-if, so the Pivotick
             // instance bound to it must go too).
             watch(viewMode, (mode, prevMode) => {
-                if (prevMode === 'graph') destroyAttackGraph('attack-graph-container');
+                if (prevMode === 'graph') {
+                    destroyAttackGraph('attack-graph-container');
+                    selectedNode.value = null;
+                }
                 if (mode === 'graph' && coverage.value) {
-                    nextTick(() => initAttackGraph('attack-graph-container', coverage.value));
+                    nextTick(() => initAttackGraph('attack-graph-container', coverage.value, {
+                        onSelect: (data, id) => { selectedNode.value = data ? { ...data, id } : null; },
+                    }));
                 }
             });
+
+            function goToSelectedRules() {
+                if (!selectedNode.value) return;
+                const url = rulesUrlForSelection(selectedNode.value, selectedNode.value.id);
+                if (url) window.location.href = url;
+            }
 
             function toggleGraphFullscreen() {
                 const el = document.getElementById('attack-graph-container');
@@ -284,6 +306,7 @@
             return {
                 coverage, loading, viewMode, searchQuery, topTechData, tacticData, tacticPieData,
                 onChartClick, onTacticClick, isGraphFullscreen, toggleGraphFullscreen,
+                selectedNode, goToSelectedRules,
             };
         },
     }).mount('#heatmap-app');
