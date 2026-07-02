@@ -3,6 +3,7 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/attack-matrix.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 {% endblock %}
 {% block content %}
@@ -36,6 +37,11 @@
                         :style="viewMode === 'charts' ? 'background:rgba(13,110,253,.1);color:#0d6efd;' : 'background:transparent;color:var(--subtle-text-color);'"
                         style="font-size:.78rem;font-weight:600;padding:.32rem .75rem;border-radius:7px;border:none;cursor:pointer;transition:background .13s,color .13s;">
                     <i class="fa-solid fa-chart-bar me-1"></i>Charts
+                </button>
+                <button @click="viewMode = 'graph'"
+                        :style="viewMode === 'graph' ? 'background:rgba(13,110,253,.1);color:#0d6efd;' : 'background:transparent;color:var(--subtle-text-color);'"
+                        style="font-size:.78rem;font-weight:600;padding:.32rem .75rem;border-radius:7px;border:none;cursor:pointer;transition:background .13s,color .13s;">
+                    <i class="fa-solid fa-diagram-project me-1"></i>Graph
                 </button>
             </div>
         </div>
@@ -74,8 +80,40 @@
         </div>
     </div>
 
+    <!-- Graph view -->
+    <div v-else-if="viewMode === 'graph'" class="card border-0 shadow-sm rounded-4">
+        <div class="card-body p-3 p-md-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                    <h6 class="fw-bold mb-1" style="color:var(--text-color);">
+                        <i class="fa-solid fa-diagram-project me-2 text-primary"></i>Tactic → Technique Graph
+                    </h6>
+                    <p class="text-muted small mb-0">Every covered tactic, technique and sub-technique, connected. Click a node to select it.</p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button @click="goToSelectedRules" :disabled="!selectedNode" class="btn btn-sm rounded-pill px-3"
+                            :style="selectedNode
+                                ? 'background:#0d6efd;border:1px solid #0d6efd;color:#fff;'
+                                : 'background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);cursor:not-allowed;'">
+                        <i class="fa-solid fa-shield-halved me-1"></i>
+                        <span v-if="selectedNode">View rules — [[ selectedNode.label ]]</span>
+                        <span v-else>Select a node</span>
+                    </button>
+                    <button @click="toggleGraphFullscreen" class="btn btn-sm rounded-pill px-3"
+                            style="background:transparent;border:1px solid var(--border-color);color:var(--text-color);">
+                        <i class="fa-solid" :class="isGraphFullscreen ? 'fa-compress' : 'fa-expand'"></i>
+                        <span class="ms-1">[[ isGraphFullscreen ? 'Exit fullscreen' : 'Fullscreen' ]]</span>
+                    </button>
+                </div>
+            </div>
+            <div id="attack-graph-container"
+                 style="width:100%;height:calc(100vh - 260px);min-height:620px;background:var(--light-bg-color);border-radius:12px;overflow:hidden;">
+            </div>
+        </div>
+    </div>
+
     <!-- Charts view -->
-    <div v-else class="row g-4">
+    <div v-else-if="viewMode === 'charts'" class="row g-4">
 
         <!-- Top techniques -->
         <div class="col-12">
@@ -137,9 +175,10 @@
 {% endblock %}
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed, onMounted } = Vue;
+    const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
     import AttackMatrix from '/static/js/components/attack-matrix.js';
     import ChartViewer  from '/static/js/components/chart-viewer.js';
+    import { initAttackGraph, destroyAttackGraph, rulesUrlForSelection } from '/static/js/attack/attackGraph.js';
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -147,6 +186,8 @@
         setup() {
             const coverage    = ref(null);
             const loading     = ref(true);
+            const isGraphFullscreen = ref(false);
+            const selectedNode = ref(null);
             const viewMode    = ref('matrix');
             const searchQuery = ref('');
 
@@ -226,7 +267,47 @@
                 if (ids) window.location.href = `/rule/rules_list?attacks=${ids}`;
             }
 
-            return { coverage, loading, viewMode, searchQuery, topTechData, tacticData, tacticPieData, onChartClick, onTacticClick };
+            // Graph is only built the moment the user clicks "Graph" — never on
+            // page load — and torn down again when leaving the view (the
+            // container div is destroyed by v-else-if, so the Pivotick
+            // instance bound to it must go too).
+            watch(viewMode, (mode, prevMode) => {
+                if (prevMode === 'graph') {
+                    destroyAttackGraph('attack-graph-container');
+                    selectedNode.value = null;
+                }
+                if (mode === 'graph' && coverage.value) {
+                    nextTick(() => initAttackGraph('attack-graph-container', coverage.value, {
+                        onSelect: (data, id) => { selectedNode.value = data ? { ...data, id } : null; },
+                    }));
+                }
+            });
+
+            function goToSelectedRules() {
+                if (!selectedNode.value) return;
+                const url = rulesUrlForSelection(selectedNode.value, selectedNode.value.id);
+                if (url) window.location.href = url;
+            }
+
+            function toggleGraphFullscreen() {
+                const el = document.getElementById('attack-graph-container');
+                if (!el) return;
+                if (!document.fullscreenElement) {
+                    el.requestFullscreen?.();
+                } else {
+                    document.exitFullscreen?.();
+                }
+            }
+
+            document.addEventListener('fullscreenchange', () => {
+                isGraphFullscreen.value = document.fullscreenElement?.id === 'attack-graph-container';
+            });
+
+            return {
+                coverage, loading, viewMode, searchQuery, topTechData, tacticData, tacticPieData,
+                onChartClick, onTacticClick, isGraphFullscreen, toggleGraphFullscreen,
+                selectedNode, goToSelectedRules,
+            };
         },
     }).mount('#heatmap-app');
 </script>
