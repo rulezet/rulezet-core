@@ -145,7 +145,8 @@ const MultiTagFilter = {
                         <span :style="{ color: getTextColor(tag.color || '#6c757d') }" class="me-2" style="font-size:0.75rem">
                             [[ tagLabel(tag.name) ]]
                         </span>
-                        <i class="fa-solid fa-circle-xmark opacity-75 ms-1" @click.stop="toggleTag(tag.name)" style="cursor:pointer"></i>
+                        <i class="fa-solid fa-circle-xmark opacity-75 ms-1" @click.stop="toggleTag(tag.name)"
+                           :style="{ color: getTextColor(tag.color || '#6c757d'), cursor: 'pointer' }"></i>
                     </span>
                 </span>
                 <i class="fa-solid fa-chevron-down ms-auto me-1 text-muted small"></i>
