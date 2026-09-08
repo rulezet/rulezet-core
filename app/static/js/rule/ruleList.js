@@ -581,7 +581,8 @@ export default {
                      check row further down is easy to miss once the card
                      is also dimmed, this isn't. -->
                 <div v-if="isResolved(rule)" class="rl-resolved-banner">
-                    <i class="fa-solid fa-circle-check"></i> Already reviewed
+                    <i class="fa-solid fa-circle-check"></i>
+                    {{ rule.validation_risk && rule.validation_risk.dismissed ? 'Kept as-is — dismissed' : 'Already reviewed' }}
                 </div>
 
                 <!-- Badges top-right -->

@@ -531,6 +531,11 @@ def validation_rules_data_table():
 
     entries = ((job.payload or {}).get('result') or {}).get('quarantined') or []
     by_rule_id = {e['rule_id']: e for e in entries if e.get('rule_id')}
+    # A reviewer explicitly deciding "keep the current tag as-is" for a
+    # mismatch (see /admin/validation/dismiss) — recorded per-run, not on
+    # the rule itself, since a later run re-quarantining it deserves a
+    # fresh look rather than inheriting an old dismissal forever.
+    dismissed_rule_ids = set(((job.payload or {}).get('result') or {}).get('dismissed_rule_ids') or [])
 
     # Dedicated risk filter — a fixed vocabulary of 4 levels (plus
     # "mismatch", the case the tool's own author flags as most worth
@@ -603,7 +608,11 @@ def validation_rules_data_table():
             _RISK_LEVEL_BY_TAG_NAME[t.get('name')]
             for t in (d.get('tags') or []) if t.get('name') in _RISK_LEVEL_BY_TAG_NAME
         }
-        resolved = current_levels == ({proposed} if proposed else set())
+        # Explicitly dismissed ("keep the current tag, I've looked at this
+        # mismatch and I'm not changing it") counts as resolved too — the
+        # only other way there is to close out a mismatch that will never
+        # match proposed_level by tagging alone.
+        resolved = current_levels == ({proposed} if proposed else set()) or d['id'] in dismissed_rule_ids
         d['validation_risk'] = {
             "hits":            e.get('hits', 0),
             "proposed_level":  proposed,
@@ -614,6 +623,7 @@ def validation_rules_data_table():
             "mismatch":        bool(upstream) and upstream != proposed,
             "matched_files":   e.get('matched_files') or [],
             "resolved":        resolved,
+            "dismissed":       d['id'] in dismissed_rule_ids,
         }
 
     # Counted before any pending_only truncation below — RuleList's own
@@ -645,6 +655,45 @@ def validation_rules_data_table():
         "total_pages":   total_pages,
         "pending_total": pending_total,
     }), 200
+
+
+@tags_blueprint.route('/admin/validation/dismiss', methods=['POST'])
+@login_required
+def validation_dismiss():
+    """Mark quarantined rules reviewed WITHOUT changing their tag — the
+    explicit "I looked at this mismatch and I'm keeping the current tag"
+    call, as opposed to accept-proposed/apply-a-different-tag which both
+    change something. Recorded on the RUN (payload.result.dismissed_rule_ids),
+    not the rule, since a later run re-quarantining the same rule deserves a
+    fresh look rather than inheriting an old dismissal forever."""
+    err = _admin_only()
+    if err: return err
+
+    data = request.json or {}
+    from app.features.jobs.jobs_core import get_job_by_uuid
+    job = get_job_by_uuid(data.get('job_uuid', ''))
+    if not job or job.job_type != 'rule_validation_run':
+        return jsonify({"success": False, "message": "Validation run not found"}), 404
+
+    try:
+        rule_ids = {int(r) for r in (data.get('rule_ids') or [])}
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "Invalid rule ids"}), 400
+    if not rule_ids:
+        return jsonify({"success": False, "message": "No rule ids given"}), 400
+
+    from app.core.db_class.db import db
+
+    p = dict(job.payload or {})
+    result = dict(p.get('result') or {})
+    dismissed = set(result.get('dismissed_rule_ids') or [])
+    dismissed.update(rule_ids)
+    result['dismissed_rule_ids'] = list(dismissed)
+    p['result'] = result
+    job.payload = p
+    db.session.commit()
+
+    return jsonify({"success": True, "dismissed": len(rule_ids)}), 200
 
 
 @tags_blueprint.route('/admin/validation/baseline_files', methods=['GET'])

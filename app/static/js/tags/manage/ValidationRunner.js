@@ -448,6 +448,7 @@ export default {
         const riskBulkActions = [
             { key: 'accept_proposed', label: 'Accept proposed risk tag', icon: 'fa-tag' },
             { key: 'custom_tag',      label: 'Apply a different tag…',   icon: 'fa-tags' },
+            { key: 'dismiss',         label: 'Keep current tag (dismiss)', icon: 'fa-check' },
         ];
 
         const tagJobUuid   = ref(null);
@@ -671,6 +672,34 @@ export default {
                 // call having already won the race.
                 await loadRiskTags();
                 pendingCustomTagIds.value = resolvedIds;
+            } else if (action === 'dismiss') {
+                dismissRules(resolvedIds);
+            }
+        }
+
+        // "Keep the current tag as-is" — the explicit third choice for a
+        // mismatch (current tag disagrees with what the evidence says):
+        // no tag change, just a record on this run that a reviewer looked
+        // at it and chose not to touch it. The only other way to close out
+        // a mismatch that will never equal proposed_level by tagging alone.
+        async function dismissRules(ruleIds) {
+            if (!jobUuid.value || !ruleIds.length) return;
+            try {
+                const res = await fetch('/tags/admin/validation/dismiss', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
+                    body: JSON.stringify({ job_uuid: jobUuid.value, rule_ids: ruleIds }),
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    emit('notify', { message: `Kept the current tag on ${ruleIds.length} rule(s) — marked reviewed.`, level: 'success' });
+                    quarantineListRef.value?.fetchData();
+                    refreshResolvedStatus();
+                } else {
+                    emit('notify', { message: data.message || 'Failed to dismiss', level: 'error' });
+                }
+            } catch (e) {
+                emit('notify', { message: 'Network error: ' + e, level: 'error' });
             }
         }
 
