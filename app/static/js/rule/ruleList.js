@@ -472,6 +472,16 @@ export default {
                             @change="onBinaryFilterChange">
                         </multi-binary-filter>
                     </div>
+
+                    <div class="rl-fp-multi-item" v-if="showValidationFilters">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-eye-slash text-danger"></i> Display
+                        </span>
+                        <label class="rl-fp-switch" title="Hide rules that already have a verdict">
+                            <input type="checkbox" v-model="pendingOnly" @change="onFilterChange" />
+                            <span>Hide already-tagged</span>
+                        </label>
+                    </div>
                 </div>
 
                 <!-- ── Export / Bundle — visible only when at least one filter is active ── -->
@@ -499,11 +509,11 @@ export default {
         <!-- ── Select-all-pages banner ── -->
         <div v-if="showSelectBanner" class="rl-select-banner">
             <span v-if="!allPagesSelected">
-                All {{ items.length }} rules on this page are selected.
+                All {{ pageSelectableItems.length }} rules on this page are selected.
             </span>
-            <span v-else>All {{ total }} rules are selected.</span>
+            <span v-else>All {{ selectableTotal }} rules are selected.</span>
             <button v-if="!allPagesSelected" class="rl-select-banner-btn" @click="selectAllPages">
-                Select all {{ total }} rules
+                Select all {{ selectableTotal }} rules
             </button>
             <button class="rl-select-banner-btn" @click="clearSelection">Clear selection</button>
         </div>
@@ -560,15 +570,23 @@ export default {
             <div class="card h-100 shadow-sm border-0 mb-4 rl-rule-card"
                  v-for="rule in items" :key="rule.id"
                  :id="highlightUuid && rule.uuid === highlightUuid ? 'rl-highlight-target' : null"
-                 :class="{ 'rl-rule-card--selected': isSelected(rule), 'rl-rule-card--highlighted': highlightUuid && rule.uuid === highlightUuid }">
+                 :class="{ 'rl-rule-card--selected': isSelected(rule), 'rl-rule-card--highlighted': highlightUuid && rule.uuid === highlightUuid, 'rl-rule-card--resolved': isResolved(rule) }">
 
                 <div class="premium-accent-line"></div>
                 <div class="card-watermark-list" v-show="!expandedIds.has(rule.id)">
                     <i class="fa-solid fa-shield-halved"></i>
                 </div>
 
+                <!-- Loud, unmissable "already handled" banner — the small
+                     check row further down is easy to miss once the card
+                     is also dimmed, this isn't. -->
+                <div v-if="isResolved(rule)" class="rl-resolved-banner">
+                    <i class="fa-solid fa-circle-check"></i> Already reviewed
+                </div>
+
                 <!-- Badges top-right -->
-                <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+                <div class="position-absolute top-0 end-0 me-3 d-flex gap-2"
+                     :style="{ zIndex: 2, marginTop: isResolved(rule) ? '2.5rem' : '.75rem' }">
                     <span v-if="showTestResults && rule.test_result" class="badge shadow-sm pt-1"
                           :class="rule.test_result.matched ? 'bg-success' : (rule.test_result.error ? 'bg-danger' : 'bg-secondary')">
                         <i class="fa-solid me-1" :class="rule.test_result.matched ? 'fa-check' : (rule.test_result.error ? 'fa-triangle-exclamation' : 'fa-xmark')"></i>
@@ -598,10 +616,18 @@ export default {
                     </span>
                 </div>
 
-                <div class="card-body d-flex flex-column p-4" style="z-index:1;">
+                <div class="card-body d-flex flex-column p-4" :style="{ zIndex: 1, paddingTop: isResolved(rule) ? '2.75rem' : '' }">
 
-                    <!-- Selection row -->
-                    <div v-if="isSelectable"
+                    <!-- Selection row — already-reviewed rules (opt-in via
+                         showValidationRisk) get a fixed "done" marker
+                         instead of a checkbox, so a bulk action can't be
+                         re-applied to something already resolved and
+                         "select all" doesn't silently re-scoop it up. -->
+                    <div v-if="isResolved(rule)" class="rl-card-check-row rl-card-check-row--resolved mb-3">
+                        <i class="fa-solid fa-circle-check text-success"></i>
+                        <span class="rl-card-check-text text-success fw-semibold">Already tagged — reviewed</span>
+                    </div>
+                    <div v-else-if="isSelectable"
                          class="rl-card-check-row mb-3"
                          :class="{ 'rl-card-check-row--on': isSelected(rule) }"
                          @click.stop="toggleItem(rule)">
@@ -961,6 +987,7 @@ export default {
                                 'dt-row--expanded':  expandedIds.has(rule.id),
                                 'dt-row--favorited': rule.is_favorited,
                                 'dt-row--highlighted': highlightUuid && rule.uuid === highlightUuid,
+                                'dt-row--resolved': isResolved(rule),
                             }"
                             :draggable="draggable"
                             @dragstart="draggable && $emit('rule-drag-start', rule)"
@@ -972,7 +999,9 @@ export default {
                                 </span>
                             </td>
                             <td v-if="isSelectable" class="dt-td dt-td--checkbox">
-                                <input type="checkbox" class="dt-checkbox"
+                                <i v-if="isResolved(rule)" class="fa-solid fa-circle-check text-success"
+                                   title="Already tagged — reviewed"></i>
+                                <input v-else type="checkbox" class="dt-checkbox"
                                        :checked="isSelected(rule)"
                                        @change="toggleItem(rule)"
                                        :aria-label="'Select ' + rule.title" />
@@ -1452,6 +1481,10 @@ export default {
         // ── Data ─────────────────────────────────────────────────────────
         const items      = ref([])
         const total      = ref(0)
+        // Same as total, minus already-resolved rows (showValidationRisk
+        // only) — "select all" must never sweep up rows that have no
+        // checkbox to begin with.
+        const pendingTotal = ref(0)
         const totalPages = ref(1)
         const loading    = ref(false)
 
@@ -1527,6 +1560,10 @@ export default {
         // shortcut, which those components have no reason to know about.
         const riskFilter       = ref(_p('mismatch_only') === 'true' ? 'mismatch' : _p('risk_level', ''))
         const selectedBinaries = ref(_arr('binary', ''))
+        // Hide already-reviewed rows entirely instead of just dimming them —
+        // once most of a run is done, a screen full of greyed-out checkmarks
+        // makes the handful still pending harder to spot.
+        const pendingOnly = ref(_p('pending_only') === 'true')
         // Picking a binary is all about seeing which rule fired on it —
         // auto-expand every result instead of making the reviewer click
         // into each card/row to find it.
@@ -1656,7 +1693,8 @@ export default {
             (isFilterHidden('person') ? 0 : personFilter.value.values.length) +
             (!isFilterHidden('quality') && (qualityMin.value !== null || qualityMax.value !== null) ? 1 : 0) +
             (props.showValidationFilters && riskFilter.value ? 1 : 0) +
-            (props.showValidationFilters ? selectedBinaries.value.length : 0)
+            (props.showValidationFilters ? selectedBinaries.value.length : 0) +
+            (props.showValidationFilters && pendingOnly.value ? 1 : 0)
         )
 
         // ── URL sync ──────────────────────────────────────────────────────
@@ -1695,6 +1733,7 @@ export default {
                 _upd('mismatch_only', riskFilter.value === 'mismatch' ? 'true' : null)
                 _upd('risk_level',    riskFilter.value !== 'mismatch' ? riskFilter.value || null : null)
                 _upd('binary',        selectedBinaries.value.join(',') || null)
+                _upd('pending_only',  pendingOnly.value ? 'true' : null)
             }
 
             const qs = p.toString()
@@ -1735,6 +1774,7 @@ export default {
                     if (riskFilter.value === 'mismatch') params.set('mismatch_only', 'true')
                     else if (riskFilter.value) params.set('risk_level', riskFilter.value)
                     for (const b of selectedBinaries.value) params.append('binary', b)
+                    if (pendingOnly.value) params.set('pending_only', 'true')
                 }
 
                 const sep = props.fetchUrl.includes('?') ? '&' : '?'
@@ -1743,6 +1783,9 @@ export default {
                 const data = await res.json()
                 items.value      = data.items ?? []
                 total.value      = data.total ?? 0
+                // Only the validation quarantine endpoint sends this — every
+                // other consumer falls back to total (nothing to exclude).
+                pendingTotal.value = data.pending_total ?? data.total ?? 0
                 totalPages.value = data.total_pages ?? 1
                 if (page.value > totalPages.value && totalPages.value > 0) {
                     page.value = totalPages.value
@@ -1790,7 +1833,7 @@ export default {
             if (!isFilterHidden('attacks'))         selectedAttacks.value = []
             if (!isFilterHidden('person'))          personFilter.value    = { mode: 'author', values: [] }
             if (!isFilterHidden('quality')) { qualityMin.value = null; qualityMax.value = null }
-            if (props.showValidationFilters) { riskFilter.value = ''; selectedBinaries.value = [] }
+            if (props.showValidationFilters) { riskFilter.value = ''; selectedBinaries.value = []; pendingOnly.value = false }
             onFilterChange()
         }
 
@@ -1852,6 +1895,14 @@ export default {
             return allPagesSelected.value || selectedIds.has(rule.id)
         }
 
+        // Opt-in (showValidationRisk): a rule already carrying the reviewer's
+        // verdict is done, not pending — it gets a fixed marker instead of a
+        // checkbox everywhere below, so it can't be silently re-swept into a
+        // "select all" and re-actioned.
+        function isResolved(rule) {
+            return !!(props.showValidationRisk && rule.validation_risk && rule.validation_risk.resolved)
+        }
+
         function _mapAdd(rule) {
             selectedRulesMap.set(rule.id, { id: rule.id, title: rule.title, format: rule.format })
         }
@@ -1874,23 +1925,28 @@ export default {
             _mapDel(id)
         }
 
+        // Resolved rows have no checkbox at all — "every"/"some" and the
+        // page-select toggle only ever consider the rows that can actually
+        // be checked.
+        const pageSelectableItems = computed(() => items.value.filter(r => !isResolved(r)))
+
         const allOnPageSelected = computed(() => {
-            if (!isSelectable.value || !items.value.length) return false
-            return items.value.every(r => selectedIds.has(r.id))
+            if (!isSelectable.value || !pageSelectableItems.value.length) return false
+            return pageSelectableItems.value.every(r => selectedIds.has(r.id))
         })
 
         const someOnPageSelected = computed(() => {
             if (!isSelectable.value) return false
-            const n = items.value.filter(r => selectedIds.has(r.id)).length
-            return n > 0 && n < items.value.length
+            const n = pageSelectableItems.value.filter(r => selectedIds.has(r.id)).length
+            return n > 0 && n < pageSelectableItems.value.length
         })
 
         function togglePageSelection() {
             if (allPagesSelected.value) { clearSelection(); return }
             if (allOnPageSelected.value) {
-                items.value.forEach(r => { selectedIds.delete(r.id); _mapDel(r.id) })
+                pageSelectableItems.value.forEach(r => { selectedIds.delete(r.id); _mapDel(r.id) })
             } else {
-                items.value.forEach(r => { selectedIds.add(r.id); _mapAdd(r) })
+                pageSelectableItems.value.forEach(r => { selectedIds.add(r.id); _mapAdd(r) })
             }
         }
 
@@ -1908,12 +1964,16 @@ export default {
 
         const selectedRulesList = computed(() => [...selectedRulesMap.values()])
 
+        // What "select all" actually means — every OTHER RuleList consumer
+        // has nothing to exclude, so this is just `total` there.
+        const selectableTotal = computed(() => props.showValidationRisk ? pendingTotal.value : total.value)
+
         const selectionCount = computed(() =>
-            allPagesSelected.value ? total.value : selectedIds.size
+            allPagesSelected.value ? selectableTotal.value : selectedIds.size
         )
 
         const showSelectBanner = computed(() =>
-            isSelectable.value && allOnPageSelected.value && total.value > items.value.length
+            isSelectable.value && allOnPageSelected.value && selectableTotal.value > pageSelectableItems.value.length
         )
 
         const showBulkBar = computed(() =>
@@ -2270,15 +2330,15 @@ export default {
             // Columns
             TOGGLEABLE_COLS, colVisible, toggleColumn,
             // Selection
-            selectedIds, allPagesSelected, isSelectable,
+            selectedIds, allPagesSelected, isSelectable, pageSelectableItems, selectableTotal,
             allOnPageSelected, someOnPageSelected,
             selectionCount, showSelectBanner, showBulkBar,
             selectedRulesList, showAllPicked, removeFromSelection,
             // Computed
             numericUserId, numericCurrentUserId, tableColspan, footerInfo,
             // Methods
-            isOwner, isFilterHidden, rlRiskTextColor, rlRiskTitle, binaryBadgeStyle,
-            riskFilter, selectedBinaries, toggleBinary,
+            isOwner, isFilterHidden, rlRiskTextColor, rlRiskTitle, binaryBadgeStyle, isResolved,
+            riskFilter, selectedBinaries, toggleBinary, pendingOnly,
             fetchData, onFilterChange, resetFilters,
             onSearchInput, clearSearch,
             setSort, sortIcon, onCardSortChange,

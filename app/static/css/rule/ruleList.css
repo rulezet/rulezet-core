@@ -478,6 +478,43 @@
     50%      { box-shadow: 0 0 0 6px rgba(13,110,253,.15); }
 }
 
+/* ── Already reviewed (opt-in via showValidationRisk) — dimmed + a loud
+   top banner, full opacity back on hover so it's still readable/clickable. ── */
+.rl-rule-card--resolved {
+    opacity: .62;
+    filter: grayscale(.35);
+    transition: opacity .15s, filter .15s;
+}
+.rl-rule-card--resolved:hover {
+    opacity: 1;
+    filter: grayscale(0);
+}
+.rl-resolved-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 3;
+    background: #198754;
+    color: #fff;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    text-align: center;
+    padding: .3rem 0;
+    border-radius: 12px 12px 0 0;
+}
+.dt-row--resolved {
+    opacity: .62;
+    filter: grayscale(.35);
+    transition: opacity .15s, filter .15s;
+}
+.dt-row--resolved:hover {
+    opacity: 1;
+    filter: grayscale(0);
+}
+
 /* Dark mode — cartes plus contrastées */
 [data-bs-theme="dark"] .rl-rule-card,
 .dark-mode .rl-rule-card {
@@ -512,6 +549,11 @@
 .rl-card-check-row--on {
     background: rgba(13,110,253,.1) !important;
     outline: 1px solid rgba(13,110,253,.25);
+}
+.rl-card-check-row--resolved {
+    background: rgba(25,135,84,.08) !important;
+    outline: 1px solid rgba(25,135,84,.25);
+    cursor: default;
 }
 .rl-card-check-input {
     width: 17px;

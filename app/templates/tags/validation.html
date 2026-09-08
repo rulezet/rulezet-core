@@ -21,8 +21,8 @@
 /* Bulk "apply a tag" modal — same overlay/dialog structure as ReportModal
    (already loaded on this page), own classes since it's a different
    feature (this is never a report). */
-.bt-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1055; display: flex; align-items: center; justify-content: center; padding: 1rem; }
-.bt-modal-dialog { background: var(--card-bg-color); border-radius: 14px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.bt-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1055; display: flex; justify-content: center; padding: 2rem 1rem; overflow-y: auto; }
+.bt-modal-dialog { background: var(--card-bg-color); border-radius: 14px; width: 100%; max-width: 600px; margin: auto 0; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
 .bt-modal-header { display: flex; align-items: center; gap: .75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); }
 .bt-modal-header__icon { width: 36px; height: 36px; border-radius: 10px; background: rgba(13,110,253,.1); color: #0d6efd; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: .95rem; }
 .bt-modal-header__body { flex: 1; min-width: 0; }
@@ -34,6 +34,16 @@
 .bt-modal-footer { display: flex; justify-content: flex-end; gap: .5rem; padding: .85rem 1.25rem; border-top: 1px solid var(--border-color); }
 .bt-modal-fade-enter-active, .bt-modal-fade-leave-active { transition: opacity .15s ease; }
 .bt-modal-fade-enter-from, .bt-modal-fade-leave-to { opacity: 0; }
+
+/* Bulk-tag job progress — small floating corner toast, not a page-inline widget. */
+.bt-toast { position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 1080; display: flex; align-items: center; gap: .65rem; background: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 12px; padding: .7rem .9rem; box-shadow: 0 10px 30px rgba(0,0,0,.25); min-width: 240px; max-width: 320px; }
+.bt-toast__icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.05rem; }
+.bt-toast__body { flex: 1; min-width: 0; }
+.bt-toast__title { font-size: .85rem; font-weight: 600; color: var(--text-color); }
+.bt-toast__link { font-size: .75rem; color: #0d6efd; text-decoration: none; }
+.bt-toast__link:hover { text-decoration: underline; }
+.bt-toast__close { background: none; border: none; color: var(--subtle-text-color); cursor: pointer; padding: .2rem; flex-shrink: 0; }
+.bt-toast__close:hover { color: var(--text-color); }
 </style>
 {% endblock %}
 

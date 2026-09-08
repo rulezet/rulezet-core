@@ -26,7 +26,6 @@
  * nothing is ever applied automatically.
  */
 
-import JobTracker  from '/static/js/jobs/JobTracker.js';
 import AnsiTerminal from '/static/js/components/ansi-terminal.js';
 import RuleList     from '/static/js/rule/ruleList.js';
 import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js';
@@ -38,14 +37,16 @@ const { ref, computed, watch, onMounted, onUnmounted } = Vue;
 // false-positive:risk=<level>  ->  <level>
 const RISK_TAG_RE = /^false-positive:risk=(.+)$/;
 
-// Fallback only — real color/description come from the taxonomy tag itself
-// once loaded (loadRiskTags below); used for the brief window before that
-// fetch resolves, and if the taxonomy somehow isn't imported on this instance.
+// The MISP taxonomy's own colors (#FF2B2B/#FFFF00/#33FF00/#FFC000, still
+// used everywhere the tag itself is shown) read as neon rather than
+// informative as a solid badge/button fill in this review UI — this is a
+// display-only override (label/id below still come from the real tag).
+// Mirrors the same override in tags.py's _risk_tag_colors().
 const RISK_META = {
-    high:               { color: '#FF2B2B', label: 'High' },
-    medium:             { color: '#FFFF00', label: 'Medium' },
-    low:                { color: '#33FF00', label: 'Low' },
-    'cannot-be-judged': { color: '#FFC000', label: 'Cannot be judged' },
+    high:               { color: '#C94A4A', label: 'High' },
+    medium:             { color: '#C99A2E', label: 'Medium' },
+    low:                { color: '#4C9A5B', label: 'Low' },
+    'cannot-be-judged': { color: '#B8752E', label: 'Cannot be judged' },
 };
 const RISK_ORDER = ['high', 'medium', 'low', 'cannot-be-judged'];
 
@@ -68,7 +69,7 @@ export default {
     name: 'ValidationRunner',
     delimiters: ['[[', ']]'],
     components: {
-        JobTracker, AnsiTerminal,
+        AnsiTerminal,
         'rule-list':                   RuleList,
         'tags-displays-list':          TagsDisplaysList,
         'vulnerability-displays-list': VulnerabilityDisplaysList,
@@ -179,7 +180,9 @@ export default {
             const fallback = RISK_META[level] || { color: '#adb5bd', label: level || 'Unknown' };
             return {
                 id:    row ? row.id : null,
-                color: row ? row.color : fallback.color,
+                // Always the muted display palette, never the row's own
+                // (neon) taxonomy color — see RISK_META's comment above.
+                color: fallback.color,
                 label: row ? row.name.replace(/^false-positive:risk="(.+)"$/, '$1') : fallback.label,
             };
         }
@@ -211,7 +214,6 @@ export default {
         // rather than a second, separate "history detail" view.
         async function viewHistoryRun(h) {
             if (running.value) return;
-            emit('update:active-tab', 'validation');
             jobUuid.value          = h.uuid;
             jobStatus.value        = h.status;
             quarantined.value      = [];
@@ -269,7 +271,38 @@ export default {
             const data = await res.json();
             if (res.ok) {
                 quarantined.value = (data.meta && data.meta.result && data.meta.result.quarantined) || [];
-                if (quarantined.value.length) loadRiskTags();
+                if (quarantined.value.length) {
+                    loadRiskTags();
+                    refreshResolvedStatus();
+                }
+            }
+        }
+
+        // quarantined.value is a fixed snapshot from when the run happened —
+        // it has no idea a rule got tagged five minutes ago. "Accept all"
+        // needs to know that live, so this sweeps every quarantined rule's
+        // CURRENT validation_risk.resolved (same rules_data_table endpoint
+        // RuleList itself uses, deliberately built without the page's own
+        // risk/binary/search filters — this needs the whole run, not
+        // whatever's currently filtered) and merges it back in.
+        async function refreshResolvedStatus() {
+            if (!jobUuid.value || !quarantined.value.length) return;
+            try {
+                const resolvedIds = new Set();
+                let page = 1, totalPages = 1;
+                do {
+                    const res = await fetch(`/tags/admin/validation/rules_data_table?job_uuid=${jobUuid.value}&page=${page}&per_page=100`);
+                    if (!res.ok) break;
+                    const data = await res.json();
+                    for (const r of (data.items || [])) {
+                        if (r.validation_risk && r.validation_risk.resolved) resolvedIds.add(r.id);
+                    }
+                    totalPages = data.total_pages || 1;
+                    page++;
+                } while (page <= totalPages);
+                for (const q of quarantined.value) q.resolved = q.rule_id != null && resolvedIds.has(q.rule_id);
+            } catch (e) {
+                console.error('[ValidationRunner] refreshResolvedStatus error:', e);
             }
         }
 
@@ -293,6 +326,11 @@ export default {
                     running.value = false;
                     await loadResult();
                     loadHistory();
+                    // The result never lives on the Validation tab (that's
+                    // launch-form-and-live-log only) — a finished run is
+                    // always viewed from History, whether opened from the
+                    // list or, like here, straight off a fresh run.
+                    emit('update:active-tab', 'history');
                     if (jobStatus.value === 'done') {
                         emit('notify', { message: `Validation done — ${quarantined.value.length} rule(s) quarantined.`, level: 'success' });
                     } else {
@@ -315,13 +353,20 @@ export default {
             try {
                 const res = await fetch(`/jobs/api/${jobParam}`);
                 if (!res.ok) { jobUuid.value = null; return; }
-                emit('update:active-tab', 'validation');
                 const data = await res.json();
                 jobUuid.value   = data.uuid;
                 jobStatus.value = data.status;
                 if (isDone.value) {
+                    // A finished run's result only ever lives on History —
+                    // whatever ?tab= the URL carried, this overrides it so
+                    // the restored result is actually visible.
+                    emit('update:active-tab', 'history');
                     await loadResult();
                 } else {
+                    // Still in progress — the live log lives on the
+                    // Validation tab; pollLogs() switches to History once
+                    // it's actually done, same as a fresh run.
+                    emit('update:active-tab', 'validation');
                     running.value = true;
                     pollTimer = setInterval(pollLogs, 2000);
                     pollLogs();
@@ -367,6 +412,8 @@ export default {
 
         onUnmounted(() => {
             if (pollTimer) clearInterval(pollTimer);
+            if (tagJobPollTimer) clearInterval(tagJobPollTimer);
+            if (tagJobAutoHideTimer) clearTimeout(tagJobAutoHideTimer);
         });
 
         // ── Quarantined-rule browser — RuleList pointed at a dedicated
@@ -403,8 +450,48 @@ export default {
             { key: 'custom_tag',      label: 'Apply a different tag…',   icon: 'fa-tags' },
         ];
 
-        const tagJobUuid = ref(null);
-        const tagging    = ref(false);
+        const tagJobUuid   = ref(null);
+        const tagJobStatus = ref('pending'); // pending | running | done | failed | cancelled
+        const tagging      = ref(false);
+        let   tagJobPollTimer = null;
+        let   tagJobAutoHideTimer = null;
+
+        // Progress for a bulk-tag job as a small floating corner toast (see
+        // .bt-toast in validation.html) instead of embedding the full
+        // JobTracker widget (progress bar + live log + pause/cancel/delete)
+        // inline in the page — overkill for something this quick, and it
+        // was pushing the actual review list down the page every time.
+        function watchTagJob(uuid) {
+            if (tagJobPollTimer) clearInterval(tagJobPollTimer);
+            if (tagJobAutoHideTimer) clearTimeout(tagJobAutoHideTimer);
+            tagJobUuid.value   = uuid;
+            tagJobStatus.value = 'pending';
+            async function poll() {
+                try {
+                    const res  = await fetch(`/jobs/status/${uuid}`);
+                    const data = await res.json();
+                    tagJobStatus.value = data.status || 'running';
+                    if (['done', 'failed', 'cancelled'].includes(tagJobStatus.value)) {
+                        clearInterval(tagJobPollTimer);
+                        tagJobPollTimer = null;
+                        quarantineListRef.value?.fetchData();
+                        refreshResolvedStatus();
+                        if (tagJobStatus.value === 'done') {
+                            tagJobAutoHideTimer = setTimeout(dismissTagJobToast, 5000);
+                        }
+                    }
+                } catch (e) {
+                    console.error('[ValidationRunner] tag job poll error:', e);
+                }
+            }
+            tagJobPollTimer = setInterval(poll, 2000);
+            poll();
+        }
+        function dismissTagJobToast() {
+            tagJobUuid.value = null;
+            if (tagJobPollTimer)     { clearInterval(tagJobPollTimer); tagJobPollTimer = null; }
+            if (tagJobAutoHideTimer) { clearTimeout(tagJobAutoHideTimer); tagJobAutoHideTimer = null; }
+        }
 
         async function launchTagJob(ruleIds, tagIds, labelTags) {
             const res = await fetch('/jobs/create', {
@@ -418,7 +505,7 @@ export default {
             });
             const data = await res.json();
             if (res.ok) {
-                tagJobUuid.value = data.job.uuid;
+                watchTagJob(data.job.uuid);
                 return true;
             }
             emit('notify', { message: data.error || 'Failed to launch bulk tag job', level: 'error' });
@@ -454,11 +541,12 @@ export default {
             });
         }
 
-        // Every quarantined rule that both exists locally and has a proposed
-        // tag — the full set "Accept all" targets, independent of whatever
-        // page of the rule browser is currently showing or selected.
+        // Every quarantined rule that both exists locally, has a proposed
+        // tag, and isn't already resolved (see refreshResolvedStatus) — the
+        // full set "Accept all" targets, independent of whatever page of
+        // the rule browser is currently showing or selected.
         const acceptableRuleIds = computed(() =>
-            quarantined.value.filter(q => q.rule_id && riskLevel(q.proposed_tag)).map(q => q.rule_id)
+            quarantined.value.filter(q => q.rule_id && riskLevel(q.proposed_tag) && !q.resolved).map(q => q.rule_id)
         );
 
         function acceptAllProposed() {
@@ -548,7 +636,13 @@ export default {
                     const res = await fetch(`/tags/admin/validation/rules_data_table?${p.toString()}`);
                     if (!res.ok) break;
                     const data = await res.json();
-                    collected.push(...(data.items || []).map(r => r.id));
+                    // Already-reviewed rules (see ruleList.js's isResolved) have
+                    // no checkbox to begin with — "select all pages" must skip
+                    // them here too, or a bulk action would silently re-tag
+                    // rules that are already done.
+                    collected.push(...(data.items || [])
+                        .filter(r => !(r.validation_risk && r.validation_risk.resolved))
+                        .map(r => r.id));
                     totalPages = data.total_pages || 1;
                     page++;
                 } while (page <= totalPages);
@@ -590,7 +684,7 @@ export default {
             pendingCustomTagIds, selectedTags, showAllSelectedTags,
             isQuickTagSelected, toggleQuickTag, removeSelectedTag, closeCustomTagModal,
             RISK_ORDER, riskMeta, contrastColor,
-            tagJobUuid, tagging, applyCustomTags,
+            tagJobUuid, tagJobStatus, dismissTagJobToast, tagging, applyCustomTags,
             history, historyLoading, viewHistoryRun, deleteHistoryRun, goBackToOverview, STATUS_COLOR, STATUS_ICON,
         };
     },
@@ -653,7 +747,7 @@ export default {
 
   <!-- History — past runs, so there's always something to look at even
        before the first click, and any of them can be revisited. -->
-  <div v-if="activeTab === 'history'" class="vr-card">
+  <div v-if="activeTab === 'history' && jobStatus === 'idle'" class="vr-card">
     <div class="vr-card__header">
       <div class="vr-card__header-left">
         <div class="vr-card__accent" style="background:#6f42c1;"></div>
@@ -700,7 +794,7 @@ export default {
   </div>
 
   <!-- Results card -->
-  <div v-if="activeTab === 'validation' && isDone && quarantined.length > 0" class="vr-card">
+  <div v-if="activeTab === 'history' && isDone && quarantined.length > 0" class="vr-card">
     <div class="vr-card__header">
       <div class="vr-card__header-left">
         <div class="vr-card__accent" style="background:#ffc107;"></div>
@@ -781,12 +875,31 @@ export default {
           :bulk-actions="riskBulkActions"
           @bulk-action="onRiskBulkAction">
       </rule-list>
-
-      <div v-if="tagJobUuid" class="mt-3 border rounded-3 p-3">
-        <job-tracker :job-uuid="tagJobUuid" @done="quarantineListRef?.fetchData()"></job-tracker>
-      </div>
     </div>
   </div>
+
+  <!-- Bulk-tag job progress — a small floating corner toast rather than the
+       full JobTracker widget (progress bar + live log + pause/cancel/delete)
+       embedded in the page, which was pushing the review list down every
+       time a tag got applied. -->
+  <transition name="bt-modal-fade">
+    <div v-if="tagJobUuid" class="bt-toast">
+      <div class="bt-toast__icon">
+        <span v-if="tagJobStatus === 'running' || tagJobStatus === 'pending'" class="spinner-border spinner-border-sm text-primary"></span>
+        <i v-else-if="tagJobStatus === 'done'" class="fa-solid fa-circle-check text-success"></i>
+        <i v-else class="fa-solid fa-circle-xmark text-danger"></i>
+      </div>
+      <div class="bt-toast__body">
+        <div class="bt-toast__title">
+          [[ tagJobStatus === 'done' ? 'Tag applied' : (tagJobStatus === 'failed' || tagJobStatus === 'cancelled') ? 'Tagging failed' : 'Applying tag…' ]]
+        </div>
+        <a :href="'/jobs/detail/' + tagJobUuid" target="_blank" rel="noopener" class="bt-toast__link">View details</a>
+      </div>
+      <button type="button" class="bt-toast__close" @click="dismissTagJobToast" aria-label="Dismiss">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+  </transition>
 
   <!-- Apply-a-tag modal — opened by the "Apply a different tag…" bulk
        action above, targeting whatever selection (single page or "all N
@@ -859,7 +972,7 @@ export default {
   </transition>
 
   <!-- A finished run (fresh or revisited from history) that quarantined nothing -->
-  <div v-if="activeTab === 'validation' && isDone && quarantined.length === 0" class="vr-card">
+  <div v-if="activeTab === 'history' && isDone && quarantined.length === 0" class="vr-card">
     <div class="vr-card__header">
       <div class="vr-card__header-left">
         <div class="vr-card__accent" style="background:#198754;"></div>

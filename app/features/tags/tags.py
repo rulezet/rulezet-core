@@ -478,6 +478,22 @@ def launch_validation():
 
 _RISK_LEVELS = ("high", "medium", "low", "cannot-be-judged")
 
+# The MISP taxonomy's own colors (#FF2B2B/#FFFF00/#33FF00/#FFC000) are the
+# correct, official ones for the tag itself everywhere else it's shown — but
+# as a solid badge/button fill in this review UI they read as neon rather
+# than informative. This is a display-only override: the tag actually
+# applied is still the real taxonomy tag (id/name untouched), only the
+# swatch color shown here is muted.
+_RISK_DISPLAY_COLORS = {
+    "high":               "#C94A4A",
+    "medium":             "#C99A2E",
+    "low":                "#4C9A5B",
+    "cannot-be-judged":   "#B8752E",
+}
+
+_RISK_TAG_NAMES = {f'false-positive:risk="{lvl}"' for lvl in _RISK_LEVELS}
+_RISK_LEVEL_BY_TAG_NAME = {f'false-positive:risk="{lvl}"': lvl for lvl in _RISK_LEVELS}
+
 
 def _risk_tag_colors():
     """{level: {id, color}} for the 4 MISP 'false-positive' taxonomy 'risk'
@@ -486,7 +502,7 @@ def _risk_tag_colors():
     rows = Tag.query.filter(Tag.name.in_([f'false-positive:risk="{lvl}"' for lvl in _RISK_LEVELS])).all()
     by_name = {t.name: t for t in rows}
     return {
-        lvl: {"id": by_name[f'false-positive:risk="{lvl}"'].id, "color": by_name[f'false-positive:risk="{lvl}"'].color}
+        lvl: {"id": by_name[f'false-positive:risk="{lvl}"'].id, "color": _RISK_DISPLAY_COLORS[lvl]}
         for lvl in _RISK_LEVELS if f'false-positive:risk="{lvl}"' in by_name
     }
 
@@ -540,21 +556,44 @@ def validation_rules_data_table():
     if not by_rule_id:
         return jsonify({"items": [], "total": 0, "total_pages": 1}), 200
 
-    pagination = RuleModel.get_rules_data_table(
-        page=request.args.get('page', 1, type=int),
-        per_page=request.args.get('per_page', 12, type=int),
-        search=request.args.get('search', None, type=str),
-        sort=request.args.get('sort', None, type=str),
-        direction=request.args.get('dir', 'asc', type=str),
-        ids=list(by_rule_id.keys()),
-    )
+    search    = request.args.get('search', None, type=str)
+    sort      = request.args.get('sort', None, type=str)
+    direction = request.args.get('dir', 'asc', type=str)
+
+    # get_rules_data_table() hard-caps per_page at 100 server-side no matter
+    # what's asked for — loop it to collect every candidate (a validation run
+    # flags at most a few hundred rules) instead of only ever seeing page 1.
+    all_rules, _page = [], 1
+    while True:
+        pg = RuleModel.get_rules_data_table(
+            page=_page, per_page=100, search=search, sort=sort, direction=direction,
+            ids=list(by_rule_id.keys()),
+        )
+        all_rules.extend(pg.items)
+        if _page >= pg.pages:
+            break
+        _page += 1
 
     colors = _risk_tag_colors()
-    items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)
+    items = RuleModel.serialize_rules_for_data_table(all_rules, current_user)
     for d in items:
         e = by_rule_id.get(d['id'], {})
         proposed = _risk_level_from_tag(e.get('proposed_tag'))
         upstream = _risk_level_from_tag(e.get('upstream_tag'))
+        # "Resolved" must NOT just mean "carries a risk tag right now" — a
+        # rule can arrive at quarantine already claiming one (that's exactly
+        # what upstream_tag/mismatch captures: its claim AT RUN TIME). Only
+        # a CHANGE since then — nothing before and something now, or a
+        # different tag than what was already there — means a reviewer
+        # actually did something on this page. Comparing the current risk
+        # tag set against the upstream snapshot (rather than "any tag at
+        # all") is what tells those two apart.
+        current_levels = {
+            _RISK_LEVEL_BY_TAG_NAME[t.get('name')]
+            for t in (d.get('tags') or []) if t.get('name') in _RISK_LEVEL_BY_TAG_NAME
+        }
+        upstream_levels = {upstream} if upstream else set()
+        resolved = current_levels != upstream_levels
         d['validation_risk'] = {
             "hits":            e.get('hits', 0),
             "proposed_level":  proposed,
@@ -564,12 +603,37 @@ def validation_rules_data_table():
             "upstream_color":  colors.get(upstream, {}).get('color'),
             "mismatch":        bool(upstream) and upstream != proposed,
             "matched_files":   e.get('matched_files') or [],
+            "resolved":        resolved,
         }
 
+    # Counted before any pending_only truncation below — RuleList's own
+    # "select all N pages" banner uses this instead of the plain total so it
+    # never offers to sweep up rows that have no checkbox to begin with.
+    pending_total = sum(1 for d in items if not d['validation_risk']['resolved'])
+
+    # "Hide already-tagged" — an explicit opt-out for reviewers who don't
+    # want a screen full of checkmarks once most of a run is done.
+    if request.args.get('pending_only', 'false').lower() == 'true':
+        items = [d for d in items if not d['validation_risk']['resolved']]
+
+    # Already-reviewed rules sink to the end (stable within each group —
+    # the requested sort still applies inside "pending" and inside
+    # "resolved") instead of being scattered wherever they happened to
+    # land in the run's own order.
+    items.sort(key=lambda d: d['validation_risk']['resolved'])
+
+    requested_page     = request.args.get('page', 1, type=int)
+    requested_per_page = request.args.get('per_page', 12, type=int)
+    total      = len(items)
+    start      = (requested_page - 1) * requested_per_page
+    page_items = items[start:start + requested_per_page]
+    total_pages = max(1, -(-total // requested_per_page)) if requested_per_page > 0 else 1
+
     return jsonify({
-        "items":       items,
-        "total":       pagination.total,
-        "total_pages": pagination.pages,
+        "items":         page_items,
+        "total":         total,
+        "total_pages":   total_pages,
+        "pending_total": pending_total,
     }), 200
 
 
