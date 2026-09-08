@@ -22,6 +22,7 @@ from app.features.rule.rule_format.utils_format.utils_import_update import (
     get_repo_head_sha,
     get_changed_files_between,
     delete_existing_repo_folder,
+    valider_repo_github,
 )
 
 sessions = []
@@ -252,7 +253,22 @@ class Update_class:
 
             cp = 0
             for source_url, rule_list in rules_by_source.items():
-                
+
+                # source_url is Rule.source — set at import time from
+                # whatever the importer supplied (e.g. /rule/import_from_json
+                # accepts any string, unvalidated) rather than something this
+                # class controls. Unlike mode="by_url" (whose caller already
+                # validated every URL via valider_repo_github() before ever
+                # constructing this class), nothing upstream of "by_rule" ever
+                # checked source_url actually points at GitHub. Without this,
+                # clone_or_access_repo()'s only gate — is_github_repo_accessible()
+                # — matches on the URL's *path* against the real GitHub API and
+                # never checks its host, so a rule with source set to e.g.
+                # "http://169.254.169.254/octocat/Hello-World" would pass and
+                # the server would clone from that attacker-chosen host (SSRF).
+                if not valider_repo_github(source_url):
+                    continue
+
                 try:
                     repo_dir, exists = clone_or_access_repo(source_url)
                     git_pull_repo(repo_dir)
