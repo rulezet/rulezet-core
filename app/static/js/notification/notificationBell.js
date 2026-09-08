@@ -389,12 +389,12 @@ const NotificationPanel = {
     </div>
 
     <!-- Toolbar -->
-    <div class="notif-toolbar" v-if="filteredItems.length > 0 || unreadCount > 0">
+    <div class="notif-toolbar" v-if="filteredItems.length > 0 || unreadCount > 0 || unreadJobCount > 0">
         <span class="notif-toolbar-count">
             [[ filteredItems.length ]] notification[[ filteredItems.length !== 1 ? 's' : '' ]]
         </span>
         <div class="notif-toolbar-actions">
-            <button class="notif-toolbar-btn" @click="markAllRead" v-if="unreadCount > 0">
+            <button class="notif-toolbar-btn" @click="markAllRead" v-if="unreadCount > 0 || unreadJobCount > 0">
                 <i class="fa-solid fa-check-double me-1"></i>Mark all read
             </button>
         </div>
