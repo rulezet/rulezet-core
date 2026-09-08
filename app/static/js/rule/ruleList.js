@@ -1774,7 +1774,14 @@ export default {
                 _upd('mismatch_only', riskFilter.value === 'mismatch' ? 'true' : null)
                 _upd('risk_level',    riskFilter.value !== 'mismatch' ? riskFilter.value || null : null)
                 _upd('binary',        selectedBinaries.value.join(',') || null)
-                _upd('pending_only',  pendingOnly.value ? 'true' : null)
+                // Only written when it actually diverges from the default —
+                // pending-only is now the opening state (defaultPendingOnly),
+                // so writing "true" every single time just clutters every
+                // URL with the state it would open in anyway. Explicitly
+                // false still gets written, so turning it off (e.g. the
+                // "Quarantined" KPI tile) survives a reload instead of
+                // snapping back to the default.
+                _upd('pending_only',  pendingOnly.value !== props.defaultPendingOnly ? String(pendingOnly.value) : null)
                 _upd('resolved_only', resolvedOnly.value ? 'true' : null)
             }
 
