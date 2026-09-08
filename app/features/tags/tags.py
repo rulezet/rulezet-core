@@ -491,7 +491,6 @@ _RISK_DISPLAY_COLORS = {
     "cannot-be-judged":   "#B8752E",
 }
 
-_RISK_TAG_NAMES = {f'false-positive:risk="{lvl}"' for lvl in _RISK_LEVELS}
 _RISK_LEVEL_BY_TAG_NAME = {f'false-positive:risk="{lvl}"': lvl for lvl in _RISK_LEVELS}
 
 
@@ -581,19 +580,30 @@ def validation_rules_data_table():
         proposed = _risk_level_from_tag(e.get('proposed_tag'))
         upstream = _risk_level_from_tag(e.get('upstream_tag'))
         # "Resolved" must NOT just mean "carries a risk tag right now" — a
-        # rule can arrive at quarantine already claiming one (that's exactly
-        # what upstream_tag/mismatch captures: its claim AT RUN TIME). Only
-        # a CHANGE since then — nothing before and something now, or a
-        # different tag than what was already there — means a reviewer
-        # actually did something on this page. Comparing the current risk
-        # tag set against the upstream snapshot (rather than "any tag at
-        # all") is what tells those two apart.
+        # rule can arrive at quarantine already claiming one, correctly or
+        # not, before any reviewer looks at it. It's tempting to compare
+        # against upstream_tag (the rule's claim AT RUN TIME, from the
+        # sidecar rulezet-validation's own sync step wrote) instead, but
+        # that snapshot comes from wherever the sync pulled rules from
+        # (INSTANCE_PUBLIC_URL, or rulezet.org when that's unset) — on a dev
+        # box that's routinely a different copy of the rule than the one
+        # sitting in this local DB, so it can't be trusted to reflect "what
+        # the rule actually had right before this run".
+        #
+        # What's actually reliable is comparing the rule's CURRENT tag
+        # (read live, right now) against this run's proposed_level (derived
+        # from the baseline scan itself, not from any tag sync) — resolved
+        # means "already correctly classified", whether that's because a
+        # reviewer just accepted the proposal, or because it already
+        # happened to agree. Anything else — nothing yet, or a *different*
+        # existing tag — is exactly the "needs a decision" case the risk
+        # filter/mismatch badge exists to surface, and stays pending until
+        # a reviewer picks accept-proposed or a different tag.
         current_levels = {
             _RISK_LEVEL_BY_TAG_NAME[t.get('name')]
             for t in (d.get('tags') or []) if t.get('name') in _RISK_LEVEL_BY_TAG_NAME
         }
-        upstream_levels = {upstream} if upstream else set()
-        resolved = current_levels != upstream_levels
+        resolved = current_levels == ({proposed} if proposed else set())
         d['validation_risk'] = {
             "hits":            e.get('hits', 0),
             "proposed_level":  proposed,
