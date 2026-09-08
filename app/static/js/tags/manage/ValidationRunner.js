@@ -27,6 +27,7 @@
  */
 
 import AnsiTerminal from '/static/js/components/ansi-terminal.js';
+import ChartViewer  from '/static/js/components/chart-viewer.js';
 import RuleList     from '/static/js/rule/ruleList.js';
 import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js';
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
@@ -74,6 +75,7 @@ export default {
         'tags-displays-list':          TagsDisplaysList,
         'vulnerability-displays-list': VulnerabilityDisplaysList,
         'tag-input':                   TagInput,
+        'chart-viewer':                ChartViewer,
     },
     props: {
         csrfToken:                  { type: String,             required: true },
@@ -289,18 +291,24 @@ export default {
             if (!jobUuid.value || !quarantined.value.length) return;
             try {
                 const resolvedIds = new Set();
+                const dismissedIds = new Set();
                 let page = 1, totalPages = 1;
                 do {
                     const res = await fetch(`/tags/admin/validation/rules_data_table?job_uuid=${jobUuid.value}&page=${page}&per_page=100`);
                     if (!res.ok) break;
                     const data = await res.json();
                     for (const r of (data.items || [])) {
-                        if (r.validation_risk && r.validation_risk.resolved) resolvedIds.add(r.id);
+                        if (!r.validation_risk) continue;
+                        if (r.validation_risk.resolved)  resolvedIds.add(r.id);
+                        if (r.validation_risk.dismissed) dismissedIds.add(r.id);
                     }
                     totalPages = data.total_pages || 1;
                     page++;
                 } while (page <= totalPages);
-                for (const q of quarantined.value) q.resolved = q.rule_id != null && resolvedIds.has(q.rule_id);
+                for (const q of quarantined.value) {
+                    q.resolved  = q.rule_id != null && resolvedIds.has(q.rule_id);
+                    q.dismissed = q.rule_id != null && dismissedIds.has(q.rule_id);
+                }
             } catch (e) {
                 console.error('[ValidationRunner] refreshResolvedStatus error:', e);
             }
@@ -557,6 +565,25 @@ export default {
             acceptProposedForRules(ids);
         }
 
+        // ── Run report — a small "what happened in this run" summary, same
+        //    idea as the GitHub update summary card: a few KPI tiles plus a
+        //    breakdown chart, built entirely from quarantined.value (already
+        //    loaded) + whatever refreshResolvedStatus() merged into it. ─────
+        const reviewedCount   = computed(() => quarantined.value.filter(q => q.resolved).length);
+        const dismissedCount  = computed(() => quarantined.value.filter(q => q.dismissed).length);
+        const pendingCount    = computed(() => quarantined.value.length - reviewedCount.value);
+        const mismatchCount   = computed(() =>
+            quarantined.value.filter(q => q.upstream_tag && q.upstream_tag !== q.proposed_tag && !q.resolved).length
+        );
+        const riskBreakdownChartData = computed(() => ({
+            categories: RISK_ORDER.map(l => riskMeta(l).label),
+            colors: RISK_ORDER.map(l => riskMeta(l).color),
+            series: [{
+                name: 'Rules',
+                values: RISK_ORDER.map(l => quarantined.value.filter(q => riskLevel(q.proposed_tag) === l).length),
+            }],
+        }));
+
         // ── "Apply a different tag…" — a small modal (see .bt-modal-* in
         //    validation.html) instead of a panel sitting at the bottom of the
         //    page. Tag search reuses TagInput (server-side search + debounce,
@@ -710,6 +737,7 @@ export default {
             quarantineListRef, quarantineFetchUrl, allBinaryOptions, validationRiskLevels,
             riskBulkActions, onRiskBulkAction, resolvingBulkIds,
             acceptableRuleIds, acceptAllProposed,
+            reviewedCount, dismissedCount, pendingCount, mismatchCount, riskBreakdownChartData,
             pendingCustomTagIds, selectedTags, showAllSelectedTags,
             isQuickTagSelected, toggleQuickTag, removeSelectedTag, closeCustomTagModal,
             RISK_ORDER, riskMeta, contrastColor,
@@ -843,6 +871,40 @@ export default {
       </div>
     </div>
     <div class="vr-card__body">
+      <!-- Run report — a few KPI tiles + a risk-level breakdown chart, same
+           idea as the GitHub update summary card (update_loading.html). -->
+      <div class="rounded-3 border p-3 mb-3">
+        <div class="row g-3 align-items-center">
+          <div class="col-12 col-lg-7">
+            <div class="d-flex flex-wrap gap-4">
+              <div class="text-center">
+                <div class="fw-bold" style="font-size:1.4rem;color:var(--text-color);">[[ quarantined.length ]]</div>
+                <div class="text-muted small">Quarantined</div>
+              </div>
+              <div class="text-center">
+                <div class="fw-bold" style="font-size:1.4rem;color:#198754;">[[ reviewedCount ]]</div>
+                <div class="text-muted small">Reviewed</div>
+              </div>
+              <div class="text-center">
+                <div class="fw-bold" style="font-size:1.4rem;color:#ffc107;">[[ pendingCount ]]</div>
+                <div class="text-muted small">Pending</div>
+              </div>
+              <div class="text-center">
+                <div class="fw-bold" style="font-size:1.4rem;color:#dc3545;">[[ mismatchCount ]]</div>
+                <div class="text-muted small">Disagreements</div>
+              </div>
+              <div class="text-center" v-if="dismissedCount > 0">
+                <div class="fw-bold text-secondary" style="font-size:1.4rem;">[[ dismissedCount ]]</div>
+                <div class="text-muted small">Dismissed</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-lg-5" style="height:160px;">
+            <chart-viewer v-if="quarantined.length > 0" :data="riskBreakdownChartData" views="donut" height="100%" :minimal="true"></chart-viewer>
+          </div>
+        </div>
+      </div>
+
       <div class="rounded-3 p-3 mb-3" style="background:var(--light-bg-color);font-size:.83rem;">
         <i class="fa-solid fa-lightbulb me-2 text-primary"></i>
         Each rule's <strong>proposed</strong> risk level is derived only from how many known-clean

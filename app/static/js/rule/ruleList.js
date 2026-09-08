@@ -602,6 +602,11 @@ export default {
                         <i v-if="rule.validation_risk.mismatch" class="fa-solid fa-triangle-exclamation me-1"></i>
                         {{ rule.validation_risk.proposed_level }}
                     </span>
+                    <span v-if="showValidationRisk && rule.validation_risk && rule.validation_risk.mismatch"
+                          class="badge rounded-pill shadow-sm pt-1 bg-danger"
+                          :title="rlRiskTitle(rule.validation_risk)">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i>Disagrees with rule's own claim
+                    </span>
                     <span v-if="isOwner(rule)" class="badge bg-success shadow-sm pt-1" title="You own this rule">
                         <i class="fa-solid fa-crown me-1"></i>OWNER
                     </span>
@@ -1042,14 +1047,21 @@ export default {
                             </td>
 
                             <td v-if="showValidationRisk" class="dt-td">
-                                <span v-if="rule.validation_risk && rule.validation_risk.proposed_level"
-                                      class="badge rounded-pill"
-                                      :class="rule.validation_risk.mismatch ? 'border border-2 border-danger' : ''"
-                                      :style="{ background: rule.validation_risk.proposed_color || '#adb5bd', color: rlRiskTextColor(rule.validation_risk.proposed_color) }"
-                                      :title="rlRiskTitle(rule.validation_risk)">
-                                    <i v-if="rule.validation_risk.mismatch" class="fa-solid fa-triangle-exclamation me-1"></i>
-                                    {{ rule.validation_risk.proposed_level }}
-                                </span>
+                                <div class="d-flex flex-column align-items-start gap-1">
+                                    <span v-if="rule.validation_risk && rule.validation_risk.proposed_level"
+                                          class="badge rounded-pill"
+                                          :class="rule.validation_risk.mismatch ? 'border border-2 border-danger' : ''"
+                                          :style="{ background: rule.validation_risk.proposed_color || '#adb5bd', color: rlRiskTextColor(rule.validation_risk.proposed_color) }"
+                                          :title="rlRiskTitle(rule.validation_risk)">
+                                        <i v-if="rule.validation_risk.mismatch" class="fa-solid fa-triangle-exclamation me-1"></i>
+                                        {{ rule.validation_risk.proposed_level }}
+                                    </span>
+                                    <span v-if="rule.validation_risk && rule.validation_risk.mismatch"
+                                          class="badge rounded-pill bg-danger" style="font-size:.62rem;"
+                                          :title="rlRiskTitle(rule.validation_risk)">
+                                        <i class="fa-solid fa-triangle-exclamation me-1"></i>Disagrees with claim
+                                    </span>
+                                </div>
                                 <span v-else class="text-muted small">—</span>
                             </td>
 
