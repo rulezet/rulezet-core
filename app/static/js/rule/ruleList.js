@@ -1062,7 +1062,6 @@ export default {
                                         <i class="fa-solid fa-triangle-exclamation me-1"></i>Disagrees with claim
                                     </span>
                                 </div>
-                                <span v-else class="text-muted small">—</span>
                             </td>
 
                             <td v-if="showValidationRisk" class="dt-td">
@@ -1077,7 +1076,6 @@ export default {
                                       style="cursor:pointer;font-size:.68rem;" title="Show all in the expanded row below" @click="toggleExpand(rule)">
                                     +{{ rule.validation_risk.matched_files.length - 3 }} more
                                 </span>
-                                <span v-if="!rule.validation_risk || !rule.validation_risk.matched_files || !rule.validation_risk.matched_files.length" class="text-muted small">—</span>
                             </td>
 
                             <td v-show="colVisible.id" class="dt-td" :title="'Rule id: ' + rule.id">

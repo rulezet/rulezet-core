@@ -537,6 +537,35 @@ def validation_rules_data_table():
     # fresh look rather than inheriting an old dismissal forever.
     dismissed_rule_ids = set(((job.payload or {}).get('result') or {}).get('dismissed_rule_ids') or [])
 
+    # "Resolved"/"mismatch" must be based on the rule's CURRENT tag, read
+    # live right now — NOT upstream_tag (the rule's claim captured by
+    # rulezet-validation's own sync step, from wherever it pulled rules:
+    # INSTANCE_PUBLIC_URL, or rulezet.org when that's unset). On a dev box
+    # that's routinely a different copy of the rule than the one sitting in
+    # this local DB, so it can't be trusted to reflect "what the rule
+    # actually has". A rule tagged low with 200 hits (proposed high) is a
+    # disagreement worth flagging even if upstream_tag is stale or missing;
+    # conversely a rule that already carried the right tag before anyone
+    # reviewed it here is not a mismatch just because upstream said so.
+    # Computed once for the WHOLE candidate set, before any filtering, so
+    # the mismatch_only filter below uses the exact same definition as the
+    # per-item badge shown later — not two different ideas of "mismatch".
+    tags_by_rule_id = RuleModel.get_tags_for_rules_batch(list(by_rule_id.keys()))
+    risk_by_rule_id = {}
+    for rid, e in by_rule_id.items():
+        proposed = _risk_level_from_tag(e.get('proposed_tag'))
+        current_levels = {
+            _RISK_LEVEL_BY_TAG_NAME[t.name]
+            for t in tags_by_rule_id.get(rid, []) if t.name in _RISK_LEVEL_BY_TAG_NAME
+        }
+        risk_by_rule_id[rid] = {
+            'proposed': proposed,
+            'upstream': _risk_level_from_tag(e.get('upstream_tag')),
+            'current_levels': current_levels,
+            'mismatch': bool(current_levels) and proposed not in current_levels,
+            'resolved': current_levels == ({proposed} if proposed else set()) or rid in dismissed_rule_ids,
+        }
+
     # Dedicated risk filter — a fixed vocabulary of 4 levels (plus
     # "mismatch", the case the tool's own author flags as most worth
     # attention) that no real Rule column backs, so it's applied here by
@@ -549,8 +578,8 @@ def validation_rules_data_table():
     if risk_level or mismatch_only or binaries:
         by_rule_id = {
             rid: e for rid, e in by_rule_id.items()
-            if (not risk_level or _risk_level_from_tag(e.get('proposed_tag')) == risk_level)
-            and (not mismatch_only or (e.get('upstream_tag') and e.get('upstream_tag') != e.get('proposed_tag')))
+            if (not risk_level or risk_by_rule_id[rid]['proposed'] == risk_level)
+            and (not mismatch_only or risk_by_rule_id[rid]['mismatch'])
             and (not binaries or any(
                 any(b in (m.get('file') or '').lower() for b in binaries)
                 for m in (e.get('matched_files') or [])
@@ -582,47 +611,17 @@ def validation_rules_data_table():
     items = RuleModel.serialize_rules_for_data_table(all_rules, current_user)
     for d in items:
         e = by_rule_id.get(d['id'], {})
-        proposed = _risk_level_from_tag(e.get('proposed_tag'))
-        upstream = _risk_level_from_tag(e.get('upstream_tag'))
-        # "Resolved" must NOT just mean "carries a risk tag right now" — a
-        # rule can arrive at quarantine already claiming one, correctly or
-        # not, before any reviewer looks at it. It's tempting to compare
-        # against upstream_tag (the rule's claim AT RUN TIME, from the
-        # sidecar rulezet-validation's own sync step wrote) instead, but
-        # that snapshot comes from wherever the sync pulled rules from
-        # (INSTANCE_PUBLIC_URL, or rulezet.org when that's unset) — on a dev
-        # box that's routinely a different copy of the rule than the one
-        # sitting in this local DB, so it can't be trusted to reflect "what
-        # the rule actually had right before this run".
-        #
-        # What's actually reliable is comparing the rule's CURRENT tag
-        # (read live, right now) against this run's proposed_level (derived
-        # from the baseline scan itself, not from any tag sync) — resolved
-        # means "already correctly classified", whether that's because a
-        # reviewer just accepted the proposal, or because it already
-        # happened to agree. Anything else — nothing yet, or a *different*
-        # existing tag — is exactly the "needs a decision" case the risk
-        # filter/mismatch badge exists to surface, and stays pending until
-        # a reviewer picks accept-proposed or a different tag.
-        current_levels = {
-            _RISK_LEVEL_BY_TAG_NAME[t.get('name')]
-            for t in (d.get('tags') or []) if t.get('name') in _RISK_LEVEL_BY_TAG_NAME
-        }
-        # Explicitly dismissed ("keep the current tag, I've looked at this
-        # mismatch and I'm not changing it") counts as resolved too — the
-        # only other way there is to close out a mismatch that will never
-        # match proposed_level by tagging alone.
-        resolved = current_levels == ({proposed} if proposed else set()) or d['id'] in dismissed_rule_ids
+        risk = risk_by_rule_id[d['id']]
         d['validation_risk'] = {
             "hits":            e.get('hits', 0),
-            "proposed_level":  proposed,
-            "proposed_tag_id": colors.get(proposed, {}).get('id'),
-            "proposed_color":  colors.get(proposed, {}).get('color'),
-            "upstream_level":  upstream,
-            "upstream_color":  colors.get(upstream, {}).get('color'),
-            "mismatch":        bool(upstream) and upstream != proposed,
+            "proposed_level":  risk['proposed'],
+            "proposed_tag_id": colors.get(risk['proposed'], {}).get('id'),
+            "proposed_color":  colors.get(risk['proposed'], {}).get('color'),
+            "upstream_level":  risk['upstream'],
+            "upstream_color":  colors.get(risk['upstream'], {}).get('color'),
+            "mismatch":        risk['mismatch'],
             "matched_files":   e.get('matched_files') or [],
-            "resolved":        resolved,
+            "resolved":        risk['resolved'],
             "dismissed":       d['id'] in dismissed_rule_ids,
         }
 
