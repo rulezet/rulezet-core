@@ -579,7 +579,11 @@ def validation_rules_data_table():
         by_rule_id = {
             rid: e for rid, e in by_rule_id.items()
             if (not risk_level or risk_by_rule_id[rid]['proposed'] == risk_level)
-            and (not mismatch_only or risk_by_rule_id[rid]['mismatch'])
+            # A dismissed rule can still be a live tag/proposed mismatch
+            # (dismissing never changes the tag) but counts as resolved —
+            # "Disagreements" must mean still-open ones, not ones a
+            # reviewer already looked at and chose to keep as-is.
+            and (not mismatch_only or (risk_by_rule_id[rid]['mismatch'] and not risk_by_rule_id[rid]['resolved']))
             and (not binaries or any(
                 any(b in (m.get('file') or '').lower() for b in binaries)
                 for m in (e.get('matched_files') or [])
