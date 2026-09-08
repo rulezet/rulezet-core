@@ -33,7 +33,11 @@ _MITRE_TECH_RE = re.compile(r'^T\d{4}(\.\d{3})?$')
 _MITRE_TACTIC_RE = re.compile(r'^TA\d{4}$')
 
 _VALID_SEVERITIES = frozenset({'low', 'medium', 'high', 'critical'})
-_VALID_LANGUAGES = frozenset({'eql', 'kql', 'lucene', 'esql', 'threshold', 'new_terms', 'ml', 'machine_learning'})
+# The query *dialect* (rule.language) is a different field from the rule
+# *type* (rule.type, e.g. "threshold"/"new_terms"/"eql"/"esql" — a
+# threshold or new_terms rule still runs its query in kuery/lucene). Elastic
+# calls Kibana Query Language "kuery" in the rule schema itself, not "kql".
+_VALID_LANGUAGES = frozenset({'kuery', 'lucene', 'eql', 'esql'})
 _QUERYLESS_TYPES = frozenset({'ml', 'machine_learning'})
 
 # A rule file always has an [metadata] and/or [rule] TOML table header —
@@ -150,11 +154,19 @@ class ElasticRule(RuleType):
         if not isinstance(description, str) or not description.strip():
             errors.append("Missing or empty required field: rule.description")
 
-        language = rule.get("language")
-        if not isinstance(language, str) or language.lower() not in _VALID_LANGUAGES:
-            errors.append(f"rule.language '{language}' is not one of: {sorted(_VALID_LANGUAGES)}")
-
         rule_type = (rule.get("type") or "").lower()
+        language = rule.get("language")
+        if rule_type not in _QUERYLESS_TYPES:
+            if not isinstance(language, str) or not language.strip():
+                errors.append("Missing required field: rule.language")
+            elif language.lower() not in _VALID_LANGUAGES:
+                # A soft check, not a hard enum: this project's own review of
+                # a real elastic/detection-rules checkout already turned up
+                # "kuery" as a live, legitimate value missing from an earlier
+                # version of this set — treat an unrecognized value as
+                # informational rather than reject a genuine rule outright.
+                warnings.append(f"rule.language '{language}' doesn't match the known set: {sorted(_VALID_LANGUAGES)}")
+
         query = rule.get("query")
         if rule_type not in _QUERYLESS_TYPES:
             if not isinstance(query, str) or not query.strip():

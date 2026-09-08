@@ -157,16 +157,46 @@ _BAD_UUID = dedent(
     """
 )
 
-_BAD_LANGUAGE_AND_SEVERITY = dedent(
+_MISSING_LANGUAGE_AND_BAD_SEVERITY = dedent(
     """\
     [rule]
     name = "Bad Enum Rule"
     description = "x"
-    language = "cobol"
     query = "process where true"
     rule_id = "44444444-4444-4444-4444-444444444444"
     risk_score = 21
     severity = "apocalyptic"
+    """
+)
+
+# "kuery" (Kibana Query Language) is real and legitimate — Elastic's rule
+# schema spells KQL this way, not "kql" (an earlier version of this set got
+# that wrong, rejecting real elastic/detection-rules files). An outright
+# unrecognized value is still accepted, just flagged as a warning, since
+# this project doesn't have full confidence in an exhaustive enum here.
+_KUERY_LANGUAGE_RULE = dedent(
+    """\
+    [rule]
+    name = "Kuery Language Rule"
+    description = "x"
+    language = "kuery"
+    query = "process.name: \\"whoami.exe\\""
+    rule_id = "77777777-7777-7777-7777-777777777777"
+    risk_score = 21
+    severity = "low"
+    """
+)
+
+_UNRECOGNIZED_LANGUAGE_RULE = dedent(
+    """\
+    [rule]
+    name = "Unrecognized Language Rule"
+    description = "x"
+    language = "cobol"
+    query = "process where true"
+    rule_id = "88888888-8888-8888-8888-888888888888"
+    risk_score = 21
+    severity = "low"
     """
 )
 
@@ -272,11 +302,22 @@ def test_validate_rejects_bad_uuid(elastic: ElasticRule) -> None:
     assert any("UUID" in e or "rule_id" in e for e in result.errors)
 
 
-def test_validate_rejects_bad_language_and_severity(elastic: ElasticRule) -> None:
-    result = elastic.validate(_BAD_LANGUAGE_AND_SEVERITY)
+def test_validate_rejects_missing_language_and_bad_severity(elastic: ElasticRule) -> None:
+    result = elastic.validate(_MISSING_LANGUAGE_AND_BAD_SEVERITY)
     assert result.ok is False
     assert any("language" in e for e in result.errors)
     assert any("severity" in e for e in result.errors)
+
+
+def test_validate_accepts_kuery_language(elastic: ElasticRule) -> None:
+    result = elastic.validate(_KUERY_LANGUAGE_RULE)
+    assert result.ok is True, result.errors
+
+
+def test_validate_warns_but_accepts_unrecognized_language(elastic: ElasticRule) -> None:
+    result = elastic.validate(_UNRECOGNIZED_LANGUAGE_RULE)
+    assert result.ok is True, result.errors
+    assert any("language" in w for w in result.warnings)
 
 
 def test_validate_rejects_missing_query_for_non_ml_type(elastic: ElasticRule) -> None:
@@ -362,7 +403,7 @@ def test_parse_metadata_returns_safe_shape_on_parse_error(elastic: ElasticRule) 
 
 
 def test_parse_metadata_unknown_severity_falls_back(elastic: ElasticRule) -> None:
-    meta = elastic.parse_metadata(_BAD_LANGUAGE_AND_SEVERITY)
+    meta = elastic.parse_metadata(_MISSING_LANGUAGE_AND_BAD_SEVERITY)
     assert meta["severity"] == "unknown"
 
 
