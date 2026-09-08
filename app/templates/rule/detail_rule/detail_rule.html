@@ -78,14 +78,30 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
         </div>
     </div>
 
-    <div v-if="ruleRisk && ruleRisk.flagged" class="alert d-flex align-items-start gap-3 mb-4 shadow-sm"
-         :class="ruleRisk.rejected ? 'alert-danger' : 'alert-warning'" role="alert">
+    <div v-if="ruleRisk && ruleRisk.errors && ruleRisk.errors.length" class="alert alert-danger d-flex align-items-start gap-3 mb-4 shadow-sm" role="alert">
         <i class="fa-solid fa-triangle-exclamation fs-4 mt-1"></i>
         <div>
-            <strong>[[ ruleRisk.rejected ? 'Rejected pattern present' : 'Cross-rule interference risk' ]]</strong>
+            <strong>Rejected pattern present</strong>
             <ul class="mb-0 mt-2 ps-3">
-                <li v-for="reason in ruleRisk.reasons" :key="reason">[[ reason ]]</li>
+                <li v-for="reason in ruleRisk.errors" :key="reason">[[ reason ]]</li>
             </ul>
+            <a href="{{ url_for('rule.how_validation_works') }}" class="small">What does this mean?</a>
+        </div>
+    </div>
+
+    <div v-if="ruleRisk && ruleRisk.warnings && ruleRisk.warnings.length" class="alert alert-warning d-flex align-items-start gap-3 mb-4 shadow-sm" role="alert">
+        <i class="fa-solid fa-circle-info fs-4 mt-1"></i>
+        <div>
+            <strong>Format &amp; documentation suggestions</strong>
+            <p class="mb-1 mt-1" style="font-size:.85rem;">
+                Not a security issue — this rule is valid and was accepted as-is. These are
+                optional fields/conventions its own format recommends, mainly affecting its
+                quality score and how well it documents itself for other reviewers.
+            </p>
+            <ul class="mb-0 mt-2 ps-3">
+                <li v-for="reason in ruleRisk.warnings" :key="reason">[[ reason ]]</li>
+            </ul>
+            <a href="{{ url_for('rule.how_validation_works') }}" class="small">What do these messages mean?</a>
         </div>
     </div>
 
@@ -1343,7 +1359,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
             const mispObjectData = ref(window.__misp_object ? JSON.stringify(window.__misp_object, null, 4) : '');
             const mispEventData  = ref(window.__misp_event  ? JSON.stringify(window.__misp_event,  null, 4) : '');
             const velociraptorArtifactData = ref(window.__velociraptor_artifact || '');
-            const ruleRisk = ref(window.__rule_risk || { flagged: false, rejected: false, reasons: [] });
+            const ruleRisk = ref(window.__rule_risk || { flagged: false, rejected: false, reasons: [], errors: [], warnings: [] });
 
             // ── Push generated artifact to a connected Velociraptor server ──
             const velociraptorServers        = ref([]);

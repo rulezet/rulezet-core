@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+
+{% block title %}How Rule Validation Works — Rulezet{% endblock %}
+
+{% block head %}
+<style>
+  .hiw-section { scroll-margin-top: 80px; }
+
+  .hiw-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    color: #fff;
+    font-weight: 700;
+    font-size: .85rem;
+    flex-shrink: 0;
+  }
+
+  .hiw-code {
+    font-family: monospace;
+    font-size: .82rem;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 2px 8px;
+    color: #0d6efd;
+    word-break: break-all;
+  }
+
+  .hiw-toc-link {
+    display: block;
+    padding: .35rem .75rem;
+    color: var(--subtle-text-color);
+    text-decoration: none;
+    font-size: .82rem;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+    border-radius: 0 4px 4px 0;
+  }
+  .hiw-toc-link:hover {
+    color: #0d6efd;
+    border-left-color: #0d6efd;
+    background: rgba(13,110,253,.06);
+  }
+
+  .hiw-verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 20px;
+  }
+  .hiw-verdict--ok    { background: rgba(25,135,84,.12);  color: #198754; }
+  .hiw-verdict--warn  { background: rgba(255,193,7,.15);  color: #997404; }
+  .hiw-verdict--error { background: rgba(220,53,69,.12);  color: #dc3545; }
+
+  .hiw-callout {
+    border-left: 3px solid;
+    border-radius: 0 8px 8px 0;
+    padding: .75rem 1rem;
+    font-size: .84rem;
+    margin-bottom: 0;
+  }
+  .hiw-callout--info    { border-color: #0d6efd; background: rgba(13,110,253,.07); }
+  .hiw-callout--warning { border-color: #ffc107; background: rgba(255,193,7,.07); }
+  .hiw-callout--success { border-color: #198754; background: rgba(25,135,84,.07); }
+  .hiw-callout--danger  { border-color: #dc3545; background: rgba(220,53,69,.07); }
+
+  .hiw-msg-table td { font-size: .85rem; vertical-align: top; }
+  .hiw-msg-pattern {
+    font-family: monospace;
+    font-size: .78rem;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 2px 6px;
+    display: inline-block;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 px-4">
+
+  <!-- ── Banner ──────────────────────────────────────────────────── -->
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-clipboard-check banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('rule.rules_list') }}" class="text-decoration-none text-muted">Rules</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">How validation works</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-clipboard-check"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">How Rule Validation Works</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:660px;font-size:.95rem;">
+      What the messages on a rule's page actually mean — the difference between a rejected
+      rule and a valid rule with room to improve, and a catalog of the most common ones.
+    </p>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- ── Sticky Table of Contents ──────────────────────────────── -->
+    <div class="col-lg-3 d-none d-lg-block">
+      <div class="sticky-top" style="top:1.5rem;">
+        <div class="p-3 rounded-3 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+          <div class="fw-bold mb-3" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--subtle-text-color);">
+            <i class="fa-solid fa-list-ul me-2 text-primary"></i>On this page
+          </div>
+          <nav class="border-start ps-1" style="border-color:var(--border-color)!important;">
+            <a class="hiw-toc-link" href="#what-is-validation">What is validated, and when</a>
+            <a class="hiw-toc-link" href="#errors-vs-warnings">Errors vs. warnings</a>
+            <a class="hiw-toc-link" href="#warning-catalog">Common warning messages</a>
+            <a class="hiw-toc-link" href="#error-catalog">Common error messages</a>
+            <a class="hiw-toc-link" href="#quality-score">How this affects the Quality Score</a>
+            <a class="hiw-toc-link" href="#corpus-wide">Corpus-wide checks (Suricata)</a>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Main content ──────────────────────────────────────────── -->
+    <div class="col-lg-9">
+
+      <!-- ═══ SECTION 1 — What is validated, and when ═══ -->
+      <section id="what-is-validation" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-magnifying-glass" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">What is validated, and when</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Every supported format (YARA, Sigma, Suricata, Zeek, Wazuh, NSE, CRS, Nova, KQL, Splunk,
+          Elastic, ...) implements its own <span class="hiw-code">validate(content)</span> — the same
+          contract, one plug-in per format, documented in
+          <span class="hiw-code">rule_type_abstract.py</span>. It runs at three moments:
+        </p>
+        <div class="p-3 rounded-3 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+          <div class="d-flex flex-column gap-3">
+            <div class="d-flex gap-3 align-items-start">
+              <div class="hiw-step-num">1</div>
+              <div style="font-size:.88rem;">
+                <strong>On submission</strong> — pasting a rule, importing from JSON/ZIP, or a GitHub
+                import/sync. A rule that fails validation here is never created — it's filed as a
+                <a href="{{ url_for('rule.bad_rules_summary') }}">bad rule</a> instead, with the exact
+                errors attached, so it can be reviewed and fixed.
+              </div>
+            </div>
+            <div class="d-flex gap-3 align-items-start">
+              <div class="hiw-step-num">2</div>
+              <div style="font-size:.88rem;">
+                <strong>On every visit to a rule's detail page</strong> — its <em>current</em> content is
+                re-validated live (cheap, stateless, nothing is stored). This is what powers the alert
+                boxes at the top of the page — always reflecting the content as it is right now, not
+                whatever it looked like when it was first created.
+              </div>
+            </div>
+            <div class="d-flex gap-3 align-items-start">
+              <div class="hiw-step-num">3</div>
+              <div style="font-size:.88rem;">
+                <strong>When computing the Quality Score</strong> — a related but separate check,
+                <span class="hiw-code">documentation_signals(content)</span>, which each format also
+                implements. See <a href="#quality-score">below</a>.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══ SECTION 2 — Errors vs warnings ═══ -->
+      <section id="errors-vs-warnings" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-scale-balanced" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Errors vs. warnings</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          <span class="hiw-code">validate()</span> returns two separate lists, and a rule's page shows
+          them as two visually distinct boxes — mixing them together used to make a routine
+          documentation suggestion look like the same kind of problem as genuinely broken content,
+          which this page (and that distinction) exists to fix.
+        </p>
+
+        <div class="row g-3 mt-1">
+          <div class="col-md-6">
+            <div class="p-3 rounded-3 border shadow-sm h-100" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+              <span class="hiw-verdict hiw-verdict--error mb-2"><i class="fa-solid fa-xmark"></i> errors</span>
+              <p class="mb-1 mt-2" style="font-size:.88rem;">
+                Required identity or logic fields are missing, malformed, or hold a value outside a
+                short, fixed set (a status enum, a UUID shape, a risk-score range, ...). A rule with
+                any error <strong>is not created</strong> at submission time — it becomes a bad rule
+                instead. Seeing this on an already-existing rule's page means the format's validator
+                was tightened after that rule was imported (e.g. a GitHub sync brought in older or
+                looser content) — worth reviewing and fixing.
+              </p>
+              <span class="badge bg-danger-subtle text-danger">Shown as: "Rejected pattern present"</span>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 rounded-3 border shadow-sm h-100" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+              <span class="hiw-verdict hiw-verdict--warn mb-2"><i class="fa-solid fa-triangle-exclamation"></i> warnings</span>
+              <p class="mb-1 mt-2" style="font-size:.88rem;">
+                Everything the format considers good practice but not mandatory — an optional field,
+                a recommended structure, an ID that doesn't quite look right. A rule with only
+                warnings <strong>is accepted exactly as submitted</strong> — nothing is blocked or
+                rejected. It mainly affects the rule's Quality Score and how easy it is for someone
+                else to review/reuse.
+              </p>
+              <span class="badge bg-warning-subtle text-warning-emphasis">Shown as: "Format &amp; documentation suggestions"</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══ SECTION 3 — Common warning messages ═══ -->
+      <section id="warning-catalog" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-circle-info" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Common warning messages</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Every format has its own wording, but almost all of its warnings fall into one of these
+          families:
+        </p>
+
+        <div class="table-responsive">
+          <table class="table hiw-msg-table">
+            <tbody>
+              <tr>
+                <td style="width:34%;"><span class="hiw-msg-pattern">Missing recommended field: X</span></td>
+                <td>
+                  An optional-but-conventional field for this format — <code>author</code>,
+                  <code>references</code>, <code>how_to_implement</code>,
+                  <code>known_false_positives</code>, <code>rule.false_positives</code>,
+                  <code>rule.note</code>, <code>rule.setup</code>, <code>analytic_story</code>, and
+                  similar — is empty or absent. These fields don't change what the rule does; they
+                  document <em>why</em> it exists, how to deploy it, and what to expect from it, which
+                  is exactly what the next person reviewing or reusing the rule needs. This directly
+                  feeds the documentation portion of the <a href="#quality-score">Quality Score</a>.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="hiw-msg-pattern">'&lt;id&gt;' doesn't look like an ATT&amp;CK technique/tactic ID</span></td>
+                <td>
+                  A MITRE ATT&amp;CK identifier was found but doesn't match the expected shape
+                  (<code>T1059</code>, <code>T1059.001</code> for a technique, <code>TA0002</code> for a
+                  tactic). It's kept as-is — nothing is silently corrected — but it likely won't be
+                  recognized by the ATT&amp;CK matrix/auto-tagging. Worth double-checking the ID against
+                  <a href="https://attack.mitre.org" target="_blank" rel="noopener">attack.mitre.org</a>.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="hiw-msg-pattern">Missing or empty rule.threat / mitre_attack_id / analytic_story</span></td>
+                <td>
+                  No ATT&amp;CK mapping or campaign grouping was found at all. Some formats (Splunk,
+                  Elastic) group individual detections into a broader "story"/campaign for easier
+                  discovery — this flags a rule that stands alone with no such grouping. Not required,
+                  but it's how someone browsing by technique or by campaign would ever find this rule.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="hiw-msg-pattern">Structural hints</span> (e.g. Splunk's <code>type 'TTP' normally requires a 'finding' block</code>, Sigma's query-pipe check, NSE's <code>luac not found</code>/<code>Missing action() function</code>)</td>
+                <td>
+                  Format-specific best practices — a detection <code>type</code> that usually pairs
+                  with a particular metadata block, a query shape that looks incomplete, a script
+                  missing the entry point its engine expects. Each of these is documented in that
+                  format's own adapter (<code>app/features/rule/rule_format/available_format/</code>)
+                  and reflects a convention from that format's own upstream project, not a
+                  Rulezet-invented rule.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-lightbulb me-2 text-primary"></i>
+          None of these block anything. A rule with ten warnings and zero errors is just as usable,
+          searchable, and testable as one with none — it simply scores lower on documentation
+          completeness.
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══ SECTION 4 — Common error messages ═══ -->
+      <section id="error-catalog" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-ban" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Common error messages</h4>
+        </div>
+        <div class="table-responsive">
+          <table class="table hiw-msg-table">
+            <tbody>
+              <tr>
+                <td style="width:34%;"><span class="hiw-msg-pattern">Missing or empty required field: X</span></td>
+                <td>
+                  A field every rule of this format must have to even be meaningfully identified or
+                  executed — a title/name, the actual detection logic (<code>search</code>,
+                  <code>query</code>, a YARA <code>rule</code> block, ...), a description. Without it,
+                  the rule can't be reliably titled, searched, deduplicated, or run.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="hiw-msg-pattern">'&lt;value&gt;' is not one of: [...]</span></td>
+                <td>
+                  A field is restricted to a short, fixed set of values by that format's own
+                  specification — a status, a severity, a query-language identifier, a rule category
+                  — and the value found isn't one of them. These enums are only hard-enforced when
+                  they're small and stable; large or evolving catalogs (ATT&amp;CK technique IDs, story
+                  names, tags) are never hard-enforced this way, since that would reject legitimate
+                  rules that simply use a value outside this project's own knowledge of the format.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="hiw-msg-pattern">rule_id/id must be a valid UUID, got: ...</span></td>
+                <td>
+                  The format expects a UUID as its own external identifier and what's there doesn't
+                  match that shape (wrong length, invalid characters, ...). This is used for
+                  cross-referencing the rule to its upstream source and for duplicate detection — a
+                  malformed one usually means a typo in the original file itself.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="hiw-msg-pattern">TOML/YAML/XML parse error: ...</span></td>
+                <td>
+                  The content isn't even syntactically valid in the format's own file format — a
+                  structural typo (unclosed quote/bracket, bad indentation, ...) that prevents parsing
+                  the rest of the rule at all.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══ SECTION 5 — Quality Score ═══ -->
+      <section id="quality-score" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-medal" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">How this affects the Quality Score</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Separately from <span class="hiw-code">validate()</span>, each format also implements
+          <span class="hiw-code">documentation_signals(content)</span> — a small checklist of whether
+          the rule documents its references, false positives, implementation notes, and ATT&amp;CK
+          mapping. A missing signal there is exactly the kind of thing a
+          <span class="hiw-msg-pattern">Missing recommended field</span> warning above is telling you
+          about — fixing the warning is generally how a rule's documentation-completeness score goes
+          up.
+        </p>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══ SECTION 6 — Corpus-wide checks (Suricata) ═══ -->
+      <section id="corpus-wide" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-diagram-project" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Corpus-wide checks (Suricata datasets &amp; flowbits)</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          One check is genuinely about interference <em>between</em> rules rather than a single
+          rule's own content: Suricata rules can reference a shared <code>dataset</code>
+          filename or a <code>flowbit</code>/<code>xbit</code>/<code>hostbit</code> name that other,
+          independently authored rules also read or write. Two rules silently disagreeing about the
+          same resource name can crash the detection engine at load time or corrupt each other's
+          state. This is checked once, at submission time only (not re-run on every page view like
+          the per-rule warnings above), and surfaces as its own rejection/warning right when a
+          conflicting Suricata rule is submitted.
+        </p>
+        <div class="hiw-callout hiw-callout--warning">
+          <i class="fa-solid fa-circle-exclamation me-2 text-warning"></i>
+          This is the one case that's actually about interference between rules — everything else on
+          this page is about a single rule's own content.
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

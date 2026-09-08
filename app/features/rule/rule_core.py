@@ -3979,15 +3979,23 @@ def get_rule_risk_flags(rule: Any) -> dict:
     here automatically — no changes needed here when a new format adds
     its own checks.
 
-    Returns {'flagged': bool, 'rejected': bool, 'reasons': list[str]}.
+    Returns {'flagged', 'rejected', 'reasons' (errors+warnings, kept for any
+    existing caller that doesn't distinguish them), 'errors', 'warnings'}.
+    errors/warnings are split out so the UI can title/style them
+    differently — lumping them under one "Cross-rule interference risk"
+    banner mislabels a routine format warning (e.g. "Missing recommended
+    field: rule.false_positives") as the same kind of problem as an actual
+    rejected/dangerous content pattern.
     """
     result = verify_rule_syntaxe(rule, rule.to_string)
     if result is None:
-        return {'flagged': False, 'rejected': False, 'reasons': []}
+        return {'flagged': False, 'rejected': False, 'reasons': [], 'errors': [], 'warnings': []}
     return {
         'flagged':  bool(result.warnings) or not result.ok,
         'rejected': not result.ok,
         'reasons':  list(result.errors) + list(result.warnings),
+        'errors':   list(result.errors),
+        'warnings': list(result.warnings),
     }
 
     

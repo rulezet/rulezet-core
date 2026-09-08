@@ -2680,6 +2680,14 @@ def get_license() -> jsonify:
 
 
 
+@rule_blueprint.route("/how_validation_works")
+def how_validation_works() -> render_template:
+    """Public explainer for the errors/warnings shown on a rule's detail
+    page — what validate() actually checks, and why a rule can be valid
+    (accepted) while still showing format/documentation suggestions."""
+    return render_template("rule/rule_validation_how_it_works.html")
+
+
 #################
 #   Bad rule    #
 #################
