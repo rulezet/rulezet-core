@@ -996,6 +996,7 @@ export default {
           :fetch-url="quarantineFetchUrl"
           :show-validation-risk="true"
           :show-validation-filters="true"
+          :default-pending-only="true"
           :validation-risk-levels="validationRiskLevels"
           :validation-binary-options="allBinaryOptions"
           :current-user-id="currentUserId"

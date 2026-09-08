@@ -161,6 +161,12 @@ export default {
         // just this page's rules — the parent has the full run result
         // client-side already, this component only ever sees one page of it.
         validationBinaryOptions: { type: Array,          default: () => [] },
+        // Opens on "Hide already-tagged" instead of everything mixed
+        // together — reviewing a run is about what still needs a decision,
+        // not what's already settled. Only an initial default: a URL that
+        // already carries pending_only/resolved_only (a reload, a shared
+        // link, the "Quarantined" KPI tile's resetFilters()) always wins.
+        defaultPendingOnly: { type: Boolean,             default: false },
         // Pins the listing to rules that carry at least one CVE — used by the
         // dashboard's "Last CVEs" widget. Not exposed as a user-facing filter.
         hasCveOnly:         { type: Boolean,             default: false },
@@ -1592,7 +1598,9 @@ export default {
         // with resolvedOnly (the parent page's "Reviewed" KPI tile drives
         // that one, e.g. ValidationRunner's report) — turning one on clears
         // the other rather than sending a contradictory pair of params.
-        const pendingOnly  = ref(_p('pending_only')  === 'true')
+        const pendingOnly  = ref(
+            _url.has('pending_only') ? _p('pending_only') === 'true' : !!props.defaultPendingOnly
+        )
         const resolvedOnly = ref(_p('resolved_only') === 'true')
         function setPendingOnly(v)  { pendingOnly.value  = v; if (v) resolvedOnly.value = false; onFilterChange() }
         function setResolvedOnly(v) { resolvedOnly.value = v; if (v) pendingOnly.value  = false; onFilterChange() }
