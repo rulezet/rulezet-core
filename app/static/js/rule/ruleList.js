@@ -176,7 +176,14 @@ export default {
     // from outside (e.g. clicking a "12 YARA rules" stat elsewhere on the
     // page) via a template ref — same idea as 'fetchData' already being
     // exposed for an external refresh trigger.
-    expose: ['fetchData', 'ruleType', 'onFilterChange', 'expandAll', 'collapseAll'],
+    expose: [
+        'fetchData', 'ruleType', 'onFilterChange', 'expandAll', 'collapseAll',
+        // Let a parent page drive the validation risk/binary/pending filters
+        // from outside (e.g. clickable KPI tiles in ValidationRunner's run
+        // report) the same way ruleType already works for the format filter.
+        'riskFilter', 'selectedBinaries', 'pendingOnly', 'resolvedOnly',
+        'setPendingOnly', 'setResolvedOnly', 'resetFilters',
+    ],
 
     template: `
     <div class="rl-wrapper">
@@ -478,7 +485,7 @@ export default {
                             <i class="fa-solid fa-eye-slash text-danger"></i> Display
                         </span>
                         <label class="rl-fp-switch" title="Hide rules that already have a verdict">
-                            <input type="checkbox" v-model="pendingOnly" @change="onFilterChange" />
+                            <input type="checkbox" :checked="pendingOnly" @change="setPendingOnly($event.target.checked)" />
                             <span>Hide already-tagged</span>
                         </label>
                     </div>
@@ -1581,8 +1588,14 @@ export default {
         const selectedBinaries = ref(_arr('binary', ''))
         // Hide already-reviewed rows entirely instead of just dimming them —
         // once most of a run is done, a screen full of greyed-out checkmarks
-        // makes the handful still pending harder to spot.
-        const pendingOnly = ref(_p('pending_only') === 'true')
+        // makes the handful still pending harder to spot. Mutually exclusive
+        // with resolvedOnly (the parent page's "Reviewed" KPI tile drives
+        // that one, e.g. ValidationRunner's report) — turning one on clears
+        // the other rather than sending a contradictory pair of params.
+        const pendingOnly  = ref(_p('pending_only')  === 'true')
+        const resolvedOnly = ref(_p('resolved_only') === 'true')
+        function setPendingOnly(v)  { pendingOnly.value  = v; if (v) resolvedOnly.value = false; onFilterChange() }
+        function setResolvedOnly(v) { resolvedOnly.value = v; if (v) pendingOnly.value  = false; onFilterChange() }
         // Picking a binary is all about seeing which rule fired on it —
         // auto-expand every result instead of making the reviewer click
         // into each card/row to find it.
@@ -1713,7 +1726,8 @@ export default {
             (!isFilterHidden('quality') && (qualityMin.value !== null || qualityMax.value !== null) ? 1 : 0) +
             (props.showValidationFilters && riskFilter.value ? 1 : 0) +
             (props.showValidationFilters ? selectedBinaries.value.length : 0) +
-            (props.showValidationFilters && pendingOnly.value ? 1 : 0)
+            (props.showValidationFilters && pendingOnly.value ? 1 : 0) +
+            (props.showValidationFilters && resolvedOnly.value ? 1 : 0)
         )
 
         // ── URL sync ──────────────────────────────────────────────────────
@@ -1753,6 +1767,7 @@ export default {
                 _upd('risk_level',    riskFilter.value !== 'mismatch' ? riskFilter.value || null : null)
                 _upd('binary',        selectedBinaries.value.join(',') || null)
                 _upd('pending_only',  pendingOnly.value ? 'true' : null)
+                _upd('resolved_only', resolvedOnly.value ? 'true' : null)
             }
 
             const qs = p.toString()
@@ -1794,6 +1809,7 @@ export default {
                     else if (riskFilter.value) params.set('risk_level', riskFilter.value)
                     for (const b of selectedBinaries.value) params.append('binary', b)
                     if (pendingOnly.value) params.set('pending_only', 'true')
+                    if (resolvedOnly.value) params.set('resolved_only', 'true')
                 }
 
                 const sep = props.fetchUrl.includes('?') ? '&' : '?'
@@ -1852,7 +1868,7 @@ export default {
             if (!isFilterHidden('attacks'))         selectedAttacks.value = []
             if (!isFilterHidden('person'))          personFilter.value    = { mode: 'author', values: [] }
             if (!isFilterHidden('quality')) { qualityMin.value = null; qualityMax.value = null }
-            if (props.showValidationFilters) { riskFilter.value = ''; selectedBinaries.value = []; pendingOnly.value = false }
+            if (props.showValidationFilters) { riskFilter.value = ''; selectedBinaries.value = []; pendingOnly.value = false; resolvedOnly.value = false }
             onFilterChange()
         }
 
@@ -2357,7 +2373,7 @@ export default {
             numericUserId, numericCurrentUserId, tableColspan, footerInfo,
             // Methods
             isOwner, isFilterHidden, rlRiskTextColor, rlRiskTitle, binaryBadgeStyle, isResolved,
-            riskFilter, selectedBinaries, toggleBinary, pendingOnly,
+            riskFilter, selectedBinaries, toggleBinary, pendingOnly, resolvedOnly, setPendingOnly, setResolvedOnly,
             fetchData, onFilterChange, resetFilters,
             onSearchInput, clearSearch,
             setSort, sortIcon, onCardSortChange,

@@ -639,9 +639,13 @@ def validation_rules_data_table():
     pending_total = sum(1 for d in items if not d['validation_risk']['resolved'])
 
     # "Hide already-tagged" — an explicit opt-out for reviewers who don't
-    # want a screen full of checkmarks once most of a run is done.
+    # want a screen full of checkmarks once most of a run is done. Mutually
+    # exclusive with resolved_only (the report's "Reviewed" KPI tile) —
+    # if a caller sends both, pending wins.
     if request.args.get('pending_only', 'false').lower() == 'true':
         items = [d for d in items if not d['validation_risk']['resolved']]
+    elif request.args.get('resolved_only', 'false').lower() == 'true':
+        items = [d for d in items if d['validation_risk']['resolved']]
 
     # Already-reviewed rules sink to the end (stable within each group —
     # the requested sort still applies inside "pending" and inside

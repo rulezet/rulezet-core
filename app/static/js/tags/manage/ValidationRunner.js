@@ -29,6 +29,7 @@
 import AnsiTerminal from '/static/js/components/ansi-terminal.js';
 import ChartViewer  from '/static/js/components/chart-viewer.js';
 import RuleList     from '/static/js/rule/ruleList.js';
+import UserChip     from '/static/js/components/UserChip.js';
 import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js';
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
 import TagInput     from '/static/js/tags/tagInput.js';
@@ -76,6 +77,7 @@ export default {
         'vulnerability-displays-list': VulnerabilityDisplaysList,
         'tag-input':                   TagInput,
         'chart-viewer':                ChartViewer,
+        'user-chip':                   UserChip,
     },
     props: {
         csrfToken:                  { type: String,             required: true },
@@ -595,6 +597,24 @@ export default {
             }],
         }));
 
+        // Who ran it, when — already sitting in the history list (loadHistory
+        // already fetches author/created_at for every past run), so this is
+        // free, no dedicated fetch.
+        const currentRunMeta = computed(() => history.value.find(h => h.uuid === jobUuid.value) || null);
+
+        // Clicking a KPI tile drives RuleList's own filters from outside,
+        // the same way ruleType already does for the format filter — see
+        // ruleList.js's expose list.
+        function filterByKpi(kind) {
+            const rl = quarantineListRef.value;
+            if (!rl) return;
+            rl.resetFilters();
+            if (kind === 'pending') rl.setPendingOnly(true);
+            else if (kind === 'reviewed') rl.setResolvedOnly(true);
+            else if (kind === 'mismatch') { rl.riskFilter = 'mismatch'; rl.onFilterChange(); }
+            // 'total' just clears back to everything, via resetFilters() above.
+        }
+
         // ── "Apply a different tag…" — a small modal (see .bt-modal-* in
         //    validation.html) instead of a panel sitting at the bottom of the
         //    page. Tag search reuses TagInput (server-side search + debounce,
@@ -749,6 +769,7 @@ export default {
             riskBulkActions, onRiskBulkAction, resolvingBulkIds,
             acceptableRuleIds, acceptAllProposed,
             reviewedCount, dismissedCount, pendingCount, mismatchCount, riskBreakdownChartData,
+            currentRunMeta, filterByKpi,
             pendingCustomTagIds, selectedTags, showAllSelectedTags,
             isQuickTagSelected, toggleQuickTag, removeSelectedTag, closeCustomTagModal,
             RISK_ORDER, riskMeta, contrastColor,
@@ -882,29 +903,39 @@ export default {
       </div>
     </div>
     <div class="vr-card__body">
-      <!-- Run report — a few KPI tiles + a risk-level breakdown chart, same
-           idea as the GitHub update summary card (update_loading.html). -->
+      <!-- Run report — a few clickable KPI tiles + a risk-level breakdown
+           chart, same idea as the GitHub update summary card
+           (update_loading.html): click a tile, RuleList below filters to it. -->
       <div class="rounded-3 border p-3 mb-3">
+        <div v-if="currentRunMeta" class="d-flex align-items-center flex-wrap gap-2 mb-3 pb-3 border-bottom">
+          <i class="fa-solid fa-play text-muted" style="font-size:.8rem;"></i>
+          <span class="text-muted small">Run [[ currentRunMeta.created_at || '' ]]</span>
+          <template v-if="currentRunMeta.author">
+            <span class="text-muted small">by</span>
+            <user-chip :user-id="currentRunMeta.author.id" :username="currentRunMeta.author.username"
+                       :avatar="currentRunMeta.author.avatar" size="xs"></user-chip>
+          </template>
+        </div>
         <div class="row g-3 align-items-center">
           <div class="col-12 col-lg-7">
-            <div class="d-flex flex-wrap gap-4">
-              <div class="text-center">
+            <div class="d-flex flex-wrap gap-2">
+              <button type="button" class="btn btn-sm border-0 text-center px-3 py-2 rounded-3 vr-report-kpi" @click="filterByKpi('total')">
                 <div class="fw-bold" style="font-size:1.4rem;color:var(--text-color);">[[ quarantined.length ]]</div>
                 <div class="text-muted small">Quarantined</div>
-              </div>
-              <div class="text-center">
+              </button>
+              <button type="button" class="btn btn-sm border-0 text-center px-3 py-2 rounded-3 vr-report-kpi" @click="filterByKpi('reviewed')">
                 <div class="fw-bold" style="font-size:1.4rem;color:#198754;">[[ reviewedCount ]]</div>
                 <div class="text-muted small">Reviewed</div>
-              </div>
-              <div class="text-center">
+              </button>
+              <button type="button" class="btn btn-sm border-0 text-center px-3 py-2 rounded-3 vr-report-kpi" @click="filterByKpi('pending')">
                 <div class="fw-bold" style="font-size:1.4rem;color:#ffc107;">[[ pendingCount ]]</div>
                 <div class="text-muted small">Pending</div>
-              </div>
-              <div class="text-center">
+              </button>
+              <button type="button" class="btn btn-sm border-0 text-center px-3 py-2 rounded-3 vr-report-kpi" @click="filterByKpi('mismatch')">
                 <div class="fw-bold" style="font-size:1.4rem;color:#dc3545;">[[ mismatchCount ]]</div>
                 <div class="text-muted small">Disagreements</div>
-              </div>
-              <div class="text-center" v-if="dismissedCount > 0">
+              </button>
+              <div class="text-center px-3 py-2" v-if="dismissedCount > 0">
                 <div class="fw-bold text-secondary" style="font-size:1.4rem;">[[ dismissedCount ]]</div>
                 <div class="text-muted small">Dismissed</div>
               </div>
