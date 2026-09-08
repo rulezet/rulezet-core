@@ -21,10 +21,12 @@ def _test_query_for_viewer(viewer):
 
 
 def assert_test_readable(test, viewer):
-    """Abort 403 if viewer cannot read this test."""
+    """Abort 403 if viewer cannot read this test. viewer=None (an
+    unauthenticated API caller — see _get_actor() in private_ns.py) is
+    treated the same as an anonymous user, not as "skip the check"."""
     from flask import abort
     if not test.is_public:
-        if viewer.is_anonymous() or (viewer.id != test.user_id and not viewer.is_admin()):
+        if viewer is None or viewer.is_anonymous() or (viewer.id != test.user_id and not viewer.is_admin()):
             abort(403)
 
 
@@ -39,7 +41,7 @@ def assert_test_writable(test, viewer):
 
 def get_test_by_uuid(uuid: str, viewer=None) -> RuleTest | None:
     test = RuleTest.query.filter_by(uuid=uuid).first()
-    if test and viewer:
+    if test:
         assert_test_readable(test, viewer)
     return test
 

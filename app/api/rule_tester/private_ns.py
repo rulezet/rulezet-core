@@ -230,6 +230,8 @@ class TestDetail(Resource):
 
     def delete(self, test_uuid):
         actor = _get_actor()
+        if not actor:
+            return {'message': 'Authentication required'}, 401
         test  = TesterModel.get_test_by_uuid(test_uuid, viewer=actor)
         if not test:
             return {'message': 'Test not found'}, 404
@@ -344,6 +346,8 @@ def _enrich_results(results):
 class TestVisibility(Resource):
     def put(self, test_uuid):
         actor = _get_actor()
+        if not actor:
+            return {'message': 'Authentication required'}, 401
         test  = TesterModel.get_test_by_uuid(test_uuid, viewer=actor)
         if not test:
             return {'message': 'Test not found'}, 404
@@ -361,6 +365,8 @@ class TestVisibility(Resource):
 class TestNotes(Resource):
     def put(self, test_uuid):
         actor = _get_actor()
+        if not actor:
+            return {'message': 'Authentication required'}, 401
         test  = TesterModel.get_test_by_uuid(test_uuid, viewer=actor)
         if not test:
             return {'message': 'Test not found'}, 404
