@@ -1783,7 +1783,15 @@ export default {
         }
 
         // ── Fetch ─────────────────────────────────────────────────────────
+        // Guards against two fetchData() calls overlapping (no in-flight
+        // check here previously) — a caller that mutates more than one
+        // filter ref in a row, each independently calling onFilterChange(),
+        // fired requests back to back and whichever response landed last
+        // silently won, occasionally leaving the list empty even though
+        // the "correct" response was actually already in and then overwritten.
+        let fetchSeq = 0
         async function fetchData() {
+            const mySeq = ++fetchSeq
             loading.value = true
             try {
                 const params = new URLSearchParams()
@@ -1822,8 +1830,10 @@ export default {
 
                 const sep = props.fetchUrl.includes('?') ? '&' : '?'
                 const res = await fetch(`${props.fetchUrl}${sep}${params}`)
+                if (mySeq !== fetchSeq) return // a newer fetchData() already superseded this one
                 if (!res.ok) return
                 const data = await res.json()
+                if (mySeq !== fetchSeq) return
                 items.value      = data.items ?? []
                 total.value      = data.total ?? 0
                 // Only the validation quarantine endpoint sends this — every
@@ -1843,7 +1853,7 @@ export default {
                     })
                 }
             } finally {
-                loading.value = false
+                if (mySeq === fetchSeq) loading.value = false
             }
         }
 

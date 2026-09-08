@@ -608,11 +608,20 @@ export default {
         function filterByKpi(kind) {
             const rl = quarantineListRef.value;
             if (!rl) return;
-            rl.resetFilters();
-            if (kind === 'pending') rl.setPendingOnly(true);
-            else if (kind === 'reviewed') rl.setResolvedOnly(true);
-            else if (kind === 'mismatch') { rl.riskFilter = 'mismatch'; rl.onFilterChange(); }
-            // 'total' just clears back to everything, via resetFilters() above.
+            // Exactly one fetchData() call per click — resetFilters() followed
+            // by immediately setting another filter fired two overlapping
+            // requests (fetchData() has no in-flight guard), and whichever
+            // response landed last silently won, sometimes leaving the list
+            // showing nothing at all despite the KPI count being correct.
+            if (kind === 'total')         { rl.resetFilters(); return; }
+            if (kind === 'pending')       { rl.setPendingOnly(true); return; }
+            if (kind === 'reviewed')      { rl.setResolvedOnly(true); return; }
+            if (kind === 'mismatch') {
+                rl.pendingOnly = false;
+                rl.resolvedOnly = false;
+                rl.riskFilter = 'mismatch';
+                rl.onFilterChange();
+            }
         }
 
         // ── "Apply a different tag…" — a small modal (see .bt-modal-* in
