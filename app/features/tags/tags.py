@@ -1,6 +1,7 @@
 from flask import Blueprint, flash, jsonify, render_template, request
 from flask_login import current_user, login_required
 import app.features.tags.tags_core as tags_core
+import app.features.rule.rule_core as RuleModel
 from app.core.utils.activity_log import log_activity
 
 
@@ -473,3 +474,127 @@ def launch_validation():
     log_activity("admin.launch_validation", "Launched a rule validation run",
                  target_type="job", target_id=job.id, target_uuid=job.uuid)
     return jsonify({"success": True, "job": job.to_json(), "message": "Validation run queued!", "toast_class": "success-subtle"}), 200
+
+
+_RISK_LEVELS = ("high", "medium", "low", "cannot-be-judged")
+
+
+def _risk_tag_colors():
+    """{level: {id, color}} for the 4 MISP 'false-positive' taxonomy 'risk'
+    tags — resolved once per request rather than per rule."""
+    from app.core.db_class.db import Tag
+    rows = Tag.query.filter(Tag.name.in_([f'false-positive:risk="{lvl}"' for lvl in _RISK_LEVELS])).all()
+    by_name = {t.name: t for t in rows}
+    return {
+        lvl: {"id": by_name[f'false-positive:risk="{lvl}"'].id, "color": by_name[f'false-positive:risk="{lvl}"'].color}
+        for lvl in _RISK_LEVELS if f'false-positive:risk="{lvl}"' in by_name
+    }
+
+
+def _risk_level_from_tag(tag_string):
+    """'false-positive:risk=high' -> 'high'. None if not that vocabulary."""
+    if not tag_string or not tag_string.startswith("false-positive:risk="):
+        return None
+    return tag_string.split("=", 1)[1]
+
+
+@tags_blueprint.route('/admin/validation/rules_data_table', methods=['GET'])
+@login_required
+def validation_rules_data_table():
+    """RuleList-compatible data source for one validation run's quarantined
+    rules — same shape as /rule/data_table, restricted to the ids that run
+    quarantined, with each item's false-positive risk assessment embedded
+    under `validation_risk` (opt-in RuleList extension, see ruleList.js's
+    showValidationRisk prop)."""
+    err = _admin_only()
+    if err: return err
+
+    from app.features.jobs.jobs_core import get_job_by_uuid
+    job = get_job_by_uuid(request.args.get('job_uuid', ''))
+    if not job or job.job_type != 'rule_validation_run':
+        return jsonify({"items": [], "total": 0, "total_pages": 1}), 200
+
+    entries = ((job.payload or {}).get('result') or {}).get('quarantined') or []
+    by_rule_id = {e['rule_id']: e for e in entries if e.get('rule_id')}
+
+    # Dedicated risk filter — a fixed vocabulary of 4 levels (plus
+    # "mismatch", the case the tool's own author flags as most worth
+    # attention) that no real Rule column backs, so it's applied here by
+    # narrowing the id set before it ever reaches get_rules_data_table().
+    risk_level = (request.args.get('risk_level') or '').strip().lower()
+    mismatch_only = request.args.get('mismatch_only', 'false').lower() == 'true'
+    # Multi-select, like a tag picker — matches if a rule fired on ANY of
+    # the chosen binaries (OR), same semantics as picking several tags.
+    binaries = [b.strip().lower() for b in request.args.getlist('binary') if b.strip()]
+    if risk_level or mismatch_only or binaries:
+        by_rule_id = {
+            rid: e for rid, e in by_rule_id.items()
+            if (not risk_level or _risk_level_from_tag(e.get('proposed_tag')) == risk_level)
+            and (not mismatch_only or (e.get('upstream_tag') and e.get('upstream_tag') != e.get('proposed_tag')))
+            and (not binaries or any(
+                any(b in (m.get('file') or '').lower() for b in binaries)
+                for m in (e.get('matched_files') or [])
+            ))
+        }
+
+    if not by_rule_id:
+        return jsonify({"items": [], "total": 0, "total_pages": 1}), 200
+
+    pagination = RuleModel.get_rules_data_table(
+        page=request.args.get('page', 1, type=int),
+        per_page=request.args.get('per_page', 12, type=int),
+        search=request.args.get('search', None, type=str),
+        sort=request.args.get('sort', None, type=str),
+        direction=request.args.get('dir', 'asc', type=str),
+        ids=list(by_rule_id.keys()),
+    )
+
+    colors = _risk_tag_colors()
+    items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)
+    for d in items:
+        e = by_rule_id.get(d['id'], {})
+        proposed = _risk_level_from_tag(e.get('proposed_tag'))
+        upstream = _risk_level_from_tag(e.get('upstream_tag'))
+        d['validation_risk'] = {
+            "hits":            e.get('hits', 0),
+            "proposed_level":  proposed,
+            "proposed_tag_id": colors.get(proposed, {}).get('id'),
+            "proposed_color":  colors.get(proposed, {}).get('color'),
+            "upstream_level":  upstream,
+            "upstream_color":  colors.get(upstream, {}).get('color'),
+            "mismatch":        bool(upstream) and upstream != proposed,
+            "matched_files":   e.get('matched_files') or [],
+        }
+
+    return jsonify({
+        "items":       items,
+        "total":       pagination.total,
+        "total_pages": pagination.pages,
+    }), 200
+
+
+@tags_blueprint.route('/admin/validation/baseline_files', methods=['GET'])
+@login_required
+def validation_baseline_files():
+    """The known-clean binaries a validation run is actually measured
+    against — collect_baseline() is deterministic given the same settings,
+    so this reproduces the exact kept/excluded split a real run used
+    without needing to have recorded it anywhere. Skips hashing (digests={})
+    since this is for display, not for reproducing scans elsewhere."""
+    err = _admin_only()
+    if err: return err
+
+    from rulezet_validation import config as rv_config, gate as rv_gate
+    from app.features.jobs.job_handlers import RULE_VALIDATION_MIRROR_DIR
+
+    settings = rv_config.load()
+    settings['mirror_dir'] = str(RULE_VALIDATION_MIRROR_DIR)
+
+    kept, excluded = rv_gate.collect_baseline(settings)
+    manifest = rv_gate.baseline_manifest(kept, digests={})
+    return jsonify({
+        "count":          len(manifest),
+        "files":          manifest,
+        "dirs":           settings.get('baseline_dirs') or [],
+        "excluded_files": sorted(f.name for f in excluded),
+    }), 200

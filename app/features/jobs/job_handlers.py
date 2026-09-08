@@ -4216,11 +4216,28 @@ def handle_rule_validation_run(job, app):
             e    = entries[u]
             rule = rules_by_uuid.get(u)
             quarantined.append({
-                'uuid':       u,
-                'rule_id':    rule.id if rule else None,
-                'title':      rule.title if rule else e.get('rule', u),
-                'hits':       e.get('hits', 0),
-                'first_seen': e.get('first_seen'),
+                'uuid':         u,
+                'rule_id':      rule.id if rule else None,
+                'title':        rule.title if rule else e.get('rule', u),
+                'hits':         e.get('hits', 0),
+                'first_seen':   e.get('first_seen'),
+                # Since rulezet-validation 6eac375: a risk level derived purely
+                # from how many known-clean binaries this rule fired on
+                # ("false-positive:risk=high/medium/low/cannot-be-judged" —
+                # matches the MISP "false-positive" taxonomy's "risk" predicate
+                # already imported here, just without the value's quotes).
+                # upstream_tag is only present when the rule already carried a
+                # risk tag of its own before this run — a disagreement between
+                # what the rule claims and what was actually observed is the
+                # case most worth a reviewer's attention.
+                'proposed_tag': e.get('proposed_tag'),
+                'upstream_tag': e.get('upstream_tag'),
+                # Which known-clean binaries this rule actually fired on —
+                # the concrete evidence behind `hits`, not just its count.
+                'matched_files': [
+                    {'file': m.get('file'), 'path': m.get('path')}
+                    for m in (e.get('matched') or []) if isinstance(m, dict)
+                ],
             })
 
     p = dict(job.payload or {})

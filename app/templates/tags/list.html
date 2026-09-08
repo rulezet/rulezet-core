@@ -1,6 +1,11 @@
 {% extends 'base.html' %}
 {% import 'macros/admin_nav.html' as anav %}
 {% block title %}Tag Management — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-3 px-4" id="main-container">
 

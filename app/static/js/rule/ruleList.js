@@ -51,6 +51,8 @@ import MultiSourceFilter        from '/static/js/rule/multiSourceFilter.js'
 import MultiLicenseFilter       from '/static/js/rule/multiLicenseFilter.js'
 import MultiPersonFilter        from '/static/js/rule/multiPersonFilter.js'
 import MultiTagFilter           from '/static/js/tags/multiTagFIlter.js'
+import MultiRiskFilter          from '/static/js/tags/multiRiskFilter.js'
+import MultiBinaryFilter        from '/static/js/tags/multiBinaryFilter.js'
 import TagsDisplaysList         from '/static/js/tags/tagsDisplaysList.js'
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
 import UserChip                 from '/static/js/components/UserChip.js'
@@ -74,6 +76,8 @@ export default {
         MultiLicenseFilter,
         MultiTagFilter,
         MultiPersonFilter,
+        MultiRiskFilter,
+        MultiBinaryFilter,
         TagsDisplaysList,
         VulnerabilityDisplaysList,
         UserChip,
@@ -136,6 +140,27 @@ export default {
         // Rule UUID to visually highlight + auto-scroll to once loaded (e.g. when
         // arriving from that rule's own Test History via ?rule_uuid=...). Optional.
         highlightUuid:      { type: String,             default: null },
+        // Opt-in, page-local extension: when true, each `rule` item is expected
+        // to carry an embedded `validation_risk` ({ hits, proposed_level,
+        // proposed_color, upstream_level, upstream_color, mismatch }) — used by
+        // the false-positive validation quarantine review page only. No effect
+        // on any other page that doesn't pass this prop.
+        showValidationRisk: { type: Boolean,            default: false },
+        // Turns on the native Risk-level + Binary rows inside this
+        // component's OWN filter panel (right alongside Columns/Filters in
+        // the toolbar) — the quarantine-review page's whole filter UI now
+        // lives here instead of being hand-rolled by the parent page.
+        // Filter state (selected risk level, selected binaries) is owned
+        // internally, exactly like the built-in tags/sources/etc. filters.
+        showValidationFilters: { type: Boolean,          default: false },
+        // [{ level, label, color }] — the MISP false-positive taxonomy,
+        // supplied by the parent (single source of truth for labels/colors)
+        // since this component has no opinion on that taxonomy itself.
+        validationRiskLevels: { type: Array,             default: () => [] },
+        // Every distinct binary name across the WHOLE validation run, not
+        // just this page's rules — the parent has the full run result
+        // client-side already, this component only ever sees one page of it.
+        validationBinaryOptions: { type: Array,          default: () => [] },
         // Pins the listing to rules that carry at least one CVE — used by the
         // dashboard's "Last CVEs" widget. Not exposed as a user-facing filter.
         hasCveOnly:         { type: Boolean,             default: false },
@@ -151,7 +176,7 @@ export default {
     // from outside (e.g. clicking a "12 YARA rules" stat elsewhere on the
     // page) via a template ref — same idea as 'fetchData' already being
     // exposed for an external refresh trigger.
-    expose: ['fetchData', 'ruleType', 'onFilterChange'],
+    expose: ['fetchData', 'ruleType', 'onFilterChange', 'expandAll', 'collapseAll'],
 
     template: `
     <div class="rl-wrapper">
@@ -217,15 +242,6 @@ export default {
                     </ul>
                 </div>
 
-                <!-- Expand / collapse all -->
-                <button class="dt-toolbar-btn"
-                        :class="{ 'dt-toolbar-btn--active': allExpanded }"
-                        :title="allExpanded ? 'Collapse all' : 'Expand all'"
-                        @click="allExpanded ? collapseAll() : expandAll()">
-                    <i :class="allExpanded ? 'fas fa-compress-alt' : 'fas fa-expand-alt'"></i>
-                    <span>{{ allExpanded ? 'Collapse' : 'Expand' }}</span>
-                </button>
-
                 <!-- Filters toggle -->
                 <button v-if="showFilters"
                         class="dt-toolbar-btn"
@@ -235,6 +251,15 @@ export default {
                     <i class="fa-solid fa-filter"></i>
                     <span>Filters</span>
                     <span v-if="activeFilterCount > 0" class="rl-filter-badge ms-1">{{ activeFilterCount }}</span>
+                </button>
+
+                <!-- Expand / collapse all -->
+                <button class="dt-toolbar-btn"
+                        :class="{ 'dt-toolbar-btn--active': allExpanded }"
+                        :title="allExpanded ? 'Collapse all' : 'Expand all'"
+                        @click="allExpanded ? collapseAll() : expandAll()">
+                    <i :class="allExpanded ? 'fas fa-compress-alt' : 'fas fa-expand-alt'"></i>
+                    <span>{{ allExpanded ? 'Collapse' : 'Expand' }}</span>
                 </button>
 
                 <!-- New Rule -->
@@ -325,7 +350,7 @@ export default {
                         <span class="rl-quality-range__label">quality</span>
                     </div>
 
-                    <div v-if="currentUserIsAuthenticated && !numericUserId"
+                    <div v-if="currentUserIsAuthenticated && !numericUserId && !showValidationFilters"
                          class="rl-scope-toggle">
                         <button :class="['rl-scope-btn', !scopeMine ? 'rl-scope-btn--active' : '']"
                                 @click="scopeMine = false; onFilterChange()">
@@ -421,6 +446,31 @@ export default {
                             :filter-context="facetContextParams"
                             @change="onPersonFilterChange">
                         </multi-person-filter>
+                    </div>
+
+                    <!-- Risk level + Binary — dedicated dropdown-pill components,
+                         same look/behavior as the Tags/Vulnerabilities pickers
+                         above rather than a hand-rolled row of buttons. -->
+                    <div class="rl-fp-multi-item" v-if="showValidationFilters">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-triangle-exclamation text-danger"></i> Risk level
+                        </span>
+                        <multi-risk-filter v-model="riskFilter"
+                            :levels="validationRiskLevels"
+                            placeholder="Filter by risk…"
+                            @change="onFilterChange">
+                        </multi-risk-filter>
+                    </div>
+
+                    <div class="rl-fp-multi-item" v-if="showValidationFilters">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-microchip text-danger"></i> Binary
+                        </span>
+                        <multi-binary-filter v-model="selectedBinaries"
+                            :options="validationBinaryOptions"
+                            placeholder="Filter by binary…"
+                            @change="onBinaryFilterChange">
+                        </multi-binary-filter>
                     </div>
                 </div>
 
@@ -525,6 +575,14 @@ export default {
                         <template v-if="rule.test_result.score!=null">{{ Math.round((rule.test_result.score||0)*100) }}%</template>
                         <template v-else>{{ rule.test_result.matched ? 'MATCH' : 'NO MATCH' }}</template>
                     </span>
+                    <span v-if="showValidationRisk && rule.validation_risk && rule.validation_risk.proposed_level"
+                          class="badge rounded-pill shadow-sm pt-1"
+                          :class="rule.validation_risk.mismatch ? 'border border-2 border-danger' : ''"
+                          :style="{ background: rule.validation_risk.proposed_color || '#adb5bd', color: rlRiskTextColor(rule.validation_risk.proposed_color) }"
+                          :title="rlRiskTitle(rule.validation_risk)">
+                        <i v-if="rule.validation_risk.mismatch" class="fa-solid fa-triangle-exclamation me-1"></i>
+                        {{ rule.validation_risk.proposed_level }}
+                    </span>
                     <span v-if="isOwner(rule)" class="badge bg-success shadow-sm pt-1" title="You own this rule">
                         <i class="fa-solid fa-crown me-1"></i>OWNER
                     </span>
@@ -568,13 +626,15 @@ export default {
                             </a>
                         </h5>
                         <div class="d-flex align-items-center gap-2 mt-2">
-                            <user-chip
-                                :user-id="rule.user_id"
-                                :username="rule.editor"
-                                :avatar="rule.editor_avatar"
-                                size="xs">
-                            </user-chip>
-                            <span class="text-muted opacity-50">|</span>
+                            <template v-if="colVisible.editor">
+                                <user-chip
+                                    :user-id="rule.user_id"
+                                    :username="rule.editor"
+                                    :avatar="rule.editor_avatar"
+                                    size="xs">
+                                </user-chip>
+                                <span class="text-muted opacity-50">|</span>
+                            </template>
                             <small class="text-muted">{{ fromNow(rule.last_modif) }}</small>
                         </div>
                     </div>
@@ -592,16 +652,31 @@ export default {
                             {{ matchedStringCount(rule) }} string{{ matchedStringCount(rule) === 1 ? '' : 's' }} matched
                         </span>
                     </div>
+                    <div v-if="showValidationRisk && rule.validation_risk && rule.validation_risk.matched_files && rule.validation_risk.matched_files.length" class="mb-3">
+                        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle-text-color);margin-bottom:.25rem;">
+                            <i class="fa-solid fa-file-shield me-1"></i>Fired on
+                        </div>
+                        <span v-for="m in rule.validation_risk.matched_files.slice(0, 3)" :key="m.path || m.file"
+                              class="badge me-1 mb-1" style="background:rgba(220,53,69,.1);color:#dc3545;font-size:.72rem;font-family:monospace;"
+                              :style="binaryBadgeStyle(m.file)"
+                              :title="m.path" @click.stop="toggleBinary(m.file)">
+                            {{ m.file }}
+                        </span>
+                        <span v-if="rule.validation_risk.matched_files.length > 3" class="badge me-1 mb-1 bg-secondary-subtle text-secondary-emphasis"
+                              style="cursor:pointer;font-size:.72rem;" title="Show all in the expanded view below" @click.stop="toggleExpand(rule)">
+                            +{{ rule.validation_risk.matched_files.length - 3 }} more
+                        </span>
+                    </div>
 
                     <!-- CVEs -->
-                    <div class="mb-2" @click.stop>
+                    <div v-if="colVisible.cves" class="mb-2" @click.stop>
                         <vulnerability-displays-list object-type="rule" :object-id="rule.id" :max-visible="3"
                             :initial-vulnerabilities="rule.cves || []">
                         </vulnerability-displays-list>
                     </div>
 
                     <!-- ATT&CK techniques -->
-                    <div v-if="rule.attacks && rule.attacks.length" class="mb-2" @click.stop>
+                    <div v-if="colVisible.attacks && rule.attacks && rule.attacks.length" class="mb-2" @click.stop>
                         <attack-display-list :initial-attacks="rule.attacks" :max-visible="3"></attack-display-list>
                     </div>
 
@@ -649,7 +724,7 @@ export default {
                     <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto">
 
                         <!-- Votes -->
-                        <div class="btn-group shadow-sm border rounded-pill overflow-hidden">
+                        <div v-if="colVisible.votes" class="btn-group shadow-sm border rounded-pill overflow-hidden">
                             <button @click="handleVote('up', rule)"
                                     class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn"
                                     :class="{ 'rl-vote-disabled': !canVote, 'rl-vote-btn--active-up': rule.user_vote === 'up' }"
@@ -663,6 +738,7 @@ export default {
                                 <i class="fas fa-thumbs-down me-1"></i>{{ rule.vote_down }}
                             </button>
                         </div>
+                        <span v-else></span>
 
                         <span v-if="rule.quality_score !== null && rule.quality_score !== undefined"
                               class="badge rounded-pill" :class="qualityBadgeClass(rule.quality_score)"
@@ -778,6 +854,20 @@ export default {
                             <i class="fa-solid fa-arrow-down me-1"></i>The matched bytes are highlighted in blue in the rule content below.
                         </p>
                     </div>
+                    <div v-if="showValidationRisk && rule.validation_risk && rule.validation_risk.matched_files && rule.validation_risk.matched_files.length" class="rl-expand-test-report">
+                        <div class="rl-expand-test-report__title">
+                            <i class="fa-solid fa-file-shield"></i>
+                            <span>Fired on {{ rule.validation_risk.matched_files.length }} known-clean binar{{ rule.validation_risk.matched_files.length === 1 ? 'y' : 'ies' }}</span>
+                        </div>
+                        <div>
+                            <span v-for="m in rule.validation_risk.matched_files" :key="m.path || m.file"
+                                  class="badge me-1 mb-1" style="background:rgba(220,53,69,.1);color:#dc3545;font-size:.75rem;font-family:monospace;"
+                                  :style="binaryBadgeStyle(m.file)"
+                                  :title="m.path" @click.stop="toggleBinary(m.file)">
+                                {{ m.path || m.file }}
+                            </span>
+                        </div>
+                    </div>
                     <code-viewer v-if="rule.to_string"
                         :code="rule.to_string"
                         :language="ruleLanguage(rule.format)"
@@ -816,6 +906,8 @@ export default {
                             </div>
                         </th>
                         <th v-if="showTestResults" class="dt-th" style="width:150px;">Result</th>
+                        <th v-if="showValidationRisk" class="dt-th" style="width:130px;">Risk</th>
+                        <th v-if="showValidationRisk" class="dt-th" style="width:180px;">Fired on</th>
                         <th v-show="colVisible.id" class="dt-th" style="width:90px;">ID</th>
                         <th v-show="colVisible.format"
                             class="dt-th dt-th--sortable" style="width:80px;"
@@ -902,10 +994,6 @@ export default {
                                 </a>
                             </td>
 
-                            <td v-show="colVisible.id" class="dt-td" :title="'Rule id: ' + rule.id">
-                                <span v-html="highlight('' + rule.id)"></span>
-                            </td>
-
                             <td v-if="showTestResults" class="dt-td">
                                 <div v-if="rule.test_result" class="d-flex align-items-center gap-1">
                                     <i v-if="rule.test_result.matched"    class="fa-solid fa-check text-success" title="Matched"></i>
@@ -921,6 +1009,37 @@ export default {
                                         <template v-if="rule.test_result.execution_time_ms!=null"> · {{ rule.test_result.execution_time_ms }}ms</template>
                                     </span>
                                 </div>
+                            </td>
+
+                            <td v-if="showValidationRisk" class="dt-td">
+                                <span v-if="rule.validation_risk && rule.validation_risk.proposed_level"
+                                      class="badge rounded-pill"
+                                      :class="rule.validation_risk.mismatch ? 'border border-2 border-danger' : ''"
+                                      :style="{ background: rule.validation_risk.proposed_color || '#adb5bd', color: rlRiskTextColor(rule.validation_risk.proposed_color) }"
+                                      :title="rlRiskTitle(rule.validation_risk)">
+                                    <i v-if="rule.validation_risk.mismatch" class="fa-solid fa-triangle-exclamation me-1"></i>
+                                    {{ rule.validation_risk.proposed_level }}
+                                </span>
+                                <span v-else class="text-muted small">—</span>
+                            </td>
+
+                            <td v-if="showValidationRisk" class="dt-td">
+                                <span v-for="m in ((rule.validation_risk && rule.validation_risk.matched_files) || []).slice(0, 3)" :key="m.path || m.file"
+                                      class="badge me-1 mb-1" style="background:rgba(220,53,69,.1);color:#dc3545;font-size:.68rem;font-family:monospace;"
+                                      :style="binaryBadgeStyle(m.file)"
+                                      :title="m.path" @click.stop="toggleBinary(m.file)">
+                                    {{ m.file }}
+                                </span>
+                                <span v-if="rule.validation_risk && rule.validation_risk.matched_files && rule.validation_risk.matched_files.length > 3"
+                                      class="badge me-1 mb-1 bg-secondary-subtle text-secondary-emphasis"
+                                      style="cursor:pointer;font-size:.68rem;" title="Show all in the expanded row below" @click="toggleExpand(rule)">
+                                    +{{ rule.validation_risk.matched_files.length - 3 }} more
+                                </span>
+                                <span v-if="!rule.validation_risk || !rule.validation_risk.matched_files || !rule.validation_risk.matched_files.length" class="text-muted small">—</span>
+                            </td>
+
+                            <td v-show="colVisible.id" class="dt-td" :title="'Rule id: ' + rule.id">
+                                <span v-html="highlight('' + rule.id)"></span>
                             </td>
 
                             <td v-show="colVisible.format" class="dt-td">
@@ -1115,6 +1234,20 @@ export default {
                                         <p v-if="matchedHighlightTerms(rule).length" class="mb-0" style="font-size:.72rem;color:var(--subtle-text-color);">
                                             <i class="fa-solid fa-arrow-right me-1"></i>The matched bytes are highlighted in blue in the rule content, on the right.
                                         </p>
+                                    </div>
+                                    <div v-if="showValidationRisk && rule.validation_risk && rule.validation_risk.matched_files && rule.validation_risk.matched_files.length" class="rl-expand-test-report">
+                                        <div class="rl-expand-test-report__title">
+                                            <i class="fa-solid fa-file-shield"></i>
+                                            <span>Fired on {{ rule.validation_risk.matched_files.length }} known-clean binar{{ rule.validation_risk.matched_files.length === 1 ? 'y' : 'ies' }}</span>
+                                        </div>
+                                        <div>
+                                            <span v-for="m in rule.validation_risk.matched_files" :key="m.path || m.file"
+                                                  class="badge me-1 mb-1" style="background:rgba(220,53,69,.1);color:#dc3545;font-size:.75rem;font-family:monospace;"
+                                                  :style="binaryBadgeStyle(m.file)"
+                                                  :title="m.path" @click.stop="toggleBinary(m.file)">
+                                                {{ m.path || m.file }}
+                                            </span>
+                                        </div>
                                     </div>
 
                                     <!-- ① Meta strip -->
@@ -1385,6 +1518,35 @@ export default {
             }
             onFilterChange()
         }
+        // ── Validation risk / binary filters (opt-in via showValidationFilters) ──
+        // Owned here exactly like the built-in tags/sources/etc. filters —
+        // fetchData() appends them as query params itself when the prop is
+        // on. The picker UI itself lives in MultiRiskFilter/MultiBinaryFilter
+        // (same dropdown-pill component family as Tags/Vulnerabilities);
+        // this only keeps the selection + the "clicking a Fired-on badge"
+        // shortcut, which those components have no reason to know about.
+        const riskFilter       = ref(_p('mismatch_only') === 'true' ? 'mismatch' : _p('risk_level', ''))
+        const selectedBinaries = ref(_arr('binary', ''))
+        // Picking a binary is all about seeing which rule fired on it —
+        // auto-expand every result instead of making the reviewer click
+        // into each card/row to find it.
+        function onBinaryFilterChange() {
+            onFilterChange()
+            if (selectedBinaries.value.length) nextTick(() => expandAll())
+        }
+        function toggleBinary(b) {
+            // Reassign a fresh array (not push/splice in place) — MultiBinaryFilter
+            // mirrors this via a plain (non-deep) watch on its modelValue prop,
+            // which only fires on a genuine reference change. An in-place mutation
+            // would update the actual filter/fetch but leave that picker's own
+            // displayed chips stale until something else forced a re-render.
+            const i = selectedBinaries.value.indexOf(b)
+            selectedBinaries.value = i === -1
+                ? [...selectedBinaries.value, b]
+                : selectedBinaries.value.filter(x => x !== b)
+            onBinaryFilterChange()
+        }
+
         const rulesFormats    = ref([])
 
         // Card sort shorthand (maps to sortKey/sortDir)
@@ -1440,6 +1602,38 @@ export default {
                    numericCurrentUserId.value === rule.user_id
         }
 
+        // Readable text color against a validation_risk taxonomy swatch —
+        // several of those colors (yellow, green) are far too light for white text.
+        function rlRiskTextColor(hex) {
+            if (!hex) return '#000'
+            const h = hex.replace('#', '')
+            const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16)
+            return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '#1a1a1a' : '#fff'
+        }
+
+        // Not written as a template literal inline in the .vue-style template
+        // string below — that string is itself backtick-delimited, and a
+        // nested backtick there closes it early (a real bug this caused once).
+        function rlRiskTitle(risk) {
+            if (!risk) return ''
+            let base = 'Fired on ' + risk.hits + ' known-clean binaries'
+            if (risk.matched_files && risk.matched_files.length) {
+                base += ': ' + risk.matched_files.map(m => m.file).join(', ')
+            }
+            return risk.mismatch
+                ? base + " — disagrees with this rule's own '" + risk.upstream_level + "' claim"
+                : base
+        }
+
+        // No selection -> every match renders normally. A selection ->
+        // only matches NOT picked recede (paler), so the ones the reviewer
+        // actually picked keep their normal, full-strength color.
+        function binaryBadgeStyle(fileName) {
+            const picked = selectedBinaries.value
+            const faded = picked.length > 0 && !picked.includes(fileName)
+            return { cursor: 'pointer', opacity: faded ? 0.35 : 1 }
+        }
+
         function isFilterHidden(key) {
             return props.hiddenFilters.includes(key)
         }
@@ -1460,7 +1654,9 @@ export default {
             (isFilterHidden('vulnerabilities') ? 0 : selectedVulns.value.length) +
             (isFilterHidden('attacks') ? 0 : selectedAttacks.value.length) +
             (isFilterHidden('person') ? 0 : personFilter.value.values.length) +
-            (!isFilterHidden('quality') && (qualityMin.value !== null || qualityMax.value !== null) ? 1 : 0)
+            (!isFilterHidden('quality') && (qualityMin.value !== null || qualityMax.value !== null) ? 1 : 0) +
+            (props.showValidationFilters && riskFilter.value ? 1 : 0) +
+            (props.showValidationFilters ? selectedBinaries.value.length : 0)
         )
 
         // ── URL sync ──────────────────────────────────────────────────────
@@ -1495,6 +1691,11 @@ export default {
             }
             _upd('scope', scopeMine.value ? 'mine' : null)
             _upd('has_ai_analysis', aiAnalysisOnly.value ? 'true' : null)
+            if (props.showValidationFilters) {
+                _upd('mismatch_only', riskFilter.value === 'mismatch' ? 'true' : null)
+                _upd('risk_level',    riskFilter.value !== 'mismatch' ? riskFilter.value || null : null)
+                _upd('binary',        selectedBinaries.value.join(',') || null)
+            }
 
             const qs = p.toString()
             history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
@@ -1529,6 +1730,11 @@ export default {
                 if (personFilter.value.values.length) {
                     const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
                     params.set(pKey, personFilter.value.values.join(','))
+                }
+                if (props.showValidationFilters) {
+                    if (riskFilter.value === 'mismatch') params.set('mismatch_only', 'true')
+                    else if (riskFilter.value) params.set('risk_level', riskFilter.value)
+                    for (const b of selectedBinaries.value) params.append('binary', b)
                 }
 
                 const sep = props.fetchUrl.includes('?') ? '&' : '?'
@@ -1584,6 +1790,7 @@ export default {
             if (!isFilterHidden('attacks'))         selectedAttacks.value = []
             if (!isFilterHidden('person'))          personFilter.value    = { mode: 'author', values: [] }
             if (!isFilterHidden('quality')) { qualityMin.value = null; qualityMax.value = null }
+            if (props.showValidationFilters) { riskFilter.value = ''; selectedBinaries.value = [] }
             onFilterChange()
         }
 
@@ -2070,7 +2277,8 @@ export default {
             // Computed
             numericUserId, numericCurrentUserId, tableColspan, footerInfo,
             // Methods
-            isOwner, isFilterHidden,
+            isOwner, isFilterHidden, rlRiskTextColor, rlRiskTitle, binaryBadgeStyle,
+            riskFilter, selectedBinaries, toggleBinary,
             fetchData, onFilterChange, resetFilters,
             onSearchInput, clearSearch,
             setSort, sortIcon, onCardSortChange,

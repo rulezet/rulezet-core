@@ -3135,6 +3135,59 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
     return query.paginate(page=page, per_page=per_page, error_out=False)
 
 
+def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
+    """Build the exact per-rule dict shape /rule/data_table returns
+    (to_json() + tags + cves + attacks + user_vote), batch-fetching each of
+    those rather than one query per rule. Shared by every RuleList consumer
+    that needs this shape from a rule set /rule/data_table's own filters
+    can't express — e.g. a fixed set of ids pulled from somewhere else
+    entirely, like a validation job's quarantine result.
+    """
+    import json as _json
+    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique as _AT, RuleVote as _RV
+
+    rule_ids = [r.id for r in rules]
+    tags_by_rule = get_tags_for_rules_batch(rule_ids)
+
+    attacks_by_rule: dict = {}
+    if rule_ids:
+        atk_rows = (
+            db.session.query(
+                RuleAttackAssociation.rule_id,
+                _AT.technique_id, _AT.name, _AT.tactic_keys,
+            )
+            .join(_AT, RuleAttackAssociation.technique_id == _AT.technique_id)
+            .filter(RuleAttackAssociation.rule_id.in_(rule_ids))
+            .all()
+        )
+        for rid, tid, tname, tkeys in atk_rows:
+            attacks_by_rule.setdefault(rid, []).append(
+                {'technique_id': tid, 'name': tname, 'tactic_keys': tkeys or []}
+            )
+
+    votes_map = {}
+    if rule_ids and current_user_obj is not None and current_user_obj.is_authenticated:
+        rows = _RV.query.filter(
+            _RV.rule_id.in_(rule_ids),
+            _RV.user_id == current_user_obj.id
+        ).all()
+        votes_map = {v.rule_id: v.vote_type for v in rows}
+
+    items = []
+    for r in rules:
+        d = r.to_json()
+        d['tags'] = [t.to_json() for t in tags_by_rule.get(r.id, [])]
+        try:
+            cves = _json.loads(r.cve_id) if r.cve_id else []
+            d['cves'] = cves if isinstance(cves, list) else []
+        except (ValueError, TypeError):
+            d['cves'] = []
+        d['attacks'] = attacks_by_rule.get(r.id, [])
+        d['user_vote'] = votes_map.get(r.id)
+        items.append(d)
+    return items
+
+
 def get_active_rules_by_ids(ids: list) -> list:
     """Active (non-deleted) rules matching the given id list."""
     if not ids:

@@ -4419,48 +4419,7 @@ def rules_data_table():
         has_ai_analysis=request.args.get('has_ai_analysis', 'false', type=str) == 'true',
     )
 
-    rule_ids = [r.id for r in pagination.items]
-    tags_by_rule = RuleModel.get_tags_for_rules_batch(rule_ids)
-
-    # Batch-fetch ATT&CK associations for this page
-    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique as _AT
-    attacks_by_rule: dict = {}
-    if rule_ids:
-        atk_rows = (
-            db.session.query(
-                RuleAttackAssociation.rule_id,
-                _AT.technique_id, _AT.name, _AT.tactic_keys,
-            )
-            .join(_AT, RuleAttackAssociation.technique_id == _AT.technique_id)
-            .filter(RuleAttackAssociation.rule_id.in_(rule_ids))
-            .all()
-        )
-        for rid, tid, tname, tkeys in atk_rows:
-            attacks_by_rule.setdefault(rid, []).append(
-                {'technique_id': tid, 'name': tname, 'tactic_keys': tkeys or []}
-            )
-
-    from app.core.db_class.db import RuleVote as _RV
-    votes_map = {}
-    if rule_ids and current_user.is_authenticated:
-        rows = _RV.query.filter(
-            _RV.rule_id.in_(rule_ids),
-            _RV.user_id == current_user.id
-        ).all()
-        votes_map = {v.rule_id: v.vote_type for v in rows}
-
-    items = []
-    for r in pagination.items:
-        d = r.to_json()
-        d['tags'] = [t.to_json() for t in tags_by_rule.get(r.id, [])]
-        try:
-            cves = json.loads(r.cve_id) if r.cve_id else []
-            d['cves'] = cves if isinstance(cves, list) else []
-        except (ValueError, TypeError):
-            d['cves'] = []
-        d['attacks'] = attacks_by_rule.get(r.id, [])
-        d['user_vote'] = votes_map.get(r.id)
-        items.append(d)
+    items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)
 
     return jsonify({
         "items":       items,

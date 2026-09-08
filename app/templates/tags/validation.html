@@ -4,6 +4,20 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
+<style>
+/* Same section-card pattern as detail_rule_propose_edit.html — a thin blue
+   accent bar + small-caps title, instead of a plain Bootstrap card header. */
+.vr-card { background: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 14px; overflow: hidden; margin-bottom: 1.25rem; }
+.vr-card__header { display: flex; align-items: center; justify-content: space-between; gap: .55rem; padding: .7rem 1.1rem; border-bottom: 1px solid var(--border-color); background: var(--light-bg-color); }
+.vr-card__header-left { display: flex; align-items: center; gap: .55rem; }
+.vr-card__accent { width: 3px; height: 15px; background: #0d6efd; border-radius: 2px; flex-shrink: 0; }
+.vr-card__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color); }
+.vr-card__body { padding: 1.1rem; }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -39,9 +53,6 @@
         <a class="dr-nav__item active" href="/tags/admin/validation">
             <i class="fas fa-shield-virus"></i><span>Validation</span>
         </a>
-        <a class="dr-nav__item" href="/tags/admin/list">
-            <i class="fas fa-tags"></i><span>Manage Tags</span>
-        </a>
         {% if not tag_manager_view %}
         <span class="dr-nav__sep"></span>
         {{ anav.admin_nav_toggle() }}
@@ -51,7 +62,13 @@
     {{ anav.admin_nav_panel('validation') }}
     {% endif %}
 
-    <validation-runner :csrf-token="csrfToken" @notify="notify"></validation-runner>
+    <validation-runner
+        :csrf-token="csrfToken"
+        :current-user-id="currentUserId"
+        :current-user-is-admin="currentUserIsAdmin"
+        :current-user-is-authenticated="currentUserIsAuthenticated"
+        @notify="notify">
+    </validation-runner>
 
 </div>
 {% endblock %}
@@ -67,12 +84,15 @@
         components: { 'validation-runner': ValidationRunner },
         setup() {
             const csrfToken = '{{ csrf_token() }}';
+            const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
+            const currentUserIsAdmin = {{ current_user.is_admin() | tojson }};
+            const currentUserIsAuthenticated = {{ current_user.is_authenticated | tojson }};
 
             function notify({ message, level }) {
                 create_message(message, level === 'error' ? 'danger-subtle' : level === 'success' ? 'success-subtle' : 'info-subtle');
             }
 
-            return { csrfToken, notify };
+            return { csrfToken, currentUserId, currentUserIsAdmin, currentUserIsAuthenticated, notify };
         }
     }).mount('#main-container');
 </script>

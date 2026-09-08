@@ -232,11 +232,12 @@
     justify-content: space-between;
     align-items: center;
     gap: .6rem;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     margin-bottom: .85rem;
+    overflow-x: auto;
 }
 .rl-toolbar-left,
-.rl-toolbar-right { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; }
+.rl-toolbar-right { display: flex; gap: .45rem; align-items: center; flex-wrap: nowrap; flex-shrink: 0; }
 
 /* Search reuses dt-search styles */
 
