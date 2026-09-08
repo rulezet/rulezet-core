@@ -1935,7 +1935,7 @@ export default {
                 sigma:    'yaml',
                 suricata: 'suricata',
                 zeek:     'zeek',
-                elastic:  'json',
+                elastic:  'toml',  // Elastic Security rules are TOML — see hljs-toml.js
                 wazuh:    'xml',
                 nova:     'text',
                 nse:      'lua',

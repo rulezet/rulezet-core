@@ -399,7 +399,8 @@ class Rule(db.Model):
             'nse': 'nse',
             'crs': 'conf',
             'nova': 'nov',
-            'splunk': 'yml'
+            'splunk': 'yml',
+            'elastic': 'toml'
         }
         
         return extensions.get(format_name, 'txt')

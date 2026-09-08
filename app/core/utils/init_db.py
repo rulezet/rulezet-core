@@ -124,15 +124,25 @@ def insert_default_formats():
         {"name": "suricata", "can_be_execute": False},
         {"name": "crs", "can_be_execute": False},
         {"name": "nova", "can_be_execute": False},
-        # {"name": "elastic", "can_be_execute": True},
         {"name": "nse", "can_be_execute": True},
         {"name": "no format", "can_be_execute": False},
         {"name": "wazuh", "can_be_execute": False},
         {"name": "kql", "can_be_execute": False},
-        {"name": "splunk", "can_be_execute": False}
+        {"name": "splunk", "can_be_execute": False},
+        # Like kql/splunk: the query (EQL/KQL/Lucene/ES|QL) needs a live
+        # Elasticsearch cluster to run — no local rule_tester driver exists.
+        {"name": "elastic", "can_be_execute": False}
     ]
 
-    user_admin = get_admin_user()
+    # get_admin_user() looks up the literal default demo admin
+    # (admin@admin.admin) — on an instance where that account was renamed,
+    # merged, or never created (e.g. --seed-defaults run against an
+    # already-customized DB), fall back to any admin rather than crashing
+    # and leaving every not-yet-seeded format (like a newly added one)
+    # permanently un-inserted until someone notices.
+    user_admin = get_admin_user() or User.query.filter_by(admin=True).first()
+    if not user_admin:
+        return
     for fmt in formats:
         existing = FormatRule.query.filter_by(name=fmt["name"]).first()
         if not existing:

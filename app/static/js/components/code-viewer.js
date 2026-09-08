@@ -45,6 +45,10 @@ async function register_extra_languages(hljs) {
         const { default: suricataLanguage } = await import('/static/js/components/hljs-suricata.js')
         hljs.registerLanguage('suricata', suricataLanguage)
     }
+    if (!hljs.getLanguage('toml')) {
+        const { default: tomlLanguage } = await import('/static/js/components/hljs-toml.js')
+        hljs.registerLanguage('toml', tomlLanguage)
+    }
 }
 
 function load_hljs() {
@@ -179,6 +183,7 @@ const KNOWN_HLJS_LANGS = new Set([
     'shell','sql','swift','typescript','xml','yaml','text',
     'yara',     // registered at runtime — see register_extra_languages() above
     'suricata', // registered at runtime — see register_extra_languages() above
+    'toml',     // registered at runtime — see register_extra_languages() above
 ])
 
 const LANG_ALIASES = {
@@ -191,6 +196,7 @@ const LANG_ALIASES = {
     crs: 'text',
     nova: 'text',
     kql: 'sql',       // KQL syntax is SQL-like
+    elastic: 'toml',  // Elastic Security rules are TOML — see hljs-toml.js
 }
 
 function detect_language(code, hint) {

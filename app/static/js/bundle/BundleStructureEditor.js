@@ -591,7 +591,7 @@ export default {
         // Map Rulezet format names to highlight.js language identifiers
         function hlxLang(format) {
             const map = {
-                sigma: 'yaml', wazuh: 'xml', elastic: 'json',
+                sigma: 'yaml', wazuh: 'xml', elastic: 'toml',  // Elastic Security rules are TOML — see hljs-toml.js
                 nova: 'yaml', crs: 'nginx',
             }
             return map[(format || '').toLowerCase()] || 'plaintext'

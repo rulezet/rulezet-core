@@ -1451,7 +1451,7 @@ export default {
             if (!format) return 'auto'
             const map = {
                 yara: 'yara', sigma: 'yaml', suricata: 'text', zeek: 'zeek',
-                elastic: 'json', wazuh: 'xml', nova: 'text', nse: 'lua', crs: 'text',
+                elastic: 'toml', wazuh: 'xml', nova: 'text', nse: 'lua', crs: 'text',  // Elastic Security rules are TOML — see hljs-toml.js
             }
             return map[format.toLowerCase()] || 'auto'
         }
