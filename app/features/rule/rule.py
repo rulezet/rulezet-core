@@ -1225,7 +1225,11 @@ def detail_rule_ai_analysis_delete(rule_id, analysis_id):
 def history_activity_delete(log_uuid):
     """Delete a single ActivityLog entry — rule creator or admin only."""
     from app.core.db_class.db import ActivityLog
-    log = ActivityLog.query.filter_by(uuid=log_uuid).first()
+    # target_id is a plain integer PK reused across unrelated tables
+    # (bundle, user, tag, job, ...) — without the target_type filter, a
+    # rule owner could delete any log row whose target_id happened to equal
+    # one of their own rule ids, regardless of what it actually logs.
+    log = ActivityLog.query.filter_by(uuid=log_uuid, target_type="rule").first()
     if not log:
         return jsonify({"success": False, "message": "Entry not found."}), 404
 
