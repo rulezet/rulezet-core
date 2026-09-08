@@ -433,11 +433,21 @@ export function initBundleGraph(containerId, jsonText, opts = {}) {
                             onclick: (_evt, node) => {
                                 const raw = node.getData()?.raw ?? {}
                                 const win = window.open('', '_blank')
-                                win.document.write(
-                                    `<html><body style="margin:0;background:#1e1e1e;color:#d4d4d4">` +
-                                    `<pre style="font-family:monospace;font-size:13px;padding:1.5rem;white-space:pre-wrap;word-break:break-all">` +
-                                    `${JSON.stringify(raw, null, 2)}</pre></body></html>`
-                                )
+                                if (!win) return
+                                // Built via DOM APIs + textContent (never HTML-parsed) rather
+                                // than document.write(`...${JSON.stringify(raw)}...`) — raw
+                                // comes from attacker-controlled MISP bundle content, and
+                                // JSON.stringify does not escape '<'/'>', so a value like
+                                // "</pre><script>...</script>" previously broke out of the
+                                // <pre> tag and executed in this same-origin popup.
+                                win.document.title = 'Raw JSON'
+                                win.document.body.style.margin = '0'
+                                win.document.body.style.background = '#1e1e1e'
+                                win.document.body.style.color = '#d4d4d4'
+                                const pre = win.document.createElement('pre')
+                                pre.style.cssText = 'font-family:monospace;font-size:13px;padding:1.5rem;white-space:pre-wrap;word-break:break-all;margin:0'
+                                pre.textContent = JSON.stringify(raw, null, 2)
+                                win.document.body.appendChild(pre)
                             },
                         }],
                     },
