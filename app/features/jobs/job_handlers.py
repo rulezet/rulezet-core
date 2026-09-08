@@ -1815,14 +1815,57 @@ def handle_update_submodule_bg(job, app):
             for line in output.splitlines()[-30:]:
                 if line.strip():
                     log_job(job, line, level='info', event='progress')
-            if result.returncode == 0:
-                log_job(job, f"Submodule '{path}' updated successfully.", level='success', event='done')
-                job.status = 'done'
-                job.done = 1
-            else:
+            if result.returncode != 0:
                 job.status = 'failed'
                 job.error = output[-500:]
                 log_job(job, f"git returned code {result.returncode}.", level='error', event='failed')
+                db.session.commit()
+                return
+
+            log_job(job, f"Submodule '{path}' updated successfully.", level='success', event='progress')
+
+            # `git submodule update --remote` only moves the submodule's own
+            # checkout ahead — it never records that new commit in this
+            # repo's own tree, so `git submodule status` keeps showing it as
+            # "modified" (a '+' flag) forever after, even though the content
+            # is exactly what was asked for. Commit the updated pointer here
+            # so the repo's recorded state matches what's checked out —
+            # otherwise every click just adds another perpetual "modified".
+            status = subprocess.run(
+                ['git', 'status', '--porcelain', '--', path],
+                capture_output=True, text=True, timeout=15, cwd=cwd,
+            )
+            if not status.stdout.strip():
+                log_job(job, f"Submodule '{path}' was already at the latest upstream commit — nothing to commit.",
+                         level='info', event='done')
+                job.status = 'done'
+                job.done = 1
+                db.session.commit()
+                return
+
+            add_result = subprocess.run(['git', 'add', '--', path], capture_output=True, text=True, timeout=15, cwd=cwd)
+            if add_result.returncode != 0:
+                job.status = 'failed'
+                job.error = (add_result.stderr or add_result.stdout).strip()[-500:]
+                log_job(job, f"git add failed: {job.error}", level='error', event='failed')
+                db.session.commit()
+                return
+
+            commit_result = subprocess.run(
+                ['git', 'commit', '-m', f"chore: bump '{path}' submodule to latest upstream"],
+                capture_output=True, text=True, timeout=15, cwd=cwd,
+            )
+            if commit_result.returncode != 0:
+                job.status = 'failed'
+                job.error = (commit_result.stderr or commit_result.stdout).strip()[-500:]
+                log_job(job, f"git commit failed: {job.error}", level='error', event='failed')
+                db.session.commit()
+                return
+
+            log_job(job, f"Committed the updated pointer for '{path}' — this instance's repo is up to date "
+                         f"(git push it to keep other deployments in sync).", level='success', event='done')
+            job.status = 'done'
+            job.done = 1
         except Exception as e:
             job.status = 'failed'
             job.error = str(e)
