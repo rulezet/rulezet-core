@@ -331,6 +331,19 @@ def get_jobs():
             # owner column only exists for admins — never exposed to plain users
             d['owner'] = (f"{j.user.first_name} {j.user.last_name or ''}".strip()
                           if j.user else f"user #{j.created_by}")
+            # UserChip-shaped, alongside the plain-string owner above — used
+            # by history tables (e.g. the validation run history) that show
+            # an avatar+name chip rather than plain text.
+            d['author'] = {
+                'id':       j.user.id if j.user else None,
+                'username': j.user.get_username() if j.user else f'#{j.created_by}',
+                'avatar':   j.user.get_avatar_url() if j.user else None,
+            }
+        # Rule-validation runs carry their own quarantine count in the
+        # payload — surfaced here so a history list can show it without a
+        # second request per row.
+        if j.job_type == 'rule_validation_run':
+            d['quarantined_count'] = ((j.payload or {}).get('result') or {}).get('quarantined_count')
         jobs.append(d)
     return jsonify({
         "jobs":       jobs,

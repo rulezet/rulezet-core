@@ -862,31 +862,51 @@ export default {
         <small>No validation run yet. Switch to the <strong>Validation</strong> tab to run the first one.</small>
       </div>
 
-      <div v-else class="list-group list-group-flush">
-        <div v-for="h in history" :key="h.uuid"
-             class="list-group-item d-flex align-items-center gap-3 px-2">
-          <div class="d-flex align-items-center gap-3 flex-grow-1" role="button" style="cursor:pointer;"
-               @click="viewHistoryRun(h)">
-            <i class="fa-solid" :class="[STATUS_ICON[h.status] || 'fa-clock', 'text-' + (STATUS_COLOR[h.status] || 'secondary')]"></i>
-            <div class="flex-grow-1 text-start">
-              <div class="small fw-semibold" style="color:var(--text-color);">
-                [[ h.label || 'Rule validation run' ]]
-              </div>
-              <div class="text-muted" style="font-size:.75rem;">
-                [[ h.created_at ]]<span v-if="h.finished_at"> — finished [[ h.finished_at ]]</span>
-              </div>
-            </div>
-            <span class="badge rounded-pill" :class="'bg-' + (STATUS_COLOR[h.status] || 'secondary') + '-subtle text-' + (STATUS_COLOR[h.status] || 'secondary')">
-              [[ h.status ]]
-            </span>
-            <i class="fa-solid fa-chevron-right text-muted opacity-50"></i>
-          </div>
-          <button type="button" class="btn btn-sm btn-outline-danger border-0"
-                  :disabled="h.status === 'pending' || h.status === 'running'"
-                  title="Delete this run" @click="deleteHistoryRun(h)">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
+      <div v-else class="dt-table-wrap">
+        <table class="dt-table" role="grid">
+          <thead class="dt-thead">
+            <tr>
+              <th class="dt-th" style="width:36px;"></th>
+              <th class="dt-th">Run</th>
+              <th class="dt-th" style="width:170px;">Launched by</th>
+              <th class="dt-th" style="width:110px;">Status</th>
+              <th class="dt-th" style="width:120px;">Quarantined</th>
+              <th class="dt-th" style="width:60px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="h in history" :key="h.uuid" style="cursor:pointer;" @click="viewHistoryRun(h)">
+              <td class="dt-td">
+                <i class="fa-solid" :class="[STATUS_ICON[h.status] || 'fa-clock', 'text-' + (STATUS_COLOR[h.status] || 'secondary')]"></i>
+              </td>
+              <td class="dt-td">
+                <div class="fw-semibold small" style="color:var(--text-color);">[[ h.label || 'Rule validation run' ]]</div>
+                <div class="text-muted" style="font-size:.72rem;">
+                  [[ h.created_at ]]<span v-if="h.finished_at"> — finished [[ h.finished_at ]]</span>
+                </div>
+              </td>
+              <td class="dt-td" @click.stop>
+                <user-chip v-if="h.author" :user-id="h.author.id" :username="h.author.username"
+                           :avatar="h.author.avatar" size="xs"></user-chip>
+              </td>
+              <td class="dt-td">
+                <span class="badge rounded-pill" :class="'bg-' + (STATUS_COLOR[h.status] || 'secondary') + '-subtle text-' + (STATUS_COLOR[h.status] || 'secondary')">
+                  [[ h.status ]]
+                </span>
+              </td>
+              <td class="dt-td">
+                <span v-if="h.quarantined_count != null" class="fw-semibold">[[ h.quarantined_count ]]</span>
+              </td>
+              <td class="dt-td" @click.stop>
+                <button type="button" class="btn btn-sm btn-outline-danger border-0"
+                        :disabled="h.status === 'pending' || h.status === 'running'"
+                        title="Delete this run" @click="deleteHistoryRun(h)">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
