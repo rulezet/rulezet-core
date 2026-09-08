@@ -354,9 +354,13 @@ export default {
         // ── marked ──────────────────────────────────────────────────────
         function _sanitize_html(html) {
             if (window.DOMPurify) return window.DOMPurify.sanitize(html, SANITIZE_CONFIG)
-            // DOMPurify failed to load — fall back to a minimal strip as last resort
-            const tmp = document.createElement('div')
-            tmp.innerHTML = html
+            // DOMPurify failed to load — fall back to a minimal strip as last
+            // resort. Parsed via DOMParser into an inert document (per spec,
+            // never "fully active" — scripts don't execute, resources don't
+            // fetch) instead of assigning raw HTML to a live element's
+            // innerHTML, which briefly parses attacker-controlled markup
+            // into the real document before anything is stripped.
+            const tmp = new DOMParser().parseFromString(html, 'text/html')
             tmp.querySelectorAll('script, iframe, object, embed, form, style, input, button, select, textarea, base, meta, link').forEach(el => el.remove())
             const SAFE_SCHEME = /^(?:https?|mailto):/i
             tmp.querySelectorAll('*').forEach(el => {
@@ -371,7 +375,7 @@ export default {
                     }
                 }
             })
-            return tmp.innerHTML
+            return tmp.body.innerHTML
         }
 
         function render_md() {
