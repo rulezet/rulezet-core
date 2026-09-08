@@ -1925,6 +1925,16 @@ def validate_proposal() -> jsonify:
             # the rule modified
             rule_proposal = RuleModel.get_rule_proposal(rule_proposal_id)
 
+            # rule_proposal_id is caller-supplied and independent from
+            # rule_id — without this check, an owner/admin of rule_id could
+            # decide (and, on accept, overwrite rule_id's content with) a
+            # pending proposal that actually belongs to a completely
+            # different rule, hijacking another user's review queue.
+            if not rule_proposal or rule_proposal.rule_id != rule_id:
+                return jsonify({"message": "Proposal not found for this rule.",
+                                "success": False,
+                                "toast_class": "danger"}), 404
+
             new_version = None
             if decision == "accepted":
                 RuleModel.set_status(rule_proposal_id,"accepted", reviewed_by_id=current_user.id)
