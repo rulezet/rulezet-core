@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ rule.title }} — AI Analysis — Rulezet{% endblock %}
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
@@ -305,13 +304,21 @@
 
     const CAN_GENERATE = {{ (current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.use'))) | tojson }};
 
-    // Lazy-load DOMPurify to sanitize marked's HTML output before v-html —
-    // rule content (what an analysis is built from) comes from any
-    // authenticated user, so this follows the exact same pipeline as blog
-    // posts: render client-side only, sanitize every time, never trust
-    // pre-rendered HTML from the server.
+    // Lazy-load marked + DOMPurify (vendored locally, not a CDN — see
+    // sanitize.js) to sanitize marked's HTML output before v-html — rule
+    // content (what an analysis is built from) comes from any authenticated
+    // user, so this follows the exact same pipeline as blog posts: render
+    // client-side only, sanitize every time, never trust pre-rendered HTML
+    // from the server. Uses the app's own SANITIZE_CONFIG (not DOMPurify's
+    // default, which still allows <form>/<input>/<style> — enough to build
+    // a full-page phishing overlay) since the AI analysis text is generated
+    // from this rule's own attacker-controlled title/description, and an
+    // LLM can be prompt-injected into echoing attacker-chosen markup.
     const _purifyMod = await import('/static/js/purify.min.js')
     const DOMPurify   = _purifyMod.default || window.DOMPurify
+    const _markedMod  = await import('/static/js/marked.min.js')
+    const marked      = _markedMod.marked || _markedMod.default || window.marked
+    const { SANITIZE_CONFIG } = await import('/static/js/sanitize.js')
 
     const rule_id     = {{ rule.id }};
     const csrf_token  = '{{ csrf_token() }}';
@@ -334,8 +341,8 @@
 
             function renderMarkdown(md) {
                 if (!md) return '';
-                if (typeof marked === 'undefined') return DOMPurify.sanitize(`<pre>${md}</pre>`);
-                return DOMPurify.sanitize(marked.parse(md));
+                if (typeof marked === 'undefined') return DOMPurify.sanitize(`<pre>${md}</pre>`, SANITIZE_CONFIG);
+                return DOMPurify.sanitize(marked.parse(md), SANITIZE_CONFIG);
             }
 
             async function fetchHistory() {

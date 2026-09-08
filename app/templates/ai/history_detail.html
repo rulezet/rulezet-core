@@ -3,7 +3,6 @@
 {% block title %}History entry — AI Admin — Rulezet{% endblock %}
 
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <style>
 .ai-summary-content { font-size: .92rem; line-height: 1.7; }
@@ -74,13 +73,22 @@
 </div>
 
 <script type="module">
+// Vendored locally (not a CDN — see sanitize.js), and sanitized with the
+// app's own SANITIZE_CONFIG rather than DOMPurify's default: this content
+// is LLM-generated from user-authored rule/proposal text, and DOMPurify's
+// default config still allows <form>/<input>/<style> — enough to build a
+// full-page phishing overlay if the model is prompt-injected into echoing
+// attacker-chosen markup.
 const _purifyMod = await import('/static/js/purify.min.js')
 const DOMPurify   = _purifyMod.default || window.DOMPurify
+const _markedMod  = await import('/static/js/marked.min.js')
+const marked      = _markedMod.marked || _markedMod.default || window.marked
+const { SANITIZE_CONFIG } = await import('/static/js/sanitize.js')
 
 const content = {{ gen.content | tojson }}
 const target  = document.getElementById('hd-content')
 target.innerHTML = (typeof marked !== 'undefined')
-    ? DOMPurify.sanitize(marked.parse(content || ''))
-    : DOMPurify.sanitize(`<pre>${content || ''}</pre>`)
+    ? DOMPurify.sanitize(marked.parse(content || ''), SANITIZE_CONFIG)
+    : DOMPurify.sanitize(`<pre>${content || ''}</pre>`, SANITIZE_CONFIG)
 </script>
 {% endblock %}
