@@ -31,6 +31,7 @@ import AnsiTerminal from '/static/js/components/ansi-terminal.js';
 import RuleList     from '/static/js/rule/ruleList.js';
 import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js';
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
+import TagInput     from '/static/js/tags/tagInput.js';
 
 const { ref, computed, watch, onMounted, onUnmounted } = Vue;
 
@@ -54,6 +55,15 @@ function riskLevel(tagString) {
     return m ? m[1] : null;
 }
 
+// Readable text color against a taxonomy swatch — several of these (yellow,
+// green) are far too light for white text.
+function contrastColor(hex) {
+    if (!hex) return '#000';
+    const h = hex.replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '#1a1a1a' : '#fff';
+}
+
 export default {
     name: 'ValidationRunner',
     delimiters: ['[[', ']]'],
@@ -62,14 +72,20 @@ export default {
         'rule-list':                   RuleList,
         'tags-displays-list':          TagsDisplaysList,
         'vulnerability-displays-list': VulnerabilityDisplaysList,
+        'tag-input':                   TagInput,
     },
     props: {
         csrfToken:                  { type: String,             required: true },
         currentUserId:              { type: [Number, String],   default: null },
         currentUserIsAdmin:         { type: Boolean,            default: false },
         currentUserIsAuthenticated: { type: Boolean,            default: false },
+        // Which of the page's two dr-nav panels is open — 'validation'
+        // (launch + live result) or 'history' (past runs list). Owned by
+        // the page (see validation.html), not here, so the tab bar itself
+        // stays plain page markup like every other dr-nav on the site.
+        activeTab:                  { type: String,             default: 'validation' },
     },
-    emits: ['notify'],
+    emits: ['notify', 'update:active-tab'],
     setup(props, { emit }) {
         // ── Launch options ──────────────────────────────────────────────────
         const fullSync = ref(false);
@@ -195,6 +211,7 @@ export default {
         // rather than a second, separate "history detail" view.
         async function viewHistoryRun(h) {
             if (running.value) return;
+            emit('update:active-tab', 'validation');
             jobUuid.value          = h.uuid;
             jobStatus.value        = h.status;
             quarantined.value      = [];
@@ -298,6 +315,7 @@ export default {
             try {
                 const res = await fetch(`/jobs/api/${jobParam}`);
                 if (!res.ok) { jobUuid.value = null; return; }
+                emit('update:active-tab', 'validation');
                 const data = await res.json();
                 jobUuid.value   = data.uuid;
                 jobStatus.value = data.status;
@@ -450,30 +468,36 @@ export default {
             acceptProposedForRules(ids);
         }
 
-        // ── "Apply a different tag…" — same generic tag search as anywhere
-        //    else in the app, targeting whichever selection opened it. ─────
+        // ── "Apply a different tag…" — a small modal (see .bt-modal-* in
+        //    validation.html) instead of a panel sitting at the bottom of the
+        //    page. Tag search reuses TagInput (server-side search + debounce,
+        //    already fixed for the "thousands of tags after MISP imports"
+        //    slowdown — see its own comments) instead of hand-rolling another
+        //    picker, and a "quick pick" row shortcuts straight to the same 4
+        //    risk tags the filter/proposals use, so applying one doesn't
+        //    require typing+searching at all. ──────────────────────────────
         const pendingCustomTagIds = ref([]);
-        const allTags      = ref([]);
-        const selectedTags = ref([]);
-        const tagSearch    = ref('');
-        const filteredTagList = computed(() => {
-            const q = tagSearch.value.toLowerCase();
-            return allTags.value
-                .filter(t => !selectedTags.value.some(s => s.id === t.id))
-                .filter(t => t.name.toLowerCase().includes(q))
-                .slice(0, 40);
-        });
-        function toggleTagSelection(t) {
-            const i = selectedTags.value.findIndex(s => s.id === t.id);
-            i === -1 ? selectedTags.value.push(t) : selectedTags.value.splice(i, 1);
+        const selectedTags        = ref([]);   // full tag objects — TagInput's own v-model shape
+        const showAllSelectedTags = ref(false); // false = capped preview (first 5), true = everything
+
+        function isQuickTagSelected(level) {
+            const tag = riskTagRow(level);
+            return !!tag && selectedTags.value.some(t => t.id === tag.id);
         }
-        function deselectTag(id) {
+        function toggleQuickTag(level) {
+            const tag = riskTagRow(level);
+            if (!tag) return;
+            selectedTags.value = isQuickTagSelected(level)
+                ? selectedTags.value.filter(t => t.id !== tag.id)
+                : [...selectedTags.value, tag];
+        }
+        function removeSelectedTag(id) {
             selectedTags.value = selectedTags.value.filter(t => t.id !== id);
         }
-        async function loadTags() {
-            const res  = await fetch('/tags/get_all_tags');
-            const data = await res.json();
-            if (res.ok) allTags.value = data.tags || [];
+        function closeCustomTagModal() {
+            pendingCustomTagIds.value = [];
+            selectedTags.value        = [];
+            showAllSelectedTags.value = false;
         }
 
         async function applyCustomTags() {
@@ -485,18 +509,74 @@ export default {
                     selectedTags.value.map(t => t.id),
                     selectedTags.value.map(t => t.name).join(', ')
                 );
-                if (ok) { pendingCustomTagIds.value = []; selectedTags.value = []; }
+                if (ok) closeCustomTagModal();
             } finally {
                 tagging.value = false;
             }
         }
 
-        function onRiskBulkAction({ action, ids }) {
-            if (!Array.isArray(ids) || ids.length === 0) return;
+        // RuleList's bulk toolbar sends the literal string 'ALL' (not an id
+        // array) once "select all N pages" is used — it never had every id
+        // loaded client-side to send. Resolve it here by re-hitting the data
+        // endpoint directly. Built from the CURRENT URL (not the static
+        // job_uuid-only quarantineFetchUrl computed) because RuleList owns
+        // its risk_level/binary/search/sort filter state internally and
+        // syncs all of it onto the address bar — that's the only place this
+        // component can see "what's actually filtered right now", and it's
+        // exactly what "select all pages" is supposed to mean (every row
+        // matching the current filters, not the whole run).
+        //
+        // get_rules_data_table() caps per_page at 100 server-side no matter
+        // what's requested (rule_core.py: `max(1, min(100, per_page))`) — a
+        // single oversized request silently comes back truncated to page 1
+        // of 100, not everything. So this pages through every result instead
+        // of trusting one big per_page to do it in one shot.
+        const resolvingBulkIds = ref(false);
+        async function resolveBulkIds(ids) {
+            if (ids !== 'ALL') return ids;
+            if (!jobUuid.value) return [];
+            const p = new URLSearchParams(window.location.search);
+            p.set('job_uuid', jobUuid.value);
+            p.set('per_page', '100');
+            resolvingBulkIds.value = true;
+            try {
+                const collected = [];
+                let page = 1;
+                let totalPages = 1;
+                do {
+                    p.set('page', String(page));
+                    const res = await fetch(`/tags/admin/validation/rules_data_table?${p.toString()}`);
+                    if (!res.ok) break;
+                    const data = await res.json();
+                    collected.push(...(data.items || []).map(r => r.id));
+                    totalPages = data.total_pages || 1;
+                    page++;
+                } while (page <= totalPages);
+                return collected;
+            } catch (e) {
+                console.error('[ValidationRunner] resolveBulkIds error:', e);
+                return [];
+            } finally {
+                resolvingBulkIds.value = false;
+            }
+        }
+
+        async function onRiskBulkAction({ action, ids }) {
+            if (ids !== 'ALL' && (!Array.isArray(ids) || ids.length === 0)) return;
+            const resolvedIds = await resolveBulkIds(ids);
+            if (!resolvedIds.length) {
+                emit('notify', { message: 'No matching rules to act on.', level: 'error' });
+                return;
+            }
             if (action === 'accept_proposed') {
-                acceptProposedForRules(ids);
+                acceptProposedForRules(resolvedIds);
             } else if (action === 'custom_tag') {
-                pendingCustomTagIds.value = ids;
+                // Quick-pick buttons need riskTagRow() to resolve — guarantee
+                // it's loaded before the modal (with those buttons) opens,
+                // rather than relying on loadResult()'s earlier fire-and-forget
+                // call having already won the race.
+                await loadRiskTags();
+                pendingCustomTagIds.value = resolvedIds;
             }
         }
 
@@ -505,9 +585,11 @@ export default {
             terminalEntries, clearLogs, startRun, quarantined, logsCollapsed,
             baselineOpen, baselineLoading, baselineLoaded, baselineFiles, baselineExcluded, baselineDirs, toggleBaseline,
             quarantineListRef, quarantineFetchUrl, allBinaryOptions, validationRiskLevels,
-            riskBulkActions, onRiskBulkAction,
+            riskBulkActions, onRiskBulkAction, resolvingBulkIds,
             acceptableRuleIds, acceptAllProposed,
-            pendingCustomTagIds, allTags, selectedTags, tagSearch, filteredTagList, toggleTagSelection, deselectTag, loadTags,
+            pendingCustomTagIds, selectedTags, showAllSelectedTags,
+            isQuickTagSelected, toggleQuickTag, removeSelectedTag, closeCustomTagModal,
+            RISK_ORDER, riskMeta, contrastColor,
             tagJobUuid, tagging, applyCustomTags,
             history, historyLoading, viewHistoryRun, deleteHistoryRun, goBackToOverview, STATUS_COLOR, STATUS_ICON,
         };
@@ -516,7 +598,7 @@ export default {
     template: `
 <div>
   <!-- Launch card -->
-  <div class="vr-card">
+  <div v-if="activeTab === 'validation'" class="vr-card">
     <div class="vr-card__header">
       <div class="vr-card__header-left">
         <div class="vr-card__accent"></div>
@@ -571,7 +653,7 @@ export default {
 
   <!-- History — past runs, so there's always something to look at even
        before the first click, and any of them can be revisited. -->
-  <div v-if="jobStatus === 'idle'" class="vr-card">
+  <div v-if="activeTab === 'history'" class="vr-card">
     <div class="vr-card__header">
       <div class="vr-card__header-left">
         <div class="vr-card__accent" style="background:#6f42c1;"></div>
@@ -585,7 +667,7 @@ export default {
 
       <div v-else-if="history.length === 0" class="text-center py-4 text-muted">
         <i class="fa-solid fa-shield-virus fa-2x mb-2 d-block opacity-25"></i>
-        <small>No validation run yet. Click <strong>Start Validation</strong> above to run the first one.</small>
+        <small>No validation run yet. Switch to the <strong>Validation</strong> tab to run the first one.</small>
       </div>
 
       <div v-else class="list-group list-group-flush">
@@ -618,7 +700,7 @@ export default {
   </div>
 
   <!-- Results card -->
-  <div v-if="isDone && quarantined.length > 0" class="vr-card">
+  <div v-if="activeTab === 'validation' && isDone && quarantined.length > 0" class="vr-card">
     <div class="vr-card__header">
       <div class="vr-card__header-left">
         <div class="vr-card__accent" style="background:#ffc107;"></div>
@@ -700,50 +782,84 @@ export default {
           @bulk-action="onRiskBulkAction">
       </rule-list>
 
-      <!-- Apply-a-specific-tag panel — opened by the "Apply a different tag…"
-           bulk action above, targeting whatever selection triggered it. -->
-      <div v-if="pendingCustomTagIds.length > 0" class="rounded-3 p-3 mt-3" style="background: var(--light-bg-color);">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-          <strong class="small">Apply a tag to [[ pendingCustomTagIds.length ]] selected rule(s)</strong>
-          <button class="btn-close" style="font-size:.7rem;" @click="pendingCustomTagIds = []; selectedTags = []"></button>
-        </div>
-        <div class="input-group input-group-sm mb-2">
-          <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search text-muted"></i></span>
-          <input type="text" class="form-control border-start-0" v-model="tagSearch"
-                 @focus="allTags.length === 0 && loadTags()" placeholder="Search tags to apply…">
-        </div>
-        <div v-if="selectedTags.length > 0" class="d-flex flex-wrap gap-1 mb-2">
-          <span v-for="tag in selectedTags" :key="tag.id" class="badge d-flex align-items-center gap-1 px-2"
-                :style="{ backgroundColor: tag.color }">
-            [[ tag.name ]]
-            <i class="fas fa-times ms-1" style="cursor:pointer;font-size:.65rem" @click="deselectTag(tag.id)"></i>
-          </span>
-        </div>
-        <div v-if="tagSearch" style="max-height:140px;overflow-y:auto;">
-          <div v-for="tag in filteredTagList" :key="tag.id"
-               class="d-flex align-items-center gap-2 p-1 rounded-2"
-               style="cursor:pointer;" @click="toggleTagSelection(tag); tagSearch=''">
-            <span class="rounded-circle flex-shrink-0" :style="{ background: tag.color, width:'10px', height:'10px' }"></span>
-            <span class="small">[[ tag.name ]]</span>
-          </div>
-        </div>
-        <button class="btn btn-primary btn-sm fw-bold rounded-pill px-4 mt-2"
-                :disabled="tagging || selectedTags.length === 0"
-                @click="applyCustomTags">
-          <span v-if="tagging" class="spinner-border spinner-border-sm me-2"></span>
-          <i v-else class="fas fa-tag me-2"></i>
-          Apply
-        </button>
-      </div>
-
       <div v-if="tagJobUuid" class="mt-3 border rounded-3 p-3">
         <job-tracker :job-uuid="tagJobUuid" @done="quarantineListRef?.fetchData()"></job-tracker>
       </div>
     </div>
   </div>
 
+  <!-- Apply-a-tag modal — opened by the "Apply a different tag…" bulk
+       action above, targeting whatever selection (single page or "all N
+       pages") triggered it. -->
+  <transition name="bt-modal-fade">
+    <div v-if="pendingCustomTagIds.length > 0" class="bt-modal-backdrop" @click.self="closeCustomTagModal">
+      <div class="bt-modal-dialog" role="dialog" aria-modal="true" aria-label="Apply a tag">
+        <div class="bt-modal-header">
+          <div class="bt-modal-header__icon"><i class="fa-solid fa-tags"></i></div>
+          <div class="bt-modal-header__body">
+            <div class="bt-modal-header__title">Apply a tag</div>
+            <div class="bt-modal-header__sub">[[ pendingCustomTagIds.length ]] rule(s) will be tagged</div>
+          </div>
+          <button type="button" class="bt-modal-close" @click="closeCustomTagModal" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div class="bt-modal-body">
+          <div class="mb-3">
+            <div class="small fw-semibold text-muted mb-2">Quick pick</div>
+            <div class="d-flex flex-wrap gap-2">
+              <button v-for="level in RISK_ORDER" :key="level" type="button"
+                      class="btn btn-sm rounded-pill fw-semibold"
+                      :style="isQuickTagSelected(level)
+                          ? { background: riskMeta(level).color, color: contrastColor(riskMeta(level).color), border: '2px solid ' + riskMeta(level).color }
+                          : { background: 'transparent', color: riskMeta(level).color, border: '2px solid ' + riskMeta(level).color }"
+                      @click="toggleQuickTag(level)">
+                <i v-if="isQuickTagSelected(level)" class="fa-solid fa-check me-1"></i>[[ riskMeta(level).label ]]
+              </button>
+            </div>
+          </div>
+
+          <tag-input v-model="selectedTags" label="Or search for a tag" placeholder="Search tags to apply…"></tag-input>
+
+          <div v-if="selectedTags.length > 0" class="mt-3 pt-3 border-top">
+            <div class="small fw-semibold text-muted mb-1">Selected ([[ selectedTags.length ]])</div>
+            <div class="d-flex flex-wrap gap-1">
+              <span v-for="tag in (showAllSelectedTags ? selectedTags : selectedTags.slice(0, 5))" :key="tag.id"
+                    class="badge d-flex align-items-center gap-1 px-2" :style="{ backgroundColor: tag.color || '#6c757d' }">
+                [[ tag.name ]]
+                <i class="fas fa-times ms-1" style="cursor:pointer;font-size:.65rem" @click="removeSelectedTag(tag.id)"></i>
+              </span>
+              <button v-if="!showAllSelectedTags && selectedTags.length > 5" type="button"
+                      class="badge border-0 bg-secondary-subtle text-secondary-emphasis" style="cursor:pointer;"
+                      @click="showAllSelectedTags = true">
+                +[[ selectedTags.length - 5 ]] more
+              </button>
+              <button v-if="showAllSelectedTags && selectedTags.length > 5" type="button"
+                      class="badge border-0 bg-secondary-subtle text-secondary-emphasis" style="cursor:pointer;"
+                      @click="showAllSelectedTags = false">
+                Show less
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="bt-modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" @click="closeCustomTagModal">Cancel</button>
+          <button type="button" class="btn btn-sm btn-primary fw-bold rounded-pill px-4"
+                  :disabled="tagging || selectedTags.length === 0"
+                  @click="applyCustomTags">
+            <span v-if="tagging" class="spinner-border spinner-border-sm me-2"></span>
+            <i v-else class="fas fa-tag me-2"></i>
+            Apply to [[ pendingCustomTagIds.length ]] rule(s)
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
   <!-- A finished run (fresh or revisited from history) that quarantined nothing -->
-  <div v-if="isDone && quarantined.length === 0" class="vr-card">
+  <div v-if="activeTab === 'validation' && isDone && quarantined.length === 0" class="vr-card">
     <div class="vr-card__header">
       <div class="vr-card__header-left">
         <div class="vr-card__accent" style="background:#198754;"></div>

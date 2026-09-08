@@ -17,6 +17,23 @@
 .vr-card__accent { width: 3px; height: 15px; background: #0d6efd; border-radius: 2px; flex-shrink: 0; }
 .vr-card__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color); }
 .vr-card__body { padding: 1.1rem; }
+
+/* Bulk "apply a tag" modal — same overlay/dialog structure as ReportModal
+   (already loaded on this page), own classes since it's a different
+   feature (this is never a report). */
+.bt-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1055; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.bt-modal-dialog { background: var(--card-bg-color); border-radius: 14px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.bt-modal-header { display: flex; align-items: center; gap: .75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); }
+.bt-modal-header__icon { width: 36px; height: 36px; border-radius: 10px; background: rgba(13,110,253,.1); color: #0d6efd; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: .95rem; }
+.bt-modal-header__body { flex: 1; min-width: 0; }
+.bt-modal-header__title { font-weight: 700; font-size: .95rem; color: var(--text-color); }
+.bt-modal-header__sub { font-size: .78rem; color: var(--subtle-text-color); }
+.bt-modal-close { background: none; border: none; color: var(--subtle-text-color); font-size: 1rem; cursor: pointer; padding: .25rem; line-height: 1; }
+.bt-modal-close:hover { color: var(--text-color); }
+.bt-modal-body { padding: 1.1rem 1.25rem; }
+.bt-modal-footer { display: flex; justify-content: flex-end; gap: .5rem; padding: .85rem 1.25rem; border-top: 1px solid var(--border-color); }
+.bt-modal-fade-enter-active, .bt-modal-fade-leave-active { transition: opacity .15s ease; }
+.bt-modal-fade-enter-from, .bt-modal-fade-leave-to { opacity: 0; }
 </style>
 {% endblock %}
 
@@ -50,9 +67,12 @@
 
     <!-- Tabs, with Admin navigation as one more item in the same row -->
     <div class="dr-nav mb-3" role="tablist">
-        <a class="dr-nav__item active" href="/tags/admin/validation">
+        <button type="button" class="dr-nav__item" :class="{ active: viewMode === 'validation' }" @click="viewMode = 'validation'">
             <i class="fas fa-shield-virus"></i><span>Validation</span>
-        </a>
+        </button>
+        <button type="button" class="dr-nav__item" :class="{ active: viewMode === 'history' }" @click="viewMode = 'history'">
+            <i class="fas fa-clock-rotate-left"></i><span>History</span>
+        </button>
         {% if not tag_manager_view %}
         <span class="dr-nav__sep"></span>
         {{ anav.admin_nav_toggle() }}
@@ -67,6 +87,8 @@
         :current-user-id="currentUserId"
         :current-user-is-admin="currentUserIsAdmin"
         :current-user-is-authenticated="currentUserIsAuthenticated"
+        :active-tab="viewMode"
+        @update:active-tab="viewMode = $event"
         @notify="notify">
     </validation-runner>
 
@@ -75,7 +97,7 @@
 
 {% block script %}
 <script type="module">
-    const { createApp } = Vue;
+    const { createApp, ref, watch } = Vue;
     import { create_message } from '/static/js/toaster.js';
     import ValidationRunner from '/static/js/tags/manage/ValidationRunner.js';
 
@@ -92,7 +114,17 @@
                 create_message(message, level === 'error' ? 'danger-subtle' : level === 'success' ? 'success-subtle' : 'info-subtle');
             }
 
-            return { csrfToken, currentUserId, currentUserIsAdmin, currentUserIsAuthenticated, notify };
+            // Which of the two panels is open survives a reload/shared link,
+            // same as everything ValidationRunner itself persists (?job=...).
+            const viewMode = ref(new URLSearchParams(window.location.search).get('tab') === 'history' ? 'history' : 'validation');
+            watch(viewMode, (v) => {
+                const p = new URLSearchParams(window.location.search);
+                if (v === 'history') p.set('tab', 'history'); else p.delete('tab');
+                const qs = p.toString();
+                window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+            });
+
+            return { csrfToken, currentUserId, currentUserIsAdmin, currentUserIsAuthenticated, notify, viewMode };
         }
     }).mount('#main-container');
 </script>
