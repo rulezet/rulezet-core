@@ -2,7 +2,6 @@
 {% block title %}{{ post.title if post else 'Post' }} — Rulezet{% endblock %}
 
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
@@ -513,6 +512,11 @@
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
     import { sanitizeHtml }          from '/static/js/sanitize.js'
     const { createApp, ref, computed, watch, onMounted, onUnmounted } = Vue
+
+    // Vendored locally instead of the unpinned/no-SRI jsdelivr CDN copy this
+    // page used to load — matches every other markdown consumer in the app.
+    const _markedMod = await import('/static/js/marked.min.js')
+    const marked     = _markedMod.marked || _markedMod.default || window.marked
 
     const isAuthenticated = {{ current_user.is_authenticated | tojson }}
     const isAdmin         = {{ current_user.is_admin()        | tojson }}
