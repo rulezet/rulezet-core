@@ -630,6 +630,18 @@
     padding-right: .65rem;
     margin-right: .1rem;
 }
+.rl-bulk-select-all {
+    border: 1px solid #0d6efd;
+    background: rgba(13,110,253,.1);
+    color: #0d6efd;
+    border-radius: 8px;
+    padding: .22rem .55rem;
+    font-size: .74rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.rl-bulk-select-all:hover { background: #0d6efd; color: #fff; }
 .rl-bulk-actions { display: flex; gap: .3rem; flex-wrap: wrap; }
 .rl-bulk-btn {
     border: 1px solid var(--border-color);

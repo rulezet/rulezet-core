@@ -1451,6 +1451,14 @@ export default {
                 <span class="rl-bulk-count">
                     {{ selectionCount }} {{ selectionCount === 1 ? 'rule' : 'rules' }} selected
                 </span>
+                <!-- Only what's checked on THIS page is selected until this is
+                     clicked — right here, next to the action buttons, so it's
+                     impossible to miss and act on "25 selected" while meaning
+                     "all 72 matching". -->
+                <button v-if="!allPagesSelected && selectableTotal > selectionCount"
+                        class="rl-bulk-select-all" @click="selectAllPages">
+                    Select all {{ selectableTotal }} matching rules instead
+                </button>
                 <div class="rl-bulk-actions">
                     <button v-for="action in bulkActions" :key="action.key"
                             class="rl-bulk-btn"
