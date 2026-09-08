@@ -5,7 +5,6 @@ import re
 import uuid
 import secrets
 import string
-import hmac
 import difflib
 from urllib.parse import urlparse
 from flask import request
@@ -29,15 +28,7 @@ def get_user_api(api_key):
     return User.query.filter_by(api_key=api_key).first()
 
 def get_user_from_api(headers):
-    """Try to get bot user by matrix id. If not, get basic user"""
-    if "MATRIX-ID" in headers:
-        bot = User.query.filter_by(last_name="Bot", first_name="Matrix").first()
-        if bot:
-            incoming = headers.get("X-API-KEY", "")
-            if bot.api_key and hmac.compare_digest(bot.api_key, incoming):
-                user = User.query.filter_by(matrix_id=headers["MATRIX-ID"]).first()
-                if user:
-                    return user
+    """Resolve the acting user from an X-API-KEY header."""
     user = get_user_api(headers.get("X-API-KEY"))
     return user
 
