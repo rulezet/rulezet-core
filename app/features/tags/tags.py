@@ -612,6 +612,14 @@ def validation_rules_data_table():
     for d in items:
         e = by_rule_id.get(d['id'], {})
         risk = risk_by_rule_id[d['id']]
+        # Same muted override as the risk badge/chart/quick-pick, applied to
+        # the rule's actual tag chips too (shown via TagsDisplaysList in the
+        # Tags column) — otherwise "medium" reads as one color in the risk
+        # badge and the taxonomy's own neon yellow right next to it.
+        for t in d.get('tags') or []:
+            level = _RISK_LEVEL_BY_TAG_NAME.get(t.get('name'))
+            if level:
+                t['color'] = _RISK_DISPLAY_COLORS[level]
         d['validation_risk'] = {
             "hits":            e.get('hits', 0),
             "proposed_level":  risk['proposed'],

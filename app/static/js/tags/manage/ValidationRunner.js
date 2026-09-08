@@ -292,6 +292,7 @@ export default {
             try {
                 const resolvedIds = new Set();
                 const dismissedIds = new Set();
+                const mismatchIds = new Set();
                 let page = 1, totalPages = 1;
                 do {
                     const res = await fetch(`/tags/admin/validation/rules_data_table?job_uuid=${jobUuid.value}&page=${page}&per_page=100`);
@@ -301,13 +302,21 @@ export default {
                         if (!r.validation_risk) continue;
                         if (r.validation_risk.resolved)  resolvedIds.add(r.id);
                         if (r.validation_risk.dismissed) dismissedIds.add(r.id);
+                        if (r.validation_risk.mismatch)  mismatchIds.add(r.id);
                     }
                     totalPages = data.total_pages || 1;
                     page++;
                 } while (page <= totalPages);
+                // mismatch here comes straight from the backend (live current
+                // tag vs proposed_level — see tags.py) instead of being
+                // recomputed client-side from upstream_tag/proposed_tag on
+                // the static quarantined.value snapshot, which is exactly
+                // the mismatch the badge/filter no longer use and would
+                // disagree with them.
                 for (const q of quarantined.value) {
                     q.resolved  = q.rule_id != null && resolvedIds.has(q.rule_id);
                     q.dismissed = q.rule_id != null && dismissedIds.has(q.rule_id);
+                    q.mismatch  = q.rule_id != null && mismatchIds.has(q.rule_id);
                 }
             } catch (e) {
                 console.error('[ValidationRunner] refreshResolvedStatus error:', e);
@@ -572,9 +581,11 @@ export default {
         const reviewedCount   = computed(() => quarantined.value.filter(q => q.resolved).length);
         const dismissedCount  = computed(() => quarantined.value.filter(q => q.dismissed).length);
         const pendingCount    = computed(() => quarantined.value.length - reviewedCount.value);
-        const mismatchCount   = computed(() =>
-            quarantined.value.filter(q => q.upstream_tag && q.upstream_tag !== q.proposed_tag && !q.resolved).length
-        );
+        // q.mismatch is merged in live by refreshResolvedStatus() (the same
+        // current-tag-vs-proposed definition the badge/filter use) — never
+        // recomputed here from the static upstream_tag/proposed_tag
+        // snapshot, which was a second, disagreeing definition of mismatch.
+        const mismatchCount   = computed(() => quarantined.value.filter(q => q.mismatch && !q.resolved).length);
         const riskBreakdownChartData = computed(() => ({
             categories: RISK_ORDER.map(l => riskMeta(l).label),
             colors: RISK_ORDER.map(l => riskMeta(l).color),
