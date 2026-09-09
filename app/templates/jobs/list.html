@@ -117,7 +117,7 @@
                     <div v-for="job in alerts_warnings" :key="'w-' + job.uuid" class="jobs-alert-item">
                         <span class="jobs-alert-dot jobs-alert-dot--warning"></span>
                         <span class="jobs-alert-title">[[ job.title ]]</span>
-                        <span class="jobs-alert-msg" v-if="job.progress > 0">Cancelled at [[ job.progress ]]%</span>
+                        <span class="jobs-alert-msg" v-if="job.progress > 0">Cancelled at [[ clampPct(job.progress) ]]%</span>
                         <span class="jobs-alert-msg" v-else>Cancelled before completing</span>
                         <span class="jobs-alert-date">[[ relativeDate(job.created_at) ]]</span>
                         <a :href="'/jobs/detail/' + job.uuid" class="jobs-alert-view">
@@ -158,10 +158,10 @@
                         <div
                             class="jobs-progress-fill"
                             :class="item.status === 'running' ? 'jobs-progress-fill--running' : ''"
-                            :style="{ width: item.progress + '%' }">
+                            :style="{ width: clampPct(item.progress) + '%' }">
                         </div>
                     </div>
-                    <span class="jobs-progress-label">[[ item.progress ]]%</span>
+                    <span class="jobs-progress-label">[[ clampPct(item.progress) ]]%</span>
                 </div>
             </template>
 
@@ -186,10 +186,10 @@
                         <div
                             class="jobs-card-progress-fill"
                             :class="item.status === 'running' ? 'jobs-card-progress-fill--running' : ''"
-                            :style="{ width: item.progress + '%' }">
+                            :style="{ width: clampPct(item.progress) + '%' }">
                         </div>
                     </div>
-                    <div class="jobs-card-progress-label">[[ item.progress ]]% <span v-if="item.duration !== null && item.duration !== undefined">· [[ formatDuration(item.duration) ]]</span></div>
+                    <div class="jobs-card-progress-label">[[ clampPct(item.progress) ]]% <span v-if="item.duration !== null && item.duration !== undefined">· [[ formatDuration(item.duration) ]]</span></div>
                 </div>
                 <div v-if="item.error" class="mt-1" style="font-size:.72rem;color:#ef4444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                     <i class="fas fa-circle-xmark me-1"></i>[[ item.error ]]
@@ -345,6 +345,13 @@
                 setTimeout(() => table_ref.value?.fetchData(), 0)
             }
 
+            // A job handler occasionally reports progress past 100 (a counting
+            // bug in that handler) — clamp it here rather than trusting the
+            // raw value, so a bad report can't blow out a progress bar's width.
+            function clampPct(p) {
+                return Math.max(0, Math.min(100, p || 0))
+            }
+
             function statusIcon(status) {
                 const icons = {
                     pending:   'fas fa-clock',
@@ -415,7 +422,7 @@
                 table_ref, can_manage, active_status,
                 status_filters, fetch_url, columns, bulk_actions,
                 alerts_errors, alerts_warnings, alerts_open,
-                setStatusFilter, statusIcon, formatDuration,
+                setStatusFilter, statusIcon, formatDuration, clampPct,
                 relativeDate, manualRefresh,
                 handleView, handleDelete, actionJob, handleBulk,
             }

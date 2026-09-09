@@ -309,6 +309,16 @@
 
 .jobs-timeline-fill--stopped { background: #dc3545; }
 
+/* Payload viewer — capped height with its own scroll, so expanding a deep/
+   large JSON tree scrolls in place instead of growing the whole row (and
+   dragging the Progress card + everything below it down with it). */
+.jobs-payload-scroll {
+    max-height: 460px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: .35rem;
+}
+
 .jobs-timeline-node {
     position: absolute;
     top: 50%;

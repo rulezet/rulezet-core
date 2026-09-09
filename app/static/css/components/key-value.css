@@ -181,6 +181,19 @@
     flex-shrink: 0;
 }
 
+/* Search-match highlight — same orange convention as DataTable's .dt-highlight */
+mark.kv-highlight {
+    background: rgba(255, 200, 0, 0.35);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+    font-weight: 600;
+}
+body.dark-mode mark.kv-highlight {
+    background: rgba(255, 200, 0, 0.22);
+    color: #ffe066;
+}
+
 /*---KV_PRIMITIVES---*/
 
 .kv-primitive {

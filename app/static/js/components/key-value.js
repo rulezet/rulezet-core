@@ -2,11 +2,17 @@
  * key-value.js — Recursive JSON/object inspector.
  *
  * Props:
- *   data       any      Value to display (object, array, primitive, null)
- *   label      String   Root label
- *   depth      Number   Internal recursion depth
- *   collapsed  Boolean  Start collapsed
- *   max-depth  Number   Auto-collapse beyond this depth (default: 3)
+ *   data               any      Value to display (object, array, primitive, null)
+ *   label              String   Root label
+ *   depth              Number   Internal recursion depth
+ *   collapsed          Boolean  Start collapsed
+ *   max-depth          Number   Auto-collapse beyond this depth (default: 3)
+ *   auto-collapse-above Number  Start ANY node collapsed if it has more than
+ *                                this many direct children — applied at every
+ *                                depth (not just the root), so a payload with
+ *                                one huge array buried inside otherwise-small
+ *                                objects only collapses that one heavy node
+ *                                instead of the whole tree. Default: null (off).
  *
  * Root-only features (depth === 0):
  *   - Search bar (filters keys + primitive values recursively)
@@ -65,28 +71,48 @@ export default {
     name: 'KeyValue',
 
     props: {
-        data:      { default: null },
-        label:     { type: String,  default: null },
-        depth:     { type: Number,  default: 0 },
-        maxDepth:  { type: Number,  default: 3 },
-        collapsed: { type: Boolean, default: false },
+        data:               { default: null },
+        label:              { type: String,  default: null },
+        depth:              { type: Number,  default: 0 },
+        maxDepth:           { type: Number,  default: 3 },
+        collapsed:          { type: Boolean, default: false },
+        autoCollapseAbove:  { type: Number,  default: null },
     },
 
     setup(props) {
         // ── Provide/inject force-state and search (root provides, children inject) ──
         let force_state, search_query
+        const search_input = ref('')  // bound to the text field — see debounce below
 
         if (props.depth === 0) {
             force_state  = ref(null)  // 'collapse' | 'expand' | null
             search_query = ref('')
             provide('kv_force',  force_state)
             provide('kv_search', search_query)
+
+            // A large payload means `entries`/`matches_query` re-walk the whole
+            // (possibly huge, arbitrarily nested) tree on every recompute — at
+            // every depth, since each nested <key-value> filters independently.
+            // Committing search_query on every keystroke made that re-walk run
+            // per character typed, which is what froze the tab on a big JSON.
+            // Debounce so it only runs once typing actually pauses.
+            let search_debounce_timer = null
+            watch(search_input, (val) => {
+                clearTimeout(search_debounce_timer)
+                search_debounce_timer = setTimeout(() => { search_query.value = val }, 300)
+            })
         } else {
             force_state  = inject('kv_force',  ref(null))
             search_query = inject('kv_search', ref(''))
         }
 
-        const open = ref(!props.collapsed && props.depth < props.maxDepth)
+        function child_count(v) {
+            if (!is_complex(v)) return 0
+            return Array.isArray(v) ? v.length : Object.keys(v).length
+        }
+        const heavy = props.autoCollapseAbove != null && child_count(props.data) > props.autoCollapseAbove
+
+        const open = ref(!props.collapsed && !heavy && props.depth < props.maxDepth)
 
         watch(force_state, (val) => {
             if (val === 'collapse') open.value = false
@@ -115,7 +141,39 @@ export default {
         const complex     = computed(() => is_complex(props.data))
         const search_active = computed(() => !!(search_query.value?.trim()))
 
+        // While searching, a node auto-opens ONLY if it still has at least one
+        // matching child after filtering — not indiscriminately every node,
+        // which would undo auto-collapse-above and bury the actual matches in
+        // noise. Clearing the search reverts to whatever `open` already was.
+        const display_open = computed(() =>
+            search_active.value ? entries.value.length > 0 : open.value
+        )
+
         function toggle() { open.value = !open.value }
+
+        // ── Search-match highlighting (orange, same convention as DataTable) ──
+        function escape_html(str) {
+            return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        }
+        function escape_regex(str) {
+            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        }
+        function highlight(text) {
+            const str = String(text ?? '')
+            const q = (search_query.value || '').trim()
+            if (!q || !str) return escape_html(str)
+            try {
+                const parts = str.split(new RegExp(`(${escape_regex(q)})`, 'gi'))
+                const q_lower = q.toLowerCase()
+                return parts.map(part =>
+                    part.toLowerCase() === q_lower
+                        ? `<mark class="kv-highlight">${escape_html(part)}</mark>`
+                        : escape_html(part)
+                ).join('')
+            } catch {
+                return escape_html(str)
+            }
+        }
 
         function collapse_all() {
             force_state.value = 'collapse'
@@ -133,9 +191,9 @@ export default {
         }
 
         return {
-            open, entries, data_type, data_label, complex, search_active,
-            search_query, force_state,
-            toggle, collapse_all, expand_all, copy_val,
+            open, display_open, entries, data_type, data_label, complex, search_active,
+            search_query, search_input, force_state,
+            toggle, collapse_all, expand_all, copy_val, highlight,
             type_of, display_primitive, is_complex,
         }
     },
@@ -148,12 +206,12 @@ export default {
         <div class="kv-search-wrap">
             <i class="fas fa-magnifying-glass kv-search-icon"></i>
             <input
-                v-model="search_query"
+                v-model="search_input"
                 class="kv-search-input"
                 type="text"
                 placeholder="Search keys or values…"
                 spellcheck="false">
-            <button v-if="search_query" class="kv-search-clear" @click="search_query = ''" title="Clear">
+            <button v-if="search_input" class="kv-search-clear" @click="search_input = ''; search_query = ''" title="Clear">
                 <i class="fas fa-xmark"></i>
             </button>
         </div>
@@ -173,7 +231,7 @@ export default {
     <!-- ── No search results ── -->
     <div v-if="depth === 0 && search_active && !entries.length && complex" class="kv-no-results">
         <i class="fas fa-magnifying-glass"></i>
-        No matches for <code>{{ search_query }}</code>
+        No matches for <code>{{ search_input }}</code>
     </div>
 
     <!-- ── Null / undefined ── -->
@@ -182,28 +240,27 @@ export default {
     </span>
 
     <!-- ── Primitive ── -->
-    <span v-else-if="!complex" :class="['kv-primitive', 'kv-' + data_type]">
-        {{ display_primitive(data) }}
+    <span v-else-if="!complex" :class="['kv-primitive', 'kv-' + data_type]" v-html="highlight(display_primitive(data))">
     </span>
 
     <!-- ── Object / Array ── -->
     <div v-else class="kv-block">
         <div class="kv-block-header" @click="toggle">
-            <i :class="['fas', open ? 'fa-chevron-down' : 'fa-chevron-right', 'kv-toggle-icon']"></i>
+            <i :class="['fas', display_open ? 'fa-chevron-down' : 'fa-chevron-right', 'kv-toggle-icon']"></i>
             <span class="kv-type-badge">{{ data_label }}</span>
-            <span v-if="!open" class="kv-preview">
+            <span v-if="!display_open" class="kv-preview">
                 {{ Array.isArray(data) ? '[…]' : '{…}' }}
             </span>
         </div>
 
-        <div v-if="open" class="kv-children">
+        <div v-if="display_open" class="kv-children">
             <div
                 v-for="entry in entries"
                 :key="entry.key"
                 class="kv-row"
                 :class="{ 'kv-row--complex': is_complex(entry.value) }">
 
-                <span class="kv-key">{{ entry.key }}</span>
+                <span class="kv-key" v-html="highlight(entry.key)"></span>
                 <span class="kv-colon">:</span>
 
                 <key-value
@@ -211,11 +268,12 @@ export default {
                     :data="entry.value"
                     :depth="depth + 1"
                     :max-depth="maxDepth"
-                    :collapsed="depth + 1 >= maxDepth">
+                    :collapsed="depth + 1 >= maxDepth"
+                    :auto-collapse-above="autoCollapseAbove">
                 </key-value>
 
                 <span v-else :class="['kv-primitive', 'kv-' + type_of(entry.value)]">
-                    {{ display_primitive(entry.value) }}
+                    <span v-html="highlight(display_primitive(entry.value))"></span>
                     <button class="kv-copy-btn" title="Copy" @click.stop="copy_val(entry.value)">
                         <i class="fas fa-copy"></i>
                     </button>

@@ -22,161 +22,239 @@
             <nav aria-label="breadcrumb" class="mb-3">
                 <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                     <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                    <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
                     <li class="breadcrumb-item"><a href="/jobs/list" class="text-decoration-none text-muted">Jobs</a></li>
                     <li class="breadcrumb-item active text-muted" aria-current="page" style="font-family:monospace;text-transform:none;">{{ job.uuid }}</li>
                 </ol>
             </nav>
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="banner-icon"><i class="fa-solid fa-gear"></i></div>
-                    <div>
-                        <h2 class="fw-bold mb-1">
-                            [[ job.title || 'Job detail' ]]
-                            <span class="jobs-status-badge ms-2" :class="'jobs-status-badge--' + job.status" style="font-size:.55rem;vertical-align:middle;">
-                                <i :class="statusIcon(job.status)"></i>
-                                [[ job.status ]]
-                            </span>
-                        </h2>
-                        <div class="banner-accent"></div>
-                    </div>
-                </div>
-                <div class="d-flex gap-2 flex-wrap" v-if="can_manage">
-                    <button v-if="job.status === 'running'"
-                        class="btn btn-sm btn-outline-warning"
-                        @click="doAction('pause')">
-                        <i class="fas fa-pause me-1"></i> Pause
-                    </button>
-                    <button v-if="job.status === 'paused'"
-                        class="btn btn-sm btn-outline-primary"
-                        @click="doAction('resume')">
-                        <i class="fas fa-play me-1"></i> Resume
-                    </button>
-                    <button v-if="['pending','running','paused'].includes(job.status)"
-                        class="btn btn-sm btn-outline-danger"
-                        @click="doAction('cancel')">
-                        <i class="fas fa-ban me-1"></i> Cancel
-                    </button>
-                    <button v-if="!['running','pending'].includes(job.status)"
-                        class="btn btn-sm btn-outline-danger"
-                        @click="doDelete">
-                        <i class="fas fa-trash me-1"></i> Delete
-                    </button>
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="banner-icon"><i class="fa-solid fa-gear"></i></div>
+                <div>
+                    <h2 class="fw-bold mb-1">[[ job.title || 'Job detail' ]]</h2>
+                    <div class="banner-accent"></div>
                 </div>
             </div>
             <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
-                <span class="me-3"><i class="fas fa-tag me-1 opacity-50"></i>[[ job.type ]]</span>
-                <span v-if="job.created_at"><i class="fas fa-clock me-1 opacity-50"></i>[[ new Date(job.created_at).toLocaleString() ]]</span>
+                Background job execution — status, progress, payload, and full logs.
             </p>
         </div>
 
         {% if current_user.is_admin() %}
-
         {{ anav.admin_nav('jobs', jobs_count=running_jobs_count) }}
-
         {% endif %}
-        <!-- ── Info grid ── -->
-        <div class="jobs-detail-grid">
 
-            <!-- Job info card -->
-            <div class="jobs-detail-card">
-                <h6><i class="fas fa-circle-info me-1"></i> Job info</h6>
-                <div class="jobs-detail-field">
-                    <span class="jobs-detail-label">UUID</span>
-                    <code class="jobs-detail-value" style="font-size:.72rem;">[[ job.uuid ]]</code>
-                </div>
-                <div class="jobs-detail-field">
-                    <span class="jobs-detail-label">Type</span>
-                    <span class="jobs-detail-value">[[ job.type ]]</span>
-                </div>
-                <div class="jobs-detail-field">
-                    <span class="jobs-detail-label">Created</span>
-                    <span class="jobs-detail-value">[[ job.created_at ? new Date(job.created_at).toLocaleString() : '—' ]]</span>
-                </div>
-                <div class="jobs-detail-field">
-                    <span class="jobs-detail-label">Started</span>
-                    <span class="jobs-detail-value">[[ job.started_at ? new Date(job.started_at).toLocaleString() : '—' ]]</span>
-                </div>
-                <div class="jobs-detail-field">
-                    <span class="jobs-detail-label">Finished</span>
-                    <span class="jobs-detail-value">[[ job.finished_at ? new Date(job.finished_at).toLocaleString() : '—' ]]</span>
-                </div>
-                <div class="jobs-detail-field">
-                    <span class="jobs-detail-label">Duration</span>
-                    <span class="jobs-detail-value">[[ job.duration !== null && job.duration !== undefined ? formatDuration(job.duration) : '—' ]]</span>
-                </div>
-
-                <!-- Input payload -->
-                <div v-if="job.meta && Object.keys(job.meta).length" class="mt-3">
-                    <key-value :data="job.meta" label="Payload"></key-value>
-                </div>
+        <!-- ── Main detail card — same shell as rule/bundle detail pages ── -->
+        <div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4" style="border-radius:12px;">
+            <div class="card-watermark-detail"><i class="fa-solid fa-gear"></i></div>
+            <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+                <span class="jobs-status-badge" :class="'jobs-status-badge--' + job.status">
+                    <i :class="statusIcon(job.status)"></i> [[ job.status ]]
+                </span>
+                <span class="badge rounded-pill bg-dark pt-1 shadow-sm">[[ job.type ]]</span>
             </div>
+            <div class="card-body p-4 p-md-5 position-relative" style="z-index:1;">
 
-            <!-- Progress + result card -->
-            <div class="jobs-detail-card">
-                <h6><i class="fas fa-chart-simple me-1"></i> Progress</h6>
-                <div class="jobs-big-progress">
-                    <div class="jobs-big-progress-bar">
-                        <div
-                            class="jobs-big-progress-fill"
-                            :class="job.status === 'running' ? 'jobs-big-progress-fill--running' : ''"
-                            :style="{ width: job.progress + '%' }">
-                        </div>
-                    </div>
-                    <div class="jobs-big-progress-pct">[[ job.progress ]]%</div>
+                <!-- Who launched it, and when -->
+                <div class="d-flex align-items-center gap-2 flex-wrap mb-4">
+                    <user-chip v-if="job.author && job.author.id"
+                        :user-id="job.author.id" :username="job.author.username"
+                        :avatar="job.author.avatar" size="sm" :show-name="true">
+                    </user-chip>
+                    <span class="text-muted" style="font-size:.85rem;">launched this job</span>
+                    <span class="text-muted" style="font-size:.85rem;">
+                        <i class="fas fa-clock me-1 opacity-50"></i>[[ formatDateTime(job.created_at) ]]
+                    </span>
                 </div>
 
-                <!-- Lifecycle timeline — purely visual, derived from job.status/progress -->
-                <div class="jobs-timeline">
-                    <div class="jobs-timeline-caption-wrap">
-                        <div class="jobs-timeline-caption" :class="'jobs-timeline-caption--' + job.status">
-                            <i :class="timelineCaptionIcon"></i>
-                            <span>[[ timelineCaptionText ]]</span>
-                            <i v-if="timelineDetailLines.length" class="fas fa-circle-info jobs-timeline-caption-info"></i>
+                <!-- Metadata — same icon + small row pattern as rule/bundle detail -->
+                <div class="rounded-3 border p-3" style="background:var(--light-bg-color);">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-fingerprint me-2 text-secondary" style="width:20px;"></i>
+                                <small class="text-muted me-2">UUID:</small>
+                                <small class="text-break fw-mono" style="font-size:.72rem;">[[ job.uuid ]]</small>
+                            </div>
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-tag me-2 text-secondary" style="width:20px;"></i>
+                                <small class="text-muted me-2">Type:</small>
+                                <small>[[ job.type ]]</small>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-calendar-plus me-2 text-secondary" style="width:20px;"></i>
+                                <small class="text-muted me-2">Created:</small>
+                                <small>[[ formatDateTime(job.created_at) ]]</small>
+                            </div>
                         </div>
-                        <div v-if="timelineDetailLines.length" class="jobs-timeline-detail">
-                            <div class="jobs-timeline-detail-title"><i class="fas fa-terminal me-1"></i>Last log entries</div>
-                            <div v-for="(l, i) in timelineDetailLines" :key="i"
-                                 class="jobs-timeline-detail-line" :class="'jobs-timeline-detail-line--' + l.level"
-                                 @click="jumpToLog(l)" title="Jump to this line in the log">
-                                <span class="jobs-timeline-detail-ts">[[ l.ts ]]</span>[[ l.msg ]]
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-play me-2 text-secondary" style="width:20px;"></i>
+                                <small class="text-muted me-2">Started:</small>
+                                <small>[[ job.started_at ? formatDateTime(job.started_at) : '—' ]]</small>
+                            </div>
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-flag-checkered me-2 text-secondary" style="width:20px;"></i>
+                                <small class="text-muted me-2">Finished:</small>
+                                <small>[[ job.finished_at ? formatDateTime(job.finished_at) : '—' ]]</small>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-stopwatch me-2 text-secondary" style="width:20px;"></i>
+                                <small class="text-muted me-2">Duration:</small>
+                                <small>[[ job.duration !== null && job.duration !== undefined ? formatDuration(job.duration) : '—' ]]</small>
                             </div>
                         </div>
                     </div>
-                    <div class="jobs-timeline-track" @click="onTimelineTrackClick" title="Click to jump to that point in the log">
-                        <div class="jobs-timeline-fill"
-                             :class="{ 'jobs-timeline-fill--stopped': timelineStopped }"
-                             :style="{ width: job.progress + '%' }"></div>
-                        <div v-for="m in timelineMilestones" :key="m.pct"
-                             class="jobs-timeline-node"
-                             :class="{ 'jobs-timeline-node--reached': job.progress >= m.pct }"
-                             :style="{ left: m.pct + '%' }"
-                             :title="m.title">
-                            <span class="jobs-timeline-dot"><i v-if="m.icon" :class="m.icon"></i></span>
-                            <span class="jobs-timeline-label">[[ m.label ]]</span>
-                        </div>
-                        <div v-if="job.status === 'running'" class="jobs-timeline-current"
-                             :style="{ left: job.progress + '%' }"
-                             :title="'Currently at ' + job.progress + '%'"></div>
-                        <div v-if="timelineStopped" class="jobs-timeline-marker"
-                             :style="{ left: job.progress + '%' }"
-                             :title="(job.status === 'failed' ? 'Failed' : 'Cancelled') + ' at ' + job.progress + '%'">
-                            <i :class="timelineStopIcon"></i>
-                        </div>
-                        <div v-if="readPct !== null" class="jobs-timeline-read"
-                             :style="{ left: readPct + '%' }"
-                             :title="'Log reading position — ' + readPct + '%'"></div>
-                        <div v-for="(marker, idx) in timelineIssueMarkers" :key="'issue-'+idx"
-                             class="jobs-timeline-issue"
-                             :class="'jobs-timeline-issue--' + marker.level"
-                             :style="{ left: marker.pct + '%' }"
-                             :title="(marker.level === 'error' ? 'Error' : 'Warning') + (marker.ts ? ' at ' + marker.ts : '') + ': ' + marker.msg"
-                             @click.stop="jumpToIssue(marker)"></div>
-                    </div>
                 </div>
 
-                <div v-if="job.error" class="alert alert-danger p-2 mt-2" style="font-size:.82rem;">
-                    <i class="fas fa-circle-xmark me-1"></i> <strong>Error:</strong> [[ job.error ]]
+            </div>
+        </div>
+
+        <!-- ── Actions — same convention as rule/bundle detail pages ── -->
+        <div v-if="can_manage || can_delete" class="mb-4 rounded-3 border" style="background:var(--light-bg-color);">
+            <div class="px-3 pt-3 pb-2 d-flex align-items-center gap-2" style="border-bottom:1px solid var(--border-color);">
+                <div style="width:3px;height:14px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
+                <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
+                    <i class="fa-solid fa-bolt me-1"></i>Actions
+                </span>
+            </div>
+            <div class="p-3 d-flex flex-wrap align-items-center gap-2">
+                <button v-if="can_manage && job.status === 'running'"
+                    class="btn btn-sm rounded-pill px-3"
+                    style="background:transparent;border:1px solid #f59e0b55;color:#f59e0b;"
+                    @click="doAction('pause')">
+                    <i class="fas fa-pause me-1"></i>Pause
+                </button>
+                <button v-if="can_manage && job.status === 'paused'"
+                    class="btn btn-sm rounded-pill px-3"
+                    style="background:transparent;border:1px solid #0d6efd55;color:#0d6efd;"
+                    @click="doAction('resume')">
+                    <i class="fas fa-play me-1"></i>Resume
+                </button>
+                <button v-if="can_manage && ['pending','running','paused'].includes(job.status)"
+                    class="btn btn-sm rounded-pill px-3"
+                    style="background:transparent;border:1px solid #dc354555;color:#dc3545;"
+                    @click="doAction('cancel')">
+                    <i class="fas fa-ban me-1"></i>Cancel
+                </button>
+                <button v-if="can_delete && !['running','pending'].includes(job.status)"
+                    class="btn btn-sm rounded-pill px-3 ms-auto"
+                    style="background:transparent;border:1px solid #dc354555;color:#dc3545;"
+                    @click="doDelete">
+                    <i class="fas fa-trash me-1"></i>Delete
+                </button>
+            </div>
+        </div>
+
+        <!-- ── Progress + Payload ── -->
+        <div class="row g-4 mb-2">
+
+            <!-- Progress card -->
+            <div class="col-12 col-lg-7">
+                <div class="card border-0 shadow-sm rounded-3 h-100">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <div style="width:3px;height:14px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
+                                <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
+                                    <i class="fa-solid fa-chart-simple me-1"></i>Progress
+                                </span>
+                            </div>
+                            <span v-if="job.total" class="text-muted" style="font-size:.8rem;">
+                                <strong style="color:var(--text-color);">[[ job.done ]]</strong> / [[ job.total ]] items
+                            </span>
+                        </div>
+
+                        <div class="jobs-big-progress">
+                            <div class="jobs-big-progress-bar">
+                                <div
+                                    class="jobs-big-progress-fill"
+                                    :class="job.status === 'running' ? 'jobs-big-progress-fill--running' : ''"
+                                    :style="{ width: progressPct + '%' }">
+                                </div>
+                            </div>
+                            <div class="jobs-big-progress-pct">[[ progressPct ]]%</div>
+                        </div>
+
+                        <!-- Lifecycle timeline — purely visual, derived from job.status/progress -->
+                        <div class="jobs-timeline">
+                            <div class="jobs-timeline-caption-wrap">
+                                <div class="jobs-timeline-caption" :class="'jobs-timeline-caption--' + job.status">
+                                    <i :class="timelineCaptionIcon"></i>
+                                    <span>[[ timelineCaptionText ]]</span>
+                                    <i v-if="timelineDetailLines.length" class="fas fa-circle-info jobs-timeline-caption-info"></i>
+                                </div>
+                                <div v-if="timelineDetailLines.length" class="jobs-timeline-detail">
+                                    <div class="jobs-timeline-detail-title"><i class="fas fa-terminal me-1"></i>Last log entries</div>
+                                    <div v-for="(l, i) in timelineDetailLines" :key="i"
+                                         class="jobs-timeline-detail-line" :class="'jobs-timeline-detail-line--' + l.level"
+                                         @click="jumpToLog(l)" title="Jump to this line in the log">
+                                        <span class="jobs-timeline-detail-ts">[[ l.ts ]]</span>[[ l.msg ]]
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="jobs-timeline-track" @click="onTimelineTrackClick" title="Click to jump to that point in the log">
+                                <div class="jobs-timeline-fill"
+                                     :class="{ 'jobs-timeline-fill--stopped': timelineStopped }"
+                                     :style="{ width: progressPct + '%' }"></div>
+                                <div v-for="m in timelineMilestones" :key="m.pct"
+                                     class="jobs-timeline-node"
+                                     :class="{ 'jobs-timeline-node--reached': progressPct >= m.pct }"
+                                     :style="{ left: m.pct + '%' }"
+                                     :title="m.title">
+                                    <span class="jobs-timeline-dot"><i v-if="m.icon" :class="m.icon"></i></span>
+                                    <span class="jobs-timeline-label">[[ m.label ]]</span>
+                                </div>
+                                <div v-if="job.status === 'running'" class="jobs-timeline-current"
+                                     :style="{ left: progressPct + '%' }"
+                                     :title="'Currently at ' + progressPct + '%'"></div>
+                                <div v-if="timelineStopped" class="jobs-timeline-marker"
+                                     :style="{ left: progressPct + '%' }"
+                                     :title="(job.status === 'failed' ? 'Failed' : 'Cancelled') + ' at ' + progressPct + '%'">
+                                    <i :class="timelineStopIcon"></i>
+                                </div>
+                                <div v-if="readPct !== null" class="jobs-timeline-read"
+                                     :style="{ left: readPct + '%' }"
+                                     :title="'Log reading position — ' + readPct + '%'"></div>
+                                <div v-for="(marker, idx) in timelineIssueMarkers" :key="'issue-'+idx"
+                                     class="jobs-timeline-issue"
+                                     :class="'jobs-timeline-issue--' + marker.level"
+                                     :style="{ left: marker.pct + '%' }"
+                                     :title="(marker.level === 'error' ? 'Error' : 'Warning') + (marker.ts ? ' at ' + marker.ts : '') + ': ' + marker.msg"
+                                     @click.stop="jumpToIssue(marker)"></div>
+                            </div>
+                        </div>
+
+                        <div v-if="job.error" class="alert alert-danger p-2 mt-3 mb-0" style="font-size:.82rem;">
+                            <i class="fas fa-circle-xmark me-1"></i> <strong>Error:</strong> [[ job.error ]]
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payload card -->
+            <div class="col-12 col-lg-5">
+                <div class="card border-0 shadow-sm rounded-3 h-100">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <div style="width:3px;height:14px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
+                                <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
+                                    <i class="fa-solid fa-code me-1"></i>Payload
+                                </span>
+                            </div>
+                            <button v-if="job.meta && Object.keys(job.meta).length"
+                                class="btn btn-sm p-0 border-0" style="color:var(--subtle-text-color);width:24px;height:24px;"
+                                title="View fullscreen" @click="openPayloadModal">
+                                <i class="fa-solid fa-expand"></i>
+                            </button>
+                        </div>
+                        <div v-if="job.meta && Object.keys(job.meta).length" class="jobs-payload-scroll">
+                            <key-value :data="job.meta" :auto-collapse-above="5"></key-value>
+                        </div>
+                        <div v-else class="text-muted text-center py-4" style="font-size:.85rem;">
+                            <i class="fa-solid fa-inbox mb-2 d-block" style="font-size:1.5rem;opacity:.3;"></i>
+                            No payload for this job.
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -192,6 +270,26 @@
             @scroll="onTerminalScroll">
         </ansi-terminal>
 
+        <!-- ── Payload — fullscreen view ── -->
+        <div class="modal fade" id="payloadModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-fullscreen">
+                <div class="modal-content border-0" style="background:var(--card-bg-color);">
+                    <div class="modal-header border-0 pb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="width:3px;height:14px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
+                            <h5 class="modal-title fw-bold mb-0" style="font-size:1rem;color:var(--text-color);">
+                                <i class="fa-solid fa-code me-1 text-primary"></i>Payload
+                            </h5>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body pt-0">
+                        <key-value v-if="job.meta" :data="job.meta" :auto-collapse-above="15"></key-value>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 {% endblock %}
@@ -204,19 +302,25 @@
     import LoadingBar   from '/static/js/components/loading-bar.js'
     import AnsiTerminal from '/static/js/components/ansi-terminal.js'
     import KeyValue     from '/static/js/components/key-value.js'
+    import UserChip     from '/static/js/components/UserChip.js'
 
     const JOB_UUID   = '{{ job.uuid }}'
     const CAN_MANAGE = {{ current_user.is_admin() | tojson }}
+    // Delete is allowed for an admin OR the user who launched this job — the
+    // backend (api_delete_job → _get_job_or_403) already allows both; only
+    // the button visibility here was admin-only, hiding it from job owners.
+    const CAN_DELETE = {{ (current_user.is_admin() or current_user.id == job.created_by) | tojson }}
 
     const TERMINAL_STATUSES = ['done', 'completed', 'failed', 'cancelled']
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { LoadingBar, AnsiTerminal, KeyValue },
+        components: { LoadingBar, AnsiTerminal, KeyValue, UserChip },
 
         setup() {
             const page_is_loading = ref(false)
             const can_manage      = CAN_MANAGE
+            const can_delete      = CAN_DELETE
             const terminal_ref    = ref(null)
             const job             = ref({
                 uuid:        JOB_UUID,
@@ -224,9 +328,12 @@
                 type:        '',
                 status:      'pending',
                 progress:    0,
+                total:       null,
+                done:        null,
                 logs:        [],
                 error:       null,
                 meta:        {},
+                author:      null,
                 duration:    null,
                 created_at:  null,
                 started_at:  null,
@@ -236,6 +343,13 @@
             let poll_timer = null
 
             const is_live = computed(() => !TERMINAL_STATUSES.includes(job.value.status))
+
+            // A job handler occasionally reports progress past 100 (a counting
+            // bug in that handler) — clamp everywhere it drives layout/text
+            // here rather than trusting the raw value, so a bad report can
+            // never blow out the progress bar's width and push the rest of
+            // the page (e.g. the Delete button) out of view.
+            const progressPct = computed(() => Math.max(0, Math.min(100, job.value.progress || 0)))
 
             const timelineMilestones = [
                 { pct: 0,   label: 'Queued', icon: 'fas fa-inbox',          title: 'Job was queued and waiting to start' },
@@ -256,7 +370,7 @@
                 cancelled: { icon: 'fas fa-ban text-danger',                 text: p => `Cancelled at ${p}%` },
             }
             const timelineCaptionIcon = computed(() => (TIMELINE_CAPTIONS[job.value.status] || TIMELINE_CAPTIONS.pending).icon)
-            const timelineCaptionText = computed(() => (TIMELINE_CAPTIONS[job.value.status] || TIMELINE_CAPTIONS.pending).text(job.value.progress))
+            const timelineCaptionText = computed(() => (TIMELINE_CAPTIONS[job.value.status] || TIMELINE_CAPTIONS.pending).text(progressPct.value))
 
             // Last few log lines, shown on hover next to the caption — each one
             // remembers its real index in job.logs so a click can jump the
@@ -281,7 +395,7 @@
             // used to translate "% scrolled through the log" into a position
             // on the timeline, and to cap track clicks so you can't jump past
             // where the job currently stands.
-            const timelineMaxPct = computed(() => job.value.status === 'done' ? 100 : (job.value.progress || 0))
+            const timelineMaxPct = computed(() => job.value.status === 'done' ? 100 : progressPct.value)
 
             const readPct = ref(null)  // null until the log has been scrolled at least once
             function onTerminalScroll({ pct }) {
@@ -371,6 +485,20 @@
                 return icons[status] || 'fas fa-circle'
             }
 
+            // Clean single-line date+time — "Sep 9, 2026 · 8:17 AM" — instead
+            // of the verbose locale-default toLocaleString() output.
+            function formatDateTime(iso) {
+                if (!iso) return '—'
+                try {
+                    const d = new Date(iso)
+                    const datePart = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+                    const timePart = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                    return `${datePart} · ${timePart}`
+                } catch {
+                    return iso
+                }
+            }
+
             function formatDuration(secs) {
                 if (secs === null || secs === undefined) return '—'
                 if (secs < 60)   return secs.toFixed(1) + 's'
@@ -405,14 +533,20 @@
                 }
             }
 
+            function openPayloadModal() {
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('payloadModal')).show()
+            }
+
             return {
+                openPayloadModal,
                 message_list, page_is_loading,
-                can_manage, job, terminal_ref, is_live, visible_logs, clearLogs,
+                can_manage, can_delete, job, terminal_ref, is_live, visible_logs, clearLogs,
+                progressPct,
                 timelineMilestones, timelineStopped, timelineStopIcon,
                 timelineCaptionIcon, timelineCaptionText, timelineDetailLines, jumpToLog,
                 readPct, onTerminalScroll, onTimelineTrackClick,
                 timelineIssueMarkers, jumpToIssue,
-                statusIcon, formatDuration,
+                statusIcon, formatDuration, formatDateTime,
                 doAction, doDelete,
             }
         }

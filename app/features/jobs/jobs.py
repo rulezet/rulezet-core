@@ -89,6 +89,13 @@ def _job_to_detail(j):
             "msg":   log.message or '',
         })
 
+    u = j.user
+    author = {
+        'id':       u.id if u else None,
+        'username': u.get_username() if u else f'#{j.created_by}',
+        'avatar':   u.get_avatar_url() if u else None,
+    }
+
     return {
         "id":          j.id,
         "uuid":        j.uuid,
@@ -96,11 +103,14 @@ def _job_to_detail(j):
         "type":        j.job_type,
         "status":      j.status,
         "progress":    j.progress_pct,
+        "total":       j.total,
+        "done":        j.done,
         "duration":    duration,
         "error":       j.error,
         "meta":        j.payload or {},
         "result":      None,
         "logs":        logs,
+        "author":      author,
         "created_at":  j.created_at.strftime('%Y-%m-%dT%H:%M:%S') if j.created_at else None,
         "started_at":  j.started_at.strftime('%Y-%m-%dT%H:%M:%S') if j.started_at else None,
         "finished_at": j.finished_at.strftime('%Y-%m-%dT%H:%M:%S') if j.finished_at else None,
