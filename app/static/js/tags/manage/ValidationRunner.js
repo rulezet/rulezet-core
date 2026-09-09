@@ -546,7 +546,7 @@ export default {
             const otherIds = riskTags.value.map(t => t.id).filter(id => !appliedTagIds.includes(id));
             if (!otherIds.length) return;
             try {
-                await fetch('/jobs/create', {
+                const res = await fetch('/jobs/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
                     body: JSON.stringify({
@@ -555,8 +555,40 @@ export default {
                         label:    `Remove conflicting false-positive:risk tag(s) from ${ruleIds.length} rule(s)`,
                     }),
                 });
+                const data = await res.json();
+                // This runs alongside (not before/after) the add job launched
+                // by launchTagJob() — that job's own completion already
+                // refreshes the report/list, but this one can finish later,
+                // leaving a rule with BOTH tags still attached for a moment.
+                // Without watching this one too, refreshResolvedStatus()'s
+                // snapshot could be taken before the removal actually landed
+                // — under-counting "Reviewed" client-side while RuleList's
+                // own live fetch (run later, whenever the page re-filters)
+                // correctly shows the rule as resolved, the exact mismatch
+                // between the KPI tile and the filtered list this caused.
+                if (res.ok && data.job?.uuid) pollUntilDone(data.job.uuid);
             } catch (e) {
                 console.error('[ValidationRunner] removeConflictingRiskTags error:', e);
+            }
+        }
+
+        // Silent completion wait for a background job that has no toast/UI
+        // of its own — just refreshes the report + list once it's done.
+        async function pollUntilDone(uuid) {
+            for (let i = 0; i < 30; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                try {
+                    const res = await fetch(`/jobs/status/${uuid}`);
+                    const data = await res.json();
+                    if (['done', 'failed', 'cancelled'].includes(data.status)) {
+                        quarantineListRef.value?.fetchData();
+                        refreshResolvedStatus();
+                        return;
+                    }
+                } catch (e) {
+                    console.error('[ValidationRunner] pollUntilDone error:', e);
+                    return;
+                }
             }
         }
 
