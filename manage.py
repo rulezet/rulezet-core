@@ -107,6 +107,31 @@ def _sync_with_origin() -> None:
     run(["git", "reset", "--hard", f"origin/{branch}"])
 
 
+def _sync_submodules() -> None:
+    """Bring tracked-branch submodules up to their remote tip.
+
+    Mirrors update.sh's submodule step: rulezet-cast, misp-taxonomies,
+    misp-galaxy and rulezet-validation float to their remote branch on every
+    update (--remote) since we want their latest content automatically —
+    rulezet-validation in particular used to require a separate manual pull
+    on prod; pivotick stays pinned to the committed submodule ref (its dist
+    build is hand-copied into static/ on version bumps, see
+    app/static/js/pivotick.iife.js) and cti is skipped here (too large for
+    --remote; refreshed via the admin UI instead).
+    """
+    run(["git", "submodule", "update", "--init", "--recursive",
+         "app/modules/rulezet-validation"])
+    result = subprocess.run(
+        ["git", "submodule", "update", "--remote", "app/modules/rulezet-cast",
+         "app/modules/misp-taxonomies", "app/modules/misp-galaxy",
+         "app/modules/rulezet-validation"],
+        cwd=ROOT,
+    )
+    if result.returncode != 0:
+        run(["git", "submodule", "update", "--remote"])
+    run(["git", "submodule", "update", "app/modules/pivotick"])
+
+
 def _confirm(prompt: str) -> bool:
     """Ask for confirmation. Returns True if confirmed, False if cancelled (or Ctrl+C)."""
     try:
@@ -304,6 +329,11 @@ def cmd_init() -> None:
     _check_venv()
     header("Initialising Rulezet (first-time setup)")
 
+    info("Initialising Git submodules…")
+    run(["git", "submodule", "update", "--init", "--recursive", "--depth", "1",
+         "app/modules/rulezet-validation"])
+    ok("Submodules initialised")
+
     info("Installing Python dependencies…")
     run([PIP, "install", "-r", "requirements.txt"])
     ok("Dependencies installed")
@@ -339,6 +369,10 @@ def cmd_start_prod() -> None:
     info("Syncing with origin…")
     _sync_with_origin()
     ok("Code updated")
+
+    info("Syncing Git submodules…")
+    _sync_submodules()
+    ok("Submodules up to date")
 
     info("Syncing Python dependencies…")
     run([PIP, "install", "-r", "requirements.txt"])
@@ -404,6 +438,10 @@ def cmd_update() -> None:
     info("Syncing with origin…")
     _sync_with_origin()
     ok("Code updated")
+
+    info("Syncing Git submodules…")
+    _sync_submodules()
+    ok("Submodules up to date")
 
     info("Syncing Python dependencies…")
     run([PIP, "install", "-r", "requirements.txt"])

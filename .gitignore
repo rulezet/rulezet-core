@@ -36,6 +36,7 @@ app/rule/output_rules
 /static/uploads/*
 app/modules/*
 !app/modules/cti
+!app/modules/rulezet-validation
 app/static/uploads/avatars
 app/static/uploads/pivotick_backgrounds
 

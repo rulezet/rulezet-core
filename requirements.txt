@@ -46,4 +46,4 @@ cryptography
 grpcio
 pyvelociraptor
 psutil
-rulezet-validation @ git+https://github.com/rulezet/rulezet-validation.git@6eac375
+-e ./app/modules/rulezet-validation

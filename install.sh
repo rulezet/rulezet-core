@@ -11,6 +11,13 @@ sudo apt install -y python3.12-venv
 python3 -m venv env
 . env/bin/activate
 
+# Init required git submodules (before pip install: requirements.txt installs
+# rulezet-validation editable from its submodule checkout)
+echo -e "${CYAN}📂 Initialising git submodules...${RESET}"
+git submodule update --init --recursive --depth 1 app/modules/rulezet-cast
+git submodule update --init --recursive --depth 1 app/modules/pivotick
+git submodule update --init --recursive --depth 1 app/modules/rulezet-validation
+
 echo -e "${CYAN}📦 Install the Python dependencies...${RESET}"
 pip install -r requirements.txt
 
@@ -47,11 +54,6 @@ if command -v ollama >/dev/null 2>&1 && ! ollama list 2>/dev/null | grep -q '^qw
 fi
 
 chmod +x ./launch.sh
-
-# Init required git submodules
-echo -e "${CYAN}📂 Initialising git submodules...${RESET}"
-git submodule update --init --recursive --depth 1 app/modules/rulezet-cast
-git submodule update --init --recursive --depth 1 app/modules/pivotick
 
 # CTI submodule (mitre/cti) — large repo, only initialise if not already present
 if [ ! -f "app/modules/cti/enterprise-attack/enterprise-attack.json" ]; then

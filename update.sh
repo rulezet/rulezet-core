@@ -41,7 +41,10 @@ echo -e "\n${YELLOW}Updating Git submodules...${NC}"
 # and pivotick (its dist build is hand-copied into static/ on version bumps, not auto-followed —
 # see app/static/js/pivotick.iife.js; --remote here would silently desync the pinned commit from
 # the served JS/CSS the next time upstream pushes to its main branch).
-git submodule update --remote app/modules/rulezet-cast app/modules/misp-taxonomies app/modules/misp-galaxy 2>/dev/null || git submodule update --remote
+# rulezet-validation used to require a separate manual pull on prod — it now floats to its
+# remote branch here too, just like misp-taxonomies/misp-galaxy.
+git submodule update --init --recursive app/modules/rulezet-validation
+git submodule update --remote app/modules/rulezet-cast app/modules/misp-taxonomies app/modules/misp-galaxy app/modules/rulezet-validation 2>/dev/null || git submodule update --remote
 git submodule update app/modules/pivotick
 # Update cti with shallow fetch to keep the footprint small
 echo -e "${YELLOW}Pulling latest MITRE CTI data (shallow)...${NC}"
