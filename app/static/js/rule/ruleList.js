@@ -234,15 +234,21 @@ export default {
                     </button>
                 </div>
 
-                <!-- Column picker (table mode) -->
-                <div v-if="viewMode === 'table'" class="dropdown">
-                    <button class="dt-toolbar-btn dropdown-toggle" data-bs-toggle="dropdown"
-                            aria-expanded="false" aria-label="Toggle columns">
+                <!-- Column picker (table mode) — teleported to <body> so it can
+                     never end up hidden behind the table, regardless of any
+                     stacking-context/z-index the table (or an ancestor) sets up. -->
+                <div v-if="viewMode === 'table'" class="dt-col-picker-wrap">
+                    <button class="dt-toolbar-btn" ref="colPickerBtnRef"
+                            :class="{ 'dt-toolbar-btn--active': showColPicker }"
+                            @click.stop="toggleColPicker" aria-label="Toggle columns">
                         <i class="fas fa-table-columns"></i>
                         <span>Columns</span>
                     </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-2"
-                        style="border-radius:12px;min-width:165px;" @click.stop>
+                </div>
+                <teleport to="body">
+                    <ul v-if="showColPicker && viewMode === 'table'"
+                        class="dropdown-menu show shadow border-0 py-2"
+                        :style="colPickerStyle" @click.stop>
                         <li v-for="col in TOGGLEABLE_COLS" :key="col.key">
                             <label class="dropdown-item rounded-2 d-flex align-items-center gap-2"
                                    style="cursor:pointer;font-size:.84rem;user-select:none;">
@@ -253,7 +259,7 @@ export default {
                             </label>
                         </li>
                     </ul>
-                </div>
+                </teleport>
 
                 <!-- Filters toggle -->
                 <button v-if="showFilters"
@@ -1658,6 +1664,35 @@ export default {
         const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, !props.hiddenColumns.includes(c.key)])))
         function toggleColumn(key) { colVisible[key] = !colVisible[key] }
 
+        // ── Column picker panel — teleported to <body>, positioned manually ──
+        const showColPicker  = ref(false)
+        const colPickerBtnRef = ref(null)
+        const colPickerStyle  = ref({})
+
+        function positionColPicker() {
+            if (!colPickerBtnRef.value) return
+            const rect = colPickerBtnRef.value.getBoundingClientRect()
+            colPickerStyle.value = {
+                position: 'fixed',
+                top: (rect.bottom + 4) + 'px',
+                right: (window.innerWidth - rect.right) + 'px',
+                zIndex: 1071,
+                minWidth: '165px',
+                borderRadius: '12px',
+            }
+        }
+
+        function toggleColPicker() {
+            showColPicker.value = !showColPicker.value
+            if (showColPicker.value) nextTick(positionColPicker)
+        }
+
+        function handleColPickerOutsideClick(e) {
+            if (!showColPicker.value) return
+            if (colPickerBtnRef.value && colPickerBtnRef.value.contains(e.target)) return
+            showColPicker.value = false
+        }
+
         // ── Selection ─────────────────────────────────────────────────────
         const selectedIds       = reactive(new Set())
         const selectedRulesMap  = reactive(new Map()) // id → {id, title, format}
@@ -2360,9 +2395,13 @@ export default {
         onMounted(() => {
             fetchData()
             fetchFormats()
+            document.addEventListener('click', handleColPickerOutsideClick)
         })
 
-        onUnmounted(() => clearTimeout(searchTimer))
+        onUnmounted(() => {
+            clearTimeout(searchTimer)
+            document.removeEventListener('click', handleColPickerOutsideClick)
+        })
 
         // Re-fetch when switching views (per-page may have changed)
         watch(viewMode, () => { page.value = 1; fetchData() })
@@ -2394,6 +2433,7 @@ export default {
             allExpanded, expandAll, collapseAll,
             // Columns
             TOGGLEABLE_COLS, colVisible, toggleColumn,
+            showColPicker, colPickerBtnRef, colPickerStyle, toggleColPicker,
             // Selection
             selectedIds, allPagesSelected, isSelectable, pageSelectableItems, selectableTotal,
             allOnPageSelected, someOnPageSelected,
