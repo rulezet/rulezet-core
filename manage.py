@@ -328,6 +328,10 @@ def cmd_start_prod() -> None:
     run([FLASK, "db", "upgrade"], extra_env={"FLASKENV": "production"})
     ok("Database schema up to date")
 
+    info("Seeding default data (formats, platform-tag configs, AI agent configs)…")
+    run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "production"})
+    ok("Default data up to date")
+
     # 3. Start
     public_url = os.environ.get("INSTANCE_PUBLIC_URL") or "http://0.0.0.0:80"
     header(f"Starting Rulezet v{app_version()} (production)")
