@@ -1598,10 +1598,12 @@ export default {
         // with resolvedOnly (the parent page's "Reviewed" KPI tile drives
         // that one, e.g. ValidationRunner's report) — turning one on clears
         // the other rather than sending a contradictory pair of params.
+        const _resolvedOnlyFromUrl = _p('resolved_only') === 'true'
         const pendingOnly  = ref(
+            _resolvedOnlyFromUrl ? false :
             _url.has('pending_only') ? _p('pending_only') === 'true' : !!props.defaultPendingOnly
         )
-        const resolvedOnly = ref(_p('resolved_only') === 'true')
+        const resolvedOnly = ref(_resolvedOnlyFromUrl)
         function setPendingOnly(v)  { pendingOnly.value  = v; if (v) resolvedOnly.value = false; onFilterChange() }
         function setResolvedOnly(v) { resolvedOnly.value = v; if (v) pendingOnly.value  = false; onFilterChange() }
         // Picking a binary is all about seeing which rule fired on it —
@@ -1774,15 +1776,18 @@ export default {
                 _upd('mismatch_only', riskFilter.value === 'mismatch' ? 'true' : null)
                 _upd('risk_level',    riskFilter.value !== 'mismatch' ? riskFilter.value || null : null)
                 _upd('binary',        selectedBinaries.value.join(',') || null)
+                _upd('resolved_only', resolvedOnly.value ? 'true' : null)
                 // Only written when it actually diverges from the default —
                 // pending-only is now the opening state (defaultPendingOnly),
                 // so writing "true" every single time just clutters every
                 // URL with the state it would open in anyway. Explicitly
                 // false still gets written, so turning it off (e.g. the
                 // "Quarantined" KPI tile) survives a reload instead of
-                // snapping back to the default.
-                _upd('pending_only',  pendingOnly.value !== props.defaultPendingOnly ? String(pendingOnly.value) : null)
-                _upd('resolved_only', resolvedOnly.value ? 'true' : null)
+                // snapping back to the default. resolved_only=true already
+                // implies pending_only=false on its own — no need for both.
+                _upd('pending_only', resolvedOnly.value
+                    ? null
+                    : (pendingOnly.value !== props.defaultPendingOnly ? String(pendingOnly.value) : null))
             }
 
             const qs = p.toString()
