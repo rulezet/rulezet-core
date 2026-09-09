@@ -19,7 +19,7 @@
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">Bulk Field Parser</li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">{% if is_admin %}Bulk Field Parser{% else %}Platform Tags{% endif %}</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
@@ -27,37 +27,53 @@
                 <i class="fa-solid fa-wand-magic-sparkles"></i>
             </div>
             <div>
-                <h2 class="fw-bold mb-1">Bulk Field Parser</h2>
+                <h2 class="fw-bold mb-1">{% if is_admin %}Bulk Field Parser{% else %}Platform Tags{% endif %}</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
+        {% if is_admin %}
         <p class="text-muted mb-0" style="max-width:680px;font-size:.95rem;">
             Extract metadata from rule content and populate fields like
             <code>license</code>, <code>author</code>, <code>original_uuid</code> and more —
             using keyword detection or custom regex patterns, on selected or all rules.
         </p>
+        {% else %}
+        <p class="text-muted mb-0" style="max-width:680px;font-size:.95rem;">
+            Detect the platform(s) a rule targets from its title/description/content
+            and tag it automatically, using a saved pattern config.
+        </p>
+        {% endif %}
     </div>
 
-    <!-- Tabs, with Admin navigation as one more item in the same row -->
+    <!-- Tabs, with Admin navigation as one more item in the same row.
+         A Tag manager (non-admin, rule.tag_any) only ever gets the Platform
+         Tags tab — Base Fields and the admin quick-nav stay admin-only. -->
     <div class="dr-nav mb-3" role="tablist">
+        {% if is_admin %}
         <a class="dr-nav__item active" data-bs-toggle="tab" href="#pane-base-fields" role="tab">
             <i class="fas fa-wand-magic-sparkles"></i><span>Base Fields</span>
         </a>
-        <a class="dr-nav__item" data-bs-toggle="tab" href="#pane-platform-tags" role="tab">
+        {% endif %}
+        <a class="dr-nav__item {% if not is_admin %}active{% endif %}" data-bs-toggle="tab" href="#pane-platform-tags" role="tab">
             <i class="fas fa-display"></i><span>Platform Tags</span>
         </a>
+        {% if is_admin %}
         <span class="dr-nav__sep"></span>
         {{ anav.admin_nav_toggle() }}
+        {% endif %}
 
         <a href="/jobs/list" class="btn btn-primary btn-sm shadow-sm fw-bold rounded-pill px-4 ms-auto">
             <i class="fas fa-tasks me-2"></i>My Jobs
         </a>
     </div>
+    {% if is_admin %}
     {{ anav.admin_nav_panel('bulk_parse_fields') }}
+    {% endif %}
 
     <div class="tab-content">
 
-        <!-- TAB 1 — Base Fields -->
+        {% if is_admin %}
+        <!-- TAB 1 — Base Fields (admin only) -->
         <div class="tab-pane fade show active" id="pane-base-fields" role="tabpanel">
             <field-parser-updater
                 :csrf-token="csrfToken"
@@ -66,9 +82,10 @@
                 @notify="notify">
             </field-parser-updater>
         </div>
+        {% endif %}
 
         <!-- TAB 2 — Platform Tags -->
-        <div class="tab-pane fade" id="pane-platform-tags" role="tabpanel">
+        <div class="tab-pane fade {% if not is_admin %}show active{% endif %}" id="pane-platform-tags" role="tabpanel">
 
             <platform-tag-config-editor
                 class="mb-4"

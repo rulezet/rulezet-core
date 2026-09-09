@@ -781,13 +781,18 @@ def admin():
 @account_blueprint.route('/admin/bulk_parse_fields', methods=['GET'])
 @login_required
 def bulk_parse_fields_page():
-    if not current_user.is_admin():
+    # Full admins get both tabs (Base Fields + Platform Tags). A Tag manager
+    # (rule.tag_any, non-admin) only ever sees the Platform Tags tab — the
+    # Base Fields tool and the admin quick-nav stay admin-only.
+    is_admin = current_user.is_admin()
+    if not is_admin and not current_user.has_permission('rule.tag_any'):
         from flask import abort
         abort(403)
     from app.features.rule.field_parser_core import FIELD_META, PARSEABLE_FIELD_KEYS
     return render_template('admin/bulk_parse_fields.html',
                            field_meta=FIELD_META,
-                           parseable_fields=PARSEABLE_FIELD_KEYS)
+                           parseable_fields=PARSEABLE_FIELD_KEYS,
+                           is_admin=is_admin)
 
 
 @account_blueprint.route('/admin/bulk_parse_fields/test_extract', methods=['POST'])
@@ -859,8 +864,8 @@ def bulk_parse_fields_trigger_platform_tags():
     scanning, since a tag could still be deleted in the gap between this
     request and the job actually running.
     """
-    if not current_user.is_admin():
-        return jsonify({'success': False, 'message': 'Admin only'}), 403
+    if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
+        return jsonify({'success': False, 'message': 'Admin or Tag manager only'}), 403
     from app.features.jobs.jobs_core import create_job
     from app.features.rule.field_parser_core import get_config, validate_platform_tag_config, CONFIG_TYPE_PLATFORM_TAGS
 
@@ -950,7 +955,7 @@ def bulk_parse_fields_configs_delete(config_id):
 @account_blueprint.route('/admin/bulk_parse_fields/platform_configs', methods=['GET'])
 @login_required
 def platform_tag_configs_list():
-    if not current_user.is_admin():
+    if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         return jsonify({'success': False}), 403
     from app.features.rule.field_parser_core import get_all_configs, CONFIG_TYPE_PLATFORM_TAGS
     cfgs = get_all_configs(config_type=CONFIG_TYPE_PLATFORM_TAGS)
@@ -962,7 +967,7 @@ def platform_tag_configs_list():
 def platform_tag_configs_validate():
     """Validate-only, no save — lets the form show errors as the admin builds
     the pattern list, before they even try to save or launch anything."""
-    if not current_user.is_admin():
+    if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         return jsonify({'success': False}), 403
     from app.features.rule.field_parser_core import validate_platform_tag_config
     data = request.get_json(force=True) or {}
@@ -973,7 +978,7 @@ def platform_tag_configs_validate():
 @account_blueprint.route('/admin/bulk_parse_fields/platform_configs', methods=['POST'])
 @login_required
 def platform_tag_configs_save():
-    if not current_user.is_admin():
+    if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         return jsonify({'success': False}), 403
     from app.features.rule.field_parser_core import save_config, validate_platform_tag_config, CONFIG_TYPE_PLATFORM_TAGS
     data   = request.get_json(force=True) or {}
@@ -995,7 +1000,7 @@ def platform_tag_configs_save():
 @account_blueprint.route('/admin/bulk_parse_fields/platform_configs/<int:config_id>', methods=['PATCH'])
 @login_required
 def platform_tag_configs_update(config_id):
-    if not current_user.is_admin():
+    if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         return jsonify({'success': False}), 403
     from app.features.rule.field_parser_core import get_config, validate_platform_tag_config, CONFIG_TYPE_PLATFORM_TAGS
     cfg = get_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
@@ -1016,7 +1021,7 @@ def platform_tag_configs_update(config_id):
 @account_blueprint.route('/admin/bulk_parse_fields/platform_configs/<int:config_id>', methods=['DELETE'])
 @login_required
 def platform_tag_configs_delete(config_id):
-    if not current_user.is_admin():
+    if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         return jsonify({'success': False}), 403
     from app.features.rule.field_parser_core import delete_config, CONFIG_TYPE_PLATFORM_TAGS
     ok = delete_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
