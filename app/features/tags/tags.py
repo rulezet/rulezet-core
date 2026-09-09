@@ -562,7 +562,7 @@ def validation_rules_data_table():
             'proposed': proposed,
             'upstream': _risk_level_from_tag(e.get('upstream_tag')),
             'current_levels': current_levels,
-            'mismatch': bool(current_levels) and proposed not in current_levels,
+            'mismatch': bool(proposed) and bool(current_levels) and proposed not in current_levels,
             'resolved': current_levels == ({proposed} if proposed else set()) or rid in dismissed_rule_ids,
         }
 
