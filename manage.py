@@ -10,7 +10,7 @@ Commands:
     start       Start the dev server
     start-prod  Start with Gunicorn (production)
     test        Run the test suite
-    update      git pull + install deps + ensure ollama + DB migrations
+    update      sync with origin + install deps + ensure ollama + DB migrations
     backup      Backup the PostgreSQL database
     restore     Restore a PostgreSQL backup (interactive)
     deploy      Full deployment: backup + update + start-prod
@@ -85,6 +85,26 @@ def run(cmd: list[str], cwd: Path = ROOT, check: bool = True, extra_env: dict | 
         error(f"Command failed: {' '.join(cmd)}")
         sys.exit(result.returncode)
     return result
+
+
+def _current_branch() -> str:
+    result = subprocess.run(["git", "branch", "--show-current"], cwd=ROOT, capture_output=True, text=True)
+    return result.stdout.strip() or "main"
+
+
+def _sync_with_origin() -> None:
+    """Make the working tree exactly match origin's current branch.
+
+    Production is a deploy target, not a place for its own commits — any
+    local commit or edit there (accidental, or made directly on the server)
+    would otherwise turn every future `git pull` into a "divergent branches"
+    prompt that blocks an unattended deploy. Fetch + hard-reset instead of
+    `git pull` sidesteps that entirely, at the cost of discarding anything
+    local: never run this against a checkout with work you want to keep.
+    """
+    run(["git", "fetch", "origin"])
+    branch = _current_branch()
+    run(["git", "reset", "--hard", f"origin/{branch}"])
 
 
 def _confirm(prompt: str) -> bool:
@@ -226,14 +246,16 @@ def cmd_help() -> None:
                   {D}→ Use this for local development{R}
 
   {G}start-prod{R}    {D}Full production launch:{R}
-                  {D}  backup → git pull → pip install → ensure ollama → db upgrade{R}
+                  {D}  backup → sync with origin → pip install → ensure ollama → db upgrade{R}
                   {D}  → flask run --host=0.0.0.0 --port=80{R}
                   {D}→ Use this on the production server (needs root for port 80){R}
+                  {D}→ "Sync with origin" hard-resets to origin/<branch> — any local{R}
+                  {D}  commit or edit on the server is discarded, never blocks on conflicts{R}
 
   {G}test{R}          {D}Run the full test suite (FLASKENV=testing){R}
 
-  {G}update{R}        {D}git pull + pip install + ensure ollama + flask db upgrade{R}
-                  {D}→ Use this after pulling new code{R}
+  {G}update{R}        {D}sync with origin + pip install + ensure ollama + flask db upgrade{R}
+                  {D}→ Use this after pulling new code — see start-prod's note on sync{R}
 
   {G}backup{R}        {D}Backup PostgreSQL database to backup/dumps/{R}
 
@@ -314,8 +336,8 @@ def cmd_start_prod() -> None:
 
     # 2. Pull + deps + migrations
     header("Updating Rulezet")
-    info("Pulling latest code…")
-    run(["git", "pull"])
+    info("Syncing with origin…")
+    _sync_with_origin()
     ok("Code updated")
 
     info("Syncing Python dependencies…")
@@ -379,8 +401,8 @@ def cmd_update() -> None:
     _check_venv()
     header("Updating Rulezet")
 
-    info("Pulling latest code…")
-    run(["git", "pull"])
+    info("Syncing with origin…")
+    _sync_with_origin()
     ok("Code updated")
 
     info("Syncing Python dependencies…")
