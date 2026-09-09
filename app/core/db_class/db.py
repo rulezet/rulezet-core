@@ -3839,6 +3839,7 @@ class BlogPost(db.Model):
             'author_id':     self.user_id,
             'author_avatar': self.author.get_avatar_url() if self.author else None,
             'tag_names':     [a.tag.name for a in self.tags if a.tag],
+            'tags':          [a.tag.to_json() for a in self.tags if a.tag],
             'technique_ids': [a.technique_id for a in self.attacks],
             'rule_ids':      [r.rule_id for r in self.rules],
             'bundle_ids':    [b.bundle_id for b in self.bundles],

@@ -75,8 +75,8 @@
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon"><i class="fa-solid fa-newspaper"></i></div>
             <div>
-                <h2 class="fw-bold mb-1">
-                    [[ post.title && post.title.length > 60 ? post.title.slice(0, 60) + '…' : post.title ]]
+                <h2 class="fw-bold mb-1" style="word-break:break-word;">
+                    [[ post.title ]]
                 </h2>
                 <div class="banner-accent"></div>
             </div>
@@ -307,11 +307,13 @@
                     </div>
                 </div>
 
-                <!-- Tags -->
-                <div v-if="post.tag_names && post.tag_names.length" class="d-flex flex-wrap gap-2 mb-4">
-                    <a v-for="tag in post.tag_names" :key="tag"
-                       :href="'/blog/?tag=' + encodeURIComponent(tag)"
-                       class="blog-tag text-decoration-none">[[ tag ]]</a>
+                <!-- Tags — same colored tag-pill rendering used everywhere else on Rulezet -->
+                <div v-if="post.tags && post.tags.length" class="mb-4">
+                    <tags-displays-list
+                        object-type="rule" :object-id="post.id"
+                        :initial-tags="post.tags"
+                        :max-visible="10" :show-namespace="true">
+                    </tags-displays-list>
                 </div>
 
                 <!-- CVE IDs — same badge style as VulnerabilityDisplaysList -->

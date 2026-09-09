@@ -5,6 +5,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/blog/blog.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -42,16 +43,29 @@
                 <li>
                     <a class="dropdown-item rounded-2 px-3 py-2" href="/blog/admin/create">
                         <i class="fa-solid fa-pen-to-square me-2 text-primary"></i>
-                        <span class="fw-semibold">Manual Post</span>
-                        <div class="text-muted" style="font-size:.73rem;margin-top:1px;">Write from scratch</div>
+                        <div>
+                            <span class="fw-semibold d-block">Manual Post</span>
+                            <span class="text-muted d-block" style="font-size:.73rem;margin-top:1px;">Write from scratch</span>
+                        </div>
                     </a>
                 </li>
                 <li><hr class="dropdown-divider my-1"></li>
                 <li>
                     <button class="dropdown-item rounded-2 px-3 py-2" type="button" @click="openCveModal()">
                         <i class="fa-solid fa-shield-halved me-2 text-danger"></i>
-                        <span class="fw-semibold">From Vulnerability</span>
-                        <div class="text-muted" style="font-size:.73rem;margin-top:1px;">Auto-generate from CVE data</div>
+                        <div>
+                            <span class="fw-semibold d-block">From Vulnerability</span>
+                            <span class="text-muted d-block" style="font-size:.73rem;margin-top:1px;">Auto-generate from CVE data</span>
+                        </div>
+                    </button>
+                </li>
+                <li>
+                    <button class="dropdown-item rounded-2 px-3 py-2" type="button" @click="openReleaseModal()">
+                        <i class="fa-solid fa-tag me-2 text-primary"></i>
+                        <div>
+                            <span class="fw-semibold d-block">From Release</span>
+                            <span class="text-muted d-block" style="font-size:.73rem;margin-top:1px;">Auto-fill from a GitHub release</span>
+                        </div>
                     </button>
                 </li>
             </ul>
@@ -61,157 +75,93 @@
     <!-- Admin nav (collapsed by default) — full width, above the content -->
     {{ admin_nav('blog') }}
 
-    <!-- Stats row — all 5 cards on one line -->
-    <div class="row row-cols-2 row-cols-md-5 g-3 mb-4">
-        <div class="col">
-            <div class="card border-0 shadow-sm rounded-3 text-center p-3">
-                <div class="fw-bold fs-4 text-primary">[[ stats.total ]]</div>
-                <div class="text-muted" style="font-size:.8rem;">Total Posts</div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card border-0 shadow-sm rounded-3 text-center p-3">
-                <div class="fw-bold fs-4 text-success">[[ stats.public ]]</div>
-                <div class="text-muted" style="font-size:.8rem;">Public</div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card border-0 shadow-sm rounded-3 text-center p-3">
-                <div class="fw-bold fs-4 text-danger">[[ stats.private ]]</div>
-                <div class="text-muted" style="font-size:.8rem;">Private</div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card border-0 shadow-sm rounded-3 text-center p-3">
-                <div class="fw-bold fs-4 text-warning">[[ stats.draft ]]</div>
-                <div class="text-muted" style="font-size:.8rem;">Drafts</div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card border-0 shadow-sm rounded-3 text-center p-3">
-                <div class="fw-bold fs-4 text-info">[[ stats.views ]]</div>
-                <div class="text-muted" style="font-size:.8rem;">Total Views</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Filters -->
-    <div class="card border-0 shadow-sm rounded-3 mb-3">
-        <div class="card-body p-3 d-flex align-items-center gap-3 flex-wrap">
-            <div class="input-group" style="max-width:300px;">
-                <span class="input-group-text border-0" style="background:var(--light-bg-color);">
-                    <i class="fa-solid fa-magnifying-glass text-muted"></i>
-                </span>
-                <input type="text" class="form-control border-0"
-                       style="background:var(--light-bg-color);color:var(--text-color);"
-                       placeholder="Search posts…"
-                       v-model="searchQuery" @input="debouncedSearch">
-            </div>
-            <select class="form-select border-0 w-auto"
-                    style="background:var(--light-bg-color);color:var(--text-color);"
-                    v-model="filterStatus" @change="onFilterChange">
-                <option value="">All posts</option>
-                <option value="public">Public only</option>
-                <option value="private">Private only</option>
-                <option value="draft">Drafts only</option>
-            </select>
-            <span class="text-muted ms-auto" style="font-size:.85rem;">
-                [[ totalPosts ]] post<template v-if="totalPosts !== 1">s</template>
-            </span>
-        </div>
-    </div>
-
     <!-- Posts table -->
     <div class="card border-0 shadow-sm rounded-3">
-        <div class="card-body p-0">
-            <div v-if="isLoading" class="d-flex justify-content-center align-items-center py-5">
-                <div class="spinner-border text-primary" role="status"></div>
-            </div>
-            <div v-else-if="posts.length === 0" class="text-center py-5 text-muted">
-                <i class="fa-solid fa-newspaper fa-3x mb-3 opacity-25"></i>
-                <p class="mb-0">No posts yet. <a href="/blog/admin/create" class="text-primary">Create one.</a></p>
-            </div>
-            <div v-else class="table-responsive">
-                <table class="table table-hover mb-0 align-middle" style="color:var(--text-color);">
-                    <thead style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle-text-color);border-bottom:2px solid var(--border-color);">
-                        <tr>
-                            <th class="ps-4 py-3">Title</th>
-                            <th class="py-3">Status</th>
-                            <th class="py-3 d-none d-md-table-cell">Tags</th>
-                            <th class="py-3 d-none d-lg-table-cell">Views</th>
-                            <th class="py-3 d-none d-lg-table-cell">Created</th>
-                            <th class="py-3 pe-4 text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="post in posts" :key="post.uuid" class="blog-admin-row">
-                            <td class="ps-4 py-3">
-                                <div class="fw-semibold" style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                                    <a :href="'/blog/post/' + post.uuid" class="text-decoration-none" style="color:var(--text-color);">[[ post.title ]]</a>
-                                </div>
-                                <div class="text-muted" style="font-size:.78rem;margin-top:2px;">[[ post.slug ]]</div>
-                            </td>
-                            <td class="py-3">
-                                <span v-if="post.is_draft" class="badge rounded-pill px-3 bg-warning text-dark">
-                                    <i class="fa-solid fa-file-lines me-1"></i>Draft
-                                </span>
-                                <span v-else :class="['badge rounded-pill px-3', post.is_public ? 'blog-status-public' : 'blog-status-private']">
-                                    [[ post.is_public ? 'Public' : 'Private' ]]
-                                </span>
-                            </td>
-                            <td class="py-3 d-none d-md-table-cell">
-                                <div class="d-flex flex-wrap gap-1" style="max-width:160px;">
-                                    <span v-for="tag in (post.tag_names || []).slice(0,2)" :key="tag" class="blog-tag">[[ tag ]]</span>
-                                    <span v-if="(post.tag_names||[]).length > 2" class="blog-tag">+[[ post.tag_names.length - 2 ]]</span>
-                                    <span v-if="!(post.tag_names||[]).length" class="text-muted" style="font-size:.78rem;">—</span>
-                                </div>
-                            </td>
-                            <td class="py-3 d-none d-lg-table-cell text-muted">[[ post.view_count || 0 ]]</td>
-                            <td class="py-3 d-none d-lg-table-cell text-muted" style="font-size:.85rem;">[[ post.created_at ]]</td>
-                            <td class="py-3 pe-4 text-end">
-                                <div class="d-flex gap-1 justify-content-end flex-wrap">
-                                    <a :href="'/blog/admin/edit/' + post.uuid"
-                                       class="btn btn-sm btn-outline-primary rounded-pill px-3">
-                                        <i class="fa-solid fa-pen-to-square me-1"></i>Edit
-                                    </a>
-                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-3"
-                                            @click="toggleAccess(post)"
-                                            :disabled="togglingId === post.uuid || post.is_draft">
-                                        <i :class="['fa-solid me-1', post.is_public ? 'fa-eye-slash' : 'fa-eye']"></i>
-                                        [[ post.is_public ? 'Unpublish' : 'Publish' ]]
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger rounded-pill px-3"
-                                            @click="confirmDelete(post)">
-                                        <i class="fa-solid fa-trash-can me-1"></i>Delete
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+        <div class="card-body p-3 blog-admin-datatable">
+            <data-table
+                ref="dataTableRef"
+                :fetch-url="postsFetchUrl"
+                :columns="postColumns"
+                can-view can-edit can-delete
+                :allow-card-view="false"
+                default-view="table"
+                :initial-per-page="20"
+                initial-sort="created_at"
+                initial-dir="desc"
+                @view="viewPost"
+                @edit="editPost"
+                @delete="confirmDelete">
+
+                <template #toolbar-start>
+                    <select class="form-select form-select-sm border-0 rounded-pill px-3"
+                            style="background:var(--light-bg-color);color:var(--text-color);width:auto;"
+                            v-model="filterStatus" @change="dataTableRef?.fetchData()">
+                        <option value="">All posts</option>
+                        <option value="public">Public only</option>
+                        <option value="private">Private only</option>
+                        <option value="draft">Drafts only</option>
+                    </select>
+                </template>
+
+                <template #cell-title="{ item, highlight }">
+                    <a :href="'/blog/post/' + item.uuid" class="text-decoration-none fw-semibold"
+                       style="color:var(--text-color);" v-html="highlight(item.title)"></a>
+                    <div class="text-muted" style="font-size:.75rem;margin-top:1px;">[[ item.slug ]]</div>
+                </template>
+
+                <template #cell-status="{ item }">
+                    <span v-if="item.is_draft" class="badge rounded-pill px-3 bg-warning text-dark">
+                        <i class="fa-solid fa-file-lines me-1"></i>Draft
+                    </span>
+                    <span v-else
+                          :class="['badge rounded-pill px-3', item.is_public ? 'blog-status-public' : 'blog-status-private']"
+                          :title="'Click to ' + (item.is_public ? 'unpublish' : 'publish')"
+                          style="cursor:pointer;"
+                          @click="toggleAccess(item)">
+                        <span v-if="togglingId === item.uuid" class="spinner-border spinner-border-sm"></span>
+                        <template v-else>[[ item.is_public ? 'Public' : 'Private' ]]</template>
+                    </span>
+                </template>
+
+                <template #cell-tags="{ item }">
+                    <tags-displays-list
+                        :object-id="item.id" object-type="rule"
+                        :initial-tags="item.tags || []"
+                        :max-visible="2" :show-namespace="true">
+                    </tags-displays-list>
+                </template>
+
+                <template #cell-author_name="{ item }">
+                    <user-chip :user-id="item.author_id" :username="item.author_username || item.author_name"
+                               :avatar="item.author_avatar" size="xs">
+                    </user-chip>
+                </template>
+
+                <template #expand="{ item }">
+                    <div class="d-flex flex-wrap gap-4">
+                        <div v-if="item.excerpt" style="max-width:480px;">
+                            <div class="text-muted text-uppercase fw-bold mb-1" style="font-size:.68rem;letter-spacing:.05em;">Excerpt</div>
+                            <div style="font-size:.85rem;color:var(--text-color);">[[ item.excerpt ]]</div>
+                        </div>
+                        <div v-if="item.cover_image_url">
+                            <div class="text-muted text-uppercase fw-bold mb-1" style="font-size:.68rem;letter-spacing:.05em;">Cover</div>
+                            <img :src="item.cover_image_url" style="height:60px;border-radius:8px;" />
+                        </div>
+                        <div>
+                            <div class="text-muted text-uppercase fw-bold mb-1" style="font-size:.68rem;letter-spacing:.05em;">Views</div>
+                            <div style="font-size:.85rem;color:var(--text-color);">[[ item.view_count || 0 ]]</div>
+                        </div>
+                        <div v-if="(item.external_links || []).length">
+                            <div class="text-muted text-uppercase fw-bold mb-1" style="font-size:.68rem;letter-spacing:.05em;">Links</div>
+                            <a v-for="l in item.external_links" :key="l.url" :href="l.url" target="_blank" rel="noopener"
+                               class="d-block" style="font-size:.82rem;">[[ l.title || l.url ]]</a>
+                        </div>
+                    </div>
+                </template>
+
+            </data-table>
         </div>
     </div>
-
-    <!-- Pagination -->
-    <nav v-if="totalPages > 1" class="d-flex justify-content-center mt-4">
-        <ul class="pagination pagination-sm mb-0">
-            <li class="page-item" :class="{disabled: currentPage === 1}">
-                <button class="page-link" @click="goToPage(currentPage - 1)">
-                    <i class="fa-solid fa-chevron-left"></i>
-                </button>
-            </li>
-            <li v-for="p in paginationRange" :key="p"
-                class="page-item" :class="{active: p === currentPage, disabled: p === '…'}">
-                <button class="page-link" @click="typeof p === 'number' && goToPage(p)">[[ p ]]</button>
-            </li>
-            <li class="page-item" :class="{disabled: currentPage === totalPages}">
-                <button class="page-link" @click="goToPage(currentPage + 1)">
-                    <i class="fa-solid fa-chevron-right"></i>
-                </button>
-            </li>
-        </ul>
-    </nav>
 
     <!-- ── Create from Vulnerability modal ─────────────────────────────────── -->
     <div class="modal fade" id="cvePostModal" tabindex="-1" aria-hidden="true">
@@ -374,6 +324,85 @@
         </div>
     </div>
 
+    <!-- ── Create from Release modal ────────────────────────────────────────── -->
+    <div class="modal fade" id="releasePostModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius:16px;background:var(--card-bg-color);">
+
+                <div class="modal-header border-0 pb-0 px-4 pt-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="width:40px;height:40px;border-radius:12px;background:#0d6efd18;display:flex;align-items:center;justify-content:center;">
+                            <i class="fa-solid fa-tag" style="color:#0d6efd;"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0" style="color:var(--text-color);">Create Post from Release</h5>
+                            <div style="font-size:.78rem;color:var(--subtle-text-color);">Fetches the title, notes, and link straight from the matching GitHub release.</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" @click="resetReleaseModal()"></button>
+                </div>
+
+                <div class="modal-body px-4 py-3">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;color:var(--text-color);">Version</label>
+                    <div class="input-group mb-2">
+                        <span class="input-group-text border-0" style="background:var(--light-bg-color);color:var(--subtle-text-color);">v.</span>
+                        <input type="text" class="form-control border-0"
+                               style="background:var(--light-bg-color);color:var(--text-color);"
+                               placeholder="1.7.2"
+                               v-model="releaseVersion" @keyup.enter="releaseInfo.exists && createFromRelease()">
+                        <button type="button" class="btn btn-sm rounded-0"
+                                style="border:1px solid var(--border-color);background:transparent;color:var(--subtle-text-color);white-space:nowrap;"
+                                @click="useLatestRelease()" :disabled="releaseLookupLoading">
+                            <i class="fa-solid fa-arrow-rotate-right me-1"></i>Last release
+                        </button>
+                    </div>
+
+                    <div v-if="releaseLookupLoading" class="d-flex align-items-center gap-2 py-2" style="font-size:.82rem;color:var(--subtle-text-color);">
+                        <div class="spinner-border spinner-border-sm text-primary"></div>
+                        Looking up release on GitHub…
+                    </div>
+                    <div v-else-if="releaseVersion.trim() && releaseInfo.checked" class="rounded-3 p-3 mt-2"
+                         style="background:var(--light-bg-color);border:1px solid var(--border-color);">
+                        <div v-if="releaseInfo.exists">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="fa-solid fa-circle-check text-success"></i>
+                                <span class="fw-semibold" style="font-size:.88rem;color:var(--text-color);">[[ releaseInfo.title ]]</span>
+                            </div>
+                            <div style="font-size:.75rem;color:var(--subtle-text-color);">Tag [[ releaseInfo.tag_name ]] — will be created as a draft for review before publishing.</div>
+                        </div>
+                        <div v-else class="d-flex align-items-center gap-2" style="font-size:.85rem;color:var(--subtle-text-color);">
+                            <i class="fa-solid fa-circle-exclamation text-warning"></i>
+                            No GitHub release found for that version.
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-1 mt-3">
+                        <span class="blog-tag">#release</span>
+                        <span class="blog-tag">#v[[ releaseInfo.exists ? releaseInfo.version : '…' ]]</span>
+                        <span class="blog-tag">#rulezet</span>
+                        <span class="blog-tag">#tlp:clear</span>
+                        <span class="blog-tag">#PAP:CLEAR</span>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-0 px-4 pb-4 pt-2 d-flex gap-2">
+                    <button type="button" class="btn btn-sm rounded-pill px-4"
+                            style="background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);"
+                            data-bs-dismiss="modal" @click="resetReleaseModal()">Cancel</button>
+                    <button type="button" class="btn btn-sm rounded-pill px-4 ms-auto"
+                            style="background:#0d6efd;color:#fff;border:none;"
+                            :disabled="!releaseInfo.exists || releaseCreating"
+                            @click="createFromRelease()">
+                        <span v-if="releaseCreating" class="spinner-border spinner-border-sm me-2"></span>
+                        <i v-else class="fa-solid fa-wand-magic-sparkles me-1"></i>
+                        Create Post
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <!-- Delete confirm modal -->
@@ -408,28 +437,47 @@
 <script type="module">
     import { create_message } from '/static/js/toaster.js'
     import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js'
+    import DataTable from '/static/js/components/table/data-table.js'
+    import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js'
+    import UserChip from '/static/js/components/UserChip.js'
     const { createApp, ref, computed, watch, onMounted } = Vue
 
     const csrfToken = '{{ csrf_token() }}'
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { VulnerabilityInput },
+        components: {
+            VulnerabilityInput,
+            'data-table': DataTable,
+            'tags-displays-list': TagsDisplaysList,
+            'user-chip': UserChip,
+        },
         setup() {
-            const posts        = ref([])
-            const isLoading    = ref(false)
+            const dataTableRef = ref(null)
+            const filterStatus = ref('')
             const isDeleting   = ref(false)
             const togglingId   = ref(null)
-            const searchQuery  = ref('')
-            const filterStatus = ref('')
-            const currentPage  = ref(1)
-            const totalPages   = ref(1)
-            const totalPosts   = ref(0)
             const postToDelete = ref(null)
-            const PER_PAGE     = 20
-            let   _modal       = null
-            let   _cveModal    = null
-            let   _searchTimer = null
+            let   _modal        = null
+
+            const postColumns = [
+                { key: 'title',       label: 'Title',   sortable: true, truncate: true, width: '260px' },
+                { key: 'status',      label: 'Status',  width: '110px' },
+                { key: 'tags',        label: 'Tags' },
+                { key: 'author_name', label: 'Author',  width: '160px' },
+                { key: 'view_count',  label: 'Views',   sortable: true, width: '90px' },
+                { key: 'created_at',  label: 'Created', sortable: true, width: '150px' },
+            ]
+
+            const postsFetchUrl = computed(() =>
+                '/blog/api/posts' + (filterStatus.value ? '?status=' + filterStatus.value : '')
+            )
+
+            function viewPost(item) { window.location.href = '/blog/post/' + item.uuid }
+            function editPost(item) { window.location.href = '/blog/admin/edit/' + item.uuid }
+
+            let   _cveModal     = null
+            let   _releaseModal = null
 
             // ── CVE modal state ──────────────────────────────────────────
             const cveIds            = ref([])
@@ -442,6 +490,14 @@
             const availableFormats  = ref([])
             let   _previewTimer     = null
 
+            // ── Release modal state ──────────────────────────────────────
+            const releaseVersion       = ref('')
+            const releaseLookupLoading = ref(false)
+            const releaseCreating      = ref(false)
+            const releaseInfo          = ref({ checked: false, exists: false, title: '', tag_name: '' })
+            let   _releaseLookupTimer  = null
+            let   _releaseLookupSeq    = 0
+
             async function loadAvailableFormats() {
                 try {
                     const res  = await fetch('/rule/get_rules_formats')
@@ -453,55 +509,17 @@
                 } catch { /* keep empty */ }
             }
 
-            const stats = computed(() => ({
-                total:   totalPosts.value,
-                public:  posts.value.filter(p => p.is_public && !p.is_draft).length,
-                private: posts.value.filter(p => !p.is_public && !p.is_draft).length,
-                draft:   posts.value.filter(p => p.is_draft).length,
-                views:   posts.value.reduce((s, p) => s + (p.view_count || 0), 0),
-            }))
-
-            async function fetchPosts() {
-                isLoading.value = true
-                const params = new URLSearchParams({ page: currentPage.value, per_page: PER_PAGE })
-                if (searchQuery.value.trim()) params.set('search', searchQuery.value.trim())
-                if (filterStatus.value) params.set('status', filterStatus.value)
+            async function toggleAccess(item) {
+                if (item.is_draft) return
+                togglingId.value = item.uuid
                 try {
-                    const res  = await fetch('/blog/api/posts?' + params)
-                    const data = await res.json()
-                    posts.value      = data.items || []
-                    totalPages.value = data.total_pages || 1
-                    totalPosts.value = data.total || 0
-                } catch {
-                    create_message('Failed to load posts.', 'danger-subtle')
-                } finally {
-                    isLoading.value = false
-                }
-            }
-
-            function debouncedSearch() {
-                clearTimeout(_searchTimer)
-                _searchTimer = setTimeout(() => { currentPage.value = 1; fetchPosts() }, 350)
-            }
-
-            function onFilterChange() { currentPage.value = 1; fetchPosts() }
-
-            function goToPage(p) {
-                if (p < 1 || p > totalPages.value) return
-                currentPage.value = p
-                fetchPosts()
-            }
-
-            async function toggleAccess(post) {
-                togglingId.value = post.uuid
-                try {
-                    const res  = await fetch(`/blog/admin/toggle_access/${post.uuid}`, {
+                    const res  = await fetch(`/blog/admin/toggle_access/${item.uuid}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                     })
                     const data = await res.json()
                     if (res.ok) {
-                        post.is_public = data.is_public
+                        item.is_public = data.is_public
                         create_message(`Post ${data.is_public ? 'published' : 'unpublished'}.`, 'success-subtle')
                     } else {
                         create_message(data.message || 'Failed.', 'danger-subtle')
@@ -513,8 +531,8 @@
                 }
             }
 
-            function confirmDelete(post) {
-                postToDelete.value = post
+            function confirmDelete(item) {
+                postToDelete.value = item
                 if (!_modal) _modal = new bootstrap.Modal(document.getElementById('deletePostModal'))
                 _modal.show()
             }
@@ -531,7 +549,7 @@
                     if (res.ok) {
                         create_message(data.message || 'Post deleted.', 'success-subtle')
                         _modal?.hide()
-                        fetchPosts()
+                        dataTableRef.value?.fetchData()
                     } else {
                         create_message(data.message || 'Delete failed.', 'danger-subtle')
                     }
@@ -542,17 +560,6 @@
                     postToDelete.value = null
                 }
             }
-
-            const paginationRange = computed(() => {
-                const total = totalPages.value, curr = currentPage.value
-                if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-                const pages = new Set([1, total, curr, curr - 1, curr + 1].filter(p => p >= 1 && p <= total))
-                const sorted = [...pages].sort((a, b) => a - b)
-                const result = []
-                let prev = null
-                for (const p of sorted) { if (prev && p - prev > 1) result.push('…'); result.push(p); prev = p }
-                return result
-            })
 
             // ── CVE match preview ────────────────────────────────────────
             async function loadCvePreview() {
@@ -635,16 +642,100 @@
                 }
             }
 
-            onMounted(() => { fetchPosts(); loadAvailableFormats() })
+            // ── Release lookup / create ──────────────────────────────────
+            async function lookupRelease(version) {
+                const mySeq = ++_releaseLookupSeq
+                releaseLookupLoading.value = true
+                try {
+                    const res  = await fetch('/blog/admin/release_info?version=' + encodeURIComponent(version))
+                    const data = await res.json()
+                    if (mySeq !== _releaseLookupSeq) return
+                    releaseInfo.value = data.success
+                        ? { checked: true, exists: !!data.exists, title: data.title || '', tag_name: data.tag_name || '' }
+                        : { checked: true, exists: false, title: '', tag_name: '' }
+                } catch {
+                    if (mySeq !== _releaseLookupSeq) return
+                    releaseInfo.value = { checked: true, exists: false, title: '', tag_name: '' }
+                } finally {
+                    if (mySeq === _releaseLookupSeq) releaseLookupLoading.value = false
+                }
+            }
+
+            watch(releaseVersion, (v) => {
+                clearTimeout(_releaseLookupTimer)
+                releaseInfo.value = { checked: false, exists: false, title: '', tag_name: '' }
+                if (!v.trim()) return
+                _releaseLookupTimer = setTimeout(() => lookupRelease(v.trim()), 400)
+            })
+
+            async function useLatestRelease() {
+                clearTimeout(_releaseLookupTimer)
+                releaseLookupLoading.value = true
+                try {
+                    const res  = await fetch('/blog/admin/release_info?version=latest')
+                    const data = await res.json()
+                    if (data.success && data.exists) {
+                        releaseVersion.value = data.version
+                        releaseInfo.value = { checked: true, exists: true, title: data.title || '', tag_name: data.tag_name || '' }
+                    } else {
+                        create_message('Could not find the latest GitHub release.', 'danger-subtle')
+                    }
+                } catch {
+                    create_message('Network error reaching GitHub.', 'danger-subtle')
+                } finally {
+                    releaseLookupLoading.value = false
+                }
+            }
+
+            function openReleaseModal() {
+                if (!_releaseModal)
+                    _releaseModal = new bootstrap.Modal(document.getElementById('releasePostModal'))
+                _releaseModal.show()
+            }
+
+            function resetReleaseModal() {
+                releaseVersion.value  = ''
+                releaseInfo.value     = { checked: false, exists: false, title: '', tag_name: '' }
+                releaseCreating.value = false
+            }
+
+            async function createFromRelease() {
+                if (!releaseInfo.value.exists) return
+                releaseCreating.value = true
+                try {
+                    const res  = await fetch('/blog/admin/create_from_release', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body:    JSON.stringify({ version: releaseVersion.value.trim() }),
+                    })
+                    const data = await res.json()
+                    if (res.ok && data.success) {
+                        _releaseModal?.hide()
+                        create_message('Post draft created from the release — redirecting to editor…', 'success-subtle')
+                        setTimeout(() => { window.location.href = '/blog/admin/edit/' + data.post_uuid }, 800)
+                    } else {
+                        create_message(data.message || 'Failed to create post.', 'danger-subtle')
+                        releaseCreating.value = false
+                    }
+                } catch {
+                    create_message('Network error.', 'danger-subtle')
+                    releaseCreating.value = false
+                }
+            }
+
+            onMounted(() => { loadAvailableFormats() })
 
             return {
-                posts, isLoading, isDeleting, togglingId, searchQuery, filterStatus,
-                currentPage, totalPages, totalPosts, postToDelete, stats, paginationRange,
-                debouncedSearch, onFilterChange, goToPage, toggleAccess, confirmDelete, doDelete,
+                dataTableRef, postColumns, postsFetchUrl, filterStatus,
+                isDeleting, togglingId, postToDelete,
+                viewPost, editPost, toggleAccess, confirmDelete, doDelete,
                 // CVE modal
                 availableFormats, cveIds, cveFormats, cveIncludeRules, cveIncludeBundles,
                 cveCreating, cvePreviewLoading, cvePreview,
                 openCveModal, resetCveModal, createFromCve,
+                // Release modal
+                releaseVersion, releaseLookupLoading, releaseCreating, releaseInfo,
+                openReleaseModal, resetReleaseModal, useLatestRelease, createFromRelease,
             }
         }
     }).mount('#main-container')

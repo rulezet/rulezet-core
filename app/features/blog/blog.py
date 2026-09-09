@@ -1,6 +1,8 @@
 import json
 import os
 import uuid as _uuid_mod
+
+import requests
 from flask import Blueprint, abort, jsonify, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
@@ -8,6 +10,11 @@ from werkzeug.utils import secure_filename
 from . import blog_core as BlogModel
 from app.core.utils.activity_log import log_activity
 from app.features.notification.notification_core import notify_blog_published
+
+# rulezet-core's own repo — release lookups always target this via the
+# GitHub API directly, independent of GITHUB_HOST (that's for where a *rule*
+# import comes from, an unrelated, per-instance-configurable setting).
+_RULEZET_REPO = 'rulezet/rulezet-core'
 
 # ── File upload security constants ───────────────────────────────────────────
 _ALLOWED_MIME_TYPES = {
@@ -272,9 +279,13 @@ def api_posts():
     tags_raw = request.args.get('tags', type=str) or ''
     tag_names = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
     status   = request.args.get('status', type=str) or None
+    sort     = request.args.get('sort', type=str) or None
+    sort_dir = request.args.get('dir', type=str) or None
 
     is_admin = current_user.is_authenticated and current_user.is_admin()
-    pagination = BlogModel.get_posts_paginated(page, per_page, search, tag_names, is_admin, status)
+    pagination = BlogModel.get_posts_paginated(
+        page, per_page, search, tag_names, is_admin, status, sort, sort_dir
+    )
 
     return jsonify({
         'items':       [p.to_json() for p in pagination.items],
@@ -597,6 +608,131 @@ def create_from_cve():
     )
 
     return jsonify({'success': True, 'post_uuid': post.uuid, 'job_uuid': job.uuid})
+
+
+# ── Create from GitHub release ───────────────────────────────────────────────
+
+def _github_headers():
+    headers = {'Accept': 'application/vnd.github+json'}
+    token = os.environ.get('GITHUB_TOKEN')
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+    return headers
+
+
+def _fetch_github_release(version):
+    """Fetch a release straight from the GitHub API — never from local files.
+
+    `version` is either the literal 'latest' or a version string with or
+    without a leading 'v' (this repo's tags are inconsistently named, e.g.
+    'v1.7.1' vs '1.7.0'), tried in both forms.
+    """
+    headers = _github_headers()
+    if version == 'latest':
+        resp = requests.get(
+            f'https://api.github.com/repos/{_RULEZET_REPO}/releases/latest',
+            headers=headers, timeout=10,
+        )
+        return resp.json() if resp.status_code == 200 else None
+
+    v = version.strip().lstrip('vV')
+    if not v:
+        return None
+    for tag in (f'v{v}', v):
+        resp = requests.get(
+            f'https://api.github.com/repos/{_RULEZET_REPO}/releases/tags/{tag}',
+            headers=headers, timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+    return None
+
+
+@blog_blueprint.route('/admin/release_info', methods=['GET'])
+@login_required
+def release_info():
+    """Look up a GitHub release (or 'latest') without creating anything."""
+    err = _admin_required()
+    if err:
+        return err
+    version = (request.args.get('version') or '').strip()
+    if not version:
+        return jsonify({'success': False, 'message': 'Version is required.'}), 400
+    try:
+        release = _fetch_github_release(version)
+    except requests.RequestException:
+        return jsonify({'success': False, 'message': 'Could not reach GitHub.'}), 502
+    if not release:
+        return jsonify({'success': True, 'exists': False})
+    tag = release.get('tag_name') or ''
+    return jsonify({
+        'success': True,
+        'exists': True,
+        'version': tag.lstrip('vV'),
+        'tag_name': tag,
+        'title': release.get('name') or tag,
+        'url': release.get('html_url'),
+    })
+
+
+@blog_blueprint.route('/admin/create_from_release', methods=['POST'])
+@login_required
+def create_from_release():
+    """Create a draft blog post from a GitHub release, fetched live from the API."""
+    err = _admin_required()
+    if err:
+        return err
+    from app.features.tags import tags_core
+    from app.core.db_class.db import Tag
+
+    data = request.get_json(silent=True) or {}
+    version = (data.get('version') or '').strip()
+    if not version:
+        return jsonify({'success': False, 'message': 'Version is required.'}), 400
+
+    try:
+        release = _fetch_github_release(version)
+    except requests.RequestException:
+        return jsonify({'success': False, 'message': 'Could not reach GitHub.'}), 502
+    if not release:
+        return jsonify({
+            'success': False,
+            'message': f'No GitHub release found for "{version}".',
+        }), 404
+
+    tag_name    = release.get('tag_name') or version
+    title       = release.get('name') or f'Rulezet {tag_name}'
+    content     = release.get('body') or ''
+    release_url = release.get('html_url') or (
+        f'https://github.com/{_RULEZET_REPO}/releases/tag/{tag_name}'
+    )
+
+    version_tag  = 'v' + tag_name.lstrip('vV')
+    release_tags = ['release', version_tag, 'rulezet', 'tlp:clear', 'PAP:CLEAR']
+    for name in release_tags:
+        if not Tag.query.filter_by(name=name).first():
+            tags_core.create_tag(
+                {'name': name, 'description': '', 'visibility': 'public'},
+                current_user,
+            )
+
+    post = BlogModel.create_post({
+        'title': title,
+        'content': content,
+        'is_draft': True,
+        'is_public': False,
+        'cover_image_url': '/static/images/release.jpeg',
+        'external_links': [{'label': 'GitHub Release Note', 'url': release_url}],
+        'tag_names': release_tags,
+    }, user_id=current_user.id)
+
+    log_activity(
+        action='blog.create_from_release',
+        description=f'Auto-generated blog post from GitHub release {tag_name}',
+        extra={'version': tag_name, 'post_uuid': post.uuid},
+    )
+
+    return jsonify({'success': True, 'post_uuid': post.uuid, 'version': tag_name})
 
 
 # ── Cover image upload ────────────────────────────────────────────────────────

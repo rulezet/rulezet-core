@@ -251,9 +251,16 @@ def export_post_json(post: BlogPost, base_url: str) -> dict:
     }
 
 
+_SORTABLE_COLUMNS = {
+    'title':      BlogPost.title,
+    'view_count': BlogPost.view_count,
+    'created_at': BlogPost.created_at,
+}
+
+
 def get_posts_paginated(page: int, per_page: int, search: str = None,
                         tag_names: list = None, is_admin: bool = False,
-                        status: str = None):
+                        status: str = None, sort: str = None, sort_dir: str = None):
     """Return a SQLAlchemy Pagination for the blog list."""
     q = BlogPost.query
 
@@ -279,7 +286,8 @@ def get_posts_paginated(page: int, per_page: int, search: str = None,
                 )
             )
 
-    q = q.order_by(BlogPost.created_at.desc())
+    sort_col = _SORTABLE_COLUMNS.get(sort, BlogPost.created_at)
+    q = q.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())
     return q.paginate(page=page, per_page=per_page, error_out=False)
 
 

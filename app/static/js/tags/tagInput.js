@@ -320,7 +320,9 @@ const TagInput = {
                         <span :style="{ color: getTextColor(tag.color || '#6c757d') }" class="fw-bold me-2">
                             [[ tagLabel(tag.name) ]]
                         </span>
-                        <i class="fas fa-times-circle" style="cursor:pointer" @click.stop="toggleTag(tag)"></i>
+                        <i class="fas fa-times-circle" style="cursor:pointer"
+                           :style="{ color: getTextColor(tag.color || '#6c757d') }"
+                           @click.stop="toggleTag(tag)"></i>
                     </span>
                 </span>
             </div>

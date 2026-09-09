@@ -17,6 +17,8 @@
  *                   shown on a disabled delete button.
  *   bulkActions     Array   [{key, label, icon?, variant?}]
  *   defaultView     String  'table' | 'card'               (default: 'table')
+ *   allowCardView   Boolean (default: true) — set false to hide the card view
+ *                   entirely (table-only), e.g. for data that doesn't suit cards.
  *   initialPerPage  Number  (default: 10)
  *   sendUrl         String  — used when mode='select'
  *
@@ -65,6 +67,7 @@ export default {
         rowNotDeletableTitle: { type: String, default: "Can't be deleted" },
         bulkActions:    { type: Array,   default: () => [] },
         defaultView:    { type: String,  default: 'table' },
+        allowCardView:  { type: Boolean, default: true },
         initialPerPage: { type: Number,  default: 10 },
         initialSort:    { type: String,  default: '' },
         initialDir:     { type: String,  default: 'asc' },
@@ -110,7 +113,7 @@ export default {
                     <slot name="toolbar-start"></slot>
 
                     <!-- View toggle -->
-                    <div class="dt-view-toggle" title="Switch view">
+                    <div v-if="allowCardView" class="dt-view-toggle" title="Switch view">
                         <button
                             class="dt-view-btn"
                             :class="{ 'dt-view-btn--active': view_mode === 'table' }"
@@ -498,7 +501,7 @@ export default {
 
         const selected_ids      = reactive(new Set())
         const all_pages_selected = ref(false)
-        const view_mode         = ref(props.defaultView)
+        const view_mode         = ref(props.allowCardView ? props.defaultView : 'table')
         const hidden_columns    = reactive(new Set())
         const show_col_picker   = ref(false)
         const expanded_id       = ref(null)
