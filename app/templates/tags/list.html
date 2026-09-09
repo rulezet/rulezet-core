@@ -113,11 +113,11 @@
                             @notify="notify"
                         ></tag-table>
 
-                        <browser-pagination
-                            :current="currentPage"
-                            :total="totalPages"
-                            @change="fetchTags"
-                        ></browser-pagination>
+                        <pagination-component
+                            :current-page="currentPage"
+                            :total-pages="totalPages"
+                            @change-page="fetchTags"
+                        ></pagination-component>
 
                     </div>
                 </div>
@@ -223,7 +223,7 @@
     import FamilyDrawer      from '/static/js/tags/manage/FamilyDrawer.js';
     import TaxonomyBrowser   from '/static/js/tags/manage/TaxonomyBrowser.js';
     import GalaxyBrowser     from '/static/js/tags/manage/GalaxyBrowser.js';
-    import BrowserPagination from '/static/js/tags/manage/BrowserPagination.js';
+    import PaginationComponent from '/static/js/rule/paginationComponent.js';
     import TagCreateModal    from '/static/js/tags/tagCreateModal.js';
     import MispUpdater       from '/static/js/tags/manage/MispUpdater.js';
     import BulkImportRunner  from '/static/js/tags/manage/BulkImportRunner.js';
@@ -276,7 +276,7 @@
             'family-drawer':      FamilyDrawer,
             'taxonomy-browser':   TaxonomyBrowser,
             'galaxy-browser':     GalaxyBrowser,
-            'browser-pagination': BrowserPagination,
+            'pagination-component': PaginationComponent,
             'tag-create-modal':   TagCreateModal,
             'misp-updater':       MispUpdater,
             'bulk-import-runner': BulkImportRunner,
