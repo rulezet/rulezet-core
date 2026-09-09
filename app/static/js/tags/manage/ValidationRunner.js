@@ -526,10 +526,38 @@ export default {
             const data = await res.json();
             if (res.ok) {
                 watchTagJob(data.job.uuid);
+                removeConflictingRiskTags(ruleIds, tagIds);
                 return true;
             }
             emit('notify', { message: data.error || 'Failed to launch bulk tag job', level: 'error' });
             return false;
+        }
+
+        // The false-positive:risk taxonomy is mutually exclusive by design —
+        // a rule should never end up carrying two risk levels at once. When
+        // one is just applied and it's one of these 4 tags, remove the other
+        // 3 from the same rule set (a no-op wherever a rule never had one of
+        // them — bulk_remove_tag_from_rules skips missing associations) so
+        // resolving a mismatch by accepting/applying a new level actually
+        // replaces the old one instead of leaving both attached.
+        async function removeConflictingRiskTags(ruleIds, appliedTagIds) {
+            await loadRiskTags();
+            if (!riskTags.value.some(t => appliedTagIds.includes(t.id))) return;
+            const otherIds = riskTags.value.map(t => t.id).filter(id => !appliedTagIds.includes(id));
+            if (!otherIds.length) return;
+            try {
+                await fetch('/jobs/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
+                    body: JSON.stringify({
+                        job_type: 'bulk_remove_tag_from_rules',
+                        payload:  { tag_ids: otherIds, filters: { rule_ids: ruleIds } },
+                        label:    `Remove conflicting false-positive:risk tag(s) from ${ruleIds.length} rule(s)`,
+                    }),
+                });
+            } catch (e) {
+                console.error('[ValidationRunner] removeConflictingRiskTags error:', e);
+            }
         }
 
         // "Accept proposed risk tag" — resolves each selected rule's own
