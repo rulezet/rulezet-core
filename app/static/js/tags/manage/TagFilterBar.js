@@ -41,6 +41,15 @@ const TagFilterBar = {
             return chips;
         });
 
+        const visibilityLabel = computed(() => {
+            const v = props.modelValue.visibility;
+            return v === 'public' ? 'Public' : v === 'private' ? 'Private' : 'Visibility';
+        });
+        const statusLabel = computed(() => {
+            const v = props.modelValue.is_active;
+            return v === 'active' ? 'Active' : v === 'inactive' ? 'Inactive' : 'Status';
+        });
+
         function update(key, value) {
             emit('update:modelValue', { ...props.modelValue, [key]: value });
             if (key !== 'search') emit('search');
@@ -49,6 +58,14 @@ const TagFilterBar = {
         function removeChip(key) {
             const defaults = { source: 'all', visibility: 'all', is_active: 'all', show_namespace: true };
             update(key, defaults[key]);
+        }
+
+        function resetFilters() {
+            emit('update:modelValue', {
+                ...props.modelValue,
+                search: '', source: 'all', visibility: 'all', is_active: 'all', show_namespace: true,
+            });
+            emit('search');
         }
 
         function onInput(e) {
@@ -60,7 +77,7 @@ const TagFilterBar = {
             if (e.key === 'Enter') emit('search');
         }
 
-        return { showAdvanced, sourceOptions, activeChips, update, removeChip, onInput, onEnter };
+        return { showAdvanced, sourceOptions, activeChips, visibilityLabel, statusLabel, update, removeChip, resetFilters, onInput, onEnter };
     },
     template: `
         <div class="tag-filter-bar mb-3">
@@ -165,14 +182,15 @@ const TagFilterBar = {
                 </transition>
             </teleport>
 
-            <!-- Filters panel — collapsible, RuleList-style. Source (Taxonomy/
-                 Galaxy/Manual) lives here now instead of its own always-visible
-                 row, alongside visibility/status/per-page/namespace. -->
+            <!-- Filters panel — same rl-filter-panel/rl-fp-row treatment as
+                 RuleList's own filter panel (badge-style selects for Visibility/
+                 Status, a plain select for Per page, a switch for Namespace). -->
             <transition name="slide-down">
-                <div v-if="showAdvanced" class="advanced-filters border rounded-3 p-3 mb-2">
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold mb-1 d-block">Type</label>
-                        <div class="d-flex gap-2 flex-wrap">
+                <div v-if="showAdvanced" class="rl-filter-panel">
+                    <div class="rl-fp-row">
+
+                        <!-- Type -->
+                        <div class="rl-fp-item d-flex gap-2 flex-wrap">
                             <button
                                 v-for="opt in sourceOptions" :key="opt.value"
                                 class="btn btn-sm source-chip"
@@ -183,42 +201,59 @@ const TagFilterBar = {
                                 <i :class="'fa-solid ' + opt.icon + ' me-1'"></i>{{ opt.label }}
                             </button>
                         </div>
-                    </div>
-                    <div class="row g-2 align-items-end">
-                        <div class="col-6 col-md-3">
-                            <label class="form-label small fw-semibold mb-1">Visibility</label>
-                            <select class="form-select form-select-sm" :value="modelValue.visibility" @change="update('visibility', $event.target.value)">
-                                <option value="all">All</option>
+
+                        <!-- Visibility -->
+                        <div class="rl-fp-fmt-wrap">
+                            <div class="rl-fmt-badge" :class="{ 'rl-fmt-badge--set': modelValue.visibility !== 'all' }">
+                                <i class="fa-solid fa-eye" style="font-size:.7rem;opacity:.6;"></i>
+                                <span>{{ visibilityLabel }}</span>
+                                <i class="fa-solid fa-chevron-down" style="font-size:.6rem;opacity:.5;"></i>
+                            </div>
+                            <select class="rl-fmt-select-overlay" :value="modelValue.visibility"
+                                    @change="update('visibility', $event.target.value)" aria-label="Visibility">
+                                <option value="all">All visibility</option>
                                 <option value="public">Public</option>
                                 <option value="private">Private</option>
                             </select>
                         </div>
-                        <div class="col-6 col-md-3">
-                            <label class="form-label small fw-semibold mb-1">Status</label>
-                            <select class="form-select form-select-sm" :value="modelValue.is_active" @change="update('is_active', $event.target.value)">
-                                <option value="all">All</option>
+
+                        <!-- Status -->
+                        <div class="rl-fp-fmt-wrap">
+                            <div class="rl-fmt-badge" :class="{ 'rl-fmt-badge--set': modelValue.is_active !== 'all' }">
+                                <i class="fa-solid fa-toggle-on" style="font-size:.7rem;opacity:.6;"></i>
+                                <span>{{ statusLabel }}</span>
+                                <i class="fa-solid fa-chevron-down" style="font-size:.6rem;opacity:.5;"></i>
+                            </div>
+                            <select class="rl-fmt-select-overlay" :value="modelValue.is_active"
+                                    @change="update('is_active', $event.target.value)" aria-label="Status">
+                                <option value="all">All statuses</option>
                                 <option value="active">Active</option>
                                 <option value="inactive">Inactive</option>
                             </select>
                         </div>
-                        <div class="col-6 col-md-3">
-                            <label class="form-label small fw-semibold mb-1">Per page</label>
-                            <select class="form-select form-select-sm" :value="modelValue.per_page" @change="update('per_page', parseInt($event.target.value))">
-                                <option value="20">20</option>
-                                <option value="50">50</option>
-                                <option value="100">100</option>
+
+                        <!-- Per page -->
+                        <div class="rl-fp-item">
+                            <select class="rl-fp-select" :value="modelValue.per_page"
+                                    @change="update('per_page', parseInt($event.target.value))" aria-label="Rows per page">
+                                <option value="20">20 / page</option>
+                                <option value="50">50 / page</option>
+                                <option value="100">100 / page</option>
                             </select>
                         </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-check small fw-semibold mb-0 d-flex align-items-center gap-2 mt-2">
-                                <input
-                                    type="checkbox" class="form-check-input m-0"
-                                    :checked="modelValue.show_namespace"
-                                    @change="update('show_namespace', $event.target.checked)"
-                                >
-                                Show namespace prefix in tag display
-                            </label>
-                        </div>
+
+                        <!-- Show namespace -->
+                        <label class="rl-fp-switch" title="Show namespace prefix in tag display">
+                            <input type="checkbox" :checked="modelValue.show_namespace"
+                                   @change="update('show_namespace', $event.target.checked)">
+                            <span>Namespace prefix</span>
+                        </label>
+
+                        <button v-if="activeChips.length || modelValue.search"
+                                class="rl-fp-reset" @click="resetFilters">
+                            <i class="fas fa-rotate-left"></i> Reset
+                        </button>
+
                     </div>
                 </div>
             </transition>

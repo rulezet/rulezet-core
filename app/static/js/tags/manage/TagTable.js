@@ -32,7 +32,7 @@ function sourceIconClass(source) {
 // ─── ColPicker ────────────────────────────────────────────────────────────────
 
 const COLUMNS = [
-    { key: 'family', label: 'Family' },
+    { key: 'family', label: 'Namespace' },
     { key: 'description', label: 'Description' },
     { key: 'visibility', label: 'Visibility' },
     { key: 'status', label: 'Status' },
@@ -240,15 +240,15 @@ const TagRow = {
                 </div>
             </td>
 
-            <td class="dt-td dt-td--actions text-end">
-                <div class="d-inline-flex gap-1">
-                    <button class="btn btn-xs btn-outline-secondary icon-btn" @click="openEdit" title="Edit">
+            <td class="dt-td dt-td--actions">
+                <div class="dt-actions">
+                    <button class="dt-action-btn" @click="openEdit" title="Edit">
                         <i class="fas fa-pen"></i>
                     </button>
-                    <button class="btn btn-xs btn-outline-secondary icon-btn" @click="detailOpen = true" title="Details">
+                    <button class="dt-action-btn" @click="detailOpen = true" title="Details">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button class="btn btn-xs btn-outline-danger icon-btn" @click="deleteOpen = true" title="Delete">
+                    <button class="dt-action-btn dt-action-btn--danger" @click="deleteOpen = true" title="Delete">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -571,7 +571,7 @@ const TagTable = {
                             <th class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': sortKey === 'source' }" @click="setSort('source')">
                                 <div class="dt-th-inner">Type <i class="fas dt-sort-icon" :class="sortIcon('source')"></i></div>
                             </th>
-                            <th v-if="visibleCols.family" class="dt-th">Family</th>
+                            <th v-if="visibleCols.family" class="dt-th">Namespace</th>
                             <th v-if="visibleCols.description" class="dt-th">Description</th>
                             <th v-if="visibleCols.visibility" class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': sortKey === 'visibility' }" @click="setSort('visibility')">
                                 <div class="dt-th-inner">Visibility <i class="fas dt-sort-icon" :class="sortIcon('visibility')"></i></div>

@@ -5,6 +5,8 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tag/tagsAdmin.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -226,6 +228,12 @@
     import MispUpdater       from '/static/js/tags/manage/MispUpdater.js';
     import BulkImportRunner  from '/static/js/tags/manage/BulkImportRunner.js';
 
+    const FILTER_DEFAULTS = {
+        search: '', sort: 'created_at', dir: 'desc',
+        visibility: 'all', is_active: 'all', source: 'all',
+        per_page: 50, show_namespace: true,
+    };
+
     // ── Tab ↔ URL sync — reloading (or sharing the link) keeps you on the
     // same tab, instead of always bouncing back to "Available Tags". Plain
     // Bootstrap tabs (data-bs-toggle="tab"), not Vue state, so this is
@@ -342,10 +350,41 @@
                         totalTags.value   = data.total_tags;
                         totalPages.value  = data.total_pages;
                         currentPage.value = page;
+                        syncFiltersToUrl();
                     }
                 } finally {
                     tableLoading.value = false;
                 }
+            }
+
+            // ── filters ↔ URL — reload/share keeps whatever's applied ──
+            function syncFiltersToUrl() {
+                const url = new URL(window.location.href);
+                const p   = url.searchParams;
+                const f   = filters.value;
+                f.search                     ? p.set('q', f.search)         : p.delete('q');
+                f.sort !== FILTER_DEFAULTS.sort ? p.set('sort', f.sort)     : p.delete('sort');
+                f.dir  !== FILTER_DEFAULTS.dir  ? p.set('dir', f.dir)       : p.delete('dir');
+                f.visibility !== 'all'       ? p.set('visibility', f.visibility) : p.delete('visibility');
+                f.is_active  !== 'all'       ? p.set('status', f.is_active) : p.delete('status');
+                f.source     !== 'all'       ? p.set('type', f.source)      : p.delete('type');
+                f.per_page   !== FILTER_DEFAULTS.per_page ? p.set('per_page', f.per_page) : p.delete('per_page');
+                f.show_namespace === false   ? p.set('ns', '0')             : p.delete('ns');
+                currentPage.value > 1        ? p.set('page', currentPage.value) : p.delete('page');
+                history.replaceState(null, '', url.pathname + url.search);
+            }
+
+            function readFiltersFromUrl() {
+                const params = new URLSearchParams(window.location.search);
+                if (params.has('q'))          filters.value.search         = params.get('q');
+                if (params.has('sort'))       filters.value.sort           = params.get('sort');
+                if (params.has('dir'))        filters.value.dir            = params.get('dir');
+                if (params.has('visibility')) filters.value.visibility     = params.get('visibility');
+                if (params.has('status'))     filters.value.is_active      = params.get('status');
+                if (params.has('type'))       filters.value.source         = params.get('type');
+                if (params.has('per_page'))   filters.value.per_page       = parseInt(params.get('per_page')) || FILTER_DEFAULTS.per_page;
+                if (params.has('ns'))         filters.value.show_namespace = params.get('ns') !== '0';
+                return parseInt(params.get('page')) || 1;
             }
 
             // ── sort (column-header click, see TagTable's @sort) ──
@@ -470,7 +509,8 @@
             }
 
             onMounted(async () => {
-                await fetchTags(1);
+                const initialPage = readFiltersFromUrl();
+                await fetchTags(initialPage);
                 ready.value = true;
                 await nextTick();
                 initTabUrlSync();

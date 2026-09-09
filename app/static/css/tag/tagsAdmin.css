@@ -41,6 +41,15 @@
 
 }
 
+/* The dt-table's columns are otherwise sized to their (short) content, which
+   with only ~7 narrow columns leaves a lot of dead space on the right —
+   widen the padding so each column gets more room instead of the table
+   just trailing off into empty space. */
+.tag-table-wrapper .dt-td,
+.tag-table-wrapper .dt-th {
+    padding: .7rem 1.5rem;
+}
+
 .tag-table thead th {
     color: var(--subtle-text-color);
     font-weight: 600;
