@@ -1683,8 +1683,13 @@ export default {
         }
 
         function toggleColPicker() {
+            // Position BEFORE showing — the button (and its rect) already
+            // exists at click time, so there's no need to wait a tick. Doing
+            // it after showing let the panel render for one frame with
+            // colPickerStyle still at its initial {} (no position/z-index at
+            // all), flashing it unstyled at the top of <body> on first open.
+            if (!showColPicker.value) positionColPicker()
             showColPicker.value = !showColPicker.value
-            if (showColPicker.value) nextTick(positionColPicker)
         }
 
         function handleColPickerOutsideClick(e) {

@@ -2927,7 +2927,7 @@ body.dark-mode .table .opacity-50 {
   opacity: 0;
   visibility: hidden;
   transition: opacity .15s ease;
-  z-index: 20;
+  z-index: 500;
 }
 .rulezy-say__bubble::before,
 .rulezy-say__bubble::after {
