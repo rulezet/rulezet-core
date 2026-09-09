@@ -13,13 +13,11 @@ Pause / Cancel support:
     _should_pause() and _is_cancelled() are checked between every batch.
 """
 
-import contextlib
 import datetime
 import html as _html
 import json
 import os
 import re
-import socket
 import subprocess
 import sys
 import uuid as uuid_mod
@@ -4105,27 +4103,6 @@ def handle_db_backup(job, app):
 RULE_VALIDATION_MIRROR_DIR = ROOT_DIR / 'data' / 'rulezet_validation'
 
 
-@contextlib.contextmanager
-def _force_ipv4_resolution():
-    """rulezet.org publishes both an A and an AAAA record. urllib (used by
-    rulezet_validation to fetch the mirror) connects to whichever address
-    getaddrinfo() returns first and does not retry the other family on
-    failure like a browser would — on a host with no working IPv6 route
-    (common on cloud VMs) that means an immediate 'No route to host' even
-    though the IPv4 address is perfectly reachable. Filter AAAA results out
-    for the duration of the sync call."""
-    _orig_getaddrinfo = socket.getaddrinfo
-
-    def _ipv4_only(host, *args, **kwargs):
-        return [r for r in _orig_getaddrinfo(host, *args, **kwargs) if r[0] == socket.AF_INET]
-
-    socket.getaddrinfo = _ipv4_only
-    try:
-        yield
-    finally:
-        socket.getaddrinfo = _orig_getaddrinfo
-
-
 @register_handler('rule_validation_run')
 def handle_rule_validation_run(job, app):
     """
@@ -4148,6 +4125,7 @@ def handle_rule_validation_run(job, app):
         limit : int  — trial run, stop after N rules fetched
     """
     from app.features.rule.rule_core import _active
+    from app.core.utils.utils import force_ipv4_resolution
     from rulezet_validation import config as rv_config
     from rulezet_validation.sync import sync as rv_sync
 
@@ -4162,7 +4140,7 @@ def handle_rule_validation_run(job, app):
     # instance that IS its own public URL (e.g. rulezet.org validating
     # itself) often can't route to its own public IP from inside itself
     # ("hairpin NAT", unsupported by plenty of cloud/VPS providers — even
-    # with IPv4 forced, see _force_ipv4_resolution above, that shows up as
+    # with IPv4 forced, see force_ipv4_resolution below, that shows up as
     # exactly this handler's "no route to host"). Point this at a
     # loopback/internal address in .env to fetch over the local network
     # instead, without changing INSTANCE_PUBLIC_URL itself (still needed
@@ -4196,7 +4174,7 @@ def handle_rule_validation_run(job, app):
             level='info', event='started')
 
     try:
-        with _force_ipv4_resolution():
+        with force_ipv4_resolution():
             rv_sync(settings, paths, full=full, limit=limit,
                     log=lambda msg: log_job(job, msg, level='info', event='progress'))
     except Exception as e:

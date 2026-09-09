@@ -5,10 +5,34 @@ import re
 import uuid
 import secrets
 import string
+import socket
 import difflib
+import contextlib
 from urllib.parse import urlparse
 from flask import request
 from ..db_class.db import User
+
+
+@contextlib.contextmanager
+def force_ipv4_resolution():
+    """Some hosts (many cloud/VPS providers) advertise IPv6 connectivity via
+    routing tables that don't actually work end-to-end — getaddrinfo() still
+    returns the AAAA record, socket.create_connection() tries it first, and
+    since the failure is a hang rather than an immediate rejection, the
+    whole call times out before it ever falls back to the working IPv4
+    address. Filtering out AAAA results for the duration of a call sidesteps
+    that entirely for any code path (urllib, requests/urllib3 — anything
+    that goes through socket.getaddrinfo)."""
+    orig_getaddrinfo = socket.getaddrinfo
+
+    def _ipv4_only(host, *args, **kwargs):
+        return [r for r in orig_getaddrinfo(host, *args, **kwargs) if r[0] == socket.AF_INET]
+
+    socket.getaddrinfo = _ipv4_only
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = orig_getaddrinfo
 
 def isUUID(uid):
     try:
