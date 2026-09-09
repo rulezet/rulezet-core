@@ -83,11 +83,10 @@ const ColPicker = {
     },
     template: `
     <div class="col-picker-wrapper d-inline-block" @click.stop>
-        <button ref="btnRef" class="btn btn-xs btn-outline-secondary"
+        <button ref="btnRef" class="dt-toolbar-btn"
                 @click="toggle"
-                title="Show / hide columns"
-                style="font-size:0.7rem; padding:2px 6px">
-            <i class="fas fa-columns"></i>
+                title="Show / hide columns">
+            <i class="fas fa-table-columns"></i><span>Columns</span>
         </button>
         <teleport to="body">
             <div v-if="open"
@@ -173,14 +172,21 @@ const TagRow = {
         };
     },
     template: `
-        <tr :class="{ 'table-active': selected }">
-            <td>
+        <tr class="dt-row" :class="{ 'dt-row--selected': selected }">
+            <td class="dt-td dt-td--checkbox">
                 <input type="checkbox" class="form-check-input"
                        :checked="selected" @change="$emit('toggle-select')">
             </td>
-            <td><tag-badge :tag="tag" :show-namespace="showNamespace"></tag-badge></td>
+            <td class="dt-td"><tag-badge :tag="tag" :show-namespace="showNamespace"></tag-badge></td>
 
-            <td v-if="visibleCols.family">
+            <td class="dt-td">
+                <span class="badge rounded-pill px-2 py-1"
+                      :style="{ background: sourceColor(tag.source) + '1a', color: sourceColor(tag.source) }">
+                    <i :class="sourceIconClass(tag.source) + ' me-1'"></i>{{ tag.source || 'Manual' }}
+                </span>
+            </td>
+
+            <td v-if="visibleCols.family" class="dt-td">
                 <button v-if="tagFamily"
                         class="btn btn-xs btn-outline-secondary family-chip"
                         @click="$emit('view-family')"
@@ -191,12 +197,12 @@ const TagRow = {
             </td>
 
             <td v-if="visibleCols.description"
-                class="text-muted small text-truncate" style="max-width:200px"
+                class="dt-td text-muted small text-truncate" style="max-width:200px"
                 :title="tag.description">
                 {{ tag.description || '—' }}
             </td>
 
-            <td v-if="visibleCols.visibility">
+            <td v-if="visibleCols.visibility" class="dt-td">
                 <button class="btn btn-xs rounded-pill"
                         :class="tag.visibility === 'public' ? 'btn-primary' : 'btn-outline-secondary'"
                         @click="$emit('toggle-visibility')">
@@ -205,7 +211,7 @@ const TagRow = {
                 </button>
             </td>
 
-            <td v-if="visibleCols.status">
+            <td v-if="visibleCols.status" class="dt-td">
                 <button class="btn btn-xs rounded-pill"
                         :class="tag.is_active ? 'btn-success' : 'btn-danger'"
                         @click="$emit('toggle-status')">
@@ -214,7 +220,7 @@ const TagRow = {
                 </button>
             </td>
 
-            <td v-if="visibleCols.usage">
+            <td v-if="visibleCols.usage" class="dt-td">
                 <div class="d-flex gap-1">
                     <a v-if="tag.rule_count > 0" :href="'/rule/rules_list?tags=' + encodeURIComponent(tag.name)"
                         class="badge rounded-pill bg-light border text-dark text-decoration-none"
@@ -234,7 +240,7 @@ const TagRow = {
                 </div>
             </td>
 
-            <td class="text-end">
+            <td class="dt-td dt-td--actions text-end">
                 <div class="d-inline-flex gap-1">
                     <button class="btn btn-xs btn-outline-secondary icon-btn" @click="openEdit" title="Edit">
                         <i class="fas fa-pen"></i>
@@ -484,36 +490,35 @@ const TagRow = {
 
 // ─── TagTable ─────────────────────────────────────────────────────────────────
 
+const SORTABLE_COLS = ['name', 'source', 'visibility', 'is_active'];
+
 const TagTable = {
-    components: { 'tag-row': TagRow, 'col-picker': ColPicker },
+    components: { 'tag-row': TagRow },
     props: {
         tags: { type: Array, required: true },
-        groupedTags: { type: Object, default: null },
-        showGrouped: { type: Boolean, default: true },
         selected: { type: Array, default: () => [] },
         csrfToken: { type: String, required: true },
         loading: { type: Boolean, default: false },
         showNamespace: { type: Boolean, default: true },
+        sortKey: { type: String, default: 'created_at' },
+        sortDir: { type: String, default: 'desc' },
+        // Column visibility now lives in the parent (list.html) so the
+        // Columns picker can sit in TagFilterBar's toolbar row alongside
+        // Search/Filters/Export, instead of floating above this table alone.
+        visibleCols: { type: Object, required: true },
     },
-    emits: ['toggle-select', 'toggle-all', 'refresh', 'view-family', 'notify'],
+    emits: ['toggle-select', 'toggle-all', 'refresh', 'view-family', 'notify', 'sort'],
     setup(props, { emit }) {
-        const { reactive } = Vue;
-
-        // ── column visibility (all on by default) ──────────────────────────────
-        const visibleCols = reactive(
-            Object.fromEntries(COLUMNS.map(c => [c.key, true]))
-        );
-
-        function toggleCol(key) { visibleCols[key] = !visibleCols[key]; }
-        function showAll() { COLUMNS.forEach(c => { visibleCols[c.key] = true; }); }
-        function hideAll() { COLUMNS.forEach(c => { visibleCols[c.key] = false; }); }
-
         function isSelected(id) { return props.selected.includes(id); }
 
-        function sourceIcon(source) {
-            if (source === 'Galaxy') return 'fas fa-atom text-purple';
-            if (source === 'Taxonomy') return 'fas fa-list text-primary';
-            return 'fas fa-tag text-secondary';
+        function setSort(key) {
+            if (!SORTABLE_COLS.includes(key)) return;
+            emit('sort', key);
+        }
+
+        function sortIcon(key) {
+            if (props.sortKey !== key) return 'fa-sort';
+            return props.sortDir === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
         }
 
         async function toggleVisibility(tag) {
@@ -538,131 +543,73 @@ const TagTable = {
         }
 
         return {
-            COLUMNS, visibleCols, toggleCol, showAll, hideAll,
-            isSelected, sourceIcon, familyOf,
+            isSelected, familyOf,
+            setSort, sortIcon,
             toggleVisibility, toggleStatus, deleteTag,
             mapIcon, getTextColor,
         };
     },
     template: `
         <div class="tag-table-wrapper">
+
             <div v-if="loading" class="d-flex align-items-center justify-content-center py-5">
                 <div class="spinner-border text-primary" role="status"></div>
             </div>
 
-            <!-- ── Grouped view ───────────────────────────────────────────── -->
-            <template v-else-if="showGrouped && groupedTags">
-                <div v-for="(group, source) in groupedTags" :key="source" class="mb-4">
-                    <div class="group-header d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
-                        <i :class="sourceIcon(source)"></i>
-                        <span class="fw-semibold" style="color: var(--text-color)">{{ source }}</span>
-                        <span class="badge bg-secondary rounded-pill">{{ group.length }}</span>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0 tag-table">
-                            <thead>
-                                <tr>
-                                    <th style="width:36px">
-                                        <input type="checkbox" class="form-check-input"
-                                               :checked="group.every(t => isSelected(t.id))"
-                                               @change="$emit('toggle-all', group.map(t => t.id), $event.target.checked)">
-                                    </th>
-                                    <th>Tag</th>
-                                    <th v-if="visibleCols.family">Family</th>
-                                    <th v-if="visibleCols.description">Description</th>
-                                    <th v-if="visibleCols.visibility">Visibility</th>
-                                    <th v-if="visibleCols.status">Status</th>
-                                    <th v-if="visibleCols.usage">Usage</th>
-                                    <th class="text-end" style="white-space:nowrap; position:relative; overflow:visible;">
-                                        Actions&nbsp;
-                                        <col-picker :cols="COLUMNS" :visible="visibleCols"
-                                                    @toggle="toggleCol"
-                                                    @show-all="showAll"
-                                                    @hide-all="hideAll">
-                                        </col-picker>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tag-row
-                                    v-for="tag in group" :key="tag.uuid"
-                                    :tag="tag"
-                                    :selected="isSelected(tag.id)"
-                                    :csrf-token="csrfToken"
-                                    :show-namespace="showNamespace"
-                                    :visible-cols="visibleCols"
-                                    @toggle-select="$emit('toggle-select', tag.id)"
-                                    @view-family="$emit('view-family', tag.source, familyOf(tag))"
-                                    @toggle-visibility="toggleVisibility(tag)"
-                                    @toggle-status="toggleStatus(tag)"
-                                    @delete="deleteTag(tag)"
-                                    @refresh="$emit('refresh')"
-                                    @notify="(m,c) => $emit('notify', m, c)"
-                                ></tag-row>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div v-if="Object.keys(groupedTags).length === 0" class="text-center text-muted py-5">
-                    <i class="fas fa-tags fa-2x mb-2 d-block opacity-25"></i>No tags found
-                </div>
-            </template>
-
-            <!-- ── Flat view ──────────────────────────────────────────────── -->
-            <template v-else>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle tag-table">
-                        <thead>
-                            <tr>
-                                <th style="width:36px">
-                                    <input type="checkbox" class="form-check-input"
-                                           :checked="tags.length > 0 && tags.every(t => isSelected(t.id))"
-                                           @change="$emit('toggle-all', tags.map(t => t.id), $event.target.checked)">
-                                </th>
-                                <th>Tag</th>
-                                <th v-if="visibleCols.family">Family</th>
-                                <th v-if="visibleCols.description">Description</th>
-                                <th v-if="visibleCols.visibility">Visibility</th>
-                                <th v-if="visibleCols.status">Status</th>
-                                <th v-if="visibleCols.usage">Usage</th>
-                                <th class="text-end" style="white-space:nowrap">
-                                    Actions&nbsp;
-                                    <col-picker :cols="COLUMNS" :visible="visibleCols"
-                                                @toggle="toggleCol"
-                                                @show-all="showAll"
-                                                @hide-all="hideAll">
-                                    </col-picker>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tag-row
-                                v-for="tag in tags" :key="tag.uuid"
-                                :tag="tag"
-                                :selected="isSelected(tag.id)"
-                                :csrf-token="csrfToken"
-                                :show-namespace="showNamespace"
-                                :visible-cols="visibleCols"
-                                @toggle-select="$emit('toggle-select', tag.id)"
-                                @view-family="$emit('view-family', tag.source, familyOf(tag))"
-                                @toggle-visibility="toggleVisibility(tag)"
-                                @toggle-status="toggleStatus(tag)"
-                                @delete="deleteTag(tag)"
-                                @refresh="$emit('refresh')"
-                                @notify="(m,c) => $emit('notify', m, c)"
-                            ></tag-row>
-                            <tr v-if="tags.length === 0">
-                                <td colspan="8" class="text-center text-muted py-5">
-                                    <i class="fas fa-tags fa-2x mb-2 d-block opacity-25"></i>No tags found
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </template>
+            <div v-else class="dt-table-wrap">
+                <table class="dt-table" role="grid">
+                    <thead class="dt-thead">
+                        <tr>
+                            <th class="dt-th dt-th--checkbox">
+                                <input type="checkbox" class="dt-checkbox"
+                                       :checked="tags.length > 0 && tags.every(t => isSelected(t.id))"
+                                       @change="$emit('toggle-all', tags.map(t => t.id), $event.target.checked)">
+                            </th>
+                            <th class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': sortKey === 'name' }" @click="setSort('name')">
+                                <div class="dt-th-inner">Tag <i class="fas dt-sort-icon" :class="sortIcon('name')"></i></div>
+                            </th>
+                            <th class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': sortKey === 'source' }" @click="setSort('source')">
+                                <div class="dt-th-inner">Type <i class="fas dt-sort-icon" :class="sortIcon('source')"></i></div>
+                            </th>
+                            <th v-if="visibleCols.family" class="dt-th">Family</th>
+                            <th v-if="visibleCols.description" class="dt-th">Description</th>
+                            <th v-if="visibleCols.visibility" class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': sortKey === 'visibility' }" @click="setSort('visibility')">
+                                <div class="dt-th-inner">Visibility <i class="fas dt-sort-icon" :class="sortIcon('visibility')"></i></div>
+                            </th>
+                            <th v-if="visibleCols.status" class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': sortKey === 'is_active' }" @click="setSort('is_active')">
+                                <div class="dt-th-inner">Status <i class="fas dt-sort-icon" :class="sortIcon('is_active')"></i></div>
+                            </th>
+                            <th v-if="visibleCols.usage" class="dt-th" title="Usage counts aren't sortable — computed per page, not stored.">Usage</th>
+                            <th class="dt-th dt-th--actions">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tag-row
+                            v-for="tag in tags" :key="tag.uuid"
+                            :tag="tag"
+                            :selected="isSelected(tag.id)"
+                            :csrf-token="csrfToken"
+                            :show-namespace="showNamespace"
+                            :visible-cols="visibleCols"
+                            @toggle-select="$emit('toggle-select', tag.id)"
+                            @view-family="$emit('view-family', tag.source, familyOf(tag))"
+                            @toggle-visibility="toggleVisibility(tag)"
+                            @toggle-status="toggleStatus(tag)"
+                            @delete="deleteTag(tag)"
+                            @refresh="$emit('refresh')"
+                            @notify="(m,c) => $emit('notify', m, c)"
+                        ></tag-row>
+                        <tr v-if="tags.length === 0">
+                            <td colspan="9" class="text-center text-muted py-5">
+                                <i class="fas fa-tags fa-2x mb-2 d-block opacity-25"></i>No tags found
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     `
 };
 
-export { TagTable, TagRow, familyOf, familyLabel, COLUMNS };
+export { TagTable, TagRow, ColPicker, familyOf, familyLabel, COLUMNS };
 export default TagTable;

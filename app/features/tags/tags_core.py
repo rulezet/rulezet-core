@@ -106,11 +106,22 @@ def get_tags(args):
     if args.get('is_active') and args['is_active'] != 'all':
         query = query.filter_by(is_active=args['is_active'] == 'active')
 
-    sort_order = args.get('sort_order', 'desc')
-    if sort_order == 'desc':
-        query = query.order_by(Tag.created_at.desc())
-    else:
-        query = query.order_by(Tag.created_at.asc())
+    # rule_count/bundle_count are annotated after pagination (see
+    # _inject_usage_counts below) via two grouped COUNT queries scoped to the
+    # current page only — they can't be sorted on without a correlated
+    # subquery running before pagination, so 'usage' isn't in this whitelist.
+    sort_columns = {
+        'name':        Tag.name,
+        'created_at':  Tag.created_at,
+        'visibility':  Tag.visibility,
+        'is_active':   Tag.is_active,
+        'source':      Tag.source,
+    }
+    sort_key = args.get('sort')
+    sort_col = sort_columns.get(sort_key, Tag.created_at)
+    default_dir = 'asc' if sort_key in sort_columns else 'desc'
+    sort_dir = args.get('dir') or default_dir
+    query = query.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())
 
     page = int(args.get('page', 1))
     per_page = min(int(args.get('per_page', 20)), 500)

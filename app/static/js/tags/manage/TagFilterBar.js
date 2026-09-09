@@ -1,8 +1,13 @@
+import { ColPicker } from './TagTable.js';
+
 const TagFilterBar = {
+    components: { 'col-picker': ColPicker },
     props: {
         modelValue: { type: Object, required: true },
         total: { type: Number, default: 0 },
         selectedCount: { type: Number, default: 0 },
+        columns: { type: Array, required: true },
+        visibleCols: { type: Object, required: true },
     },
     emits: [
         'update:modelValue',
@@ -13,6 +18,7 @@ const TagFilterBar = {
         'select-all-visible',
         'set-public-selected', 'set-private-selected',
         'activate-selected', 'deactivate-selected',
+        'toggle-col', 'show-all-cols', 'hide-all-cols',
     ],
     setup(props, { emit }) {
         const { ref, computed } = Vue;
@@ -28,9 +34,9 @@ const TagFilterBar = {
         const activeChips = computed(() => {
             const chips = [];
             const v = props.modelValue;
+            if (v.source !== 'all') chips.push({ key: 'source', label: v.source });
             if (v.visibility !== 'all') chips.push({ key: 'visibility', label: v.visibility === 'public' ? 'Public' : 'Private' });
             if (v.is_active !== 'all') chips.push({ key: 'is_active', label: v.is_active === 'active' ? 'Active only' : 'Inactive only' });
-            if (v.sort_order !== 'desc') chips.push({ key: 'sort_order', label: 'Oldest first' });
             if (v.show_namespace === false) chips.push({ key: 'show_namespace', label: 'No namespace' });
             return chips;
         });
@@ -41,7 +47,7 @@ const TagFilterBar = {
         }
 
         function removeChip(key) {
-            const defaults = { visibility: 'all', is_active: 'all', sort_order: 'desc', show_namespace: true };
+            const defaults = { source: 'all', visibility: 'all', is_active: 'all', show_namespace: true };
             update(key, defaults[key]);
         }
 
@@ -59,28 +65,33 @@ const TagFilterBar = {
     template: `
         <div class="tag-filter-bar mb-3">
 
-            <!-- Search + actions -->
-            <div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
-                <div class="input-group input-group-sm flex-grow-1" style="min-width:200px; max-width:420px;">
-                    <span class="input-group-text bg-transparent border-end-0 pe-1">
-                        <i class="fa-solid fa-magnifying-glass text-muted"></i>
+            <!-- Search + count on the left, everything else pushed right —
+                 same split as RuleList's toolbar (rl-toolbar-left/right). -->
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-2 flex-wrap">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="dt-search" style="min-width:200px; max-width:420px;">
+                        <i class="fas fa-magnifying-glass dt-search-icon"></i>
+                        <input
+                            type="text"
+                            :value="modelValue.search"
+                            class="dt-search-input"
+                            placeholder="Search tags…"
+                            @keyup="onEnter"
+                            @input="onInput"
+                        >
+                    </div>
+                    <span class="text-muted small text-nowrap">
+                        <strong>{{ total }}</strong> tag<span v-if="total !== 1">s</span>
                     </span>
-                    <input
-                        type="text"
-                        :value="modelValue.search"
-                        class="form-control border-start-0 ps-0"
-                        placeholder="Search tags…"
-                        @keyup="onEnter"
-                        @input="onInput"
-                    >
                 </div>
 
+                <div class="d-flex align-items-center gap-2 flex-wrap">
                 <button
-                    class="btn btn-sm btn-outline-secondary position-relative"
-                    :class="{ active: showAdvanced }"
+                    class="dt-toolbar-btn position-relative"
+                    :class="{ 'dt-toolbar-btn--active': showAdvanced }"
                     @click="showAdvanced = !showAdvanced"
                 >
-                    <i class="fa-solid fa-sliders me-1"></i>Filters <i class="fas fa-caret-down ms-1"></i>
+                    <i class="fa-solid fa-sliders"></i><span>Filters</span>
                     <span
                         v-if="activeChips.length"
                         class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
@@ -90,8 +101,8 @@ const TagFilterBar = {
 
                 <!-- Export -->
                 <div class="dropdown">
-                    <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
-                        <i class="fa-solid fa-download me-1"></i>Export
+                    <button class="dt-toolbar-btn dropdown-toggle" data-bs-toggle="dropdown">
+                        <i class="fa-solid fa-download"></i><span>Export</span>
                     </button>
                     <ul class="dropdown-menu shadow border-0 rounded-3">
                         <li>
@@ -107,86 +118,73 @@ const TagFilterBar = {
                     </ul>
                 </div>
 
-                <!-- Bulk actions on selection -->
-                <div v-if="selectedCount > 0" class="d-flex gap-1 align-items-center">
-                    <span class="badge bg-primary-subtle text-primary border border-primary rounded-pill px-2 py-1">
-                        <i class="fas fa-check-square me-1"></i>{{ selectedCount }} selected
-                    </span>
+                <!-- Columns -->
+                <col-picker :cols="columns" :visible="visibleCols"
+                            @toggle="key => $emit('toggle-col', key)"
+                            @show-all="$emit('show-all-cols')"
+                            @hide-all="$emit('hide-all-cols')">
+                </col-picker>
 
-                    <!-- Visibility dropdown -->
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" title="Change visibility">
-                            <i class="fas fa-eye me-1"></i>Visibility
-                        </button>
-                        <ul class="dropdown-menu shadow border-0 rounded-3">
-                            <li>
-                                <button class="dropdown-item small" @click="$emit('set-public-selected')">
-                                    <i class="fas fa-eye me-2 text-primary"></i>Make public
-                                </button>
-                            </li>
-                            <li>
-                                <button class="dropdown-item small" @click="$emit('set-private-selected')">
-                                    <i class="fas fa-eye-slash me-2 text-secondary"></i>Make private
-                                </button>
-                            </li>
-                        </ul>
-                    </div>
-
-                    <!-- Status dropdown -->
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" title="Change status">
-                            <i class="fas fa-toggle-on me-1"></i>Status
-                        </button>
-                        <ul class="dropdown-menu shadow border-0 rounded-3">
-                            <li>
-                                <button class="dropdown-item small" @click="$emit('activate-selected')">
-                                    <i class="fas fa-check-circle me-2 text-success"></i>Activate
-                                </button>
-                            </li>
-                            <li>
-                                <button class="dropdown-item small" @click="$emit('deactivate-selected')">
-                                    <i class="fas fa-ban me-2 text-danger"></i>Deactivate
-                                </button>
-                            </li>
-                        </ul>
-                    </div>
-
-                    <!-- Delete -->
-                    <button class="btn btn-sm btn-outline-danger rounded-pill px-3" @click="$emit('delete-selected')" title="Delete selected">
-                        <i class="fas fa-trash me-1"></i>Delete
-                    </button>
-
-                    <!-- Clear -->
-                    <button class="btn btn-sm btn-outline-secondary" @click="$emit('clear-selection')" title="Clear selection">
-                        <i class="fas fa-times"></i>
-                    </button>
+                <!-- Add New Tag — same primary-button convention as RuleList's "New Rule" -->
+                <button class="dt-toolbar-btn dt-toolbar-btn--primary"
+                        data-bs-toggle="modal" data-bs-target="#add_tag_modal_">
+                    <i class="fas fa-plus"></i><span>Add New Tag</span>
+                </button>
                 </div>
             </div>
 
-            <!-- Source tabs -->
-            <div class="d-flex gap-2 flex-wrap mb-2">
-                <button
-                    v-for="opt in sourceOptions" :key="opt.value"
-                    class="btn btn-sm source-chip"
-                    :class="modelValue.source === opt.value ? 'active' : ''"
-                    :style="modelValue.source === opt.value ? { background: opt.color, borderColor: opt.color, color: '#fff' } : {}"
-                    @click="update('source', opt.value)"
-                >
-                    <i :class="'fa-solid ' + opt.icon + ' me-1'"></i>{{ opt.label }}
-                </button>
-            </div>
+            <!-- Bulk actions — the same sticky floating bar used everywhere else
+                 a selection is made (dt-bulk-bar), not an inline dropdown row.
+                 Teleported to <body> so position:fixed can't get clipped by an
+                 ancestor's stacking context. -->
+            <teleport to="body">
+                <transition name="dt-bulk-slide">
+                    <div v-if="selectedCount > 0" class="dt-bulk-bar">
+                        <span class="dt-bulk-count">{{ selectedCount }} tag<span v-if="selectedCount !== 1">s</span> selected</span>
+                        <div class="dt-bulk-actions">
+                            <button class="dt-bulk-btn" @click="$emit('set-public-selected')">
+                                <i class="fas fa-eye"></i> Make public
+                            </button>
+                            <button class="dt-bulk-btn" @click="$emit('set-private-selected')">
+                                <i class="fas fa-eye-slash"></i> Make private
+                            </button>
+                            <button class="dt-bulk-btn" @click="$emit('activate-selected')">
+                                <i class="fas fa-check-circle"></i> Activate
+                            </button>
+                            <button class="dt-bulk-btn" @click="$emit('deactivate-selected')">
+                                <i class="fas fa-ban"></i> Deactivate
+                            </button>
+                            <button class="dt-bulk-btn dt-bulk-btn--danger" @click="$emit('delete-selected')">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </div>
+                        <button class="dt-bulk-clear" @click="$emit('clear-selection')">
+                            <i class="fas fa-xmark"></i> Clear
+                        </button>
+                    </div>
+                </transition>
+            </teleport>
 
-            <!-- Advanced panel -->
+            <!-- Filters panel — collapsible, RuleList-style. Source (Taxonomy/
+                 Galaxy/Manual) lives here now instead of its own always-visible
+                 row, alongside visibility/status/per-page/namespace. -->
             <transition name="slide-down">
                 <div v-if="showAdvanced" class="advanced-filters border rounded-3 p-3 mb-2">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-6 col-md-3">
-                            <label class="form-label small fw-semibold mb-1">Sort</label>
-                            <select class="form-select form-select-sm" :value="modelValue.sort_order" @change="update('sort_order', $event.target.value)">
-                                <option value="desc">Newest first</option>
-                                <option value="asc">Oldest first</option>
-                            </select>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold mb-1 d-block">Type</label>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button
+                                v-for="opt in sourceOptions" :key="opt.value"
+                                class="btn btn-sm source-chip"
+                                :class="modelValue.source === opt.value ? 'active' : ''"
+                                :style="modelValue.source === opt.value ? { background: opt.color, borderColor: opt.color, color: '#fff' } : {}"
+                                @click="update('source', opt.value)"
+                            >
+                                <i :class="'fa-solid ' + opt.icon + ' me-1'"></i>{{ opt.label }}
+                            </button>
                         </div>
+                    </div>
+                    <div class="row g-2 align-items-end">
                         <div class="col-6 col-md-3">
                             <label class="form-label small fw-semibold mb-1">Visibility</label>
                             <select class="form-select form-select-sm" :value="modelValue.visibility" @change="update('visibility', $event.target.value)">
@@ -225,12 +223,8 @@ const TagFilterBar = {
                 </div>
             </transition>
 
-            <!-- Active chips + count -->
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="badge rounded-pill bg-light text-dark border px-3 py-2 shadow-sm">
-                    <i class="fa-solid fa-tags me-1 text-primary"></i>
-                    <strong>{{ total }}</strong> tags
-                </span>
+            <!-- Active filter chips -->
+            <div v-if="activeChips.length" class="d-flex align-items-center gap-2 flex-wrap">
                 <span
                     v-for="chip in activeChips" :key="chip.key"
                     class="badge rounded-pill border px-2 py-1 filter-chip"

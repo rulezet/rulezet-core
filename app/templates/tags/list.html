@@ -4,6 +4,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -58,11 +59,6 @@
             <span class="dr-nav__sep"></span>
             {{ anav.admin_nav_toggle() }}
             {% endif %}
-
-            <button class="btn btn-primary btn-sm shadow-sm fw-bold rounded-pill px-4 ms-auto"
-                    data-bs-toggle="modal" data-bs-target="#add_tag_modal_">
-                <i class="fas fa-plus me-2"></i>Add New Tag
-            </button>
         </div>
         {% if not tag_manager_view %}
         {{ anav.admin_nav_panel('tags') }}
@@ -81,6 +77,8 @@
                             v-model="filters"
                             :total="totalTags"
                             :selected-count="selectedIds.length"
+                            :columns="TAG_COLUMNS"
+                            :visible-cols="visibleCols"
                             @search="fetchTags(1)"
                             @export-all="exportAll"
                             @export-selected="exportSelected"
@@ -91,22 +89,21 @@
                             @set-private-selected="bulkSetVisibility('private')"
                             @activate-selected="bulkSetStatus(true)"
                             @deactivate-selected="bulkSetStatus(false)"
+                            @toggle-col="toggleCol"
+                            @show-all-cols="showAllCols"
+                            @hide-all-cols="hideAllCols"
                         ></tag-filter-bar>
-
-                         <browser-pagination
-                            :current="currentPage"
-                            :total="totalPages"
-                            @change="fetchTags"
-                        ></browser-pagination>
 
                         <tag-table
                             :tags="tags"
-                            :grouped-tags="filters.source === 'all' ? groupedTags : null"
-                            :show-grouped="filters.source === 'all'"
                             :selected="selectedIds"
                             :csrf-token="csrfToken"
                             :loading="tableLoading"
                             :show-namespace="filters.show_namespace"
+                            :sort-key="filters.sort"
+                            :sort-dir="filters.dir"
+                            :visible-cols="visibleCols"
+                            @sort="handleSort"
                             @toggle-select="toggleSelect"
                             @toggle-all="toggleAll"
                             @view-family="openFamilyDrawer"
@@ -217,10 +214,10 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed, onMounted } = Vue;
+    const { createApp, ref, reactive, onMounted, nextTick } = Vue;
     import { create_message, message_list } from '/static/js/toaster.js';
     import TagFilterBar      from '/static/js/tags/manage/TagFilterBar.js';
-    import { TagTable }      from '/static/js/tags/manage/TagTable.js';
+    import { TagTable, COLUMNS as TAG_COLUMNS } from '/static/js/tags/manage/TagTable.js';
     import FamilyDrawer      from '/static/js/tags/manage/FamilyDrawer.js';
     import TaxonomyBrowser   from '/static/js/tags/manage/TaxonomyBrowser.js';
     import GalaxyBrowser     from '/static/js/tags/manage/GalaxyBrowser.js';
@@ -228,6 +225,40 @@
     import TagCreateModal    from '/static/js/tags/tagCreateModal.js';
     import MispUpdater       from '/static/js/tags/manage/MispUpdater.js';
     import BulkImportRunner  from '/static/js/tags/manage/BulkImportRunner.js';
+
+    // ── Tab ↔ URL sync — reloading (or sharing the link) keeps you on the
+    // same tab, instead of always bouncing back to "Available Tags". Plain
+    // Bootstrap tabs (data-bs-toggle="tab"), not Vue state, so this is
+    // handled with the Bootstrap Tab API directly rather than a v-model.
+    const TAB_PARAM_BY_PANE = {
+        'pane-tags':     null,   // default tab — omitted from the URL
+        'pane-taxonomy': 'taxonomy',
+        'pane-galaxy':   'galaxy',
+        'pane-update':   'update',
+    };
+
+    function initTabUrlSync() {
+        const tablist = document.querySelector('.dr-nav[role="tablist"]');
+        if (!tablist) return;
+
+        const wanted = new URLSearchParams(window.location.search).get('tab');
+        if (wanted) {
+            const paneId = Object.keys(TAB_PARAM_BY_PANE).find(id => TAB_PARAM_BY_PANE[id] === wanted);
+            const trigger = paneId && tablist.querySelector(`[data-bs-toggle="tab"][href="#${paneId}"]`);
+            if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
+        }
+
+        tablist.querySelectorAll('[data-bs-toggle="tab"]').forEach(trigger => {
+            trigger.addEventListener('shown.bs.tab', (e) => {
+                const paneId = e.target.getAttribute('href').slice(1);
+                const tabParam = TAB_PARAM_BY_PANE[paneId];
+                const url = new URL(window.location.href);
+                if (tabParam) url.searchParams.set('tab', tabParam);
+                else url.searchParams.delete('tab');
+                history.replaceState(null, '', url.pathname + url.search);
+            });
+        });
+    }
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -256,7 +287,8 @@
 
             const filters = ref({
                 search:         '',
-                sort_order:     'desc',
+                sort:           'created_at',
+                dir:            'desc',
                 visibility:     'all',
                 is_active:      'all',
                 source:         'all',
@@ -264,15 +296,14 @@
                 show_namespace: true,
             });
 
-            const groupedTags = computed(() => {
-                const groups = {};
-                for (const tag of tags.value) {
-                    const src = tag.source || 'Manual';
-                    if (!groups[src]) groups[src] = [];
-                    groups[src].push(tag);
-                }
-                return groups;
-            });
+            // ── column visibility (lives here so the Columns picker can sit in
+            // TagFilterBar's toolbar row, while TagTable just renders per it) ──
+            const visibleCols = reactive(
+                Object.fromEntries(TAG_COLUMNS.map(c => [c.key, true]))
+            );
+            function toggleCol(key) { visibleCols[key] = !visibleCols[key]; }
+            function showAllCols() { TAG_COLUMNS.forEach(c => { visibleCols[c.key] = true; }); }
+            function hideAllCols() { TAG_COLUMNS.forEach(c => { visibleCols[c.key] = false; }); }
 
             // ── drawer state ──
             const drawerOpen   = ref(false);
@@ -297,7 +328,8 @@
                     const params = new URLSearchParams({
                         page,
                         search:     filters.value.search,
-                        sort_order: filters.value.sort_order,
+                        sort:       filters.value.sort,
+                        dir:        filters.value.dir,
                         visibility: filters.value.visibility,
                         is_active:  filters.value.is_active,
                         source:     filters.value.source,
@@ -314,6 +346,17 @@
                 } finally {
                     tableLoading.value = false;
                 }
+            }
+
+            // ── sort (column-header click, see TagTable's @sort) ──
+            function handleSort(key) {
+                if (filters.value.sort === key) {
+                    filters.value.dir = filters.value.dir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    filters.value.sort = key;
+                    filters.value.dir  = 'asc';
+                }
+                fetchTags(1);
             }
 
             // ── selection ──
@@ -429,6 +472,8 @@
             onMounted(async () => {
                 await fetchTags(1);
                 ready.value = true;
+                await nextTick();
+                initTabUrlSync();
             });
 
             const handleRefreshList = (newlyCreatedTag) => {
@@ -440,10 +485,11 @@
                 message_list,
                 csrfToken, ready, pageLoading, tableLoading,
                 tags, totalTags, totalPages, currentPage, filters,
-                groupedTags, selectedIds,
+                selectedIds,
+                TAG_COLUMNS, visibleCols, toggleCol, showAllCols, hideAllCols,
                 drawerOpen, drawerSource, drawerFamily, openFamilyDrawer,
                 notify,
-                fetchTags, toggleSelect, toggleAll, selectAllVisible,
+                fetchTags, handleSort, toggleSelect, toggleAll, selectAllVisible,
                 bulkDelete, bulkSetVisibility, bulkSetStatus,
                 exportSelected, exportAll, refreshAll, handleRefreshList
             };
