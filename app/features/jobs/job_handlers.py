@@ -4130,12 +4130,13 @@ def _force_ipv4_resolution():
 def handle_rule_validation_run(job, app):
     """
     Run rulezet-validation's sync+gate pipeline against this instance:
-    pull the rules from `INSTANCE_PUBLIC_URL`, scan them against a local
-    known-clean binary baseline, and quarantine any rule that fires — a
-    false-positive risk. Falls back to rulezet_validation's own default (the
-    public rulezet.org) with a loud warning when `INSTANCE_PUBLIC_URL` isn't
-    set, rather than failing outright — harmless when this instance *is*
-    rulezet.org, a useful stand-in target on a local/dev box otherwise.
+    pull the rules from `RULE_VALIDATION_URL` (or `INSTANCE_PUBLIC_URL` if
+    that's not set), scan them against a local known-clean binary baseline,
+    and quarantine any rule that fires — a false-positive risk. Falls back
+    to rulezet_validation's own default (the public rulezet.org) with a
+    loud warning when neither is set, rather than failing outright —
+    harmless when this instance *is* rulezet.org, a useful stand-in target
+    on a local/dev box otherwise.
 
     rulezet-validation is imported as a library rather than shelled out to:
     `sync()` already accepts a `log=` callable (its own extension point for
@@ -4157,19 +4158,28 @@ def handle_rule_validation_run(job, app):
     settings = rv_config.load()
     settings['mirror_dir'] = str(RULE_VALIDATION_MIRROR_DIR)
 
-    instance_url = os.environ.get('INSTANCE_PUBLIC_URL')
+    # RULE_VALIDATION_URL takes priority over INSTANCE_PUBLIC_URL — an
+    # instance that IS its own public URL (e.g. rulezet.org validating
+    # itself) often can't route to its own public IP from inside itself
+    # ("hairpin NAT", unsupported by plenty of cloud/VPS providers — even
+    # with IPv4 forced, see _force_ipv4_resolution above, that shows up as
+    # exactly this handler's "no route to host"). Point this at a
+    # loopback/internal address in .env to fetch over the local network
+    # instead, without changing INSTANCE_PUBLIC_URL itself (still needed
+    # correct elsewhere: email links, telemetry, etc.).
+    instance_url = os.environ.get('RULE_VALIDATION_URL') or os.environ.get('INSTANCE_PUBLIC_URL')
     if instance_url:
         settings['url'] = instance_url
     else:
-        # No INSTANCE_PUBLIC_URL configured (unset on plenty of legitimate
-        # setups: local dev boxes, instances with no public URL yet) — fall
-        # back to rulezet_validation's own default (the public rulezet.org)
-        # rather than failing the job outright, but say so loudly so nobody
+        # Neither configured (unset on plenty of legitimate setups: local
+        # dev boxes, instances with no public URL yet) — fall back to
+        # rulezet_validation's own default (the public rulezet.org) rather
+        # than failing the job outright, but say so loudly so nobody
         # mistakes "rulezet.org's rules" for "this instance's rules".
         log_job(job,
-                f"INSTANCE_PUBLIC_URL is not set — falling back to "
-                f"{settings['url']} instead of validating this instance's own "
-                f"rules. Set INSTANCE_PUBLIC_URL in .env to fix this.",
+                f"Neither RULE_VALIDATION_URL nor INSTANCE_PUBLIC_URL is set — "
+                f"falling back to {settings['url']} instead of validating this "
+                f"instance's own rules. Set one of them in .env to fix this.",
                 level='warning', event='progress')
 
     paths = rv_config.paths(settings)
