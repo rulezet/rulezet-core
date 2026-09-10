@@ -1,12 +1,14 @@
 
-// Toggle API key visibility.
+// Toggle API key visibility. Exposed as window.bindApiKeyToggle so callers
+// that re-render the API key card in place (e.g. after regenerating it) can
+// re-bind the toggle without a page reload.
 (function() {
-    $(function() {
+    function bindApiKeyToggle() {
         var $btn = $('#toggle-api-key');
         var $key = $('#api-key');
         if (!$btn.length || !$key.length) return;
 
-        $btn.on('click', function() {
+        $btn.off('click').on('click', function() {
             var visible = $btn.attr('data-visible') === 'true';
             if (visible) {
                 // hide
@@ -26,6 +28,8 @@
                 $btn.find('i').removeClass('fa-eye').addClass('fa-eye-slash');
             }
         });
-    });
-})();
+    }
 
+    window.bindApiKeyToggle = bindApiKeyToggle;
+    $(bindApiKeyToggle);
+})();

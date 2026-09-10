@@ -428,7 +428,7 @@
             </div>
         </div>
         <div class="card border-0 shadow-sm rounded-3 mb-4">
-            <div class="card-body p-4">
+            <div class="card-body p-4" id="api-key-body">
                 {% if current_user.api_key %}
                 <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
                     <code id="api-key" class="api-key blurred flex-grow-1 p-2 rounded"
@@ -439,10 +439,12 @@
                         title="Show/Hide" data-visible="false">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary"
-                        onclick="navigator.clipboard.writeText('{{ current_user.api_key }}').then(() => window.create_message('API key copied!', 'success-subtle'))"
-                        title="Copy">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="copyApiKey()" title="Copy">
                         <i class="fas fa-copy"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="regenerateApiKey()"
+                        title="Regenerate">
+                        <i class="fas fa-rotate"></i>
                     </button>
                 </div>
                 <small class="text-muted">
@@ -452,7 +454,10 @@
                     </a>
                 </small>
                 {% else %}
-                <p class="text-muted mb-0"><i class="fas fa-ban me-2"></i>No API key generated yet.</p>
+                <p class="text-muted mb-2"><i class="fas fa-ban me-2"></i>No API key generated yet.</p>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="regenerateApiKey()">
+                    <i class="fas fa-key me-1"></i>Generate API key
+                </button>
                 {% endif %}
             </div>
         </div>
@@ -617,6 +622,61 @@
     window.create_message = create_message
 
     function csrf() { return document.getElementById('csrf_token')?.value || '' }
+
+    window.copyApiKey = function () {
+        const el = document.getElementById('api-key')
+        if (!el) return
+        navigator.clipboard.writeText(el.textContent.trim())
+            .then(() => create_message('API key copied!', 'success-subtle'))
+    }
+
+    function apiKeyCardHtml(key) {
+        return `
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                <code id="api-key" class="api-key blurred flex-grow-1 p-2 rounded"
+                    style="background:var(--code-bg-color);font-size:.85rem;word-break:break-all;">
+                    ${key}
+                </code>
+                <button id="toggle-api-key" type="button" class="btn btn-sm btn-outline-secondary blur-btn"
+                    title="Show/Hide" data-visible="false">
+                    <i class="fas fa-eye"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="copyApiKey()" title="Copy">
+                    <i class="fas fa-copy"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="regenerateApiKey()"
+                    title="Regenerate">
+                    <i class="fas fa-rotate"></i>
+                </button>
+            </div>
+            <small class="text-muted">
+                Use the <code>X-API-KEY</code> header —
+                <a href="http://rulezet.org/api/" target="_blank">API docs
+                    <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:.7rem;"></i>
+                </a>
+            </small>
+        `
+    }
+
+    window.regenerateApiKey = async function () {
+        if (!confirm('Regenerate your API key? The current key will stop working immediately.')) return
+        try {
+            const res = await fetch('/account/regenerate_api_key', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf() },
+            })
+            const data = await res.json()
+            if (res.ok && data.success) {
+                document.getElementById('api-key-body').innerHTML = apiKeyCardHtml(data.api_key)
+                window.bindApiKeyToggle()
+                create_message('API key regenerated!', 'success-subtle')
+            } else {
+                create_message(data.message || 'Could not regenerate the API key.', 'danger-subtle')
+            }
+        } catch {
+            create_message('Could not regenerate the API key.', 'danger-subtle')
+        }
+    }
 
     createApp({
         delimiters: ['[[', ']]'],
