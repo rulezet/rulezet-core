@@ -437,7 +437,7 @@ MAIL_PASSWORD=your-smtp-password
                 </tr>
                 <tr>
                   <td><span class="mono-badge">update</span></td>
-                  <td><span class="inline-code">git pull</span> + reinstall deps + run pending DB migrations. Use after pulling new releases.</td>
+                  <td><span class="inline-code">git pull</span> + sync tracked git submodules (MISP taxonomies/galaxy, rulezet-validation, …) + reinstall deps + run pending DB migrations. Use after pulling new releases.</td>
                 </tr>
                 <tr>
                   <td><span class="mono-badge">deploy</span></td>
@@ -789,7 +789,7 @@ flask db upgrade</code></pre>
           <p class="section-lead">Full REST API built on Flask-RESTX. Swagger UI is live at <span class="inline-code">/api/</span>. All write operations require an API key.</p>
 
           <h3 class="subsection-title">Authentication</h3>
-          <p class="doc-p">API keys are per-user. Generate one from your profile settings. Pass it in the <span class="inline-code">X-API-KEY</span> request header. Read-only endpoints (public namespaces) work without a key.</p>
+          <p class="doc-p">API keys are per-user — one is created automatically when you register. Find it under the <strong>API Access</strong> card on your profile page, where you can also regenerate it at any time (this immediately invalidates the old key, so update any integration using it). Pass the key in the <span class="inline-code">X-API-KEY</span> request header. Read-only endpoints (public namespaces) work without a key.</p>
 
           <h3 class="subsection-title">Namespaces</h3>
           <div class="table-wrap">
