@@ -116,6 +116,11 @@ def _worker_loop(app, lane='default'):
                 )
 
                 if job is None:
+                    # No pending job: the query above still opened a transaction.
+                    # Close it now — left open, it pins Postgres's vacuum horizon
+                    # and blocks dead-tuple cleanup instance-wide for as long as
+                    # the queue stays empty (which is most of the time).
+                    db.session.rollback()
                     time.sleep(2)
                     continue
 
