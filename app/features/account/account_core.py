@@ -291,6 +291,20 @@ def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> tupl
     return True, pending_email
 
 
+def regenerate_api_key_core(user_id: int) -> str | None:
+    """Replace the user's API key with a freshly generated one.
+
+    Immediately invalidates the old key -- any integration still using it
+    starts getting 401s from @api_required until updated with the new one.
+    """
+    user = get_user(user_id)
+    if not user:
+        return None
+    user.api_key = generate_api_key()
+    db.session.commit()
+    return user.api_key
+
+
 def request_email_change_core(user_id: int, new_email: str) -> bool:
     """Store a pending email change and send a confirmation link to the new address."""
     user = get_user(user_id)

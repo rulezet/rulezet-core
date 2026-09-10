@@ -403,6 +403,18 @@ def edit_user():
     return render_template("account/edit_user.html", form=form)
 
 
+@account_blueprint.route('/regenerate_api_key', methods=['POST'])
+@login_required
+def regenerate_api_key():
+    """Regenerate the current user's API key, invalidating the old one."""
+    new_key = AccountModel.regenerate_api_key_core(current_user.id)
+    if not new_key:
+        return jsonify({"success": False, "message": "Could not regenerate the API key."}), 400
+    log_activity("user.regenerate_api_key", "Regenerated API key",
+                 target_type="user", target_id=current_user.id)
+    return jsonify({"success": True, "api_key": new_key})
+
+
 @account_blueprint.route('/confirm-email-change/<token>')
 @login_required
 def confirm_email_change(token):
