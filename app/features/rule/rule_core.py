@@ -440,16 +440,21 @@ def check_identifier_uniqueness(rule_format: str, content: str, exclude_rule_id:
     if not identifier:
         return True, ""
 
-    candidates = _active().filter(Rule.format == fmt)
+    # corpus_identifier is denormalized onto the row (kept in sync by the
+    # `set` events on Rule.to_string/Rule.format in db.py) specifically so
+    # this can be an indexed lookup — this used to re-parse every existing
+    # rule of the same format on every single submission, which turned a
+    # large bulk import into an O(N^2) crawl as the corpus grew.
+    candidates = _active().filter(Rule.format == fmt, Rule.corpus_identifier == identifier)
     if exclude_rule_id:
         candidates = candidates.filter(Rule.id != exclude_rule_id)
 
-    for existing in candidates:
-        if _extract_corpus_identifier(fmt, existing.to_string) == identifier:
-            return False, (
-                f"{_CORPUS_IDENTIFIER_LABEL[fmt]} '{identifier}' is already used by rule "
-                f"'{existing.title}' (id={existing.id})."
-            )
+    existing = candidates.first()
+    if existing is not None:
+        return False, (
+            f"{_CORPUS_IDENTIFIER_LABEL[fmt]} '{identifier}' is already used by rule "
+            f"'{existing.title}' (id={existing.id})."
+        )
 
     return True, ""
 
