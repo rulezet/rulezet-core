@@ -319,6 +319,14 @@ class Rule(db.Model):
     # full-table scan through nested REPLACE()/LOWER() SQL functions.
     content_hash = db.Column(db.String(32), nullable=True, index=True)
 
+    # Format-specific identifier that must be unique within its format's corpus
+    # (Suricata SID, YARA rule name, Wazuh rule ID) — NULL for formats with no
+    # such identifier. Kept in sync by the `set` events below. Lets
+    # check_identifier_uniqueness() do an indexed lookup instead of re-parsing
+    # every existing rule of the same format on every new submission — see
+    # rule_core.py:check_identifier_uniqueness.
+    corpus_identifier = db.Column(db.String(191), nullable=True, index=True)
+
     # Soft delete
     is_deleted        = db.Column(db.Boolean, nullable=False, default=False, index=True)
     deleted_at        = db.Column(db.DateTime, nullable=True)
@@ -568,9 +576,26 @@ def compute_rule_content_hash(content):
     return hashlib.md5(clean.encode('utf-8')).hexdigest()
 
 
+def compute_rule_corpus_identifier(rule_format, content):
+    """Format-specific identifier that must be unique within its format's
+    corpus (Suricata SID, YARA rule name, Wazuh rule ID). Lazy import — this
+    module is imported by rule_core, not the other way around."""
+    from app.features.rule.rule_core import _extract_corpus_identifier
+    return _extract_corpus_identifier(rule_format, content)
+
+
 @event.listens_for(Rule.to_string, 'set')
 def _rule_to_string_set(target, value, oldvalue, initiator):
     target.content_hash = compute_rule_content_hash(value)
+    target.corpus_identifier = compute_rule_corpus_identifier(target.format, value)
+
+
+@event.listens_for(Rule.format, 'set')
+def _rule_format_set(target, value, oldvalue, initiator):
+    # Order-independent safety: recompute if to_string was already set before
+    # format (add_rule_core sets format first today, but nothing enforces that).
+    if target.to_string:
+        target.corpus_identifier = compute_rule_corpus_identifier(value, target.to_string)
 
 
 
