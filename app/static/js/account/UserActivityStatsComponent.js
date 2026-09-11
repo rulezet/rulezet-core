@@ -28,6 +28,9 @@ const UserActivityStatsComponent = {
             }
         };
 
+        const hasTrustScore = Vue.computed(() => activity_data.value?.activity_stats?.trust_score !== null
+            && activity_data.value?.activity_stats?.trust_score !== undefined);
+
         const trustGaugeData = Vue.computed(() => {
             const val = activity_data.value?.activity_stats?.trust_score ?? 0;
             return {
@@ -85,9 +88,14 @@ const UserActivityStatsComponent = {
             };
         });
 
+        const hasContent = Vue.computed(() => {
+            const s = activity_data.value?.activity_stats;
+            return !!(s && ((s.total_rules ?? 0) > 0 || (s.total_bundles ?? 0) > 0));
+        });
+
         Vue.onMounted(() => { if (actualUserId.value) fetchData(); });
 
-        return { activity_data, loading, error, trustGaugeData, votesBarData, formatDonutData, timelineAreaData, assetsDonutData };
+        return { activity_data, loading, error, hasContent, hasTrustScore, trustGaugeData, votesBarData, formatDonutData, timelineAreaData, assetsDonutData };
     },
     template: `
 <div class="ud-charts-root">
@@ -125,76 +133,87 @@ const UserActivityStatsComponent = {
                 <div class="ud-kpi-card ud-kpi-card--green">
                     <div class="ud-kpi-icon"><i class="fas fa-circle-check"></i></div>
                     <div class="ud-kpi-body">
-                        <div class="ud-kpi-value">[[ activity_data.activity_stats.trust_score ]]%</div>
+                        <div class="ud-kpi-value">[[ hasTrustScore ? activity_data.activity_stats.trust_score + '%' : '—' ]]</div>
                         <div class="ud-kpi-label">Trust Score</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Section header -->
-        <div class="ud-section-header mb-3">
-            <i class="fas fa-chart-pie ud-section-icon"></i>
-            <div>
-                <div class="ud-section-title">Overview</div>
-                <div class="ud-section-sub">Trust rating and asset breakdown at a glance</div>
-            </div>
-        </div>
+        <template v-if="hasContent">
 
-        <!-- Row 1: Gauge + Assets donut -->
-        <div class="row g-3 mb-4">
-            <div class="col-lg-6">
-                <div class="ud-chart-card ud-chart-card--accent-blue">
-                    <chart-viewer :data="trustGaugeData" views="gauge" height="320px"></chart-viewer>
+            <!-- Section header -->
+            <div class="ud-section-header mb-3">
+                <i class="fas fa-chart-pie ud-section-icon"></i>
+                <div>
+                    <div class="ud-section-title">Overview</div>
+                    <div class="ud-section-sub">Trust rating and asset breakdown at a glance</div>
                 </div>
             </div>
-            <div class="col-lg-6">
-                <div class="ud-chart-card ud-chart-card--accent-teal">
-                    <chart-viewer :data="assetsDonutData" views="donut" height="320px"></chart-viewer>
+
+            <!-- Row 1: Gauge + Assets donut -->
+            <div class="row g-3 mb-4">
+                <div class="col-lg-6">
+                    <div v-if="hasTrustScore" class="ud-chart-card ud-chart-card--accent-blue">
+                        <chart-viewer :data="trustGaugeData" views="gauge" height="320px"></chart-viewer>
+                    </div>
+                    <div v-else class="ud-chart-card ud-chart-card--accent-blue d-flex align-items-center justify-content-center text-muted text-center" style="height:320px;">
+                        <div><i class="fas fa-thumbs-up d-block mb-2 opacity-25" style="font-size:1.8rem;"></i>Not enough votes yet to compute a trust score</div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="ud-chart-card ud-chart-card--accent-teal">
+                        <chart-viewer :data="assetsDonutData" views="donut" height="320px"></chart-viewer>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Section header -->
-        <div class="ud-section-header mb-3">
-            <i class="fas fa-thumbs-up ud-section-icon"></i>
-            <div>
-                <div class="ud-section-title">Votes & Formats</div>
-                <div class="ud-section-sub">Community feedback and rule format distribution</div>
-            </div>
-        </div>
-
-        <!-- Row 2: Votes bar + Format donut -->
-        <div class="row g-3 mb-4">
-            <div class="col-lg-7">
-                <div class="ud-chart-card ud-chart-card--accent-purple">
-                    <chart-viewer :data="votesBarData" :views="['bar', 'bar-h']" height="380px"></chart-viewer>
+            <!-- Section header -->
+            <div class="ud-section-header mb-3">
+                <i class="fas fa-thumbs-up ud-section-icon"></i>
+                <div>
+                    <div class="ud-section-title">Votes & Formats</div>
+                    <div class="ud-section-sub">Community feedback and rule format distribution</div>
                 </div>
             </div>
-            <div class="col-lg-5">
-                <div class="ud-chart-card ud-chart-card--accent-orange">
-                    <chart-viewer :data="formatDonutData" :views="['donut', 'pie']" height="380px"></chart-viewer>
+
+            <!-- Row 2: Votes bar + Format donut -->
+            <div class="row g-3 mb-4">
+                <div class="col-lg-7">
+                    <div class="ud-chart-card ud-chart-card--accent-purple">
+                        <chart-viewer :data="votesBarData" :views="['bar', 'bar-h']" height="380px"></chart-viewer>
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="ud-chart-card ud-chart-card--accent-orange">
+                        <chart-viewer :data="formatDonutData" :views="['donut', 'pie']" height="380px"></chart-viewer>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Section header -->
-        <div class="ud-section-header mb-3">
-            <i class="fas fa-chart-line ud-section-icon"></i>
-            <div>
-                <div class="ud-section-title">Contribution Timeline</div>
-                <div class="ud-section-sub">Monthly publication history</div>
-            </div>
-        </div>
-
-        <!-- Row 3: Timeline -->
-        <div class="row g-3">
-            <div class="col-12">
-                <div class="ud-chart-card ud-chart-card--accent-blue">
-                    <chart-viewer :data="timelineAreaData" :views="['area', 'line', 'bar']" height="360px"></chart-viewer>
+            <!-- Section header -->
+            <div class="ud-section-header mb-3">
+                <i class="fas fa-chart-line ud-section-icon"></i>
+                <div>
+                    <div class="ud-section-title">Contribution Timeline</div>
+                    <div class="ud-section-sub">Monthly publication history</div>
                 </div>
             </div>
-        </div>
+
+            <!-- Row 3: Timeline -->
+            <div class="row g-3">
+                <div class="col-12">
+                    <div class="ud-chart-card ud-chart-card--accent-blue">
+                        <chart-viewer :data="timelineAreaData" :views="['area', 'line', 'bar']" height="360px"></chart-viewer>
+                    </div>
+                </div>
+            </div>
+
+        </template>
+
+        <p v-else class="text-muted mb-0 text-center py-5">
+            <i class="fas fa-chart-simple me-2 opacity-25"></i>No rules or bundles published yet — charts will appear once there's activity to show.
+        </p>
 
     </div>
 </div>

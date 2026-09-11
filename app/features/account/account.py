@@ -1078,9 +1078,10 @@ def get_user_activity_stats(user_id):
 
     
     total_votes = r_likes + r_dislikes + b_likes + b_dislikes
-    trust_score = 100
-    if total_votes > 0:
-        trust_score = round((r_likes + b_likes) / total_votes * 100, 1)
+    # None (not 100) when there's nothing to evaluate — defaulting to 100
+    # made a brand new user with zero votes look like a proven top
+    # contributor, which isn't a real trust score, just an absence of data.
+    trust_score = round((r_likes + b_likes) / total_votes * 100, 1) if total_votes > 0 else None
 
     return jsonify({
         "activity_stats": {
