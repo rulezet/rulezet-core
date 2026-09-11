@@ -3631,8 +3631,14 @@ def import_rules_from_zip():
         }
 
         session_th = SessionModel.Session_class(repo_dir, current_user, info)
-        session_th.start()
+        # Append before start(): start() spawns the background thread
+        # immediately, and a fast-finishing run can reach its own
+        # sessions.remove(self) before this line runs otherwise — since
+        # removal is a no-op when self isn't in the list yet, the
+        # already-finished session then gets appended right after and
+        # never gets cleaned up.
         SessionModel.sessions.append(session_th)
+        session_th.start()
 
         log_activity("github.import_started",
                      f"Started ZIP import '{source}'",
@@ -4098,8 +4104,8 @@ def check_updates_by_url():
     }
 
     update_session = UpdateModel.Update_class(valid_urls, current_user, info, mode="by_url")
-    update_session.start()
     UpdateModel.sessions.append(update_session)
+    update_session.start()
 
     try:
         from app.features.notification.notification_core import notify_admins_session_started
@@ -4175,8 +4181,8 @@ def check_updates_by_rule():
     info = {"mode": "by_rule", "count": len(rule_ids), "initiated_by": current_user.first_name}
 
     update_session = UpdateModel.Update_class(rule_ids, current_user, info, mode="by_rule")
-    update_session.start()
     UpdateModel.sessions.append(update_session)
+    update_session.start()
 
     try:
         from app.features.notification.notification_core import notify_admins_session_started
