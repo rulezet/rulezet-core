@@ -61,8 +61,18 @@ const MultiPersonFilter = {
             fetchList()
         })
 
-        Vue.watch(() => props.sourceRules, fetchList)
-        Vue.watch(() => props.filterContext, fetchList)
+        // filterContext is a raw computed over the parent's search/filter
+        // refs (no debounce of its own) — it changes on every keystroke in
+        // the main search box, which used to trigger an immediate fetch
+        // here on every character. Debounced so typing waits for a pause
+        // before this list is refetched, same as the main rule search.
+        let fetchTimer = null
+        const debouncedFetchList = () => {
+            clearTimeout(fetchTimer)
+            fetchTimer = setTimeout(fetchList, 450)
+        }
+        Vue.watch(() => props.sourceRules, debouncedFetchList)
+        Vue.watch(() => props.filterContext, debouncedFetchList)
 
         const filteredList = Vue.computed(() => {
             const q = search.value.toLowerCase()
