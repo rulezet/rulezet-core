@@ -37,12 +37,16 @@ const GitHubSelectionTable = {
             // { [url]: jobUuid }  — tracks active delete jobs per repo
             activeDeleteJobs: {},
 
+            // Bulk delete was removed from the UI — bulk actions are
+            // export-only now (a single repo can still be deleted from its
+            // own row). Kept as an object (not a hardcoded template) in case
+            // another bulk action joins export later.
             activeAction: {
-                type: 'delete',
-                title: 'Massive Deletion',
-                icon: 'fa-trash-can',
-                variant: 'danger',
-                confirmText: 'Yes, Delete Everything'
+                type: 'export',
+                title: 'Export Repositories',
+                icon: 'fa-file-export',
+                variant: 'primary',
+                confirmText: 'Start Export'
             }
         };
     },
@@ -127,24 +131,7 @@ const GitHubSelectionTable = {
             setTimeout(() => this.changePage(this.currentPage), 1500);
         },
 
-        openActionModal(actionType) {
-            if (actionType === 'delete') {
-                this.activeAction = {
-                    type: 'delete',
-                    title: 'Massive Deletion',
-                    icon: 'fa-trash-can',
-                    variant: 'danger',
-                    confirmText: 'Delete Selected'
-                };
-            } else if (actionType === 'export') {
-                this.activeAction = {
-                    type: 'export',
-                    title: 'Export Repositories',
-                    icon: 'fa-file-export',
-                    variant: 'primary',
-                    confirmText: 'Start Export'
-                };
-            }
+        openExportModal() {
             const modal = new bootstrap.Modal(document.getElementById('githubActionModal'));
             modal.show();
         },
@@ -238,106 +225,86 @@ const GitHubSelectionTable = {
     },
 
     template: `
-    <div class="github-selection-wrapper">
-        <github-filter 
+    <div class="dt-wrapper">
+        <github-filter
             ref="filter"
-            :api-endpoint="apiEndpoint" 
+            :api-endpoint="apiEndpoint"
             @update:results="handleSearchResults"
             @loading="val => loading = val">
         </github-filter>
 
-        <div class="mb-4 d-flex justify-content-between align-items-center">
-            <button class="btn btn-outline-primary rounded-pill px-3" @click="toggleGlobalSelectAll">
-                <i class="fas fa-check-double me-1"></i> Select All results ([[ totalUrls ]])
-            </button>
-            <button v-if="selectedCount > 0"
-                    class="btn btn-link text-danger text-decoration-none"
-                    @click="clearSelection">
-                Clear Selection
+        <div class="rl-toolbar mb-3" style="justify-content:space-between;">
+            <button class="dt-toolbar-btn" @click="toggleGlobalSelectAll">
+                <i class="fas fa-check-double"></i> Select All results ([[ totalUrls ]])
             </button>
         </div>
 
-        <div v-if="selectedCount > 0"
-             class="alert alert-primary shadow-lg border-0 rounded-pill d-flex justify-content-between align-items-center px-4 py-3 sticky-top animate__animated animate__fadeIn"
-             style="top: 20px; z-index: 1020;">
-            <div>
-                <strong class="me-2">
-                    <i class="fas fa-tasks me-2"></i>[[ selectedCount ]] repositories selected
-                </strong>
-            </div>
-            <div class="d-flex gap-2">
-                <template v-if="isAdmin">
-                    <button class="btn btn-danger btn-sm rounded-pill px-4 fw-bold"
-                            @click="openActionModal('delete')"
-                            :disabled="isActionLoading">
-                        <i class="fas fa-trash-alt me-1"></i> Delete Selected
-                    </button>
-                </template>
-                <button class="btn btn-primary btn-sm rounded-pill px-4 fw-bold"
-                        @click="openActionModal('export')"
-                        :disabled="isActionLoading">
-                    <i class="fas fa-file-export me-1"></i> Export Selected
-                </button>
-            </div>
+        <div v-if="selectedCount > 0" class="rl-select-banner">
+            <span><i class="fas fa-tasks me-1"></i>[[ selectedCount ]] repositories selected</span>
+            <button class="rl-select-banner-btn" @click="clearSelection">Clear selection</button>
         </div>
 
-        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
-            <div class="table-responsive">
-                <table class="table align-middle mb-0">
-                    <thead class="bg-light">
-                        <tr class="text-muted small text-uppercase">
-                            <th style="width:50px" class="text-center">
-                                <input type="checkbox" class="form-check-input"
-                                       :checked="isPageFullySelected"
-                                       @change="toggleAllOnPage">
-                            </th>
-                            <th style="width:40px"></th>
-                            <th>Repository Details</th>
-                            <th class="text-center">Rules</th>
-                            <th class="text-end pe-4">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody v-if="!loading">
-                        <template v-for="(item, index) in githubUrls" :key="item.url">
-                            <tr :class="{'table-active': isItemChecked(item.url)}"
-                                style="cursor:pointer"
-                                @click="toggleRow(item.url)">
-                                <td class="text-center" @click.stop>
-                                    <input type="checkbox" class="form-check-input"
-                                           :checked="isItemChecked(item.url)"
-                                           @change="updateSelection(item.url, $event.target.checked)">
-                                </td>
-                                <td class="text-center">
-                                    <i class="fas"
-                                       :class="expandedRows.has(item.url)
-                                           ? 'fa-chevron-down text-primary'
-                                           : 'fa-chevron-right text-muted'"></i>
-                                </td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="bg-light rounded p-2 me-3">
-                                            <i class="fab fa-github fa-lg"></i>
-                                        </div>
-                                        <div>
-                                            <div class="fw-bold text-dark text-truncate"
-                                                 style="max-width:300px">[[ item.url ]]</div>
-                                            <div class="x-small text-muted">
-                                                Detected Rules: [[ item.rule_count ]]
-                                                <span v-if="item.last_import && item.last_import.imported !== null">
-                                                    | <i class="fas fa-check text-success"></i> Imported
-                                                </span>
-                                            </div>
+        <div class="dt-table-wrap position-relative">
+            <div v-if="loading" class="dt-loading-overlay">
+                <div class="dt-spinner"></div>
+            </div>
+            <table class="dt-table" role="grid">
+                <thead class="dt-thead">
+                    <tr>
+                        <th class="dt-th dt-th--checkbox">
+                            <input type="checkbox" class="dt-checkbox"
+                                   :checked="isPageFullySelected"
+                                   @change="toggleAllOnPage">
+                        </th>
+                        <th class="dt-th" style="width:40px"></th>
+                        <th class="dt-th">Repository Details</th>
+                        <th class="dt-th text-center">Rules</th>
+                        <th class="dt-th text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody v-if="!loading">
+                    <template v-for="(item, index) in githubUrls" :key="item.url">
+                        <tr class="dt-row"
+                            :class="{ 'dt-row--selected': isItemChecked(item.url), 'dt-row--expanded': expandedRows.has(item.url) }"
+                            style="cursor:pointer"
+                            @click="toggleRow(item.url)">
+                            <td class="dt-td dt-td--checkbox" @click.stop>
+                                <input type="checkbox" class="dt-checkbox"
+                                       :checked="isItemChecked(item.url)"
+                                       @change="updateSelection(item.url, $event.target.checked)">
+                            </td>
+                            <td class="dt-td text-center">
+                                <i class="fas dt-expand-chevron"
+                                   :class="expandedRows.has(item.url)
+                                       ? 'fa-chevron-down text-primary'
+                                       : 'fa-chevron-right text-muted'"></i>
+                            </td>
+                            <td class="dt-td">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-light rounded p-2 me-3">
+                                        <i class="fab fa-github fa-lg"></i>
+                                    </div>
+                                    <div>
+                                        <div class="fw-bold text-dark text-truncate"
+                                             style="max-width:300px">[[ item.url ]]</div>
+                                        <div class="x-small text-muted">
+                                            Detected Rules: [[ item.rule_count ]]
+                                            <span v-if="item.last_import && item.last_import.imported !== null">
+                                                | <i class="fas fa-check text-success"></i> Imported
+                                            </span>
                                         </div>
                                     </div>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-primary-soft text-primary rounded-pill px-3">
-                                        [[ item.rule_count ]] rules
-                                    </span>
-                                </td>
-                                <td class="text-end pe-4" @click.stop>
+                                </div>
+                            </td>
+                            <td class="dt-td text-center">
+                                <span class="badge bg-primary-soft text-primary rounded-pill px-3">
+                                    [[ item.rule_count ]] rules
+                                </span>
+                            </td>
+                            <td class="dt-td dt-td--actions" @click.stop>
+                                <div class="dt-actions justify-content-end">
                                     <template v-if="isAdmin">
-                                        <button class="btn btn-sm btn-outline-danger border-0 rounded-circle me-1"
+                                        <button class="dt-action-btn dt-action-btn--danger"
                                                 data-bs-toggle="modal"
                                                 :data-bs-target="'#delete_repo_modal_' + index"
                                                 title="Delete Repository">
@@ -345,7 +312,7 @@ const GitHubSelectionTable = {
                                         </button>
                                     </template>
 
-                                    <!-- Delete confirmation modal -->
+                                    <!-- Delete confirmation modal (single repo — bulk delete was removed) -->
                                     <div class="modal fade" :id="'delete_repo_modal_' + index"
                                          tabindex="-1" aria-hidden="true">
                                         <div class="modal-dialog modal-dialog-centered">
@@ -387,12 +354,11 @@ const GitHubSelectionTable = {
                                     </div>
 
                                     <a :href="'/rule/github_detail?url=' + encodeURIComponent(item.url)"
-                                       class="btn btn-sm btn-outline-primary border-0 rounded-circle me-1"
-                                       title="View Details">
+                                       class="dt-action-btn" title="View Details">
                                         <i class="fas fa-external-link-alt"></i>
                                     </a>
                                     <template v-if="isAdmin">
-                                        <button class="btn btn-sm btn-outline-success border-0 rounded-circle"
+                                        <button class="dt-action-btn"
                                                 @click="updateSingleRepo(item)"
                                                 :disabled="item.isUpdating"
                                                 title="Check for updates">
@@ -400,12 +366,13 @@ const GitHubSelectionTable = {
                                                :class="{'fa-spin': item.isUpdating}"></i>
                                         </button>
                                     </template>
-                                </td>
-                            </tr>
+                                </div>
+                            </td>
+                        </tr>
 
-                            <!-- ── Expanded detail row ── -->
-                            <tr v-if="expandedRows.has(item.url)" class="bg-light shadow-inner">
-                                <td colspan="5" class="p-4">
+                        <!-- ── Expanded detail row ── -->
+                        <tr v-if="expandedRows.has(item.url)" class="dt-row-expand">
+                            <td colspan="5" class="dt-expand-cell">
                                     <div class="animate__animated animate__fadeIn">
 
                                         <!-- ── Job tracker (shown when a delete job is active) ── -->
@@ -575,17 +542,12 @@ const GitHubSelectionTable = {
                                 </td>
                             </tr>
                         </template>
-                    </tbody>
-                </table>
+                </tbody>
+            </table>
 
-                <div v-if="loading" class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted">Loading repositories...</p>
-                </div>
-                <div v-if="githubUrls.length === 0 && !loading" class="text-center py-5 text-muted">
-                    <i class="fas fa-search fa-3x mb-3 opacity-25"></i>
-                    <p>No GitHub URLs found matching your search.</p>
-                </div>
+            <div v-if="githubUrls.length === 0 && !loading" class="dt-empty">
+                <i class="fas fa-search dt-empty-icon"></i>
+                <p class="dt-empty-text">No GitHub URLs found matching your search.</p>
             </div>
         </div>
 
@@ -596,6 +558,21 @@ const GitHubSelectionTable = {
                 @change-page="changePage">
             </pagination-component>
         </div>
+
+        <!-- ── Bulk bar (sticky bottom, export-only — bulk delete removed) ── -->
+        <transition name="rl-bulk-slide">
+            <div v-if="selectedCount > 0" class="rl-bulk-bar">
+                <span class="rl-bulk-count">[[ selectedCount ]] selected</span>
+                <div class="rl-bulk-actions">
+                    <button class="rl-bulk-btn" @click="openExportModal" :disabled="isActionLoading">
+                        <i class="fas fa-file-export"></i> Export Selected
+                    </button>
+                </div>
+                <button class="rl-bulk-clear" @click="clearSelection">
+                    <i class="fas fa-xmark"></i> Clear
+                </button>
+            </div>
+        </transition>
 
         <github-action-modal
             modal-id="githubActionModal"
@@ -610,14 +587,7 @@ const GitHubSelectionTable = {
             :payload="actionPayload"
             @success="handleActionSuccess">
             <template #description>
-                <div v-if="activeAction.type === 'delete'"
-                     class="alert alert-warning border-0 small rounded-3 text-start mb-0">
-                    <i class="fa-solid fa-circle-info me-2"></i>
-                    This will remove all associated rules from the database.
-                    Repositories with more than 200 rules will be processed
-                    as a background job automatically.
-                </div>
-                <div v-else class="text-muted small">
+                <div class="text-muted small">
                     This will prepare a bundle of all selected repositories for export.
                 </div>
             </template>
