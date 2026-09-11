@@ -457,15 +457,14 @@
                 current_page.value = page
             }
 
-            async function onSearchInput() {
-                if (searchQuery.value.trim() === "") {
-                    await fetchRules(1)
-                } else {
-                    await fetchRules(1)
-                }
+            let searchTimer = null
+            function onSearchInput() {
+                clearTimeout(searchTimer)
+                searchTimer = setTimeout(() => fetchRules(1), 450)
             }
 
             async function onEnterKey() {
+                clearTimeout(searchTimer)
                 await fetchRules(1)
             }
 
@@ -565,15 +564,14 @@
 
             fetchBundles(1)
 
-            async function onSearchInputBundle() {
-                if (searchQuery.value.trim() === "") {
-                    await fetchBundles(1)
-                } else {
-                    await fetchBundles(1)
-                }
+            let searchTimerBundle = null
+            function onSearchInputBundle() {
+                clearTimeout(searchTimerBundle)
+                searchTimerBundle = setTimeout(() => fetchBundles(1), 450)
             }
 
             async function onEnterKeyBundle() {
+                clearTimeout(searchTimerBundle)
                 await fetchBundles(1)
             }
 
