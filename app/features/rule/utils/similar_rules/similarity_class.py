@@ -73,6 +73,7 @@ class Similarity_class:
         # Percentage management
         self.indexing_progress = 0
         self.is_indexing = True
+        self._stop_thread_started = False
 
         self.status_message = "Initializing environment..."
         self.start_time = datetime.datetime.now(tz=datetime.timezone.utc)
@@ -355,9 +356,21 @@ class Similarity_class:
         return True
 
     def status(self):
-        if self.total > 0 and self.jobs.empty() and not self.is_indexing:
-            self.stop()
-        
+        # The queue draining doesn't mean the last dequeued batch is done —
+        # a worker still has FAISS search + fuzzy matching + the DB insert
+        # left to do after jobs.get() empties the queue. stop() used to run
+        # synchronously right here, blocking this request for up to 30s
+        # waiting on _save_done, and reporting 'stopped': True (from the
+        # very first line of stop()) regardless of whether that wait timed
+        # out — so the frontend's one-shot final-stats fetch could read the
+        # SimilarResult row before save_final_stats() had actually written
+        # to it, showing 0s despite the run having genuinely found pairs.
+        # Now: kick off the cleanup in the background (once), and only
+        # report done once _save_done is actually set.
+        if self.total > 0 and self.jobs.empty() and not self.is_indexing and not self._stop_thread_started:
+            self._stop_thread_started = True
+            Thread(target=self.stop, daemon=True).start()
+
         remaining = self.jobs.qsize()
         # Progress based on total jobs created in _run_session
         complete_jobs = getattr(self, 'total_jobs', 1) - remaining
@@ -377,7 +390,9 @@ class Similarity_class:
             'total_jobs': getattr(self, 'total_jobs', 0),
             'complete': complete_jobs,
             'remaining': remaining,
-            'stopped': self.stopped,
+            # True only once save_final_stats() has actually run and committed
+            # (see the comment above) — not just once the queue looked empty.
+            'stopped': self._save_done.is_set(),
             'percentage': min(display_percent, 100),
             'status_message': self.status_message,
             'similar_pairs_found': self.similar_pairs_found,

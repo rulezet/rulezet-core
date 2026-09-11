@@ -5221,8 +5221,14 @@ def similar_update():
     if request.method == "POST":
         data = request.json
         similar_session = SimilarityModel.Similarity_class(current_user, "Update similar rules", mode="filter", params=data)
-        similar_session.start()
+        # Append before start(): start() spawns the background thread
+        # immediately, and a fast-finishing run (small target set) can reach
+        # its own sessions.remove(self) before this line runs otherwise —
+        # since removal is a no-op when self isn't in the list yet, the
+        # already-finished session then gets appended right after and never
+        # gets cleaned up.
         SimilarityModel.sessions.append(similar_session)
+        similar_session.start()
         _notify_similarity(similar_session)
 
         return {
@@ -5232,8 +5238,8 @@ def similar_update():
         }, 201
     else:
         similar_session = SimilarityModel.Similarity_class(current_user, "Update similar rules", mode="global")
-        similar_session.start()
         SimilarityModel.sessions.append(similar_session)
+        similar_session.start()
         _notify_similarity(similar_session)
 
         return {
