@@ -91,7 +91,7 @@ TASK_TYPES = {
         'target_picker': 'connector_select',
     },
     'rule_git_mirror_sync': {
-        'label': 'Rule Git Mirror — sync',
+        'label': 'Rulesets — sync',
         'icon': 'fa-brands fa-git-alt',
         'job_type': 'rule_git_mirror_sync',
         'target_picker': 'none',

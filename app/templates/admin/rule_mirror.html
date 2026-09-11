@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% import 'macros/admin_nav.html' as anav %}
-{% block title %}Rule Git Mirror — Rulezet{% endblock %}
+{% block title %}Rulesets — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 {% endblock %}
@@ -9,17 +9,20 @@
 <div class="container mt-3" id="main-container" v-cloak>
 
     <div class="explorer-banner mb-4">
-        <i class="fa-brands fa-git-alt banner-watermark"></i>
+        <img src="{{ url_for('static', filename='image/rulezet_rulesets_logo.png') }}" alt=""
+             class="banner-watermark" style="width:8rem;height:8rem;object-fit:contain;opacity:.06;">
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">Rule Git Mirror</li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Rulesets</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon"><i class="fa-brands fa-git-alt"></i></div>
-            <div><h2 class="fw-bold mb-1">Rule Git Mirror</h2><div class="banner-accent"></div></div>
+            <div class="banner-icon banner-icon--mascot" style="background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15);">
+                <img src="{{ url_for('static', filename='image/rulezet_rulesets_logo.png') }}" alt="Rulesets" style="border-radius:8px;">
+            </div>
+            <div><h2 class="fw-bold mb-1">Rulesets</h2><div class="banner-accent"></div></div>
         </div>
         <p class="text-muted mb-0" style="max-width:650px;font-size:.95rem;">
             Mirrors every active, public rule into a git repository as plain files — off by
@@ -40,7 +43,7 @@
            class="d-inline-flex align-items-center gap-2 px-4 py-2 rounded-pill text-decoration-none fw-semibold shadow-sm"
            style="background:var(--card-bg-color);border:1px solid var(--border-color);color:var(--text-color);font-size:.875rem;transition:box-shadow .15s;">
             <i class="fa-solid fa-book-open text-primary"></i>
-            How does the Rule Git Mirror work?
+            How does Rulesets work?
             <i class="fa-solid fa-arrow-right text-primary" style="font-size:.75rem;"></i>
         </a>
     </div>
@@ -110,7 +113,7 @@
     <div class="alert alert-info border-0 rounded-3 small">
         <i class="fa-solid fa-circle-info me-2"></i>
         Recurring syncs are scheduled the same way as every other admin job — create a
-        <strong>Rule Git Mirror — sync</strong> task in
+        <strong>Rulesets — sync</strong> task in
         <a href="/admin/tasks/">Workflows</a>.
     </div>
 
@@ -159,7 +162,7 @@
                         githubToken.value = ''
                         statusOk.value = true
                         statusMessage.value = 'Settings saved.'
-                        create_message('Rule Git Mirror settings saved.', 'success-subtle')
+                        create_message('Rulesets settings saved.', 'success-subtle')
                     } else {
                         statusOk.value = false
                         statusMessage.value = data.message || 'Could not save settings.'
