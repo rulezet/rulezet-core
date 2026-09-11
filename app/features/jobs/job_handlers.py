@@ -4429,26 +4429,53 @@ def handle_rule_analysis(job, app):
 
 @register_handler('rule_git_mirror_sync')
 def handle_rule_git_mirror_sync(job, app):
-    """Runs one Rule Git Mirror sync pass — off by default, admin-configured
-    per instance (RuleMirrorConfig). See rule_mirror_core.sync_mirror() for
-    the actual git plumbing; this handler is just the BackgroundJob glue."""
+    """Runs a Rulesets sync pass — off by default, admin-configured per
+    instance (RuleMirrorConfig, possibly several rows). See
+    rule_mirror_core.sync_mirror() for the actual git plumbing; this
+    handler is just the BackgroundJob glue.
+
+    job.payload may carry a specific 'config_id' (set by that config's own
+    "Run now" button); when absent (e.g. a generic recurring Task
+    Scheduler entry, which has no notion of which config to target),
+    sync_mirror() loops over every currently-enabled config itself."""
     from app.features.admin.rule_mirror import rule_mirror_core as RuleMirrorModel
+
+    config_id = (job.payload or {}).get('config_id')
 
     def _log_fn(level, message):
         log_job(job, message, level=level, event='progress')
 
     try:
-        result = RuleMirrorModel.sync_mirror(job=job, log_fn=_log_fn)
+        result = RuleMirrorModel.sync_mirror(config_id=config_id, job=job, log_fn=_log_fn)
     except Exception as e:
-        log_job(job, f'Rule Git Mirror sync failed: {e}', level='error', event='error')
+        # Full traceback (not just str(e)) — this failure mode has been hard
+        # to pin down from the one-line message alone across a couple of
+        # earlier reports; keep the real location on the job row itself.
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[rule_git_mirror_sync] {tb}")
+        log_job(job, f'Rulesets sync failed: {e}', level='error', event='error')
         job.status = 'failed'
-        job.error  = str(e)
+        job.error  = tb
         db.session.commit()
+        if config_id:
+            log_activity(
+                'admin.rule_mirror_sync_failed',
+                f"Rulesets sync failed: {e}",
+                target_type='rule_mirror_config', target_id=config_id, is_public=False,
+            )
         return
 
-    log_job(
-        job,
-        f"Sync complete — {result['written']} rule(s) written, {result['deleted']} removed"
-        + (' (initial load).' if result['first_sync'] else '.'),
-        level='success', event='done',
-    )
+    if 'configs_synced' in result:
+        message = (
+            f"Sync complete across {result['configs_synced']} config(s) — "
+            f"{result['written']} rule(s) written, {result['deleted']} removed."
+        )
+        if result.get('configs_failed'):
+            message += f" Skipped (failed): {', '.join(result['configs_failed'])}."
+    else:
+        message = (
+            f"Sync complete — {result['written']} rule(s) written, {result['deleted']} removed"
+            + (' (initial load).' if result['first_sync'] else '.')
+        )
+    log_job(job, message, level='success', event='done')

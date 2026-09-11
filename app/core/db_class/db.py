@@ -3112,11 +3112,12 @@ class InstanceConfig(db.Model):
 
 
 class RuleMirrorConfig(db.Model):
-    """Single-row: this instance's Rule Git Mirror settings (see
-    docs/design/rule_git_mirror.md). Off by default, admin-configured,
-    per-instance — deliberately NOT tied to GITHUB_TOKEN/IS_OFFICIAL_INSTANCE
-    so a self-hosted instance can point this at its own repo with its own
-    token, independent of rulezet.org's own official mirror config.
+    """One "Rulesets" mirror target (see docs/design/rule_git_mirror.md) —
+    an instance can have several, each pushing the same active/public rule
+    set to a different repo. Off by default, admin-configured, per-instance
+    — deliberately NOT tied to GITHUB_TOKEN/IS_OFFICIAL_INSTANCE so a
+    self-hosted instance can point this at its own repo(s) with its own
+    token(s), independent of rulezet.org's own official mirror config.
 
     github_token is stored the same way Connector.api_key_outbound already
     is (a plain column — this app's existing trust boundary is DB access,
@@ -3124,20 +3125,37 @@ class RuleMirrorConfig(db.Model):
     saved; the admin UI only ever shows a masked placeholder."""
     __tablename__ = 'rule_mirror_config'
     id              = db.Column(db.Integer, primary_key=True)
+    uuid            = db.Column(db.String(36), unique=True, nullable=False)
+    name            = db.Column(db.String(255), nullable=False, default='Rulesets mirror')
     enabled         = db.Column(db.Boolean, default=False, nullable=False)
     repo_url        = db.Column(db.String(512), nullable=True)
     github_token    = db.Column(db.String(512), nullable=True)
     branch          = db.Column(db.String(128), default='main', nullable=False)
     last_synced_at  = db.Column(db.DateTime, nullable=True)
+    created_at      = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     updated_at      = db.Column(db.DateTime, nullable=True)
     updated_by_id   = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
 
+    # Set only by a successful "Test connection" call (rule_mirror_core.test_config)
+    # — reset to False whenever repo_url/branch/github_token change. "Run now"
+    # is refused, both in the UI and server-side, until this is True: a
+    # mandatory check before ever attempting to push, not just an optional one.
+    is_verified     = db.Column(db.Boolean, default=False, nullable=False)
+    last_error      = db.Column(db.Text, nullable=True)
+    last_tested_at  = db.Column(db.DateTime, nullable=True)
+
     def to_json(self):
         return {
+            'id':             self.id,
+            'uuid':           self.uuid,
+            'name':           self.name,
             'enabled':        self.enabled,
             'repo_url':       self.repo_url,
             'has_token':      bool(self.github_token),
             'branch':         self.branch,
+            'is_verified':    self.is_verified,
+            'last_error':     self.last_error,
+            'last_tested_at': self.last_tested_at.strftime('%Y-%m-%d %H:%M') if self.last_tested_at else None,
             'last_synced_at': self.last_synced_at.strftime('%Y-%m-%d %H:%M') if self.last_synced_at else None,
             'updated_at':     self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
         }

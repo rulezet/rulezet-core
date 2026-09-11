@@ -157,20 +157,39 @@
           <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-folder-tree" style="font-size:1.1rem;"></i></div>
           <h4 class="fw-bold mb-0">Repository layout</h4>
         </div>
-        <pre class="hiw-code">rules/
-  &lt;format&gt;/                  yara, sigma, suricata, splunk, elastic, kql, ...
-    &lt;shard&gt;/                 first 2 hex chars of the rule's uuid
-      &lt;uuid&gt;/
-        rule.&lt;ext&gt;             the rule's content, correct extension per format
-        metadata.yaml           title, author, license, description, tags,
+        <pre class="hiw-code">README.md                   auto-generated — sources, rule counts, Rulezet version
+rules/
+  &lt;source&gt;/                  where the rule came from — a GitHub Sources repo
+                             (e.g. github.com_org_repo), or "manual" for
+                             hand-authored rules
+    &lt;format&gt;/                yara, sigma, suricata, splunk, elastic, kql, ...
+      &lt;shard&gt;/               first 2 hex chars of the rule's uuid
+        &lt;uuid&gt;/
+          &lt;rule-name&gt;.&lt;ext&gt;    slug of the rule's title, correct extension
+                               per format — renamed automatically if the
+                               rule's title changes
+          metadata.json         title, author, license, description, tags,
                                  ATT&amp;CK techniques, CVEs, rulezet_url, ...</pre>
         <div class="hiw-callout hiw-callout--info mt-3">
           <i class="fa-solid fa-circle-info me-1"></i>
-          <code>metadata.yaml</code>'s <code>license_verified</code> flag is
+          Grouping by source first keeps rules pulled from the same GitHub
+          repository together, since a busy instance can have many different
+          import sources — format is the second-level split within each one.
+        </div>
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-1"></i>
+          <code>metadata.json</code>'s <code>license_verified</code> flag is
           <code>true</code> only when the rule's license matches a small
           permissive allow-list (MIT, Apache-2.0, GPL-*, CC-*, ...). Every
           rule is mirrored regardless — this just makes an unclear or
           non-permissive license visible instead of silent.
+        </div>
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-1"></i>
+          <code>README.md</code> at the repo root is rewritten on every sync:
+          the Rulezet version that produced it, when it was last synced, and
+          every source currently mirrored with its rule count — each one
+          linking straight back to it.
         </div>
       </section>
 
@@ -295,7 +314,9 @@
           <h4 class="fw-bold mb-0">Set it up on your own instance</h4>
         </div>
         <p style="font-size:.92rem;color:var(--subtle-text-color);">
-          Five steps, from a blank GitHub repository to a running mirror.
+          Five steps, from a blank GitHub repository to a running mirror. You can repeat this
+          for as many repositories as you like — each one is its own independent entry in the
+          Rulesets table, with its own URL, branch and token.
         </p>
 
         <div class="d-flex flex-column gap-3 mt-2">
@@ -316,17 +337,18 @@
               <span class="text-muted">
                 On GitHub: Settings → Developer settings → Fine-grained personal access tokens
                 → New token, "Only select repositories" → your mirror repo, permission
-                <em>Contents: Read and write</em>, nothing else.
+                <em>Contents: Read and write</em>, nothing else. The "?" next to the token field
+                in Rulesets walks through this too.
               </span>
             </div>
           </div>
           <div class="d-flex gap-3 align-items-start">
             <div class="hiw-step-num">3</div>
             <div style="font-size:.88rem;">
-              <strong>Open <a href="/admin/rule_mirror">Admin → Rulesets</a></strong><br>
+              <strong>Open <a href="/admin/rule_mirror">Admin → Rulesets</a> and add a repository</strong><br>
               <span class="text-muted">
-                Enter the repository URL, branch (defaults to <code>main</code>), and the token
-                from step 2. Save.
+                Give it a name, enter the repository URL, branch (defaults to <code>main</code>),
+                and the token from step 2. Save.
               </span>
             </div>
           </div>
@@ -335,9 +357,15 @@
             <div style="font-size:.88rem;">
               <strong>Toggle "Enabled" and click "Run now"</strong><br>
               <span class="text-muted">
-                For the first sync. Track its progress on the <a href="/jobs/list">Jobs page</a>
+                "Run now" always re-tests the connection first — it's not optional, and not just
+                a one-time check: every click confirms the token can still authenticate and has
+                write access to the repo before anything is pushed, so a token revoked on GitHub
+                after the last successful run gets caught immediately instead of failing mid-sync.
+                The wifi icon on a row runs that same test on demand, without launching a sync.
+                Once "Run now" succeeds, track progress on the <a href="/jobs/list">Jobs page</a>
                 — for a large instance this can take a while the first time (it walks every
-                active rule).
+                active rule). Each repository's history icon shows every test, trigger and sync
+                for that row.
               </span>
             </div>
           </div>

@@ -3,6 +3,7 @@
 {% block title %}Rulesets — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/rulesets.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -25,8 +26,8 @@
             <div><h2 class="fw-bold mb-1">Rulesets</h2><div class="banner-accent"></div></div>
         </div>
         <p class="text-muted mb-0" style="max-width:650px;font-size:.95rem;">
-            Mirrors every active, public rule into a git repository as plain files — off by
-            default, and specific to this instance.
+            Mirrors every active, public rule into one or more git repositories as plain files —
+            off by default, and specific to this instance. Configure as many repositories as you need.
         </p>
     </div>
 
@@ -50,63 +51,12 @@
 
     <div class="card border-0 shadow-sm rounded-3 mb-4">
         <div class="card-body p-4">
-
-            <div v-if="statusMessage" class="alert border-0 rounded-3"
-                 :class="statusOk ? 'alert-success' : 'alert-danger'">
-                [[ statusMessage ]]
-            </div>
-
-            <div class="rounded-3 border p-3 mb-4" style="background:var(--light-bg-color);">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong>[[ enabled ? 'Enabled' : 'Disabled' ]]</strong>
-                        <span class="text-muted ms-2" v-if="lastSyncedAt">
-                            Last synced [[ lastSyncedAt ]]
-                        </span>
-                        <span class="text-muted ms-2" v-else>Never synced yet.</span>
-                    </div>
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" role="switch"
-                               id="mirror-enabled" v-model="enabled" @change="save">
-                        <label class="form-check-label" for="mirror-enabled">Enabled</label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label fw-bold small text-uppercase text-muted">Repository URL</label>
-                <input type="text" class="form-control" v-model="repoUrl"
-                       placeholder="https://github.com/your-org/your-rules-mirror">
-                <small class="text-muted">A GitHub repository this instance will push to. Can be empty/new.</small>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label fw-bold small text-uppercase text-muted">Branch</label>
-                <input type="text" class="form-control" v-model="branch" style="max-width:220px;">
-            </div>
-
-            <div class="mb-4">
-                <label class="form-label fw-bold small text-uppercase text-muted">GitHub token</label>
-                <input type="password" class="form-control" v-model="githubToken"
-                       :placeholder="hasToken ? 'Already set — leave blank to keep it' : 'Fine-grained PAT, scoped to this repo only'"
-                       autocomplete="new-password">
-                <small class="text-muted">
-                    Use a token dedicated to this one repository — not the same token used for
-                    GitHub rule import, and never one with broader access than necessary.
-                    Never shown again once saved.
-                </small>
-            </div>
-
-            <div class="d-flex gap-2">
-                <button class="btn btn-primary rounded-pill px-4" @click="save" :disabled="saving">
-                    <i class="fas fa-save me-1"></i>Save settings
-                </button>
-                <button class="btn btn-outline-primary rounded-pill px-4" @click="runNow"
-                        :disabled="running || !enabled">
-                    <i class="fas fa-play me-1" :class="{ 'fa-spin fa-circle-notch': running }"></i>
-                    [[ running ? 'Running…' : 'Run now' ]]
-                </button>
-            </div>
+            <rulesets-table
+                ref="rulesetsTable"
+                :csrf-token="CSRF"
+                @create="openCreate"
+                @edit="openEdit">
+            </rulesets-table>
         </div>
     </div>
 
@@ -114,91 +64,261 @@
         <i class="fa-solid fa-circle-info me-2"></i>
         Recurring syncs are scheduled the same way as every other admin job — create a
         <strong>Rulesets — sync</strong> task in
-        <a href="/admin/tasks/">Workflows</a>.
+        <a href="/admin/tasks/">Workflows</a>. A scheduled task with no repository picked
+        syncs every currently-enabled repository above.
     </div>
 
 </div>
+
+<!-- ── Create / edit modal ───────────────────────────────────────── -->
+<div class="modal fade" id="rulesetModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="background:var(--card-bg-color);">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold">
+                    <i class="fa-brands fa-git-alt text-primary me-2"></i>[[ editMode ? 'Edit repository' : 'New repository' ]]
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+
+                <div class="mb-3">
+                    <label class="rms-form-label">Name <span class="text-danger">*</span></label>
+                    <input v-model="form.name" type="text" class="form-control"
+                           placeholder="Official rulezet.org mirror" maxlength="255">
+                </div>
+
+                <div class="mb-3">
+                    <label class="rms-form-label">Repository URL <span class="text-danger">*</span></label>
+                    <input v-model="form.repo_url" type="text" class="form-control font-monospace"
+                           placeholder="https://github.com/your-org/your-rules-mirror">
+                    <div class="rms-form-hint">A GitHub repository this instance will push to. Can be empty/new.</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="rms-form-label">Branch</label>
+                    <input v-model="form.branch" type="text" class="form-control" style="max-width:220px;" placeholder="main">
+                </div>
+
+                <div class="mb-3">
+                    <div class="rms-label-row">
+                        <label class="rms-form-label mb-0">GitHub token <span v-if="!editMode" class="text-danger">*</span></label>
+                        <button type="button" class="rms-help-btn" title="How do I get a token?" @click="openTokenHelp">?</button>
+                    </div>
+                    <input v-model="form.github_token" type="password" class="form-control font-monospace"
+                           autocomplete="new-password"
+                           :placeholder="editMode ? 'Already set — leave blank to keep it' : 'Fine-grained PAT, scoped to this repo only'">
+                    <div class="rms-form-hint">
+                        Use a token dedicated to this one repository — not the same token used for
+                        GitHub rule import, and never one with broader access than necessary.
+                        Never shown again once saved.
+                    </div>
+                </div>
+
+                <div class="mb-1 form-check">
+                    <input v-model="form.enabled" type="checkbox" class="form-check-input" id="rmsEnabled">
+                    <label class="form-check-label rms-form-label mb-0" for="rmsEnabled">Enabled</label>
+                </div>
+
+                <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2">
+                    <i class="fa-solid fa-circle-exclamation me-1"></i>[[ formError ]]
+                </div>
+            </div>
+            <div class="modal-footer border-top">
+                <button class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary rounded-pill px-4" @click="saveConfig" :disabled="saving">
+                    <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>
+                    [[ editMode ? 'Save changes' : 'Add repository' ]]
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── GitHub token help modal ────────────────────────────────────── -->
+<div class="modal fade" id="rulesetTokenHelpModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="background:var(--card-bg-color);">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold">
+                    <i class="fa-solid fa-key text-primary me-2"></i>Creating a GitHub token for Rulesets
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-muted" style="font-size:.85rem;">
+                    Rulesets pushes to one GitHub repository per configured entry. Use a fine-grained
+                    Personal Access Token scoped to that single repository — never a classic token
+                    with account-wide access.
+                </p>
+
+                <div class="rms-help-step">
+                    <div class="rms-help-step-num">1</div>
+                    <div class="rms-help-step-body">
+                        <strong>Create the destination repository first (if it doesn't exist yet)</strong>
+                        On GitHub, click <code>New repository</code>. It can be empty — Rulesets will
+                        push the first commit itself. Note its owner/name, e.g. <code>your-org/your-rules-mirror</code>.
+                    </div>
+                </div>
+
+                <div class="rms-help-step">
+                    <div class="rms-help-step-num">2</div>
+                    <div class="rms-help-step-body">
+                        <strong>Go to Developer settings</strong>
+                        In GitHub, open <code>Settings → Developer settings → Personal access tokens →
+                        Fine-grained tokens</code>, then click <code>Generate new token</code>.
+                    </div>
+                </div>
+
+                <div class="rms-help-step">
+                    <div class="rms-help-step-num">3</div>
+                    <div class="rms-help-step-body">
+                        <strong>Scope it to the one repository</strong>
+                        Under <code>Repository access</code>, choose <code>Only select repositories</code>
+                        and pick the mirror repository from step 1. Do not grant access to any other repository.
+                    </div>
+                </div>
+
+                <div class="rms-help-step">
+                    <div class="rms-help-step-num">4</div>
+                    <div class="rms-help-step-body">
+                        <strong>Grant it write access to contents</strong>
+                        Under <code>Permissions → Repository permissions</code>, set
+                        <code>Contents</code> to <code>Read and write</code>. Every other permission
+                        can stay at <code>No access</code> — Rulesets only ever writes rule files and commits.
+                    </div>
+                </div>
+
+                <div class="rms-help-step">
+                    <div class="rms-help-step-num">5</div>
+                    <div class="rms-help-step-body">
+                        <strong>Set an expiration and generate the token</strong>
+                        Pick an expiration you're comfortable rotating (e.g. 90 days), then click
+                        <code>Generate token</code>. Copy it immediately — GitHub only shows it once.
+                    </div>
+                </div>
+
+                <div class="rms-help-step">
+                    <div class="rms-help-step-num">6</div>
+                    <div class="rms-help-step-body">
+                        <strong>Paste it into the GitHub token field</strong>
+                        Rulezet stores it server-side and never displays it again once saved — the field
+                        will only ever show a masked placeholder afterwards. To rotate it, generate a new
+                        token on GitHub and paste it back in here; the old one can then be revoked.
+                    </div>
+                </div>
+
+                <div class="alert alert-warning border-0 rounded-3 mt-3 mb-0 py-2 small">
+                    <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                    Use a different token for every repository you configure here, and never reuse the
+                    token used elsewhere in Rulezet (e.g. GitHub rule import). If a token is ever
+                    compromised, revoke it directly from GitHub — Rulezet has no way to do that for you.
+                </div>
+            </div>
+            <div class="modal-footer border-top">
+                <button class="btn btn-primary rounded-pill px-4" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block script %}
 <script type="module">
-    const { createApp, ref } = Vue
+    const { createApp, reactive, ref, onMounted } = Vue
+    import RulesetsTable from '/static/js/admin/rulesetsTable.js'
     import { create_message } from '/static/js/toaster.js'
+
+    const CSRF = '{{ csrf_token() }}'
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { 'rulesets-table': RulesetsTable },
         setup() {
-            const config = {{ config.to_json() | tojson }}
+            const rulesetsTable = ref(null)
+            const saving        = ref(false)
+            const formError      = ref('')
+            const editMode      = ref(false)
+            const editUuid      = ref(null)
 
-            const enabled        = ref(config.enabled)
-            const repoUrl         = ref(config.repo_url || '')
-            const branch          = ref(config.branch || 'main')
-            const hasToken        = ref(config.has_token)
-            const githubToken     = ref('')
-            const lastSyncedAt    = ref(config.last_synced_at)
-            const saving          = ref(false)
-            const running         = ref(false)
-            const statusMessage   = ref('')
-            const statusOk        = ref(true)
+            const form = reactive({
+                name: '', repo_url: '', branch: 'main', github_token: '', enabled: false,
+            })
 
-            function csrf() { return document.getElementById('csrf_token')?.value || '' }
+            function resetForm() {
+                Object.assign(form, { name: '', repo_url: '', branch: 'main', github_token: '', enabled: false })
+                formError.value = ''
+            }
 
-            async function save() {
+            let bsModal, bsTokenHelpModal
+            onMounted(() => {
+                const Modal = window.bootstrap?.Modal
+                if (Modal) {
+                    bsModal          = new Modal(document.getElementById('rulesetModal'))
+                    bsTokenHelpModal = new Modal(document.getElementById('rulesetTokenHelpModal'))
+                }
+            })
+
+            function openTokenHelp() { bsTokenHelpModal?.show() }
+
+            function openCreate() {
+                editMode.value = false
+                editUuid.value = null
+                resetForm()
+                bsModal?.show()
+            }
+
+            function openEdit(c) {
+                editMode.value = true
+                editUuid.value = c.uuid
+                Object.assign(form, {
+                    name: c.name, repo_url: c.repo_url || '', branch: c.branch || 'main',
+                    // The token is never sent back once saved — left blank on purpose,
+                    // filling it in only replaces the stored value.
+                    github_token: '', enabled: c.enabled,
+                })
+                formError.value = ''
+                bsModal?.show()
+            }
+
+            async function saveConfig() {
+                formError.value = ''
+                const missingCreateFields = !editMode.value && (!form.repo_url.trim() || !form.github_token.trim())
+                if (!form.name.trim() || missingCreateFields) {
+                    formError.value = editMode.value
+                        ? 'A name is required.'
+                        : 'Name, repository URL and token are all required.'
+                    return
+                }
                 saving.value = true
                 try {
-                    const res = await fetch('/admin/rule_mirror/update', {
+                    const url = editMode.value
+                        ? `/admin/rule_mirror/update/${editUuid.value}`
+                        : '/admin/rule_mirror/create'
+                    const res = await fetch(url, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
-                        body: JSON.stringify({
-                            enabled: enabled.value,
-                            repo_url: repoUrl.value,
-                            branch: branch.value,
-                            github_token: githubToken.value,
-                        }),
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+                        body: JSON.stringify({ ...form }),
                     })
                     const data = await res.json()
                     if (res.ok && data.success) {
-                        if (githubToken.value) hasToken.value = true
-                        githubToken.value = ''
-                        statusOk.value = true
-                        statusMessage.value = 'Settings saved.'
-                        create_message('Rulesets settings saved.', 'success-subtle')
+                        bsModal?.hide()
+                        create_message(editMode.value ? 'Repository updated.' : 'Repository added.', 'success-subtle')
+                        rulesetsTable.value?.refresh()
                     } else {
-                        statusOk.value = false
-                        statusMessage.value = data.message || 'Could not save settings.'
+                        formError.value = data.message || 'An error occurred.'
                     }
                 } catch {
-                    statusOk.value = false
-                    statusMessage.value = 'Network error — could not save settings.'
+                    formError.value = 'Network error.'
                 } finally {
                     saving.value = false
                 }
             }
 
-            async function runNow() {
-                running.value = true
-                try {
-                    const res = await fetch('/admin/rule_mirror/run_now', {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': csrf() },
-                    })
-                    const data = await res.json()
-                    if (res.ok && data.success) {
-                        create_message('Sync started — track it on the Jobs page.', 'success-subtle')
-                        window.location.href = '/jobs/detail/' + data.job_uuid
-                    } else {
-                        create_message(data.message || 'Could not start the sync.', 'danger-subtle')
-                    }
-                } catch {
-                    create_message('Network error — could not start the sync.', 'danger-subtle')
-                } finally {
-                    running.value = false
-                }
-            }
-
             return {
-                enabled, repoUrl, branch, hasToken, githubToken, lastSyncedAt,
-                saving, running, statusMessage, statusOk, save, runNow,
+                CSRF, rulesetsTable, form, saving, formError, editMode,
+                openCreate, openEdit, saveConfig, openTokenHelp,
             }
         }
     }).mount('#main-container')
