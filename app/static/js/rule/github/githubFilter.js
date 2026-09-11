@@ -2,18 +2,24 @@ const GithubFilter = {
     props: {
         apiEndpoint: { type: String, required: true },
         placeholder: { type: String, default: 'Search by repository URL...' },
-        autoFetch: { type: Boolean, default: true }
+        autoFetch: { type: Boolean, default: true },
+        sortKey: { type: String, default: '' },
+        sortDir: { type: String, default: 'asc' }
     },
     emits: ['update:results', 'loading'],
     delimiters: ['[[', ']]'],
     setup(props, { emit }) {
         const searchQuery = Vue.ref('');
-        const searchField = Vue.ref('url'); 
+        const searchField = Vue.ref('url');
         const selectedFormat = Vue.ref('');
         const authorQuery = Vue.ref('');
         const searchIsLoading = Vue.ref(false);
         const totalUrls = Vue.ref(0);
         const availableFormats = Vue.ref([]);
+        const filtersOpen = Vue.ref(false);
+        const activeFilterCount = Vue.computed(() =>
+            (selectedFormat.value ? 1 : 0) + (authorQuery.value ? 1 : 0)
+        );
 
         const fetchMetadata = async () => {
             try {
@@ -36,6 +42,10 @@ const GithubFilter = {
                 format: selectedFormat.value,
                 author: authorQuery.value
             });
+            if (props.sortKey) {
+                params.set('sort', props.sortKey);
+                params.set('dir', props.sortDir);
+            }
 
             try {
                 const res = await fetch(`${props.apiEndpoint}?${params.toString()}`);
@@ -86,6 +96,8 @@ const GithubFilter = {
             searchIsLoading,
             totalUrls,
             availableFormats,
+            filtersOpen,
+            activeFilterCount,
             fetchUrls,
             clearSearch,
             clearAuthor,
@@ -93,65 +105,65 @@ const GithubFilter = {
         };
     },
     template: `
-   <div class="card shadow-sm border-0 mb-4 rounded-4" style="background-color: var(--card-bg-color);">
-        <div class="card-body p-4">
-            <div class="row g-3 align-items-end">
-                <div class="col-md-5">
-                    <label class="small fw-bold text-muted mb-1 ms-1 text-uppercase">Keywords</label>
-                    <div class="input-group input-group-sm position-relative shadow-sm rounded-3 overflow-hidden">
-                        <select v-model="searchField" class="form-select border-0 text-muted small fw-bold" @change="fetchUrls(1)" style="max-width: 80px; background-color: var(--bg-color);">
-                            <option value="url">URL</option>
-                            <option value="all">All</option>
-                        </select>
-                        <span class="input-group-text border-0 text-muted" style="background-color: var(--bg-color);">
-                            <i v-if="!searchIsLoading" class="fa-solid fa-magnifying-glass"></i>
-                            <span v-else class="spinner-border spinner-border-sm text-primary"></span>
-                        </span>
-                        <input type="text" v-model="searchQuery" @keyup.enter="fetchUrls(1)" class="form-control border-0" :placeholder="placeholder" style="height: 38px; background-color: var(--bg-color);">
-                        
-                        <span v-if="searchQuery" @click="clearSearch" class="position-absolute end-0 top-50 translate-middle-y me-2 text-muted cursor-pointer" style="z-index: 5;">
-                            <i class="fa-solid fa-circle-xmark opacity-50"></i>
-                        </span>
-                    </div>
+    <div>
+        <div class="rl-toolbar">
+            <div class="rl-toolbar-left">
+                <div class="dt-search">
+                    <i v-if="!searchIsLoading" class="fas fa-search dt-search-icon"></i>
+                    <span v-else class="spinner-border spinner-border-sm text-primary dt-search-icon" style="width:.85rem;height:.85rem;"></span>
+                    <input class="dt-search-input" type="text" :placeholder="placeholder"
+                           v-model="searchQuery" @keyup.enter="fetchUrls(1)" aria-label="Search repositories" />
+                    <button v-if="searchQuery" class="dt-search-clear" @click="clearSearch"
+                            aria-label="Clear search">
+                        <i class="fas fa-xmark"></i>
+                    </button>
                 </div>
+                <select v-model="searchField" class="rl-fp-select" @change="fetchUrls(1)" aria-label="Search in" style="width:auto;">
+                    <option value="url">URL only</option>
+                    <option value="all">URL, format &amp; title</option>
+                </select>
+                <span v-if="!searchIsLoading" class="text-muted small text-nowrap">
+                    <strong>[[ totalUrls ]]</strong> repositor[[ totalUrls === 1 ? 'y' : 'ies' ]]
+                </span>
+            </div>
 
-                <div class="col-md-3">
-                    <label class="small fw-bold text-muted mb-1 ms-1 text-uppercase">Author</label>
-                    <div class="input-group input-group-sm position-relative shadow-sm rounded-3 overflow-hidden">
-                        <input type="text" 
-                            v-model="authorQuery" 
-                            @keyup.enter="fetchUrls(1)" 
-                            class="form-control border-0" 
-                            placeholder="e.g. Neo23x0" 
-                            style="height: 38px; background-color: var(--bg-color);">
-                        
-                        <span v-if="authorQuery" 
-                            @click="clearAuthor" 
-                            class="position-absolute end-0 top-50 translate-middle-y me-2 text-muted cursor-pointer" 
-                            style="z-index: 5;">
-                            <i class="fa-solid fa-circle-xmark opacity-50"></i>
-                        </span>
-                    </div>
+            <div class="rl-toolbar-right">
+                <slot name="toolbar-extra"></slot>
+
+                <button class="dt-toolbar-btn"
+                        :class="{ 'dt-toolbar-btn--active': filtersOpen }"
+                        @click="filtersOpen = !filtersOpen"
+                        :aria-expanded="filtersOpen">
+                    <i class="fa-solid fa-filter"></i>
+                    <span>Filters</span>
+                    <span v-if="activeFilterCount > 0" class="rl-filter-badge ms-1">[[ activeFilterCount ]]</span>
+                </button>
+            </div>
+        </div>
+
+        <div v-show="filtersOpen" class="rl-filter-panel">
+            <div class="rl-fp-row">
+                <div class="rl-fp-item" style="min-width:220px;">
+                    <input type="text"
+                           v-model="authorQuery"
+                           @keyup.enter="fetchUrls(1)"
+                           class="rl-fp-select"
+                           placeholder="Author, e.g. Neo23x0"
+                           style="width:100%;">
                 </div>
-
-                <div class="col-md-2">
-                    <label class="small fw-bold text-muted mb-1 ms-1 text-uppercase">Format</label>
-                    <select v-model="selectedFormat" @change="fetchUrls(1)" class="form-select form-select-sm border-0 shadow-sm" style="border-radius: 10px; height: 38px; background-color: var(--bg-color);">
-                        <option value="">All</option>
-                        <option v-for="fmt in availableFormats" 
-                                :key="typeof fmt === 'object' ? fmt.name : fmt" 
+                <div class="rl-fp-item">
+                    <select v-model="selectedFormat" @change="fetchUrls(1)" class="rl-fp-select" aria-label="Format">
+                        <option value="">All formats</option>
+                        <option v-for="fmt in availableFormats"
+                                :key="typeof fmt === 'object' ? fmt.name : fmt"
                                 :value="typeof fmt === 'object' ? fmt.name : fmt">
                             [[ typeof fmt === 'object' ? fmt.name : fmt ]]
                         </option>
                     </select>
                 </div>
-
-                <div class="col-md-2 text-end">
-                    <div class="border-start ps-3 text-start">
-                        <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.6rem;">Total</small>
-                        <span class="h5 fw-bold mb-0 text-primary">[[ totalUrls ]]</span>
-                    </div>
-                </div>
+                <button v-if="activeFilterCount > 0" class="rl-fp-reset" @click="selectedFormat = ''; clearAuthor()">
+                    <i class="fas fa-rotate-left me-1"></i>Reset
+                </button>
             </div>
         </div>
     </div>

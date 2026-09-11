@@ -2953,7 +2953,7 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
     return [row.url for row in query.all()]
 
 
-def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None):
+def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, sort: str = None, sort_dir: str = 'asc'):
     github_pattern = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
     author_expr = func.substring(Rule.source, r'github\.com/([^/]+)')
 
@@ -2969,6 +2969,7 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
         author_expr.label("author"),
         func.count(Rule.id).label("rule_count"),
         func.string_agg(Rule.format.distinct(), text("','")).label("formats"),
+        func.string_agg(Rule.license.distinct(), text("','")).label("licenses"),
         func.sum(
             case(
                 (and_(Rule.cve_id.isnot(None), Rule.cve_id != '[]', Rule.cve_id != ''), 1),
@@ -3002,7 +3003,14 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             )
 
     query = query.group_by(Rule.source)
-    
+
+    # Sortable columns are all aggregates/expressions from the SELECT above —
+    # sort by the label rather than re-declaring the expression, so this
+    # stays correct if the aggregation logic above ever changes.
+    sort_column = sort if sort in ('url', 'author', 'rule_count', 'cve_count') else 'url'
+    direction   = 'desc' if sort_dir == 'desc' else 'asc'
+    query = query.order_by(text(f'{sort_column} {direction}'))
+
     pagination = query.paginate(page=page, per_page=20)
 
     urls = [row.url for row in pagination.items]
@@ -3054,6 +3062,7 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             "author": row.author,
             "rule_count": row.rule_count,
             "formats": row.formats.split(',') if row.formats else [],
+            "licenses": row.licenses.split(',') if row.licenses else [],
             "cve_count": row.cve_count,
             "has_conflicts": (row.has_high_similarity or 0) > 0,
             "last_import": {
