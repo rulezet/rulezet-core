@@ -2956,6 +2956,14 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
 def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None):
     github_pattern = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
     author_expr = func.substring(Rule.source, r'github\.com/([^/]+)')
+
+    # Rule.source is stored without a trailing ".git" — a URL pasted straight
+    # from GitHub's own "Clone" button has one, which otherwise never matches
+    # anything even though the repo is right there.
+    if search:
+        search = search.strip().rstrip('/')
+        if search.lower().endswith('.git'):
+            search = search[:-4]
     query = db.session.query(
         Rule.source.label("url"),
         author_expr.label("author"),
@@ -2996,20 +3004,50 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
     query = query.group_by(Rule.source)
     
     pagination = query.paginate(page=page, per_page=20)
-    
+
+    urls = [row.url for row in pagination.items]
+
+    # Batched: this used to run 2 extra ILIKE-scan queries PER row (40 for a
+    # single page of 20), which dominated this endpoint's response time.
+    # One query per result type instead, matched back to each url in Python
+    # (each ordered newest-first, so the first match found per url is still
+    # the same "latest" result the old per-row .first() picked).
+    last_imports_by_url = {}
+    last_updates_by_url = {}
+    if urls:
+        importer_rows = (
+            ImporterResult.query
+            .filter(or_(*[ImporterResult.info.ilike(f"%{u}%") for u in urls]))
+            .order_by(ImporterResult.query_date.desc())
+            .all()
+        )
+        for r in importer_rows:
+            info_lower = (r.info or '').lower()
+            for u in urls:
+                if u not in last_imports_by_url and u.lower() in info_lower:
+                    last_imports_by_url[u] = r
+
+        update_rows = (
+            UpdateResult.query
+            .filter(or_(*[
+                or_(UpdateResult.info.ilike(f"%{u}%"), UpdateResult.repo_sources.ilike(f"%{u}%"))
+                for u in urls
+            ]))
+            .order_by(UpdateResult.query_date.desc())
+            .all()
+        )
+        for r in update_rows:
+            info_lower    = (r.info or '').lower()
+            sources_lower = (r.repo_sources or '').lower()
+            for u in urls:
+                if u not in last_updates_by_url and (u.lower() in info_lower or u.lower() in sources_lower):
+                    last_updates_by_url[u] = r
+
     github_data = []
     for row in pagination.items:
         url = row.url
-        
-        last_import = ImporterResult.query.filter(ImporterResult.info.ilike(f"%{url}%"))\
-            .order_by(ImporterResult.query_date.desc()).first()
-            
-        last_update = UpdateResult.query.filter(
-            or_(
-                UpdateResult.info.ilike(f"%{url}%"),
-                UpdateResult.repo_sources.ilike(f"%{url}%")
-            )
-        ).order_by(UpdateResult.query_date.desc()).first()
+        last_import = last_imports_by_url.get(url)
+        last_update = last_updates_by_url.get(url)
 
         github_data.append({
             "url": url,
