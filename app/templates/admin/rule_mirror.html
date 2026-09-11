@@ -38,14 +38,21 @@
     </div>
     {{ anav.admin_nav_panel('rule_mirror') }}
 
-    <!-- ── How it works — link to doc page ─────────── -->
-    <div class="mb-4">
+    <!-- ── How it works + official repo — link to doc page and to GitHub ─────────── -->
+    <div class="mb-4 d-flex flex-wrap gap-2">
         <a href="{{ url_for('rule_mirror.how_it_works') }}"
            class="d-inline-flex align-items-center gap-2 px-4 py-2 rounded-pill text-decoration-none fw-semibold shadow-sm"
            style="background:var(--card-bg-color);border:1px solid var(--border-color);color:var(--text-color);font-size:.875rem;transition:box-shadow .15s;">
             <i class="fa-solid fa-book-open text-primary"></i>
             How does Rulesets work?
             <i class="fa-solid fa-arrow-right text-primary" style="font-size:.75rem;"></i>
+        </a>
+        <a href="https://github.com/rulezet/rulezet-rulesets" target="_blank" rel="noreferrer"
+           class="d-inline-flex align-items-center gap-2 px-4 py-2 rounded-pill text-decoration-none fw-semibold shadow-sm"
+           style="background:var(--card-bg-color);border:1px solid var(--border-color);color:var(--text-color);font-size:.875rem;transition:box-shadow .15s;">
+            <i class="fa-brands fa-github text-primary"></i>
+            Official Rulesets repo
+            <i class="fa-solid fa-arrow-up-right-from-square text-primary" style="font-size:.75rem;"></i>
         </a>
     </div>
 
