@@ -13,7 +13,7 @@ from flask_mail import Message
 from app import mail
 
 from ... import db
-from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleEditProposal, RuleFavoriteUser, RuleUpdateHistory, RuleVote, Tag, User, UserConfig
+from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, Connector, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleEditProposal, RuleFavoriteUser, RuleUpdateHistory, RuleVote, Tag, User, UserConfig
 from ...core.utils.utils import generate_api_key
 from ..rule import rule_core as RuleModel
 import uuid
@@ -445,14 +445,25 @@ def promote_remove_user_admin(user_id , action) -> bool:
 
 # Delete
 
-def delete_user_core(id) -> bool:
-    """Delete the user from the DB and clean up their avatar file."""
-    rules = RuleModel.get_rules_of_user_with_id(id)
-    RuleModel.give_all_right_to_admin(rules)
-
-    user = get_user(id)
+def is_protected_system_user(user) -> bool:
+    """True for a system connector's shadow user (e.g. 'Rulezet Official')
+    — the account that owns content synced by that connector. Deleting it
+    would leave Connector.shadow_user_id pointing at nothing, and
+    _get_or_create_shadow_user would then silently mint a brand new shadow
+    user on the next sync, orphaning every rule the old one owned."""
     if not user:
         return False
+    return Connector.query.filter_by(shadow_user_id=user.id, is_system=True).first() is not None
+
+
+def delete_user_core(id) -> bool:
+    """Delete the user from the DB and clean up their avatar file."""
+    user = get_user(id)
+    if not user or is_protected_system_user(user):
+        return False
+
+    rules = RuleModel.get_rules_of_user_with_id(id)
+    RuleModel.give_all_right_to_admin(rules)
 
     # Resolve FK constraints before deleting the user row.
     # UserConfig has non-nullable user_id → must delete the row.

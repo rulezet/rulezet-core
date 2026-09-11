@@ -234,6 +234,8 @@
 }
 .dt-action-btn:hover { background: var(--light-bg-color); color: var(--text-color); }
 .dt-action-btn--danger:hover { background: rgba(220, 53, 69, .12); color: #dc3545; }
+.dt-action-btn:disabled { opacity: .45; cursor: not-allowed; }
+.dt-action-btn:disabled:hover { background: transparent; color: var(--subtle-text-color); }
 .dt-expand-chevron { transition: transform .18s ease; }
 .dt-action-btn--expand.is-expanded .dt-expand-chevron { transform: rotate(180deg); }
 

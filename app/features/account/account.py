@@ -224,6 +224,10 @@ def delete_user() -> render_template:
     data    = request.get_json() or {}
     user_id = int(data.get('id', 0)) or None
     if current_user.is_admin():
+        if AccountModel.is_protected_system_user(AccountModel.get_user(user_id)):
+            return {"message": "This is a system account (e.g. a connector's shadow user) and can't be deleted",
+                    "success": False,
+                    "toast_class" : "danger-subtle"}, 400
         delete = AccountModel.delete_user_core(user_id)
         if delete:
             log_activity("admin.delete_user", f"Deleted user id={user_id}",
@@ -315,12 +319,23 @@ def users_data_table():
         for uid, rid, rname in role_rows:
             roles_by_user.setdefault(uid, []).append({'id': rid, 'name': rname})
 
+    from app.core.db_class.db import Connector
+    protected_user_ids = set(
+        uid for (uid,) in db.session.query(Connector.shadow_user_id)
+        .filter(Connector.shadow_user_id.in_(user_ids), Connector.is_system == True)
+        .all()
+    ) if user_ids else set()
+
     items = []
     for u in pagination.items:
         j = u.to_json()
         j['rule_count']   = rule_counts.get(u.id, 0)
         j['bundle_count'] = bundle_counts.get(u.id, 0)
         j['roles']        = roles_by_user.get(u.id, [])
+        # Shadow user of a system connector (e.g. "Rulezet Official") —
+        # owns synced content, can't be deleted from here (see
+        # account_core.is_protected_system_user).
+        j['is_protected_system_user'] = u.id in protected_user_ids
         items.append(j)
 
     return jsonify({'items': items, 'total': pagination.total, 'total_pages': pagination.pages})
