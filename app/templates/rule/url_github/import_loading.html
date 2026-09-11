@@ -343,7 +343,7 @@
         <div class="tab-content">
             <div class="tab-pane fade show active" id="imported-pane" role="tabpanel" aria-labelledby="imported-tab">
                 <div class="ul-report-card">
-                    <rule-list v-if="repoUrl" ref="ruleListRef"
+                    <rule-list v-if="repoUrl" :key="'imported-' + is_finished" ref="ruleListRef"
                         mode="manage"
                         default-view="table"
                         fetch-url="/rule/data_table"
@@ -362,7 +362,7 @@
             </div>
             <div class="tab-pane fade" id="badrules-pane" role="tabpanel" aria-labelledby="badrules-tab">
                 <div class="ul-report-card">
-                    <bad-rule-list v-if="repoUrl" ref="badRuleListRef"
+                    <bad-rule-list v-if="repoUrl" :key="'bad-' + is_finished" ref="badRuleListRef"
                         :source="repoUrl"
                         :csrf-token="csrfToken"
                         :current-user-id="currentUserId"
@@ -715,26 +715,20 @@
                         // that in the background and merge it in once it
                         // arrives, instead of blocking the report on it.
                         //
-                        // <rule-list>/<bad-rule-list> mount (and run their own
-                        // first fetchData()) the instant is_finished flips
-                        // true above — right as the very last worker thread
-                        // is still finishing its own commit. Their first
-                        // fetch can therefore land a beat too early and show
-                        // an incomplete table until a manual reload. This
-                        // response only exists once save_info() has fully
-                        // persisted the ImporterResult, which only happens
-                        // after every rule has been committed — so re-running
-                        // fetchData() here is a guaranteed-fresh refresh, no
+                        // <rule-list>/<bad-rule-list> are keyed on is_finished
+                        // (see the template), so flipping it just above forces
+                        // Vue to throw away whatever instance existed (mounted
+                        // as soon as repoUrl was known, possibly while the
+                        // import was still running — its own fetchData() then
+                        // showed an incomplete table) and mount a brand new
+                        // one. That fresh instance's own onMounted() fetch is
+                        // what populates the table now, guaranteed to run
+                        // after this point rather than raced against it —
+                        // no manual fetchData() call needed here, and no
                         // reload required.
                         fetch('/rule/import_loading_status/{{sid}}?is_finished=true')
                             .then(res => res.json())
-                            .then(loc => {
-                                result_data.value = { ...result_data.value, ...loc }
-                                nextTick(() => {
-                                    ruleListRef.value?.fetchData()
-                                    badRuleListRef.value?.fetchData(1)
-                                })
-                            })
+                            .then(loc => { result_data.value = { ...result_data.value, ...loc } })
                             .catch(() => {})
                     }
                 });
