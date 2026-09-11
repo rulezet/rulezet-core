@@ -164,12 +164,14 @@ rules/
                              hand-authored rules
     &lt;format&gt;/                yara, sigma, suricata, splunk, elastic, kql, ...
       &lt;shard&gt;/               first 2 hex chars of the rule's uuid
-        &lt;uuid&gt;/
-          &lt;rule-name&gt;.&lt;ext&gt;    slug of the rule's title, correct extension
-                               per format — renamed automatically if the
-                               rule's title changes
+        &lt;rule-name&gt;-&lt;uuid8&gt;/  slug of the rule's title + first 8 hex chars
+                               of its uuid (uniqueness) — renamed
+                               automatically if the rule's title changes
+          &lt;rule-name&gt;.&lt;ext&gt;    same title slug, correct extension per format
           metadata.json         title, author, license, description, tags,
-                                 ATT&amp;CK techniques, CVEs, rulezet_url, ...</pre>
+                                 ATT&amp;CK techniques, CVEs, rulezet_url, ...
+          rulezet_link.md        clickable link back to the rule's Rulezet
+                                 page + its uuid in plain text</pre>
         <div class="hiw-callout hiw-callout--info mt-3">
           <i class="fa-solid fa-circle-info me-1"></i>
           Grouping by source first keeps rules pulled from the same GitHub
@@ -183,6 +185,13 @@ rules/
           permissive allow-list (MIT, Apache-2.0, GPL-*, CC-*, ...). Every
           rule is mirrored regardless — this just makes an unclear or
           non-permissive license visible instead of silent.
+        </div>
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-1"></i>
+          <code>rulezet_link.md</code> carries the rule's Rulezet uuid in
+          plain text — a clone can be searched (<code>grep -rl &lt;uuid&gt;</code>)
+          to jump straight from a rule on Rulezet to its exact GitHub folder,
+          without recomputing any title slug.
         </div>
         <div class="hiw-callout hiw-callout--info mt-3">
           <i class="fa-solid fa-circle-info me-1"></i>

@@ -2,9 +2,14 @@
 rule_mirror_core.py — Rulesets / Rule Git Mirror (see docs/design/rule_git_mirror.md).
 
 Mirrors every active, public rule into one or more plain git repositories:
-one folder per rule (<rule-name>.<ext> + metadata.json), history is native
-git history (a rule's file gets a new commit each time its content changes
-— no separate "historique" folder, no duplicated content). A generated
+one folder per rule, named after the rule itself (not its raw uuid) with
+a short uuid suffix for uniqueness — <rule-name>.<ext> + metadata.json +
+rulezet_link.md (a clickable link back to the rule's Rulezet page, plus
+its uuid in plain text, so a rule can be found on GitHub from its Rulezet
+uuid alone). History is native git history (a rule's content file gets a
+new, isolated commit each time its content changes — see _sync_one_config
+— so GitHub's own diff view shows exactly the old vs. new content; no
+separate "historique" folder, no duplicated content). A generated
 README.md at the repo root lists every source currently mirrored (with a
 link back to it) and the Rulezet version, refreshed on every sync. Off by
 default, per-instance, admin-configured — an instance can run several
@@ -89,13 +94,18 @@ def _source_slug_for(source: str) -> str:
 
 
 def _slugify(text: str, fallback: str = 'rule') -> str:
-    """Filesystem-safe slug for a rule's content filename, e.g. 'Detect F5
-    TMUI RCE (CVE-2020-5902)!' -> 'detect-f5-tmui-rce-cve-2020-5902'. Always
-    used inside that rule's own uuid-named folder, so a collision between
-    two rules sharing a title is impossible — no uniqueness suffix needed."""
+    """Filesystem-safe slug for a rule's content filename and folder name,
+    e.g. 'Detect F5 TMUI RCE (CVE-2020-5902)!' -> 'detect-f5-tmui-rce-cve-2020-5902'."""
     slug = re.sub(r"[^\w\s-]", '', text or '', flags=re.UNICODE).strip().lower()
     slug = re.sub(r'[\s_-]+', '-', slug).strip('-')
     return slug[:80].strip('-') or fallback
+
+
+def _dir_suffix_for(uuid_str: str) -> str:
+    """First 8 hex chars of the rule's uuid — appended to its folder name
+    so two rules that happen to share a title can't collide, without
+    having to scan sibling folders for a free name on every write."""
+    return (uuid_str or '00000000')[:8].lower()
 
 
 def _is_license_permissive(license_str: str) -> bool:
@@ -106,12 +116,37 @@ def _is_license_permissive(license_str: str) -> bool:
 
 
 def _rule_relative_dir(rule) -> str:
-    """Layout: rules/<source>/<format>/<shard>/<uuid>/ — grouped by where a
-    rule came from first (there can be many different GitHub sources),
-    then by format within each source."""
+    """Layout: rules/<source>/<format>/<shard>/<rule-name>-<uuid8>/ —
+    grouped by where a rule came from first (there can be many different
+    GitHub sources), then by format within each source. The folder name
+    is title-derived (not the raw uuid) so a plain `git clone` reads like
+    a real ruleset; the trailing 8 hex chars of the rule's uuid keep it
+    unique even when two rules share a title. Because it's title-derived,
+    a rename moves the whole folder — see _find_existing_rule_dir, which
+    is how the old one gets found and removed."""
     source_slug = _source_slug_for(rule.source)
     fmt = (rule.format or 'unknown').lower()
-    return os.path.join('rules', source_slug, fmt, _shard_for(rule.uuid), rule.uuid)
+    dirname = f"{_slugify(rule.title, fallback=rule.uuid or 'rule')}-{_dir_suffix_for(rule.uuid)}"
+    return os.path.join('rules', source_slug, fmt, _shard_for(rule.uuid), dirname)
+
+
+def _find_existing_rule_dir(base_path: str, rule) -> str:
+    """Finds this rule's folder on disk by its uuid suffix alone, regardless
+    of what its title-derived prefix currently reads as — the only way to
+    locate the *old* folder after a title change, since the folder name is
+    no longer the immutable uuid. Returns a path relative to base_path, or
+    None if nothing matches (new rule, or nothing mirrored yet)."""
+    source_slug = _source_slug_for(rule.source)
+    fmt = (rule.format or 'unknown').lower()
+    shard_rel = os.path.join('rules', source_slug, fmt, _shard_for(rule.uuid))
+    shard_abs = os.path.join(base_path, shard_rel)
+    if not os.path.isdir(shard_abs):
+        return None
+    suffix = f"-{_dir_suffix_for(rule.uuid)}"
+    for entry in os.listdir(shard_abs):
+        if entry.endswith(suffix) and os.path.isdir(os.path.join(shard_abs, entry)):
+            return os.path.join(shard_rel, entry)
+    return None
 
 
 def _public_url_for(rule) -> str:
@@ -151,13 +186,28 @@ def _metadata_for(rule, tags_by_rule: dict, techniques_by_rule: dict) -> dict:
     }
 
 
-def _write_rule(base_path: str, rule, tags_by_rule: dict, techniques_by_rule: dict) -> str:
-    """Writes <rule-name>.<ext> + metadata.json for one rule, removing any
-    other file in that same folder first (an old rule.yar/metadata.yaml
-    from before this layout, or a previous title's slug after a rename) —
-    the folder always holds exactly one content file + metadata.json.
-    Returns the rule's directory, relative to the repo root, for the
-    caller to stage with `repo.git.add(rel_dir)`.
+def _link_file_for(rule, rulezet_url: str) -> str:
+    """rulezet_link.md — a clickable link back to the rule's page (renders
+    as a real link in GitHub's web UI, unlike a .txt/.url file), plus the
+    rule's Rulezet uuid in plain, grep-able text — so given a rule's uuid
+    on Rulezet you can find its exact GitHub folder (e.g. `grep -rl
+    <uuid>` on a clone) without having to recompute its title slug."""
+    return (
+        f"# {rule.title}\n\n"
+        f"[View this rule on Rulezet]({rulezet_url})\n\n"
+        f"Rulezet UUID: `{rule.uuid}`\n"
+    )
+
+
+def _write_rule(base_path: str, rule, tags_by_rule: dict, techniques_by_rule: dict) -> list:
+    """Writes <rule-name>.<ext> + metadata.json + rulezet_link.md for one
+    rule, removing any other file in that same folder first (an old
+    rule.yar/metadata.yaml from before this layout) — the folder always
+    holds exactly those three files. Returns the paths touched, relative
+    to the repo root, for the caller to stage with `repo.git.add(path)`:
+    the rule's current folder, plus its *old* folder too when the title
+    changed since last sync (the folder name is title-derived now, so a
+    rename moves the whole folder instead of just the file inside it).
 
     NOTE: staging must be the `git add <path>` CLI form (repo.git.add), not
     GitPython's index.add()/index.remove() pair — index.add() on a
@@ -165,17 +215,25 @@ def _write_rule(base_path: str, rule, tags_by_rule: dict, techniques_by_rule: di
     leaving a stale entry staged as an unstaged working-tree deletion (this
     is what caused the diverged-history incident on 2026-09-11: a whole
     incremental sync's renames landed in the working tree but not in any
-    commit). `repo.git.add(rel_dir)` stages adds/modifies/deletes under
-    that path in one atomic call."""
+    commit). `repo.git.add(path)` stages adds/modifies/deletes under that
+    path in one atomic call — including a path that no longer exists at
+    all, which is exactly the old-folder-after-rename case here."""
     rel_dir = _rule_relative_dir(rule)
     abs_dir = os.path.join(base_path, rel_dir)
+
+    touched = [rel_dir]
+    old_rel_dir = _find_existing_rule_dir(base_path, rule)
+    if old_rel_dir and old_rel_dir != rel_dir:
+        shutil.rmtree(os.path.join(base_path, old_rel_dir), ignore_errors=True)
+        touched.append(old_rel_dir)
+
     os.makedirs(abs_dir, exist_ok=True)
 
     ext = _extension_for(rule.format)
     filename = f'{_slugify(rule.title, fallback=rule.uuid or "rule")}.{ext}'
 
     for existing in os.listdir(abs_dir):
-        if existing not in (filename, 'metadata.json'):
+        if existing not in (filename, 'metadata.json', 'rulezet_link.md'):
             os.remove(os.path.join(abs_dir, existing))
 
     with open(os.path.join(abs_dir, filename), 'w', encoding='utf-8') as f:
@@ -186,11 +244,14 @@ def _write_rule(base_path: str, rule, tags_by_rule: dict, techniques_by_rule: di
         json.dump(metadata, f, indent=2, ensure_ascii=False)
         f.write('\n')
 
-    return rel_dir
+    with open(os.path.join(abs_dir, 'rulezet_link.md'), 'w', encoding='utf-8') as f:
+        f.write(_link_file_for(rule, metadata['rulezet_url']))
+
+    return touched
 
 
 def _remove_rule_dir(base_path: str, rule) -> str:
-    rel_dir = _rule_relative_dir(rule)
+    rel_dir = _find_existing_rule_dir(base_path, rule) or _rule_relative_dir(rule)
     abs_dir = os.path.join(base_path, rel_dir)
     if os.path.isdir(abs_dir):
         shutil.rmtree(abs_dir)
@@ -224,8 +285,8 @@ def _readme_for(config: RuleMirrorConfig) -> str:
         "",
         f"- **Rules mirrored:** {total}",
         f"- **Last synced:** {now}",
-        "- **Layout:** `rules/<source>/<format>/<shard>/<rule-uuid>/<rule-name>.<ext>` "
-        "+ `metadata.json` per rule",
+        "- **Layout:** `rules/<source>/<format>/<shard>/<rule-name>-<uuid8>/<rule-name>.<ext>` "
+        "+ `metadata.json` + `rulezet_link.md` per rule",
         "",
         "## Sources",
         "",
@@ -666,9 +727,11 @@ def _sync_one_config(config: RuleMirrorConfig, job=None, log_fn=None) -> dict:
 
     def _stage_rule(rule):
         """Writes the rule and stages it — see _write_rule's docstring for
-        why this must be repo.git.add (the CLI form), not index.add()."""
-        rel_dir = _write_rule(local_dir, rule, tags_by_rule, techniques_by_rule)
-        repo.git.add(rel_dir)
+        why this must be repo.git.add (the CLI form), not index.add(). May
+        touch two paths (current folder + old folder after a title
+        rename) — both get staged."""
+        for rel_dir in _write_rule(local_dir, rule, tags_by_rule, techniques_by_rule):
+            repo.git.add(rel_dir)
 
     if is_first_sync:
         batch = []

@@ -49,6 +49,21 @@
   (e.g. `detect-f5-tmui-rce-cve-2020-5902.yar`) instead of the generic
   `rule.<ext>` — renamed automatically (old filename `git rm`'d) if the
   rule's title changes on a later sync.
+- **Folder named after the rule, plus a `rulezet_link.md`**: the per-rule
+  folder itself is now `<rule-name>-<uuid8>/` instead of the raw uuid, so
+  a plain `git clone` reads like a real ruleset rather than a wall of
+  UUIDs — the trailing 8 hex chars of the rule's uuid keep it unique even
+  when two rules share a title. A rename moves the whole folder now (not
+  just the content filename inside it); `_find_existing_rule_dir` locates
+  the old one by its uuid8 suffix and `git rm`'s it in the same commit.
+  Each rule's folder also gained a third file, `rulezet_link.md` — a
+  clickable link back to the rule's page on this instance, plus its
+  Rulezet uuid in plain text, so a rule can be traced from Rulezet to its
+  exact GitHub folder (and back) without recomputing any slug. Each
+  content change was already committed in isolation, one rule per commit
+  (see `_sync_one_config`'s incremental loop) — untouched by this change —
+  so GitHub's own commit diff view continues to show exactly the old vs.
+  new rule content, not a batch of unrelated rules.
 - **README.md**: auto-generated at the repo root on every sync — Rulezet
   version, last-synced time, and a table of every source currently
   mirrored with its rule count, each linking back to it.
@@ -121,10 +136,14 @@ deleted (trashed) rules get removed.
 1. **History = native git history.** No `historique/` folder with
    duplicated old versions. Every time a rule's content changes, the sync
    job writes the new content to the *same path* and commits — `git log
-   --follow rules/<source>/<format>/<shard>/<uuid>/<rule-name>.<ext>` gives
-   the full version history for free (git's `--follow` tracks it across a
-   rename, e.g. if the rule's title changes and its filename slug with
-   it), with real diffs, no wasted space, nothing to invent server-side.
+   --follow rules/<source>/<format>/<shard>/<rule-name>-<uuid8>/<rule-name>.<ext>`
+   gives the full version history for free (git's `--follow` tracks it
+   across a rename, e.g. if the rule's title changes and its folder/
+   filename slug with it), with real diffs, no wasted space, nothing to
+   invent server-side. A content change alone (title unchanged) lands as
+   a single, isolated commit touching just that rule's folder, so a plain
+   `git show <commit>` on GitHub already renders the old-vs-new diff with
+   no extra tooling.
    Rules are grouped by `<source>` first (the GitHub Sources repo they
    were imported from, or `manual`) since a busy instance can have many
    different import sources, then by `<format>` within each one.
@@ -233,15 +252,21 @@ rules/
     <format>/                     # yara, sigma, suricata, splunk, elastic,
                                   # kql, wazuh, nse, crs, nova, atr, zeek, ...
       <shard>/                   # first 2 hex chars of the rule's uuid
-        <uuid>/
-          <rule-name>.<ext>         # slug of the rule's title, e.g.
-                                     # detect-f5-tmui-rce-cve-2020-5902.yar —
-                                     # correct extension per format, so a
-                                     # plain clone gets working syntax
-                                     # highlighting in any editor. Renamed
-                                     # on the next sync if the rule's title
-                                     # changes (old filename is git rm'd).
+        <rule-name>-<uuid8>/      # slug of the rule's title + first 8 hex
+                                   # chars of its uuid (uniqueness, since
+                                   # two rules can share a title). Renamed
+                                   # on the next sync if the rule's title
+                                   # changes — the old folder is found by
+                                   # its uuid8 suffix and git rm'd.
+          <rule-name>.<ext>         # same title slug, correct extension
+                                     # per format, so a plain clone gets
+                                     # working syntax highlighting.
           metadata.json              # see below
+          rulezet_link.md            # clickable link back to the rule's
+                                      # Rulezet page + its uuid in plain
+                                      # text, so `grep -rl <uuid>` on a
+                                      # clone finds the rule's folder from
+                                      # its Rulezet uuid alone
 ```
 
 Grouping by source first keeps rules pulled from the same GitHub repo
