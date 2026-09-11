@@ -4423,3 +4423,32 @@ def handle_rule_analysis(job, app):
 
     log_job(job, f'Done — {generated} generated, {failed} failed this run.',
             level='success', event='done')
+
+
+# ─── Rule Git Mirror (see docs/design/rule_git_mirror.md) ───────────────────
+
+@register_handler('rule_git_mirror_sync')
+def handle_rule_git_mirror_sync(job, app):
+    """Runs one Rule Git Mirror sync pass — off by default, admin-configured
+    per instance (RuleMirrorConfig). See rule_mirror_core.sync_mirror() for
+    the actual git plumbing; this handler is just the BackgroundJob glue."""
+    from app.features.admin.rule_mirror import rule_mirror_core as RuleMirrorModel
+
+    def _log_fn(level, message):
+        log_job(job, message, level=level, event='progress')
+
+    try:
+        result = RuleMirrorModel.sync_mirror(job=job, log_fn=_log_fn)
+    except Exception as e:
+        log_job(job, f'Rule Git Mirror sync failed: {e}', level='error', event='error')
+        job.status = 'failed'
+        job.error  = str(e)
+        db.session.commit()
+        return
+
+    log_job(
+        job,
+        f"Sync complete — {result['written']} rule(s) written, {result['deleted']} removed"
+        + (' (initial load).' if result['first_sync'] else '.'),
+        level='success', event='done',
+    )

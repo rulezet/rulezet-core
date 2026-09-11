@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
+{% block title %}Rule Git Mirror — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-3" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-brands fa-git-alt banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Rule Git Mirror</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-brands fa-git-alt"></i></div>
+            <div><h2 class="fw-bold mb-1">Rule Git Mirror</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:650px;font-size:.95rem;">
+            Mirrors every active, public rule into a git repository as plain files — off by
+            default, and specific to this instance. See
+            <a href="{{ url_for('rule_mirror.how_it_works') }}">how it works</a> for the
+            full design and setup steps.
+        </p>
+    </div>
+
+    <div class="dr-nav mb-3" role="tablist">
+        <span class="dr-nav__label" style="padding:.5rem .25rem;">Admin</span>
+        <span class="dr-nav__sep"></span>
+        {{ anav.admin_nav_toggle() }}
+    </div>
+    {{ anav.admin_nav_panel('rule_mirror') }}
+
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+
+            <div v-if="statusMessage" class="alert border-0 rounded-3"
+                 :class="statusOk ? 'alert-success' : 'alert-danger'">
+                [[ statusMessage ]]
+            </div>
+
+            <div class="rounded-3 border p-3 mb-4" style="background:var(--light-bg-color);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>[[ enabled ? 'Enabled' : 'Disabled' ]]</strong>
+                        <span class="text-muted ms-2" v-if="lastSyncedAt">
+                            Last synced [[ lastSyncedAt ]]
+                        </span>
+                        <span class="text-muted ms-2" v-else>Never synced yet.</span>
+                    </div>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="mirror-enabled" v-model="enabled" @change="save">
+                        <label class="form-check-label" for="mirror-enabled">Enabled</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold small text-uppercase text-muted">Repository URL</label>
+                <input type="text" class="form-control" v-model="repoUrl"
+                       placeholder="https://github.com/your-org/your-rules-mirror">
+                <small class="text-muted">A GitHub repository this instance will push to. Can be empty/new.</small>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold small text-uppercase text-muted">Branch</label>
+                <input type="text" class="form-control" v-model="branch" style="max-width:220px;">
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label fw-bold small text-uppercase text-muted">GitHub token</label>
+                <input type="password" class="form-control" v-model="githubToken"
+                       :placeholder="hasToken ? 'Already set — leave blank to keep it' : 'Fine-grained PAT, scoped to this repo only'"
+                       autocomplete="new-password">
+                <small class="text-muted">
+                    Use a token dedicated to this one repository — not the same token used for
+                    GitHub rule import, and never one with broader access than necessary.
+                    Never shown again once saved.
+                </small>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary rounded-pill px-4" @click="save" :disabled="saving">
+                    <i class="fas fa-save me-1"></i>Save settings
+                </button>
+                <button class="btn btn-outline-primary rounded-pill px-4" @click="runNow"
+                        :disabled="running || !enabled">
+                    <i class="fas fa-play me-1" :class="{ 'fa-spin fa-circle-notch': running }"></i>
+                    [[ running ? 'Running…' : 'Run now' ]]
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-info border-0 rounded-3 small">
+        <i class="fa-solid fa-circle-info me-2"></i>
+        Recurring syncs are scheduled the same way as every other admin job — create a
+        <strong>Rule Git Mirror — sync</strong> task in
+        <a href="/admin/tasks/">Workflows</a>.
+    </div>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref } = Vue
+    import { create_message } from '/static/js/toaster.js'
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        setup() {
+            const config = {{ config.to_json() | tojson }}
+
+            const enabled        = ref(config.enabled)
+            const repoUrl         = ref(config.repo_url || '')
+            const branch          = ref(config.branch || 'main')
+            const hasToken        = ref(config.has_token)
+            const githubToken     = ref('')
+            const lastSyncedAt    = ref(config.last_synced_at)
+            const saving          = ref(false)
+            const running         = ref(false)
+            const statusMessage   = ref('')
+            const statusOk        = ref(true)
+
+            function csrf() { return document.getElementById('csrf_token')?.value || '' }
+
+            async function save() {
+                saving.value = true
+                try {
+                    const res = await fetch('/admin/rule_mirror/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                        body: JSON.stringify({
+                            enabled: enabled.value,
+                            repo_url: repoUrl.value,
+                            branch: branch.value,
+                            github_token: githubToken.value,
+                        }),
+                    })
+                    const data = await res.json()
+                    if (res.ok && data.success) {
+                        if (githubToken.value) hasToken.value = true
+                        githubToken.value = ''
+                        statusOk.value = true
+                        statusMessage.value = 'Settings saved.'
+                        create_message('Rule Git Mirror settings saved.', 'success-subtle')
+                    } else {
+                        statusOk.value = false
+                        statusMessage.value = data.message || 'Could not save settings.'
+                    }
+                } catch {
+                    statusOk.value = false
+                    statusMessage.value = 'Network error — could not save settings.'
+                } finally {
+                    saving.value = false
+                }
+            }
+
+            async function runNow() {
+                running.value = true
+                try {
+                    const res = await fetch('/admin/rule_mirror/run_now', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrf() },
+                    })
+                    const data = await res.json()
+                    if (res.ok && data.success) {
+                        create_message('Sync started — track it on the Jobs page.', 'success-subtle')
+                        window.location.href = '/jobs/detail/' + data.job_uuid
+                    } else {
+                        create_message(data.message || 'Could not start the sync.', 'danger-subtle')
+                    }
+                } catch {
+                    create_message('Network error — could not start the sync.', 'danger-subtle')
+                } finally {
+                    running.value = false
+                }
+            }
+
+            return {
+                enabled, repoUrl, branch, hasToken, githubToken, lastSyncedAt,
+                saving, running, statusMessage, statusOk, save, runNow,
+            }
+        }
+    }).mount('#main-container')
+</script>
+{% endblock %}

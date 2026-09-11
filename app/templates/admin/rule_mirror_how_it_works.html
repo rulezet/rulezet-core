@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% import 'macros/admin_nav.html' as anav %}
+
+{% block title %}How the Rule Git Mirror Works — Rulezet{% endblock %}
+
+{% block head %}
+<style>
+  .hiw-section { scroll-margin-top: 80px; }
+
+  .hiw-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    color: #fff;
+    font-weight: 700;
+    font-size: .85rem;
+    flex-shrink: 0;
+  }
+
+  .hiw-flow-arrow {
+    font-size: 1.4rem;
+    color: #0d6efd;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .hiw-flow-box {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--card-bg-color);
+    padding: .75rem 1rem;
+    font-size: .83rem;
+    text-align: center;
+    flex: 1;
+  }
+
+  .hiw-toc-link {
+    display: block;
+    padding: .35rem .75rem;
+    color: var(--subtle-text-color);
+    text-decoration: none;
+    font-size: .82rem;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+    border-radius: 0 4px 4px 0;
+  }
+  .hiw-toc-link:hover {
+    color: #0d6efd;
+    border-left-color: #0d6efd;
+    background: rgba(13,110,253,.06);
+  }
+
+  .hiw-callout {
+    border-left: 3px solid;
+    border-radius: 0 8px 8px 0;
+    padding: .75rem 1rem;
+    font-size: .84rem;
+    margin-bottom: 1rem;
+  }
+  .hiw-callout--info    { border-color: #0d6efd; background: rgba(13,110,253,.07); }
+  .hiw-callout--warning { border-color: #ffc107; background: rgba(255,193,7,.07); }
+  .hiw-callout--success { border-color: #198754; background: rgba(25,135,84,.07); }
+  .hiw-callout--danger  { border-color: #dc3545; background: rgba(220,53,69,.07); }
+
+  .hiw-setup-step {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: .75rem;
+    background: var(--card-bg-color);
+  }
+  .hiw-code {
+    display: block;
+    background: var(--code-bg-color, #1e1e1e);
+    color: #d4d4d4;
+    border-radius: 8px;
+    padding: .6rem .9rem;
+    font-family: monospace;
+    font-size: .82rem;
+    overflow-x: auto;
+    margin-top: .5rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+      <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+      <li class="breadcrumb-item"><a href="/admin/rule_mirror" class="text-decoration-none text-muted">Rule Git Mirror</a></li>
+      <li class="breadcrumb-item active text-muted" aria-current="page">How it works</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <div class="banner-icon"><i class="fa-brands fa-git-alt"></i></div>
+    <div>
+      <h2 class="fw-bold mb-1">How the Rule Git Mirror Works</h2>
+      <div class="banner-accent"></div>
+    </div>
+  </div>
+
+  <p class="text-muted mb-4" style="max-width:720px;font-size:.95rem;">
+    An off-by-default, admin-configured feature that mirrors every active,
+    public rule into a plain git repository — one folder per rule — so
+    anyone who wants "all the rules" can <code>git clone</code> instead of
+    going through the app or API.
+  </p>
+
+  <div class="row">
+    <div class="col-lg-3 mb-4">
+      <div class="card border-0 shadow-sm rounded-3" style="position:sticky;top:80px;">
+        <div class="card-body p-3">
+          <div class="fw-bold small text-uppercase text-muted mb-2">On this page</div>
+          <a class="hiw-toc-link" href="#overview">Overview</a>
+          <a class="hiw-toc-link" href="#layout">Repository layout</a>
+          <a class="hiw-toc-link" href="#sync">How a sync works</a>
+          <a class="hiw-toc-link" href="#security">Security model</a>
+          <a class="hiw-toc-link" href="#setup">Set it up on your own instance</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-9">
+
+      <section id="overview" class="hiw-section mb-5">
+        <h4 class="fw-bold mb-3">Overview</h4>
+        <div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
+          <div class="hiw-flow-box">Rule created / updated / deleted<br><span class="text-muted">in Rulezet</span></div>
+          <span class="hiw-flow-arrow">→</span>
+          <div class="hiw-flow-box">Sync job<br><span class="text-muted">(scheduled or "Run now")</span></div>
+          <span class="hiw-flow-arrow">→</span>
+          <div class="hiw-flow-box">One commit per rule<br><span class="text-muted">pushed to the mirror repo</span></div>
+        </div>
+        <p>
+          There is no separate "history" folder — a rule's file lives at the
+          <em>same path</em> for its whole life, and every content change is a
+          new commit on that path. <code>git log --follow</code> on any rule's
+          file is its full version history, for free.
+        </p>
+      </section>
+
+      <section id="layout" class="hiw-section mb-5">
+        <h4 class="fw-bold mb-3">Repository layout</h4>
+        <pre class="hiw-code">rules/
+  &lt;format&gt;/                  yara, sigma, suricata, splunk, elastic, kql, ...
+    &lt;shard&gt;/                 first 2 hex chars of the rule's uuid
+      &lt;uuid&gt;/
+        rule.&lt;ext&gt;             the rule's content, correct extension per format
+        metadata.yaml           title, author, license, description, tags,
+                                 ATT&amp;CK techniques, CVEs, rulezet_url, ...</pre>
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-1"></i>
+          <code>metadata.yaml</code>'s <code>license_verified</code> flag is
+          <code>true</code> only when the rule's license matches a small
+          permissive allow-list (MIT, Apache-2.0, GPL-*, CC-*, ...). Every
+          rule is mirrored regardless — this just makes an unclear or
+          non-permissive license visible instead of silent.
+        </div>
+      </section>
+
+      <section id="sync" class="hiw-section mb-5">
+        <h4 class="fw-bold mb-3">How a sync works</h4>
+        <ol class="ps-3">
+          <li class="mb-2"><strong>First sync</strong> takes every active rule's
+            <em>current</em> content — it does not replay past edits.
+            Git history for the mirror starts the day it goes live.</li>
+          <li class="mb-2"><strong>Every sync after that</strong> is incremental: only
+            rules created/updated/deleted since the last sync are touched —
+            one commit per changed rule, one <code>git rm</code> per deleted
+            rule.</li>
+          <li class="mb-2">A sync can be triggered two ways: the
+            <a href="/admin/rule_mirror">settings page</a>'s "Run now" button
+            (a one-off <a href="/jobs/list">background job</a>, same as any
+            other admin action), or a recurring schedule created in
+            <a href="/admin/tasks/">Workflows</a> ("Rule Git Mirror — sync").</li>
+        </ol>
+      </section>
+
+      <section id="security" class="hiw-section mb-5">
+        <h4 class="fw-bold mb-3">Security model</h4>
+        <div class="hiw-callout hiw-callout--warning">
+          <i class="fa-solid fa-triangle-exclamation me-1"></i>
+          This feature pushes to a third-party service using a stored
+          credential — read this section before enabling it.
+        </div>
+        <ul class="ps-3">
+          <li class="mb-2"><strong>Off by default, admin-only, per instance.</strong>
+            Nothing is enabled by install/update scripts — an admin has to
+            explicitly turn it on and configure a repo.</li>
+          <li class="mb-2"><strong>Its own token, on purpose.</strong> Use a
+            token dedicated to this feature — <em>not</em> the
+            <code>GITHUB_TOKEN</code> used for GitHub rule import — ideally a
+            fine-grained GitHub PAT restricted to just the mirror repo
+            (contents: read &amp; write, nothing else).</li>
+          <li class="mb-2"><strong>The token is never shown again</strong> once
+            saved. The settings page only ever shows a masked placeholder;
+            changing it means entering a new value, not revealing the old
+            one.</li>
+          <li class="mb-2"><strong>The token never appears in a process list.</strong>
+            It's written straight into the local mirror clone's
+            <code>.git/config</code> (a plain file write) immediately before a
+            push, then cleared right after — never passed as a command-line
+            argument to <code>git</code>.</li>
+          <li class="mb-0"><strong>Only public content is mirrored</strong> — the
+            same rules an anonymous visitor could already browse on this
+            instance.</li>
+        </ul>
+      </section>
+
+      <section id="setup" class="hiw-section mb-5">
+        <h4 class="fw-bold mb-3">Set it up on your own instance</h4>
+        <p class="text-muted">Five steps, from a blank GitHub repo to a running mirror.</p>
+
+        <div class="hiw-setup-step d-flex gap-3">
+          <span class="hiw-step-num">1</span>
+          <div>
+            <strong>Create (or pick) a GitHub repository</strong> to hold the
+            mirror — it can be completely empty. Public if you want it
+            clonable by anyone, private if it's just for your own team.
+          </div>
+        </div>
+
+        <div class="hiw-setup-step d-flex gap-3">
+          <span class="hiw-step-num">2</span>
+          <div>
+            <strong>Create a token scoped to just that repository.</strong>
+            On GitHub: Settings → Developer settings → Fine-grained personal
+            access tokens → New token, "Only select repositories" → your
+            mirror repo, permission <em>Contents: Read and write</em>, nothing
+            else.
+          </div>
+        </div>
+
+        <div class="hiw-setup-step d-flex gap-3">
+          <span class="hiw-step-num">3</span>
+          <div>
+            <strong>Open <a href="/admin/rule_mirror">Admin → Rule Git Mirror</a></strong>,
+            enter the repository URL, branch (defaults to <code>main</code>),
+            and the token from step 2. Save.
+          </div>
+        </div>
+
+        <div class="hiw-setup-step d-flex gap-3">
+          <span class="hiw-step-num">4</span>
+          <div>
+            <strong>Toggle "Enabled" and click "Run now"</strong> for the
+            first sync. Track its progress on the
+            <a href="/jobs/list">Jobs page</a> — for a large instance this can
+            take a while the first time (it walks every active rule).
+          </div>
+        </div>
+
+        <div class="hiw-setup-step d-flex gap-3">
+          <span class="hiw-step-num">5</span>
+          <div>
+            <strong>Schedule ongoing syncs</strong> in
+            <a href="/admin/tasks/">Workflows</a> — create a task of type
+            "Rule Git Mirror — sync" with whatever recurrence you want
+            (weekly is a reasonable default). From then on, new/changed/
+            deleted rules keep the mirror current automatically.
+          </div>
+        </div>
+
+        <div class="hiw-callout hiw-callout--success mt-3">
+          <i class="fa-solid fa-circle-check me-1"></i>
+          That's it — disable the feature any time by toggling it off on the
+          settings page; nothing further gets pushed, and nothing already
+          mirrored is touched.
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

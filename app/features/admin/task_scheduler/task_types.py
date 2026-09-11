@@ -90,6 +90,15 @@ TASK_TYPES = {
         'job_type': 'connector_pull',
         'target_picker': 'connector_select',
     },
+    'rule_git_mirror_sync': {
+        'label': 'Rule Git Mirror — sync',
+        'icon': 'fa-brands fa-git-alt',
+        'job_type': 'rule_git_mirror_sync',
+        'target_picker': 'none',
+        # RuleMirrorConfig.enabled gates this — scheduling/running the task
+        # with the feature turned off just fails fast with a clear message
+        # (see rule_mirror_core.sync_mirror), it never syncs unexpectedly.
+    },
     'ai_rule_analysis': {
         'label': 'AI Rule Analysis — generate reports',
         'icon': 'fa-solid fa-robot',

@@ -3111,6 +3111,38 @@ class InstanceConfig(db.Model):
         }
 
 
+class RuleMirrorConfig(db.Model):
+    """Single-row: this instance's Rule Git Mirror settings (see
+    docs/design/rule_git_mirror.md). Off by default, admin-configured,
+    per-instance — deliberately NOT tied to GITHUB_TOKEN/IS_OFFICIAL_INSTANCE
+    so a self-hosted instance can point this at its own repo with its own
+    token, independent of rulezet.org's own official mirror config.
+
+    github_token is stored the same way Connector.api_key_outbound already
+    is (a plain column — this app's existing trust boundary is DB access,
+    not per-field encryption) but is never re-sent to the browser once
+    saved; the admin UI only ever shows a masked placeholder."""
+    __tablename__ = 'rule_mirror_config'
+    id              = db.Column(db.Integer, primary_key=True)
+    enabled         = db.Column(db.Boolean, default=False, nullable=False)
+    repo_url        = db.Column(db.String(512), nullable=True)
+    github_token    = db.Column(db.String(512), nullable=True)
+    branch          = db.Column(db.String(128), default='main', nullable=False)
+    last_synced_at  = db.Column(db.DateTime, nullable=True)
+    updated_at      = db.Column(db.DateTime, nullable=True)
+    updated_by_id   = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    def to_json(self):
+        return {
+            'enabled':        self.enabled,
+            'repo_url':       self.repo_url,
+            'has_token':      bool(self.github_token),
+            'branch':         self.branch,
+            'last_synced_at': self.last_synced_at.strftime('%Y-%m-%d %H:%M') if self.last_synced_at else None,
+            'updated_at':     self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
+        }
+
+
 class RegisteredInstance(db.Model):
     """Remote Rulezet instances that have phoned home to this instance."""
     __tablename__ = 'registered_instance'

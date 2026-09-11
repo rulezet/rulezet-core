@@ -224,6 +224,9 @@
                               <a href="/admin/tasks/" class="dr-nav__item {% if request.path.startswith('/admin/tasks') %}active{% endif %}">
                                  <i class="fa-solid fa-code-branch"></i><span>Workflows</span>
                               </a>
+                              <a href="/admin/rule_mirror" class="dr-nav__item {% if request.path == '/admin/rule_mirror' %}active{% endif %}">
+                                 <i class="fa-brands fa-git-alt"></i><span>Rule Git Mirror</span>
+                              </a>
                               <a href="/admin/logs" class="dr-nav__item {% if request.path == '/admin/logs' %}active{% endif %}">
                                  <i class="fa-solid fa-list-ul"></i><span>Logs</span>
                               </a>
@@ -450,6 +453,7 @@
       { label: 'MISP', url: '/misp/list', icon: 'fa-share-nodes', keywords: ['misp', 'threat intelligence'] },
       { label: 'Admin: Jobs', url: '/admin/jobs/list', icon: 'fa-gears', keywords: ['admin jobs'] },
       { label: 'Admin: Workflows', url: '/admin/tasks/', icon: 'fa-code-branch', keywords: ['workflows', 'task scheduler', 'scheduled tasks'] },
+      { label: 'Admin: Rule Git Mirror', url: '/admin/rule_mirror', icon: 'fa-brands fa-git-alt', keywords: ['rule mirror', 'git mirror', 'github mirror', 'export rules'] },
       { label: 'Logs', url: '/admin/logs', icon: 'fa-list-ul', keywords: ['logs'] },
       { label: 'Server Settings', url: '/admin/settings', icon: 'fa-sliders', keywords: ['server settings'] },
       {% endif %}
