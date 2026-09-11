@@ -189,6 +189,12 @@ def content_convert_to_misp_object(rule_id: int) -> MISPObject | None:
 
         elif fmt == "nova":
             misp_object = create_nova_misp_object(rule)
+        elif fmt == "splunk":
+            misp_object = create_splunk_misp_object(rule)
+        elif fmt == "elastic":
+            misp_object = create_elastic_misp_object(rule)
+        elif fmt == "kql":
+            misp_object = create_kql_analytics_misp_object(rule)
         else:
             # Generic fallback
             misp_object = MISPObject(name=fmt, ignore_warning=True)
@@ -333,6 +339,61 @@ def create_crs_misp_object(rule) -> MISPObject:
     
     if rule.to_string:
         misp_object.add_attribute('raw-rule', value=rule.to_string, type='text')
+
+    return misp_object
+
+def create_splunk_misp_object(rule) -> MISPObject:
+    """
+    Specific mapper for Splunk Security Content (ESCU) detections, based on
+    the 'splunk-rule' object template (MISP/misp-objects#529). Not yet
+    bundled with pymisp's own misp-objects data at the time this was
+    written, hence misp_objects_template_custom like rulezet-metadata.
+    """
+    misp_object = MISPObject(name='splunk-rule', misp_objects_template_custom=load_object_template('splunk-rule'))
+    misp_object['meta-category'] = "misc"
+
+    if rule.to_string:
+        misp_object.add_attribute('spl', value=rule.to_string, type='text')
+
+    if rule.title:
+        misp_object.add_attribute('rule-name', value=rule.title, type='text')
+
+    return misp_object
+
+def create_elastic_misp_object(rule) -> MISPObject:
+    """
+    Specific mapper for Elastic Security detection rules, based on the
+    'elastic-detection-rule' object template (MISP/misp-objects#529). Not
+    yet bundled with pymisp's own misp-objects data at the time this was
+    written, hence misp_objects_template_custom like rulezet-metadata.
+    """
+    misp_object = MISPObject(name='elastic-detection-rule', misp_objects_template_custom=load_object_template('elastic-detection-rule'))
+    misp_object['meta-category'] = "misc"
+
+    if rule.to_string:
+        misp_object.add_attribute('query', value=rule.to_string, type='text')
+
+    if rule.title:
+        misp_object.add_attribute('rule-name', value=rule.title, type='text')
+
+    return misp_object
+
+def create_kql_analytics_misp_object(rule) -> MISPObject:
+    """
+    Specific mapper for Microsoft Sentinel/Defender XDR KQL analytics
+    rules, based on the 'kql-analytics-rule' object template
+    (MISP/misp-objects#529). Not yet bundled with pymisp's own
+    misp-objects data at the time this was written, hence
+    misp_objects_template_custom like rulezet-metadata.
+    """
+    misp_object = MISPObject(name='kql-analytics-rule', misp_objects_template_custom=load_object_template('kql-analytics-rule'))
+    misp_object['meta-category'] = "misc"
+
+    if rule.to_string:
+        misp_object.add_attribute('query', value=rule.to_string, type='text')
+
+    if rule.title:
+        misp_object.add_attribute('rule-name', value=rule.title, type='text')
 
     return misp_object
 
