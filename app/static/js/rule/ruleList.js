@@ -1945,7 +1945,7 @@ export default {
         // ── Search ────────────────────────────────────────────────────────
         function onSearchInput() {
             clearTimeout(searchTimer)
-            searchTimer = setTimeout(() => { page.value = 1; fetchData() }, 360)
+            searchTimer = setTimeout(() => { page.value = 1; fetchData() }, 450)
         }
 
         function clearSearch() {
