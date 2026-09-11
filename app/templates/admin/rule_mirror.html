@@ -23,9 +23,7 @@
         </div>
         <p class="text-muted mb-0" style="max-width:650px;font-size:.95rem;">
             Mirrors every active, public rule into a git repository as plain files — off by
-            default, and specific to this instance. See
-            <a href="{{ url_for('rule_mirror.how_it_works') }}">how it works</a> for the
-            full design and setup steps.
+            default, and specific to this instance.
         </p>
     </div>
 
@@ -35,6 +33,17 @@
         {{ anav.admin_nav_toggle() }}
     </div>
     {{ anav.admin_nav_panel('rule_mirror') }}
+
+    <!-- ── How it works — link to doc page ─────────── -->
+    <div class="mb-4">
+        <a href="{{ url_for('rule_mirror.how_it_works') }}"
+           class="d-inline-flex align-items-center gap-2 px-4 py-2 rounded-pill text-decoration-none fw-semibold shadow-sm"
+           style="background:var(--card-bg-color);border:1px solid var(--border-color);color:var(--text-color);font-size:.875rem;transition:box-shadow .15s;">
+            <i class="fa-solid fa-book-open text-primary"></i>
+            How does the Rule Git Mirror work?
+            <i class="fa-solid fa-arrow-right text-primary" style="font-size:.75rem;"></i>
+        </a>
+    </div>
 
     <div class="card border-0 shadow-sm rounded-3 mb-4">
         <div class="card-body p-4">
