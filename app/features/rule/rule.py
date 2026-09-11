@@ -4231,9 +4231,16 @@ def get_url_github():
     search_field = request.args.get("search_field", default='url', type=str)
     format_filter = request.args.get("format", default=None, type=str)
     author_filter = request.args.get("author", "")
+    license_filter = request.args.get("license", default=None, type=str)
+    conflicts_only = request.args.get("conflicts_only", default='false', type=str) == 'true'
     page = request.args.get("page", default=1, type=int)
     sort = request.args.get("sort", default=None, type=str)
     sort_dir = request.args.get("dir", default='asc', type=str)
+
+    authors_param = request.args.get("authors", "")
+    editors_param = request.args.get("editors", "")
+    author_names = [a for a in authors_param.split(',') if a] or None
+    editor_names = [e for e in editors_param.split(',') if e] or None
 
     github_data, total_url, total_pages = RuleModel.get_optimized_github_data(
         page=page,
@@ -4241,6 +4248,10 @@ def get_url_github():
         search_field=search_field,
         format_filter=format_filter,
         author_filter=author_filter,
+        author_names=author_names,
+        editor_names=editor_names,
+        license_filter=license_filter,
+        conflicts_only=conflicts_only,
         sort=sort,
         sort_dir=sort_dir
     )
@@ -4251,6 +4262,26 @@ def get_url_github():
         "total_url": total_url,
         "total_pages": total_pages
     }), 200
+
+
+@rule_blueprint.route("/get_github_authors_usage", methods=['GET'])
+@login_required
+def get_github_authors_usage_route():
+    search_query = request.args.get('q', '').strip()
+    return jsonify(RuleModel.get_github_authors_usage(search_query=search_query))
+
+
+@rule_blueprint.route("/get_github_editors_usage", methods=['GET'])
+@login_required
+def get_github_editors_usage_route():
+    search_query = request.args.get('q', '').strip()
+    return jsonify(RuleModel.get_github_editors_usage(search_query=search_query))
+
+
+@rule_blueprint.route("/get_github_licenses_usage", methods=['GET'])
+@login_required
+def get_github_licenses_usage_route():
+    return jsonify(RuleModel.get_github_licenses_usage())
 
 
 LARGE_DELETE_THRESHOLD = 200

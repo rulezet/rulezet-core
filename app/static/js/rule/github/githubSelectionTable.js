@@ -45,8 +45,8 @@ const GitHubSelectionTable = {
             expandedRows: new Set(),
             isActionLoading: false,
 
-            sortKey: 'url',
-            sortDir: 'asc',
+            sortKey: new URLSearchParams(window.location.search).get('sort') || 'url',
+            sortDir: new URLSearchParams(window.location.search).get('dir') || 'asc',
             colVisible: Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, true])),
             showColPicker: false,
             colPickerStyle: {},
@@ -96,13 +96,16 @@ const GitHubSelectionTable = {
             return this.isPageFullySelected && this.totalUrls > this.githubUrls.length;
         },
         actionPayload() {
+            // search_query/search_field/format_filter are not currently read
+            // by /rule/bulk_action_github (mode='all' just grabs every
+            // GitHub source) — kept for whenever that catches up to actually
+            // scoping "select all matching" by the active filters.
             const filter = this.$refs.filter || {};
             return {
                 mode: this.isAllSelectedMode ? 'all' : 'partial',
                 search_query: filter.searchQuery || '',
                 search_field: filter.searchField || 'url',
                 format_filter: filter.selectedFormat || '',
-                author_filter: filter.authorQuery || '',
                 selected_ids: Array.from(this.selectedIds),
                 excluded_ids: Array.from(this.excludedIds)
             };
@@ -160,7 +163,7 @@ const GitHubSelectionTable = {
         },
 
         handleSearchResults(data) {
-            this.githubUrls = data.github_url.map(item => ({ ...item, isUpdating: false }));
+            this.githubUrls = data.github_url.map(item => ({ ...item, isUpdating: false, licensesExpanded: false }));
             this.totalUrls = data.total_url;
             this.totalPages = data.total_pages;
             this.currentPage = data.current_page;
@@ -430,11 +433,27 @@ const GitHubSelectionTable = {
                                 </span>
                             </td>
                             <td v-show="colVisible.formats" class="dt-td">
-                                <span v-for="fmt in item.formats" :key="fmt" class="badge border text-dark fw-normal me-1">[[ fmt ]]</span>
+                                <span v-for="fmt in item.formats" :key="fmt"
+                                      class="badge bg-dark text-white me-1"
+                                      style="text-transform:uppercase;">[[ fmt ]]</span>
                                 <span v-if="!item.formats.length" class="text-muted small">—</span>
                             </td>
-                            <td v-show="colVisible.license" class="dt-td">
-                                <span v-for="lic in item.licenses" :key="lic" class="badge border text-dark fw-normal me-1">[[ lic ]]</span>
+                            <td v-show="colVisible.license" class="dt-td" @click.stop>
+                                <span v-for="lic in (item.licensesExpanded ? item.licenses : (item.licenses || []).slice(0, 10))" :key="lic"
+                                      class="badge bg-light text-muted fw-normal border-0 me-1"
+                                      style="font-size:.7rem;">[[ lic ]]</span>
+                                <button v-if="item.licenses && item.licenses.length > 10 && !item.licensesExpanded"
+                                        class="badge bg-light text-muted fw-normal border-0"
+                                        style="font-size:.7rem;cursor:pointer;"
+                                        @click="item.licensesExpanded = true">
+                                    +[[ item.licenses.length - 10 ]]
+                                </button>
+                                <button v-else-if="item.licenses && item.licenses.length > 10"
+                                        class="badge bg-light text-muted fw-normal border-0"
+                                        style="font-size:.7rem;cursor:pointer;"
+                                        @click="item.licensesExpanded = false">
+                                    <i class="fas fa-angle-up"></i>
+                                </button>
                                 <span v-if="!item.licenses || !item.licenses.length" class="text-muted small">—</span>
                             </td>
                             <td v-show="colVisible.cves" class="dt-td text-center">[[ item.cve_count ]]</td>
@@ -500,7 +519,7 @@ const GitHubSelectionTable = {
 
                                     <a :href="'/rule/github_detail?url=' + encodeURIComponent(item.url)"
                                        class="dt-action-btn" title="View Details">
-                                        <i class="fas fa-external-link-alt"></i>
+                                        <i class="fas fa-eye"></i>
                                     </a>
                                     <template v-if="isAdmin">
                                         <button class="dt-action-btn"

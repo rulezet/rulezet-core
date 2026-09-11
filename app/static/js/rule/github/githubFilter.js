@@ -1,3 +1,5 @@
+import MultiPersonFilter from '/static/js/rule/multiPersonFilter.js'
+
 const GithubFilter = {
     props: {
         apiEndpoint: { type: String, required: true },
@@ -8,17 +10,40 @@ const GithubFilter = {
     },
     emits: ['update:results', 'loading'],
     delimiters: ['[[', ']]'],
+    components: {
+        'multi-person-filter': MultiPersonFilter
+    },
     setup(props, { emit }) {
-        const searchQuery = Vue.ref('');
-        const searchField = Vue.ref('url');
-        const selectedFormat = Vue.ref('');
-        const authorQuery = Vue.ref('');
-        const searchIsLoading = Vue.ref(false);
-        const totalUrls = Vue.ref(0);
+        // ── Initial state from the URL — filters (and sort, read by the
+        // parent) survive a reload/share instead of silently resetting. ──
+        const _url = new URLSearchParams(window.location.search)
+        const _p   = (key, fallback = '') => _url.get(key) ?? fallback
+
+        const searchQuery     = Vue.ref(_p('search'))
+        const searchField     = Vue.ref(_p('search_field', 'url'))
+        const selectedFormat  = Vue.ref(_p('format'))
+        const selectedLicense = Vue.ref(_p('license'))
+        const conflictsOnly   = Vue.ref(_p('conflicts_only') === 'true')
+        const personFilter    = Vue.ref({
+            mode:   _p('person_mode', 'author'),
+            values: (_p('editors') || _p('authors') || '').split(',').filter(Boolean),
+        })
+        // person_mode defaults to 'author' — if only `editors` was present in
+        // the URL (no explicit person_mode), the values above came from the
+        // editors param, so the mode must say so too.
+        if (!_url.get('person_mode') && _url.get('editors')) personFilter.value.mode = 'editor'
+
+        const currentPage      = Vue.ref(parseInt(_p('page', '1'), 10) || 1);
+        const searchIsLoading  = Vue.ref(false);
+        const totalUrls        = Vue.ref(0);
         const availableFormats = Vue.ref([]);
-        const filtersOpen = Vue.ref(false);
+        const availableLicenses = Vue.ref([]);
+        const filtersOpen      = Vue.ref(false);
         const activeFilterCount = Vue.computed(() =>
-            (selectedFormat.value ? 1 : 0) + (authorQuery.value ? 1 : 0)
+            (selectedFormat.value ? 1 : 0) +
+            (selectedLicense.value ? 1 : 0) +
+            (conflictsOnly.value ? 1 : 0) +
+            (personFilter.value.values.length ? 1 : 0)
         );
 
         const fetchMetadata = async () => {
@@ -26,12 +51,45 @@ const GithubFilter = {
                 const res = await fetch('/rule/get_rules_formats');
                 const data = await res.json();
                 availableFormats.value = data.formats || [];
-            } catch (e) { 
+            } catch (e) {
                 availableFormats.value = [];
+            }
+            try {
+                const res = await fetch('/rule/get_github_licenses_usage');
+                availableLicenses.value = res.ok ? await res.json() : [];
+            } catch (e) {
+                availableLicenses.value = [];
             }
         };
 
+        function syncToUrl() {
+            const p = new URLSearchParams(window.location.search)
+            const _upd = (key, val) => val ? p.set(key, val) : p.delete(key)
+
+            _upd('search',         searchQuery.value || null)
+            _upd('search_field',   searchField.value !== 'url' ? searchField.value : null)
+            _upd('format',         selectedFormat.value || null)
+            _upd('license',        selectedLicense.value || null)
+            _upd('conflicts_only', conflictsOnly.value ? 'true' : null)
+            _upd('page',           currentPage.value > 1 ? currentPage.value : null)
+            if (props.sortKey) { p.set('sort', props.sortKey); p.set('dir', props.sortDir) }
+            else               { p.delete('sort'); p.delete('dir') }
+
+            if (personFilter.value.values.length) {
+                const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
+                p.set(pKey, personFilter.value.values.join(','))
+                _upd('person_mode', personFilter.value.mode !== 'author' ? personFilter.value.mode : null)
+                p.delete(pKey === 'editors' ? 'authors' : 'editors')
+            } else {
+                p.delete('authors'); p.delete('editors'); p.delete('person_mode')
+            }
+
+            const qs = p.toString()
+            history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+        }
+
         const fetchUrls = async (page = 1) => {
+            currentPage.value = page;
             searchIsLoading.value = true;
             emit('loading', true);
 
@@ -40,17 +98,22 @@ const GithubFilter = {
                 search: searchQuery.value || '',
                 search_field: searchField.value,
                 format: selectedFormat.value,
-                author: authorQuery.value
+                license: selectedLicense.value || '',
+                conflicts_only: conflictsOnly.value ? 'true' : 'false',
             });
             if (props.sortKey) {
                 params.set('sort', props.sortKey);
                 params.set('dir', props.sortDir);
             }
+            if (personFilter.value.values.length) {
+                const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
+                params.set(pKey, personFilter.value.values.join(','))
+            }
 
             try {
                 const res = await fetch(`${props.apiEndpoint}?${params.toString()}`);
                 const data = await res.json();
-                
+
                 if (res.status === 200) {
                     totalUrls.value = data.total_url || 0;
                     emit('update:results', {
@@ -65,6 +128,7 @@ const GithubFilter = {
             } finally {
                 searchIsLoading.value = false;
                 emit('loading', false);
+                syncToUrl();
             }
         };
 
@@ -73,35 +137,39 @@ const GithubFilter = {
             fetchUrls(1);
         };
 
-        const clearAuthor = () => {
-            authorQuery.value = '';
+        const resetFilters = () => {
+            selectedFormat.value = '';
+            selectedLicense.value = '';
+            conflictsOnly.value = false;
+            personFilter.value = { mode: 'author', values: [] };
             fetchUrls(1);
         };
-        
-        Vue.watch([searchQuery, authorQuery], ([newSearch, newAuthor], [oldSearch, oldAuthor]) => {
-            if ((oldSearch !== '' && newSearch === '') || (oldAuthor !== '' && newAuthor === '')) {
-                fetchUrls(1);
-            }
+
+        Vue.watch(searchQuery, (newSearch, oldSearch) => {
+            if (oldSearch !== '' && newSearch === '') fetchUrls(1);
         });
 
         Vue.onMounted(() => {
             fetchMetadata();
-            if (props.autoFetch) fetchUrls(1);
+            if (props.autoFetch) fetchUrls(currentPage.value);
         });
 
         return {
             searchQuery,
             searchField,
             selectedFormat,
+            selectedLicense,
+            conflictsOnly,
+            personFilter,
             searchIsLoading,
             totalUrls,
             availableFormats,
+            availableLicenses,
             filtersOpen,
             activeFilterCount,
             fetchUrls,
             clearSearch,
-            clearAuthor,
-            authorQuery
+            resetFilters,
         };
     },
     template: `
@@ -142,15 +210,15 @@ const GithubFilter = {
         </div>
 
         <div v-show="filtersOpen" class="rl-filter-panel">
-            <div class="rl-fp-row">
-                <div class="rl-fp-item" style="min-width:220px;">
-                    <input type="text"
-                           v-model="authorQuery"
-                           @keyup.enter="fetchUrls(1)"
-                           class="rl-fp-select"
-                           placeholder="Author, e.g. Neo23x0"
-                           style="width:100%;">
+            <div class="rl-fp-row rl-fp-row--multi">
+                <div class="rl-fp-multi-item" style="min-width:240px;">
+                    <multi-person-filter v-model="personFilter"
+                        author-endpoint="/rule/get_github_authors_usage"
+                        editor-endpoint="/rule/get_github_editors_usage"
+                        @change="fetchUrls(1)">
+                    </multi-person-filter>
                 </div>
+
                 <div class="rl-fp-item">
                     <select v-model="selectedFormat" @change="fetchUrls(1)" class="rl-fp-select" aria-label="Format">
                         <option value="">All formats</option>
@@ -161,7 +229,22 @@ const GithubFilter = {
                         </option>
                     </select>
                 </div>
-                <button v-if="activeFilterCount > 0" class="rl-fp-reset" @click="selectedFormat = ''; clearAuthor()">
+
+                <div class="rl-fp-item">
+                    <select v-model="selectedLicense" @change="fetchUrls(1)" class="rl-fp-select" aria-label="License">
+                        <option value="">All licenses</option>
+                        <option v-for="lic in availableLicenses" :key="lic.name" :value="lic.name">
+                            [[ lic.name ]] ([[ lic.count ]])
+                        </option>
+                    </select>
+                </div>
+
+                <label class="rl-fp-switch" title="Only repositories with a high-similarity conflict">
+                    <input type="checkbox" v-model="conflictsOnly" @change="fetchUrls(1)" />
+                    <span>Conflicts only</span>
+                </label>
+
+                <button v-if="activeFilterCount > 0" class="rl-fp-reset" @click="resetFilters">
                     <i class="fas fa-rotate-left me-1"></i>Reset
                 </button>
             </div>
