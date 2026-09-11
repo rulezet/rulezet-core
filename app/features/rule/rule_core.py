@@ -2953,8 +2953,13 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
     return [row.url for row in query.all()]
 
 
-def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, sort: str = None, sort_dir: str = 'asc'):
-    github_pattern = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
+# Shared by get_optimized_github_data() and the facet-usage helpers below —
+# a repo's rules are whatever matches this against Rule.source.
+_GITHUB_URL_PATTERN = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
+
+
+def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc'):
+    github_pattern = _GITHUB_URL_PATTERN
     author_expr = func.substring(Rule.source, r'github\.com/([^/]+)')
 
     # Rule.source is stored without a trailing ".git" — a URL pasted straight
@@ -2990,6 +2995,19 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
     if author_filter and author_filter != "":
         query = query.filter(author_expr.ilike(f"%{author_filter}%"))
 
+    # author_names/editor_names come from MultiPersonFilter — exact names
+    # picked from get_github_authors_usage()/get_github_editors_usage(),
+    # not free text, hence .in_() rather than ILIKE.
+    if author_names:
+        query = query.filter(author_expr.in_(author_names))
+
+    if editor_names:
+        editor_col = func.coalesce(User.username, func.concat(User.first_name, ' ', User.last_name))
+        query = query.join(User, User.id == Rule.user_id).filter(editor_col.in_(editor_names))
+
+    if license_filter:
+        query = query.filter(Rule.license == license_filter)
+
     if search:
         if search_field == 'url':
             query = query.filter(Rule.source.ilike(f"%{search}%"))
@@ -3003,6 +3021,19 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             )
 
     query = query.group_by(Rule.source)
+
+    if conflicts_only:
+        # has_high_similarity is an aggregate (func.max(...)) — filtering on
+        # it belongs in HAVING, not WHERE. Unlike ORDER BY, Postgres won't
+        # accept the SELECT-list alias here, so the expression is repeated.
+        query = query.having(
+            func.max(
+                db.session.query(func.count(RuleSimilarity.id))
+                .filter(RuleSimilarity.rule_id == Rule.id)
+                .filter(RuleSimilarity.score > 0.99)
+                .as_scalar()
+            ) > 0
+        )
 
     # Sortable columns are all aggregates/expressions from the SELECT above —
     # sort by the label rather than re-declaring the expression, so this
@@ -3082,6 +3113,56 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
         })
 
     return github_data, pagination.total, pagination.pages
+
+
+def get_github_authors_usage(search_query: str = None):
+    """Distinct GitHub repo owners (extracted from Rule.source) with rule
+    counts, scoped to rules matching the GitHub URL pattern — feeds the
+    Author mode of MultiPersonFilter on the GitHub Sources page."""
+    author_expr = func.substring(Rule.source, r'github\.com/([^/]+)')
+    query = _active().filter(Rule.source.op('~')(_GITHUB_URL_PATTERN))
+
+    if search_query:
+        query = query.filter(author_expr.ilike(f'%{search_query}%'))
+
+    rows = (
+        query.with_entities(author_expr.label('author'), func.count(Rule.id).label('count'))
+        .group_by(author_expr)
+        .order_by(func.count(Rule.id).desc())
+        .all()
+    )
+    return [{"name": r.author, "count": r.count} for r in rows if r.author]
+
+
+def get_github_editors_usage(search_query: str = None):
+    """Distinct Rulezet users who own rules imported from a GitHub repo, with
+    counts — feeds the Editor mode of MultiPersonFilter on the same page."""
+    editor_col = func.coalesce(User.username, func.concat(User.first_name, ' ', User.last_name))
+    query = (
+        db.session.query(editor_col.label('name'), func.count(Rule.id).label('count'))
+        .join(User, User.id == Rule.user_id)
+        .filter(Rule.source.op('~')(_GITHUB_URL_PATTERN), Rule.is_deleted == False)
+    )
+
+    if search_query:
+        query = query.filter(editor_col.ilike(f'%{search_query}%'))
+
+    rows = query.group_by(editor_col).order_by(func.count(Rule.id).desc()).all()
+    return [{"name": r.name, "count": r.count} for r in rows]
+
+
+def get_github_licenses_usage():
+    """Distinct licenses in use across GitHub-sourced rules, with counts —
+    feeds the License filter on the GitHub Sources page."""
+    rows = (
+        _active()
+        .filter(Rule.source.op('~')(_GITHUB_URL_PATTERN), Rule.license.isnot(None), Rule.license != '')
+        .with_entities(Rule.license.label('license'), func.count(Rule.id).label('count'))
+        .group_by(Rule.license)
+        .order_by(func.count(Rule.id).desc())
+        .all()
+    )
+    return [{"name": r.license, "count": r.count} for r in rows]
 
 
 def get_rule_count_by_github_page(page: int = 1, search: str = None):
