@@ -90,6 +90,11 @@ const GitHubSelectionTable = {
             if (this.githubUrls.length === 0) return false;
             return this.githubUrls.every(item => this.isItemChecked(item.url));
         },
+        showSelectBanner() {
+            if (this.githubUrls.length === 0) return false;
+            if (this.isAllSelectedMode) return true;
+            return this.isPageFullySelected && this.totalUrls > this.githubUrls.length;
+        },
         actionPayload() {
             const filter = this.$refs.filter || {};
             return {
@@ -336,14 +341,18 @@ const GitHubSelectionTable = {
             </template>
         </github-filter>
 
-        <div class="rl-toolbar mb-3" style="justify-content:space-between;">
-            <button class="dt-toolbar-btn" @click="toggleGlobalSelectAll">
-                <i class="fas fa-check-double"></i> Select All results ([[ totalUrls ]])
+        <!-- ── Select-all-pages banner (RuleList pattern): checking the page
+             header checkbox only ever selects what's on this page; this
+             banner is the one place that offers to extend that to every
+             matching repository. ── -->
+        <div v-if="showSelectBanner" class="rl-select-banner">
+            <span v-if="!isAllSelectedMode">
+                All [[ githubUrls.length ]] repositories on this page are selected.
+            </span>
+            <span v-else>All [[ totalUrls ]] repositories are selected.</span>
+            <button v-if="!isAllSelectedMode" class="rl-select-banner-btn" @click="toggleGlobalSelectAll">
+                Select all [[ totalUrls ]] repositories
             </button>
-        </div>
-
-        <div v-if="selectedCount > 0" class="rl-select-banner">
-            <span><i class="fas fa-tasks me-1"></i>[[ selectedCount ]] repositories selected</span>
             <button class="rl-select-banner-btn" @click="clearSelection">Clear selection</button>
         </div>
 
