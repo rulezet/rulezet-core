@@ -498,8 +498,13 @@ def edit_rule(rule_id) -> render_template:
     if is_owner_or_admin:
         form = EditRuleForm()
         licenses = get_licst_license()
+        # Rules imported from GitHub (see rule_from_github/proposal_core.py)
+        # can carry a free-text license that isn't in licenses.txt — without
+        # it in the choices, WTForms rejects the whole submission with "Not
+        # a valid choice" even when the user never touched the license.
+        if rule.license and rule.license not in licenses:
+            licenses = licenses + [rule.license]
         form.license.choices = [(lic, lic) for lic in licenses]
-
 
         if form.validate_on_submit():
             
@@ -591,18 +596,33 @@ def edit_rule(rule_id) -> render_template:
             flash("Rule modified with success!", "success")
 
             return redirect(url_for('rule.detail_rule', rule_id=current_rule.id))
+
+        if request.method == 'POST':
+            # A real submission failed validation — surface it (silently
+            # re-rendering left the user with no idea their edit wasn't
+            # saved). form.*.data already holds what they submitted, so
+            # leave it alone instead of overwriting it with the old rule
+            # values — otherwise the failure also wipes their edit.
+            error_summary = "; ".join(
+                f"{getattr(form, field).label.text}: {', '.join(errs)}"
+                for field, errs in form.errors.items()
+            )
+            flash(f"Could not save changes — {error_summary}", "danger")
         else:
+            # Plain GET (initial page load) — validate_on_submit() is False
+            # here too (nothing was submitted), but for an unrelated reason:
+            # Flask-WTF only binds request.form into the form on POST, so
+            # every field needs to be populated by hand from the rule.
             form.format.data = rule.format
             form.source.data = rule.source
             form.title.data = rule.title
             form.description.data = rule.description
-            form.license.data = rule.license  # Selected value
+            form.license.data = rule.license
             form.cve_id.data = rule.cve_id
             form.version.data = rule.version
             form.to_string.data = rule.to_string
-            form.original_uuid.data= rule.original_uuid
-            rule.last_modif = datetime.now(timezone.utc)
-            
+            form.original_uuid.data = rule.original_uuid
+
         return render_template("rule/edit_rule.html", form=form, rule=rule)
     else:
         return render_template("access_denied.html")

@@ -119,6 +119,9 @@
                             <div class="col-md-4">
                                 <license-input v-model="manualLicense" required></license-input>
                                 <input type="hidden" name="license" :value="manualLicense">
+                                {% if form.license.errors %}
+                                <div class="invalid-feedback d-block">{{ form.license.errors[0] }}</div>
+                                {% endif %}
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group">
