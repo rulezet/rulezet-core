@@ -4,6 +4,18 @@ import GithubActionModal from '/static/js/rule/github/githubActionModal.js';
 import JobTracker from '/static/js/jobs/JobTracker.js';
 import { message_list, create_message } from '/static/js/toaster.js'
 
+// Columns hidden behind the column-picker (same pattern as ruleList.js) —
+// URL/Rules/Actions stay always visible, everything else is optional.
+const TOGGLEABLE_COLS = [
+    { key: 'author',    label: 'Author' },
+    { key: 'formats',   label: 'Formats' },
+    { key: 'license',   label: 'License' },
+    { key: 'cves',      label: 'CVEs' },
+    { key: 'conflicts', label: 'Conflicts' },
+    { key: 'imported',  label: 'Imported' },
+    { key: 'updated',   label: 'Updated' },
+]
+
 const GitHubSelectionTable = {
     props: {
         apiEndpoint: { type: String, required: true },
@@ -33,6 +45,12 @@ const GitHubSelectionTable = {
             expandedRows: new Set(),
             isActionLoading: false,
 
+            sortKey: 'url',
+            sortDir: 'asc',
+            colVisible: Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, true])),
+            showColPicker: false,
+            colPickerStyle: {},
+
             // ── Job tracking per repo URL ─────────────────────────────────────
             // { [url]: jobUuid }  — tracks active delete jobs per repo
             activeDeleteJobs: {},
@@ -51,6 +69,14 @@ const GitHubSelectionTable = {
         };
     },
     computed: {
+        TOGGLEABLE_COLS() {
+            return TOGGLEABLE_COLS;
+        },
+        tableColspan() {
+            let n = 4; // checkbox + URL + Rules + Actions (chevron lives inside Actions now)
+            for (const col of TOGGLEABLE_COLS) if (this.colVisible[col.key]) n++;
+            return n;
+        },
         isAdmin() {
             return this.currentUserIsAdmin === 'true' || this.currentUserIsAdmin === true;
         },
@@ -77,7 +103,57 @@ const GitHubSelectionTable = {
             };
         }
     },
+    mounted() {
+        document.addEventListener('click', this.handleColPickerOutsideClick);
+    },
+    beforeUnmount() {
+        document.removeEventListener('click', this.handleColPickerOutsideClick);
+    },
     methods: {
+        setSort(key) {
+            if (this.sortKey === key) {
+                this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortKey = key;
+                this.sortDir = 'asc';
+            }
+            this.$refs.filter.fetchUrls(1);
+        },
+
+        sortIcon(key) {
+            if (this.sortKey !== key) return 'fa-sort';
+            return this.sortDir === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
+        },
+
+        toggleColumn(key) {
+            this.colVisible[key] = !this.colVisible[key];
+        },
+
+        positionColPicker() {
+            const btn = this.$refs.colPickerBtn;
+            if (!btn) return;
+            const rect = btn.getBoundingClientRect();
+            this.colPickerStyle = {
+                position: 'fixed',
+                top: (rect.bottom + 4) + 'px',
+                right: (window.innerWidth - rect.right) + 'px',
+                zIndex: 1071,
+                minWidth: '165px',
+                borderRadius: '12px',
+            };
+        },
+
+        toggleColPicker() {
+            if (!this.showColPicker) this.positionColPicker();
+            this.showColPicker = !this.showColPicker;
+        },
+
+        handleColPickerOutsideClick(e) {
+            if (!this.showColPicker) return;
+            if (this.$refs.colPickerBtn && this.$refs.colPickerBtn.contains(e.target)) return;
+            this.showColPicker = false;
+        },
+
         handleSearchResults(data) {
             this.githubUrls = data.github_url.map(item => ({ ...item, isUpdating: false }));
             this.totalUrls = data.total_url;
@@ -229,8 +305,35 @@ const GitHubSelectionTable = {
         <github-filter
             ref="filter"
             :api-endpoint="apiEndpoint"
+            :sort-key="sortKey"
+            :sort-dir="sortDir"
             @update:results="handleSearchResults"
             @loading="val => loading = val">
+            <template #toolbar-extra>
+                <div class="dt-col-picker-wrap">
+                    <button class="dt-toolbar-btn" ref="colPickerBtn"
+                            :class="{ 'dt-toolbar-btn--active': showColPicker }"
+                            @click.stop="toggleColPicker" aria-label="Toggle columns">
+                        <i class="fas fa-table-columns"></i>
+                        <span>Columns</span>
+                    </button>
+                    <teleport to="body">
+                        <ul v-if="showColPicker"
+                            class="dropdown-menu show shadow border-0 py-2"
+                            :style="colPickerStyle" @click.stop>
+                            <li v-for="col in TOGGLEABLE_COLS" :key="col.key">
+                                <label class="dropdown-item rounded-2 d-flex align-items-center gap-2"
+                                       style="cursor:pointer;font-size:.84rem;user-select:none;">
+                                    <input type="checkbox"
+                                           :checked="colVisible[col.key]"
+                                           @change="toggleColumn(col.key)" />
+                                    [[ col.label ]]
+                                </label>
+                            </li>
+                        </ul>
+                    </teleport>
+                </div>
+            </template>
         </github-filter>
 
         <div class="rl-toolbar mb-3" style="justify-content:space-between;">
@@ -256,9 +359,39 @@ const GitHubSelectionTable = {
                                    :checked="isPageFullySelected"
                                    @change="toggleAllOnPage">
                         </th>
-                        <th class="dt-th" style="width:40px"></th>
-                        <th class="dt-th">Repository Details</th>
-                        <th class="dt-th text-center">Rules</th>
+                        <th class="dt-th dt-th--sortable"
+                            :class="{ 'dt-th--sorted': sortKey === 'url' }"
+                            @click="setSort('url')">
+                            <div class="dt-th-inner">
+                                Repository <i class="fas dt-sort-icon" :class="sortIcon('url')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.author" class="dt-th dt-th--sortable"
+                            :class="{ 'dt-th--sorted': sortKey === 'author' }"
+                            @click="setSort('author')">
+                            <div class="dt-th-inner">
+                                Author <i class="fas dt-sort-icon" :class="sortIcon('author')"></i>
+                            </div>
+                        </th>
+                        <th class="dt-th text-center dt-th--sortable"
+                            :class="{ 'dt-th--sorted': sortKey === 'rule_count' }"
+                            @click="setSort('rule_count')">
+                            <div class="dt-th-inner" style="justify-content:center;">
+                                Rules <i class="fas dt-sort-icon" :class="sortIcon('rule_count')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.formats" class="dt-th">Formats</th>
+                        <th v-show="colVisible.license" class="dt-th">License</th>
+                        <th v-show="colVisible.cves" class="dt-th text-center dt-th--sortable"
+                            :class="{ 'dt-th--sorted': sortKey === 'cve_count' }"
+                            @click="setSort('cve_count')">
+                            <div class="dt-th-inner" style="justify-content:center;">
+                                CVEs <i class="fas dt-sort-icon" :class="sortIcon('cve_count')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.conflicts" class="dt-th text-center">Conflicts</th>
+                        <th v-show="colVisible.imported" class="dt-th">Imported</th>
+                        <th v-show="colVisible.updated" class="dt-th">Updated</th>
                         <th class="dt-th text-end">Actions</th>
                     </tr>
                 </thead>
@@ -273,34 +406,37 @@ const GitHubSelectionTable = {
                                        :checked="isItemChecked(item.url)"
                                        @change="updateSelection(item.url, $event.target.checked)">
                             </td>
-                            <td class="dt-td text-center">
-                                <i class="fas dt-expand-chevron"
-                                   :class="expandedRows.has(item.url)
-                                       ? 'fa-chevron-down text-primary'
-                                       : 'fa-chevron-right text-muted'"></i>
-                            </td>
                             <td class="dt-td">
                                 <div class="d-flex align-items-center">
-                                    <div class="bg-light rounded p-2 me-3">
+                                    <div class="bg-light rounded p-2 me-3 flex-shrink-0">
                                         <i class="fab fa-github fa-lg"></i>
                                     </div>
-                                    <div>
-                                        <div class="fw-bold text-dark text-truncate"
-                                             style="max-width:300px">[[ item.url ]]</div>
-                                        <div class="x-small text-muted">
-                                            Detected Rules: [[ item.rule_count ]]
-                                            <span v-if="item.last_import && item.last_import.imported !== null">
-                                                | <i class="fas fa-check text-success"></i> Imported
-                                            </span>
-                                        </div>
-                                    </div>
+                                    <div class="fw-bold text-dark" style="word-break:break-all;">[[ item.url ]]</div>
                                 </div>
                             </td>
+                            <td v-show="colVisible.author" class="dt-td">[[ item.author || '—' ]]</td>
                             <td class="dt-td text-center">
                                 <span class="badge bg-primary-soft text-primary rounded-pill px-3">
-                                    [[ item.rule_count ]] rules
+                                    [[ item.rule_count ]]
                                 </span>
                             </td>
+                            <td v-show="colVisible.formats" class="dt-td">
+                                <span v-for="fmt in item.formats" :key="fmt" class="badge border text-dark fw-normal me-1">[[ fmt ]]</span>
+                                <span v-if="!item.formats.length" class="text-muted small">—</span>
+                            </td>
+                            <td v-show="colVisible.license" class="dt-td">
+                                <span v-for="lic in item.licenses" :key="lic" class="badge border text-dark fw-normal me-1">[[ lic ]]</span>
+                                <span v-if="!item.licenses || !item.licenses.length" class="text-muted small">—</span>
+                            </td>
+                            <td v-show="colVisible.cves" class="dt-td text-center">[[ item.cve_count ]]</td>
+                            <td v-show="colVisible.conflicts" class="dt-td text-center">
+                                <span v-if="item.has_conflicts" class="badge bg-danger" title="High similarity (&gt;90%) with another rule">
+                                    <i class="fas fa-triangle-exclamation"></i>
+                                </span>
+                                <span v-else class="text-muted small">—</span>
+                            </td>
+                            <td v-show="colVisible.imported" class="dt-td">[[ item.last_import ? item.last_import.date : '—' ]]</td>
+                            <td v-show="colVisible.updated" class="dt-td">[[ item.last_update ? item.last_update.date : 'Never' ]]</td>
                             <td class="dt-td dt-td--actions" @click.stop>
                                 <div class="dt-actions justify-content-end">
                                     <template v-if="isAdmin">
@@ -366,13 +502,20 @@ const GitHubSelectionTable = {
                                                :class="{'fa-spin': item.isUpdating}"></i>
                                         </button>
                                     </template>
+
+                                    <!-- Expand: always last -->
+                                    <button class="dt-action-btn dt-action-btn--expand"
+                                            :class="{ 'is-expanded': expandedRows.has(item.url) }"
+                                            title="Expand" @click="toggleRow(item.url)">
+                                        <i class="fas fa-chevron-down dt-expand-chevron" style="font-size:.65rem;"></i>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
 
                         <!-- ── Expanded detail row ── -->
                         <tr v-if="expandedRows.has(item.url)" class="dt-row-expand">
-                            <td colspan="5" class="dt-expand-cell">
+                            <td :colspan="tableColspan" class="dt-expand-cell">
                                     <div class="animate__animated animate__fadeIn">
 
                                         <!-- ── Job tracker (shown when a delete job is active) ── -->

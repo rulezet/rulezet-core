@@ -4232,13 +4232,17 @@ def get_url_github():
     format_filter = request.args.get("format", default=None, type=str)
     author_filter = request.args.get("author", "")
     page = request.args.get("page", default=1, type=int)
+    sort = request.args.get("sort", default=None, type=str)
+    sort_dir = request.args.get("dir", default='asc', type=str)
 
     github_data, total_url, total_pages = RuleModel.get_optimized_github_data(
-        page=page, 
-        search=search, 
-        search_field=search_field, 
+        page=page,
+        search=search,
+        search_field=search_field,
         format_filter=format_filter,
-        author_filter=author_filter
+        author_filter=author_filter,
+        sort=sort,
+        sort_dir=sort_dir
     )
 
     return jsonify({
