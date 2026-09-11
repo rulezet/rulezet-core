@@ -137,11 +137,20 @@ const UserContributionStatsComponent = {
             }]
         }));
 
+        const hasContributionData = Vue.computed(() => {
+            const s = userStats.value;
+            return !!(s && (
+                (s.rules_owned ?? 0) > 0 || (s.suggestions_accepted ?? 0) > 0 ||
+                (s.rules_liked ?? 0) > 0 || (s.consecutive_days_active ?? 0) > 0 ||
+                (s.rules_popular_score ?? 0) > 0
+            ));
+        });
+
         Vue.onMounted(fetchUserStats);
 
         return {
             userStats, loading, computedBadges, nextLevelThreshold, progressPercentage,
-            getBadgeClass, getBadgeIcon, levelGaugeData, radarData, pointsBarData
+            getBadgeClass, getBadgeIcon, levelGaugeData, radarData, pointsBarData, hasContributionData
         };
     },
     template: `
@@ -269,7 +278,7 @@ const UserContributionStatsComponent = {
         </div>
 
         <!-- Row 2: Radar + Bar -->
-        <div class="row g-3 mb-4">
+        <div v-if="hasContributionData" class="row g-3 mb-4">
             <div class="col-lg-5">
                 <div class="ud-chart-card ud-chart-card--accent-purple">
                     <chart-viewer :data="radarData" views="radar" height="380px"></chart-viewer>
@@ -281,6 +290,9 @@ const UserContributionStatsComponent = {
                 </div>
             </div>
         </div>
+        <p v-else class="text-muted mb-4 text-center py-4">
+            <i class="fas fa-chart-simple me-2 opacity-25"></i>No contributions yet — this will fill in once there's activity to show.
+        </p>
 
         <!-- Section header -->
         <div class="ud-section-header mb-3">
