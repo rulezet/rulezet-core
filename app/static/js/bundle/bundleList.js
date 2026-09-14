@@ -1452,6 +1452,7 @@ export default {
             const map = {
                 yara: 'yara', sigma: 'yaml', suricata: 'text', zeek: 'zeek',
                 elastic: 'toml', wazuh: 'xml', nova: 'text', nse: 'lua', crs: 'text',  // Elastic Security rules are TOML — see hljs-toml.js
+                kunai: 'yaml',
             }
             return map[format.toLowerCase()] || 'auto'
         }

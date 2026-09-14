@@ -592,7 +592,7 @@ export default {
         function hlxLang(format) {
             const map = {
                 sigma: 'yaml', wazuh: 'xml', elastic: 'toml',  // Elastic Security rules are TOML — see hljs-toml.js
-                nova: 'yaml', crs: 'nginx',
+                nova: 'yaml', crs: 'nginx', kunai: 'yaml',
             }
             return map[(format || '').toLowerCase()] || 'plaintext'
         }
@@ -600,7 +600,7 @@ export default {
         const _ext = (format) => {
             const map = {
                 yara: '.yar', sigma: '.yaml', nova: '.yaml', suricata: '.rules',
-                zeek: '.zeek', wazuh: '.xml', nse: '.nse', crs: '.conf',
+                zeek: '.zeek', wazuh: '.xml', nse: '.nse', crs: '.conf', kunai: '.kun',
             }
             return map[(format || '').toLowerCase()] || '.txt'
         }

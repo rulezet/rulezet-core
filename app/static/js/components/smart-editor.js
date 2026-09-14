@@ -40,7 +40,7 @@ const _KNOWN_HLJS = new Set([
     'suricata', // registered at runtime — see _register_extra_languages() below
     'toml',     // registered at runtime — see _register_extra_languages() below
 ])
-const _LANG_ALIASES = { nse:'lua', sigma:'yaml', wazuh:'xml', zeek:'text', crs:'text', nova:'text', kql:'sql', splunk:'yaml', elastic:'toml' }
+const _LANG_ALIASES = { nse:'lua', sigma:'yaml', kunai:'yaml', wazuh:'xml', zeek:'text', crs:'text', nova:'text', kql:'sql', splunk:'yaml', elastic:'toml' }
 function _resolve_lang(lang) {
     const mapped = _LANG_ALIASES[lang] || lang
     return _KNOWN_HLJS.has(mapped) ? mapped : 'text'
