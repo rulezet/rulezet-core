@@ -173,12 +173,18 @@
 
                         <div class="row mb-4 text-start">
                             <div class="col-12">
+                                <!-- No :rule-id — unlike ATT&CK above, linked-rule
+                                     changes here are NOT persisted immediately.
+                                     They only live in selectedRelatedRules until
+                                     the Save button submits this form, same as
+                                     Tags (see the hidden 'related_rules' field
+                                     below and edit_rule_core's sync_manual_relations). -->
                                 <related-rule-input
                                     v-model="selectedRelatedRules"
                                     label="Linked Rules"
-                                    :rule-id="parseInt(ruleId)"
                                     csrf-token="{{ csrf_token() }}">
                                 </related-rule-input>
+                                <input type="hidden" name="related_rules" :value="JSON.stringify(selectedRelatedRules)">
                             </div>
                         </div>
 
