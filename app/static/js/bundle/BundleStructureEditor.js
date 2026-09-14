@@ -429,7 +429,7 @@ export default {
                 <code-viewer
                     v-else-if="selectedNode && isRule(selectedNode)"
                     :code="selectedNode.content || ''"
-                    :language="hlxLang(selectedNode.format)"
+                    :language="selectedNode.format || 'auto'"
                     :title="selectedNode.name"
                     max-height="32vh">
                 </code-viewer>
@@ -438,7 +438,7 @@ export default {
                 <code-viewer
                     v-else-if="previewContent"
                     :code="previewContent"
-                    :language="hlxLang(previewFormat)"
+                    :language="previewFormat || 'auto'"
                     :title="previewName"
                     max-height="32vh">
                 </code-viewer>
@@ -588,14 +588,11 @@ export default {
         // ── Helpers ────────────────────────────────────────────────
         const isRule = (node) => node && String(node.id).startsWith('rule_')
 
-        // Map Rulezet format names to highlight.js language identifiers
-        function hlxLang(format) {
-            const map = {
-                sigma: 'yaml', wazuh: 'xml', elastic: 'toml',  // Elastic Security rules are TOML — see hljs-toml.js
-                nova: 'yaml', crs: 'nginx', kunai: 'yaml',
-            }
-            return map[(format || '').toLowerCase()] || 'plaintext'
-        }
+        // Highlighting: <code-viewer> is given the raw rule format string
+        // directly (:language="rule.format || 'auto'") and resolves it
+        // itself via its own LANG_ALIASES map — same convention as the
+        // rule detail page — instead of duplicating a second, incomplete
+        // format->language table here.
 
         const _ext = (format) => {
             const map = {
@@ -604,6 +601,12 @@ export default {
             }
             return map[(format || '').toLowerCase()] || '.txt'
         }
+
+        // Many rule titles are full sentences ending in a period (most
+        // Wazuh titles do, e.g. "Integrity checksum changed.") — appending
+        // _ext() straight onto that produced a double dot before the
+        // extension ("...changed..xml"). Strip trailing dots first.
+        const _fileName = (rule) => rule.title.replace(/\.+$/, '') + _ext(rule.format)
 
         // ── Load / save ────────────────────────────────────────────
         async function loadTree() {
@@ -812,11 +815,10 @@ export default {
         function addRules(rules) {
             const target = _targetFolder()
             for (const rule of rules) {
-                const ext = _ext(rule.format)
                 target.push({
                     id:       'rule_' + rule.id + '_' + Date.now(),
                     rule_id:  rule.id,
-                    name:     rule.title + ext,
+                    name:     _fileName(rule),
                     type:     'file',
                     format:   rule.format || '',
                     content:  rule.to_string || '',
@@ -834,7 +836,7 @@ export default {
                 target.push({
                     id:       'rule_' + rule.id + '_' + Date.now(),
                     rule_id:  rule.id,
-                    name:     rule.title + _ext(rule.format),
+                    name:     _fileName(rule),
                     type:     'file',
                     format:   rule.format || '',
                     content:  rule.to_string || '',
@@ -883,7 +885,7 @@ export default {
             treeData, selectedNode, previewContent, previewName, previewFormat,
             saving, saveStatus, lastSavedAt, rootDropActive,
             folderText, fileNameText, fileExt, nodeToRename, creationMode,
-            isRule, hlxLang, selectNode, clearDisplay, setPreview, prepareTarget,
+            isRule, selectNode, clearDisplay, setPreview, prepareTarget,
             confirmAddFolder, confirmAddFile, cancelCreation,
             beginRename, confirmRename, cancelRename,
             beginDelete, saveStructure, saveNow, onContentChange,
