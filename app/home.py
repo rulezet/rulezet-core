@@ -803,34 +803,67 @@ def admin_logs():
     return render_template('admin/logs.html')
 
 
-@home_blueprint.route('/admin/get_logs_page', methods=['GET'])
+@home_blueprint.route('/admin/logs/connections', methods=['GET'])
 @login_required
-def get_logs_page():
+def admin_connection_logs():
+    """Dedicated 'who signed in/out, from where' view — same ActivityLog
+    table as /admin/logs, just user.login/user.logout only, so it doesn't
+    get lost in the noise of every rule/bundle/tag edit on the main page."""
     if not current_user.is_admin():
-        return jsonify({"error": "Unauthorized"}), 401
+        return render_template('access_denied.html')
+    return render_template('admin/connection_logs.html')
 
-    from app.core.db_class.db import ActivityLog
-    from app import db
 
-    from sqlalchemy import or_
-    from datetime import datetime
+@home_blueprint.route('/admin/logs/api', methods=['GET'])
+@login_required
+def admin_api_logs():
+    """Dedicated view for category='api' entries (every /api/* request —
+    see api.py's after_request logger) — same reasoning as the Connections
+    page: API traffic is high-volume and would otherwise bury everything
+    else on the main Activity Logs page."""
+    if not current_user.is_admin():
+        return render_template('access_denied.html')
+    return render_template('admin/api_logs.html')
+
+
+@home_blueprint.route('/admin/logs/definitions', methods=['GET'])
+@login_required
+def admin_log_definitions():
+    """Icon/title/visibility manager for every known activity-log action —
+    was a Vue view-mode toggle inside admin/logs.html, now its own page
+    alongside Activity Logs/Connections/API so the same nav row reaches it."""
+    if not current_user.is_admin():
+        return render_template('access_denied.html')
+    return render_template('admin/log_definitions.html')
+
+
+def _parse_common_log_args():
+    """Shared request.args parsing for every admin logs listing endpoint
+    (general / connections / API) — keeps page/per_page/search/level/
+    user_id/sort/dir/date_from/date_to consistent across all three."""
     page      = request.args.get('page', 1, type=int)
     per_page  = min(100, request.args.get('per_page', 25, type=int))
     search    = request.args.get('search', '', type=str).strip()
-    action    = request.args.get('action', '', type=str).strip()
-    category  = request.args.get('category', '', type=str).strip()
     level     = request.args.get('level', '', type=str).strip()
     user_id_f = request.args.get('user_id', None, type=int)
     sort_key  = request.args.get('sort', 'created_at', type=str)
     sort_dir  = request.args.get('dir', 'desc', type=str)
     date_from = request.args.get('date_from', '', type=str).strip()
     date_to   = request.args.get('date_to',   '', type=str).strip()
+    return page, per_page, search, level, user_id_f, sort_key, sort_dir, date_from, date_to
 
-    _allowed_sorts = {'id', 'created_at', 'category', 'level', 'action'}
-    if sort_key not in _allowed_sorts:
-        sort_key = 'created_at'
-    if sort_dir not in ('asc', 'desc'):
-        sort_dir = 'desc'
+
+def _build_logs_query(search='', action='', category='', level='', user_id_f=None,
+                       date_from='', date_to='', sort_key='created_at', sort_dir='desc',
+                       fixed_actions=None, fixed_category=None):
+    """Shared filter/sort builder behind every admin logs listing variant.
+    fixed_actions/fixed_category pin a listing to an exact set of
+    actions (Connections: user.login/user.logout) or a category (API:
+    'api') regardless of whatever action/category param a client sends —
+    the dedicated endpoints below always pass these, the general one never does."""
+    from app.core.db_class.db import ActivityLog
+    from sqlalchemy import or_
+    from datetime import datetime, timedelta
 
     q = ActivityLog.query
     if search:
@@ -840,9 +873,13 @@ def get_logs_page():
             ActivityLog.action.ilike(like),
             ActivityLog.description.ilike(like),
         ))
-    if action:
+    if fixed_actions:
+        q = q.filter(ActivityLog.action.in_(fixed_actions))
+    elif action:
         q = q.filter(ActivityLog.action.ilike(f'%{action}%'))
-    if category:
+    if fixed_category:
+        q = q.filter(ActivityLog.category == fixed_category)
+    elif category:
         q = q.filter(ActivityLog.category == category)
     if level:
         q = q.filter(ActivityLog.level == level)
@@ -856,22 +893,29 @@ def get_logs_page():
             pass
     if date_to:
         try:
-            dt_to = datetime.strptime(date_to, '%Y-%m-%d')
-            # include the full day
-            from datetime import timedelta
-            dt_to = dt_to + timedelta(days=1)
+            dt_to = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)  # include the full day
             q = q.filter(ActivityLog.created_at < dt_to)
         except ValueError:
             pass
 
+    _allowed_sorts = {'id', 'created_at', 'category', 'level', 'action'}
+    if sort_key not in _allowed_sorts:
+        sort_key = 'created_at'
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = 'desc'
     sort_col = getattr(ActivityLog, sort_key)
-    q = q.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())
+    return q.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())
 
+
+def _paginate_logs_query(q, page, per_page):
     total       = q.count()
     total_pages = max(1, (total + per_page - 1) // per_page)
     page        = min(page, total_pages)
     items       = q.offset((page - 1) * per_page).limit(per_page).all()
+    return items, total, total_pages, page
 
+
+def _logs_page_response(items, total, total_pages, page, per_page):
     return jsonify({
         "items":       [l.to_json() for l in items],
         "logs":        [l.to_json() for l in items],  # backward compat
@@ -880,6 +924,53 @@ def get_logs_page():
         "per_page":    per_page,
         "total_pages": total_pages,
     }), 200
+
+
+@home_blueprint.route('/admin/get_logs_page', methods=['GET'])
+@login_required
+def get_logs_page():
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    page, per_page, search, level, user_id_f, sort_key, sort_dir, date_from, date_to = _parse_common_log_args()
+    action   = request.args.get('action', '', type=str).strip()
+    category = request.args.get('category', '', type=str).strip()
+
+    q = _build_logs_query(search=search, action=action, category=category, level=level,
+                           user_id_f=user_id_f, date_from=date_from, date_to=date_to,
+                           sort_key=sort_key, sort_dir=sort_dir)
+    items, total, total_pages, page = _paginate_logs_query(q, page, per_page)
+    return _logs_page_response(items, total, total_pages, page, per_page)
+
+
+@home_blueprint.route('/admin/get_connection_logs_page', methods=['GET'])
+@login_required
+def get_connection_logs_page():
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    page, per_page, search, level, user_id_f, sort_key, sort_dir, date_from, date_to = _parse_common_log_args()
+    q = _build_logs_query(search=search, level=level, user_id_f=user_id_f,
+                           date_from=date_from, date_to=date_to,
+                           sort_key=sort_key, sort_dir=sort_dir,
+                           fixed_actions=('user.login', 'user.logout'))
+    items, total, total_pages, page = _paginate_logs_query(q, page, per_page)
+    return _logs_page_response(items, total, total_pages, page, per_page)
+
+
+@home_blueprint.route('/admin/get_api_logs_page', methods=['GET'])
+@login_required
+def get_api_logs_page():
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    page, per_page, search, level, user_id_f, sort_key, sort_dir, date_from, date_to = _parse_common_log_args()
+    q = _build_logs_query(search=search, level=level, user_id_f=user_id_f,
+                           date_from=date_from, date_to=date_to,
+                           sort_key=sort_key, sort_dir=sort_dir,
+                           fixed_category='api')
+    items, total, total_pages, page = _paginate_logs_query(q, page, per_page)
+    return _logs_page_response(items, total, total_pages, page, per_page)
 
 
 @home_blueprint.route('/admin/logs/delete/<int:log_id>', methods=['POST'])
