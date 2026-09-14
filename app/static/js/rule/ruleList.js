@@ -977,7 +977,7 @@ export default {
                     </div>
                     <code-viewer v-if="rule.to_string"
                         :code="rule.to_string"
-                        :language="ruleLanguage(rule.format)"
+                        :language="rule.format || 'auto'"
                         :title="rule.title"
                         :initial-search="searchField === 'content' ? search : ''"
                         :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
@@ -1506,7 +1506,7 @@ export default {
                                         <div class="rl-expand-code">
                                             <code-viewer v-if="rule.to_string"
                                                 :code="rule.to_string"
-                                                :language="ruleLanguage(rule.format)"
+                                                :language="rule.format || 'auto'"
                                                 :title="rule.title"
                                                 :initial-search="searchField === 'content' ? search : ''"
                                                 :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
@@ -2396,23 +2396,11 @@ export default {
             return 'bg-danger-subtle text-danger'
         }
 
-        // ── Rule format → hljs language ───────────────────────────────────
-        function ruleLanguage(format) {
-            if (!format) return 'auto'
-            const map = {
-                yara:     'yara',
-                sigma:    'yaml',
-                suricata: 'suricata',
-                zeek:     'zeek',
-                elastic:  'toml',  // Elastic Security rules are TOML — see hljs-toml.js
-                wazuh:    'xml',
-                nova:     'text',
-                nse:      'lua',
-                crs:      'text',
-                splunk:   'yaml',
-            }
-            return map[format.toLowerCase()] || 'auto'
-        }
+        // Highlighting: <code-viewer> is given the raw rule format string
+        // directly (:language="rule.format || 'auto'") and resolves it
+        // itself via its own LANG_ALIASES map — same convention as the
+        // rule detail page — instead of duplicating a second, incomplete
+        // format->language table here (this one was missing kunai).
 
         // ── Test result: matched bytes → highlight terms for CodeViewer ────
         // Reconstructs "31 F7 40 88 ..." the same way the rule source spells a
@@ -2554,7 +2542,7 @@ export default {
             toggleExpand,
             handleVote, handleFavorite,
             emitBulkAction, emitSend,
-            fromNow, formatDate, ruleLanguage, qualityBadgeClass, highlight, matchedHighlightTerms, matchedStringCount,
+            fromNow, formatDate, qualityBadgeClass, highlight, matchedHighlightTerms, matchedStringCount,
             // Status
             statusIcon, statusLabel, canChangeStatus, cycleStatus,
             // Export

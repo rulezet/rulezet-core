@@ -589,7 +589,7 @@ export default {
                                     <div v-if="isRuleExpanded(bundle.id, rule.id)" class="bl-rule-code">
                                         <code-viewer v-if="rule.to_string"
                                             :code="rule.to_string"
-                                            :language="ruleLanguage(rule.format)"
+                                            :language="rule.format || 'auto'"
                                             :title="rule.title"
                                             max-height="240px">
                                         </code-viewer>
@@ -940,7 +940,7 @@ export default {
                                                             <div v-if="isRuleExpanded(bundle.id, rule.id)" class="bl-rule-code">
                                                                 <code-viewer v-if="rule.to_string"
                                                                     :code="rule.to_string"
-                                                                    :language="ruleLanguage(rule.format)"
+                                                                    :language="rule.format || 'auto'"
                                                                     :title="rule.title"
                                                                     max-height="200px">
                                                                 </code-viewer>
@@ -1447,15 +1447,11 @@ export default {
             } catch { return val }
         }
 
-        function ruleLanguage(format) {
-            if (!format) return 'auto'
-            const map = {
-                yara: 'yara', sigma: 'yaml', suricata: 'text', zeek: 'zeek',
-                elastic: 'toml', wazuh: 'xml', nova: 'text', nse: 'lua', crs: 'text',  // Elastic Security rules are TOML — see hljs-toml.js
-                kunai: 'yaml',
-            }
-            return map[format.toLowerCase()] || 'auto'
-        }
+        // Highlighting: <code-viewer> is given the raw rule format string
+        // directly (:language="rule.format || 'auto'") and resolves it
+        // itself via its own LANG_ALIASES map — same convention as the
+        // rule detail page — instead of duplicating a second, incomplete
+        // format->language table here.
 
         // ── Lifecycle ─────────────────────────────────────────────────────
         onMounted(() => fetchData())
@@ -1486,7 +1482,7 @@ export default {
             toggleRuleExpand, isRuleExpanded,
             fetchBundleRules,
             handleVote, emitBulkAction, emitSend,
-            fromNow, formatDate, ruleLanguage, highlight,
+            fromNow, formatDate, highlight,
         }
     },
 }
