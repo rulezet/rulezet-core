@@ -54,3 +54,6 @@ tests/rule_tester/
 app/modules/misp-taxonomies
 app/modules/misp-taxonomies
 app/modules/misp-taxonomies
+app/modules/cti
+app/modules/misp-galaxy
+app/modules/misp-taxonomies
