@@ -131,7 +131,9 @@ def insert_default_formats():
         {"name": "splunk", "can_be_execute": False},
         # Like kql/splunk: the query (EQL/KQL/Lucene/ES|QL) needs a live
         # Elasticsearch cluster to run — no local rule_tester driver exists.
-        {"name": "elastic", "can_be_execute": False}
+        {"name": "elastic", "can_be_execute": False},
+        # No rule_tester driver yet — same situation as wazuh/kql/splunk/elastic.
+        {"name": "kunai", "can_be_execute": False},
     ]
 
     # get_admin_user() looks up the literal default demo admin

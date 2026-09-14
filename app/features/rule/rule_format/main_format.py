@@ -51,10 +51,14 @@ def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, f
     imported = 0
     skipped = 0
     bad_rules = 0
+    # Scopes extract_relations()'s cross-rule correlation (e.g. Kunai's
+    # shared hash) to this one call — single-threaded here, so no lock
+    # is needed (see resolve_and_link_relations' docstring).
+    correlation_seen = {}
 
     for filepath in format_files:
         rules = format_rule.extract_rules_from_file(filepath)
-        for rule_text in rules:    
+        for rule_text in rules:
             # enrich info with filepath
             enriched_info = {**info, "filepath": filepath}
             # Validate
@@ -75,9 +79,20 @@ def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, f
 
             # Attempt to create rule if validation is OK
             if validation_result.ok:
+                # add_rule_core always returns a (Rule|False, message) tuple —
+                # unpacked here (not just `if success:` on the raw tuple,
+                # which is truthy either way) both to keep imported/skipped
+                # accurate and because the real Rule object is what
+                # resolve_and_link_relations needs.
                 success = RuleModel.add_rule_core(result_dict["rule"], user)
-                if success:
+                new_rule, _msg = success if isinstance(success, tuple) else (success, None)
+                if new_rule:
                     imported += 1
+                    try:
+                        from app.features.rule_relation.rule_relation_core import resolve_and_link_relations
+                        resolve_and_link_relations(format_rule, rule_text, metadata, new_rule, correlation_seen)
+                    except Exception:
+                        pass
                 else:
                     skipped += 1
             else:

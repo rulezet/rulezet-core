@@ -94,4 +94,28 @@ class RuleType(ABC):
         """
         return {}
 
+    def extract_relations(self, content: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Optional. Report relations this rule has to sibling rules in the
+        same import batch — e.g. a Wazuh rule's <if_sid>, or two Kunai
+        rules sharing a correlation hash. The import pipeline resolves
+        these into RuleRelation rows once every rule in the batch exists
+        (see rule_relation_core.add_relation) — this method only needs to
+        describe what it found, never touch the DB itself.
+
+        Each entry is one of:
+          {'kind': 'target_ref', 'target_identifier': str, 'relation_type': str}
+            — a direct reference to another rule's `original_uuid`
+            (Wazuh's numeric id, for example). Resolved against rules from
+            the same source+file first, falling back to the same
+            source+format corpus.
+          {'kind': 'correlation_key', 'key': str, 'relation_type': str}
+            — a shared marker with no specific target (Kunai's hash in
+            meta.comments, for example); every pair of rules in the same
+            batch reporting the same key gets linked pairwise.
+
+        Returns [] by default — a format that doesn't implement this simply
+        never produces relations, exactly like any other format today.
+        """
+        return []
+
     # other method to do ....

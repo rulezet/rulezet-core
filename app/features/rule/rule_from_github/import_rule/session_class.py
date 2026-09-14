@@ -54,6 +54,16 @@ class Session_class:
         self.events      = []
         self._events_lock = Lock()
 
+        # Cross-rule correlation for extract_relations()'s 'correlation_key'
+        # entries (e.g. Kunai rules sharing a hash in meta.comments) — a
+        # plain dict keyed by (format, key) -> [rule_id, ...], guarded by
+        # _relation_lock since process() runs on self.thread_count worker
+        # threads concurrently. Only correlates rules seen within THIS
+        # session; a rule from an earlier sync sharing the same key isn't
+        # retroactively linked (see _resolve_relations' docstring).
+        self._correlation_seen = {}
+        self._relation_lock = Lock()
+
     def _log_event(self, kind, name, fmt, count=None):
         with self._events_lock:
             entry = {"type": kind, "name": name, "format": fmt}
@@ -323,6 +333,10 @@ class Session_class:
                             self.imported += 1
                             self.count_per_format[rule_instance.format]["imported"] += 1
                             self._log_event("imported", rule_name, rule_instance.format)
+                            try:
+                                self._resolve_relations(rule_instance, clean_text, metadata, success)
+                            except Exception:
+                                pass  # never let a relation-extraction bug fail the import itself
                         else:
                             self.skipped += 1
                             self.count_per_format[rule_instance.format]["skipped"] += 1
@@ -366,6 +380,16 @@ class Session_class:
 
         return True
     
+    def _resolve_relations(self, rule_instance, raw_text, metadata, new_rule):
+        """Thin wrapper around the shared resolve_and_link_relations() —
+        see that function's docstring for what it actually does. This
+        session's own _correlation_seen dict + _relation_lock scope the
+        cross-rule correlation (Kunai-style shared hashes) to just this
+        import run, since process() runs on self.thread_count threads."""
+        from app.features.rule_relation.rule_relation_core import resolve_and_link_relations
+        resolve_and_link_relations(rule_instance, raw_text, metadata, new_rule,
+                                    self._correlation_seen, lock=self._relation_lock)
+
     def save_info(self):
         result_entry = ImporterResult(
             uuid=str(self.uuid),
