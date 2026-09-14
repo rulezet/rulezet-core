@@ -265,6 +265,13 @@ export default {
                             <span class="brs-rule-title">{{ rule.title }}</span>
                             <div class="brs-rule-meta">
                                 <span class="brs-rule-format">{{ (rule.format || '?').toUpperCase() }}</span>
+                                <a v-if="rule.linked_rules_count > 0"
+                                   :href="'/rule/detail_rule/' + rule.id + '/linked_rules'" target="_blank" @click.stop
+                                   class="badge rounded-pill text-decoration-none"
+                                   style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25); font-size:.65rem;"
+                                   :title="rule.linked_rules_count + ' linked rule' + (rule.linked_rules_count === 1 ? '' : 's')">
+                                    <i class="fa-solid fa-diagram-project me-1"></i>{{ rule.linked_rules_count }}
+                                </a>
                                 <span class="brs-rule-editor">
                                     <i class="fas fa-user fa-xs me-1"></i>{{ rule.editor || '—' }}
                                 </span>
@@ -320,6 +327,7 @@ export default {
                                 <th v-if="visibleCols.has('tags')" style="width:140px;">Tags</th>
                                 <th v-if="visibleCols.has('cves')" style="width:110px;">CVEs</th>
                                 <th v-if="visibleCols.has('attacks')" style="width:140px;">ATT&amp;CK</th>
+                                <th v-if="visibleCols.has('linked')" style="width:90px;">Linked</th>
                                 <th style="width:80px;">Actions</th>
                             </tr>
                         </thead>
@@ -373,6 +381,16 @@ export default {
                                 </td>
                                 <td v-if="visibleCols.has('attacks')" @click.stop style="max-width:140px;">
                                     <attack-display-list :initial-attacks="rule.attacks" :max-visible="2" />
+                                </td>
+                                <td v-if="visibleCols.has('linked')" @click.stop>
+                                    <a v-if="rule.linked_rules_count > 0"
+                                       :href="'/rule/detail_rule/' + rule.id + '/linked_rules'" target="_blank"
+                                       class="badge rounded-pill text-decoration-none"
+                                       style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25); font-size:.68rem;"
+                                       :title="rule.linked_rules_count + ' linked rule' + (rule.linked_rules_count === 1 ? '' : 's')">
+                                        <i class="fa-solid fa-diagram-project me-1"></i>{{ rule.linked_rules_count }}
+                                    </a>
+                                    <span v-else class="text-muted" style="font-size:.65rem;">—</span>
                                 </td>
                                 <td @click.stop>
                                     <div class="d-flex gap-1">
@@ -499,8 +517,14 @@ export default {
             { key: 'tags',          label: 'Tags'    },
             { key: 'cves',          label: 'CVEs'    },
             { key: 'attacks',       label: 'ATT&CK'  },
+            { key: 'linked',        label: 'Linked'  },
         ]
-        const visibleCols  = reactive(new Set(['format', 'editor', 'creation_date']))
+        // 'linked' visible by default — a rule composed via a Wazuh
+        // <if_sid> or a Kunai rule() reference may not work standalone if
+        // its counterpart isn't also added to the bundle (see the Linked
+        // rules confirm modal in edit_bundle.html), worth surfacing here
+        // before the user even picks it, not just after.
+        const visibleCols  = reactive(new Set(['format', 'editor', 'creation_date', 'linked']))
         const colPickerOpen = ref(false)
 
         function toggleCol(key) {
