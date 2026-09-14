@@ -93,6 +93,13 @@ export default {
         canDelete:   { type: Boolean, default: false },
         canModerate: { type: Boolean, default: false },
         csrfToken:   { type: String,  default: '' },
+        // Hides the category pill row — for a consumer whose fetchUrl is
+        // already pinned server-side to one category/action set (e.g. the
+        // Connections/API Activity pages), so picking a different category
+        // here would just silently return zero rows instead of doing
+        // anything. Off by default — the main Activity Logs page still
+        // shows every category.
+        hideCategoryFilter: { type: Boolean, default: false },
     },
 
     emits: ['delete', 'bulk-delete', 'edit', 'toggle-visibility', 'bulk-set-visibility'],
@@ -281,6 +288,7 @@ export default {
             </button>
         </div>
 
+        <template v-if="!hideCategoryFilter">
         <div class="lt-filter-sep d-none d-sm-block"></div>
 
         <!-- Category pills -->
@@ -295,6 +303,7 @@ export default {
                 {{ cat.label }}
             </button>
         </div>
+        </template>
 
         <div class="lt-filter-sep d-none d-sm-block"></div>
 
