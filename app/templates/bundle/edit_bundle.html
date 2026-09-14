@@ -328,6 +328,23 @@ createApp({
             const updated = new Set(bundleRuleIds.value)
             rules.forEach(r => updated.add(r.id))
             bundleRuleIds.value = updated
+
+            // A rule with linked_rules_count > 0 (see /rule/data_table's
+            // serialize_rules_for_data_table) may depend on — or be
+            // depended on by — another rule not in this bundle (a Wazuh
+            // <if_sid>, a Kunai rule() composition, ...). Adding only one
+            // side risks a bundle that doesn't actually work standalone —
+            // warn, don't block, since not every relation is a hard
+            // dependency (e.g. a manual "related to" note).
+            const linkedRules = rules.filter(r => r.linked_rules_count > 0)
+            if (linkedRules.length) {
+                const names = linkedRules.map(r => r.title).join(', ')
+                create_message(
+                    `${linkedRules.length === 1 ? 'This rule has' : 'These rules have'} linked rules (${names}) — ` +
+                    `you may also need to add the rule(s) they're linked to, or this bundle might not work as expected.`,
+                    'warning-subtle'
+                )
+            }
         }
 
         function onPreviewRule(rule) {
