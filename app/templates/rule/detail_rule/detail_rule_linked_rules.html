@@ -46,18 +46,20 @@
     {{ nav.detail_rule_nav(rule, 'linked_rules', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count, test_count=test_count, ai_analysis_count=ai_analysis_count, linked_rules_count=linked_rules_count) }}
 
     <!-- ── Direction switcher ── -->
-    <ul class="nav nav-pills mb-3 gap-2">
-        <li class="nav-item">
-            <button type="button" class="nav-link" :class="{ active: direction === 'outgoing' }" @click="direction = 'outgoing'">
-                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Links to (<span>[[ outgoingTotal ]]</span>)
-            </button>
-        </li>
-        <li class="nav-item">
-            <button type="button" class="nav-link" :class="{ active: direction === 'incoming' }" @click="direction = 'incoming'">
-                <i class="fa-solid fa-arrow-down-left-and-arrow-up-right-to-center me-1"></i>Linked from (<span>[[ incomingTotal ]]</span>)
-            </button>
-        </li>
-    </ul>
+    <nav class="dr-nav mb-3" style="display:inline-flex;">
+        <button type="button" class="dr-nav__item" :class="{ active: direction === 'outgoing' }" @click="direction = 'outgoing'">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            <span>Links to (<span>[[ outgoingTotal ]]</span>)</span>
+            <i class="fa-solid fa-circle-question opacity-50" style="font-size:.7rem;"
+                title="Rules this one points to — this rule depends on, references, or otherwise cites them."></i>
+        </button>
+        <button type="button" class="dr-nav__item" :class="{ active: direction === 'incoming' }" @click="direction = 'incoming'">
+            <i class="fa-solid fa-arrow-down-left-and-arrow-up-right-to-center"></i>
+            <span>Linked from (<span>[[ incomingTotal ]]</span>)</span>
+            <i class="fa-solid fa-circle-question opacity-50" style="font-size:.7rem;"
+                title="Rules that point to this one — they depend on, reference, or otherwise cite this rule."></i>
+        </button>
+    </nav>
 
     <!-- Loading -->
     <div v-if="loading" class="text-center py-5">
