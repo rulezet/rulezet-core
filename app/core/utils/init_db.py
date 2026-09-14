@@ -184,7 +184,13 @@ def insert_default_platform_tag_configs():
     with open(fixture_path, "r", encoding="utf-8") as f:
         templates = json.load(f)
 
-    user_admin = get_admin_user()
+    # get_admin_user() only ever looks up the literal default demo admin
+    # (admin@admin.admin) — same fallback as insert_default_formats() above,
+    # for the same reason: on an instance where that account was renamed,
+    # merged, or never created, this must not silently no-op and leave every
+    # not-yet-seeded template (including a newly added one) permanently
+    # un-inserted until someone notices.
+    user_admin = get_admin_user() or User.query.filter_by(admin=True).first()
     if not user_admin:
         return
 
@@ -212,31 +218,13 @@ def insert_default_platform_tag_configs():
         ))
     db.session.commit()
 
-    # "Everything" — combine all platform_tags configs that exist right now
-    # (seeded above, plus anything the admin already made), deduplicated by
-    # tag. Recomputed only if it doesn't already exist, same as the others.
-    if not FieldParserConfig.query.filter_by(name="Everything", config_type="platform_tags").first():
-        others = (FieldParserConfig.query
-                  .filter_by(config_type="platform_tags")
-                  .filter(FieldParserConfig.name != "Everything")
-                  .all())
-        combined, seen_tag_ids = [], set()
-        for cfg in others:
-            for p in (cfg.config or {}).get("patterns", []):
-                if p.get("tag_id") in seen_tag_ids:
-                    continue
-                seen_tag_ids.add(p.get("tag_id"))
-                combined.append(p)
-        # validate_platform_tag_config also drops anything whose tag was
-        # deleted between the loop above and now, and enforces the same
-        # 200-pattern cap the admin UI is held to.
-        ok, _error, resolved = validate_platform_tag_config({"patterns": combined}) if combined else (False, "", [])
-        if ok:
-            db.session.add(FieldParserConfig(
-                name="Everything", config={"patterns": resolved},
-                user_id=user_admin.id, config_type="platform_tags",
-            ))
-            db.session.commit()
+    # No "combine everything into one saved config" step here anymore — that
+    # used to bake a static "Everything" config at seed time, which went
+    # stale the moment a new template was added afterward (nothing recomputed
+    # it). The bulk_parse_fields UI's "Run All Saved Configs" option
+    # (field_parser_core.combine_all_platform_tag_patterns) now does this
+    # live, from whatever configs exist at the moment it's run — no stored
+    # copy to fall out of date.
 
 
 def insert_default_ai_agent_configs():
