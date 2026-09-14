@@ -136,6 +136,7 @@ api.add_namespace(log_ns, path="/log")
 
 # Tags
 from .tags.tags_private_api import tags_private_ns  # noqa
+_hide_ns(tags_private_ns)
 api.add_namespace(tags_private_ns, path="/tags/private")
 
 # Rule Tester — hidden from Swagger: this is the same backend the in-app
