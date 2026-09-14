@@ -4466,6 +4466,14 @@ def handle_rule_git_mirror_sync(job, app):
             )
         return
 
+    if result.get('interrupted'):
+        # Paused/cancelled mid-sync — rule_mirror_core already logged exactly
+        # why and saved a resume offset. Nothing else to report: this is not
+        # a completion, so no "Sync complete" line, and job.status is left
+        # alone (it's already 'paused'/'cancelled', set by whatever action
+        # triggered this in the first place).
+        return
+
     if 'configs_synced' in result:
         message = (
             f"Sync complete across {result['configs_synced']} config(s) — "

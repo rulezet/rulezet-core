@@ -199,7 +199,8 @@ def _link_file_for(rule, rulezet_url: str) -> str:
     )
 
 
-def _write_rule(base_path: str, rule, tags_by_rule: dict, techniques_by_rule: dict) -> list:
+def _write_rule(base_path: str, rule, tags_by_rule: dict, techniques_by_rule: dict,
+                 skip_rename_check: bool = False) -> list:
     """Writes <rule-name>.<ext> + metadata.json + rulezet_link.md for one
     rule, removing any other file in that same folder first (an old
     rule.yar/metadata.yaml from before this layout) — the folder always
@@ -208,6 +209,14 @@ def _write_rule(base_path: str, rule, tags_by_rule: dict, techniques_by_rule: di
     the rule's current folder, plus its *old* folder too when the title
     changed since last sync (the folder name is title-derived now, so a
     rename moves the whole folder instead of just the file inside it).
+
+    skip_rename_check=True skips the _find_existing_rule_dir() lookup
+    entirely — pass this on a first/initial sync, where nothing could
+    possibly have been renamed (nothing was ever mirrored before), so the
+    lookup is pure wasted work. At ~600k rules that lookup runs once per
+    rule and does an os.listdir() over its whole shard directory each
+    time — on the initial load this was a real, measured cost for
+    nothing, since it can never find anything on a first sync.
 
     NOTE: staging must be the `git add <path>` CLI form (repo.git.add), not
     GitPython's index.add()/index.remove() pair — index.add() on a
@@ -222,10 +231,11 @@ def _write_rule(base_path: str, rule, tags_by_rule: dict, techniques_by_rule: di
     abs_dir = os.path.join(base_path, rel_dir)
 
     touched = [rel_dir]
-    old_rel_dir = _find_existing_rule_dir(base_path, rule)
-    if old_rel_dir and old_rel_dir != rel_dir:
-        shutil.rmtree(os.path.join(base_path, old_rel_dir), ignore_errors=True)
-        touched.append(old_rel_dir)
+    if not skip_rename_check:
+        old_rel_dir = _find_existing_rule_dir(base_path, rule)
+        if old_rel_dir and old_rel_dir != rel_dir:
+            shutil.rmtree(os.path.join(base_path, old_rel_dir), ignore_errors=True)
+            touched.append(old_rel_dir)
 
     os.makedirs(abs_dir, exist_ok=True)
 
@@ -578,7 +588,11 @@ def test_config(config: RuleMirrorConfig) -> tuple:
 # ─── Sync ──────────────────────────────────────────────────────────────────
 
 INITIAL_LOAD_BATCH_SIZE = 500   # rules per commit on the very first sync
-PUSH_EVERY_N_COMMITS    = 1000  # during the (large) initial load only
+# Was 1000 (= a push every 500k rules — one push for a ~600k-rule initial
+# load, meaning hours of work could sit unpushed and be lost on a crash
+# before ever reaching GitHub). 20 batches = 10k rules between pushes —
+# bounds how much work a crash between pushes can cost.
+PUSH_EVERY_N_COMMITS    = 20
 
 
 def sync_mirror(config_id: int = None, job=None, log_fn=None) -> dict:
@@ -610,10 +624,20 @@ def sync_mirror(config_id: int = None, job=None, log_fn=None) -> dict:
     # unverified/broken shouldn't stop the others from syncing.
     summaries = []
     failed = []
+    interrupted = False
     for config in configs:
         _log('info', f"── {config.name} ──")
         try:
-            summaries.append(_sync_one_config(config, job=job, log_fn=log_fn))
+            result = _sync_one_config(config, job=job, log_fn=log_fn)
+            summaries.append(result)
+            if result.get('interrupted'):
+                # Job was paused/cancelled mid-config — its own resume offset
+                # is already saved. Don't start the next config this round;
+                # the job payload only has room for one config's offset, so
+                # resuming mid-sweep would otherwise silently skip whichever
+                # config comes after this one.
+                interrupted = True
+                break
         except Exception as e:
             failed.append(config.name)
             _log('error', f"'{config.name}' skipped: {e}")
@@ -623,7 +647,7 @@ def sync_mirror(config_id: int = None, job=None, log_fn=None) -> dict:
                 target_type='rule_mirror_config', target_id=config.id, is_public=False,
             )
 
-    if not summaries:
+    if not summaries and not interrupted:
         raise RuntimeError(f"All {len(configs)} enabled config(s) failed to sync — see log above.")
 
     return {
@@ -631,6 +655,7 @@ def sync_mirror(config_id: int = None, job=None, log_fn=None) -> dict:
         'configs_failed': failed,
         'written': sum(s['written'] for s in summaries),
         'deleted': sum(s['deleted'] for s in summaries),
+        'interrupted': interrupted,
     }
 
 
@@ -660,42 +685,7 @@ def _sync_one_config(config: RuleMirrorConfig, job=None, log_fn=None) -> dict:
     _log('info', f"Starting {'initial' if is_first_sync else 'incremental'} sync for '{config.name}'…")
     repo = _ensure_local_repo(config)
 
-    from sqlalchemy import or_
     from app.features.rule.rule_core import _active
-    query = _active()
-    if cutoff:
-        query = query.filter(or_(Rule.creation_date > cutoff, Rule.last_modif > cutoff))
-    changed = query.all()
-
-    removed = []
-    if cutoff:
-        removed = Rule.query.filter(Rule.is_deleted == True, Rule.deleted_at > cutoff).all()
-
-    if job:
-        job.total = len(changed) + len(removed)
-        job.done = 0
-        db.session.commit()
-
-    # NOTE for the real ~600k-rule initial load: this fetches tags/techniques
-    # for every changed rule in one batch up front. Fine for the (small)
-    # incremental case; if the first run's memory footprint becomes a
-    # problem at full scale, chunk this per INITIAL_LOAD_BATCH_SIZE instead
-    # of all at once — not done here since it's untested and unnecessary
-    # for anything short of the full corpus.
-    changed_ids = [r.id for r in changed]
-    from app.features.rule.rule_core import get_tags_for_rules_batch
-    from app.features.attack.attack_core import get_techniques_for_rules_batch
-    # get_tags_for_rules_batch checks flask_login's current_user to decide
-    # public-only vs. full visibility — outside any request (a background
-    # job), that proxy resolves to None rather than an anonymous user, and
-    # None.is_authenticated crashes the whole sync. A throwaway request
-    # context gives flask_login a real (logged-out) current_user to check,
-    # which is what actually makes this "public tags only" instead of just
-    # broken.
-    from flask import current_app
-    with current_app.test_request_context():
-        tags_by_rule = get_tags_for_rules_batch(changed_ids)
-    techniques_by_rule = get_techniques_for_rules_batch(changed_ids)
 
     commits_since_push = 0
     written = 0
@@ -725,32 +715,48 @@ def _sync_one_config(config: RuleMirrorConfig, job=None, log_fn=None) -> dict:
             _clear_authenticated_remote(repo, config)
         commits_since_push = 0
 
-    def _stage_rule(rule):
-        """Writes the rule and stages it — see _write_rule's docstring for
-        why this must be repo.git.add (the CLI form), not index.add(). May
-        touch two paths (current folder + old folder after a title
-        rename) — both get staged."""
-        for rel_dir in _write_rule(local_dir, rule, tags_by_rule, techniques_by_rule):
-            repo.git.add(rel_dir)
-
     if is_first_sync:
-        batch = []
-        for rule in changed:
-            _stage_rule(rule)
-            batch.append(rule)
-            written += 1
-            if job:
-                job.done += 1
-            if len(batch) >= INITIAL_LOAD_BATCH_SIZE:
-                _commit(f"initial import: {len(batch)} rule(s) ({batch[0].format})")
-                batch = []
-                if commits_since_push >= PUSH_EVERY_N_COMMITS:
-                    _maybe_push()
-        if batch:
-            _commit(f"initial import: {len(batch)} rule(s)")
+        written, interrupted = _run_initial_sync(repo, local_dir, job, _log, _commit, _maybe_push)
+        if interrupted:
+            # Paused or cancelled mid-way — _run_initial_sync already logged
+            # why and saved the resume offset. Stopping here (skipping the
+            # README/final-push/last_synced_at below) is what makes the next
+            # attempt correctly resume as still-the-initial-sync instead of
+            # the whole backlog being silently treated as already mirrored.
+            return {'written': written, 'deleted': 0, 'first_sync': True, 'interrupted': True}
     else:
+        from sqlalchemy import or_
+        query = _active().filter(or_(Rule.creation_date > cutoff, Rule.last_modif > cutoff))
+        changed = query.all()
+
+        removed = Rule.query.filter(Rule.is_deleted == True, Rule.deleted_at > cutoff).all()
+
+        if job:
+            job.total = len(changed) + len(removed)
+            job.done = 0
+            db.session.commit()
+
+        # Incremental deltas are small (whatever changed since the last
+        # sync) — loading all of their tags/techniques up front in one
+        # batch, unlike the initial load, is not a scale concern.
+        changed_ids = [r.id for r in changed]
+        from app.features.rule.rule_core import get_tags_for_rules_batch
+        from app.features.attack.attack_core import get_techniques_for_rules_batch
+        # get_tags_for_rules_batch checks flask_login's current_user to decide
+        # public-only vs. full visibility — outside any request (a background
+        # job), that proxy resolves to None rather than an anonymous user, and
+        # None.is_authenticated crashes the whole sync. A throwaway request
+        # context gives flask_login a real (logged-out) current_user to check,
+        # which is what actually makes this "public tags only" instead of just
+        # broken.
+        from flask import current_app
+        with current_app.test_request_context():
+            tags_by_rule = get_tags_for_rules_batch(changed_ids)
+        techniques_by_rule = get_techniques_for_rules_batch(changed_ids)
+
         for rule in changed:
-            _stage_rule(rule)
+            for rel_dir in _write_rule(local_dir, rule, tags_by_rule, techniques_by_rule):
+                repo.git.add(rel_dir)
             _commit(f"update: {rule.format}/{rule.uuid} - {rule.title}")
             written += 1
             if job:
@@ -787,3 +793,120 @@ def _sync_one_config(config: RuleMirrorConfig, job=None, log_fn=None) -> dict:
     _log('success', f"'{config.name}' sync complete — {written} written, {deleted} removed.")
 
     return {'written': written, 'deleted': deleted, 'first_sync': is_first_sync}
+
+
+def _run_initial_sync(repo, local_dir: str, job, _log, _commit, _maybe_push) -> tuple:
+    """The ~600k-rule first-sync path — deliberately separate from the
+    (small, all-in-memory) incremental path above because at this scale
+    every per-rule cost matters and needs its own handling:
+
+      - paginated via keyset (WHERE id > last_id ORDER BY id LIMIT N), not
+        OFFSET — an OFFSET-based page walk needs the DB to scan and
+        discard everything before it on every single page, which turns a
+        run over ~600k rows into an effectively O(n²) table scan by the
+        last few batches (offset ~599,500 needs to skip ~599,500 rows
+        just to return the next 500). Keyset pagination is a straight
+        index seek on the primary key every time regardless of how far in
+        the run already is. It also can't be thrown off by a rule getting
+        soft-deleted mid-run the way OFFSET-based paging can (a deletion
+        earlier in the ordering shifts every later OFFSET by one, silently
+        skipping whatever used to sit at the new offset).
+      - tags/techniques are looked up per batch, not for the full ~600k
+        rule set up front — was flagged as a real risk at this scale
+        (untested memory footprint) in this function's own prior comment
+      - _write_rule(skip_rename_check=True) — nothing could have been
+        renamed on a first sync (nothing was ever mirrored before), so
+        skip that lookup entirely; see _write_rule's docstring
+      - one `repo.git.add(*paths)` call per BATCH instead of per rule —
+        _stage_rule used to spawn one `git` subprocess per rule, which
+        dominated the whole run's wall-clock time at 600k rules
+      - pushes far more often (see PUSH_EVERY_N_COMMITS) and saves a
+        resume cursor after every batch, so a crash/restart loses at
+        most one batch of work instead of redoing (or losing, if
+        unpushed) the entire multi-hour run from scratch
+      - cooperatively checks for pause/cancel between batches, same
+        pattern as compute_rule_quality_score/recompute_gamification
+
+    Returns (written, interrupted) — written counts only what this call
+    itself processed (not prior attempts' progress), interrupted is True
+    when the loop stopped early because the job was paused or cancelled
+    (the caller must not treat the sync as complete when that's the case).
+    """
+    from app.features.rule.rule_core import _active, get_tags_for_rules_batch
+    from app.features.attack.attack_core import get_techniques_for_rules_batch
+    from flask import current_app
+    from app.features.jobs.job_handlers import _is_cancelled, _should_pause
+
+    base_query = _active().order_by(Rule.id)
+    payload = job.payload or {} if job else {}
+    last_id = int(payload.get('_resume_after_id', 0))
+    # Cumulative count across every resume so far — job.done must keep
+    # climbing across a pause/resume, not reset to 0 each time this
+    # function is re-entered by a fresh invocation of the job.
+    done_before_this_run = int(payload.get('_resume_done_count', 0))
+
+    if job:
+        if not job.total:
+            job.total = base_query.count()
+            db.session.commit()
+
+    if last_id:
+        _log('info', f"Resuming initial sync after rule id {last_id} ({done_before_this_run}/{job.total if job else '?'} done so far)…")
+
+    written = 0        # this invocation only — what the caller's log lines report
+    batch_num = 0
+
+    def _save_progress():
+        if job:
+            payload = dict(job.payload or {})
+            payload['_resume_after_id'] = last_id
+            payload['_resume_done_count'] = done_before_this_run + written
+            job.payload = payload
+            job.done = done_before_this_run + written
+            db.session.commit()
+
+    while True:
+        if job and _is_cancelled(job):
+            _log('warning', f"Sync cancelled after rule id {last_id} ({written} rule(s) written this run).")
+            _save_progress()
+            return written, True
+
+        if job and _should_pause(job):
+            _save_progress()
+            _log('info', f"Sync paused after rule id {last_id} ({written} rule(s) written this run). Click Resume to continue.")
+            return written, True
+
+        batch = base_query.filter(Rule.id > last_id).limit(INITIAL_LOAD_BATCH_SIZE).all()
+        if not batch:
+            break
+
+        batch_ids = [r.id for r in batch]
+        # See _sync_one_config's incremental branch for why this needs a
+        # throwaway request context (no real request exists in a
+        # background job, and get_tags_for_rules_batch needs one).
+        with current_app.test_request_context():
+            tags_by_rule = get_tags_for_rules_batch(batch_ids)
+        techniques_by_rule = get_techniques_for_rules_batch(batch_ids)
+
+        staged_paths = []
+        for rule in batch:
+            staged_paths.extend(_write_rule(local_dir, rule, tags_by_rule, techniques_by_rule,
+                                             skip_rename_check=True))
+            written += 1
+        last_id = batch_ids[-1]
+
+        if staged_paths:
+            repo.git.add(*staged_paths)
+        _commit(f"initial import: {len(batch)} rule(s) ({batch[0].format})")
+        _save_progress()
+
+        batch_num += 1
+        if batch_num % PUSH_EVERY_N_COMMITS == 0:
+            _maybe_push()
+            _log('info', f"Progress: {done_before_this_run + written} rule(s) mirrored so far" + (f"/{job.total}" if job else "") + ".")
+
+    # Completed — return the true cumulative total (this run's rules plus
+    # whatever earlier resumed attempts already did), not just this
+    # invocation's slice, so the final "sync complete" summary is accurate
+    # even for a run that took several pause/resume cycles to finish.
+    return done_before_this_run + written, False
