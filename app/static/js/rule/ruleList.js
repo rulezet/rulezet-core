@@ -164,11 +164,11 @@ export default {
         // view: its own column) on any row whose rule.linked_rules_count is
         // > 0 — that field is always present on every /rule/data_table row
         // (see serialize_rules_for_data_table), this prop only controls
-        // whether it's rendered. Off by default (most RuleList consumers
-        // are a narrower context — a picker modal, a bundle's rule set —
-        // where this would just be noise); on for the main rules list and
-        // the GitHub import report's "Imported Rules" table.
-        showRelatedCount:   { type: Boolean,            default: false },
+        // whether it's rendered. On by default everywhere — purely
+        // informational (a link to that rule's Linked Rules page, no
+        // effect on selection/filtering), so a consumer only needs
+        // :show-related-count="false" if it specifically wants it hidden.
+        showRelatedCount:   { type: Boolean,            default: true },
         // Turns on the native Risk-level + Binary rows inside this
         // component's OWN filter panel (right alongside Columns/Filters in
         // the toolbar) — the quarantine-review page's whole filter UI now
