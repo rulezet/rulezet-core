@@ -133,3 +133,70 @@
     from { opacity: 0; transform: translateY(28px) scale(.92); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* ── Category pills — one leaderboard visible at a time ──────── */
+.cb-category-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+.cb-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .45rem 1rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--subtle-text-color);
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s, box-shadow .15s;
+}
+.cb-pill:hover {
+    background: var(--light-bg-color);
+    color: var(--text-color);
+}
+.cb-pill--active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(13,110,253,.3);
+}
+.cb-pill--active:hover {
+    background: #0a58ca;
+    color: #fff;
+}
+
+/* ── Category fade transition — swapping panels reads as a soft
+   crossfade instead of a jarring layout jump. ──────────── */
+.cb-fade-enter-active,
+.cb-fade-leave-active {
+    transition: opacity .18s ease, transform .18s ease;
+}
+.cb-fade-enter-from,
+.cb-fade-leave-to {
+    opacity: 0;
+    transform: translateY(6px);
+}
+.cb-fade-enter-to,
+.cb-fade-leave-from {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* ── "You're on the podium!" toast, shown alongside the confetti ──── */
+.cb-rank-toast {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .55rem 1.1rem;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #d4a700, #fd7e14);
+    color: #fff;
+    font-weight: 700;
+    font-size: .85rem;
+    box-shadow: 0 4px 14px rgba(212,167,0,.35);
+    margin-bottom: .75rem;
+}
