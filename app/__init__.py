@@ -58,6 +58,7 @@ def create_app(start_worker=True):
     from app.features.notification.notification import notification_blueprint
     from app.features.report.report import report_blueprint
     from app.features.attack.attack import attack_blueprint
+    from app.features.rule_relation.rule_relation import rule_relation_blueprint
     from app.features.workspace.workspace import workspace_blueprint
     from app.features.blog.blog import blog_blueprint
     from app.features.community.community import community_blueprint
@@ -85,6 +86,7 @@ def create_app(start_worker=True):
     app.register_blueprint(notification_blueprint, url_prefix='/notifications')
     app.register_blueprint(report_blueprint, url_prefix='/report')
     app.register_blueprint(attack_blueprint, url_prefix='/attack')
+    app.register_blueprint(rule_relation_blueprint, url_prefix='/rule_relation')
     app.register_blueprint(workspace_blueprint, url_prefix='/workspace')
     app.register_blueprint(blog_blueprint, url_prefix='/blog')
     app.register_blueprint(community_blueprint, url_prefix='/community')

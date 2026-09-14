@@ -309,6 +309,12 @@ def _wipe_rule_children(rule_ids: list) -> None:
         or_(RuleSimilarity.rule_id.in_(ids), RuleSimilarity.similar_rule_id.in_(ids))
     ).delete(synchronize_session=False)
 
+    # 14. Rule-to-rule relations (has ondelete=CASCADE but be explicit — same
+    # reasoning as step 13)
+    RuleRelation.query.filter(
+        or_(RuleRelation.source_rule_id.in_(ids), RuleRelation.target_rule_id.in_(ids))
+    ).delete(synchronize_session=False)
+
     db.session.flush()
 
 
