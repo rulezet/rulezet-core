@@ -114,6 +114,11 @@ const TEMPLATES = [
     },
 ];
 
+// Sentinel config_id meaning "every saved config, combined live" — kept in
+// sync with ALL_PLATFORM_CONFIGS in field_parser_core.py (never a real
+// FieldParserConfig.id, those are DB integers).
+const ALL_CONFIGS_ID = 'ALL';
+
 let _rowSeq = 0;
 function newRow(overrides = {}) {
     return reactive({
@@ -252,8 +257,33 @@ const PlatformTagConfigEditor = {
 
         function selectLoadedConfig(id) {
             loadedConfigId.value = id;
-            emit('config-selected', id);
+            // configName is already set to the right value by every caller
+            // (loadConfig/saveCurrentConfig/updateCurrentConfig) before this runs.
+            emit('config-selected', { id, name: configName.value });
         }
+
+        // "Run All Configs" — every saved config's patterns, combined live
+        // by the server at run time (field_parser_core.combine_all_platform_tag_patterns),
+        // never a separately-saved snapshot that could go stale. Only
+        // selects it for the runner below; doesn't touch the pattern
+        // builder on the left, so whatever's being edited there is untouched.
+        function selectAllConfigs() {
+            loadedConfigId.value = ALL_CONFIGS_ID;
+            configName.value = '';
+            emit('config-selected', { id: ALL_CONFIGS_ID, name: 'All Configs' });
+        }
+
+        // Distinct tag count across every saved config — shown on the "All
+        // Configs" card so it reads as more than just a label.
+        const allConfigsTagCount = computed(() => {
+            const seen = new Set();
+            for (const cfg of savedConfigs.value) {
+                for (const p of (cfg.config && cfg.config.patterns) || []) {
+                    if (p.tag_id != null) seen.add(p.tag_id);
+                }
+            }
+            return seen.size;
+        });
 
         async function saveCurrentConfig() {
             const name = configName.value.trim();
@@ -309,7 +339,7 @@ const PlatformTagConfigEditor = {
 
         function saveAsNewConfig() {
             loadedConfigId.value = null;
-            emit('config-selected', null);
+            emit('config-selected', { id: null, name: null });
             return saveCurrentConfig();
         }
 
@@ -322,7 +352,7 @@ const PlatformTagConfigEditor = {
             if (loadedConfigId.value === id) {
                 loadedConfigId.value = null;
                 configName.value = '';
-                emit('config-selected', null);
+                emit('config-selected', { id: null, name: null });
             }
         }
 
@@ -345,7 +375,7 @@ const PlatformTagConfigEditor = {
         function clearLoadedConfig() {
             loadedConfigId.value = null;
             configName.value = '';
-            emit('config-selected', null);
+            emit('config-selected', { id: null, name: null });
         }
 
         // ── templates — additive: loading a second one appends to the first ────
@@ -420,6 +450,7 @@ const PlatformTagConfigEditor = {
             saveCurrentConfig, updateCurrentConfig, saveAsNewConfig, deleteConfig,
             loadConfig, clearLoadedConfig,
             TEMPLATES, selectedTemplateKey, loadingTemplate, loadSelectedTemplate,
+            ALL_CONFIGS_ID, selectAllConfigs, allConfigsTagCount,
         };
     },
 
@@ -553,13 +584,19 @@ const PlatformTagConfigEditor = {
             <i class="fa-solid fa-bookmark me-1"></i>Saved Configs
           </span>
         </div>
-        <div v-if="loadedConfigId" class="d-flex align-items-center gap-2 mb-2">
+        <div v-if="loadedConfigId === ALL_CONFIGS_ID" class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge rounded-pill px-2 py-1" style="background:#0d6efd22;color:#0d6efd;border:1px solid #0d6efd44;font-size:.72rem;">
+            <i class="fa-solid fa-layer-group me-1"></i>All Configs selected — ready to run below
+          </span>
+          <button @click="clearLoadedConfig" class="btn btn-xs btn-link text-muted p-0" style="font-size:.72rem;">clear</button>
+        </div>
+        <div v-else-if="loadedConfigId" class="d-flex align-items-center gap-2 mb-2">
           <span class="badge rounded-pill px-2 py-1" style="background:#6f42c122;color:#6f42c1;border:1px solid #6f42c144;font-size:.72rem;">
             <i class="fa-solid fa-bookmark me-1"></i>Editing loaded config
           </span>
           <button @click="clearLoadedConfig" class="btn btn-xs btn-link text-muted p-0" style="font-size:.72rem;">clear</button>
         </div>
-        <div class="input-group input-group-sm mb-2">
+        <div v-if="loadedConfigId !== ALL_CONFIGS_ID" class="input-group input-group-sm mb-2">
           <input type="text" class="form-control" v-model="configName" placeholder="Config name…"
                  @keyup.enter="loadedConfigId ? updateCurrentConfig() : saveCurrentConfig()">
           <button v-if="loadedConfigId" class="btn btn-outline-primary fw-semibold" @click="updateCurrentConfig" :disabled="saving" title="Overwrite existing config">
@@ -577,6 +614,39 @@ const PlatformTagConfigEditor = {
           <small>No saved configs yet.</small>
         </div>
         <div v-else class="d-flex flex-column gap-2" style="max-height:420px;overflow-y:auto;">
+
+          <!-- "Run All Configs" — first, highlighted, distinct from the
+               plain saved-config rows below: not a saved config itself,
+               it's every one of them combined live at run time (see
+               combine_all_platform_tag_patterns in field_parser_core.py),
+               so it can never go stale the way a manually re-saved
+               "combine everything" config would. -->
+          <div @click="selectAllConfigs" role="button"
+               class="d-flex align-items-center gap-2 rounded-3 p-2"
+               :class="{ 'border-primary': loadedConfigId === ALL_CONFIGS_ID }"
+               :style="{
+                 background: 'linear-gradient(135deg, #0d6efd14, #0d6efd08)',
+                 border: loadedConfigId === ALL_CONFIGS_ID ? '2px solid #0d6efd' : '1px solid #0d6efd55',
+                 cursor: 'pointer',
+               }">
+            <div class="d-flex align-items-center justify-content-center flex-shrink-0"
+                 style="width:32px;height:32px;border-radius:50%;background:#0d6efd;color:#fff;">
+              <i class="fa-solid fa-layer-group"></i>
+            </div>
+            <div class="flex-grow-1 min-w-0">
+              <div class="fw-bold small" style="color:#0d6efd;">
+                All Configs
+                <i v-if="loadedConfigId === ALL_CONFIGS_ID" class="fa-solid fa-circle-check ms-1" title="Active for the trigger below"></i>
+              </div>
+              <div style="color:var(--subtle-text-color);font-size:.7rem;">
+                [[ savedConfigs.length ]] config[[ savedConfigs.length === 1 ? '' : 's' ]] combined · [[ allConfigsTagCount ]] tag[[ allConfigsTagCount === 1 ? '' : 's' ]]
+              </div>
+            </div>
+            <span class="badge rounded-pill flex-shrink-0" style="background:#0d6efd;color:#fff;font-size:.68rem;">
+              <i class="fa-solid fa-play me-1"></i>Run all
+            </span>
+          </div>
+
           <div v-for="cfg in savedConfigs" :key="cfg.id"
                class="d-flex align-items-center gap-2 rounded-3 border p-2"
                :class="{ 'border-primary': loadedConfigId === cfg.id }"

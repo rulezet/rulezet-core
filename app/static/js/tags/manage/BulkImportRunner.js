@@ -29,6 +29,18 @@ export default {
         // External gate (e.g. "no valid config picked yet") — same idea as
         // the internal `running` disable, just driven by the parent instead.
         disabled:    { type: Boolean, default: false },
+        // The idle-state placeholder's "Click X to import every Y found on
+        // disk" text was written for the original taxonomy/galaxy-import
+        // use case and doesn't fit every consumer (e.g. platform tagging
+        // isn't importing anything from disk) — the title/description
+        // above it already carry a real, per-consumer recap. On by default
+        // so every existing caller keeps its current look.
+        showIdleHint: { type: Boolean, default: true },
+        // Off collapses the header to a single line: just the description
+        // (used as the whole recap sentence) next to the button — for a
+        // consumer that already decided everything worth saying belongs in
+        // one sentence, not a heading + a sentence under it.
+        showTitle:    { type: Boolean, default: true },
     },
     emits: ['notify', 'refresh-main'],
     setup(props, { emit }) {
@@ -137,15 +149,17 @@ export default {
   <div class="card-body p-4">
 
     <!-- Header -->
-    <div class="d-flex align-items-start justify-content-between mb-3 flex-wrap gap-3">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-3">
       <div>
-        <h6 class="fw-bold mb-1">
+        <h6 v-if="showTitle" class="fw-bold mb-1">
           <i :class="icon" class="me-2" :style="'color:' + accentColor"></i>[[ title ]]
         </h6>
-        <small class="text-muted">[[ description ]]</small>
+        <small class="text-muted">
+          <i v-if="!showTitle" :class="icon" class="me-1" :style="'color:' + accentColor"></i>[[ description ]]
+        </small>
       </div>
       <button @click="start" :disabled="running || disabled"
-              class="btn fw-semibold px-4 text-white"
+              class="btn fw-semibold px-4 text-white flex-shrink-0"
               :style="'background:' + accentColor + ';border-color:' + accentColor">
         <i class="fa-solid me-2" :class="running ? 'fa-spinner fa-spin' : 'fa-play'"></i>
         [[ running ? 'Running…' : buttonLabel ]]
@@ -175,7 +189,7 @@ export default {
     </template>
 
     <!-- Idle placeholder -->
-    <div v-else class="text-center py-3 text-muted">
+    <div v-else-if="showIdleHint" class="text-center py-3 text-muted">
       <i :class="icon" class="fa-2x mb-2 d-block opacity-25"></i>
       <small>Click <strong>[[ buttonLabel ]]</strong> to import every [[ itemNoun ]] found on disk — already-imported ones are skipped automatically.</small>
     </div>
