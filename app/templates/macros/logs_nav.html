@@ -1,0 +1,23 @@
+{#
+    Tab-style links between the three admin activity-log pages. Mirrors
+    detail_rule_nav.html's pattern (a macro for sub-page tabs). Emits just
+    the <a> items (no wrapping .dr-nav div) so a caller can put them in the
+    SAME row as anav.admin_nav_toggle() — see admin/connection_logs.html
+    and admin/api_logs.html, matching how admin/logs.html's own (hand-
+    written, since its "Activity Logs" entry is a Vue view-mode button, not
+    a plain link) row already keeps everything on one line.
+#}
+{% macro logs_nav_items(active) %}
+    <a href="/admin/logs" class="dr-nav__item {% if active == 'logs' %}active{% endif %}">
+        <i class="fa-solid fa-scroll"></i><span>Activity Logs</span>
+    </a>
+    <a href="/admin/logs/connections" class="dr-nav__item {% if active == 'connections' %}active{% endif %}">
+        <i class="fa-solid fa-right-to-bracket"></i><span>User Connections</span>
+    </a>
+    <a href="/admin/logs/api" class="dr-nav__item {% if active == 'api' %}active{% endif %}">
+        <i class="fa-solid fa-code"></i><span>API Activity</span>
+    </a>
+    <a href="/admin/logs/definitions" class="dr-nav__item {% if active == 'definitions' %}active{% endif %}">
+        <i class="fa-solid fa-icons"></i><span>Log Definitions</span>
+    </a>
+{% endmacro %}
