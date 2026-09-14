@@ -146,6 +146,20 @@ export default {
         // the false-positive validation quarantine review page only. No effect
         // on any other page that doesn't pass this prop.
         showValidationRisk: { type: Boolean,            default: false },
+        // Opt-in, page-local extension: when true, shows a small "relation"
+        // badge per row (card view: top-right badge row; table view: its
+        // own column) — used by the rule detail page's dedicated Linked
+        // Rules page to say *how* each row relates to the rule being
+        // viewed (e.g. "depends on" / "used by"), reusing this component's
+        // own card/table rendering instead of a bespoke list. No effect on
+        // any other page that doesn't pass this prop.
+        showRelationType:   { type: Boolean,            default: false },
+        // { [ruleId]: label } — the text shown by showRelationType's badge
+        // for that row. Supplied by the parent (it already resolved the
+        // relation rows and their direction-aware label — see
+        // detail_rule_linked_rules.html) since this component has no
+        // notion of rule-to-rule relations itself.
+        relationLabels:     { type: Object,             default: () => ({}) },
         // Turns on the native Risk-level + Binary rows inside this
         // component's OWN filter panel (right alongside Columns/Filters in
         // the toolbar) — the quarantine-review page's whole filter UI now
@@ -174,9 +188,25 @@ export default {
         // widgets that don't want to touch the page's own URL via syncUrl).
         initialSort:        { type: String,              default: '' },
         initialDir:         { type: String,              default: 'asc' },
+        // mode="select" only: seeds selectedIds/selectedRulesMap with rows a
+        // parent already has picked elsewhere (e.g. RelatedRuleInput opening
+        // this browser with rules already linked to the rule being edited),
+        // so those show pre-checked and in the "N selected" picked panel
+        // instead of being silently re-pickable as if they weren't chosen
+        // yet. Seeded once at setup — a caller that needs to update this
+        // after mount re-mounts the component (v-if toggle), same as every
+        // current consumer already does when reopening a picker.
+        preSelected:        { type: Array,                default: () => [] },
+        // mode="select" only: hides the toolbar's own "Confirm (N)" button —
+        // for a consumer that listens to the new 'toggle-select' emit and
+        // already commits each pick/unpick live, that button (and its
+        // "batch, then confirm" model) is redundant. Every other mode="select"
+        // consumer (Task Scheduler, Workspace "Add Rules", bulk admin tools)
+        // still gets it by default — they rely on the batch-then-confirm flow.
+        showConfirmButton:  { type: Boolean,             default: true },
     },
 
-    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'rule-drag-start', 'rule-drag-end', 'status-change'],
+    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'toggle-select', 'rule-drag-start', 'rule-drag-end', 'status-change'],
 
     // 'ruleType'/'onFilterChange' let a parent page drive the format filter
     // from outside (e.g. clicking a "12 YARA rules" stat elsewhere on the
@@ -303,7 +333,7 @@ export default {
                 </span>
 
                 <!-- Select-all / send (mode=select) -->
-                <button v-if="mode === 'select'"
+                <button v-if="mode === 'select' && showConfirmButton"
                         class="dt-toolbar-btn dt-toolbar-btn--primary"
                         :disabled="selectionCount === 0 || confirmDisabled"
                         @click="emitSend">
@@ -639,6 +669,10 @@ export default {
                     <span class="badge rounded-pill bg-dark pt-1 shadow-sm">
                         {{ rule.format ? rule.format.toUpperCase() : '?' }}
                     </span>
+                    <span v-if="showRelationType && relationLabels[rule.id]" class="badge rounded-pill shadow-sm pt-1"
+                          style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25);">
+                        <i class="fa-solid fa-diagram-project me-1"></i>{{ relationLabels[rule.id] }}
+                    </span>
                 </div>
 
                 <div class="card-body d-flex flex-column p-4" :style="{ zIndex: 1, paddingTop: isResolved(rule) ? '2.75rem' : '' }">
@@ -957,6 +991,7 @@ export default {
                             </div>
                         </th>
                         <th v-if="showTestResults" class="dt-th" style="width:150px;">Result</th>
+                        <th v-if="showRelationType" class="dt-th" style="width:170px;">Relation</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:130px;">Risk</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:180px;">Fired on</th>
                         <th v-show="colVisible.id" class="dt-th" style="width:90px;">ID</th>
@@ -1063,6 +1098,13 @@ export default {
                                         <template v-if="rule.test_result.execution_time_ms!=null"> · {{ rule.test_result.execution_time_ms }}ms</template>
                                     </span>
                                 </div>
+                            </td>
+
+                            <td v-if="showRelationType" class="dt-td">
+                                <span v-if="relationLabels[rule.id]" class="badge rounded-pill"
+                                      style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25); font-size:.68rem;">
+                                    <i class="fa-solid fa-diagram-project me-1"></i>{{ relationLabels[rule.id] }}
+                                </span>
                             </td>
 
                             <td v-if="showValidationRisk" class="dt-td">
@@ -1704,6 +1746,13 @@ export default {
         const showAllPicked     = ref(false)
         const allPagesSelected = ref(false)
 
+        for (const r of props.preSelected) {
+            if (r && r.id != null) {
+                selectedIds.add(r.id)
+                selectedRulesMap.set(r.id, { id: r.id, title: r.title, format: r.format })
+            }
+        }
+
         let searchTimer = null
 
         // ── Helpers ───────────────────────────────────────────────────────
@@ -2023,11 +2072,20 @@ export default {
             }
             if (selectedIds.has(rule.id)) { selectedIds.delete(rule.id); _mapDel(rule.id) }
             else                           { selectedIds.add(rule.id);    _mapAdd(rule) }
+            // Per-toggle signal, separate from the batch 'send' emitted by the
+            // Confirm button — lets a consumer that wants live add/remove
+            // (no "pick several then confirm" step) react immediately, e.g.
+            // RelatedRuleInput persisting each pick/unpick as it happens
+            // instead of only on an explicit confirm. Existing consumers
+            // that don't listen for this are unaffected.
+            emit('toggle-select', rule, selectedIds.has(rule.id))
         }
 
         function removeFromSelection(id) {
+            const rule = selectedRulesMap.get(id)
             selectedIds.delete(id)
             _mapDel(id)
+            if (rule) emit('toggle-select', rule, false)
         }
 
         // Resolved rows have no checkbox at all — "every"/"some" and the
@@ -2216,6 +2274,7 @@ export default {
             if (props.draggable) n++
             if (props.showStatus) n++
             if (props.showTestResults) n++
+            if (props.showRelationType) n++
             for (const col of TOGGLEABLE_COLS) if (colVisible[col.key]) n++
             return n
         })

@@ -131,6 +131,18 @@ def rule() -> render_template:
                 except Exception:
                     pass
 
+            r_data = request.form.get('related_rules')
+            if r_data:
+                try:
+                    from app.features.rule_relation.rule_relation_core import add_relation as _add_rel
+                    for entry in json.loads(r_data):
+                        target_id = entry.get('id')
+                        if target_id:
+                            _add_rel(new_rule.id, target_id, entry.get('relation_type') or 'references',
+                                      user_id=current_user.id, source='manual')
+                except Exception:
+                    pass
+
             flash('Rule added !', 'success')
             return redirect(url_for('rule.detail_rule', rule_id=new_rule.id))
         elif isinstance(message, str) and message.startswith("TRASH_CONFLICT:"):
@@ -914,14 +926,20 @@ def _rule_ai_analysis_count(rule_id):
     return q.count()
 
 
+def _rule_linked_rules_count(rule_id):
+    from app.features.rule_relation.rule_relation_core import count_relations_for_rule
+    return count_relations_for_rule(rule_id)
+
+
 def _nav_counts(rule_id):
     return {
-        'similarity_count':  _rule_similarity_count(rule_id),
-        'history_count':     _rule_history_count(rule_id),
-        'proposal_count':    _rule_proposal_count(rule_id),
-        'scope_count':       _rule_scope_count(rule_id),
-        'test_count':        _rule_test_count(rule_id),
-        'ai_analysis_count': _rule_ai_analysis_count(rule_id),
+        'similarity_count':    _rule_similarity_count(rule_id),
+        'history_count':       _rule_history_count(rule_id),
+        'proposal_count':      _rule_proposal_count(rule_id),
+        'scope_count':         _rule_scope_count(rule_id),
+        'test_count':          _rule_test_count(rule_id),
+        'ai_analysis_count':   _rule_ai_analysis_count(rule_id),
+        'linked_rules_count':  _rule_linked_rules_count(rule_id),
     }
 
 
@@ -1020,6 +1038,20 @@ def detail_rule_scope(rule_id):
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
     return render_template("rule/detail_rule/detail_rule_scope.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/linked_rules", methods=['GET'])
+def detail_rule_linked_rules(rule_id):
+    """Linked Rules sub-page for a rule — the curated/auto-detected
+    RuleRelation system (app/features/rule_relation/), NOT the same-
+    source/author 'Related Rules' panel that lives on the Overview tab."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_linked_rules.html", rule=rule,
                            **_nav_counts(rule.id))
 
 

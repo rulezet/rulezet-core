@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <style>
 .rf-label-hint {
     display: inline-flex;
@@ -252,6 +253,13 @@
               <attack-input v-model="selectedAttacks" label="ATT&CK Techniques"
                 csrf-token="{{ csrf_token() }}"></attack-input>
               <input type="hidden" name="attacks" :value="JSON.stringify(selectedAttacks)">
+            </div>
+          </div>
+          <div class="row mb-4">
+            <div class="col-12">
+              <related-rule-input v-model="selectedRelatedRules" label="Linked Rules"
+                csrf-token="{{ csrf_token() }}"></related-rule-input>
+              <input type="hidden" name="related_rules" :value="JSON.stringify(selectedRelatedRules)">
             </div>
           </div>
 
@@ -842,6 +850,7 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
       import TagInput from '/static/js/tags/tagInput.js';
       import VersionPicker from '/static/js/tags/utils/versionPicker.js';
       import AttackInput from '/static/js/attack/attackInput.js';
+      import RelatedRuleInput from '/static/js/rule_relation/relatedRuleInput.js';
       import LicenseInput from '/static/js/components/LicenseInput.js';
       import AIThinkingSteps from '/static/js/components/ai-thinking-steps.js';
 
@@ -855,6 +864,7 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
                   'tag-input': TagInput,
                   'version-picker': VersionPicker,
                   'attack-input': AttackInput,
+                  'related-rule-input': RelatedRuleInput,
                   'license-input': LicenseInput,
                   'ai-thinking-steps': AIThinkingSteps,
             },
@@ -1188,6 +1198,7 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
                   const detectedVulnerabilities = ref([]);
                   const selectedTags = ref([]);
                   const selectedAttacks = ref([]);
+                  const selectedRelatedRules = ref([]);
 
                   const formData = Vue.reactive({
                         version: window.__manual_version || '1.0',
@@ -1341,6 +1352,7 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
                         detectedVulnerabilities,
                         selectedTags,
                         selectedAttacks,
+                        selectedRelatedRules,
                         formData,
 
                         proposalMessage,
