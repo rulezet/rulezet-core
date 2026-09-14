@@ -160,6 +160,15 @@ export default {
         // detail_rule_linked_rules.html) since this component has no
         // notion of rule-to-rule relations itself.
         relationLabels:     { type: Object,             default: () => ({}) },
+        // Shows a "N linked" badge (card view: top-right badge row; table
+        // view: its own column) on any row whose rule.linked_rules_count is
+        // > 0 — that field is always present on every /rule/data_table row
+        // (see serialize_rules_for_data_table), this prop only controls
+        // whether it's rendered. Off by default (most RuleList consumers
+        // are a narrower context — a picker modal, a bundle's rule set —
+        // where this would just be noise); on for the main rules list and
+        // the GitHub import report's "Imported Rules" table.
+        showRelatedCount:   { type: Boolean,            default: false },
         // Turns on the native Risk-level + Binary rows inside this
         // component's OWN filter panel (right alongside Columns/Filters in
         // the toolbar) — the quarantine-review page's whole filter UI now
@@ -385,6 +394,12 @@ export default {
                            class="rl-fp-switch" title="Exact match">
                         <input type="checkbox" v-model="exactMatch" @change="onFilterChange" />
                         <span>Exact</span>
+                    </label>
+
+                    <label v-if="!isFilterHidden('has_relations')"
+                           class="rl-fp-switch" title="Only rules linked to at least one other rule">
+                        <input type="checkbox" v-model="hasRelationsOnly" @change="onFilterChange" />
+                        <span><i class="fa-solid fa-diagram-project me-1"></i>Linked rules</span>
                     </label>
 
                     <div class="rl-quality-range" v-if="!isFilterHidden('quality')" title="Filter by quality score">
@@ -673,6 +688,13 @@ export default {
                           style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25);">
                         <i class="fa-solid fa-diagram-project me-1"></i>{{ relationLabels[rule.id] }}
                     </span>
+                    <a v-if="showRelatedCount && rule.linked_rules_count > 0"
+                       :href="'/rule/detail_rule/' + rule.id + '/linked_rules'" @click.stop
+                       class="badge rounded-pill shadow-sm pt-1 text-decoration-none"
+                       style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25);"
+                       :title="rule.linked_rules_count + ' linked rule' + (rule.linked_rules_count === 1 ? '' : 's')">
+                        <i class="fa-solid fa-diagram-project me-1"></i>{{ rule.linked_rules_count }}
+                    </a>
                 </div>
 
                 <div class="card-body d-flex flex-column p-4" :style="{ zIndex: 1, paddingTop: isResolved(rule) ? '2.75rem' : '' }">
@@ -992,6 +1014,7 @@ export default {
                         </th>
                         <th v-if="showTestResults" class="dt-th" style="width:150px;">Result</th>
                         <th v-if="showRelationType" class="dt-th" style="width:170px;">Relation</th>
+                        <th v-if="showRelatedCount" class="dt-th" style="width:90px;">Linked</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:130px;">Risk</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:180px;">Fired on</th>
                         <th v-show="colVisible.id" class="dt-th" style="width:90px;">ID</th>
@@ -1105,6 +1128,15 @@ export default {
                                       style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25); font-size:.68rem;">
                                     <i class="fa-solid fa-diagram-project me-1"></i>{{ relationLabels[rule.id] }}
                                 </span>
+                            </td>
+
+                            <td v-if="showRelatedCount" class="dt-td">
+                                <a v-if="rule.linked_rules_count > 0"
+                                   :href="'/rule/detail_rule/' + rule.id + '/linked_rules'" @click.stop
+                                   class="badge rounded-pill text-decoration-none"
+                                   style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25); font-size:.68rem;">
+                                    <i class="fa-solid fa-diagram-project me-1"></i>{{ rule.linked_rules_count }}
+                                </a>
                             </td>
 
                             <td v-if="showValidationRisk" class="dt-td">
@@ -1613,6 +1645,7 @@ export default {
         const scopeMine        = ref(_p('scope') === 'mine')
         const cveOnly           = ref(props.hasCveOnly || _p('has_cve') === 'true')
         const aiAnalysisOnly    = ref(_p('has_ai_analysis') === 'true')
+        const hasRelationsOnly  = ref(_p('has_relations') === 'true')
         const _numOrNull = (key) => {
             const raw = _p(key)
             const n = raw !== '' ? Number(raw) : NaN
@@ -1814,6 +1847,7 @@ export default {
         const activeFilterCount = computed(() =>
             (!isFilterHidden('format') && ruleType.value ? 1 : 0) +
             (!isFilterHidden('exact_match') && exactMatch.value ? 1 : 0) +
+            (!isFilterHidden('has_relations') && hasRelationsOnly.value ? 1 : 0) +
             (!isFilterHidden('search_field') && searchField.value !== 'all' ? 1 : 0) +
             (scopeMine.value ? 1 : 0) +
             (isFilterHidden('tags') ? 0 : selectedTags.value.length) +
@@ -1861,6 +1895,7 @@ export default {
             }
             _upd('scope', scopeMine.value ? 'mine' : null)
             _upd('has_ai_analysis', aiAnalysisOnly.value ? 'true' : null)
+            _upd('has_relations', hasRelationsOnly.value ? 'true' : null)
             if (props.showValidationFilters) {
                 _upd('mismatch_only', riskFilter.value === 'mismatch' ? 'true' : null)
                 _upd('risk_level',    riskFilter.value !== 'mismatch' ? riskFilter.value || null : null)
@@ -1915,6 +1950,7 @@ export default {
                 if (selectedAttacks.value.length)    params.set('attacks', selectedAttacks.value.join(','))
                 if (cveOnly.value)                    params.set('has_cve', 'true')
                 if (aiAnalysisOnly.value)             params.set('has_ai_analysis', 'true')
+                if (hasRelationsOnly.value)            params.set('has_relations', 'true')
                 if (qualityMin.value !== null)        params.set('quality_score_min', qualityMin.value)
                 if (qualityMax.value !== null)        params.set('quality_score_max', qualityMax.value)
                 if (personFilter.value.values.length) {
@@ -1979,6 +2015,7 @@ export default {
             if (!isFilterHidden('format'))          ruleType.value       = ''
             if (!isFilterHidden('search_field'))    searchField.value    = 'all'
             if (!isFilterHidden('exact_match'))     exactMatch.value     = false
+            if (!isFilterHidden('has_relations'))   hasRelationsOnly.value = false
             scopeMine.value      = false
             if (!isFilterHidden('tags'))            selectedTags.value   = []
             if (!isFilterHidden('sources'))         selectedSources.value = []
@@ -2275,6 +2312,7 @@ export default {
             if (props.showStatus) n++
             if (props.showTestResults) n++
             if (props.showRelationType) n++
+            if (props.showRelatedCount) n++
             for (const col of TOGGLEABLE_COLS) if (colVisible[col.key]) n++
             return n
         })
@@ -2490,7 +2528,7 @@ export default {
             filtersOpen, ruleType, searchField, exactMatch, cardSort, qualityMin, qualityMax, onQualityRangeChange,
             selectedTags, selectedSources, selectedLicenses, selectedVulns, selectedAttacks,
             personFilter, onPersonFilterChange,
-            scopeMine, aiAnalysisOnly, MASCOT_ENABLED,
+            scopeMine, aiAnalysisOnly, hasRelationsOnly, MASCOT_ENABLED,
             rulesFormats, activeFilterCount,
             // UI
             viewMode, expandedIds,
