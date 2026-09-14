@@ -239,10 +239,11 @@ const RelatedRuleInput = {
                 </div>
             </rule-hover-preview>
             <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                <select class="form-select form-select-sm py-0" style="font-size:.72rem; width:auto;"
+                <select class="form-select form-select-sm py-0"
+                        style="font-size:.72rem; width:auto; background-color:var(--card-bg-color); color:var(--text-color); border-color:var(--border-color);"
                         :value="entry.relation_type" @change="changeRelationType(entry, $event.target.value)"
                         :disabled="saving === entry.id">
-                    <option v-for="rt in RELATION_TYPES" :key="rt.value" :value="rt.value">[[ rt.label ]]</option>
+                    <option v-for="rt in RELATION_TYPES" :key="rt.value" :value="rt.value" style="background-color:var(--card-bg-color); color:var(--text-color);">[[ rt.label ]]</option>
                 </select>
                 <button @click.stop="removeRule(entry)"
                         class="btn p-0 border-0 d-flex align-items-center"
