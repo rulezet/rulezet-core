@@ -92,6 +92,11 @@ export default {
                     pollTimer = null;
                     running.value = false;
                     emit('job-running-changed', false);
+                    // Job finished — drop it from the URL (parent clears
+                    // ?job=...) so a reload doesn't keep "resuming" a job
+                    // that's already over. The on-screen log/status stays,
+                    // only the URL tracking stops.
+                    emit('job-uuid-changed', null);
                     if (jobStatus.value === 'done') {
                         emit('notify', `${props.title} complete!`, 'success-subtle');
                         emit('refresh-main');
