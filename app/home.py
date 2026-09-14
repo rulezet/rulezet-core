@@ -75,8 +75,8 @@ def home() -> render_template:
     rule_formats  = RuleModel.get_all_rule_format()
 
     from app.features.blog import blog_core as BlogModel
-    latest_posts = BlogModel.get_posts_paginated(page=1, per_page=1, is_admin=False)
-    latest_blog_post = latest_posts.items[0].to_json() if latest_posts.items else None
+    latest_posts = BlogModel.get_posts_paginated(page=1, per_page=2, is_admin=False)
+    latest_blog_posts = [p.to_json() for p in latest_posts.items]
 
     return render_template("home.html",
         show_import_hint=show_import_hint,
@@ -84,7 +84,7 @@ def home() -> render_template:
         total_bundles=total_bundles,
         total_attacks=total_attacks,
         rule_formats=rule_formats,
-        latest_blog_post=latest_blog_post,
+        latest_blog_posts=latest_blog_posts,
     )
 
 @home_blueprint.route("/home_charts/<tab>")
