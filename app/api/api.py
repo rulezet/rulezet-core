@@ -190,7 +190,10 @@ _LOG_SKIP_PREFIXES = ("/api/sync/", "/api/instance/", "/api/log/", "/api/config/
 
 @api_blueprint.after_request
 def _log_api_request(response):
-    """Log every API call with its HTTP status and JSON payload."""
+    """Log every genuine API-key-authenticated call with its HTTP status
+    and JSON payload — see the api_user check below for why session-only
+    requests (the website itself calling one of its own /api/* routes) are
+    skipped entirely."""
     try:
         path   = freq.path
         method = freq.method
@@ -202,6 +205,29 @@ def _log_api_request(response):
             return response
         if path in ("/api/", "/api/swagger.json"):
             return response
+
+        # Several /api/* namespaces (comments, ...) are dual-purpose: the
+        # website's own frontend calls them directly over the logged-in
+        # session, with no API key at all, alongside genuine external API
+        # consumers presenting one. Only an X-API-KEY request is "API
+        # Activity" — a plain session hit is just the site using its own
+        # routes, and (where it matters) already gets its own properly
+        # categorized log_activity() call at the business-logic level (see
+        # e.g. comment_api.py's hard_delete). Logging it again here, always
+        # as category='api', made every such site action show up on the
+        # API Activity page as if an external API caller had done it.
+        user_id  = None
+        username = None
+        try:
+            from app.core.utils.utils import get_user_from_api
+            api_user = get_user_from_api(freq.headers)
+            if api_user:
+                user_id  = api_user.id
+                username = api_user.get_username()
+        except Exception:
+            pass
+        if not user_id:
+            return response  # no API key presented — this is just the site using its own route
 
         status_code = response.status_code
         level = "success" if status_code < 300 else ("warning" if status_code < 500 else "error")
@@ -221,26 +247,6 @@ def _log_api_request(response):
             resp_preview = response.get_data(as_text=True)[:500]
         except Exception:
             pass
-
-        # resolve actor: API key takes priority, then session user
-        user_id  = None
-        username = None
-        try:
-            from app.core.utils.utils import get_user_from_api
-            api_user = get_user_from_api(freq.headers)
-            if api_user:
-                user_id  = api_user.id
-                username = api_user.get_username()
-        except Exception:
-            pass
-        if not user_id:
-            try:
-                from flask_login import current_user
-                if current_user.is_authenticated:
-                    user_id  = current_user.id
-                    username = current_user.get_username()
-            except Exception:
-                pass
 
         # write audit entry — use a fresh session state to avoid dirty-session issues
         try:
