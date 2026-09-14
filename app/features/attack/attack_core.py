@@ -159,6 +159,15 @@ def add_technique_to_rule(rule_id: int, technique_id: str, user_id: int | None =
     db.session.add(assoc)
     db.session.commit()
     _refresh_rule_quality_score(rule_id)
+
+    # Only a manual mapping is a real curation contribution — auto-parsed
+    # associations (source='auto', no user_id) don't count.
+    if source == 'manual' and user_id:
+        from ..account import account_core as AccountModel
+        profile = AccountModel.get_or_create_gamification_profile(user_id)
+        if profile:
+            AccountModel.update_attack_mappings_gamification(profile.id, user_id)
+
     return assoc, 'created'
 
 

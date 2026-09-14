@@ -2235,7 +2235,10 @@ POINTS = {
     'rules_owned': 10,
     'rules_liked_or_disliked': 1,
     'consecutive_days_active': 1,
-    'rules_popular_score': 1
+    'rules_popular_score': 1,
+    'bundles_owned': 15,
+    'rule_tests_contributed': 1,
+    'attack_mappings_contributed': 5,
 }
 
 # if you have more than 15000 points you will be level 3...
@@ -2282,7 +2285,7 @@ class Gamification(db.Model):
     # ----------------------------------------------------
     rules_liked = db.Column(db.Integer, default=0, index=True)
     rules_disliked = db.Column(db.Integer, default=0)
-    
+
     # ----------------------------------------------------
     # 5. ACTIVITY / TIMING
     # ----------------------------------------------------
@@ -2290,7 +2293,14 @@ class Gamification(db.Model):
     consecutive_days_active = db.Column(db.Integer, default=0)
 
     # ----------------------------------------------------
-    # 6. RELATIONSHIP
+    # 6. NEWER FEATURES (Bundle, RuleTest, RuleAttackAssociation)
+    # ----------------------------------------------------
+    bundles_owned = db.Column(db.Integer, default=0)
+    rule_tests_contributed = db.Column(db.Integer, default=0)
+    attack_mappings_contributed = db.Column(db.Integer, default=0)
+
+    # ----------------------------------------------------
+    # 7. RELATIONSHIP
     # ----------------------------------------------------
 
     user = db.relationship('User', backref=db.backref('gamification_stats', uselist=False, cascade='all, delete-orphan'))
@@ -2312,6 +2322,9 @@ class Gamification(db.Model):
             "rules_disliked": self.rules_disliked,
             "last_contribution_date": self.last_contribution_date,
             "consecutive_days_active": self.consecutive_days_active,
+            "bundles_owned": self.bundles_owned,
+            "rule_tests_contributed": self.rule_tests_contributed,
+            "attack_mappings_contributed": self.attack_mappings_contributed,
             "global_rank": self.get_global_rank()
         }
     
@@ -2335,6 +2348,10 @@ class Gamification(db.Model):
         score += self.rules_owned * POINTS['rules_owned']
         score += self.rules_popular_score * POINTS['rules_popular_score']
         score += self.rules_liked * POINTS['rules_liked_or_disliked']
+        score += (self.consecutive_days_active or 0) * POINTS['consecutive_days_active']
+        score += (self.bundles_owned or 0) * POINTS['bundles_owned']
+        score += (self.rule_tests_contributed or 0) * POINTS['rule_tests_contributed']
+        score += (self.attack_mappings_contributed or 0) * POINTS['attack_mappings_contributed']
         return score
 
     def calculate_current_level(self, points):
@@ -2361,7 +2378,8 @@ def receive_before_flush(session, flush_context, instances):
     for instance in session.dirty:
         if isinstance(instance, Gamification):
             has_changed = False
-            for field in ['suggestions_accepted', 'rules_owned', 'rules_liked', 'rules_popular_score', 'consecutive_days_active']:
+            for field in ['suggestions_accepted', 'rules_owned', 'rules_liked', 'rules_popular_score', 'consecutive_days_active',
+                          'bundles_owned', 'rule_tests_contributed', 'attack_mappings_contributed']:
                 
                
                 history = attributes.instance_state(instance).get_history(field, passive=PASSIVE_NO_INITIALIZE)
@@ -2375,6 +2393,33 @@ def receive_before_flush(session, flush_context, instances):
                 instance.update_scores()
 
 event.listen(db.session, 'before_flush', receive_before_flush)
+
+
+class UserBadge(db.Model):
+    """One row per badge a user has actually unlocked. The badge catalog
+    itself (name/description/icon/unlock rule) lives in code, not the DB —
+    see app/features/account/badges.py — this table only records *events*
+    (who unlocked what, and when), which is what lets the UI show a
+    congratulations moment exactly once, the first time it becomes true,
+    instead of recomputing the same badge list fresh on every page load."""
+    __tablename__ = "user_badge"
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey("user.id", ondelete='CASCADE'), nullable=False, index=True)
+    badge_key  = db.Column(db.String(64), nullable=False)
+    unlocked_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    user = db.relationship('User', backref=db.backref('badges', cascade='all, delete-orphan'))
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'badge_key', name='uq_user_badge_user_key'),
+    )
+
+    def to_json(self):
+        return {
+            "badge_key": self.badge_key,
+            "unlocked_at": self.unlocked_at.strftime('%Y-%m-%d') if self.unlocked_at else None,
+        }
 
 #####################
 #   Similar Rule    #

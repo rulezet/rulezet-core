@@ -943,9 +943,8 @@ def apply_restricted_metadata_edit(rule_id, user_id, tags_input, vulnerabilities
 # Read
 
 def get_count_rules_by_user_id(user_id) -> int:
-    """Get the count of rules for a specific user"""
-    return Rule.query.filter(Rule.user_id == user_id).count(
-)
+    """Get the count of active (non soft-deleted) rules for a specific user"""
+    return _active().filter(Rule.user_id == user_id).count()
 
 
 

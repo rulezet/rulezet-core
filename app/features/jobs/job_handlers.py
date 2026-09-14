@@ -4479,3 +4479,75 @@ def handle_rule_git_mirror_sync(job, app):
             + (' (initial load).' if result['first_sync'] else '.')
         )
     log_job(job, message, level='success', event='done')
+
+
+# ─── Gamification recompute ─────────────────────────────────────────────────
+
+@register_handler('recompute_gamification')
+def handle_recompute_gamification(job, app):
+    """Bulk resync of every user's gamification profile — replaces the old
+    admin "Refresh" button's synchronous update_gamification_profiles(),
+    which looped every user with several unbatched queries each. Same
+    paginated/resumable/pausable shape as compute_rule_quality_score;
+    account_core.recompute_gamification_batch() does one GROUP BY query
+    per metric for the whole batch instead of per user — see its
+    docstring for why that matters at this instance's user-base scale."""
+    from app.features.account import account_core as AccountModel
+
+    offset = (job.payload or {}).get('_resume_offset', 0)
+
+    if job.total == 0:
+        job.total = User.query.count()
+        db.session.commit()
+        log_job(job, f"Job started — {job.total} user(s) to recompute.", level='info', event='started')
+    elif offset > 0:
+        log_job(job,
+            f"Resuming from offset {offset} ({offset}/{job.total} already processed, {job.progress_pct}% done)",
+            level='info', event='resumed')
+
+    if job.total == 0:
+        log_job(job, "No users to recompute — nothing to do.", level='warning', event='done')
+        return
+
+    batch_num = 0
+    recomputed = 0
+
+    while True:
+        if _is_cancelled(job):
+            log_job(job,
+                f"Job cancelled at offset {offset} ({job.progress_pct}% done — {recomputed} user(s) recomputed so far).",
+                level='warning', event='cancelled')
+            return
+
+        if _should_pause(job):
+            _save_offset(job, offset)
+            db.session.commit()
+            log_job(job,
+                f"Job paused at offset {offset} ({job.progress_pct}% done — {recomputed} user(s) recomputed so far). "
+                f"Click Resume to continue.",
+                level='info', event='paused')
+            return
+
+        batch_ids = [uid for (uid,) in
+                     db.session.query(User.id).order_by(User.id).offset(offset).limit(BATCH_SIZE).all()]
+        if not batch_ids:
+            break
+
+        try:
+            recomputed += AccountModel.recompute_gamification_batch(batch_ids)
+        except Exception as e:
+            log_job(job, f"Batch at offset {offset} failed: {e}", level='error', event='batch_error')
+            db.session.rollback()
+
+        offset    += len(batch_ids)
+        batch_num += 1
+        job.done   = offset
+        _save_offset(job, offset)
+        db.session.commit()
+
+        if batch_num % LOG_EVERY == 0:
+            log_job(job,
+                f"Progress: {job.done}/{job.total} users ({job.progress_pct}%) — {recomputed} recomputed so far.",
+                level='info', event='progress')
+
+    log_job(job, f"Gamification recompute complete — {recomputed} user(s) processed.", level='success', event='done')

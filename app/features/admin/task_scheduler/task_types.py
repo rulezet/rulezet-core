@@ -99,6 +99,12 @@ TASK_TYPES = {
         # with the feature turned off just fails fast with a clear message
         # (see rule_mirror_core.sync_mirror), it never syncs unexpectedly.
     },
+    'gamification_recompute': {
+        'label': 'Gamification — recompute all users',
+        'icon': 'fa-solid fa-star',
+        'job_type': 'recompute_gamification',
+        'target_picker': 'none',
+    },
     'ai_rule_analysis': {
         'label': 'AI Rule Analysis — generate reports',
         'icon': 'fa-solid fa-robot',

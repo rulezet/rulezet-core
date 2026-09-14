@@ -13,7 +13,8 @@ from flask_mail import Message
 from app import mail
 
 from ... import db
-from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, Connector, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleEditProposal, RuleFavoriteUser, RuleUpdateHistory, RuleVote, Tag, User, UserConfig
+from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, Connector, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleAttackAssociation, RuleEditProposal, RuleFavoriteUser, RuleTest, RuleUpdateHistory, RuleVote, Tag, User, UserBadge, UserConfig
+from .badges import BADGES
 from ...core.utils.utils import generate_api_key
 from ..rule import rule_core as RuleModel
 import uuid
@@ -558,7 +559,7 @@ def get_user_votes_summary(user_id: int) -> dict:
     r = db.session.query(
         func.coalesce(func.sum(Rule.vote_up), 0),
         func.coalesce(func.sum(Rule.vote_down), 0)
-    ).filter(Rule.user_id == user_id).one()
+    ).filter(Rule.user_id == user_id, Rule.is_deleted == False).one()
 
     b = db.session.query(
         func.coalesce(func.sum(Bundle.vote_up), 0),
@@ -880,39 +881,6 @@ def get_or_create_gamification_profile(user_id: int) -> Gamification:
         db.session.commit()
     return profile
 
-def update_rules_suggestion_gamification(gamification_id: int, user_id: int) -> None:
-    try:
-        if not gamification_id:
-            return False
-        if not user_id:
-            return False
-        gamification = get_gamification_by_id(gamification_id)
-        if not gamification:
-            return
-        
-        # found in RuleUpdateHistory table all the update accepted. Onlythe ruleHistorye from the user
-        rules_history = RuleEditProposal.query.filter_by(user_id=user_id).all()
-        if rules_history: # just update one time the value because in the good way we have the good value
-            suggestions_submitted = 0
-            suggestions_accepted = 0
-            suggestions_rejected = 0
-            for rule_history in rules_history:
-                if rule_history.status == "accepted":
-                    suggestions_accepted = suggestions_accepted + 1
-                elif rule_history.status == "rejected":
-                    suggestions_rejected = suggestions_rejected + 1
-                else:
-                    suggestions_submitted = suggestions_submitted + 1
-
-            gamification.suggestions_submitted = suggestions_submitted
-            gamification.suggestions_accepted = suggestions_accepted
-            gamification.suggestions_rejected = suggestions_rejected
-
-        db.session.commit()
-        return True
-    except Exception as e:
-        return False
-
 def get_gamification_by_id(gamification_id: int) -> Gamification:
     return Gamification.query.get(gamification_id)
 
@@ -1042,16 +1010,152 @@ def update_rules_owned_gamification(gamification_id , user_id) -> None:
         return True
    except Exception as e:
         return False
-   
 
+
+#-----------------------
+#  Contribution streak
+#-----------------------
+
+def _record_contribution(gamification: Gamification) -> None:
+    """Stamps last_contribution_date = now, and bumps consecutive_days_active
+    when the previous contribution was exactly yesterday (resets to 1 on a
+    gap of 2+ days or on the very first contribution ever; a repeat
+    contribution on the same day leaves the streak unchanged). Call this
+    from any function that just incremented a point-earning metric."""
+    now = datetime.datetime.now(timezone.utc).replace(tzinfo=None)
+    last = gamification.last_contribution_date
+    if last:
+        gap_days = (now.date() - last.date()).days
+        if gap_days == 1:
+            gamification.consecutive_days_active = (gamification.consecutive_days_active or 0) + 1
+        elif gap_days > 1:
+            gamification.consecutive_days_active = 1
+        # gap_days == 0 (already contributed today) -> streak unchanged
+    else:
+        gamification.consecutive_days_active = 1
+    gamification.last_contribution_date = now
+
+
+#-----------------------
+#  Bundles owned
+#-----------------------
+
+def update_bundles_owned_gamification(gamification_id, user_id) -> bool:
+    """Update the value for the bundles-owned section — mirrors
+    update_rules_owned_gamification's shape."""
+    try:
+        if not gamification_id or not user_id:
+            return False
+        gamification = get_gamification_by_id(gamification_id)
+        if not gamification:
+            return False
+
+        gamification.bundles_owned = Bundle.query.filter_by(user_id=user_id).count()
+        _record_contribution(gamification)
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
+
+
+#-----------------------
+#  Rule tests contributed
+#-----------------------
+
+def update_rule_tests_gamification(gamification_id, user_id) -> bool:
+    """Counts distinct calendar days the user ran at least one rule test —
+    not the raw test count, since a test is cheap/ungated and would
+    otherwise be trivial to spam for points."""
+    try:
+        if not gamification_id or not user_id:
+            return False
+        gamification = get_gamification_by_id(gamification_id)
+        if not gamification:
+            return False
+
+        distinct_days = (
+            db.session.query(func.count(func.distinct(func.date(RuleTest.created_at))))
+            .filter(RuleTest.user_id == user_id)
+            .scalar()
+        ) or 0
+        gamification.rule_tests_contributed = distinct_days
+        _record_contribution(gamification)
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
+
+
+#-----------------------
+#  ATT&CK mappings contributed
+#-----------------------
+
+def update_attack_mappings_gamification(gamification_id, user_id) -> bool:
+    """Only manual mappings count (source='manual') — auto-parsed
+    associations aren't a user contribution."""
+    try:
+        if not gamification_id or not user_id:
+            return False
+        gamification = get_gamification_by_id(gamification_id)
+        if not gamification:
+            return False
+
+        gamification.attack_mappings_contributed = (
+            RuleAttackAssociation.query
+            .filter(RuleAttackAssociation.user_id == user_id, RuleAttackAssociation.source == 'manual')
+            .count()
+        )
+        _record_contribution(gamification)
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
+
+
+#-----------------------
+#  Badges
+#-----------------------
+
+def evaluate_badges(gamification: Gamification) -> list:
+    """Checks the badge catalog against this profile, persists any newly
+    met one as a UserBadge row, and returns just the ones that were new
+    this run (empty most of the time) — that's what the caller uses to
+    trigger a one-time "you just unlocked X" moment instead of recomputing
+    the same badge list fresh on every page load."""
+    if not gamification:
+        return []
+
+    already = {
+        b.badge_key for b in UserBadge.query.filter_by(user_id=gamification.user_id).all()
+    }
+    newly_unlocked = []
+    for badge in BADGES:
+        if badge['key'] in already:
+            continue
+        try:
+            if badge['check'](gamification):
+                db.session.add(UserBadge(user_id=gamification.user_id, badge_key=badge['key']))
+                newly_unlocked.append(badge['key'])
+        except Exception:
+            continue
+
+    if newly_unlocked:
+        db.session.commit()
+    return newly_unlocked
 
 
 _LEADERBOARD_SORT_COLUMNS = {
-    'total_points':           Gamification.total_points,
-    'suggestions_accepted':   Gamification.suggestions_accepted,
-    'rules_owned':            Gamification.rules_owned,
-    'rules_popular_score':    Gamification.rules_popular_score,
-    'last_contribution_date': Gamification.last_contribution_date,
+    'total_points':                 Gamification.total_points,
+    'suggestions_accepted':         Gamification.suggestions_accepted,
+    'rules_owned':                  Gamification.rules_owned,
+    'rules_popular_score':          Gamification.rules_popular_score,
+    'last_contribution_date':       Gamification.last_contribution_date,
+    'bundles_owned':                Gamification.bundles_owned,
+    'rule_tests_contributed':       Gamification.rule_tests_contributed,
+    'attack_mappings_contributed':  Gamification.attack_mappings_contributed,
 }
 
 _ACTIVE_SINCE_DAYS = {'week': 7, 'month': 30, 'year': 365}
@@ -1110,6 +1214,9 @@ def get_leaderboard_paginated(page: int, per_page: int, sort_by: str = 'total_po
             "suggestions_accepted": stats.suggestions_accepted,
             "rules_owned": stats.rules_owned,
             "rules_popular_score": stats.rules_popular_score,
+            "bundles_owned": stats.bundles_owned,
+            "rule_tests_contributed": stats.rule_tests_contributed,
+            "attack_mappings_contributed": stats.attack_mappings_contributed,
             "last_contribution_date": (
                 stats.last_contribution_date.strftime('%Y-%m-%d') if stats.last_contribution_date else None
             ),
@@ -1124,91 +1231,148 @@ def get_leaderboard_paginated(page: int, per_page: int, sort_by: str = 'total_po
 
 def get_user_contributions_data(user_id: int) -> dict:
     """
-    Retrieves a single user's stats, excluding badges.
+    Retrieves a single user's stats plus their badges. `new_badges` lists
+    only badges unlocked by this very call (evaluate_badges persists as it
+    goes) — that's what the frontend uses to show a one-time "you just
+    unlocked X" moment instead of just re-showing the same badge list.
     """
     stats = Gamification.query.filter_by(user_id=user_id).first()
-    
+
     if not stats:
         return {"user_stats": None}
 
+    new_badges = evaluate_badges(stats)
+    unlocked = UserBadge.query.filter_by(user_id=user_id).all()
+
     return {
         "user_stats": stats.to_json(),
+        "badges": [b.to_json() for b in unlocked],
+        "new_badges": new_badges,
     }
 
-def refreshData(action):
-    """Recup all the user or just the user's stats"""
-    if action == "global":
-        # update data for the global leaderboard
-        error = 0
-        for user in User.query.all():
-            data = get_or_create_gamification_profile(user.id)
-            if not data:
-                error = error + 1
-        if error > 0:
-            return False
-        else:
-            return True
+def recompute_gamification_batch(user_ids: list) -> int:
+    """Authoritative resync of every count-based gamification metric for a
+    batch of users, using one GROUP BY query per metric across the whole
+    batch instead of ~6 unbatched queries PER user (what the old
+    update_gamification_profiles()/refreshData() did — looping User.query.all()
+    with a handful of single-user queries each is exactly the N+1 shape
+    that turned a full recompute into a multi-hour synchronous HTTP
+    request as the user base grew). Same reasoning as
+    compute_rule_quality_score's build_batch_context.
 
-    else:
-        # update data for the my contributions
-        data = get_or_create_gamification_profile(current_user.id)
-        if not data:
-            return False
-        return True
-    
-def update_liked_gamification(gamification_id , user_id) -> bool:
-    """See in RuleVote and in BundleVote all the like and dislike create by the user"""
-    try:
-        if not gamification_id:
-            return False
-        if not user_id:
-            return False
-        
-       # like and dislike for the user
-        dict = get_user_votes_summary(user_id)
-        if not dict:
-            return False
-        total_like = dict['total_upvotes']
-        total_dislike = dict['total_downvotes']
+    Does NOT touch last_contribution_date/consecutive_days_active — those
+    reflect real-time activity as it happens (see _record_contribution),
+    not a periodic resync; touching them here would wrongly bump/reset
+    everyone's streak just because this job ran.
 
-        # calcule of the popular score
-        popular_score = total_like  - total_dislike 
-        
-        if popular_score < 0:
-            popular_score = 0
-        gamification = get_gamification_by_id(gamification_id)
-        if not gamification:
-            return False
-        gamification.rules_popular_score = popular_score
-        db.session.commit()
+    Also runs evaluate_badges() per user against the resynced numbers —
+    still one query per user (checking already-unlocked badges), but that
+    alone is far cheaper than the per-user metric queries this replaces.
 
-        return True
-    except Exception as e:
-        return False
-    
-def update_gamification_profiles():
-    """Update the gamification profiles for all users"""
-    users = User.query.all()
-    for user in users:
-        # update the user with the reel value like If someone has already like or propose an edit
-        user_gamification = get_or_create_gamification_profile(user.id)
-        if user_gamification:
-            # found all the like oand dislike of an user in 
-            s = update_rules_owned_gamification(user_gamification.id, user.id)
-            if not s:
-                pass
-            # found RuleSuggestion
-            s_ = update_rules_suggestion_gamification(user_gamification.id, user.id)
-            if not s_:
-                pass    
-            s__ = update_liked_gamification(user_gamification.id, user.id)
-            if not s__:
-                pass
-            
-        else:
-            return False
+    Returns the number of profiles touched.
+    """
+    if not user_ids:
+        return 0
 
-    return True
+    rules_owned = dict(
+        db.session.query(Rule.user_id, func.count(Rule.id))
+        .filter(Rule.user_id.in_(user_ids), Rule.is_deleted == False)
+        .group_by(Rule.user_id).all()
+    )
+    bundles_owned = dict(
+        db.session.query(Bundle.user_id, func.count(Bundle.id))
+        .filter(Bundle.user_id.in_(user_ids))
+        .group_by(Bundle.user_id).all()
+    )
+    test_days = dict(
+        db.session.query(RuleTest.user_id, func.count(func.distinct(func.date(RuleTest.created_at))))
+        .filter(RuleTest.user_id.in_(user_ids))
+        .group_by(RuleTest.user_id).all()
+    )
+    attack_mappings = dict(
+        db.session.query(RuleAttackAssociation.user_id, func.count(RuleAttackAssociation.id))
+        .filter(RuleAttackAssociation.user_id.in_(user_ids), RuleAttackAssociation.source == 'manual')
+        .group_by(RuleAttackAssociation.user_id).all()
+    )
+
+    rule_vote_sums = {
+        uid: (up, down) for uid, up, down in
+        db.session.query(
+            Rule.user_id,
+            func.coalesce(func.sum(Rule.vote_up), 0),
+            func.coalesce(func.sum(Rule.vote_down), 0),
+        ).filter(Rule.user_id.in_(user_ids), Rule.is_deleted == False)
+        .group_by(Rule.user_id).all()
+    }
+    bundle_vote_sums = {
+        uid: (up, down) for uid, up, down in
+        db.session.query(
+            Bundle.user_id,
+            func.coalesce(func.sum(Bundle.vote_up), 0),
+            func.coalesce(func.sum(Bundle.vote_down), 0),
+        ).filter(Bundle.user_id.in_(user_ids))
+        .group_by(Bundle.user_id).all()
+    }
+
+    # rules_liked/rules_disliked = votes this user CAST on others' rules or
+    # bundles (see apply_vote_gamification) — not votes received (that's
+    # rules_popular_score, from the sums above).
+    cast_votes = {}
+    for uid, vote_type, cnt in (
+        db.session.query(RuleVote.user_id, RuleVote.vote_type, func.count(RuleVote.id))
+        .filter(RuleVote.user_id.in_(user_ids)).group_by(RuleVote.user_id, RuleVote.vote_type).all()
+    ) + (
+        db.session.query(BundleVote.user_id, BundleVote.vote_type, func.count(BundleVote.id))
+        .filter(BundleVote.user_id.in_(user_ids)).group_by(BundleVote.user_id, BundleVote.vote_type).all()
+    ):
+        bucket = cast_votes.setdefault(uid, {'up': 0, 'down': 0})
+        bucket[vote_type] = bucket.get(vote_type, 0) + cnt
+
+    proposal_counts = {}
+    for uid, status, cnt in (
+        db.session.query(RuleEditProposal.user_id, RuleEditProposal.status, func.count(RuleEditProposal.id))
+        .filter(RuleEditProposal.user_id.in_(user_ids))
+        .group_by(RuleEditProposal.user_id, RuleEditProposal.status).all()
+    ):
+        proposal_counts.setdefault(uid, {})[status] = cnt
+
+    existing_profiles = {g.user_id: g for g in Gamification.query.filter(Gamification.user_id.in_(user_ids)).all()}
+
+    touched = 0
+    for user_id in user_ids:
+        profile = existing_profiles.get(user_id)
+        if not profile:
+            profile = Gamification(user_id=user_id, uuid=str(uuid.uuid4()))
+            db.session.add(profile)
+
+        r_up, r_down = rule_vote_sums.get(user_id, (0, 0))
+        b_up, b_down = bundle_vote_sums.get(user_id, (0, 0))
+        popular_score = (r_up + b_up) - (r_down + b_down)
+
+        votes = cast_votes.get(user_id, {'up': 0, 'down': 0})
+        statuses = proposal_counts.get(user_id, {})
+
+        profile.rules_owned = rules_owned.get(user_id, 0)
+        profile.bundles_owned = bundles_owned.get(user_id, 0)
+        profile.rule_tests_contributed = test_days.get(user_id, 0)
+        profile.attack_mappings_contributed = attack_mappings.get(user_id, 0)
+        profile.rules_popular_score = max(0, popular_score)
+        profile.rules_liked = votes['up']
+        profile.rules_disliked = votes['down']
+        profile.suggestions_accepted = statuses.get('accepted', 0)
+        profile.suggestions_rejected = statuses.get('rejected', 0)
+        profile.suggestions_submitted = sum(c for s, c in statuses.items() if s not in ('accepted', 'rejected'))
+
+        touched += 1
+
+    db.session.commit()
+
+    for user_id in user_ids:
+        profile = existing_profiles.get(user_id) or Gamification.query.filter_by(user_id=user_id).first()
+        if profile:
+            evaluate_badges(profile)
+
+    return touched
 
 
 def get_total_users():

@@ -42,6 +42,9 @@ def create():
             log_activity("bundle.create", f"Created bundle '{my_bundle.name}'",
                          target_type="bundle", target_id=my_bundle.id, target_uuid=my_bundle.uuid,
                          is_public=bool(my_bundle.access))
+            profil_game_user = AccountModel.get_or_create_gamification_profile(current_user.id)
+            if profil_game_user:
+                AccountModel.update_bundles_owned_gamification(profil_game_user.id, current_user.id)
             flash('Bundle created !', 'success')
             return redirect(url_for("bundle.edit", bundle_id=my_bundle.id))
         else:

@@ -665,13 +665,59 @@ def remove_rule_favorite() -> jsonify:
 #####################
 @account_blueprint.route("/contributor")
 @login_required
-def contributor() -> str: 
+def contributor() -> str:
     """Contributor page"""
     return render_template("account/contributor.html")
 
 
+_POINT_SOURCE_COPY = {
+    'suggestions_accepted':        {'label': 'Suggestion Accepted',   'icon': 'fa-check-circle',    'description': 'An edit suggestion of yours gets approved.'},
+    'rules_owned':                 {'label': 'Rule Ownership',        'icon': 'fa-cloud-upload-alt', 'description': 'You author or import a rule (soft-deleted rules don\'t count).'},
+    'bundles_owned':                {'label': 'Bundle Published',      'icon': 'fa-layer-group',      'description': 'You publish a bundle.'},
+    'rule_tests_contributed':       {'label': 'Rule Testing',          'icon': 'fa-flask',            'description': 'You run at least one rule test on a given day (counted per day, not per test).'},
+    'attack_mappings_contributed':  {'label': 'ATT&CK Mapping',        'icon': 'fa-crosshairs',       'description': 'You manually map a rule to a MITRE ATT&CK technique.'},
+    'rules_popular_score':          {'label': 'Popular Score',         'icon': 'fa-star',             'description': 'Rules you own get upvoted by the community (net of downvotes).'},
+    'rules_liked_or_disliked':      {'label': 'Casting a Vote',        'icon': 'fa-thumbs-up',        'description': 'You upvote or downvote a rule or bundle.'},
+    'consecutive_days_active':      {'label': 'Daily Streak',          'icon': 'fa-fire-alt',         'description': 'You contribute something on consecutive days.'},
+}
+
+
+@account_blueprint.route("/how_to_earn_points")
+@login_required
+def how_to_earn_points() -> str:
+    """Explains every point source and the full badge catalog — reads
+    straight from POINTS (db.py) and BADGES (badges.py) so it can never
+    drift out of sync with the real values, unlike the old hand-duplicated
+    frontend copy this replaces."""
+    from ...core.db_class.db import POINTS, LEVEL_THRESHOLDS
+    from .badges import badges_catalog_json
+
+    point_sources = [
+        {**copy, 'key': key, 'points': POINTS[key]}
+        for key, copy in _POINT_SOURCE_COPY.items()
+    ]
+
+    return render_template(
+        "account/how_to_earn_points.html",
+        point_sources=point_sources,
+        level_thresholds=sorted(LEVEL_THRESHOLDS.items()),
+        badges=badges_catalog_json(),
+    )
+
+
+@account_blueprint.route("/badges_catalog")
+@login_required
+def badges_catalog():
+    """JSON badge catalog — used by UserContributionStatsComponent to show
+    the full set (locked + unlocked) instead of only whichever ones a user
+    has already earned. Same source as how_to_earn_points, just as JSON."""
+    from .badges import badges_catalog_json
+    return jsonify({"badges": badges_catalog_json()})
+
+
 _VALID_LEADERBOARD_SORTS = ['total_points', 'suggestions_accepted', 'rules_owned',
-                            'rules_popular_score', 'last_contribution_date']
+                            'rules_popular_score', 'last_contribution_date',
+                            'bundles_owned', 'rule_tests_contributed', 'attack_mappings_contributed']
 _VALID_ACTIVE_SINCE = ['week', 'month', 'year']
 
 
@@ -768,23 +814,27 @@ def get_user_contributions(user_id):
 @account_blueprint.route('/refresh', methods=['GET'])
 @login_required
 def refresh():
-    """Recup the my contributions"""
+    """Queue a full gamification recompute as a background job. Used to
+    run synchronously inside this request (looping every user with
+    several unbatched queries each) — see
+    job_handlers.handle_recompute_gamification /
+    account_core.recompute_gamification_batch for why that doesn't scale
+    and what replaced it."""
     if not current_user.is_admin():
         return jsonify({"message": "Admin access required", "success": False, "toast_class": "danger-subtle"}), 403
 
-    action = request.args.get('action')
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='recompute_gamification',
+        label='Gamification — recompute all users',
+        payload={},
+        created_by=current_user.id,
+    )
+    log_activity('admin.gamification_recompute_triggered', 'Triggered a full gamification recompute',
+                 target_type='job', target_id=job.id)
 
-    success = AccountModel.refreshData(action)
-    if not success:
-        return jsonify({"message": "Failed to refresh data", "success": False , "toast_class" : "danger-subtle"}), 500
-    
-    # update the user with the reel value like If someone has already like or propose an edit 
-    success_ = AccountModel.update_gamification_profiles()
-    if not success_:
-        return jsonify({"message": "Error to update the gameifcation section", "success": False , "toast_class" : "danger-subtle"}), 500
-
-
-    return jsonify({"message": "Data refreshed", "success": True , "toast_class" : "success-subtle"}), 200
+    return jsonify({"message": "Recompute job queued", "success": True, "toast_class": "success-subtle",
+                     "job_uuid": job.uuid}), 200
 
 # get_total_users
 @account_blueprint.route('/get_total_users', methods=['GET'])
