@@ -2,43 +2,43 @@
   "Platforms": [
     {
       "label": "Windows",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"Win32\"",
+      "tag_name": "misp-galaxy:operating-system=\"Windows\"",
       "regex": "\\bwindows\\b|\\bwin32\\b",
       "enabled": true
     },
     {
       "label": "Linux",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"Linux\"",
+      "tag_name": "misp-galaxy:operating-system=\"Linux\"",
       "regex": "\\blinux\\b",
       "enabled": true
     },
     {
       "label": "macOS",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"MacOS_X\"",
+      "tag_name": "misp-galaxy:operating-system=\"macOS\"",
       "regex": "\\bmac ?os( ?x)?\\b|\\bdarwin\\b",
       "enabled": true
     },
     {
       "label": "Android",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"AndroidOS\"",
+      "tag_name": "misp-galaxy:operating-system=\"Android\"",
       "regex": "\\bandroid\\b",
       "enabled": true
     },
     {
       "label": "Unix",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"Unix\"",
+      "tag_name": "misp-galaxy:operating-system=\"UNIX\"",
       "regex": "\\bunix\\b",
       "enabled": true
     },
     {
       "label": "FreeBSD",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"FreeBSD\"",
+      "tag_name": "misp-galaxy:operating-system=\"FreeBSD\"",
       "regex": "\\bfreebsd\\b",
       "enabled": true
     },
     {
       "label": "Solaris",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"Solaris\"",
+      "tag_name": "misp-galaxy:operating-system=\"Oracle Solaris\"",
       "regex": "\\bsolaris\\b",
       "enabled": true
     }
