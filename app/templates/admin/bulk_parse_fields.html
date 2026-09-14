@@ -109,6 +109,8 @@
                                     'blog-step--done': step.done,
                                     'blog-step--passed': platformCurrentStep > idx + 1,
                                 }"
+                                :disabled="platformJobRunning && idx + 1 !== 3"
+                                :style="(platformJobRunning && idx + 1 !== 3) ? 'opacity:.5;cursor:not-allowed;' : ''"
                                 @click="goToPlatformStep(idx + 1)">
                             <span class="blog-step-circle">
                                 <i v-if="step.done && platformCurrentStep !== idx + 1" class="fa-solid fa-check"></i>
@@ -205,13 +207,23 @@
                     item-noun="rule"
                     :payload="platformRunnerPayload"
                     :show-idle-hint="false"
+                    :resume-job-uuid="platformResumeJobUuid"
+                    @job-uuid-changed="onPlatformJobUuidChanged"
+                    @job-running-changed="platformJobRunning = $event"
                     @notify="notify">
                 </bulk-import-runner>
+                <div v-if="platformJobRunning" class="text-center mb-3">
+                    <small style="color:var(--subtle-text-color);font-size:.78rem;">
+                        <i class="fa-solid fa-lock me-1"></i>Job running — wait for it to finish before relaunching.
+                    </small>
+                </div>
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" @click="platformCurrentStep = 2">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4"
+                            :disabled="platformJobRunning" @click="platformCurrentStep = 2">
                         <i class="fa-solid fa-arrow-left me-2"></i>Back
                     </button>
                     <button class="btn btn-link btn-sm text-muted text-decoration-none px-0" type="button"
+                            :disabled="platformJobRunning"
                             data-bs-toggle="collapse" data-bs-target="#backupCollapse">
                         <i class="fa-solid fa-database me-1"></i>Backup database first
                         <i class="fa-solid fa-chevron-down ms-1" style="font-size:.65rem;"></i>
@@ -336,7 +348,13 @@ createApp({
             { key: 'rules',  label: 'Select Rules',           sub: platformPickerCollapsed.value ? platformScopeSummary.value : 'Choose which rules', done: platformPickerCollapsed.value },
             { key: 'launch', label: 'Launch',                 sub: 'Run the job', done: false },
         ]);
+        // Set by BulkImportRunner's 'job-running-changed' emit — while a
+        // job is actively running, step 1/2 are locked: must wait for it
+        // to finish before relaunching.
+        const platformJobRunning = ref(false);
+
         function goToPlatformStep(n) {
+            if (platformJobRunning.value && n !== 3) return;
             if (n === 2 && !selectedPlatformConfigId.value) return;
             if (n === 3 && !platformReadyToRun.value) return;
             platformCurrentStep.value = n;
@@ -344,11 +362,35 @@ createApp({
 
         // Real recap — the config actually loaded and the scope actually
         // confirmed above, so the card reads as "here's what pressing this
-        // button will do", not a generic label.
-        const platformRunnerDescription = computed(() =>
-            `Config "${selectedPlatformConfigName.value}" — ${platformScopeSummary.value}. ` +
-            `Already-tagged rules are skipped, safe to re-run.`
-        );
+        // button will do", not a generic label. Falls back to a generic
+        // line when landing straight on step 3 via a resumed job (see
+        // platformResumeJobUuid below) — this session never picked a
+        // config, the job itself already carries its own real details.
+        const platformRunnerDescription = computed(() => {
+            if (!selectedPlatformConfigId.value) return 'Resumed job — see progress below.';
+            return `Config "${selectedPlatformConfigName.value}" — ${platformScopeSummary.value}. ` +
+                   `Already-tagged rules are skipped, safe to re-run.`;
+        });
+
+        // ── Job <-> URL sync — the job uuid lives in ?job=... while (and
+        //    after) it runs, so reloading this page reconnects to it
+        //    instead of losing track of an in-progress job. A ?job= param
+        //    present on load also jumps straight to step 3 to show it.
+        const platformResumeJobUuid = ref(null);
+
+        function initPlatformJobFromUrl() {
+            const uuid = new URLSearchParams(window.location.search).get('job');
+            if (!uuid) return;
+            platformResumeJobUuid.value = uuid;
+            platformCurrentStep.value   = 3;
+        }
+
+        function onPlatformJobUuidChanged(uuid) {
+            const url = new URL(window.location.href);
+            if (uuid) url.searchParams.set('job', uuid);
+            else url.searchParams.delete('job');
+            history.replaceState(null, '', url);
+        }
 
         // ── Tab <-> URL sync — reload/share the page and land back on the
         //    same tab instead of always resetting to the default one. Plain
@@ -379,6 +421,7 @@ createApp({
         onMounted(() => {
             wireTabUrlSync();
             initTabFromUrl();
+            initPlatformJobFromUrl();
         });
 
         return {
@@ -388,6 +431,7 @@ createApp({
             platformSelectionMode, platformSelectedIds, platformFormatFilter, platformPickerCollapsed,
             onPlatformSend, platformScopeSummary, platformRunnerPayload,
             platformCurrentStep, platformSteps, goToPlatformStep,
+            platformResumeJobUuid, onPlatformJobUuidChanged, platformJobRunning,
         };
     }
 }).mount('#main-container');

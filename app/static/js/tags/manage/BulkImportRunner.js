@@ -8,7 +8,7 @@
 
 import AnsiTerminal from '/static/js/components/ansi-terminal.js';
 
-const { ref, computed, onUnmounted } = Vue;
+const { ref, computed, onMounted, onUnmounted } = Vue;
 
 export default {
     name: 'BulkImportRunner',
@@ -41,8 +41,14 @@ export default {
         // consumer that already decided everything worth saying belongs in
         // one sentence, not a heading + a sentence under it.
         showTitle:    { type: Boolean, default: true },
+        // If set when this component mounts, resumes watching that
+        // already-queued/running (or even finished) job instead of sitting
+        // idle waiting for the button to be clicked — lets a parent put the
+        // job uuid in the URL and reconnect to it across a page reload
+        // instead of losing track of an in-progress job.
+        resumeJobUuid: { type: String, default: null },
     },
-    emits: ['notify', 'refresh-main'],
+    emits: ['notify', 'refresh-main', 'job-uuid-changed', 'job-running-changed'],
     setup(props, { emit }) {
         const running    = ref(false);
         const jobUuid     = ref(null);
@@ -85,6 +91,7 @@ export default {
                     clearInterval(pollTimer);
                     pollTimer = null;
                     running.value = false;
+                    emit('job-running-changed', false);
                     if (jobStatus.value === 'done') {
                         emit('notify', `${props.title} complete!`, 'success-subtle');
                         emit('refresh-main');
@@ -93,6 +100,20 @@ export default {
             } catch (e) {
                 console.error('[BulkImportRunner] poll error:', e);
             }
+        }
+
+        // Shared by start() (a job just got created) and the resume-on-mount
+        // path (a job uuid arrived via props, e.g. from the URL) — begins
+        // polling and tells the parent which job this is now watching, so
+        // it can keep a URL param in sync across reloads.
+        function watchJob(uuid, initialStatus) {
+            jobUuid.value   = uuid;
+            jobStatus.value = initialStatus;
+            running.value   = true;
+            emit('job-uuid-changed', uuid);
+            emit('job-running-changed', true);
+            pollTimer = setInterval(pollLogs, 2000);
+            pollLogs();
         }
 
         async function start() {
@@ -125,16 +146,20 @@ export default {
                     return;
                 }
 
-                jobUuid.value   = data.job.uuid;
-                jobStatus.value = 'running';
-
-                pollTimer = setInterval(pollLogs, 2000);
-                pollLogs();
+                watchJob(data.job.uuid, 'running');
             } catch (e) {
                 emit('notify', 'Network error: ' + e, 'danger-subtle');
                 running.value = false;
             }
         }
+
+        onMounted(() => {
+            // pollLogs() corrects jobStatus/progress from the real job
+            // status on its very first tick, so 'running' here is just a
+            // reasonable placeholder until that lands (also covers an
+            // already-finished job fine — isDone flips true right after).
+            if (props.resumeJobUuid) watchJob(props.resumeJobUuid, 'running');
+        });
 
         onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
 
