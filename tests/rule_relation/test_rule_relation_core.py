@@ -176,3 +176,45 @@ def test_hard_delete_wipes_relations_via_wipe_rule_children(app):
         db.session.commit()
 
         assert RuleRelation.query.filter_by(uuid=relation_uuid).first() is None
+
+
+def test_sync_manual_relations_adds_removes_and_changes_type(app):
+    with app.app_context():
+        a, b, c = _make_rule('SyncA'), _make_rule('SyncB'), _make_rule('SyncC')
+        relation_core.add_relation(a.id, b.id, 'references')
+
+        # b -> depends_on (type change), c added, nothing removed since only b existed
+        relation_core.sync_manual_relations(a.id, [
+            {'id': b.id, 'relation_type': 'depends_on'},
+            {'id': c.id, 'relation_type': 'related'},
+        ])
+
+        rows = {r.target_rule_id: r.relation_type for r in RuleRelation.query.filter_by(source_rule_id=a.id, source='manual').all()}
+        assert rows == {b.id: 'depends_on', c.id: 'related'}
+
+        # Now drop everything
+        relation_core.sync_manual_relations(a.id, [])
+        assert RuleRelation.query.filter_by(source_rule_id=a.id, source='manual').count() == 0
+
+
+def test_sync_manual_relations_never_touches_auto_links(app):
+    with app.app_context():
+        a, b = _make_rule('SyncAutoA'), _make_rule('SyncAutoB')
+        relation_core.add_relation(a.id, b.id, 'if_sid', source='auto')
+
+        relation_core.sync_manual_relations(a.id, [])  # no manual links submitted
+
+        auto_row = RuleRelation.query.filter_by(source_rule_id=a.id, source='auto').first()
+        assert auto_row is not None
+        assert auto_row.target_rule_id == b.id
+
+
+def test_sync_manual_relations_accepts_json_string(app):
+    with app.app_context():
+        a, b = _make_rule('SyncJsonA'), _make_rule('SyncJsonB')
+        relation_core.sync_manual_relations(a.id, f'[{{"id": {b.id}, "relation_type": "variant_of"}}]')
+
+        row = RuleRelation.query.filter_by(source_rule_id=a.id, source='manual').first()
+        assert row is not None
+        assert row.target_rule_id == b.id
+        assert row.relation_type == 'variant_of'

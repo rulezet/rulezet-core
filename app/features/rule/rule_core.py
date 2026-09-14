@@ -875,6 +875,13 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
         except Exception as e:
             pass
 
+    if "related_rules" in form_dict:
+        try:
+            from app.features.rule_relation.rule_relation_core import sync_manual_relations
+            sync_manual_relations(rule.id, form_dict.get("related_rules"), user_id=current_user.id)
+        except Exception:
+            pass
+
     db.session.commit()
 
     try:
@@ -886,7 +893,7 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     return True, rule
 
 
-def apply_restricted_metadata_edit(rule_id, user_id, tags_input, vulnerabilities_input) -> Rule:
+def apply_restricted_metadata_edit(rule_id, user_id, tags_input, vulnerabilities_input, related_rules_input=None) -> Rule:
     """Update ONLY a rule's tags + CVE/vulnerability list — the counterpart
     to edit_rule_core's full-field update, used by the rule.tag_any-scoped
     branch of edit_rule() so a non-owner Tag Manager visiting that page can
@@ -936,6 +943,13 @@ def apply_restricted_metadata_edit(rule_id, user_id, tags_input, vulnerabilities
     rule.last_modif = datetime.datetime.now(tz=datetime.timezone.utc)
 
     db.session.commit()
+
+    if related_rules_input is not None:
+        try:
+            from app.features.rule_relation.rule_relation_core import sync_manual_relations
+            sync_manual_relations(rule.id, related_rules_input, user_id=user_id)
+        except Exception:
+            pass
 
     try:
         from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
@@ -3213,7 +3227,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          tags=None, editor_names=None, bundle_id=None, attacks=None,
                          status=None, workspace_uuid=None, exclude_workspace_uuid=None,
                          ids=None, has_cve=False, quality_score_min=None, quality_score_max=None,
-                         has_ai_analysis=False):
+                         has_ai_analysis=False, has_relations=False):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -3261,6 +3275,13 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
             AIGeneration.rule_id.isnot(None),
         ).distinct()
         query = query.filter(Rule.id.in_(analyzed_rule_ids))
+
+    if has_relations:
+        from app.core.db_class.db import RuleRelation
+        related_rule_ids = db.session.query(RuleRelation.source_rule_id).union(
+            db.session.query(RuleRelation.target_rule_id)
+        )
+        query = query.filter(Rule.id.in_(related_rule_ids))
 
     col = _DATA_TABLE_SORT_KEYS.get(sort)
     if col is not None:
@@ -3311,6 +3332,9 @@ def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
         ).all()
         votes_map = {v.rule_id: v.vote_type for v in rows}
 
+    from app.features.rule_relation.rule_relation_core import count_relations_for_rules_batch
+    relations_count_by_rule = count_relations_for_rules_batch(rule_ids)
+
     items = []
     for r in rules:
         d = r.to_json()
@@ -3322,6 +3346,7 @@ def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
             d['cves'] = []
         d['attacks'] = attacks_by_rule.get(r.id, [])
         d['user_vote'] = votes_map.get(r.id)
+        d['linked_rules_count'] = relations_count_by_rule.get(r.id, 0)
         items.append(d)
     return items
 

@@ -470,6 +470,7 @@ def edit_rule(rule_id) -> render_template:
                 rule_id, current_user.id,
                 request.form.get('tags'),
                 request.form.get('vulnerabilities'),
+                request.form.get('related_rules'),
             )
             RuleModel.add_contributor(current_user.id, rule_id)
 
@@ -569,6 +570,8 @@ def edit_rule(rule_id) -> render_template:
                 rule_dict['tags'] = json.loads(t_data) if t_data else []
             except json.JSONDecodeError:
                 rule_dict['tags'] = []
+
+            rule_dict['related_rules'] = request.form.get('related_rules')
 
             success , current_rule = RuleModel.edit_rule_core(rule_dict, rule_id)
             log_activity("rule.edit", f"Edited rule '{current_rule.title}' (id={rule_id})",
@@ -4510,6 +4513,7 @@ def rules_data_table():
         quality_score_min=request.args.get('quality_score_min', None, type=float),
         quality_score_max=request.args.get('quality_score_max', None, type=float),
         has_ai_analysis=request.args.get('has_ai_analysis', 'false', type=str) == 'true',
+        has_relations=request.args.get('has_relations', 'false', type=str) == 'true',
     )
 
     items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)

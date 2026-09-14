@@ -17,6 +17,9 @@ Key functions:
 """
 import uuid as uuid_mod
 import datetime
+import json
+
+from sqlalchemy import func
 
 from ... import db
 from ...core.db_class.db import Rule, RuleRelation, RULE_RELATION_TYPES
@@ -78,6 +81,49 @@ def add_relation(source_rule_id: int, target_rule_id: int, relation_type: str,
     return relation, 'created'
 
 
+def sync_manual_relations(rule_id: int, related_rules_input, user_id: int = None) -> None:
+    """Reconciles a rule's manual outgoing relations to match
+    related_rules_input exactly — one diff-and-apply, not one API call per
+    pick/unpick. Used by the edit-rule form's Save button: the Linked Rules
+    picker there only updates its own local modelValue while the user is
+    editing (same deferred pattern as Tags), so nothing is actually written
+    until this runs. Never touches source='auto' links (Wazuh if_sid, Kunai
+    rule() composition, ...) — those aren't part of this picker's domain.
+
+    related_rules_input is either a JSON string or an already-parsed list of
+    {id, relation_type} dicts (extra keys, e.g. title/format for display,
+    are ignored).
+    """
+    try:
+        data_list = json.loads(related_rules_input) if isinstance(related_rules_input, str) else (related_rules_input or [])
+    except (ValueError, TypeError):
+        data_list = []
+    if not isinstance(data_list, list):
+        data_list = []
+
+    new_related = {}
+    for r in data_list:
+        if isinstance(r, dict) and r.get('id'):
+            try:
+                new_related[int(r['id'])] = r.get('relation_type') or 'references'
+            except (TypeError, ValueError):
+                pass
+
+    current = RuleRelation.query.filter_by(source_rule_id=rule_id, source='manual').all()
+    current_by_target = {a.target_rule_id: a.relation_type for a in current}
+
+    # relation_type is part of the uniqueness key, not an in-place field —
+    # a type change is a remove + re-add, same as an outright unlink.
+    for assoc in current:
+        if new_related.get(assoc.target_rule_id) != assoc.relation_type:
+            db.session.delete(assoc)
+    db.session.commit()
+
+    for target_id, relation_type in new_related.items():
+        if current_by_target.get(target_id) != relation_type:
+            add_relation(rule_id, target_id, relation_type, user_id=user_id, source='manual')
+
+
 def remove_relation(relation_uuid: str) -> bool:
     relation = RuleRelation.query.filter_by(uuid=relation_uuid).first()
     if not relation:
@@ -132,6 +178,26 @@ def count_relations_for_rule(rule_id: int) -> int:
         RuleRelation.query.filter_by(source_rule_id=rule_id).count()
         + RuleRelation.query.filter_by(target_rule_id=rule_id).count()
     )
+
+
+def count_relations_for_rules_batch(rule_ids: list) -> dict:
+    """{rule_id: outgoing+incoming relation count} for every id in rule_ids —
+    two GROUP BY queries total, not one COUNT per rule. Same batching
+    pattern as get_tags_for_rules_batch/attacks_by_rule in
+    serialize_rules_for_data_table, which is what feeds this: RuleList's
+    optional 'N linked rules' badge (showRelatedCount)."""
+    if not rule_ids:
+        return {}
+    counts = {}
+    for rid, cnt in (db.session.query(RuleRelation.source_rule_id, func.count(RuleRelation.id))
+                      .filter(RuleRelation.source_rule_id.in_(rule_ids))
+                      .group_by(RuleRelation.source_rule_id).all()):
+        counts[rid] = counts.get(rid, 0) + cnt
+    for rid, cnt in (db.session.query(RuleRelation.target_rule_id, func.count(RuleRelation.id))
+                      .filter(RuleRelation.target_rule_id.in_(rule_ids))
+                      .group_by(RuleRelation.target_rule_id).all()):
+        counts[rid] = counts.get(rid, 0) + cnt
+    return counts
 
 
 def get_relations_page(rule_id: int, direction: str, page: int = 1, per_page: int = 20) -> dict:

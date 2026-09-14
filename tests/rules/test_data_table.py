@@ -87,6 +87,61 @@ def test_github_source_stats_requires_url(client):
     assert client.get('/rule/github_source_stats').status_code == 400
 
 
+def test_data_table_includes_linked_rules_count(app, client):
+    import datetime
+    from app import db
+    from app.core.db_class.db import Rule, User
+    from app.features.rule_relation.rule_relation_core import add_relation
+
+    with app.app_context():
+        editor = User.query.filter_by(email="t@t.t").first()
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        a = Rule(title='LinkedA', format='yara', to_string='rule LinkedA { condition: true }',
+                 is_deleted=False, vote_up=0, vote_down=0, user_id=editor.id,
+                 creation_date=now, last_modif=now)
+        b = Rule(title='LinkedB', format='yara', to_string='rule LinkedB { condition: true }',
+                 is_deleted=False, vote_up=0, vote_down=0, user_id=editor.id,
+                 creation_date=now, last_modif=now)
+        db.session.add_all([a, b])
+        db.session.commit()
+        add_relation(a.id, b.id, 'references')
+        a_id, b_id = a.id, b.id
+
+    data = client.get('/rule/data_table?per_page=100').get_json()
+    by_id = {r['id']: r for r in data['items']}
+    assert by_id[a_id]['linked_rules_count'] == 1
+    assert by_id[b_id]['linked_rules_count'] == 1
+    # The seeded fixture rule has no relation.
+    assert any(r['linked_rules_count'] == 0 for r in data['items'])
+
+
+def test_data_table_has_relations_filter(app, client):
+    import datetime
+    from app import db
+    from app.core.db_class.db import Rule, User
+    from app.features.rule_relation.rule_relation_core import add_relation
+
+    with app.app_context():
+        editor = User.query.filter_by(email="t@t.t").first()
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        a = Rule(title='FilterA', format='yara', to_string='rule FilterA { condition: true }',
+                 is_deleted=False, vote_up=0, vote_down=0, user_id=editor.id,
+                 creation_date=now, last_modif=now)
+        b = Rule(title='FilterB', format='yara', to_string='rule FilterB { condition: true }',
+                 is_deleted=False, vote_up=0, vote_down=0, user_id=editor.id,
+                 creation_date=now, last_modif=now)
+        db.session.add_all([a, b])
+        db.session.commit()
+        add_relation(a.id, b.id, 'references')
+        a_id, b_id = a.id, b.id
+
+    data = client.get('/rule/data_table?has_relations=true&per_page=100').get_json()
+    ids = {r['id'] for r in data['items']}
+    assert {a_id, b_id} <= ids
+    # The unrelated seeded fixture rule must not pass the filter.
+    assert not any(r['title'] == 'test' for r in data['items'])
+
+
 def test_github_source_stats_shape(client):
     data = client.get(
         '/rule/github_source_stats?url=https://github.com/x/y'
