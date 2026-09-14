@@ -2810,8 +2810,15 @@ def handle_bulk_tag_platforms(job, app):
     saved) since a referenced tag could have been deleted in the meantime —
     if that happened, the job stops immediately rather than silently running
     with a smaller pattern set than the admin configured.
+
+    config_id may also be the ALL_PLATFORM_CONFIGS sentinel ("Run All Saved
+    Configs") — every saved platform_tags config's patterns combined live,
+    deduped by tag_id, instead of one specific saved config.
     """
-    from app.features.rule.field_parser_core import get_config, validate_platform_tag_config, CONFIG_TYPE_PLATFORM_TAGS
+    from app.features.rule.field_parser_core import (
+        get_config, validate_platform_tag_config, combine_all_platform_tag_patterns,
+        CONFIG_TYPE_PLATFORM_TAGS, ALL_PLATFORM_CONFIGS,
+    )
 
     payload       = job.payload or {}
     rule_ids      = payload.get('rule_ids', 'ALL')
@@ -2827,17 +2834,22 @@ def handle_bulk_tag_platforms(job, app):
         db.session.commit()
         return
 
-    cfg = get_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
-    if not cfg:
-        log_job(job, f'Config #{config_id} not found (deleted?) — aborting.', level='error', event='error')
-        job.status = 'failed'
-        job.error  = 'Config not found'
-        db.session.commit()
-        return
+    if config_id == ALL_PLATFORM_CONFIGS:
+        cfg_label = 'all saved configs'
+        ok, error, resolved_patterns = combine_all_platform_tag_patterns()
+    else:
+        cfg = get_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
+        if not cfg:
+            log_job(job, f'Config #{config_id} not found (deleted?) — aborting.', level='error', event='error')
+            job.status = 'failed'
+            job.error  = 'Config not found'
+            db.session.commit()
+            return
+        cfg_label = f'"{cfg.name}"'
+        ok, error, resolved_patterns = validate_platform_tag_config(cfg.config)
 
-    ok, error, resolved_patterns = validate_platform_tag_config(cfg.config)
     if not ok:
-        log_job(job, f'Config "{cfg.name}" is no longer valid — aborting without changing anything: {error}',
+        log_job(job, f'Config {cfg_label} is no longer valid — aborting without changing anything: {error}',
                 level='error', event='error')
         job.status = 'failed'
         job.error  = error
@@ -2846,7 +2858,7 @@ def handle_bulk_tag_platforms(job, app):
 
     active_patterns = [p for p in resolved_patterns if p['enabled']]
     if not active_patterns:
-        log_job(job, f'Config "{cfg.name}" has no enabled patterns — nothing to do.',
+        log_job(job, f'Config {cfg_label} has no enabled patterns — nothing to do.',
                 level='warning', event='done')
         job.done = job.total or 0
         db.session.commit()
@@ -2873,7 +2885,7 @@ def handle_bulk_tag_platforms(job, app):
         job.total = q.count()
         db.session.commit()
         pattern_names = ', '.join(p['label'] for p, _ in compiled)
-        log_job(job, f'Starting — scanning {job.total} rule(s) using config "{cfg.name}" ({pattern_names}).',
+        log_job(job, f'Starting — scanning {job.total} rule(s) using config {cfg_label} ({pattern_names}).',
                 level='info', event='start')
     else:
         log_job(job, f'Resuming from offset {offset}.', level='info', event='resume')

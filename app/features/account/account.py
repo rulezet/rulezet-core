@@ -944,30 +944,45 @@ def bulk_parse_fields_trigger_platform_tags():
     if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         return jsonify({'success': False, 'message': 'Admin or Tag manager only'}), 403
     from app.features.jobs.jobs_core import create_job
-    from app.features.rule.field_parser_core import get_config, validate_platform_tag_config, CONFIG_TYPE_PLATFORM_TAGS
+    from app.features.rule.field_parser_core import (
+        get_config, validate_platform_tag_config, combine_all_platform_tag_patterns,
+        CONFIG_TYPE_PLATFORM_TAGS, ALL_PLATFORM_CONFIGS,
+    )
 
-    data      = request.get_json(force=True) or {}
-    config_id = data.get('config_id')
+    data          = request.get_json(force=True) or {}
+    config_id     = data.get('config_id')
+    rule_ids      = data.get('rule_ids', 'ALL')
+    format_filter = (data.get('format_filter') or '').strip() or None
     if not config_id:
         return jsonify({'success': False, 'message': 'config_id is required — save a platform-tag config first.'}), 400
+    if rule_ids != 'ALL' and not isinstance(rule_ids, list):
+        return jsonify({'success': False, 'message': 'rule_ids must be "ALL" or a list of rule ids.'}), 400
 
-    cfg = get_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
-    if not cfg:
-        return jsonify({'success': False, 'message': 'Platform-tag config not found.'}), 404
+    if config_id == ALL_PLATFORM_CONFIGS:
+        ok, error, resolved = combine_all_platform_tag_patterns()
+        if not ok:
+            return jsonify({'success': False, 'message': error}), 400
+        cfg_name = f'All saved configs — {len(resolved)} pattern(s) combined'
+    else:
+        cfg = get_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
+        if not cfg:
+            return jsonify({'success': False, 'message': 'Platform-tag config not found.'}), 404
 
-    ok, error, _resolved = validate_platform_tag_config(cfg.config)
-    if not ok:
-        return jsonify({'success': False, 'message': f'Config is invalid, not launching: {error}'}), 400
+        ok, error, _resolved = validate_platform_tag_config(cfg.config)
+        if not ok:
+            return jsonify({'success': False, 'message': f'Config is invalid, not launching: {error}'}), 400
+        cfg_name = cfg.name
 
+    scope_desc = f'{len(rule_ids)} selected rule(s)' if rule_ids != 'ALL' else (f'format={format_filter}' if format_filter else 'all rules')
     job = create_job(
         job_type='bulk_tag_platforms',
-        label=f'Detect & tag platforms ({cfg.name})',
-        payload={'rule_ids': 'ALL', 'format_filter': None, 'config_id': cfg.id},
+        label=f'Detect & tag platforms ({cfg_name}) — {scope_desc}',
+        payload={'rule_ids': rule_ids, 'format_filter': format_filter, 'config_id': config_id},
         created_by=current_user.id,
     )
     if not job:
         return jsonify({'success': False, 'message': 'Failed to create job'}), 500
-    log_activity('admin.bulk_tag_platforms', f'Triggered platform-tag detection for all rules using config "{cfg.name}"',
+    log_activity('admin.bulk_tag_platforms', f'Triggered platform-tag detection ({scope_desc}) using config "{cfg_name}"',
                  target_type='job', target_id=job.id, target_uuid=job.uuid)
     return jsonify({'success': True, 'job': job.to_json(), 'message': 'Platform tagging job queued!'})
 
