@@ -10,7 +10,7 @@ from flask import current_app
 
 from app import db
 
-from app.core.db_class.db import Rule, RuleStatus, UpdateResult, User, NewRule
+from app.core.db_class.db import Rule, RuleStatus, UpdateResult, User, NewRule, compute_rule_content_hash
 from app.features.rule import rule_core as RuleModel
 
 
@@ -848,7 +848,15 @@ def Check_for_rule_updates(rule_content, new_rule_content, rule_id):
 
     validation = rule_class.validate(new_rule_content)
 
-    if rule.to_string.strip() != validation.normalized_content.strip():
+    # A plain .strip() comparison flags a "change" on any whitespace/line-
+    # ending noise a re-exported/re-cloned source can introduce (CRLF vs LF,
+    # trailing blank lines, ...) even when the actual rule is byte-for-byte
+    # the same — at scale (a large source re-synced wholesale) this floods
+    # the pending-updates queue with thousands of no-op entries whose diff
+    # then shows no real content changed. Compare with the same normalized
+    # hash already used everywhere else in the app to decide "same content"
+    # (see compute_rule_content_hash / get_rule_by_content) instead.
+    if compute_rule_content_hash(rule.to_string) != compute_rule_content_hash(validation.normalized_content):
 
         # There is a change
         if validation.ok:

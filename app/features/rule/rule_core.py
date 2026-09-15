@@ -2786,6 +2786,104 @@ def get_old_rule_choice(page , search=None) -> list:
     return query.paginate(page=page, per_page=20, max_per_page=20)
 
 
+def _pending_updates_base_query(search=None, rule_format=None):
+    """Shared filter behind every "pending GitHub update" listing/bulk-action
+    below — same rule as get_old_rule_choice's base_filters, plus an optional
+    Rule.format join-filter for the Pending Updates page's format dropdown."""
+    base_filters = [
+        RuleUpdateHistory.message != "accepted",
+        RuleUpdateHistory.message != "rejected",
+        or_(
+            RuleUpdateHistory.change_type.is_(None),
+            RuleUpdateHistory.change_type.notin_(_NON_PENDING_CHANGE_TYPES),
+        ),
+    ]
+    if current_user.is_admin():
+        query = RuleUpdateHistory.query.filter(*base_filters)
+    else:
+        query = RuleUpdateHistory.query.filter(
+            *base_filters, RuleUpdateHistory.analyzed_by_user_id == current_user.id
+        )
+    if search:
+        query = query.filter(RuleUpdateHistory.rule_title.ilike(f"%{search}%"))
+    if rule_format:
+        query = query.join(Rule, Rule.id == RuleUpdateHistory.rule_id).filter(Rule.format == rule_format)
+    return query
+
+
+_PENDING_UPDATES_SORTABLE = {
+    'rule_title':   RuleUpdateHistory.rule_title,
+    'analyzed_at':  RuleUpdateHistory.analyzed_at,
+    'success':      RuleUpdateHistory.success,
+}
+
+
+def get_pending_updates_page(page: int = 1, per_page: int = 20, search: str = None,
+                              rule_format: str = None, sort: str = None, direction: str = None):
+    """Paginated feed for the Pending Updates page's DataTable (fetchUrl
+    contract: page/per_page/search/sort/dir -> {items, total, total_pages})."""
+    query = _pending_updates_base_query(search=search, rule_format=rule_format)
+    sort_col = _PENDING_UPDATES_SORTABLE.get(sort, RuleUpdateHistory.analyzed_at)
+    query = query.order_by(sort_col.desc() if direction != 'asc' else sort_col.asc())
+    return query.paginate(page=page, per_page=min(per_page or 20, 100), max_per_page=100)
+
+
+def get_pending_updates_ids(search: str = None, rule_format: str = None) -> list:
+    """Every id currently matching the Pending Updates filters — used to
+    resolve the DataTable's 'ALL' bulk-action sentinel (select all N items
+    matching the current filter, not just the current page)."""
+    return [row.id for row in _pending_updates_base_query(search=search, rule_format=rule_format)
+            .with_entities(RuleUpdateHistory.id).all()]
+
+
+def accept_update_history(history_id: int) -> tuple[bool, str]:
+    """Apply one pending update: writes history.new_content onto the live
+    rule and marks the history row 'accepted' — same logic the single-row
+    Accept button on the Pending Updates page already used, extracted here
+    so bulk/background-job callers share it instead of re-deriving it."""
+    history = RuleUpdateHistory.query.get(history_id)
+    if not history:
+        return False, 'Not found'
+    if history.message in ('accepted', 'rejected'):
+        return True, history.message
+
+    rule = get_rule(history.rule_id)
+    if not rule:
+        return False, 'Rule not found'
+
+    validation = verify_rule_syntaxe(rule, history.new_content)
+    if not validation or not validation.ok:
+        history.message = 'rejected'
+        db.session.commit()
+        return False, 'Invalid syntax'
+
+    rule.to_string = history.new_content
+    history.message = 'accepted'
+    db.session.commit()
+    return True, 'accepted'
+
+
+def reject_update_history(history_id: int) -> tuple[bool, str]:
+    history = RuleUpdateHistory.query.get(history_id)
+    if not history:
+        return False, 'Not found'
+    if history.message not in ('accepted', 'rejected'):
+        history.message = 'rejected'
+        db.session.commit()
+    return True, 'rejected'
+
+
+def delete_update_history(history_id: int) -> bool:
+    """Removes the pending-update entry itself (no accept/reject decision
+    recorded) — for the Delete bulk action, distinct from Reject."""
+    history = RuleUpdateHistory.query.get(history_id)
+    if not history:
+        return False
+    db.session.delete(history)
+    db.session.commit()
+    return True
+
+
 def get_update_pending():
     """Get all the schedules with pending updates for the current user"""
     return RuleUpdateHistory.query.filter(

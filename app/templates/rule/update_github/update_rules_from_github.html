@@ -1,7 +1,12 @@
 {% extends 'base.html' %}
-{% block title %}Update Rules — Rulezet{% endblock %}
-{% block content %}
+{% block title %}Pending Updates — Rulezet{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
+{% endblock %}
+
+{% block content %}
 <div class="container mt-4" id="main-container" v-cloak>
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-rotate banner-watermark"></i>
@@ -13,182 +18,194 @@
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon">
-                <i class="fa-solid fa-rotate"></i>
-            </div>
+            <div class="banner-icon"><i class="fa-solid fa-rotate"></i></div>
             <div>
                 <h2 class="fw-bold mb-1">Rules to be Updated</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
         <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-            Review and accept or reject pending rule updates detected from GitHub sources.
+            Review and accept, reject, or delete pending rule updates detected from GitHub sources.
         </p>
     </div>
 
-    <div class="card p-3">
-        <!-- Toolbar -->
-        <div class="d-flex align-items-center gap-3 mb-3">
-            <input v-model="searchQueryChanges" @input="fetchOldRules(1)" @keyup.enter="fetchOldRules(1)"
-                class="form-control" placeholder="Search pending updates…" style="max-width:360px;">
-            <span class="text-muted small ms-1" v-if="!loadingChanges">
-                [[ total_changes ]] result<span v-if="total_changes !== 1">s</span>
-            </span>
-            <div class="ms-auto">
-                <button v-if="old_choice.length > 0" class="btn btn-success btn-sm rounded-pill px-3"
-                    @click="acceptAll()">
-                    <i class="fas fa-check me-1"></i>Accept all
-                </button>
-            </div>
+    <!-- Job progress — shown while a large bulk action runs in the background -->
+    <div v-if="activeJobUuid" class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <job-tracker :job-uuid="activeJobUuid" @done="onJobDone" @failed="onJobDone"></job-tracker>
         </div>
+    </div>
 
-        <!-- Loading -->
-        <div v-if="loadingChanges" class="d-flex justify-content-center py-5">
-            <div class="spinner-border text-primary" role="status"></div>
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body p-3">
+            <data-table
+                ref="tableRef"
+                :fetch-url="fetchUrl"
+                mode="manage"
+                :columns="columns"
+                :bulk-actions="bulkActions"
+                :can-view="true"
+                :allow-card-view="false"
+                :initial-per-page="20"
+                initial-sort="analyzed_at"
+                initial-dir="desc"
+                @view="goToCompare"
+                @bulk-action="onBulkAction">
+
+                <template #toolbar-start>
+                    <select class="form-select form-select-sm" style="width:auto;max-width:180px;flex:0 0 auto;"
+                            v-model="selectedFormat" @change="onFormatChange">
+                        <option value="">All formats</option>
+                        <option v-for="fmt in formats" :key="fmt.name" :value="fmt.name">[[ fmt.name ]]</option>
+                    </select>
+                </template>
+
+                <template #cell-rule_format="{ value }">
+                    <span v-if="value" class="badge" style="background:#1a1a1a;color:#fff;text-transform:uppercase;letter-spacing:.03em;font-size:.68rem;">[[ value ]]</span>
+                    <span v-else class="badge bg-secondary">Unknown</span>
+                </template>
+
+                <template #cell-rule_title="{ item }">
+                    <a :href="'/rule/detail_rule/' + item.rule_id" class="text-primary fw-semibold text-decoration-none">
+                        [[ item.rule_title ]]
+                    </a>
+                </template>
+
+                <template #cell-success="{ item }">
+                    <span v-if="item.success && item.new_content" class="text-success fw-semibold">
+                        <i class="fas fa-check-circle me-1"></i>Update found
+                    </span>
+                    <span v-else class="text-danger fw-semibold">
+                        <i class="fas fa-times-circle me-1"></i>Failed
+                    </span>
+                </template>
+
+                <template #cell-analyzed_by_user_id="{ item }">
+                    <user-chip v-if="item.analyzed_by_user_id" :user-id="item.analyzed_by_user_id"
+                               :username="item.analyzed_by_user_name" :avatar="item.analyzed_by_avatar"
+                               size="xs" :show-name="true"></user-chip>
+                </template>
+
+                <template #cell-quick_actions="{ item }">
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-success rounded-pill px-2" title="Accept" @click="decisionRule(item, 'accept')">
+                            <i class="fa-solid fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger rounded-pill px-2" title="Reject" @click="decisionRule(item, 'reject')">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </template>
+
+            </data-table>
         </div>
-
-        <!-- Table -->
-        <div v-else-if="old_choice.length > 0" class="table-responsive">
-            <table class="table table-hover align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Format</th>
-                        <th>Rule</th>
-                        <th class="text-center">Status</th>
-                        <th>Message</th>
-                        <th class="text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="result in old_choice" :key="result.id">
-                        <td>
-                            <span v-if="result.rule_format" class="badge bg-primary">[[ result.rule_format ]]</span>
-                            <span v-else class="badge bg-secondary">Unknown</span>
-                        </td>
-                        <td>
-                            <a :href="`/rule/detail_rule/${result.rule_id}`" class="text-primary fw-semibold text-decoration-none">
-                                [[ result.rule_title ]]
-                            </a>
-                        </td>
-                        <td class="text-center">
-                            <span v-if="result.success && result.new_content" class="text-success fw-semibold">
-                                <i class="fas fa-check-circle me-1"></i>Update found
-                            </span>
-                            <span v-else class="text-danger fw-semibold">
-                                <i class="fas fa-times-circle me-1"></i>Failed
-                            </span>
-                        </td>
-                        <td class="text-muted small">[[ result.message ]]</td>
-                        <td>
-                            <div class="d-flex gap-1 justify-content-center">
-                                <a class="btn btn-sm btn-outline-primary"
-                                    :href="'/rule/update_github/choose_changes?id=' + result.id"
-                                    title="Compare changes">
-                                    <i class="fas fa-code-branch"></i>
-                                </a>
-                                <button class="btn btn-sm btn-success"
-                                    @click="decisionRule(result.id, 'accepted')" title="Accept">
-                                    <i class="fas fa-check"></i>
-                                </button>
-                                <button class="btn btn-sm btn-danger"
-                                    @click="decisionRule(result.id, 'rejected')" title="Reject">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Empty state -->
-        <div v-else class="text-center py-5">
-            <i class="fas fa-check-circle fa-3x text-success mb-3 d-block opacity-75"></i>
-            <h5 class="fw-bold mb-1">All up to date</h5>
-            <p class="text-muted small mb-0">No pending updates found.</p>
-        </div>
-
-        <!-- Pagination -->
-        <nav v-if="old_total_page > 1" class="mt-3" aria-label="Changes pagination">
-            <ul class="pagination justify-content-center mb-0">
-                <li class="page-item" :class="{ disabled: old_current_page === 1 }">
-                    <button class="page-link" @click="fetchOldRules(old_current_page - 1)">Previous</button>
-                </li>
-                <li v-for="page in visiblePages" :key="page" class="page-item"
-                    :class="{ active: page === old_current_page, disabled: page === '...' }">
-                    <button class="page-link" v-if="page !== '...'" @click="fetchOldRules(page)">[[ page ]]</button>
-                    <span class="page-link" v-else>…</span>
-                </li>
-                <li class="page-item" :class="{ disabled: old_current_page === old_total_page }">
-                    <button class="page-link" @click="fetchOldRules(old_current_page + 1)">Next</button>
-                </li>
-            </ul>
-        </nav>
     </div>
 </div>
-
 {% endblock %}
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed } = Vue
+    const { createApp, ref, computed, onMounted } = Vue
     import { create_message } from '/static/js/toaster.js'
+    import DataTable from '/static/js/components/table/data-table.js'
+    import UserChip from '/static/js/components/UserChip.js'
+    import JobTracker from '/static/js/jobs/JobTracker.js'
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { 'data-table': DataTable, 'user-chip': UserChip, 'job-tracker': JobTracker },
         setup() {
-            const csrf_token = '{{ csrf_token() }}'
+            const csrfToken = '{{ csrf_token() }}'
+            const tableRef = ref(null)
+            const activeJobUuid = ref(null)
 
-            const old_choice          = ref([])
-            const old_current_page    = ref(1)
-            const old_total_page      = ref(0)
-            const searchQueryChanges  = ref('')
-            const loadingChanges      = ref(true)
-            const total_changes       = ref(0)
+            const formats = ref([])
+            const selectedFormat = ref('')
 
-            async function fetchOldRules(page) {
-                loadingChanges.value = true
-                const params = new URLSearchParams({ page, search: searchQueryChanges.value || '' })
-                const res = await fetch('/rule/get_rule_changes?' + params.toString())
-                if (res.status === 200) {
-                    const data = await res.json()
-                    old_choice.value       = data.rule
-                    old_current_page.value = page
-                    old_total_page.value   = data.total_pages
-                    total_changes.value    = data.total_rules
-                    loadingChanges.value   = false
-                }
-            }
-            fetchOldRules(1)
-
-            const visiblePages = computed(() => {
-                const total = old_total_page.value, current = old_current_page.value, pages = []
-                if (total <= 7) for (let i = 1; i <= total; i++) pages.push(i)
-                else if (current <= 4) pages.push(1, 2, 3, 4, 5, '...', total)
-                else if (current >= total - 3) pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total)
-                else pages.push(1, '...', current - 1, current, current + 1, '...', total)
-                return pages
+            const fetchUrl = computed(() => {
+                const params = new URLSearchParams()
+                if (selectedFormat.value) params.set('format', selectedFormat.value)
+                const qs = params.toString()
+                return '/rule/get_rule_changes' + (qs ? '?' + qs : '')
             })
 
-            async function acceptAll() {
-                const res = await fetch('/rule/accept_all_changes')
-                const data = await res.json()
-                create_message(data.message, data.toast_class)
-                fetchOldRules(1)
+            const columns = [
+                { key: 'rule_format',        label: 'Format',   sortable: false, width: '110px' },
+                { key: 'rule_title',         label: 'Rule',     sortable: true },
+                { key: 'success',            label: 'Status',   sortable: false, width: '140px' },
+                { key: 'message',            label: 'Message',  sortable: false, truncate: true },
+                { key: 'analyzed_by_user_id', label: 'Analyzed By', sortable: false, width: '160px' },
+                { key: 'analyzed_at',        label: 'Analyzed At', sortable: true, width: '140px' },
+                { key: 'quick_actions',      label: 'Quick actions', sortable: false, width: '100px' },
+            ]
+
+            const bulkActions = [
+                { key: 'accept', label: 'Accept', icon: 'fa-check' },
+                { key: 'reject', label: 'Reject', icon: 'fa-times', variant: 'danger' },
+                { key: 'delete', label: 'Delete',  icon: 'fa-trash-can', variant: 'danger' },
+            ]
+
+            async function loadFormats() {
+                try {
+                    const res = await fetch('/rule/get_rules_formats')
+                    if (res.ok) {
+                        const data = await res.json()
+                        formats.value = data.formats || []
+                    }
+                } catch (e) { /* format filter is a nice-to-have, fail quiet */ }
             }
 
-            async function decisionRule(history_id, decision) {
-                const params = new URLSearchParams({ history_id, decision })
-                const res = await fetch('/rule/changes_decision?' + params.toString())
-                const data = await res.json()
-                create_message(data.message, data.toast_class)
-                fetchOldRules(1)
+            function onFormatChange() {
+                tableRef.value?.fetchData()
             }
+
+            function goToCompare(item) {
+                window.location.href = '/rule/update_github/choose_changes?id=' + item.id
+            }
+
+            async function runDecision(action, ids) {
+                const res = await fetch('/rule/update_github/bulk_decision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({
+                        action, ids,
+                        search: tableRef.value?.search || '',
+                        format: selectedFormat.value,
+                    }),
+                })
+                const data = await res.json().catch(() => ({}))
+                if (!data.success) {
+                    create_message(data.message || 'Request failed.', 'danger-subtle')
+                    return
+                }
+                if (data.job) {
+                    activeJobUuid.value = data.job.uuid
+                    create_message('Queued as a background job — tracking progress below.', 'info-subtle')
+                } else {
+                    create_message(data.message || 'Done.', 'success-subtle')
+                    tableRef.value?.fetchData()
+                }
+            }
+
+            function decisionRule(item, action) {
+                runDecision(action, [item.id])
+            }
+
+            function onBulkAction({ action, ids }) {
+                runDecision(action, ids)
+            }
+
+            function onJobDone() {
+                activeJobUuid.value = null
+                tableRef.value?.fetchData()
+            }
+
+            onMounted(loadFormats)
 
             return {
-                old_choice, old_current_page, old_total_page, visiblePages,
-                searchQueryChanges, loadingChanges, total_changes,
-                fetchOldRules, acceptAll, decisionRule,
+                tableRef, activeJobUuid, formats, selectedFormat, fetchUrl,
+                columns, bulkActions,
+                onFormatChange, goToCompare, decisionRule, onBulkAction, onJobDone,
             }
         }
     }).mount('#main-container')

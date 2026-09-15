@@ -3218,18 +3218,95 @@ def get_rules_page_history_():
 
 
 @rule_blueprint.route("/get_rule_changes", methods=['GET'])
-def get_rule_changes()-> render_template:
-    """Get the history of the rule"""
-    page = request.args.get('page', type=int)
-    search = request.args.get('search', type=str)
-    rules = RuleModel.get_old_rule_choice(page, search)
-    if rules:
-        return {"success": True,
-                "rule": [rule.to_json() for rule in rules],
-                "total_pages": rules.pages,
-                "total_rules": rules.total
-            }, 200
-    return {"message": "No Rule"}, 404
+@login_required
+def get_rule_changes() -> jsonify:
+    """Pending Updates page's DataTable fetchUrl — page/per_page/search/
+    sort/dir/format in, {items, total, total_pages} out."""
+    page       = request.args.get('page', 1, type=int)
+    per_page   = request.args.get('per_page', 20, type=int)
+    search     = request.args.get('search', '', type=str).strip() or None
+    sort       = request.args.get('sort', '', type=str).strip() or None
+    direction  = request.args.get('dir', 'desc', type=str)
+    rule_format = request.args.get('format', '', type=str).strip() or None
+
+    rules = RuleModel.get_pending_updates_page(
+        page=page, per_page=per_page, search=search, rule_format=rule_format,
+        sort=sort, direction=direction,
+    )
+    return jsonify({
+        "success": True,
+        "items": [r.to_json() for r in rules.items],
+        "total": rules.total,
+        "total_pages": rules.pages,
+    })
+
+
+# Above this count, a bulk decision (accept/reject/delete) runs as a
+# background job instead of inline in the request — large enough that an
+# inline loop could plausibly time out the request, small enough that most
+# everyday selections (a page, a search-narrowed batch) still get an
+# immediate result with no job/polling UI at all.
+_PENDING_UPDATES_BULK_JOB_THRESHOLD = 100
+
+
+@rule_blueprint.route("/update_github/bulk_decision", methods=['POST'])
+@login_required
+def bulk_pending_update_decision() -> jsonify:
+    """Bulk Accept/Reject/Delete for the Pending Updates page. `ids` is
+    either an explicit list of RuleUpdateHistory ids, or the string 'ALL'
+    meaning every entry currently matching search/format (DataTable's
+    "select all N items matching this filter" flow) — resolved server-side
+    against the same filters, never trusting a client-supplied count."""
+    data   = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip()
+    ids    = data.get('ids')
+    search = (data.get('search') or '').strip() or None
+    rule_format = (data.get('format') or '').strip() or None
+
+    if action not in ('accept', 'reject', 'delete'):
+        return jsonify({"success": False, "message": "Invalid action."}), 400
+
+    if ids == 'ALL':
+        ids = RuleModel.get_pending_updates_ids(search=search, rule_format=rule_format)
+    elif isinstance(ids, list):
+        ids = [int(i) for i in ids if str(i).isdigit()]
+    else:
+        return jsonify({"success": False, "message": "ids must be a list or 'ALL'."}), 400
+
+    if not ids:
+        return jsonify({"success": False, "message": "Nothing matched — no pending update(s) to update."}), 400
+
+    if len(ids) > _PENDING_UPDATES_BULK_JOB_THRESHOLD:
+        from app.features.jobs.jobs_core import create_job
+        job = create_job(
+            job_type='pending_update_history_bulk_decision',
+            payload={'action': action, 'ids': ids},
+            label=f"{action.capitalize()} {len(ids)} pending update(s)",
+            created_by=current_user.id,
+            total=len(ids),
+        )
+        if not job:
+            return jsonify({"success": False, "message": "Failed to queue job."}), 500
+        log_activity('rule.quick_meta', f"Queued bulk {action} of {len(ids)} pending update(s)",
+                     extra={"action": action, "count": len(ids)}, is_public=False)
+        return jsonify({"success": True, "job": job.to_json()})
+
+    action_fn = {
+        'accept': RuleModel.accept_update_history,
+        'reject': RuleModel.reject_update_history,
+        'delete': RuleModel.delete_update_history,
+    }[action]
+
+    done = 0
+    for history_id in ids:
+        ok = action_fn(history_id)
+        ok = ok[0] if isinstance(ok, tuple) else ok
+        if ok:
+            done += 1
+
+    log_activity('rule.quick_meta', f"Bulk {action} of {done}/{len(ids)} pending update(s)",
+                 extra={"action": action, "count": done}, is_public=False)
+    return jsonify({"success": True, "message": f"{done}/{len(ids)} {action}ed.", "done": done})
 
 
 

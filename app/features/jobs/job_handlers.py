@@ -2009,6 +2009,73 @@ def handle_bulk_update_decision(job, app):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  pending_update_history_bulk_decision — Accept/Reject/Delete on the Pending
+#  Updates page (RuleUpdateHistory rows), for a bulk action large enough that
+#  running it inline in the request would time out — see rule.py's
+#  bulk_pending_update_decision route for the inline-vs-job threshold.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('pending_update_history_bulk_decision')
+def handle_pending_update_history_bulk_decision(job, app):
+    try:
+        action = job.payload.get('action')  # 'accept' | 'reject' | 'delete'
+        ids    = job.payload.get('ids') or []
+
+        from app.features.rule.rule_core import (
+            accept_update_history, reject_update_history, delete_update_history,
+        )
+        action_fn = {
+            'accept': accept_update_history,
+            'reject': reject_update_history,
+            'delete': delete_update_history,
+        }.get(action)
+
+        job.total = max(len(ids), 1)
+        if not ids or not action_fn:
+            log_job(job, 'Nothing to do.', level='info', event='done')
+            job.status = 'done'
+            job.done = job.total
+            db.session.commit()
+            return
+
+        done_count = 0
+        for i, history_id in enumerate(ids):
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled at {job.done}/{job.total} ({job.progress_pct}% done).",
+                        level='warning', event='cancelled')
+                db.session.commit()
+                return
+            if _should_pause(job):
+                db.session.commit()
+                log_job(job, f"Paused at {job.done}/{job.total} ({job.progress_pct}% done). Click Resume to continue.",
+                        level='info', event='paused')
+                db.session.commit()
+                return
+
+            try:
+                ok = action_fn(history_id)
+                ok = ok[0] if isinstance(ok, tuple) else ok
+                if ok:
+                    done_count += 1
+            except Exception as e:
+                log_job(job, f'Entry {history_id}: {e}', level='warning', event='progress')
+
+            job.done = i + 1
+            if job.done % 25 == 0 or job.done == job.total:
+                log_job(job, f'{action.capitalize()}ed {job.done}/{job.total}…', level='info', event='progress')
+                db.session.commit()
+
+        job.status = 'done'
+        log_job(job, f'{done_count}/{job.total} entr{"y" if job.total == 1 else "ies"} {action}ed.',
+                level='success', event='done')
+    except Exception as e:
+        job.status = 'failed'
+        job.error  = str(e)
+        log_job(job, str(e), level='error', event='failed')
+    db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  bulk_new_rules_decision — add or reject all new rules found in a scan
 # ─────────────────────────────────────────────────────────────────────────────
 

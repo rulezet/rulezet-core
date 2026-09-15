@@ -1178,6 +1178,7 @@ class RuleUpdateHistory(db.Model):
             "analyzed_by_user_id": self.analyzed_by_user_id,
             "analyzed_at": self.analyzed_at.strftime('%Y-%m-%d %H:%M'),
             "analyzed_by_user_name": self.analyzed_by.first_name,
+            "analyzed_by_avatar": self.analyzed_by.get_avatar_url() if self.analyzed_by else None,
             "rule_format": self.get_rule_format(),
             "rule_source": self.get_rule_source(),
             "manuel_submit": self.manuel_submit if self.manuel_submit else False,
