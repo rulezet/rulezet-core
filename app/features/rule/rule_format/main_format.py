@@ -96,6 +96,25 @@ def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, f
                 else:
                     skipped += 1
             else:
+                # Before giving up on this rule: for YARA, an "undefined
+                # identifier" failure is often another rule in the same repo
+                # this one composes with (e.g. `condition: Macho and ...`)
+                # rather than a real syntax error — see
+                # try_resolve_yara_missing_dependency's docstring.
+                dep_status = 'no_match'
+                if format_name == 'yara':
+                    from app.features.rule.rule_format.available_format.yara_format import try_resolve_yara_missing_dependency
+                    dep_status, dep_new_rule = try_resolve_yara_missing_dependency(
+                        format_rule, rule_text, metadata, validation_result, user,
+                        source_repo_url=enriched_info.get('repo_url'),
+                    )
+                    if dep_status == 'created':
+                        imported += 1
+                        continue
+                    if dep_status == 'skipped':
+                        skipped += 1
+                        continue
+
                 BadRuleModel.save_invalid_rule(
                     form_dict=metadata,
                     to_string=rule_text,

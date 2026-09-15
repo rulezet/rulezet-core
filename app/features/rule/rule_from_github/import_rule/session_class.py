@@ -342,16 +342,37 @@ class Session_class:
                             self.count_per_format[rule_instance.format]["skipped"] += 1
                             self._log_event("skipped", rule_name, rule_instance.format)
                     else:
-                        BadRuleModel.save_invalid_rule(
-                            form_dict=metadata,
-                            to_string=clean_text,
-                            rule_type=rule_instance.format,
-                            error=validation.errors,
-                            user=local_user
-                        )
-                        self.bad_rules += 1
-                        self.count_per_format[rule_instance.format]["bad_rule"] += 1
-                        self._log_event("bad", rule_name, rule_instance.format)
+                        dep_status, dep_new_rule = ('no_match', None)
+                        if rule_instance.format == 'yara':
+                            from app.features.rule.rule_format.available_format.yara_format import try_resolve_yara_missing_dependency
+                            dep_status, dep_new_rule = try_resolve_yara_missing_dependency(
+                                rule_instance, clean_text, metadata, validation, local_user,
+                                source_repo_url=self.info.get('repo_url'), github_path=rel_path,
+                            )
+
+                        if dep_status == 'created':
+                            self.imported += 1
+                            self.count_per_format[rule_instance.format]["imported"] += 1
+                            self._log_event("imported", rule_name, rule_instance.format)
+                            try:
+                                self._resolve_relations(rule_instance, clean_text, metadata, dep_new_rule)
+                            except Exception:
+                                pass
+                        elif dep_status == 'skipped':
+                            self.skipped += 1
+                            self.count_per_format[rule_instance.format]["skipped"] += 1
+                            self._log_event("skipped", rule_name, rule_instance.format)
+                        else:
+                            BadRuleModel.save_invalid_rule(
+                                form_dict=metadata,
+                                to_string=clean_text,
+                                rule_type=rule_instance.format,
+                                error=validation.errors,
+                                user=local_user
+                            )
+                            self.bad_rules += 1
+                            self.count_per_format[rule_instance.format]["bad_rule"] += 1
+                            self._log_event("bad", rule_name, rule_instance.format)
 
                 self.jobs.task_done()
             except Exception:
