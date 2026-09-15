@@ -16,7 +16,7 @@ from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_s
 
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
-from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format
+from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
 from app import db
@@ -2809,6 +2809,33 @@ def _ai_fix_available_for(bad_rule) -> bool:
     return cfg.enabled if cfg else True
 
 
+def _suggested_dependency_for(bad_rule) -> dict | None:
+    """When a YARA bad rule's compile error is an undefined identifier that
+    isn't a builtin module/external (see YaraRule.validate's own auto-fix
+    loop), it's likely another rule's name — YARA's cross-rule condition
+    reference (e.g. `condition: Macho and ...`). Looks for a matching-titled
+    rule already on this instance so the edit page can offer to link them
+    and recompile together, instead of the user having to track it down
+    themselves."""
+    if (bad_rule.rule_type or '').lower() != 'yara' or not bad_rule.error_message:
+        return None
+    from app.features.rule.rule_format.available_format.yara_format import (
+        extract_undefined_identifier, find_missing_dependency_rule,
+    )
+    var_name = extract_undefined_identifier(bad_rule.error_message)
+    if not var_name:
+        return None
+    dep_rule = find_missing_dependency_rule(var_name, bad_rule)
+    if not dep_rule:
+        return None
+    return {
+        'var_name':    var_name,
+        'rule_id':     dep_rule.id,
+        'rule_uuid':   dep_rule.uuid,
+        'rule_title':  dep_rule.title,
+    }
+
+
 @rule_blueprint.route('/bad_rule/<int:rule_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_bad_rule(rule_id):
@@ -2840,11 +2867,66 @@ def edit_bad_rule(rule_id):
                     flash(f"Error: {error}", "danger")
                     bad_rule.error_message = error
                     return render_template('rule/edit_bad_rule.html', rule=bad_rule, new_content=new_content,
-                                           ai_fix_available=ai_fix_available)
+                                           ai_fix_available=ai_fix_available,
+                                           suggested_dependency=_suggested_dependency_for(bad_rule))
 
-            return render_template('rule/edit_bad_rule.html', rule=bad_rule, ai_fix_available=ai_fix_available)
+            return render_template('rule/edit_bad_rule.html', rule=bad_rule, ai_fix_available=ai_fix_available,
+                                   suggested_dependency=_suggested_dependency_for(bad_rule))
         return render_template("access_denied.html")
     return render_template('404.html')
+
+
+@rule_blueprint.route('/bad_rule/<int:rule_id>/link_dependency', methods=['POST'])
+@login_required
+def bad_rule_link_dependency(rule_id):
+    """Confirms a suggested cross-rule dependency (see
+    _suggested_dependency_for above): compiles the bad rule TOGETHER with
+    the target rule's own source to confirm the guess, and on success
+    imports the bad rule as-is plus records the dependency as a
+    RuleRelation('depends_on') — see import_bad_rule_with_dependency."""
+    bad_rule = BadRuleModel.get_invalid_rule_by_id(rule_id)
+    if not bad_rule:
+        return jsonify({"success": False, "error": "Not found."}), 404
+    if not (_is_github_manager() or current_user.id == bad_rule.user_id):
+        return jsonify({"success": False, "error": "Forbidden."}), 403
+    if (bad_rule.rule_type or '').lower() != 'yara':
+        return jsonify({"success": False, "error": "Only supported for YARA rules."}), 400
+
+    data = request.get_json(silent=True) or {}
+    target_rule_id = data.get('target_rule_id')
+    content = data.get('content') or bad_rule.raw_content
+    if not target_rule_id:
+        return jsonify({"success": False, "error": "target_rule_id required."}), 400
+
+    from app.core.db_class.db import Rule
+    target_rule = Rule.query.get(int(target_rule_id))
+    if not target_rule or target_rule.is_deleted:
+        return jsonify({"success": False, "error": "Target rule not found."}), 404
+
+    success, error, new_rule = import_bad_rule_with_dependency(bad_rule, content, target_rule, current_user)
+    if not success:
+        return jsonify({"success": False, "error": error}), 400
+
+    if error == "DUPLICATE_REDIRECT":
+        # An active/trashed rule already covers this exact content — the
+        # bad_rule entry is already gone (see import_bad_rule_with_dependency),
+        # so just point the caller at the real, already-existing rule instead
+        # of a dead-end error.
+        return jsonify({
+            "success": True,
+            "redirect": url_for('rule.detail_rule', rule_id=new_rule.id),
+            "message": f'This rule already exists: "{new_rule.title}".',
+        })
+
+    log_activity(
+        "rule.bad_rule_edited",
+        f"Fixed and imported invalid rule id={rule_id} as rule '{new_rule.title}' (id={new_rule.id}), "
+        f"linked to dependency rule '{target_rule.title}' (id={target_rule.id})",
+        target_type="rule", target_id=new_rule.id, target_uuid=new_rule.uuid,
+        extra={"bad_rule_id": rule_id, "dependency_rule_id": target_rule.id},
+        is_public=False,
+    )
+    return jsonify({"success": True, "redirect": url_for('rule.detail_rule', rule_id=new_rule.id)})
 
 
 @rule_blueprint.route('/bad_rule/<int:rule_id>/ai_fix', methods=['POST'])

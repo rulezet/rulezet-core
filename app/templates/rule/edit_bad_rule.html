@@ -38,6 +38,8 @@ window.__bad_rule_format  = {{ rule.rule_type | tojson }};
 window.__bad_rule_error   = {{ (rule.error_message or '') | tojson }};
 window.__bad_rule_ai_fix_url = {{ url_for('rule.bad_rule_ai_fix', rule_id=rule.id) | tojson }};
 window.__ai_fix_available = {{ ai_fix_available | default(false) | tojson }};
+window.__suggested_dependency = {{ suggested_dependency | default(none) | tojson }};
+window.__link_dependency_url = {{ url_for('rule.bad_rule_link_dependency', rule_id=rule.id) | tojson }};
 </script>
 
 <div id="edit-bad-rule-app">
@@ -92,6 +94,34 @@ window.__ai_fix_available = {{ ai_fix_available | default(false) | tojson }};
                     <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="proposedContent = ''">
                         <i class="fa-solid fa-xmark me-1"></i>Discard, I'll edit manually
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if suggested_dependency %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-3">
+                <div class="flex-shrink-0" style="width:40px;height:40px;border-radius:9px;background:rgba(13,110,253,.1);color:#0d6efd;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-link"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <p class="mb-2" style="font-size:.9rem;">
+                        This looks like it references another rule by name — YARA couldn't resolve
+                        <code>{{ suggested_dependency.var_name }}</code>, and
+                        <a href="{{ url_for('rule.detail_rule', rule_id=suggested_dependency.rule_id) }}" target="_blank">
+                            "{{ suggested_dependency.rule_title }}"</a> matches exactly.
+                        Link them and recompile together to confirm?
+                    </p>
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" :disabled="linkingDependency" @click="linkDependency">
+                        <i class="fa-solid" :class="linkingDependency ? 'fa-spinner fa-spin' : 'fa-link'"></i>
+                        [[ linkingDependency ? 'Recompiling…' : 'Link & recompile together' ]]
+                    </button>
+                    <div v-if="linkDependencyError" class="alert alert-danger py-2 px-3 mt-3 mb-0" style="font-size:.82rem;">
+                        <i class="fa-solid fa-circle-exclamation me-1"></i>[[ linkDependencyError ]]
+                    </div>
                 </div>
             </div>
         </div>
@@ -221,9 +251,38 @@ window.__ai_fix_available = {{ ai_fix_available | default(false) | tojson }};
                 create_message('Fix applied to the editor below — review it, then click Save to commit.', 'success-subtle');
             }
 
+            const linkingDependency   = ref(false);
+            const linkDependencyError = ref('');
+
+            async function linkDependency() {
+                const suggestion = window.__suggested_dependency;
+                if (!suggestion) return;
+                linkingDependency.value = true;
+                linkDependencyError.value = '';
+                try {
+                    const res = await fetch(window.__link_dependency_url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                        body: JSON.stringify({ target_rule_id: suggestion.rule_id, content: content.value }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (data.success) {
+                        create_message(data.message || 'Linked and imported successfully.', 'success-subtle');
+                        window.location.href = data.redirect;
+                    } else {
+                        linkDependencyError.value = data.error || `Request failed (${res.status}).`;
+                    }
+                } catch (e) {
+                    linkDependencyError.value = String(e);
+                } finally {
+                    linkingDependency.value = false;
+                }
+            }
+
             return {
                 content, language, errorMessage, fixing, steps, fixError,
                 proposedContent, proposedExplanation, tryAiFix, useProposedFix,
+                linkingDependency, linkDependencyError, linkDependency,
             };
         }
     }).mount('#edit-bad-rule-app');

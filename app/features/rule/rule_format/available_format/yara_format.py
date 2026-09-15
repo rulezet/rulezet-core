@@ -1,10 +1,11 @@
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import re
 import yara
-from app.features.rule.rule_core import get_rule
+from app.features.rule.rule_core import get_rule, _active
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult
 from app.core.utils.utils import detect_cve
+from app.core.db_class.db import Rule
 
 
 #################
@@ -56,12 +57,65 @@ def detect_global_rule_risk(content: str) -> dict:
             }
     return {'flagged': False, 'reasons': []}
 
+def extract_undefined_identifier(error_msg: str) -> Optional[str]:
+    """Pulls the identifier name out of a YARA 'undefined identifier "X"'
+    compile error, e.g. what validate() itself matches against YARA_MODULES/
+    ALLOWED_EXTERNALS above — used on the bad-rule edit page to go one step
+    further for the case validate() *can't* auto-fix: X isn't a builtin
+    module or external, it's another rule's name (YARA's cross-rule
+    condition reference, e.g. `condition: Macho and ...`)."""
+    match = re.search(r'undefined identifier "(\w+)"', error_msg or '')
+    return match.group(1) if match else None
+
+
+def find_missing_dependency_rule(var_name: str, bad_rule=None) -> Optional[Rule]:
+    """Given an identifier YARA couldn't resolve on its own, look for an
+    existing active YARA rule literally named var_name — the rule this one
+    is meant to compile alongside. Returns None for anything validate()
+    would already have auto-handled (a known module/external), since those
+    never reach this far as a standing error.
+
+    Multiple same-titled matches are disambiguated by preferring one from
+    the same source repo (bad_rule.url) or, more specifically, the same
+    github_path — the rule most likely to actually be the sibling this
+    particular bad rule was extracted next to.
+    """
+    if var_name in YaraRule.YARA_MODULES or var_name in YaraRule.ALLOWED_EXTERNALS:
+        return None
+
+    candidates = _active().filter(Rule.format == 'yara', Rule.title == var_name).all()
+    if not candidates:
+        candidates = _active().filter(
+            Rule.format == 'yara', Rule.title.ilike(var_name)
+        ).all()
+    if not candidates:
+        return None
+    if len(candidates) == 1 or bad_rule is None:
+        return candidates[0]
+
+    same_path = [c for c in candidates
+                 if getattr(bad_rule, 'github_path', None) and c.github_path == bad_rule.github_path]
+    if same_path:
+        return same_path[0]
+
+    same_source = [c for c in candidates
+                   if getattr(bad_rule, 'url', None) and c.source == bad_rule.url]
+    if same_source:
+        return same_source[0]
+
+    return candidates[0]
+
+
 class YaraRule(RuleType):
     @property
     def format(self) -> str:
         return "yara"
 
     YARA_MODULES = {"pe", "math", "cuckoo", "magic", "hash", "dotnet", "elf", "macho"}
+    ALLOWED_EXTERNALS = {
+        "filename", "filepath", "extension", "filetype",
+        "md5", "sha1", "sha256", "owner", "new_file"
+    }
 
     def get_class(self) -> str:
         return "YaraRule"
@@ -70,11 +124,8 @@ class YaraRule(RuleType):
     #   Abstract section  #
     # ---------------------#
     def validate(self, content: str, **kwargs) -> ValidationResult:
-            ALLOWED_EXTERNALS = {
-                "filename", "filepath", "extension", "filetype", 
-                "md5", "sha1", "sha256", "owner", "new_file"
-            }
-            
+            ALLOWED_EXTERNALS = self.ALLOWED_EXTERNALS
+
             externals = {}
             attempts = 0
             max_attempts = 10

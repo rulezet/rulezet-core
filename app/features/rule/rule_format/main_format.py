@@ -305,6 +305,81 @@ def process_and_import_fixed_rule(bad_rule_obj: InvalidRuleModel, raw_content: s
 
 
 
+def import_bad_rule_with_dependency(bad_rule_obj: InvalidRuleModel, raw_content: str, target_rule, user):
+    """Import a YARA bad rule whose only compile error is an undefined
+    identifier that turns out to be another rule's name — YARA's cross-
+    rule condition reference (e.g. `condition: Macho and ...`), not a
+    builtin module/external. Compiling the bad rule alone will always fail
+    in that case, so this confirms the guess by compiling it TOGETHER with
+    target_rule's own source; on success it imports the bad rule's own
+    content as-is (never the combined text — Rulezet stores one rule per
+    row) and records the dependency as a RuleRelation('depends_on') so
+    it's documented rather than silently dropped, same idea as the
+    Wazuh if_sid / Kunai correlation-hash auto-relations.
+
+    Returns (success, error_message, new_rule_or_None).
+    """
+    import yara
+    from app.features.rule.rule_format.available_format.yara_format import YaraRule
+    from app.features.rule_relation import rule_relation_core as RelationModel
+
+    combined_source = f"{target_rule.to_string or ''}\n\n{raw_content}"
+    try:
+        yara.compile(source=combined_source)
+    except yara.SyntaxError as e:
+        return False, f"Still doesn't compile together with '{target_rule.title}': {e}", None
+    except Exception as e:
+        return False, str(e), None
+
+    try:
+        info = {
+            "license": bad_rule_obj.license,
+            "author": getattr(user, "first_name", "Unknown"),
+            "repo_url": bad_rule_obj.url,
+        }
+        rule_instance = YaraRule()
+        # The combined-source compile above only confirms validity — the
+        # stored content is the bad rule's own text alone, so metadata is
+        # parsed from that, not the combined text.
+        validation_result = ValidationResult(ok=True, errors=[], warnings=[], normalized_content=raw_content)
+        metadata = rule_instance.parse_metadata(raw_content, info, validation_result)
+        metadata["github_path"] = bad_rule_obj.github_path
+
+        new_rule, message = RuleModel.add_rule_core(metadata, user)
+        if not new_rule:
+            msg_str = str(message)
+            if (msg_str.startswith("DUPLICATE:") or msg_str.startswith("UUID_DUPLICATE:")
+                    or msg_str.startswith("TRASH_CONFLICT")):
+                # An active (or trashed) rule already covers this content/uuid —
+                # not a real failure. Clean up the bad_rule entry either way and
+                # point the caller at the real, already-existing rule instead of
+                # surfacing a dead-end error.
+                db.session.delete(bad_rule_obj)
+                db.session.commit()
+                dup_id = msg_str.split(":", 3)[2] if msg_str.count(":") >= 2 else ''
+                existing_rule = Rule.query.get(int(dup_id)) if dup_id.isdigit() else None
+                if existing_rule:
+                    return True, "DUPLICATE_REDIRECT", existing_rule
+                return False, msg_str, None
+            if "already exists" in msg_str.lower():
+                db.session.delete(bad_rule_obj)
+                db.session.commit()
+            return False, msg_str or "Failed to insert rule.", None
+
+        db.session.delete(bad_rule_obj)
+        db.session.commit()
+
+        RelationModel.add_relation(
+            new_rule.id, target_rule.id, 'depends_on',
+            note=f'Compile-time dependency — YARA condition references "{target_rule.title}"',
+            user_id=user.id, source='manual',
+        )
+        return True, "", new_rule
+    except Exception as e:
+        db.session.rollback()
+        return False, str(e), None
+
+
 def parse_rule_by_format(rule_content: str, user: User, format_name: str, url_repo=None, github_path=None, license_override=None):
     """
     Parse a rule content based on its format.
