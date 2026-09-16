@@ -50,6 +50,8 @@ import re
 import uuid as uuid_mod
 import datetime
 
+from sqlalchemy.exc import IntegrityError
+
 from ... import db
 from ...core.db_class.db import Rule, GithubRepo
 
@@ -75,7 +77,7 @@ def _rule_has_cve(cve_id) -> bool:
 
 
 def _apply_repo_counts(url: str, count_delta: int, format_deltas: dict = None,
-                        license_deltas: dict = None, cve_delta: int = 0) -> None:
+                        license_deltas: dict = None, cve_delta: int = 0, _retry: bool = True) -> None:
     """Low-level: adjust rule_count, format_counts, license_counts and
     cve_count on one GithubRepo row in one read-modify-write. Creates the
     row on first positive count_delta; deletes it once rule_count would hit
@@ -84,8 +86,17 @@ def _apply_repo_counts(url: str, count_delta: int, format_deltas: dict = None,
 
     Not done as a single atomic SQL upsert (Postgres ON CONFLICT vs
     SQLite's own upsert would need dialect-branching) — a plain read-
-    modify-write is good enough here given rebuild_github_repos_from_rules()
-    exists as a correctness backstop for the rare concurrent-write race.
+    modify-write, with a retry-as-update on the unique-constraint race
+    below, is good enough here given rebuild_github_repos_from_rules()
+    exists as a correctness backstop for anything that still slips through.
+
+    The race this retries: two rules from the same brand-new GitHub source
+    get created around the same time (a bulk import is the common case) —
+    both read "no GithubRepo row for this url yet" before either commits,
+    both try to INSERT one, and the loser hits ix_github_repo_url's unique
+    constraint. Caught specifically (not a bare except) so a genuinely
+    unexpected DB error still surfaces instead of being silently retried
+    into a loop.
     """
     if not is_github_source(url):
         return
@@ -108,7 +119,10 @@ def _apply_repo_counts(url: str, count_delta: int, format_deltas: dict = None,
     new_count = (repo.rule_count or 0) + count_delta
     if new_count <= 0:
         db.session.delete(repo)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
         return
 
     repo.rule_count = new_count
@@ -133,7 +147,16 @@ def _apply_repo_counts(url: str, count_delta: int, format_deltas: dict = None,
 
     repo.cve_count = max(0, (repo.cve_count or 0) + cve_delta)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        if not _retry:
+            raise
+        # Someone else's commit for this same url landed between our SELECT
+        # and our commit — the row exists now, so retry once as a plain
+        # update instead of losing this delta.
+        _apply_repo_counts(url, count_delta, format_deltas, license_deltas, cve_delta, _retry=False)
 
 
 def apply_delta(url: str, delta: int, rule=None) -> None:

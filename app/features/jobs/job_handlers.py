@@ -641,7 +641,7 @@ def handle_delete_github_rules(job, app):
         from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
         apply_deltas_for_rule_ids(pre_ids, sign=-1, is_deleted=False)
     except Exception:
-        pass
+        db.session.rollback()
 
     # Soft-delete in one bulk update
     updated = Rule.query.filter(Rule.source.in_(urls), Rule.is_deleted == False).update(
@@ -1051,7 +1051,7 @@ def handle_trash_restore_bulk(job, app):
             from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
             apply_deltas_for_rule_ids(chunk, sign=+1, is_deleted=True)
         except Exception:
-            pass
+            db.session.rollback()
         Rule.query.filter(Rule.id.in_(chunk), Rule.is_deleted == True).update(
             {"is_deleted": False, "deleted_at": None, "deleted_by_id": None, "delete_batch_uuid": None},
             synchronize_session=False,
@@ -1512,11 +1512,16 @@ def handle_connector_pull(job, app):
                                             level='warning', event='progress')
                                 _import_rule_history_new(rule, item.get('update_history', []),
                                                          effective_user_id)
-                            try:
-                                from app.features.rule.github_repo_core import apply_deltas_for_new_rules
-                                apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
-                            except Exception:
-                                pass
+                            # Not wrapped in its own try/except: this whole
+                            # block is still inside the outer try that flushed
+                            # new_rules_pending above (not yet committed) — a
+                            # swallowed-but-uncaught failure here would leave
+                            # the session poisoned while still reporting
+                            # pg_created/rules_created as success. Let it
+                            # propagate to the outer except below, which
+                            # correctly rolls back and counts these as errors.
+                            from app.features.rule.github_repo_core import apply_deltas_for_new_rules
+                            apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
                             pg_created    = len(new_rules_pending)
                             rules_created += pg_created
                         except Exception as batch_exc:
@@ -1647,11 +1652,16 @@ def handle_connector_pull(job, app):
                                     _sync_cve_ids(rule, item.get('cve_ids', []))
                                     _import_rule_history_new(rule, item.get('update_history', []),
                                                              effective_user_id)
-                                try:
-                                    from app.features.rule.github_repo_core import apply_deltas_for_new_rules
-                                    apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
-                                except Exception:
-                                    pass
+                                # Not wrapped in its own try/except — same
+                                # reasoning as connector_pull above: this is
+                                # still inside the outer try that flushed
+                                # new_rules_pending (not yet committed), so a
+                                # swallowed failure here would leave the
+                                # session poisoned while still reporting
+                                # rules_created as success. Let it propagate
+                                # to the outer except below, which rolls back.
+                                from app.features.rule.github_repo_core import apply_deltas_for_new_rules
+                                apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
                                 rules_created += len(new_rules_pending)
 
                             db.session.commit()

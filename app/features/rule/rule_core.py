@@ -106,7 +106,7 @@ def soft_delete_rule(rule_id: int, user_id: int, batch_uuid: str = None) -> bool
         from app.features.rule.github_repo_core import apply_delta
         apply_delta(source, -1, rule=rule)
     except Exception:
-        pass
+        db.session.rollback()
     return True
 
 
@@ -121,7 +121,7 @@ def soft_delete_rule_list(rule_ids: list, user_id: int, batch_uuid: str = None) 
         from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
         apply_deltas_for_rule_ids(rule_ids, sign=-1, is_deleted=False)
     except Exception:
-        pass
+        db.session.rollback()
 
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     updated = Rule.query.filter(
@@ -178,7 +178,7 @@ def restore_rule(rule_id: int):
         from app.features.rule.github_repo_core import apply_delta
         apply_delta(rule.source, +1, rule=rule)
     except Exception:
-        pass
+        db.session.rollback()
     return True
 
 
@@ -190,7 +190,7 @@ def restore_rules_bulk(rule_ids: list) -> int:
         from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
         apply_deltas_for_rule_ids(rule_ids, sign=+1, is_deleted=True)
     except Exception:
-        pass
+        db.session.rollback()
 
     updated = Rule.query.filter(
         Rule.id.in_(rule_ids), Rule.is_deleted == True
@@ -213,7 +213,7 @@ def restore_batch(batch_uuid: str) -> int:
         ).all()]
         apply_deltas_for_rule_ids(batch_rule_ids, sign=+1, is_deleted=True)
     except Exception:
-        pass
+        db.session.rollback()
 
     updated = Rule.query.filter(
         Rule.delete_batch_uuid == batch_uuid, Rule.is_deleted == True
@@ -742,7 +742,11 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
             from app.features.rule.github_repo_core import apply_delta
             apply_delta(new_rule.source, +1, rule=new_rule)
         except Exception:
-            pass  # GithubRepo is a cache — never let a sync failure block rule creation
+            # GithubRepo is a cache — never let a sync failure block rule
+            # creation, but DO roll back: an uncaught IntegrityError here
+            # leaves the session unusable for the rest of the request
+            # (e.g. the notify_followers_new_rule call right after this).
+            db.session.rollback()
 
         # Record the creation itself as v1 of the version history + a visible
         # "Rule created" timeline entry — centralized here (not left to each
@@ -938,7 +942,7 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
         new_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id}
         sync_rule_edit(old_source, rule.source, old_snapshot, new_snapshot)
     except Exception:
-        pass
+        db.session.rollback()
 
     try:
         from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
@@ -4999,7 +5003,7 @@ def delete_similarity_history(uuid: str):
             from app.features.rule.github_repo_core import sync_conflict_counts
             sync_conflict_counts()
         except Exception:
-            pass
+            db.session.rollback()
         return True
     except Exception as e:
         db.session.rollback()
