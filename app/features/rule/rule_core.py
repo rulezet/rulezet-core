@@ -396,6 +396,7 @@ def _find_in_trash_by_content(content: str):
 # the submission at the source rather than let the corpus accumulate them.
 _CORPUS_IDENTIFIER_LABEL = {
     'suricata': 'Suricata SID',
+    'sagan': 'Sagan SID',
     'yara': 'YARA rule name',
     'wazuh': 'Wazuh rule ID',
 }
@@ -413,7 +414,7 @@ def _extract_corpus_identifier(rule_format: str, content: str) -> Optional[str]:
     """Extract the identifier that must be unique within its format's corpus."""
     fmt = (rule_format or '').lower()
     content = content or ''
-    if fmt == 'suricata':
+    if fmt in ('suricata', 'sagan'):
         m = re.search(r'\bsid\s*:\s*(\d+)', content, re.IGNORECASE)
         return m.group(1) if m else None
     if fmt == 'yara':
@@ -3625,6 +3626,52 @@ def replace_rule_format(old_format_name: str, new_format_name: str) -> int:
         rule.format = new_format_name
         count += 1
     db.session.commit()
+    return count
+
+
+def get_mistagged_suricata_rule_ids() -> list:
+    """Every active format='suricata' rule whose content actually shows
+    Sagan-specific evidence — issue #61 (see
+    docs/design/suricata_sagan_rework.md). Deferred import: rule_format's
+    modules import FROM rule_core (get_rule), so importing back at module
+    level here would be circular."""
+    from app.features.rule.rule_format.available_format._snort_family_common import looks_like_sagan
+
+    ids = []
+    for rule_id, content in (_active().filter(Rule.format == 'suricata')
+                              .with_entities(Rule.id, Rule.to_string).yield_per(500)):
+        if looks_like_sagan(content or ''):
+            ids.append(rule_id)
+    return ids
+
+
+def reclassify_mistagged_suricata_rules(rule_ids: list = None, on_progress=None, should_stop=None) -> int:
+    """Flips Rule.format from 'suricata' to 'sagan' for the given ids (or
+    every currently-mistagged rule when rule_ids is None) — through the ORM
+    so Rule.format's 'set' event listener (db.py) recomputes
+    corpus_identifier under its new format-scoped uniqueness bucket.
+    Requires 'sagan' to already be registered in _extract_corpus_identifier
+    above (it is) — doing this before that lands would silently null out
+    corpus_identifier on every affected row.
+
+    on_progress(n, rule) / should_stop() — same contract as
+    accept_all_update()/reject_all_update(), for a BackgroundJob caller to
+    report live progress and support pause/cancel.
+
+    Returns the number of rows actually updated.
+    """
+    ids = rule_ids if rule_ids is not None else get_mistagged_suricata_rule_ids()
+    count = 0
+    for i, rule_id in enumerate(ids):
+        if should_stop and should_stop():
+            break
+        rule = Rule.query.get(rule_id)
+        if rule and rule.format == 'suricata':
+            rule.format = 'sagan'
+            db.session.commit()
+            count += 1
+        if on_progress:
+            on_progress(i + 1, rule)
     return count
 
 

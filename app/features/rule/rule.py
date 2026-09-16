@@ -3478,6 +3478,113 @@ def get_last_cve_rules() -> dict:
 
     return {"success": True, "rules": serialized, "length": len(serialized)}, 200
 
+
+# ── One-time health check for issue #61 (docs/design/suricata_sagan_rework.md):
+# scans every format='suricata' rule through the tightened SuricataRule.
+# validate() and buckets it as ok / should-be-sagan / genuinely-broken, so an
+# admin can act on each bucket with one click instead of guessing. Temporary
+# admin tool — remove once the migration has been run on a given instance.
+@rule_blueprint.route("/admin/suricata_audit/run", methods=['POST'])
+@login_required
+def suricata_audit_run() -> jsonify:
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='audit_suricata_rules',
+        payload={},
+        label="Audit Suricata rules (issue #61)",
+        created_by=current_user.id,
+    )
+    if not job:
+        return jsonify({"success": False, "message": "Failed to queue job."}), 500
+
+    log_activity('admin.settings_changed', "Queued a Suricata rule audit (issue #61)", is_public=False)
+    return jsonify({"success": True, "job": job.to_json()})
+
+
+@rule_blueprint.route("/admin/suricata_audit/result/<string:job_uuid>", methods=['GET'])
+@login_required
+def suricata_audit_result(job_uuid) -> jsonify:
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    from app.core.db_class.db import BackgroundJob
+    job = BackgroundJob.query.filter_by(uuid=job_uuid, job_type='audit_suricata_rules').first()
+    if not job:
+        return jsonify({"success": False, "message": "Job not found."}), 404
+    if job.status != 'done':
+        return jsonify({"success": False, "message": f"Job is {job.status}, not done yet."}), 400
+
+    payload = job.payload or {}
+    sagan_ids  = payload.get('sagan_ids') or []
+    broken_ids = payload.get('broken_ids') or []
+    return jsonify({
+        "success": True,
+        "ok_count":     payload.get('ok_count', 0),
+        "sagan_ids":    sagan_ids,
+        "broken_ids":   broken_ids,
+        "sagan_count":  len(sagan_ids),
+        "broken_count": len(broken_ids),
+    })
+
+
+@rule_blueprint.route("/admin/suricata_audit/reclassify", methods=['POST'])
+@login_required
+def suricata_audit_reclassify() -> jsonify:
+    """Reclassify the audit's 'should be Sagan' bucket — same job as a
+    fresh get_mistagged_suricata_rule_ids() scan, just fed the already-
+    computed ids instead of re-scanning the whole corpus."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (data.get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({"success": False, "message": "Nothing to reclassify."}), 400
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='reclassify_suricata_to_sagan',
+        payload={'ids': ids},
+        label=f"Reclassify {len(ids)} Suricata rule(s) as Sagan",
+        created_by=current_user.id,
+        total=len(ids),
+    )
+    if not job:
+        return jsonify({"success": False, "message": "Failed to queue job."}), 500
+
+    log_activity('admin.settings_changed', f"Queued reclassification of {len(ids)} Suricata rule(s) as Sagan",
+                 extra={"count": len(ids)}, is_public=False)
+    return jsonify({"success": True, "job": job.to_json()})
+
+
+@rule_blueprint.route("/admin/suricata_audit/trash", methods=['POST'])
+@login_required
+def suricata_audit_trash() -> jsonify:
+    """Soft-deletes the audit's 'broken' bucket (moved to Trash, not hard-
+    deleted — reversible from /rule/trash like any other soft delete). A
+    single bulk SQL UPDATE (soft_delete_rule_list), so this runs inline —
+    no job needed even for a few hundred rows."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (data.get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({"success": False, "message": "Nothing to trash."}), 400
+
+    import uuid as _uuid
+    batch_uuid = str(_uuid.uuid4())
+    count = RuleModel.soft_delete_rule_list(ids, current_user.id, batch_uuid=batch_uuid)
+
+    log_activity('admin.settings_changed',
+                 f"Moved {count} broken Suricata rule(s) to trash (issue #61 audit)",
+                 extra={"count": count, "batch_uuid": batch_uuid}, is_public=False)
+    return jsonify({"success": True, "count": count})
+
+
 @rule_blueprint.route("/admin/manage_format_rule", methods=["GET", "POST"])
 @login_required
 def manage_format_rule() -> render_template:

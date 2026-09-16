@@ -2076,6 +2076,136 @@ def handle_pending_update_history_bulk_decision(job, app):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  audit_suricata_rules — one-time health check for issue #61
+#  (docs/design/suricata_sagan_rework.md): runs every active format=
+#  'suricata' rule through the (now-tightened) SuricataRule.validate() and
+#  buckets it as ok / should-be-sagan / genuinely-broken, so an admin can
+#  act on each bucket with one click afterwards (see suricata_sagan_reclassify
+#  and suricata_audit_act routes in rule.py) instead of guessing.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('audit_suricata_rules')
+def handle_audit_suricata_rules(job, app):
+    try:
+        from app.features.rule.rule_format.available_format.suricata_format import SuricataRule
+        from app.features.rule.rule_format.available_format._snort_family_common import looks_like_sagan
+
+        suricata = SuricataRule()
+        total = Rule.query.filter(Rule.format == 'suricata', Rule.is_deleted == False).count()
+        job.total = max(total, 1)
+        db.session.commit()
+
+        ok_count   = 0
+        sagan_ids  = []
+        broken_ids = []
+
+        query = (Rule.query
+                 .filter(Rule.format == 'suricata', Rule.is_deleted == False)
+                 .with_entities(Rule.id, Rule.to_string)
+                 .yield_per(500))
+
+        for i, (rule_id, content) in enumerate(query):
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled at {job.done}/{job.total} ({job.progress_pct}% done).",
+                        level='warning', event='cancelled')
+                db.session.commit()
+                return
+            if _should_pause(job):
+                db.session.commit()
+                log_job(job, f"Paused at {job.done}/{job.total} ({job.progress_pct}% done). Click Resume to continue.",
+                        level='info', event='paused')
+                db.session.commit()
+                return
+
+            result = suricata.validate(content or '')
+            if result.ok:
+                ok_count += 1
+            elif looks_like_sagan(content or ''):
+                sagan_ids.append(rule_id)
+            else:
+                broken_ids.append(rule_id)
+
+            job.done = i + 1
+            if job.done % 1000 == 0 or job.done == job.total:
+                log_job(job, f'Audited {job.done}/{job.total}… {ok_count} ok, '
+                             f'{len(sagan_ids)} look like Sagan, {len(broken_ids)} broken so far.',
+                        level='info', event='progress')
+                db.session.commit()
+
+        # payload is a plain JSON column (not MutableDict) — reassign the
+        # whole dict rather than mutate in place, or SQLAlchemy won't see
+        # the change and this commit silently persists nothing new.
+        job.payload = {**(job.payload or {}), 'ok_count': ok_count,
+                        'sagan_ids': sagan_ids, 'broken_ids': broken_ids}
+        job.status = 'done'
+        log_job(job, f'Audit complete — {ok_count} ok, {len(sagan_ids)} should become Sagan, '
+                     f'{len(broken_ids)} broken (recommend review/trash).',
+                level='success', event='done')
+    except Exception as e:
+        job.status = 'failed'
+        job.error  = str(e)
+        log_job(job, str(e), level='error', event='failed')
+    db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  reclassify_suricata_to_sagan — one-time retroactive fix for issue #61:
+#  Suricata rules that are actually Sagan rules (see
+#  docs/design/suricata_sagan_rework.md). ids are resolved up front by the
+#  triggering route (get_mistagged_suricata_rule_ids) so the job's payload
+#  is a stable, already-computed list rather than re-deriving it mid-run.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('reclassify_suricata_to_sagan')
+def handle_reclassify_suricata_to_sagan(job, app):
+    try:
+        ids = job.payload.get('ids') or []
+
+        from app.features.rule.rule_core import reclassify_mistagged_suricata_rules
+
+        job.total = max(len(ids), 1)
+        if not ids:
+            log_job(job, 'Nothing to reclassify.', level='info', event='done')
+            job.status = 'done'
+            job.done = job.total
+            db.session.commit()
+            return
+
+        def _on_progress(n, rule):
+            job.done = n
+            if n % 100 == 0 or n == job.total:
+                log_job(job, f'Reclassified {n}/{job.total}…', level='info', event='progress')
+                db.session.commit()
+
+        def _should_stop():
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled at {job.done}/{job.total} ({job.progress_pct}% done).",
+                        level='warning', event='cancelled')
+                return True
+            if _should_pause(job):
+                db.session.commit()
+                log_job(job, f"Paused at {job.done}/{job.total} ({job.progress_pct}% done). Click Resume to continue.",
+                        level='info', event='paused')
+                return True
+            return False
+
+        count = reclassify_mistagged_suricata_rules(ids, on_progress=_on_progress, should_stop=_should_stop)
+
+        if job.done < job.total and (_is_cancelled(job) or _should_pause(job)):
+            db.session.commit()
+            return
+
+        job.done = job.total
+        job.status = 'done'
+        log_job(job, f'{count} rule(s) reclassified from suricata to sagan.', level='success', event='done')
+    except Exception as e:
+        job.status = 'failed'
+        job.error  = str(e)
+        log_job(job, str(e), level='error', event='failed')
+    db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  bulk_new_rules_decision — add or reject all new rules found in a scan
 # ─────────────────────────────────────────────────────────────────────────────
 

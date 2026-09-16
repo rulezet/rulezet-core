@@ -113,3 +113,59 @@ def test_a2_unset_with_matching_set_is_not_flagged():
     result = SuricataRule().validate(rule)
     assert result.ok is True
     assert result.warnings == []
+
+
+# ── issue #61: Sagan rules mistagged as Suricata ────────────────────────────
+# https://github.com/rulezet/rulezet-core/issues/61 — Sagan and Suricata
+# share the same header/option grammar (both parse fine with
+# suricataparser), so SuricataRule.validate()/.detect() must reject/refuse
+# Sagan-specific evidence explicitly rather than accept it as valid Suricata.
+
+SAGAN_SYSLOG_RULE = (
+    'alert syslog $EXTERNAL_NET any -> $HOME_NET any '
+    '(msg:"[OSSEC] Ossec started"; content:"Ossec started"; '
+    'classtype:system-event; program:ossec; sid:5000287; rev:1;)'
+)
+
+SAGAN_ANY_RULE = (
+    'alert any $EXTERNAL_NET any -> $HOME_NET any '
+    '(msg:"[CISCO-SDEE] Data Base TNS Connection"; content:"SID: 7000 ,"; '
+    'parse_src_ip:1; parse_dst_ip:2; parse_port; program:qdee; sid:6107000; rev:4;)'
+)
+
+
+def test_suricata_rejects_sagan_syslog_protocol():
+    result = SuricataRule().validate(SAGAN_SYSLOG_RULE)
+    assert result.ok is False
+    assert any('syslog' in e for e in result.errors)
+
+
+def test_suricata_rejects_sagan_any_protocol():
+    result = SuricataRule().validate(SAGAN_ANY_RULE)
+    assert result.ok is False
+    assert any('"any"' in e for e in result.errors)
+
+
+def test_suricata_detect_rejects_both_sagan_examples():
+    """SuricataRule.detect() must return False for genuine Sagan content —
+    this is what the ambiguous-.rules-extension disambiguation relies on to
+    not mis-route a Sagan rule to the Suricata format during import."""
+    s = SuricataRule()
+    assert s.detect(SAGAN_SYSLOG_RULE) is False
+    assert s.detect(SAGAN_ANY_RULE) is False
+
+
+def test_suricata_detect_accepts_a_real_suricata_rule():
+    s = SuricataRule()
+    rule = 'alert tcp $HOME_NET any -> $EXTERNAL_NET 22 (msg:"SSH test"; sid:1000099; rev:1;)'
+    assert s.detect(rule) is True
+    assert s.validate(rule).ok is True
+
+
+def test_suricata_still_accepts_real_protocols_and_keywords():
+    """Regression: tightening validate() for Sagan must not false-reject a
+    real Suricata rule using a less common but legitimate protocol."""
+    for proto in ('tcp', 'udp', 'http', 'tls', 'dns', 'ftp', 'ssh', 'modbus'):
+        rule = f'alert {proto} any any -> any any (msg:"t"; sid:1; rev:1;)'
+        result = SuricataRule().validate(rule)
+        assert result.ok is True, f'{proto} should be a valid Suricata protocol: {result.errors}'

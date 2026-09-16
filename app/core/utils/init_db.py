@@ -134,6 +134,11 @@ def insert_default_formats():
         {"name": "elastic", "can_be_execute": False},
         # No rule_tester driver yet — same situation as wazuh/kql/splunk/elastic.
         {"name": "kunai", "can_be_execute": False},
+        # No rule_tester driver yet — same situation as kunai. See
+        # docs/design/suricata_sagan_rework.md (issue #61): Sagan rules were
+        # previously mistagged as suricata since both share the same
+        # .rule/.rules extension and near-identical grammar.
+        {"name": "sagan", "can_be_execute": False},
     ]
 
     # get_admin_user() looks up the literal default demo admin
