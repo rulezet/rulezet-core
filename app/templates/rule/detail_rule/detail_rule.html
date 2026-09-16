@@ -26,6 +26,8 @@
 <script>
 window.__rule_json   = {{ rule_to_json | tojson | safe }};
 window.__rule_risk   = {{ rule_risk | tojson | safe }};
+window.__deep_validation_available = {{ deep_validation_available | default(false) | tojson }};
+window.__deep_validate_url = {{ url_for('rule.deep_validate_rule', rule_id=rule.id) | tojson }};
 {% if rule_misp_object %}window.__misp_object = {{ rule_misp_object | tojson | safe }};{% endif %}
 {% if rule_misp_event  %}window.__misp_event  = {{ rule_misp_event  | tojson | safe }};{% endif %}
 {% if rule_velociraptor_artifact %}window.__velociraptor_artifact = {{ rule_velociraptor_artifact | tojson | safe }};{% endif %}
@@ -104,6 +106,54 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
             <a href="{{ url_for('rule.how_validation_works') }}" class="small">What do these messages mean?</a>
         </div>
     </div>
+
+    {% if deep_validation_available %}
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-3">
+            <div class="d-flex align-items-start gap-3">
+                <div class="flex-shrink-0" style="width:36px;height:36px;border-radius:9px;background:rgba(13,110,253,.1);color:#0d6efd;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-microscope"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div>
+                            <strong style="font-size:.9rem;">Deep validate with Suricata engine</strong>
+                            <p class="text-muted mb-0" style="font-size:.8rem;">
+                                Runs this rule through a real Suricata engine (not just grammar) — catches things the
+                                quick check above can't, like unknown decode events or unreachable file references.
+                            </p>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                                :disabled="deepValidating" @click="runDeepValidate">
+                            <i class="fa-solid" :class="deepValidating ? 'fa-spinner fa-spin' : 'fa-microscope'"></i>
+                            [[ deepValidating ? 'Running…' : 'Run deep validation' ]]
+                        </button>
+                    </div>
+
+                    <div v-if="deepValidateResult" class="mt-3 pt-3" style="border-top:1px solid var(--border-color);">
+                        <div v-if="deepValidateResult.error" class="text-danger small">
+                            <i class="fa-solid fa-circle-exclamation me-1"></i>[[ deepValidateResult.error ]]
+                        </div>
+                        <div v-else-if="deepValidateResult.ok && deepValidateResult.diagnostics.length === 0" class="text-success small">
+                            <i class="fa-solid fa-circle-check me-1"></i>Passed — the real Suricata engine accepted this rule.
+                        </div>
+                        <div v-else>
+                            <div v-for="(diag, idx) in deepValidateResult.diagnostics" :key="idx"
+                                 class="small mb-2 p-2 rounded-3"
+                                 :style="diag.severity === 1 ? 'background:rgba(220,53,69,.08);' : 'background:rgba(255,193,7,.1);'">
+                                <span class="badge" :class="diag.severity === 1 ? 'bg-danger' : 'bg-warning text-dark'" style="font-size:.65rem;">
+                                    [[ diag.severity === 1 ? 'ERROR' : 'WARNING' ]]
+                                </span>
+                                <span class="ms-1">Line [[ diag.range.start.line + 1 ]]:</span>
+                                [[ diag.message ]]
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {{ nav.detail_rule_nav(rule, 'detail', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count, test_count=test_count, ai_analysis_count=ai_analysis_count, linked_rules_count=linked_rules_count) }}
 
@@ -1360,6 +1410,29 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
             const velociraptorArtifactData = ref(window.__velociraptor_artifact || '');
             const ruleRisk = ref(window.__rule_risk || { flagged: false, rejected: false, reasons: [], errors: [], warnings: [] });
 
+            // ── Deep validate (real Suricata engine, on-demand — issue #61) ──
+            const deepValidating     = ref(false);
+            const deepValidateResult = ref(null);
+            async function runDeepValidate() {
+                deepValidating.value = true;
+                try {
+                    const res = await fetch(window.__deep_validate_url, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' },
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        deepValidateResult.value = data;
+                    } else {
+                        deepValidateResult.value = { error: data.message || 'Request failed.' };
+                    }
+                } catch (e) {
+                    deepValidateResult.value = { error: String(e) };
+                } finally {
+                    deepValidating.value = false;
+                }
+            }
+
             // ── Push generated artifact to a connected Velociraptor server ──
             const velociraptorServers        = ref([]);
             const velociraptorServersLoading = ref(false);
@@ -1973,6 +2046,9 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 mispEventData,
                 velociraptorArtifactData,
                 ruleRisk,
+                deepValidating,
+                deepValidateResult,
+                runDeepValidate,
                 velociraptorServers,
                 velociraptorServersLoading,
                 selectedVelociraptorServer,

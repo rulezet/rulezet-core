@@ -866,11 +866,16 @@ def detail_rule_by_uuid(rule_uuid):
         current_user_vote = _rv.vote_type if _rv else None
     if rule:
         rule_risk = RuleModel.get_rule_risk_flags(rule)
+        from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+        deep_validation_available = (
+            (rule.format or '').lower() == 'suricata' and is_deep_validation_configured()
+        )
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
                                rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
+                               deep_validation_available=deep_validation_available,
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
@@ -987,13 +992,38 @@ def detail_rule(rule_id)-> render_template:
         current_user_vote = _rv.vote_type if _rv else None
     if rule:
         rule_risk = RuleModel.get_rule_risk_flags(rule)
+        from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+        deep_validation_available = (
+            (rule.format or '').lower() == 'suricata' and is_deep_validation_configured()
+        )
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
                                rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
+                               deep_validation_available=deep_validation_available,
                                **_nav_counts(rule.id))
     return render_template("404.html")
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/deep_validate", methods=['POST'])
+@login_required
+def deep_validate_rule(rule_id):
+    """On-demand real-engine validation for a Suricata rule (issue #61
+    suggestion #1) — see docs/design/suricata_language_server_integration.md.
+    Never run automatically (a real Suricata engine run is ~0.5-5s per
+    call); only from this explicit button click. Suricata-only: a genuine
+    Sagan rule is by definition something a real Suricata engine rejects,
+    so deep-validating one against Suricata semantics is meaningless."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule or rule.is_deleted:
+        return jsonify({"success": False, "message": "Rule not found"}), 404
+    if (rule.format or '').lower() != 'suricata':
+        return jsonify({"success": False, "message": "Deep validation is only available for Suricata rules."}), 400
+
+    from app.features.rule.rule_format.deep_validate import deep_validate_suricata_rule
+    result = deep_validate_suricata_rule(rule.to_string)
+    return jsonify({"success": True, **result})
 
 
 @rule_blueprint.route("/detail_rule/<int:rule_id>/history", methods=['GET'])
