@@ -4379,6 +4379,39 @@ def verify_rule_syntaxe(rule: Any , new_content) -> Optional[ValidationResult]:
     return None
 
 
+def get_corpus_identifier_collision_warning(rule: Any) -> Optional[str]:
+    """Live check (not the admin-only report's snapshot — see
+    get_sid_collision_groups) for whether THIS specific rule's
+    corpus_identifier (Suricata/Sagan SID, YARA rule name, Wazuh rule ID —
+    see _CORPUS_IDENTIFIER_LABEL) collides with another active rule of the
+    same format, so a viewer lands on the warning just by opening the
+    rule's own detail page instead of only an admin who happens to run the
+    collision report. Returns a plain-text warning (no HTML — rule titles
+    are external, untrusted content) or None when there's nothing to warn
+    about. Capped at 5 named siblings to keep the banner readable when a
+    SID was reused very widely.
+    """
+    fmt = (rule.format or '').lower()
+    identifier = getattr(rule, 'corpus_identifier', None)
+    if fmt not in _CORPUS_IDENTIFIER_LABEL or not identifier:
+        return None
+
+    siblings = (
+        _active()
+        .filter(Rule.format == fmt, Rule.corpus_identifier == identifier, Rule.id != rule.id)
+        .order_by(Rule.creation_date.asc())
+        .all()
+    )
+    if not siblings:
+        return None
+
+    label = _CORPUS_IDENTIFIER_LABEL[fmt]
+    named = [f'#{s.id} "{s.title}"' for s in siblings[:5]]
+    extra = f' and {len(siblings) - 5} more' if len(siblings) > 5 else ''
+    return (f'{label} "{identifier}" is also used by {len(siblings)} other active rule(s): '
+            f'{", ".join(named)}{extra}.')
+
+
 def get_rule_risk_flags(rule: Any) -> dict:
     """
     Compute cross-rule-interference risk flags for a rule's current content.
@@ -4389,7 +4422,10 @@ def get_rule_risk_flags(rule: Any) -> dict:
     'warnings' (flagged but allowed) or 'errors' (a rejected pattern that
     predates this check, e.g. an older or GitHub-imported rule) shows up
     here automatically — no changes needed here when a new format adds
-    its own checks.
+    its own checks. Also includes a live corpus_identifier collision check
+    (issue #61 suggestion #3) — independent of validate(), since a
+    duplicate SID/rule-name/rule-ID isn't a syntax problem with this rule's
+    own content, it's a cross-rule conflict.
 
     Returns {'flagged', 'rejected', 'reasons' (errors+warnings, kept for any
     existing caller that doesn't distinguish them), 'errors', 'warnings'}.
@@ -4400,14 +4436,19 @@ def get_rule_risk_flags(rule: Any) -> dict:
     rejected/dangerous content pattern.
     """
     result = verify_rule_syntaxe(rule, rule.to_string)
-    if result is None:
-        return {'flagged': False, 'rejected': False, 'reasons': [], 'errors': [], 'warnings': []}
+    errors   = list(result.errors) if result else []
+    warnings = list(result.warnings) if result else []
+
+    collision_warning = get_corpus_identifier_collision_warning(rule)
+    if collision_warning:
+        warnings.append(collision_warning)
+
     return {
-        'flagged':  bool(result.warnings) or not result.ok,
-        'rejected': not result.ok,
-        'reasons':  list(result.errors) + list(result.warnings),
-        'errors':   list(result.errors),
-        'warnings': list(result.warnings),
+        'flagged':  bool(warnings) or bool(errors),
+        'rejected': bool(errors),
+        'reasons':  errors + warnings,
+        'errors':   errors,
+        'warnings': warnings,
     }
 
     

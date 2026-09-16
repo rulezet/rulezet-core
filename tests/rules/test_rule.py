@@ -944,6 +944,56 @@ def test_a7_duplicate_wazuh_rule_id_is_rejected(client):
     assert "A7 first wazuh id rule" in json_data["message"]
 
 
+def test_legacy_sid_collision_shows_live_warning_on_detail_page(client, app):
+    """check_identifier_uniqueness() only guards NEW submissions — a legacy
+    pair sharing a SID from before that check existed (issue #61 suggestion
+    #3) must still surface a live warning on both rules' own detail pages,
+    not just in the admin-only collision report. Simulated by writing the
+    second row directly (the API itself would reject it, same as
+    test_a4_duplicate_suricata_sid_is_rejected — that's the point)."""
+    first = {
+        "title": "Legacy collision first rule",
+        "format": "suricata",
+        "version": "1.0",
+        "license": "MIT",
+        "to_string": 'alert tcp any any -> any any (msg:"legacy1"; sid:900420; rev:1;)',
+    }
+    response = client.post("/api/rule/private/create", json=first, headers={"X-API-KEY": API_KEY_USER})
+    assert response.status_code == 200
+    first_id = response.get_json()["rule"]["id"]
+
+    with app.app_context():
+        import datetime, uuid as uuid_mod
+        from app import db
+        from app.core.db_class.db import Rule, User
+        user = User.query.filter_by(admin=True).first()
+        second = Rule(
+            user_id=user.id, format="suricata", title="Legacy collision second rule",
+            license="MIT", description="d", uuid=str(uuid_mod.uuid4()), source="Unknown",
+            to_string='alert tcp any any -> any any (msg:"legacy2"; sid:900420; rev:1;)',
+            creation_date=datetime.datetime.utcnow(), last_modif=datetime.datetime.utcnow(),
+            vote_up=0, vote_down=0, is_deleted=False, status="published",
+        )
+        db.session.add(second)
+        db.session.commit()
+        second_id = second.id
+
+    with app.app_context():
+        from app.features.rule import rule_core as RuleModel
+        rule = RuleModel.get_rule(first_id)
+        risk = RuleModel.get_rule_risk_flags(rule)
+        assert risk["flagged"] is True
+        assert any('SID "900420"' in w and "Legacy collision second rule" in w for w in risk["warnings"])
+
+    detail = client.get(f"/rule/detail_rule/{first_id}")
+    assert detail.status_code == 200
+    match = re.search(r"window\.__rule_risk\s*=\s*(\{.*?\});", detail.get_data(as_text=True))
+    assert match is not None
+    embedded_risk = json.loads(match.group(1))
+    assert embedded_risk["flagged"] is True
+    assert any("900420" in w for w in embedded_risk["warnings"])
+
+
 def test_identifier_uniqueness_does_not_block_normal_submission(client):
     """Distinct identifiers across formats are unaffected by the uniqueness check (regression check)."""
     cases = [
