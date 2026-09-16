@@ -234,6 +234,84 @@
         </div>
     </div>
 
+    <!-- SID collision report (issue #61 suggestion #3) — a report, not an
+         automatic fix: a human picks which rule in each group keeps the
+         SID. Remove this card once the residual collisions have been
+         reviewed on this instance. -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-3">
+                <div class="flex-shrink-0" style="width:40px;height:40px;border-radius:9px;background:rgba(220,53,69,.1);color:#dc3545;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-clone"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold mb-1">SID collision report</h6>
+                    <p class="text-muted mb-2" style="font-size:.85rem;">
+                        Same SID claimed by several unrelated Suricata/Sagan rules — the underlying engine only ever
+                        loads the first one. Predates <code>check_identifier_uniqueness()</code> (added 2026-08-11),
+                        which already blocks new collisions — this is only about what's already in the corpus.
+                        Oldest rule in each group is pre-checked as "keep" (the one an engine would actually load);
+                        review before trashing the rest.
+                    </p>
+
+                    <button v-if="!sidGroups" type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3"
+                            :disabled="sidBusy" @click="runSidReport">
+                        <i class="fa-solid" :class="sidBusy ? 'fa-spinner fa-spin' : 'fa-magnifying-glass'"></i>
+                        Run SID collision report
+                    </button>
+
+                    <div v-if="sidGroups">
+                        <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                            <span class="small text-muted">
+                                [[ sidGroups.length ]] group[[ sidGroups.length === 1 ? '' : 's' ]],
+                                [[ sidTotalExtra ]] extra row[[ sidTotalExtra === 1 ? '' : 's' ]] pre-selected to trash.
+                            </span>
+                            <button type="button" class="btn btn-sm btn-link text-muted p-0" @click="sidGroups = null">
+                                <i class="fa-solid fa-rotate-left me-1"></i>Run again
+                            </button>
+                        </div>
+
+                        <div v-if="sidGroups.length === 0" class="text-success small">
+                            <i class="fa-solid fa-check-circle me-1"></i>No collisions found.
+                        </div>
+
+                        <details v-for="group in sidGroups" :key="group.format + ':' + group.sid"
+                                  class="mb-2" style="border:1px solid var(--border-color);border-radius:10px;padding:.5rem .75rem;">
+                            <summary style="cursor:pointer;font-size:.85rem;">
+                                <span class="badge" style="background:#1a1a1a;color:#fff;text-transform:uppercase;font-size:.65rem;">[[ group.format ]]</span>
+                                SID <code>[[ group.sid ]]</code> — [[ group.rules.length ]] rules
+                            </summary>
+                            <table class="table table-sm mb-0 mt-2" style="font-size:.8rem;">
+                                <tbody>
+                                    <tr v-for="(rule, idx) in group.rules" :key="rule.id">
+                                        <td style="width:28px;">
+                                            <input type="checkbox" :checked="sidSelected.has(rule.id)"
+                                                   @change="toggleSidSelected(rule.id)">
+                                        </td>
+                                        <td>
+                                            <a :href="'/rule/detail_rule/' + rule.id" target="_blank">[[ rule.title ]]</a>
+                                            <span v-if="idx === 0" class="badge bg-success-subtle text-success ms-1" style="font-size:.62rem;">oldest — keep</span>
+                                        </td>
+                                        <td class="text-muted text-truncate" style="max-width:220px;">[[ rule.source ]]</td>
+                                        <td class="text-muted">[[ rule.creation_date ]]</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </details>
+
+                        <div class="d-flex align-items-center gap-2 mt-3" v-if="sidGroups.length > 0">
+                            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3"
+                                    :disabled="sidActionBusy || sidSelected.size === 0" @click="trashSidSelected">
+                                <i class="fa-solid fa-trash"></i>
+                                Move [[ sidSelected.size ]] selected rule[[ sidSelected.size === 1 ? '' : 's' ]] to Trash
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <format-list ref="formatListRef" csrf-token="{{ csrf_token() }}"></format-list>
 
 </div>
@@ -245,7 +323,7 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref } = Vue
+    const { createApp, ref, reactive } = Vue
     import { create_message }  from '/static/js/toaster.js'
     import FormatList          from '/static/js/rule/formatList.js'
     import PaginationComponent from '/static/js/rule/paginationComponent.js'
@@ -345,10 +423,64 @@
                 }
             }
 
+            const sidBusy       = ref(false)
+            const sidGroups     = ref(null)
+            const sidTotalExtra = ref(0)
+            const sidSelected   = reactive(new Set())
+            const sidActionBusy = ref(false)
+
+            async function runSidReport() {
+                sidBusy.value = true
+                try {
+                    const res = await fetch('/rule/admin/sid_collisions/report')
+                    const data = await res.json()
+                    if (data.success) {
+                        sidGroups.value = data.groups
+                        sidTotalExtra.value = data.total_extra_rows
+                        sidSelected.clear()
+                        // Pre-select every rule except the oldest (index 0) in each group.
+                        for (const group of data.groups) {
+                            group.rules.slice(1).forEach(r => sidSelected.add(r.id))
+                        }
+                    } else {
+                        create_message(data.message || 'Failed to load report.', 'danger-subtle')
+                    }
+                } finally {
+                    sidBusy.value = false
+                }
+            }
+
+            function toggleSidSelected(id) {
+                if (sidSelected.has(id)) sidSelected.delete(id)
+                else sidSelected.add(id)
+            }
+
+            async function trashSidSelected() {
+                sidActionBusy.value = true
+                try {
+                    const res = await fetch('/rule/admin/sid_collisions/trash', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ ids: Array.from(sidSelected) }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        create_message(`${data.count} rule(s) moved to trash.`, 'success-subtle')
+                        sidGroups.value = null
+                    } else {
+                        create_message(data.message || 'Failed to trash rules.', 'danger-subtle')
+                    }
+                } finally {
+                    sidActionBusy.value = false
+                }
+            }
+
             return {
                 formatListRef,
                 auditBusy, auditJobUuid, auditResult, actionBusy, actionJobUuid,
                 runAudit, onAuditDone, resetAudit, actReclassify, actTrash,
+                sidBusy, sidGroups, sidTotalExtra, sidSelected, sidActionBusy,
+                runSidReport, toggleSidSelected, trashSidSelected,
             }
         }
     }).mount('#main-container')

@@ -3585,6 +3585,46 @@ def suricata_audit_trash() -> jsonify:
     return jsonify({"success": True, "count": count})
 
 
+# ── SID collision report (issue #61 suggestion #3) — a read-only report,
+# not an automatic fix: some collisions are unrelated rules that all reused
+# an obvious "example/dev" SID block, so a human picks which rule in each
+# group keeps the SID. Safe to run on a live prod instance — it's a single
+# GROUP BY query, no bulk write happens unless the admin explicitly trashes
+# rows from the report afterwards.
+@rule_blueprint.route("/admin/sid_collisions/report", methods=['GET'])
+@login_required
+def sid_collisions_report() -> jsonify:
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    groups = RuleModel.get_sid_collision_groups()
+    total_extra_rows = sum(len(g['rules']) - 1 for g in groups)
+    return jsonify({"success": True, "groups": groups, "total_groups": len(groups),
+                     "total_extra_rows": total_extra_rows})
+
+
+@rule_blueprint.route("/admin/sid_collisions/trash", methods=['POST'])
+@login_required
+def sid_collisions_trash() -> jsonify:
+    """Soft-deletes the rule ids a human picked to lose their SID collision
+    (moved to Trash, reversible — see /rule/trash)."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (data.get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({"success": False, "message": "Nothing to trash."}), 400
+
+    import uuid as _uuid
+    batch_uuid = str(_uuid.uuid4())
+    count = RuleModel.soft_delete_rule_list(ids, current_user.id, batch_uuid=batch_uuid)
+
+    log_activity('admin.settings_changed',
+                 f"Moved {count} rule(s) to trash (issue #61 SID collision cleanup)",
+                 extra={"count": count, "batch_uuid": batch_uuid}, is_public=False)
+    return jsonify({"success": True, "count": count})
+
+
 @rule_blueprint.route("/admin/manage_format_rule", methods=["GET", "POST"])
 @login_required
 def manage_format_rule() -> render_template:

@@ -3675,6 +3675,57 @@ def reclassify_mistagged_suricata_rules(rule_ids: list = None, on_progress=None,
     return count
 
 
+def get_sid_collision_groups(formats: tuple = ('suricata', 'sagan')) -> list:
+    """Issue #61 suggestion #3: SID collisions predating
+    check_identifier_uniqueness() (added 2026-08-11 — this only guards NEW
+    submissions, it never retroactively touched what was already in the
+    corpus). Groups active rules by (format, corpus_identifier) wherever
+    more than one shares it, oldest first per group — the oldest is the one
+    a real Suricata/Sagan engine would actually load, per the issue
+    ("Suricata rejects all but the first loaded"), so it's a reasonable
+    default "keep" when a human reviews the group.
+
+    Returns [{'format', 'sid', 'rules': [{'id','title','source',
+    'github_path','creation_date'}, ...]}], sorted by group size descending.
+    A human should decide which rule in a group actually keeps the SID —
+    some collisions are unrelated rules that all reused an obvious
+    "example/dev" SID block (1000001-1000004 in the issue), not real
+    errors, so this is a report, not an automatic fix.
+    """
+    from sqlalchemy import func
+
+    dupes = (
+        db.session.query(Rule.format, Rule.corpus_identifier, func.count(Rule.id))
+        .filter(Rule.format.in_(formats), Rule.is_deleted == False, Rule.corpus_identifier.isnot(None))
+        .group_by(Rule.format, Rule.corpus_identifier)
+        .having(func.count(Rule.id) > 1)
+        .all()
+    )
+
+    groups = []
+    for fmt, sid, _count in dupes:
+        rules = (
+            _active()
+            .filter(Rule.format == fmt, Rule.corpus_identifier == sid)
+            .order_by(Rule.creation_date.asc())
+            .all()
+        )
+        groups.append({
+            'format': fmt,
+            'sid': sid,
+            'rules': [{
+                'id': r.id,
+                'title': r.title,
+                'source': r.source,
+                'github_path': r.github_path,
+                'creation_date': r.creation_date.strftime('%Y-%m-%d %H:%M') if r.creation_date else None,
+            } for r in rules],
+        })
+
+    groups.sort(key=lambda g: len(g['rules']), reverse=True)
+    return groups
+
+
 def get_importer_result(sid: str):
     return ImporterResult.query.filter_by(uuid=sid).first()
 
