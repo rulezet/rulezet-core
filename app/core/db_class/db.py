@@ -3736,6 +3736,44 @@ class RuleAttackAssociation(db.Model):
         }
 
 
+class GithubRepo(db.Model):
+    """Cached registry of distinct GitHub repo URLs referenced by active
+    (non-deleted) rules — powers the GitHub Sources list
+    (/rule/github/list_github_url) without a live GROUP BY over the whole
+    Rule table (that query took 1.3-1.4s per page load on a ~368k-row
+    corpus with no caching at all). rule_count is kept in sync incrementally
+    from every place that changes rule counts per source — see
+    app/features/rule/github_repo_core.py for the write-side helpers and
+    the full list of call sites this depends on staying correct at.
+
+    Deliberately NOT caching formats/licenses/cve_count/similarity-conflict
+    per repo — those still get computed live, but scoped to just the
+    current page's ~20 URLs (bounded, cheap) instead of the whole corpus.
+    """
+    __tablename__ = 'github_repo'
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid       = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    url        = db.Column(db.String(500), unique=True, nullable=False, index=True)
+    author     = db.Column(db.String(255), nullable=True, index=True)
+    rule_count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc))
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc),
+                           onupdate=datetime.datetime.now(tz=datetime.timezone.utc))
+    last_synced_at = db.Column(db.DateTime, nullable=True)  # set by a full rebuild, not by incremental deltas
+
+    def to_json(self):
+        return {
+            'id':         self.id,
+            'uuid':       self.uuid,
+            'url':        self.url,
+            'author':     self.author,
+            'rule_count': self.rule_count,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
+        }
+
+
 # Manual relation types a user can pick when linking two rules by hand —
 # auto-detected links (source='auto') instead use the format-specific kind
 # that produced them (e.g. 'if_sid', 'correlation_hash') and aren't

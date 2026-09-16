@@ -4849,6 +4849,30 @@ def bulk_action_github():
 
     return jsonify({"message": "Action not supported"}), 400
 
+
+@rule_blueprint.route("/github/resync_repos", methods=['POST'])
+@login_required
+def resync_github_repos():
+    """Temporary admin action: full recompute of the GithubRepo cache table
+    from Rule (the correctness backstop — see github_repo_core.py). Exists so
+    drift from a missed incremental-sync call site, or from data that
+    predates this table, can always be repaired in one click."""
+    if not _is_github_manager():
+        return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
+
+    from app.features.rule.github_repo_core import rebuild_github_repos_from_rules
+    result = rebuild_github_repos_from_rules()
+    log_activity("github.repos_resynced",
+                 f"Resynced GitHub repo registry: {result['repos']} repo(s), {result['rules_counted']} rule(s)",
+                 extra=result, icon="fa-brands fa-github")
+    return jsonify({
+        "status": "success",
+        "message": f"Resynced {result['repos']} repositories ({result['rules_counted']} rules).",
+        "toast_class": "success-subtle",
+        **result
+    }), 200
+
+
 @rule_blueprint.route("/github_detail", methods=['GET'])
 @login_required
 def github_detail():

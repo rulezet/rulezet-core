@@ -518,6 +518,11 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
         missing_tags.update(missed)
     _sync_cve_ids(rule, remote.get('cve_ids', []))
     _import_rule_history(rule, remote.get('update_history', []), owner_id)
+    try:
+        from app.features.rule.github_repo_core import apply_delta
+        apply_delta(rule.source, +1)
+    except Exception:
+        pass
     return 'created'
 
 

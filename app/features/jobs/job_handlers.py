@@ -630,12 +630,32 @@ def handle_delete_github_rules(job, app):
     now        = datetime.datetime.now(tz=datetime.timezone.utc)
     created_by = job.created_by
 
+    # Snapshot per-url active counts BEFORE the bulk update, so GithubRepo's
+    # cache can be decremented by exactly what's about to be deleted — see
+    # github_repo_core.py's module docstring for the full write-site list.
+    try:
+        from sqlalchemy import func
+        from app.features.rule.github_repo_core import apply_delta
+        pre_counts = dict(
+            db.session.query(Rule.source, func.count(Rule.id))
+            .filter(Rule.source.in_(urls), Rule.is_deleted == False)
+            .group_by(Rule.source).all()
+        )
+    except Exception:
+        pre_counts = {}
+
     # Soft-delete in one bulk update
     updated = Rule.query.filter(Rule.source.in_(urls), Rule.is_deleted == False).update(
         {"is_deleted": True, "deleted_at": now, "deleted_by_id": created_by, "delete_batch_uuid": batch_uuid},
         synchronize_session=False,
     )
     db.session.commit()
+
+    try:
+        for url, count in pre_counts.items():
+            apply_delta(url, -count)
+    except Exception:
+        pass
 
     job.done = updated
     db.session.commit()
@@ -1015,6 +1035,11 @@ def handle_trash_restore_bulk(job, app):
             import time; time.sleep(2)
         chunk = all_ids[i:i + TRASH_BATCH]
         now   = _dt.datetime.now(tz=_dt.timezone.utc)
+        try:
+            from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
+            apply_deltas_for_rule_ids(chunk, sign=+1, is_deleted=True)
+        except Exception:
+            pass
         Rule.query.filter(Rule.id.in_(chunk), Rule.is_deleted == True).update(
             {"is_deleted": False, "deleted_at": None, "deleted_by_id": None, "delete_batch_uuid": None},
             synchronize_session=False,
@@ -1475,6 +1500,11 @@ def handle_connector_pull(job, app):
                                             level='warning', event='progress')
                                 _import_rule_history_new(rule, item.get('update_history', []),
                                                          effective_user_id)
+                            try:
+                                from app.features.rule.github_repo_core import apply_deltas_for_new_rules
+                                apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
+                            except Exception:
+                                pass
                             pg_created    = len(new_rules_pending)
                             rules_created += pg_created
                         except Exception as batch_exc:
@@ -1605,6 +1635,11 @@ def handle_connector_pull(job, app):
                                     _sync_cve_ids(rule, item.get('cve_ids', []))
                                     _import_rule_history_new(rule, item.get('update_history', []),
                                                              effective_user_id)
+                                try:
+                                    from app.features.rule.github_repo_core import apply_deltas_for_new_rules
+                                    apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
+                                except Exception:
+                                    pass
                                 rules_created += len(new_rules_pending)
 
                             db.session.commit()
