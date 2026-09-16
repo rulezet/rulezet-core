@@ -866,6 +866,36 @@ def Check_for_rule_updates(rule_content, new_rule_content, rule_id):
             if already_update_by_user:
                 return {"message": "Already updated by user", "success": True, "new_content": None}, True, None
 
+            # Real-engine deep validation (issue #61 suggestion #1) — the
+            # grammar-only check above (suricataparser) accepts a rule
+            # syntax-shaped content the real Suricata engine still rejects
+            # (bad protocol, unknown decode event, unreachable file
+            # reference, ...). Suricata-only, opt-in (SURICATA_BINARY_PATH),
+            # and only on an actual content change (not every sync) — see
+            # docs/design/suricata_language_server_integration.md for why
+            # this is affordable per-changed-rule but not per full corpus.
+            if rule_format == 'suricata':
+                from app.features.rule.rule_format.deep_validate import (
+                    deep_validate_suricata_rule, is_deep_validation_configured,
+                )
+                if is_deep_validation_configured():
+                    deep_result = deep_validate_suricata_rule(validation.normalized_content)
+                    if deep_result.get('available') and deep_result.get('ok') is False:
+                        deep_errors = [d['message'] for d in deep_result.get('diagnostics', [])
+                                       if d.get('severity') == 1] or ['real engine rejected this content']
+                        return (
+                            {
+                                # Keep the exact "Update found but invalid:" prefix other
+                                # code paths string-match on (see syntax_valid/
+                                # update_available checks below and in process()).
+                                "message": f"Update found but invalid: [Suricata engine] {'; '.join(deep_errors)}",
+                                "success": True,  # Rule was found and diffed
+                                "new_content": None,  # No valid content to apply
+                            },
+                            True,
+                            None,
+                        )
+
             # Change is valid, return success
             return (
                 {

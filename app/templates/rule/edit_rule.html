@@ -228,6 +228,7 @@
                                 {% if form.to_string.errors %}
                                 <div class="invalid-feedback d-block fw-bold mt-2">{{ form.to_string.errors[0] }}</div>
                                 {% endif %}
+                                <deep-validate-suricata :format="editFormat" :content="currentRule.to_string"></deep-validate-suricata>
                             </div>
                         </div>
                         </fieldset>
@@ -266,6 +267,9 @@
     import AttackInput from '/static/js/attack/attackInput.js';
     import RelatedRuleInput from '/static/js/rule_relation/relatedRuleInput.js';
     import LicenseInput from '/static/js/components/LicenseInput.js';
+    import DeepValidateSuricata from '/static/js/rule/DeepValidateSuricata.js';
+
+    window.__deep_validation_available = {{ deep_validation_available | default(false) | tojson }};
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -277,6 +281,7 @@
             'attack-input': AttackInput,
             'related-rule-input': RelatedRuleInput,
             'license-input': LicenseInput,
+            'deep-validate-suricata': DeepValidateSuricata,
         },
         setup() {
 

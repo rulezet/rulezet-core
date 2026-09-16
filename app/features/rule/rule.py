@@ -92,6 +92,8 @@ def rule() -> render_template:
     ai_generate_available = _ai_generate_available() and (
         current_user.is_admin() or current_user.has_permission('ai.use')
     )
+    from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+    deep_validation_available = is_deep_validation_configured()
 
     # form send to treatment
 
@@ -103,7 +105,8 @@ def rule() -> render_template:
         valide , error = verify_syntax_rule_by_format(rule_dict)
 
         if valide == False:
-                return render_template("rule/rule.html", error=error, form=form, ai_generate_available=ai_generate_available)
+                return render_template("rule/rule.html", error=error, form=form, ai_generate_available=ai_generate_available,
+                                       deep_validation_available=deep_validation_available)
 
         v_data = request.form.get('vulnerabilities')
         form_dict['vulnerabilities'] = v_data
@@ -152,7 +155,8 @@ def rule() -> render_template:
             t_id    = parts[2] if len(parts) > 2 else ''
             t_title = parts[3] if len(parts) > 3 else 'deleted rule'
             flash(f'TRASH_CONFLICT:{t_uuid}:{t_id}:{t_title}', 'warning')
-            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available)
+            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available,
+                                   deep_validation_available=deep_validation_available)
         elif isinstance(message, str) and (message.startswith("DUPLICATE:") or message.startswith("UUID_DUPLICATE:")):
             # An active rule with this exact content (or the same uuid) already
             # exists — go straight to it instead of leaving the user with a
@@ -166,11 +170,14 @@ def rule() -> render_template:
                 flash(f'A rule with {reason} already exists: "{dup_title}".', 'info')
                 return redirect(url_for('rule.detail_rule', rule_id=int(dup_id)))
             flash(f'A rule with {reason} already exists: "{dup_title}".', 'danger')
-            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available)
+            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available,
+                                   deep_validation_available=deep_validation_available)
         else:
             flash(message, 'danger')
-            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available)
-    return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available)
+            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available,
+                                   deep_validation_available=deep_validation_available)
+    return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available,
+                                   deep_validation_available=deep_validation_available)
 
 
 @rule_blueprint.route("/ai_generate_rule", methods=['POST'])
@@ -506,7 +513,9 @@ def edit_rule(rule_id) -> render_template:
         form.version.data = rule.version
         form.to_string.data = rule.to_string
         form.original_uuid.data = rule.original_uuid
-        return render_template("rule/edit_rule.html", form=form, rule=rule, restricted_edit=True)
+        from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+        return render_template("rule/edit_rule.html", form=form, rule=rule, restricted_edit=True,
+                               deep_validation_available=is_deep_validation_configured())
 
     if is_owner_or_admin:
         form = EditRuleForm()
@@ -534,7 +543,9 @@ def edit_rule(rule_id) -> render_template:
             valide , error = verify_syntax_rule_by_format(rule_dict)
             if not valide:
                 form.to_string.errors.append(f"Syntax Error: {error}")
-                return render_template("rule/edit_rule.html",error=error, form=form, rule=rule)
+                from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+                return render_template("rule/edit_rule.html",error=error, form=form, rule=rule,
+                                       deep_validation_available=is_deep_validation_configured())
             
             
 
@@ -638,7 +649,9 @@ def edit_rule(rule_id) -> render_template:
             form.to_string.data = rule.to_string
             form.original_uuid.data = rule.original_uuid
 
-        return render_template("rule/edit_rule.html", form=form, rule=rule)
+        from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+        return render_template("rule/edit_rule.html", form=form, rule=rule,
+                               deep_validation_available=is_deep_validation_configured())
     else:
         return render_template("access_denied.html")
     
@@ -866,16 +879,11 @@ def detail_rule_by_uuid(rule_uuid):
         current_user_vote = _rv.vote_type if _rv else None
     if rule:
         rule_risk = RuleModel.get_rule_risk_flags(rule)
-        from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
-        deep_validation_available = (
-            (rule.format or '').lower() == 'suricata' and is_deep_validation_configured()
-        )
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
                                rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
-                               deep_validation_available=deep_validation_available,
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
@@ -992,37 +1000,38 @@ def detail_rule(rule_id)-> render_template:
         current_user_vote = _rv.vote_type if _rv else None
     if rule:
         rule_risk = RuleModel.get_rule_risk_flags(rule)
-        from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
-        deep_validation_available = (
-            (rule.format or '').lower() == 'suricata' and is_deep_validation_configured()
-        )
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
                                rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
-                               deep_validation_available=deep_validation_available,
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
 
-@rule_blueprint.route("/detail_rule/<int:rule_id>/deep_validate", methods=['POST'])
+@rule_blueprint.route("/deep_validate_content", methods=['POST'])
 @login_required
-def deep_validate_rule(rule_id):
-    """On-demand real-engine validation for a Suricata rule (issue #61
+def deep_validate_content():
+    """On-demand real-engine validation for Suricata rule content (issue #61
     suggestion #1) — see docs/design/suricata_language_server_integration.md.
     Never run automatically (a real Suricata engine run is ~0.5-5s per
-    call); only from this explicit button click. Suricata-only: a genuine
-    Sagan rule is by definition something a real Suricata engine rejects,
-    so deep-validating one against Suricata semantics is meaningless."""
-    rule = RuleModel.get_rule(rule_id)
-    if not rule or rule.is_deleted:
-        return jsonify({"success": False, "message": "Rule not found"}), 404
-    if (rule.format or '').lower() != 'suricata':
+    call); only from an explicit button click on the create/edit-rule
+    forms. Suricata-only: a genuine Sagan rule is by definition something
+    a real Suricata engine rejects, so deep-validating one against
+    Suricata semantics is meaningless. Takes {content, format} in the
+    JSON body — works for content that isn't a saved Rule yet (create
+    form) as well as an in-progress edit that may differ from what's
+    actually saved."""
+    data    = request.get_json(silent=True) or {}
+    content = data.get('content') or ''
+    fmt     = (data.get('format') or '').lower()
+    if fmt != 'suricata':
         return jsonify({"success": False, "message": "Deep validation is only available for Suricata rules."}), 400
+    if not content.strip():
+        return jsonify({"success": False, "message": "No content to validate."}), 400
 
     from app.features.rule.rule_format.deep_validate import deep_validate_suricata_rule
-    result = deep_validate_suricata_rule(rule.to_string)
+    result = deep_validate_suricata_rule(content)
     return jsonify({"success": True, **result})
 
 

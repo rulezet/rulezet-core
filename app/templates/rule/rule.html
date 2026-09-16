@@ -301,6 +301,7 @@
             {% if form.to_string.errors %}
             <div class="invalid-feedback d-block mt-1">{{ form.to_string.errors[0] }}</div>
             {% endif %}
+            <deep-validate-suricata :format="manualFormat" :content="manualContent"></deep-validate-suricata>
           </div>
 
           {% if error %}
@@ -362,6 +363,7 @@
               min-height="300px"
               max-height="60vh">
             </smart-editor>
+            <deep-validate-suricata :format="ruleType" :content="parseContent"></deep-validate-suricata>
           </div>
 
           <div class="mb-4">
@@ -840,6 +842,7 @@ window.__manual_version = {{ (form.version.data or '1.0') | tojson }};
 window.__trash_conflict_title = {{ trash_conflict_title | tojson }};
 window.__flash_messages = {{ flash_messages | tojson }};
 window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) | tojson }};
+window.__deep_validation_available = {{ deep_validation_available | default(false) | tojson }};
 </script>
 <script type="module">
 
@@ -853,6 +856,7 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
       import RelatedRuleInput from '/static/js/rule_relation/relatedRuleInput.js';
       import LicenseInput from '/static/js/components/LicenseInput.js';
       import AIThinkingSteps from '/static/js/components/ai-thinking-steps.js';
+      import DeepValidateSuricata from '/static/js/rule/DeepValidateSuricata.js';
 
       const VALID_TABS = ['manual', 'parse', 'github', 'zip', 'json', 'ai_generate'];
 
@@ -867,6 +871,7 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
                   'related-rule-input': RelatedRuleInput,
                   'license-input': LicenseInput,
                   'ai-thinking-steps': AIThinkingSteps,
+                  'deep-validate-suricata': DeepValidateSuricata,
             },
             setup() {
                   const requestedTab = new URLSearchParams(window.location.search).get('tab');
