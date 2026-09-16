@@ -198,6 +198,7 @@ const LANG_ALIASES = {
     nova: 'text',
     kql: 'sql',       // KQL syntax is SQL-like
     elastic: 'toml',  // Elastic Security rules are TOML — see hljs-toml.js
+    sagan: 'suricata',// Sagan shares Suricata's exact header/option grammar (issue #61)
 }
 
 function detect_language(code, hint) {
