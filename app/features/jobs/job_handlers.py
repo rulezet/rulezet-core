@@ -657,6 +657,25 @@ def handle_delete_github_rules(job, app):
             level='success', event='done')
 
 
+# ─── github_repo_resync ───────────────────────────────────────────────────────
+
+@register_handler('github_repo_resync')
+def handle_github_repo_resync(job, app):
+    """Full recompute of the GithubRepo registry from Rule (+ RuleSimilarity
+    for conflicts) — the same correctness backstop as the GitHub Sources
+    page's admin "Resync" button, wrapped as a schedulable/background job
+    (see app.features.rule.github_repo_core.rebuild_github_repos_from_rules
+    for the write-site list this repairs drift against)."""
+    log_job(job, 'Resyncing GitHub repo registry from current rule data…', level='info', event='start')
+    from app.features.rule.github_repo_core import rebuild_github_repos_from_rules
+    result = rebuild_github_repos_from_rules()
+    job.total = result['repos']
+    job.done  = result['repos']
+    db.session.commit()
+    log_job(job, f"Done — {result['repos']} repo(s), {result['rules_counted']} rule(s) counted.",
+            level='success', event='done')
+
+
 # ─── delete_activity_logs ─────────────────────────────────────────────────────
 
 LOG_DELETE_BATCH = 1000

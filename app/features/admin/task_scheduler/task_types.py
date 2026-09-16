@@ -90,6 +90,15 @@ TASK_TYPES = {
         'job_type': 'connector_pull',
         'target_picker': 'connector_select',
     },
+    'github_repo_resync': {
+        'label': 'GitHub Sources — resync registry',
+        'icon': 'fa-brands fa-github',
+        'job_type': 'github_repo_resync',
+        'target_picker': 'none',
+        # Same full recompute as the GitHub Sources page's admin "Resync"
+        # button — a correctness backstop for GithubRepo's incremental sync
+        # (see github_repo_core.py), safe to run repeatedly/on a schedule.
+    },
     'rule_git_mirror_sync': {
         'label': 'Rulesets — sync',
         'icon': 'fa-brands fa-git-alt',
