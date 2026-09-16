@@ -423,7 +423,7 @@ const GitHubSelectionTable = {
                                     <div class="bg-light rounded p-2 me-3 flex-shrink-0">
                                         <i class="fab fa-github fa-lg"></i>
                                     </div>
-                                    <div class="fw-bold text-dark" style="word-break:break-all;">[[ item.url ]]</div>
+                                    <div class="fw-bold text-dark" style="white-space:nowrap;">[[ item.url ]]</div>
                                 </div>
                             </td>
                             <td v-show="colVisible.author" class="dt-td">[[ item.author || '—' ]]</td>
