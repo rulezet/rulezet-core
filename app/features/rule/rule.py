@@ -3560,6 +3560,62 @@ def suricata_audit_result(job_uuid) -> jsonify:
     })
 
 
+@rule_blueprint.route("/admin/suricata_deep_validate/run", methods=['POST'])
+@login_required
+def suricata_deep_validate_run() -> jsonify:
+    """Trigger a bounded batch of real-engine deep validation (issue #61
+    suggestion #1) — see docs/design/suricata_language_server_integration.md.
+    `limit` is admin-chosen (capped at 5000 server-side) rather than the
+    whole corpus: each rule is a real Suricata subprocess run
+    (~0.5-5s), so a run against all ~86k rules would take hours — an
+    admin runs this in bounded batches instead, reviewing between runs."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+    if not is_deep_validation_configured():
+        return jsonify({"success": False, "message": "Deep validation is not configured on this instance."}), 400
+
+    data  = request.get_json(silent=True) or {}
+    limit = min(int(data.get('limit') or 500), 5000)
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='deep_validate_suricata_rules',
+        payload={'limit': limit},
+        label=f"Deep validate up to {limit} Suricata rule(s) (real engine)",
+        created_by=current_user.id,
+    )
+    if not job:
+        return jsonify({"success": False, "message": "Failed to queue job."}), 500
+
+    log_activity('admin.settings_changed', f"Queued a real-engine deep validation batch (limit={limit})", is_public=False)
+    return jsonify({"success": True, "job": job.to_json()})
+
+
+@rule_blueprint.route("/admin/suricata_deep_validate/result/<string:job_uuid>", methods=['GET'])
+@login_required
+def suricata_deep_validate_result(job_uuid) -> jsonify:
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    from app.core.db_class.db import BackgroundJob
+    job = BackgroundJob.query.filter_by(uuid=job_uuid, job_type='deep_validate_suricata_rules').first()
+    if not job:
+        return jsonify({"success": False, "message": "Job not found."}), 404
+    if job.status != 'done':
+        return jsonify({"success": False, "message": f"Job is {job.status}, not done yet."}), 400
+
+    payload = job.payload or {}
+    failed  = payload.get('failed') or []
+    return jsonify({
+        "success":     True,
+        "ok_count":    payload.get('ok_count', 0),
+        "failed":      failed,
+        "failed_count": len(failed),
+    })
+
+
 @rule_blueprint.route("/admin/suricata_audit/reclassify", methods=['POST'])
 @login_required
 def suricata_audit_reclassify() -> jsonify:
@@ -3661,6 +3717,9 @@ def manage_format_rule() -> render_template:
     if not current_user.is_admin():
         return render_template("access_denied.html")
 
+    from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+    suricata_deep_validation_configured = is_deep_validation_configured()
+
     form = CreateFormatRuleForm()
 
     if form.validate_on_submit():
@@ -3676,9 +3735,11 @@ def manage_format_rule() -> render_template:
         flash(message, "success" if success else "danger")
 
         if success:
-            return render_template("admin/format.html", form=form)
+            return render_template("admin/format.html", form=form,
+                                   suricata_deep_validation_configured=suricata_deep_validation_configured)
 
-    return render_template("admin/format.html", form=form)
+    return render_template("admin/format.html", form=form,
+                           suricata_deep_validation_configured=suricata_deep_validation_configured)
 
 @rule_blueprint.route("/get_rules_formats_pages", methods=['GET'])
 def get_rules_formats_pages() -> dict:

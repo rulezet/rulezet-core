@@ -312,6 +312,57 @@
         </div>
     </div>
 
+    <!-- Real-engine deep validation batches (issue #61 suggestion #1) — only
+         shown when this instance has opted in (SURICATA_BINARY_PATH set).
+         See docs/design/suricata_language_server_integration.md: each rule
+         is a real Suricata subprocess run, so this always runs a bounded
+         batch, never the whole corpus in one go. -->
+    {% if suricata_deep_validation_configured %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-3">
+                <div class="flex-shrink-0" style="width:40px;height:40px;border-radius:9px;background:rgba(13,110,253,.1);color:#0d6efd;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-microscope"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold mb-1">Deep validate with Suricata engine (batch)</h6>
+                    <p class="text-muted mb-2" style="font-size:.85rem;">
+                        Real <code>suricata -T -v</code> run per rule — catches what the grammar-only check above
+                        can't (bad decode events, unreachable file references, ...), but is genuinely slow
+                        (~0.5-5s/rule). Runs a bounded batch, not the whole corpus — run again to cover the next batch.
+                    </p>
+
+                    <div v-if="!dvJobUuid && !dvResult" class="d-flex align-items-center gap-2">
+                        <input type="number" class="form-control form-control-sm" style="width:110px;"
+                               v-model.number="dvLimit" min="1" max="5000" placeholder="500">
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" :disabled="dvBusy" @click="runDeepValidateBatch">
+                            <i class="fa-solid" :class="dvBusy ? 'fa-spinner fa-spin' : 'fa-microscope'"></i>
+                            Run batch
+                        </button>
+                    </div>
+
+                    <div v-if="dvJobUuid && !dvResult" class="mt-2">
+                        <job-tracker :job-uuid="dvJobUuid" @done="onDvDone" @failed="dvJobUuid = null"></job-tracker>
+                    </div>
+
+                    <div v-if="dvResult" class="mt-2">
+                        <div class="d-flex gap-4 flex-wrap mb-2">
+                            <div><span class="fw-bold text-success">[[ dvResult.ok_count ]]</span> <span class="text-muted small">passed real engine</span></div>
+                            <div><span class="fw-bold text-danger">[[ dvResult.failed_count ]]</span> <span class="text-muted small">failed real engine</span></div>
+                        </div>
+                        <div v-for="f in dvResult.failed" :key="f.id" class="small mb-1 p-2 rounded-3" style="background:rgba(220,53,69,.08);">
+                            <a :href="'/rule/detail_rule/' + f.id" target="_blank">#[[ f.id ]] [[ f.title ]]</a> — [[ f.message ]]
+                        </div>
+                        <button type="button" class="btn btn-sm btn-link text-muted p-0 mt-2" @click="dvResult = null">
+                            <i class="fa-solid fa-rotate-left me-1"></i>Run another batch
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <format-list ref="formatListRef" csrf-token="{{ csrf_token() }}"></format-list>
 
 </div>
@@ -475,12 +526,53 @@
                 }
             }
 
+            // ── Deep validate batch (real Suricata engine — issue #61) ──
+            const dvBusy    = ref(false)
+            const dvLimit   = ref(500)
+            const dvJobUuid = ref(null)
+            const dvResult  = ref(null)
+
+            async function runDeepValidateBatch() {
+                dvBusy.value = true
+                try {
+                    const res = await fetch('/rule/admin/suricata_deep_validate/run', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ limit: dvLimit.value || 500 }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        dvJobUuid.value = data.job.uuid
+                    } else {
+                        create_message(data.message || 'Failed to queue job.', 'danger-subtle')
+                    }
+                } finally {
+                    dvBusy.value = false
+                }
+            }
+
+            async function onDvDone() {
+                const jobUuid = dvJobUuid.value
+                try {
+                    const res = await fetch('/rule/admin/suricata_deep_validate/result/' + jobUuid)
+                    const data = await res.json()
+                    if (data.success) {
+                        dvResult.value = data
+                    } else {
+                        create_message(data.message || 'Failed to load result.', 'danger-subtle')
+                    }
+                } finally {
+                    dvJobUuid.value = null
+                }
+            }
+
             return {
                 formatListRef,
                 auditBusy, auditJobUuid, auditResult, actionBusy, actionJobUuid,
                 runAudit, onAuditDone, resetAudit, actReclassify, actTrash,
                 sidBusy, sidGroups, sidTotalExtra, sidSelected, sidActionBusy,
                 runSidReport, toggleSidSelected, trashSidSelected,
+                dvBusy, dvLimit, dvJobUuid, dvResult, runDeepValidateBatch, onDvDone,
             }
         }
     }).mount('#main-container')

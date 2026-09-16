@@ -2166,6 +2166,98 @@ def handle_audit_suricata_rules(job, app):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  deep_validate_suricata_rules — real-engine validation over a bounded batch
+#  of Suricata rules (issue #61 suggestion #1). Each call is a real
+#  `suricata -T -v` subprocess run (~0.5-5s — see
+#  docs/design/suricata_language_server_integration.md), so this only ever
+#  processes a bounded slice (payload['limit'], admin-chosen at trigger time)
+#  per job, not the whole corpus — an admin runs it again to cover the next
+#  slice. Resumable via the standard _resume_offset convention if paused
+#  mid-slice.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('deep_validate_suricata_rules')
+def handle_deep_validate_suricata_rules(job, app):
+    try:
+        from app.features.rule.rule_format.deep_validate import (
+            deep_validate_suricata_rule, is_deep_validation_configured,
+        )
+
+        if not is_deep_validation_configured():
+            log_job(job, 'Deep validation is not configured on this instance (SURICATA_BINARY_PATH unset).',
+                    level='error', event='failed')
+            job.status = 'failed'
+            job.error  = 'Not configured'
+            db.session.commit()
+            return
+
+        payload = job.payload or {}
+        limit   = min(int(payload.get('limit') or 500), 5000)
+        offset  = payload.get('_resume_offset', 0)
+
+        query = (Rule.query
+                 .filter(Rule.format == 'suricata', Rule.is_deleted == False)
+                 .order_by(Rule.id.asc())
+                 .with_entities(Rule.id, Rule.to_string))
+
+        if job.total == 0:
+            job.total = min(query.count(), limit)
+            db.session.commit()
+            log_job(job, f'Deep-validating up to {job.total} Suricata rule(s) against a real engine…',
+                    level='info', event='started')
+        elif offset > 0:
+            log_job(job, f'Resuming from offset {offset} ({offset}/{job.total} already done).',
+                    level='info', event='resumed')
+
+        ok_count   = payload.get('_ok_count', 0)
+        failed     = payload.get('_failed', [])  # [{id, title, message}], capped below
+
+        batch = query.offset(offset).limit(limit - offset).all()
+
+        for i, (rule_id, content) in enumerate(batch):
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled at {job.done}/{job.total} ({job.progress_pct}% done).",
+                        level='warning', event='cancelled')
+                db.session.commit()
+                return
+            if _should_pause(job):
+                job.payload = {**payload, '_resume_offset': offset + i,
+                                '_ok_count': ok_count, '_failed': failed}
+                db.session.commit()
+                log_job(job, f"Paused at {job.done}/{job.total} ({job.progress_pct}% done). Click Resume to continue.",
+                        level='info', event='paused')
+                return
+
+            result = deep_validate_suricata_rule(content or '')
+            if result.get('error'):
+                log_job(job, f'Rule #{rule_id}: {result["error"]}', level='warning', event='progress')
+            elif result.get('ok'):
+                ok_count += 1
+            else:
+                rule = Rule.query.get(rule_id)
+                msg = result['diagnostics'][0]['message'] if result.get('diagnostics') else 'Unknown error'
+                if len(failed) < 200:  # cap stored detail — a job.payload isn't meant to hold thousands of messages
+                    failed.append({'id': rule_id, 'title': rule.title if rule else '?', 'message': msg})
+
+            job.done = offset + i + 1
+            if job.done % 20 == 0 or job.done == job.total:
+                log_job(job, f'Deep-validated {job.done}/{job.total}… {ok_count} ok, {len(failed)} failed so far.',
+                        level='info', event='progress')
+                db.session.commit()
+
+        job.payload = {**payload, '_ok_count': ok_count, '_failed': failed,
+                        'ok_count': ok_count, 'failed': failed}
+        job.status = 'done'
+        log_job(job, f'Deep validation complete — {ok_count} ok, {len(failed)} failed a real engine check.',
+                level='success', event='done')
+    except Exception as e:
+        job.status = 'failed'
+        job.error  = str(e)
+        log_job(job, str(e), level='error', event='failed')
+    db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  reclassify_suricata_to_sagan — one-time retroactive fix for issue #61:
 #  Suricata rules that are actually Sagan rules (see
 #  docs/design/suricata_sagan_rework.md). ids are resolved up front by the
