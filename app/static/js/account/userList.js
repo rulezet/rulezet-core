@@ -297,7 +297,7 @@ export default {
                     <button class="ul-action-secondary ul-action-secondary--danger"
                             :disabled="user.is_protected_system_user"
                             @click="!user.is_protected_system_user && $emit('delete-user', user)"
-                            :title="user.is_protected_system_user ? 'System account (owns synced content) — can\'t be deleted' : 'Delete user'">
+                            :title="user.is_protected_system_user ? 'System account (owns synced content) — cannot be deleted' : 'Delete user'">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -459,7 +459,7 @@ export default {
                                 </button>
                                 <button class="dt-action-btn dt-action-btn--danger"
                                         :disabled="user.is_protected_system_user"
-                                        :title="user.is_protected_system_user ? 'System account (owns synced content) — can\'t be deleted' : 'Delete user'"
+                                        :title="user.is_protected_system_user ? 'System account (owns synced content) — cannot be deleted' : 'Delete user'"
                                         @click="!user.is_protected_system_user && $emit('delete-user', user)">
                                     <i class="fas fa-trash"></i>
                                 </button>
