@@ -2099,12 +2099,18 @@ def handle_audit_suricata_rules(job, app):
         sagan_ids  = []
         broken_ids = []
 
-        query = (Rule.query
-                 .filter(Rule.format == 'suricata', Rule.is_deleted == False)
-                 .with_entities(Rule.id, Rule.to_string)
-                 .yield_per(500))
+        # Keyset pagination (WHERE id > last_id ORDER BY id LIMIT N), not
+        # yield_per()/a server-side cursor — psycopg2's named cursor doesn't
+        # survive a commit() while still being iterated ("named cursor
+        # isn't valid anymore"), and this handler needs to commit
+        # periodically for the UI's live progress. Each batch below is a
+        # complete, already-fetched query result, so committing between
+        # batches is safe.
+        BATCH = 1000
+        last_id = 0
+        done = 0
 
-        for i, (rule_id, content) in enumerate(query):
+        while True:
             if _is_cancelled(job):
                 log_job(job, f"Cancelled at {job.done}/{job.total} ({job.progress_pct}% done).",
                         level='warning', event='cancelled')
@@ -2117,20 +2123,31 @@ def handle_audit_suricata_rules(job, app):
                 db.session.commit()
                 return
 
-            result = suricata.validate(content or '')
-            if result.ok:
-                ok_count += 1
-            elif looks_like_sagan(content or ''):
-                sagan_ids.append(rule_id)
-            else:
-                broken_ids.append(rule_id)
+            batch = (Rule.query
+                      .filter(Rule.format == 'suricata', Rule.is_deleted == False, Rule.id > last_id)
+                      .order_by(Rule.id.asc())
+                      .with_entities(Rule.id, Rule.to_string)
+                      .limit(BATCH)
+                      .all())
+            if not batch:
+                break
 
-            job.done = i + 1
-            if job.done % 1000 == 0 or job.done == job.total:
-                log_job(job, f'Audited {job.done}/{job.total}… {ok_count} ok, '
-                             f'{len(sagan_ids)} look like Sagan, {len(broken_ids)} broken so far.',
-                        level='info', event='progress')
-                db.session.commit()
+            for rule_id, content in batch:
+                result = suricata.validate(content or '')
+                if result.ok:
+                    ok_count += 1
+                elif looks_like_sagan(content or ''):
+                    sagan_ids.append(rule_id)
+                else:
+                    broken_ids.append(rule_id)
+                done += 1
+
+            last_id  = batch[-1][0]
+            job.done = done
+            log_job(job, f'Audited {job.done}/{job.total}… {ok_count} ok, '
+                         f'{len(sagan_ids)} look like Sagan, {len(broken_ids)} broken so far.',
+                    level='info', event='progress')
+            db.session.commit()
 
         # payload is a plain JSON column (not MutableDict) — reassign the
         # whole dict rather than mutate in place, or SQLAlchemy won't see
