@@ -440,9 +440,24 @@ def promote_remove_user_admin(user_id , action) -> bool:
             return True
         else:
             return False
-        
+
     else:
         return False
+
+
+def toggle_user_verified(user_id: int) -> tuple[bool, bool]:
+    """Flip a user's is_verified flag. Returns (success, new_verified_value).
+    No self-exclusion like promote_remove_user_admin — an admin toggling
+    their own verified badge isn't a privilege-escalation risk the way
+    self-promoting to admin would be."""
+    if not current_user.is_admin():
+        return False, False
+    user = get_user(user_id)
+    if not user:
+        return False, False
+    user.is_verified = not user.is_verified
+    db.session.commit()
+    return True, user.is_verified
 
 # Delete
 

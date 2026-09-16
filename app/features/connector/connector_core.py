@@ -325,6 +325,16 @@ def seed_official_connector() -> None:
         if _OLD_SHADOW_USERNAME_RE.match(shadow.username or ''):
             shadow.username = _unique_username(_slugify_username(c.name), exclude_user_id=shadow.id)
         _seed_official_shadow_avatar(shadow)
+        # The official connector's shadow user owns every rule pulled from
+        # rulezet.org — it should read as verified by default, same as a
+        # real vetted account, rather than showing "Unverified" on every
+        # one of those rules' author chip. _get_or_create_shadow_user()
+        # creates it with is_verified=False (the correct default for an
+        # ordinary connector's shadow user); this self-heals it specifically
+        # for the ONE official, is_system=True connector — runs on every
+        # boot so existing installs pick it up too, not just fresh ones.
+        if not shadow.is_verified:
+            shadow.is_verified = True
         db.session.commit()
     except Exception:
         db.session.rollback()

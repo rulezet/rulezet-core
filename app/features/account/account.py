@@ -217,6 +217,28 @@ def promote_remove_admin() -> jsonify:
     else:
         return render_template("access_denied.html")
 
+@account_blueprint.route("/toggle_user_verified", methods=['POST'])
+@login_required
+def toggle_user_verified() -> jsonify:
+    """Admin action: flip a user's verified badge on/off (Users admin list)."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    data    = request.get_json() or {}
+    user_id = int(data.get('userId', 0)) or None
+    if not user_id:
+        return jsonify({"success": False, "message": "Missing userId"}), 400
+
+    success, verified = AccountModel.toggle_user_verified(user_id)
+    if not success:
+        return jsonify({"success": False, "message": "User not found"}), 404
+
+    log_activity("admin.settings_changed",
+                 f"{'Verified' if verified else 'Unverified'} user id={user_id}",
+                 target_type="user", target_id=user_id)
+    return jsonify({"success": True, "verified": verified})
+
+
 @account_blueprint.route("/delete_user", methods=['POST'])
 @login_required
 def delete_user() -> render_template:
