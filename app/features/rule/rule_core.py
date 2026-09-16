@@ -104,7 +104,7 @@ def soft_delete_rule(rule_id: int, user_id: int, batch_uuid: str = None) -> bool
     db.session.commit()
     try:
         from app.features.rule.github_repo_core import apply_delta
-        apply_delta(source, -1)
+        apply_delta(source, -1, rule=rule)
     except Exception:
         pass
     return True
@@ -176,7 +176,7 @@ def restore_rule(rule_id: int):
     db.session.commit()
     try:
         from app.features.rule.github_repo_core import apply_delta
-        apply_delta(rule.source, +1)
+        apply_delta(rule.source, +1, rule=rule)
     except Exception:
         pass
     return True
@@ -740,7 +740,7 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
 
         try:
             from app.features.rule.github_repo_core import apply_delta
-            apply_delta(new_rule.source, +1)
+            apply_delta(new_rule.source, +1, rule=new_rule)
         except Exception:
             pass  # GithubRepo is a cache — never let a sync failure block rule creation
 
@@ -852,10 +852,12 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     if not rule:
         return False, None
 
-    # Captured before being overwritten below — source is a plain editable
-    # form field, so a human can retarget which GitHub repo (if any) this
-    # rule counts toward on any edit. See github_repo_core.sync_source_change.
+    # Captured before being overwritten below — source/format/license/cve_id
+    # are all plain editable form fields, and GithubRepo's per-repo
+    # aggregates need the before/after of each to stay accurate. See
+    # github_repo_core.sync_rule_edit.
     old_source = rule.source
+    old_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id}
 
     rule.format = form_dict["format"]
     rule.title = form_dict["title"]
@@ -932,8 +934,9 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     db.session.commit()
 
     try:
-        from app.features.rule.github_repo_core import sync_source_change
-        sync_source_change(old_source, rule.source)
+        from app.features.rule.github_repo_core import sync_rule_edit
+        new_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id}
+        sync_rule_edit(old_source, rule.source, old_snapshot, new_snapshot)
     except Exception:
         pass
 
@@ -3128,47 +3131,19 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
 _GITHUB_URL_PATTERN = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
 
 
-def _repo_aggregates_for_urls(urls: list) -> dict:
-    """Per-page-scoped formats/licenses/cve_count/has_conflicts for a bounded
-    set of repo URLs (a single page, ~20 of them) — deliberately NOT cached
-    on GithubRepo (see its docstring), computed live but against a tiny
-    Rule.source IN (...) filter (indexed via ix_rule_source_btree) instead
-    of the whole corpus."""
-    if not urls:
-        return {}
-    rows = (
-        db.session.query(
-            Rule.source.label("url"),
-            func.string_agg(Rule.format.distinct(), text("','")).label("formats"),
-            func.string_agg(Rule.license.distinct(), text("','")).label("licenses"),
-            func.sum(
-                case(
-                    (and_(Rule.cve_id.isnot(None), Rule.cve_id != '[]', Rule.cve_id != ''), 1),
-                    else_=0
-                )
-            ).label("cve_count"),
-            func.max(
-                db.session.query(func.count(RuleSimilarity.id))
-                .filter(RuleSimilarity.rule_id == Rule.id)
-                .filter(RuleSimilarity.score > 0.99)
-                .as_scalar()
-            ).label("has_high_similarity")
-        )
-        .filter(Rule.source.in_(urls), Rule.is_deleted == False)
-        .group_by(Rule.source)
-        .all()
-    )
-    return {row.url: row for row in rows}
-
-
 def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc'):
-    """Paginates GithubRepo (a small, incrementally-synced table — see
-    github_repo_core.py) instead of running a live GROUP BY over the whole
-    Rule table. Filters that depend on per-rule data (format/license/editor/
-    conflicts) are applied as EXISTS subqueries scoped to each candidate
-    repo's own rules — cheap regardless of corpus size since Rule.source is
-    indexed (ix_rule_source_btree) and GithubRepo itself only has one row
-    per distinct repo."""
+    """Paginates AND filters/sorts entirely off GithubRepo (a small,
+    incrementally-synced table — see github_repo_core.py) instead of
+    running a live GROUP BY / per-rule scan over the whole Rule table.
+    format/license/cve_count/conflicts all live directly on GithubRepo now
+    (format_counts/license_counts/cve_count/conflict_count), so those
+    filters and the cve_count sort are plain WHERE/ORDER BY on this table —
+    no Rule query at all for them.
+
+    editor_names is the one exception left touching Rule (via an EXISTS
+    semi-join) — which Rulezet user owns a rule is inherently per-rule
+    data, not something GithubRepo aggregates; same for the free-text
+    title search when search_field != 'url'."""
     from sqlalchemy import func, exists
 
     # Rule.source is stored without a trailing ".git" — a URL pasted straight
@@ -3182,9 +3157,12 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
     query = GithubRepo.query
 
     if format_filter:
-        query = query.filter(exists().where(and_(
-            Rule.source == GithubRepo.url, Rule.is_deleted == False, Rule.format == format_filter
-        )))
+        # .as_integer() > 0 rather than [key].isnot(None): on SQLite the
+        # generic JSON comparator wraps a missing key in JSON_QUOTE(), which
+        # turns SQL NULL into the *string* "null" — so isnot(None) is always
+        # true there. as_integer() casts before that happens and behaves
+        # identically on Postgres.
+        query = query.filter(GithubRepo.format_counts[format_filter].as_integer() > 0)
 
     if author_filter and author_filter != "":
         query = query.filter(GithubRepo.author.ilike(f"%{author_filter}%"))
@@ -3203,9 +3181,7 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
         )))
 
     if license_filter:
-        query = query.filter(exists().where(and_(
-            Rule.source == GithubRepo.url, Rule.is_deleted == False, Rule.license == license_filter
-        )))
+        query = query.filter(GithubRepo.license_counts[license_filter].as_integer() > 0)
 
     if search:
         if search_field == 'url':
@@ -3220,32 +3196,18 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             ))
 
     if conflicts_only:
-        query = query.filter(exists().where(and_(
-            Rule.source == GithubRepo.url, Rule.is_deleted == False,
-            RuleSimilarity.rule_id == Rule.id, RuleSimilarity.score > 0.99
-        )))
+        query = query.filter(GithubRepo.conflict_count > 0)
 
-    if sort == 'cve_count':
-        # Not stored on GithubRepo (deliberately) — needs a correlated
-        # per-row subquery to sort by, but it's one indexed lookup per
-        # candidate repo, not a full-corpus scan.
-        cve_count_expr = (
-            db.session.query(func.count(Rule.id))
-            .filter(Rule.source == GithubRepo.url, Rule.is_deleted == False,
-                    Rule.cve_id.isnot(None), Rule.cve_id != '[]', Rule.cve_id != '')
-            .correlate(GithubRepo)
-            .as_scalar()
-        )
-        order_expr = cve_count_expr.desc() if sort_dir == 'desc' else cve_count_expr.asc()
+    if sort in ('url', 'author', 'rule_count', 'cve_count'):
+        sort_column = getattr(GithubRepo, sort)
     else:
-        sort_column = getattr(GithubRepo, sort) if sort in ('url', 'author', 'rule_count') else GithubRepo.url
-        order_expr = sort_column.desc() if sort_dir == 'desc' else sort_column.asc()
+        sort_column = GithubRepo.url
+    order_expr = sort_column.desc() if sort_dir == 'desc' else sort_column.asc()
     query = query.order_by(order_expr)
 
     pagination = query.paginate(page=page, per_page=20)
 
     urls = [row.url for row in pagination.items]
-    aggregates = _repo_aggregates_for_urls(urls)
 
     # Batched: this used to run 2 extra ILIKE-scan queries PER row (40 for a
     # single page of 20), which dominated this endpoint's response time.
@@ -3288,16 +3250,15 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
         url = repo.url
         last_import = last_imports_by_url.get(url)
         last_update = last_updates_by_url.get(url)
-        agg = aggregates.get(url)
 
         github_data.append({
             "url": url,
             "author": repo.author,
             "rule_count": repo.rule_count,
-            "formats": agg.formats.split(',') if agg and agg.formats else [],
-            "licenses": agg.licenses.split(',') if agg and agg.licenses else [],
-            "cve_count": agg.cve_count if agg else 0,
-            "has_conflicts": bool(agg and (agg.has_high_similarity or 0) > 0),
+            "formats": sorted((repo.format_counts or {}).keys()),
+            "licenses": sorted((repo.license_counts or {}).keys()),
+            "cve_count": repo.cve_count,
+            "has_conflicts": repo.conflict_count > 0,
             "last_import": {
                 "date": last_import.query_date.strftime('%Y-%m-%d %H:%M') if last_import else None,
                 "url_imported": "/rule/import_loading/"+ last_import.uuid if last_import else None,
@@ -3318,21 +3279,18 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
 
 
 def get_github_authors_usage(search_query: str = None):
-    """Distinct GitHub repo owners (extracted from Rule.source) with rule
-    counts, scoped to rules matching the GitHub URL pattern — feeds the
-    Author mode of MultiPersonFilter on the GitHub Sources page."""
-    author_expr = func.substring(Rule.source, r'github\.com/([^/]+)')
-    query = _active().filter(Rule.source.op('~')(_GITHUB_URL_PATTERN))
-
-    if search_query:
-        query = query.filter(author_expr.ilike(f'%{search_query}%'))
-
-    rows = (
-        query.with_entities(author_expr.label('author'), func.count(Rule.id).label('count'))
-        .group_by(author_expr)
-        .order_by(func.count(Rule.id).desc())
-        .all()
+    """Distinct GitHub repo owners with rule counts, summed straight off
+    GithubRepo (author + rule_count are already tracked there — see
+    github_repo_core.py) instead of a live regex-extract scan over Rule —
+    feeds the Author mode of MultiPersonFilter on the GitHub Sources page."""
+    query = (
+        db.session.query(GithubRepo.author.label('author'), func.sum(GithubRepo.rule_count).label('count'))
+        .filter(GithubRepo.author.isnot(None))
     )
+    if search_query:
+        query = query.filter(GithubRepo.author.ilike(f'%{search_query}%'))
+
+    rows = query.group_by(GithubRepo.author).order_by(func.sum(GithubRepo.rule_count).desc()).all()
     return [{"name": r.author, "count": r.count} for r in rows if r.author]
 
 
@@ -3355,16 +3313,17 @@ def get_github_editors_usage(search_query: str = None):
 
 def get_github_licenses_usage():
     """Distinct licenses in use across GitHub-sourced rules, with counts —
-    feeds the License filter on the GitHub Sources page."""
-    rows = (
-        _active()
-        .filter(Rule.source.op('~')(_GITHUB_URL_PATTERN), Rule.license.isnot(None), Rule.license != '')
-        .with_entities(Rule.license.label('license'), func.count(Rule.id).label('count'))
-        .group_by(Rule.license)
-        .order_by(func.count(Rule.id).desc())
-        .all()
-    )
-    return [{"name": r.license, "count": r.count} for r in rows]
+    summed from GithubRepo.license_counts (already tracked per repo)
+    instead of a live scan over Rule. Feeds the License filter on the
+    GitHub Sources page. GithubRepo is small (one row per repo), so
+    summing its per-repo license_counts dicts in Python is cheap and
+    avoids a DB-side JSON-unnest just for this."""
+    totals = {}
+    for (license_counts,) in db.session.query(GithubRepo.license_counts).all():
+        for name, count in (license_counts or {}).items():
+            totals[name] = totals.get(name, 0) + count
+    return [{"name": name, "count": count}
+            for name, count in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
 
 
 def get_rule_count_by_github_page(page: int = 1, search: str = None):
@@ -5032,10 +4991,15 @@ def delete_similarity_history(uuid: str):
     try:
         RuleSimilarity.query.filter_by(result_uuid=uuid).delete()
 
-        
+
         SimilarResult.query.filter_by(uuid=uuid).delete()
 
         db.session.commit()
+        try:
+            from app.features.rule.github_repo_core import sync_conflict_counts
+            sync_conflict_counts()
+        except Exception:
+            pass
         return True
     except Exception as e:
         db.session.rollback()

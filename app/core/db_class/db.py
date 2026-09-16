@@ -3746,17 +3746,31 @@ class GithubRepo(db.Model):
     app/features/rule/github_repo_core.py for the write-side helpers and
     the full list of call sites this depends on staying correct at.
 
-    Deliberately NOT caching formats/licenses/cve_count/similarity-conflict
-    per repo — those still get computed live, but scoped to just the
-    current page's ~20 URLs (bounded, cheap) instead of the whole corpus.
+    format_counts/license_counts are {name: count} dicts of this repo's
+    active rules, kept in sync incrementally at the same write sites as
+    rule_count (see github_repo_core.py) — the filter/sort/search logic on
+    the GitHub Sources list reads them (and cve_count/conflict_count)
+    directly off this table, never a live Rule scan.
+
+    conflict_count (distinct rules in this repo with a RuleSimilarity row
+    scoring > 0.99) is the one exception to "same write sites as
+    rule_count": RuleSimilarity itself is produced by a separate, full
+    corpus-wide recompute job (app/features/rule/utils/similar_rules/
+    similarity_class.py wipes and rebuilds the whole table), so
+    conflict_count is instead resynced in one batched pass right after that
+    job finishes — see github_repo_core.sync_conflict_counts().
     """
     __tablename__ = 'github_repo'
 
-    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    uuid       = db.Column(db.String(36), unique=True, nullable=False, index=True)
-    url        = db.Column(db.String(500), unique=True, nullable=False, index=True)
-    author     = db.Column(db.String(255), nullable=True, index=True)
-    rule_count = db.Column(db.Integer, nullable=False, default=0)
+    id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid           = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    url            = db.Column(db.String(500), unique=True, nullable=False, index=True)
+    author         = db.Column(db.String(255), nullable=True, index=True)
+    rule_count     = db.Column(db.Integer, nullable=False, default=0)
+    format_counts  = db.Column(db.JSON, nullable=False, default=dict)
+    license_counts = db.Column(db.JSON, nullable=False, default=dict)
+    cve_count      = db.Column(db.Integer, nullable=False, default=0)
+    conflict_count = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc))
     updated_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc),
                            onupdate=datetime.datetime.now(tz=datetime.timezone.utc))
@@ -3769,6 +3783,10 @@ class GithubRepo(db.Model):
             'url':        self.url,
             'author':     self.author,
             'rule_count': self.rule_count,
+            'formats':    sorted((self.format_counts or {}).keys()),
+            'licenses':   sorted((self.license_counts or {}).keys()),
+            'cve_count':  self.cve_count,
+            'has_conflicts': self.conflict_count > 0,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
         }

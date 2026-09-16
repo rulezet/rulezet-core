@@ -630,19 +630,18 @@ def handle_delete_github_rules(job, app):
     now        = datetime.datetime.now(tz=datetime.timezone.utc)
     created_by = job.created_by
 
-    # Snapshot per-url active counts BEFORE the bulk update, so GithubRepo's
-    # cache can be decremented by exactly what's about to be deleted — see
+    # Snapshot the exact rule ids about to be deleted BEFORE the bulk update,
+    # so GithubRepo's aggregates (rule_count/formats/licenses/cve_count) can
+    # be decremented by exactly what's about to change — see
     # github_repo_core.py's module docstring for the full write-site list.
     try:
-        from sqlalchemy import func
-        from app.features.rule.github_repo_core import apply_delta
-        pre_counts = dict(
-            db.session.query(Rule.source, func.count(Rule.id))
-            .filter(Rule.source.in_(urls), Rule.is_deleted == False)
-            .group_by(Rule.source).all()
-        )
+        pre_ids = [r[0] for r in db.session.query(Rule.id).filter(
+            Rule.source.in_(urls), Rule.is_deleted == False
+        ).all()]
+        from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
+        apply_deltas_for_rule_ids(pre_ids, sign=-1, is_deleted=False)
     except Exception:
-        pre_counts = {}
+        pass
 
     # Soft-delete in one bulk update
     updated = Rule.query.filter(Rule.source.in_(urls), Rule.is_deleted == False).update(
@@ -650,12 +649,6 @@ def handle_delete_github_rules(job, app):
         synchronize_session=False,
     )
     db.session.commit()
-
-    try:
-        for url, count in pre_counts.items():
-            apply_delta(url, -count)
-    except Exception:
-        pass
 
     job.done = updated
     db.session.commit()

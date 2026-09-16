@@ -520,7 +520,7 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
     _import_rule_history(rule, remote.get('update_history', []), owner_id)
     try:
         from app.features.rule.github_repo_core import apply_delta
-        apply_delta(rule.source, +1)
+        apply_delta(rule.source, +1, rule=rule)
     except Exception:
         pass
     return 'created'
