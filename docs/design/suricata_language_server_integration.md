@@ -1,6 +1,17 @@
 # Integrating `suricata-language-server` — Feasibility Analysis
 
-> Status: **research, not started.** Answers the question deferred in
+> Status: **implemented**, per the recommendation below. `SURICATA_BINARY_PATH`
+> (`.env`, empty = disabled), `app/features/rule/rule_format/deep_validate.py`,
+> a single-rule "Deep validate" button on the rule detail page, and an
+> admin-triggered bounded-batch background job (Manage Rule Formats page)
+> all exist and were verified end-to-end against this machine's real
+> Suricata 8.0.3 + suricata-language-server 2.1.2 — a Sagan-shaped rule
+> correctly comes back `severity=1`/`protocol "any" cannot be used...`, a
+> valid rule passes clean, ~0.5s per call. Off by default; nothing runs
+> unless an admin sets `SURICATA_BINARY_PATH` and separately
+> `pip install suricata-language-server`.
+>
+> Answers the question deferred in
 > [`suricata_sagan_rework.md`](./suricata_sagan_rework.md) (§2, "explicitly
 > out of scope for this plan") and directly addresses issue #61's
 > suggestion #1: *"Run suricata-language-server (or plain Suricata)
@@ -223,9 +234,9 @@ instead of a placeholder:
    subcommand) to keep `_snort_family_common.py`'s allowlists honest
    against real Suricata data, without any runtime dependency on the tool.
 
-## Open question for the user
+## Status
 
-Item 1-4 above is real, buildable work (new setting, two UI entry points,
-one job handler, subprocess plumbing) — worth scoping as its own ticket
-rather than folded into the already-shipped Sagan/Suricata rework. Ready
-to start on it whenever you want to prioritize it; say the word.
+Items 1-4 above are implemented — see the status note at the top of this
+document. Item 5 (periodically re-vendoring `suricata-keywords.json` to
+keep `_snort_family_common.py`'s allowlists honest) is still a manual,
+occasional maintenance task, not automated.
