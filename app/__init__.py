@@ -32,6 +32,21 @@ def create_app(start_worker=True):
 
     Config[config_name].init_app(app)
 
+    # Behind a reverse proxy (nginx, ...), Flask/Werkzeug otherwise only ever
+    # sees the proxy's own address as request.remote_addr — every access log
+    # line (including the dev server's terminal output) and every IP-based
+    # feature (activity log, rate limiting, ...) would show the proxy's IP
+    # for every single request. ProxyFix rewrites remote_addr/scheme/host
+    # from X-Forwarded-*, trusting exactly TRUSTED_PROXY_COUNT hops (counted
+    # from the right — the proxy-appended entry, never a client-supplied
+    # one) so a client can't just spoof its own X-Forwarded-For. Off by
+    # default (0) — only enable by setting TRUSTED_PROXY_COUNT to the real
+    # number of reverse proxies this instance sits behind.
+    proxy_count = app.config.get('TRUSTED_PROXY_COUNT', 0)
+    if proxy_count > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_count, x_proto=proxy_count, x_host=proxy_count)
+
     db.init_app(app)
     csrf.init_app(app)
     migrate.init_app(app, db, render_as_batch=True)

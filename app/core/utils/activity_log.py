@@ -117,28 +117,32 @@ def log_activity(
         ip = method = url = user_agent = referrer = endpoint = None
         remote_addr = xff = None
         with suppress(Exception):
+            # request.remote_addr is the single source of truth for "who
+            # made this request" — when this instance sits behind a proxy
+            # (TRUSTED_PROXY_COUNT > 0, see app/__init__.py), Werkzeug's
+            # ProxyFix has already rewritten it from X-Forwarded-For,
+            # trusting only the configured number of hops counted from the
+            # right (the proxy-appended entry). Taking the raw header's
+            # first entry ourselves, as this used to do, trusts whatever a
+            # client puts there — the leftmost entry is exactly the part a
+            # client controls, since a well-behaved proxy only ever appends.
             remote_addr = freq.remote_addr
-            _xff_raw = (freq.headers.get('X-Forwarded-For') or '').strip()
-            xff = _xff_raw or None
-            # ip_address = real client IP: first XFF entry (client behind proxy) or remote_addr
-            ip = (xff.split(',')[0].strip() if xff else remote_addr)
-            if ip:
-                ip = ip[:45]
+            ip = remote_addr[:45] if remote_addr else None
+            xff = (freq.headers.get('X-Forwarded-For') or '').strip() or None
             url        = freq.path[:512]
             method     = freq.method
             user_agent = (freq.headers.get('User-Agent') or '')[:256] or None
             referrer   = (freq.referrer or '')[:512] or None
             endpoint   = freq.endpoint
 
-        # Build extra JSON: IPs (never loopback) + named target key + caller data
+        # Build extra JSON: raw XFF chain (audit trail) + named target key + caller data
         with suppress(Exception):
             base: dict[str, Any] = {}
-            # X-Forwarded-For = real client IP chain — always include when present
+            # Raw X-Forwarded-For chain, kept for audit purposes even though
+            # ip_address (above) is now the single trusted value — useful to
+            # see the full hop chain a proxy actually forwarded.
             if xff:
                 base['x_forwarded_for'] = xff[:512]
-            # remote_addr = the direct connecting address (proxy/lb) — skip loopback (127.x / ::1)
-            if remote_addr and remote_addr != '::1' and not remote_addr.startswith('127.'):
-                base['remote_addr'] = remote_addr
             # Named target IDs (rule_id, comment_id, bundle_id…) from target_type
             if target_type and target_id is not None:
                 base[f'{target_type}_id'] = target_id

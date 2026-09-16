@@ -23,6 +23,15 @@ class Config:
     INSTANCE_PUBLIC_URL  = os.environ.get('INSTANCE_PUBLIC_URL')   # e.g. https://myinstance.example.com
     IS_OFFICIAL_INSTANCE = os.environ.get('IS_OFFICIAL_INSTANCE', 'false').lower() == 'true'
 
+    # Number of reverse proxies (nginx, ...) this instance sits behind — 0
+    # (default) means "no proxy, trust nothing" and leaves remote_addr as
+    # the raw TCP peer. Set to the real hop count to make Werkzeug's
+    # ProxyFix trust X-Forwarded-For/-Proto/-Host that far and no further
+    # (see app/__init__.py) — request.remote_addr, activity log IPs, and
+    # the dev server's own terminal access log then show the real client
+    # IP instead of the proxy's.
+    TRUSTED_PROXY_COUNT = int(os.environ.get('TRUSTED_PROXY_COUNT', 0))
+
     # Self-hosted Ollama instance backing the in-app chatbot prototype.
     # Run one locally with e.g. `ollama serve` (and `ollama pull qwen2.5:1.5b`) —
     # no API key, no billing, everything stays on this machine.
