@@ -163,6 +163,11 @@ confirmed via `rule_type_abstract.py`'s `load_all_rule_formats()`).
   engine-backed validator as a separate, opt-in instance setting (e.g. "path
   to a local `suricata` binary — enables deep validation when set") rather
   than a hard requirement folded into this fix.
+  **Now analyzed in detail**: see
+  [`suricata_language_server_integration.md`](./suricata_language_server_integration.md)
+  — feasibility, exact batch-mode output format, and a concrete (real,
+  maintainer-sourced) performance number confirming why this stays
+  opt-in/single-rule/background-job rather than an upload-time check.
 
 ## 3. Retroactive reclassification of the ~7,119 already-mistagged rules
 
