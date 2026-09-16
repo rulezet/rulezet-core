@@ -54,6 +54,16 @@ class Session_class:
         self.events      = []
         self._events_lock = Lock()
 
+        # Cross-rule correlation for extract_relations()'s 'correlation_key'
+        # entries (e.g. Kunai rules sharing a hash in meta.comments) — a
+        # plain dict keyed by (format, key) -> [rule_id, ...], guarded by
+        # _relation_lock since process() runs on self.thread_count worker
+        # threads concurrently. Only correlates rules seen within THIS
+        # session; a rule from an earlier sync sharing the same key isn't
+        # retroactively linked (see _resolve_relations' docstring).
+        self._correlation_seen = {}
+        self._relation_lock = Lock()
+
     def _log_event(self, kind, name, fmt, count=None):
         with self._events_lock:
             entry = {"type": kind, "name": name, "format": fmt}
@@ -323,21 +333,46 @@ class Session_class:
                             self.imported += 1
                             self.count_per_format[rule_instance.format]["imported"] += 1
                             self._log_event("imported", rule_name, rule_instance.format)
+                            try:
+                                self._resolve_relations(rule_instance, clean_text, metadata, success)
+                            except Exception:
+                                pass  # never let a relation-extraction bug fail the import itself
                         else:
                             self.skipped += 1
                             self.count_per_format[rule_instance.format]["skipped"] += 1
                             self._log_event("skipped", rule_name, rule_instance.format)
                     else:
-                        BadRuleModel.save_invalid_rule(
-                            form_dict=metadata,
-                            to_string=clean_text,
-                            rule_type=rule_instance.format,
-                            error=validation.errors,
-                            user=local_user
-                        )
-                        self.bad_rules += 1
-                        self.count_per_format[rule_instance.format]["bad_rule"] += 1
-                        self._log_event("bad", rule_name, rule_instance.format)
+                        dep_status, dep_new_rule = ('no_match', None)
+                        if rule_instance.format == 'yara':
+                            from app.features.rule.rule_format.available_format.yara_format import try_resolve_yara_missing_dependency
+                            dep_status, dep_new_rule = try_resolve_yara_missing_dependency(
+                                rule_instance, clean_text, metadata, validation, local_user,
+                                source_repo_url=self.info.get('repo_url'), github_path=rel_path,
+                            )
+
+                        if dep_status == 'created':
+                            self.imported += 1
+                            self.count_per_format[rule_instance.format]["imported"] += 1
+                            self._log_event("imported", rule_name, rule_instance.format)
+                            try:
+                                self._resolve_relations(rule_instance, clean_text, metadata, dep_new_rule)
+                            except Exception:
+                                pass
+                        elif dep_status == 'skipped':
+                            self.skipped += 1
+                            self.count_per_format[rule_instance.format]["skipped"] += 1
+                            self._log_event("skipped", rule_name, rule_instance.format)
+                        else:
+                            BadRuleModel.save_invalid_rule(
+                                form_dict=metadata,
+                                to_string=clean_text,
+                                rule_type=rule_instance.format,
+                                error=validation.errors,
+                                user=local_user
+                            )
+                            self.bad_rules += 1
+                            self.count_per_format[rule_instance.format]["bad_rule"] += 1
+                            self._log_event("bad", rule_name, rule_instance.format)
 
                 self.jobs.task_done()
             except Exception:
@@ -366,6 +401,16 @@ class Session_class:
 
         return True
     
+    def _resolve_relations(self, rule_instance, raw_text, metadata, new_rule):
+        """Thin wrapper around the shared resolve_and_link_relations() —
+        see that function's docstring for what it actually does. This
+        session's own _correlation_seen dict + _relation_lock scope the
+        cross-rule correlation (Kunai-style shared hashes) to just this
+        import run, since process() runs on self.thread_count threads."""
+        from app.features.rule_relation.rule_relation_core import resolve_and_link_relations
+        resolve_and_link_relations(rule_instance, raw_text, metadata, new_rule,
+                                    self._correlation_seen, lock=self._relation_lock)
+
     def save_info(self):
         result_entry = ImporterResult(
             uuid=str(self.uuid),

@@ -150,6 +150,43 @@ class WazuhRule(RuleType):
             }
 
 
+    def extract_relations(self, content: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Wazuh rules correlate with each other via <if_sid>/<if_matched_sid>
+        (a direct reference to another rule's numeric id — resolved as a
+        target_ref) and <if_group>/<if_matched_group> (a shared group name,
+        not a single rule — every rule declaring the same group value is
+        correlated as a set, so this is reported as a correlation_key
+        instead, the same shape Kunai's shared-hash correlation uses).
+        Previously this data was read nowhere and silently discarded once
+        a <rule> was split out of its enclosing <group> — see
+        extract_rules_from_file's docstring.
+        """
+        relations = []
+        try:
+            root = ET.fromstring(content)
+            rule = root if root.tag == "rule" else root.find(".//rule")
+            if rule is None:
+                return []
+
+            for tag, relation_type in (("if_sid", "if_sid"), ("if_matched_sid", "if_matched_sid")):
+                for el in rule.findall(tag):
+                    target_id = (el.text or "").strip()
+                    if target_id:
+                        relations.append({
+                            'kind': 'target_ref', 'target_identifier': target_id, 'relation_type': relation_type,
+                        })
+
+            for tag, relation_type in (("if_group", "if_group"), ("if_matched_group", "if_matched_group")):
+                for el in rule.findall(tag):
+                    group = (el.text or "").strip()
+                    if group:
+                        relations.append({
+                            'kind': 'correlation_key', 'key': f'{relation_type}:{group}', 'relation_type': relation_type,
+                        })
+        except Exception:
+            return []
+        return relations
+
     def get_rule_files(self, file: str) -> bool:
         """
         Get all Wazuh XML rule files from a repo.

@@ -8,7 +8,7 @@
 
 import AnsiTerminal from '/static/js/components/ansi-terminal.js';
 
-const { ref, computed, onUnmounted } = Vue;
+const { ref, computed, onMounted, onUnmounted } = Vue;
 
 export default {
     name: 'BulkImportRunner',
@@ -29,8 +29,26 @@ export default {
         // External gate (e.g. "no valid config picked yet") — same idea as
         // the internal `running` disable, just driven by the parent instead.
         disabled:    { type: Boolean, default: false },
+        // The idle-state placeholder's "Click X to import every Y found on
+        // disk" text was written for the original taxonomy/galaxy-import
+        // use case and doesn't fit every consumer (e.g. platform tagging
+        // isn't importing anything from disk) — the title/description
+        // above it already carry a real, per-consumer recap. On by default
+        // so every existing caller keeps its current look.
+        showIdleHint: { type: Boolean, default: true },
+        // Off collapses the header to a single line: just the description
+        // (used as the whole recap sentence) next to the button — for a
+        // consumer that already decided everything worth saying belongs in
+        // one sentence, not a heading + a sentence under it.
+        showTitle:    { type: Boolean, default: true },
+        // If set when this component mounts, resumes watching that
+        // already-queued/running (or even finished) job instead of sitting
+        // idle waiting for the button to be clicked — lets a parent put the
+        // job uuid in the URL and reconnect to it across a page reload
+        // instead of losing track of an in-progress job.
+        resumeJobUuid: { type: String, default: null },
     },
-    emits: ['notify', 'refresh-main'],
+    emits: ['notify', 'refresh-main', 'job-uuid-changed', 'job-running-changed'],
     setup(props, { emit }) {
         const running    = ref(false);
         const jobUuid     = ref(null);
@@ -73,6 +91,12 @@ export default {
                     clearInterval(pollTimer);
                     pollTimer = null;
                     running.value = false;
+                    emit('job-running-changed', false);
+                    // Job finished — drop it from the URL (parent clears
+                    // ?job=...) so a reload doesn't keep "resuming" a job
+                    // that's already over. The on-screen log/status stays,
+                    // only the URL tracking stops.
+                    emit('job-uuid-changed', null);
                     if (jobStatus.value === 'done') {
                         emit('notify', `${props.title} complete!`, 'success-subtle');
                         emit('refresh-main');
@@ -81,6 +105,20 @@ export default {
             } catch (e) {
                 console.error('[BulkImportRunner] poll error:', e);
             }
+        }
+
+        // Shared by start() (a job just got created) and the resume-on-mount
+        // path (a job uuid arrived via props, e.g. from the URL) — begins
+        // polling and tells the parent which job this is now watching, so
+        // it can keep a URL param in sync across reloads.
+        function watchJob(uuid, initialStatus) {
+            jobUuid.value   = uuid;
+            jobStatus.value = initialStatus;
+            running.value   = true;
+            emit('job-uuid-changed', uuid);
+            emit('job-running-changed', true);
+            pollTimer = setInterval(pollLogs, 2000);
+            pollLogs();
         }
 
         async function start() {
@@ -113,16 +151,20 @@ export default {
                     return;
                 }
 
-                jobUuid.value   = data.job.uuid;
-                jobStatus.value = 'running';
-
-                pollTimer = setInterval(pollLogs, 2000);
-                pollLogs();
+                watchJob(data.job.uuid, 'running');
             } catch (e) {
                 emit('notify', 'Network error: ' + e, 'danger-subtle');
                 running.value = false;
             }
         }
+
+        onMounted(() => {
+            // pollLogs() corrects jobStatus/progress from the real job
+            // status on its very first tick, so 'running' here is just a
+            // reasonable placeholder until that lands (also covers an
+            // already-finished job fine — isDone flips true right after).
+            if (props.resumeJobUuid) watchJob(props.resumeJobUuid, 'running');
+        });
 
         onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
 
@@ -137,15 +179,17 @@ export default {
   <div class="card-body p-4">
 
     <!-- Header -->
-    <div class="d-flex align-items-start justify-content-between mb-3 flex-wrap gap-3">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-3">
       <div>
-        <h6 class="fw-bold mb-1">
+        <h6 v-if="showTitle" class="fw-bold mb-1">
           <i :class="icon" class="me-2" :style="'color:' + accentColor"></i>[[ title ]]
         </h6>
-        <small class="text-muted">[[ description ]]</small>
+        <small class="text-muted">
+          <i v-if="!showTitle" :class="icon" class="me-1" :style="'color:' + accentColor"></i>[[ description ]]
+        </small>
       </div>
       <button @click="start" :disabled="running || disabled"
-              class="btn fw-semibold px-4 text-white"
+              class="btn fw-semibold px-4 text-white flex-shrink-0"
               :style="'background:' + accentColor + ';border-color:' + accentColor">
         <i class="fa-solid me-2" :class="running ? 'fa-spinner fa-spin' : 'fa-play'"></i>
         [[ running ? 'Running…' : buttonLabel ]]
@@ -175,7 +219,7 @@ export default {
     </template>
 
     <!-- Idle placeholder -->
-    <div v-else class="text-center py-3 text-muted">
+    <div v-else-if="showIdleHint" class="text-center py-3 text-muted">
       <i :class="icon" class="fa-2x mb-2 d-block opacity-25"></i>
       <small>Click <strong>[[ buttonLabel ]]</strong> to import every [[ itemNoun ]] found on disk — already-imported ones are skipped automatically.</small>
     </div>

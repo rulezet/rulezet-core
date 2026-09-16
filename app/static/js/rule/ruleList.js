@@ -146,6 +146,29 @@ export default {
         // the false-positive validation quarantine review page only. No effect
         // on any other page that doesn't pass this prop.
         showValidationRisk: { type: Boolean,            default: false },
+        // Opt-in, page-local extension: when true, shows a small "relation"
+        // badge per row (card view: top-right badge row; table view: its
+        // own column) — used by the rule detail page's dedicated Linked
+        // Rules page to say *how* each row relates to the rule being
+        // viewed (e.g. "depends on" / "used by"), reusing this component's
+        // own card/table rendering instead of a bespoke list. No effect on
+        // any other page that doesn't pass this prop.
+        showRelationType:   { type: Boolean,            default: false },
+        // { [ruleId]: label } — the text shown by showRelationType's badge
+        // for that row. Supplied by the parent (it already resolved the
+        // relation rows and their direction-aware label — see
+        // detail_rule_linked_rules.html) since this component has no
+        // notion of rule-to-rule relations itself.
+        relationLabels:     { type: Object,             default: () => ({}) },
+        // Shows a "N linked" badge (card view: top-right badge row; table
+        // view: its own column) on any row whose rule.linked_rules_count is
+        // > 0 — that field is always present on every /rule/data_table row
+        // (see serialize_rules_for_data_table), this prop only controls
+        // whether it's rendered. On by default everywhere — purely
+        // informational (a link to that rule's Linked Rules page, no
+        // effect on selection/filtering), so a consumer only needs
+        // :show-related-count="false" if it specifically wants it hidden.
+        showRelatedCount:   { type: Boolean,            default: true },
         // Turns on the native Risk-level + Binary rows inside this
         // component's OWN filter panel (right alongside Columns/Filters in
         // the toolbar) — the quarantine-review page's whole filter UI now
@@ -174,9 +197,25 @@ export default {
         // widgets that don't want to touch the page's own URL via syncUrl).
         initialSort:        { type: String,              default: '' },
         initialDir:         { type: String,              default: 'asc' },
+        // mode="select" only: seeds selectedIds/selectedRulesMap with rows a
+        // parent already has picked elsewhere (e.g. RelatedRuleInput opening
+        // this browser with rules already linked to the rule being edited),
+        // so those show pre-checked and in the "N selected" picked panel
+        // instead of being silently re-pickable as if they weren't chosen
+        // yet. Seeded once at setup — a caller that needs to update this
+        // after mount re-mounts the component (v-if toggle), same as every
+        // current consumer already does when reopening a picker.
+        preSelected:        { type: Array,                default: () => [] },
+        // mode="select" only: hides the toolbar's own "Confirm (N)" button —
+        // for a consumer that listens to the new 'toggle-select' emit and
+        // already commits each pick/unpick live, that button (and its
+        // "batch, then confirm" model) is redundant. Every other mode="select"
+        // consumer (Task Scheduler, Workspace "Add Rules", bulk admin tools)
+        // still gets it by default — they rely on the batch-then-confirm flow.
+        showConfirmButton:  { type: Boolean,             default: true },
     },
 
-    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'rule-drag-start', 'rule-drag-end', 'status-change'],
+    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'toggle-select', 'rule-drag-start', 'rule-drag-end', 'status-change'],
 
     // 'ruleType'/'onFilterChange' let a parent page drive the format filter
     // from outside (e.g. clicking a "12 YARA rules" stat elsewhere on the
@@ -303,7 +342,7 @@ export default {
                 </span>
 
                 <!-- Select-all / send (mode=select) -->
-                <button v-if="mode === 'select'"
+                <button v-if="mode === 'select' && showConfirmButton"
                         class="dt-toolbar-btn dt-toolbar-btn--primary"
                         :disabled="selectionCount === 0 || confirmDisabled"
                         @click="emitSend">
@@ -355,6 +394,12 @@ export default {
                            class="rl-fp-switch" title="Exact match">
                         <input type="checkbox" v-model="exactMatch" @change="onFilterChange" />
                         <span>Exact</span>
+                    </label>
+
+                    <label v-if="!isFilterHidden('has_relations')"
+                           class="rl-fp-switch" title="Only rules linked to at least one other rule">
+                        <input type="checkbox" v-model="hasRelationsOnly" @change="onFilterChange" />
+                        <span><i class="fa-solid fa-diagram-project me-1"></i>Linked rules</span>
                     </label>
 
                     <div class="rl-quality-range" v-if="!isFilterHidden('quality')" title="Filter by quality score">
@@ -639,6 +684,17 @@ export default {
                     <span class="badge rounded-pill bg-dark pt-1 shadow-sm">
                         {{ rule.format ? rule.format.toUpperCase() : '?' }}
                     </span>
+                    <span v-if="showRelationType && relationLabels[rule.id]" class="badge rounded-pill shadow-sm pt-1"
+                          style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25);">
+                        <i class="fa-solid fa-diagram-project me-1"></i>{{ relationLabels[rule.id] }}
+                    </span>
+                    <a v-if="showRelatedCount && rule.linked_rules_count > 0"
+                       :href="'/rule/detail_rule/' + rule.id + '/linked_rules'" @click.stop
+                       class="badge rounded-pill shadow-sm pt-1 text-decoration-none"
+                       style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25);"
+                       :title="rule.linked_rules_count + ' linked rule' + (rule.linked_rules_count === 1 ? '' : 's')">
+                        <i class="fa-solid fa-diagram-project me-1"></i>{{ rule.linked_rules_count }}
+                    </a>
                 </div>
 
                 <div class="card-body d-flex flex-column p-4" :style="{ zIndex: 1, paddingTop: isResolved(rule) ? '2.75rem' : '' }">
@@ -921,7 +977,7 @@ export default {
                     </div>
                     <code-viewer v-if="rule.to_string"
                         :code="rule.to_string"
-                        :language="ruleLanguage(rule.format)"
+                        :language="rule.format || 'auto'"
                         :title="rule.title"
                         :initial-search="searchField === 'content' ? search : ''"
                         :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
@@ -957,6 +1013,8 @@ export default {
                             </div>
                         </th>
                         <th v-if="showTestResults" class="dt-th" style="width:150px;">Result</th>
+                        <th v-if="showRelationType" class="dt-th" style="width:170px;">Relation</th>
+                        <th v-if="showRelatedCount" class="dt-th" style="width:90px;">Linked</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:130px;">Risk</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:180px;">Fired on</th>
                         <th v-show="colVisible.id" class="dt-th" style="width:90px;">ID</th>
@@ -1063,6 +1121,22 @@ export default {
                                         <template v-if="rule.test_result.execution_time_ms!=null"> · {{ rule.test_result.execution_time_ms }}ms</template>
                                     </span>
                                 </div>
+                            </td>
+
+                            <td v-if="showRelationType" class="dt-td">
+                                <span v-if="relationLabels[rule.id]" class="badge rounded-pill"
+                                      style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25); font-size:.68rem;">
+                                    <i class="fa-solid fa-diagram-project me-1"></i>{{ relationLabels[rule.id] }}
+                                </span>
+                            </td>
+
+                            <td v-if="showRelatedCount" class="dt-td">
+                                <a v-if="rule.linked_rules_count > 0"
+                                   :href="'/rule/detail_rule/' + rule.id + '/linked_rules'" @click.stop
+                                   class="badge rounded-pill text-decoration-none"
+                                   style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25); font-size:.68rem;">
+                                    <i class="fa-solid fa-diagram-project me-1"></i>{{ rule.linked_rules_count }}
+                                </a>
                             </td>
 
                             <td v-if="showValidationRisk" class="dt-td">
@@ -1432,7 +1506,7 @@ export default {
                                         <div class="rl-expand-code">
                                             <code-viewer v-if="rule.to_string"
                                                 :code="rule.to_string"
-                                                :language="ruleLanguage(rule.format)"
+                                                :language="rule.format || 'auto'"
                                                 :title="rule.title"
                                                 :initial-search="searchField === 'content' ? search : ''"
                                                 :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
@@ -1571,6 +1645,7 @@ export default {
         const scopeMine        = ref(_p('scope') === 'mine')
         const cveOnly           = ref(props.hasCveOnly || _p('has_cve') === 'true')
         const aiAnalysisOnly    = ref(_p('has_ai_analysis') === 'true')
+        const hasRelationsOnly  = ref(_p('has_relations') === 'true')
         const _numOrNull = (key) => {
             const raw = _p(key)
             const n = raw !== '' ? Number(raw) : NaN
@@ -1704,6 +1779,13 @@ export default {
         const showAllPicked     = ref(false)
         const allPagesSelected = ref(false)
 
+        for (const r of props.preSelected) {
+            if (r && r.id != null) {
+                selectedIds.add(r.id)
+                selectedRulesMap.set(r.id, { id: r.id, title: r.title, format: r.format })
+            }
+        }
+
         let searchTimer = null
 
         // ── Helpers ───────────────────────────────────────────────────────
@@ -1765,6 +1847,7 @@ export default {
         const activeFilterCount = computed(() =>
             (!isFilterHidden('format') && ruleType.value ? 1 : 0) +
             (!isFilterHidden('exact_match') && exactMatch.value ? 1 : 0) +
+            (!isFilterHidden('has_relations') && hasRelationsOnly.value ? 1 : 0) +
             (!isFilterHidden('search_field') && searchField.value !== 'all' ? 1 : 0) +
             (scopeMine.value ? 1 : 0) +
             (isFilterHidden('tags') ? 0 : selectedTags.value.length) +
@@ -1812,6 +1895,7 @@ export default {
             }
             _upd('scope', scopeMine.value ? 'mine' : null)
             _upd('has_ai_analysis', aiAnalysisOnly.value ? 'true' : null)
+            _upd('has_relations', hasRelationsOnly.value ? 'true' : null)
             if (props.showValidationFilters) {
                 _upd('mismatch_only', riskFilter.value === 'mismatch' ? 'true' : null)
                 _upd('risk_level',    riskFilter.value !== 'mismatch' ? riskFilter.value || null : null)
@@ -1866,6 +1950,7 @@ export default {
                 if (selectedAttacks.value.length)    params.set('attacks', selectedAttacks.value.join(','))
                 if (cveOnly.value)                    params.set('has_cve', 'true')
                 if (aiAnalysisOnly.value)             params.set('has_ai_analysis', 'true')
+                if (hasRelationsOnly.value)            params.set('has_relations', 'true')
                 if (qualityMin.value !== null)        params.set('quality_score_min', qualityMin.value)
                 if (qualityMax.value !== null)        params.set('quality_score_max', qualityMax.value)
                 if (personFilter.value.values.length) {
@@ -1930,6 +2015,7 @@ export default {
             if (!isFilterHidden('format'))          ruleType.value       = ''
             if (!isFilterHidden('search_field'))    searchField.value    = 'all'
             if (!isFilterHidden('exact_match'))     exactMatch.value     = false
+            if (!isFilterHidden('has_relations'))   hasRelationsOnly.value = false
             scopeMine.value      = false
             if (!isFilterHidden('tags'))            selectedTags.value   = []
             if (!isFilterHidden('sources'))         selectedSources.value = []
@@ -2023,11 +2109,20 @@ export default {
             }
             if (selectedIds.has(rule.id)) { selectedIds.delete(rule.id); _mapDel(rule.id) }
             else                           { selectedIds.add(rule.id);    _mapAdd(rule) }
+            // Per-toggle signal, separate from the batch 'send' emitted by the
+            // Confirm button — lets a consumer that wants live add/remove
+            // (no "pick several then confirm" step) react immediately, e.g.
+            // RelatedRuleInput persisting each pick/unpick as it happens
+            // instead of only on an explicit confirm. Existing consumers
+            // that don't listen for this are unaffected.
+            emit('toggle-select', rule, selectedIds.has(rule.id))
         }
 
         function removeFromSelection(id) {
+            const rule = selectedRulesMap.get(id)
             selectedIds.delete(id)
             _mapDel(id)
+            if (rule) emit('toggle-select', rule, false)
         }
 
         // Resolved rows have no checkbox at all — "every"/"some" and the
@@ -2216,6 +2311,8 @@ export default {
             if (props.draggable) n++
             if (props.showStatus) n++
             if (props.showTestResults) n++
+            if (props.showRelationType) n++
+            if (props.showRelatedCount) n++
             for (const col of TOGGLEABLE_COLS) if (colVisible[col.key]) n++
             return n
         })
@@ -2299,23 +2396,11 @@ export default {
             return 'bg-danger-subtle text-danger'
         }
 
-        // ── Rule format → hljs language ───────────────────────────────────
-        function ruleLanguage(format) {
-            if (!format) return 'auto'
-            const map = {
-                yara:     'yara',
-                sigma:    'yaml',
-                suricata: 'suricata',
-                zeek:     'zeek',
-                elastic:  'toml',  // Elastic Security rules are TOML — see hljs-toml.js
-                wazuh:    'xml',
-                nova:     'text',
-                nse:      'lua',
-                crs:      'text',
-                splunk:   'yaml',
-            }
-            return map[format.toLowerCase()] || 'auto'
-        }
+        // Highlighting: <code-viewer> is given the raw rule format string
+        // directly (:language="rule.format || 'auto'") and resolves it
+        // itself via its own LANG_ALIASES map — same convention as the
+        // rule detail page — instead of duplicating a second, incomplete
+        // format->language table here (this one was missing kunai).
 
         // ── Test result: matched bytes → highlight terms for CodeViewer ────
         // Reconstructs "31 F7 40 88 ..." the same way the rule source spells a
@@ -2431,7 +2516,7 @@ export default {
             filtersOpen, ruleType, searchField, exactMatch, cardSort, qualityMin, qualityMax, onQualityRangeChange,
             selectedTags, selectedSources, selectedLicenses, selectedVulns, selectedAttacks,
             personFilter, onPersonFilterChange,
-            scopeMine, aiAnalysisOnly, MASCOT_ENABLED,
+            scopeMine, aiAnalysisOnly, hasRelationsOnly, MASCOT_ENABLED,
             rulesFormats, activeFilterCount,
             // UI
             viewMode, expandedIds,
@@ -2457,7 +2542,7 @@ export default {
             toggleExpand,
             handleVote, handleFavorite,
             emitBulkAction, emitSend,
-            fromNow, formatDate, ruleLanguage, qualityBadgeClass, highlight, matchedHighlightTerms, matchedStringCount,
+            fromNow, formatDate, qualityBadgeClass, highlight, matchedHighlightTerms, matchedStringCount,
             // Status
             statusIcon, statusLabel, canChangeStatus, cycleStatus,
             // Export

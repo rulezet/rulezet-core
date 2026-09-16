@@ -8,6 +8,10 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
+<!-- Reuses the blog editor's step-progress bar (.blog-stepper/.blog-step*)
+     for the Platform Tags 3-step wizard below — same look, no reason to
+     duplicate ~100 lines of CSS for an identical component. -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/blog/blog.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -87,55 +91,160 @@
         <!-- TAB 2 — Platform Tags -->
         <div class="tab-pane fade {% if not is_admin %}show active{% endif %}" id="pane-platform-tags" role="tabpanel">
 
-            <platform-tag-config-editor
-                class="mb-4"
-                :csrf-token="csrfToken"
-                @notify="notify"
-                @config-selected="onPlatformConfigSelected">
-            </platform-tag-config-editor>
-
-            <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <!-- ── Step progress — same component as the blog editor's
+                 wizard (.blog-stepper/.blog-step*, css/blog/blog.css) ── -->
+            <div class="card border-0 shadow-sm rounded-3 mb-4 blog-stepper-card">
                 <div class="card-body p-4">
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <div style="width:3px;height:14px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
-                        <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
-                            <i class="fa-solid fa-play me-1"></i>Run
+                    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                        <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--subtle-text-color);">
+                            Platform tagging
                         </span>
+                        <span class="fw-bold" style="font-size:.85rem;color:#0d6efd;">Step [[ platformCurrentStep ]] of [[ platformSteps.length ]]</span>
                     </div>
-                    <bulk-import-runner
-                        :csrf-token="csrfToken"
-                        endpoint="/account/admin/bulk_parse_fields/trigger_platform_tags"
-                        title="Detect &amp; Tag Platforms"
-                        :description="platformRunnerDescription"
-                        icon="fa-solid fa-display"
-                        accent-color="#0d6efd"
-                        button-label="Re-parse All Rules"
-                        item-noun="rule"
-                        :payload="{ config_id: selectedPlatformConfigId }"
-                        :disabled="!selectedPlatformConfigId"
-                        @notify="notify">
-                    </bulk-import-runner>
+                    <div class="blog-stepper">
+                        <button v-for="(step, idx) in platformSteps" :key="step.key" type="button"
+                                class="blog-step"
+                                :class="{
+                                    'blog-step--active': platformCurrentStep === idx + 1,
+                                    'blog-step--done': step.done,
+                                    'blog-step--passed': platformCurrentStep > idx + 1,
+                                }"
+                                :disabled="platformJobRunning && idx + 1 !== 3"
+                                :style="(platformJobRunning && idx + 1 !== 3) ? 'opacity:.5;cursor:not-allowed;' : ''"
+                                @click="goToPlatformStep(idx + 1)">
+                            <span class="blog-step-circle">
+                                <i v-if="step.done && platformCurrentStep !== idx + 1" class="fa-solid fa-check"></i>
+                                <template v-else>[[ idx + 1 ]]</template>
+                            </span>
+                            <span class="blog-step-label">
+                                <span class="blog-step-title">[[ step.label ]]</span>
+                                <span class="blog-step-sub">[[ step.sub ]]</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
 
-                    <!-- Backup — tucked away, not shown unless asked for -->
-                    <button class="btn btn-link btn-sm text-muted px-0 mt-3" type="button"
+            <transition name="blog-step-fade" mode="out-in">
+
+            <!-- ═══ STEP 1 — Platform Tag Patterns ═══ -->
+            <div v-if="platformCurrentStep === 1" key="pstep1">
+                <platform-tag-config-editor
+                    class="mb-3"
+                    :csrf-token="csrfToken"
+                    @notify="notify"
+                    @config-selected="onPlatformConfigSelected">
+                </platform-tag-config-editor>
+                <div class="d-flex justify-content-end">
+                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-semibold"
+                            :disabled="!selectedPlatformConfigId" @click="platformCurrentStep = 2">
+                        Continue to Select Rules<i class="fa-solid fa-arrow-right ms-2"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ═══ STEP 2 — Select Rules. Same picker + "pick some rules, or
+                 check the header box and confirm 'all N matching this
+                 filter'" flow as the Base Fields tab below. Confirming only
+                 sets the scope (collapses this card into a one-line recap)
+                 — the actual trigger is step 3's Launch button. ═══ -->
+            <div v-else-if="platformCurrentStep === 2" key="pstep2">
+                <div class="card border-0 shadow-sm rounded-4 mb-3">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                            <small v-if="!platformPickerCollapsed" style="color:var(--subtle-text-color);font-size:.78rem;">
+                                Filter, pick rules (or check the header box for "select all matching"), click <strong>Confirm</strong>.
+                            </small>
+                            <span v-else class="badge rounded-pill" style="background:#0d6efd1a;color:#0d6efd;font-size:.72rem;">
+                                <i class="fa-solid fa-crosshairs me-1"></i>[[ platformScopeSummary ]]
+                            </span>
+                            <button v-if="platformPickerCollapsed" type="button"
+                                    class="btn btn-sm btn-link text-decoration-none ms-auto py-0"
+                                    @click="platformPickerCollapsed = false">
+                                <i class="fa-solid fa-pen me-1"></i>Change
+                            </button>
+                        </div>
+                        <rule-list
+                            v-if="!platformPickerCollapsed"
+                            mode="select"
+                            default-view="table"
+                            :show-filters="true"
+                            :show-create="false"
+                            :can-vote="false"
+                            :can-favorite="false"
+                            :current-user-is-authenticated="true"
+                            :csrf-token="csrfToken"
+                            @send="onPlatformSend">
+                        </rule-list>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" @click="platformCurrentStep = 1">
+                        <i class="fa-solid fa-arrow-left me-2"></i>Back
+                    </button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-semibold"
+                            :disabled="!platformPickerCollapsed" @click="platformCurrentStep = 3">
+                        Continue to Launch<i class="fa-solid fa-arrow-right ms-2"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ═══ STEP 3 — Launch. No title, no idle hint, no progress
+                 fluff before it's running — one sentence (what will
+                 happen) + the button. Backup is a small link right next to
+                 it, not its own card. ═══ -->
+            <div v-else key="pstep3">
+                <bulk-import-runner
+                    class="mb-2"
+                    :csrf-token="csrfToken"
+                    endpoint="/account/admin/bulk_parse_fields/trigger_platform_tags"
+                    title=""
+                    :show-title="false"
+                    :description="platformRunnerDescription"
+                    icon="fa-solid fa-display"
+                    accent-color="#0d6efd"
+                    button-label="Launch"
+                    item-noun="rule"
+                    :payload="platformRunnerPayload"
+                    :show-idle-hint="false"
+                    :resume-job-uuid="platformResumeJobUuid"
+                    @job-uuid-changed="onPlatformJobUuidChanged"
+                    @job-running-changed="platformJobRunning = $event"
+                    @notify="notify">
+                </bulk-import-runner>
+                <div v-if="platformJobRunning" class="text-center mb-3">
+                    <small style="color:var(--subtle-text-color);font-size:.78rem;">
+                        <i class="fa-solid fa-lock me-1"></i>Job running — wait for it to finish before relaunching.
+                    </small>
+                </div>
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4"
+                            :disabled="platformJobRunning" @click="platformCurrentStep = 2">
+                        <i class="fa-solid fa-arrow-left me-2"></i>Back
+                    </button>
+                    <button class="btn btn-link btn-sm text-muted text-decoration-none px-0" type="button"
+                            :disabled="platformJobRunning"
                             data-bs-toggle="collapse" data-bs-target="#backupCollapse">
                         <i class="fa-solid fa-database me-1"></i>Backup database first
                         <i class="fa-solid fa-chevron-down ms-1" style="font-size:.65rem;"></i>
                     </button>
-                    <div class="collapse mt-2" id="backupCollapse">
-                        <bulk-import-runner
-                            :csrf-token="csrfToken"
-                            endpoint="/admin/backups/trigger"
-                            title="Backup Database"
-                            description="Runs backup/scripts/backup_rulezet.sh (your existing pg_dump script) right now. Download finished backups from /admin/get_backups."
-                            icon="fa-solid fa-database"
-                            accent-color="#0d6efd"
-                            button-label="Backup Now"
-                            item-noun="step">
-                        </bulk-import-runner>
-                    </div>
+                </div>
+                <div class="collapse" id="backupCollapse">
+                    <bulk-import-runner
+                        class="mb-3"
+                        :csrf-token="csrfToken"
+                        endpoint="/admin/backups/trigger"
+                        title="Backup Database"
+                        description="Runs backup/scripts/backup_rulezet.sh (your existing pg_dump script) right now. Download finished backups from /admin/get_backups."
+                        icon="fa-solid fa-database"
+                        accent-color="#0d6efd"
+                        button-label="Backup Now"
+                        item-noun="step">
+                    </bulk-import-runner>
                 </div>
             </div>
+
+            </transition>
         </div>
 
     </div>
@@ -145,10 +254,13 @@
 
 {% block script %}
 <script type="module">
-const { createApp, ref, computed } = Vue;
+const { createApp, ref, computed, onMounted } = Vue;
 import FieldParserUpdater from '/static/js/admin/bulkParseFields.js'
 import BulkImportRunner from '/static/js/tags/manage/BulkImportRunner.js'
 import PlatformTagConfigEditor from '/static/js/admin/platformTagConfigEditor.js'
+import RuleList from '/static/js/rule/ruleList.js'
+import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js'
+import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
 import { create_message } from '/static/js/toaster.js'
 
 const fieldMeta       = {{ field_meta | tojson | safe }};
@@ -156,26 +268,170 @@ const parseableFields = {{ parseable_fields | tojson | safe }};
 const csrfToken       = '{{ csrf_token() }}';
 
 createApp({
+    delimiters: ['[[', ']]'],
     components: {
         'field-parser-updater': FieldParserUpdater,
         'bulk-import-runner': BulkImportRunner,
         'platform-tag-config-editor': PlatformTagConfigEditor,
+        'rule-list': RuleList,
+        'tags-displays-list': TagsDisplaysList,
+        'vulnerability-displays-list': VulnerabilityDisplaysList,
     },
     setup() {
         function notify(msg, cls = 'info-subtle') { create_message(msg, cls); }
 
         const selectedPlatformConfigId = ref(null);
-        function onPlatformConfigSelected(id) { selectedPlatformConfigId.value = id; }
+        const selectedPlatformConfigName = ref(null);
+        function onPlatformConfigSelected({ id, name }) {
+            selectedPlatformConfigId.value   = id;
+            selectedPlatformConfigName.value = name;
+        }
 
-        const platformRunnerDescription = computed(() =>
-            selectedPlatformConfigId.value
-                ? 'Scans every rule using the loaded config above — already-tagged rules are skipped, safe to re-run.'
-                : 'Load or save a config above first — the button stays disabled until one is active.'
+        // ── Platform Tags rule scope — same <rule-list mode="select"> +
+        //    @send pattern as the Base Fields tab (bulkParseFields.js's
+        //    onSend): confirming a plain pick sends a real id array;
+        //    checking the header box and confirming "select all N matching
+        //    this filter" sends the literal string 'ALL' instead, plus the
+        //    active filters (format included). Unlike Base Fields, @send
+        //    here only records the scope — the "Run" card's button below
+        //    is still the one trigger, since it also gates on a config
+        //    being selected. ────────────────────────────────────────────
+        const platformSelectionMode   = ref('ALL');   // 'ALL' | 'selection' — 'ALL' until the picker is ever confirmed
+        const platformSelectedIds     = ref([]);
+        const platformFormatFilter    = ref('');
+        // Collapses the picker into a one-line recap once Confirm has been
+        // clicked at least once — nothing to gain from keeping a whole rule
+        // table open once the scope is already decided; "Change" re-expands it.
+        const platformPickerCollapsed = ref(false);
+
+        function onPlatformSend(ids, filters) {
+            if (ids === 'ALL') {
+                platformSelectionMode.value = 'ALL';
+                platformSelectedIds.value   = [];
+                platformFormatFilter.value  = (filters && filters.format) ? filters.format : '';
+            } else {
+                platformSelectionMode.value = 'selection';
+                platformSelectedIds.value   = ids;
+                platformFormatFilter.value  = '';
+            }
+            platformPickerCollapsed.value = true;
+        }
+
+        const platformScopeSummary = computed(() => {
+            if (platformSelectionMode.value === 'selection') {
+                return `${platformSelectedIds.value.length} selected rule${platformSelectedIds.value.length === 1 ? '' : 's'}`;
+            }
+            return platformFormatFilter.value ? `All rules (format=${platformFormatFilter.value})` : 'All rules';
+        });
+
+        const platformRunnerPayload = computed(() => ({
+            config_id:     selectedPlatformConfigId.value,
+            rule_ids:      platformSelectionMode.value === 'selection' ? platformSelectedIds.value : 'ALL',
+            format_filter: platformSelectionMode.value === 'ALL' ? (platformFormatFilter.value || null) : null,
+        }));
+
+        // Step 3 (Launch) is only reachable once both a config and a rule
+        // scope are actually set (platformPickerCollapsed only turns true
+        // once the picker's Confirm has fired at least once) — nothing
+        // useful to recap or run before that; also gates the "Continue to
+        // Launch" button and jumping to step 3 via the stepper itself.
+        const platformReadyToRun = computed(() =>
+            !!selectedPlatformConfigId.value && platformPickerCollapsed.value
         );
+
+        // ── 3-step wizard (same single-panel-at-a-time pattern as the blog
+        //    editor) — Step 2 can't be reached before a config is picked,
+        //    Step 3 can't be reached before a scope is confirmed.
+        const platformCurrentStep = ref(1);
+        const platformSteps = computed(() => [
+            { key: 'config', label: 'Platform Tag Patterns', sub: selectedPlatformConfigName.value || 'Pick or build a config', done: !!selectedPlatformConfigId.value },
+            { key: 'rules',  label: 'Select Rules',           sub: platformPickerCollapsed.value ? platformScopeSummary.value : 'Choose which rules', done: platformPickerCollapsed.value },
+            { key: 'launch', label: 'Launch',                 sub: 'Run the job', done: false },
+        ]);
+        // Set by BulkImportRunner's 'job-running-changed' emit — while a
+        // job is actively running, step 1/2 are locked: must wait for it
+        // to finish before relaunching.
+        const platformJobRunning = ref(false);
+
+        function goToPlatformStep(n) {
+            if (platformJobRunning.value && n !== 3) return;
+            if (n === 2 && !selectedPlatformConfigId.value) return;
+            if (n === 3 && !platformReadyToRun.value) return;
+            platformCurrentStep.value = n;
+        }
+
+        // Real recap — the config actually loaded and the scope actually
+        // confirmed above, so the card reads as "here's what pressing this
+        // button will do", not a generic label. Falls back to a generic
+        // line when landing straight on step 3 via a resumed job (see
+        // platformResumeJobUuid below) — this session never picked a
+        // config, the job itself already carries its own real details.
+        const platformRunnerDescription = computed(() => {
+            if (!selectedPlatformConfigId.value) return 'Resumed job — see progress below.';
+            return `Config "${selectedPlatformConfigName.value}" — ${platformScopeSummary.value}. ` +
+                   `Already-tagged rules are skipped, safe to re-run.`;
+        });
+
+        // ── Job <-> URL sync — the job uuid lives in ?job=... while (and
+        //    after) it runs, so reloading this page reconnects to it
+        //    instead of losing track of an in-progress job. A ?job= param
+        //    present on load also jumps straight to step 3 to show it.
+        const platformResumeJobUuid = ref(null);
+
+        function initPlatformJobFromUrl() {
+            const uuid = new URLSearchParams(window.location.search).get('job');
+            if (!uuid) return;
+            platformResumeJobUuid.value = uuid;
+            platformCurrentStep.value   = 3;
+        }
+
+        function onPlatformJobUuidChanged(uuid) {
+            const url = new URL(window.location.href);
+            if (uuid) url.searchParams.set('job', uuid);
+            else url.searchParams.delete('job');
+            history.replaceState(null, '', url);
+        }
+
+        // ── Tab <-> URL sync — reload/share the page and land back on the
+        //    same tab instead of always resetting to the default one. Plain
+        //    Bootstrap tabs (data-bs-toggle="tab"), not a Vue-owned state, so
+        //    this just listens to Bootstrap's own shown/click events rather
+        //    than re-implementing tab switching.
+        function tabKeyFromPaneId(paneId) { return paneId.replace(/^pane-/, ''); }
+        function paneIdFromTabKey(key)    { return 'pane-' + key; }
+
+        function initTabFromUrl() {
+            const key = new URLSearchParams(window.location.search).get('tab');
+            if (!key) return;
+            const trigger = document.querySelector(`[data-bs-toggle="tab"][href="#${paneIdFromTabKey(key)}"]`);
+            if (trigger && window.bootstrap) window.bootstrap.Tab.getOrCreateInstance(trigger).show();
+        }
+
+        function wireTabUrlSync() {
+            document.querySelectorAll('[data-bs-toggle="tab"]').forEach(trigger => {
+                trigger.addEventListener('shown.bs.tab', (ev) => {
+                    const key = tabKeyFromPaneId(ev.target.getAttribute('href').slice(1));
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('tab', key);
+                    history.replaceState(null, '', url);
+                });
+            });
+        }
+
+        onMounted(() => {
+            wireTabUrlSync();
+            initTabFromUrl();
+            initPlatformJobFromUrl();
+        });
 
         return {
             fieldMeta, parseableFields, csrfToken, notify,
-            selectedPlatformConfigId, onPlatformConfigSelected, platformRunnerDescription,
+            selectedPlatformConfigId, selectedPlatformConfigName, onPlatformConfigSelected,
+            platformReadyToRun, platformRunnerDescription,
+            platformSelectionMode, platformSelectedIds, platformFormatFilter, platformPickerCollapsed,
+            onPlatformSend, platformScopeSummary, platformRunnerPayload,
+            platformCurrentStep, platformSteps, goToPlatformStep,
+            platformResumeJobUuid, onPlatformJobUuidChanged, platformJobRunning,
         };
     }
 }).mount('#main-container');

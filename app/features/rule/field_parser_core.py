@@ -12,6 +12,13 @@ from app.core.utils.utils import detect_cve
 CONFIG_TYPE_FIELD_PARSER  = 'field_parser'
 CONFIG_TYPE_PLATFORM_TAGS = 'platform_tags'
 
+# Sentinel config_id meaning "every saved platform-tag config, combined live"
+# — the "Run All Saved Configs" option (bulk_parse_fields_trigger_platform_tags
+# in account.py, handle_bulk_tag_platforms in job_handlers.py). Never a real
+# FieldParserConfig.id (those are DB autoincrement integers), so it can't
+# collide with one.
+ALL_PLATFORM_CONFIGS = 'ALL'
+
 # Fields that can be parsed from rule content. Order matters for with_entities queries.
 PARSEABLE_FIELD_KEYS = ['license', 'author', 'original_uuid', 'description', 'version', 'title']
 
@@ -247,3 +254,36 @@ def validate_platform_tag_config(config: dict) -> tuple[bool, str, list[dict]]:
     if errors:
         return False, ' | '.join(errors), []
     return True, '', resolved
+
+
+def combine_all_platform_tag_patterns() -> tuple[bool, str, list[dict]]:
+    """Live union of every saved platform_tags config's patterns, deduped by
+    tag_id (get_all_configs orders newest-first, so on a collision the most
+    recently created/saved config's version of that tag's pattern wins),
+    then re-validated against the DB right now — backs the "Run All Saved
+    Configs" option.
+
+    Deliberately NOT a separately-saved config (an earlier "Everything"
+    config that combined whatever existed at save time went stale the
+    moment a new config was added afterward, with nothing to prompt anyone
+    to regenerate it) — this recomputes from whatever configs exist at the
+    moment it's called, so it can never be out of date.
+    """
+    configs = get_all_configs(config_type=CONFIG_TYPE_PLATFORM_TAGS)
+    if not configs:
+        return False, 'No saved platform-tag configs exist yet — save at least one first.', []
+
+    combined: list[dict] = []
+    seen_tag_ids: set[int] = set()
+    for cfg in configs:
+        for p in (cfg.config or {}).get('patterns', []):
+            tag_id = p.get('tag_id')
+            if tag_id in seen_tag_ids:
+                continue
+            seen_tag_ids.add(tag_id)
+            combined.append(p)
+
+    if not combined:
+        return False, 'Every saved config is empty — nothing to run.', []
+
+    return validate_platform_tag_config({'patterns': combined})

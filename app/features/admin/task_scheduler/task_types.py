@@ -90,6 +90,30 @@ TASK_TYPES = {
         'job_type': 'connector_pull',
         'target_picker': 'connector_select',
     },
+    'github_repo_resync': {
+        'label': 'GitHub Sources — resync registry',
+        'icon': 'fa-brands fa-github',
+        'job_type': 'github_repo_resync',
+        'target_picker': 'none',
+        # Same full recompute as the GitHub Sources page's admin "Resync"
+        # button — a correctness backstop for GithubRepo's incremental sync
+        # (see github_repo_core.py), safe to run repeatedly/on a schedule.
+    },
+    'rule_git_mirror_sync': {
+        'label': 'Rulesets — sync',
+        'icon': 'fa-brands fa-git-alt',
+        'job_type': 'rule_git_mirror_sync',
+        'target_picker': 'none',
+        # RuleMirrorConfig.enabled gates this — scheduling/running the task
+        # with the feature turned off just fails fast with a clear message
+        # (see rule_mirror_core.sync_mirror), it never syncs unexpectedly.
+    },
+    'gamification_recompute': {
+        'label': 'Gamification — recompute all users',
+        'icon': 'fa-solid fa-star',
+        'job_type': 'recompute_gamification',
+        'target_picker': 'none',
+    },
     'ai_rule_analysis': {
         'label': 'AI Rule Analysis — generate reports',
         'icon': 'fa-solid fa-robot',

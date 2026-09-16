@@ -76,7 +76,12 @@ export default {
 
     emits: ['create', 'edit', 'delete', 'view', 'bulk-action', 'send'],
 
-    expose: ['fetchData'],
+    // search/sort_key/sort_dir exposed so a parent building a bulk-action
+    // payload for the 'ALL' sentinel (see emitBulkAction) can read back
+    // whatever filter is currently active — DataTable owns that state
+    // internally (its own search box), so it's the only source of truth
+    // for "what does 'ALL' actually mean right now".
+    expose: ['fetchData', 'search', 'sort_key', 'sort_dir'],
 
     template: `
         <div class="dt-wrapper" :class="{ 'dt-wrapper--bulk-open': showBulkBar }">

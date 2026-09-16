@@ -195,6 +195,8 @@ def content_convert_to_misp_object(rule_id: int) -> MISPObject | None:
             misp_object = create_elastic_misp_object(rule)
         elif fmt == "kql":
             misp_object = create_kql_analytics_misp_object(rule)
+        elif fmt == "kunai":
+            misp_object = create_kunai_misp_object(rule)
         else:
             # Generic fallback
             misp_object = MISPObject(name=fmt, ignore_warning=True)
@@ -391,6 +393,24 @@ def create_kql_analytics_misp_object(rule) -> MISPObject:
 
     if rule.to_string:
         misp_object.add_attribute('query', value=rule.to_string, type='text')
+
+    if rule.title:
+        misp_object.add_attribute('rule-name', value=rule.title, type='text')
+
+    return misp_object
+
+def create_kunai_misp_object(rule) -> MISPObject:
+    """
+    Specific mapper for Kunai (YAML-based EDR) rules, based on the
+    'kunai-rule' object template (MISP/misp-objects#530). Not yet bundled
+    with pymisp's own misp-objects data at the time this was written,
+    hence misp_objects_template_custom like rulezet-metadata.
+    """
+    misp_object = MISPObject(name='kunai-rule', misp_objects_template_custom=load_object_template('kunai-rule'))
+    misp_object['meta-category'] = "misc"
+
+    if rule.to_string:
+        misp_object.add_attribute('kunai', value=rule.to_string, type='text')
 
     if rule.title:
         misp_object.add_attribute('rule-name', value=rule.title, type='text')

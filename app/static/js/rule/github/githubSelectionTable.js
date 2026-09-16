@@ -44,6 +44,7 @@ const GitHubSelectionTable = {
             isAllSelectedMode: false,
             expandedRows: new Set(),
             isActionLoading: false,
+            resyncing: false,
 
             sortKey: new URLSearchParams(window.location.search).get('sort') || 'url',
             sortDir: new URLSearchParams(window.location.search).get('dir') || 'asc',
@@ -220,6 +221,30 @@ const GitHubSelectionTable = {
             modal.show();
         },
 
+        // ── Temporary admin action: full recompute of GithubRepo from Rule
+        // — the correctness backstop for the incremental sync (see
+        // github_repo_core.py's docstring for the full write-site list). ──
+        async resyncGithubRepos() {
+            if (this.resyncing) return;
+            this.resyncing = true;
+            try {
+                const res = await fetch('/rule/github/resync_repos', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': this.csrfToken
+                    }
+                });
+                const data = await res.json();
+                create_message(data.message || 'Resync finished.', data.toast_class || 'success-subtle');
+                if (res.ok) this.$refs.filter.fetchUrls(this.currentPage);
+            } catch (err) {
+                create_message('Resync failed.', 'danger-subtle');
+            } finally {
+                this.resyncing = false;
+            }
+        },
+
         // ── Single repo delete — smart: sync if small, job if large ──────────
         async deleteSingleRepo(url) {
             this.isActionLoading = true;
@@ -318,6 +343,11 @@ const GitHubSelectionTable = {
             @update:results="handleSearchResults"
             @loading="val => loading = val">
             <template #toolbar-extra>
+                <button v-if="isAdmin" class="dt-toolbar-btn" :disabled="resyncing"
+                        @click="resyncGithubRepos" title="Full recompute of the GitHub repo registry from current rule data">
+                    <i class="fas fa-rotate" :class="{ 'fa-spin': resyncing }"></i>
+                    <span>[[ resyncing ? 'Resyncing…' : 'Resync' ]]</span>
+                </button>
                 <div class="dt-col-picker-wrap">
                     <button class="dt-toolbar-btn" ref="colPickerBtn"
                             :class="{ 'dt-toolbar-btn--active': showColPicker }"
@@ -423,7 +453,7 @@ const GitHubSelectionTable = {
                                     <div class="bg-light rounded p-2 me-3 flex-shrink-0">
                                         <i class="fab fa-github fa-lg"></i>
                                     </div>
-                                    <div class="fw-bold text-dark" style="word-break:break-all;">[[ item.url ]]</div>
+                                    <div class="fw-bold text-dark" style="white-space:nowrap;">[[ item.url ]]</div>
                                 </div>
                             </td>
                             <td v-show="colVisible.author" class="dt-td">[[ item.author || '—' ]]</td>

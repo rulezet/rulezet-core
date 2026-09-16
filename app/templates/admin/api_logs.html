@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
+{% import 'macros/logs_nav.html' as lnav %}
+{% block title %}API Activity — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/logs.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+{% endblock %}
+
+{% block content %}
+{% if current_user.is_admin() %}
+<div class="container-fluid my-4" id="apilogs-app" v-cloak>
+
+  <!-- Banner -->
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-code banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/admin/logs" class="text-decoration-none text-muted">Admin</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">API Activity</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-code"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">API Activity</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">Every request made through the REST API (/api/*), split out from the main Activity Logs so it isn't buried under everything else.</p>
+  </div>
+
+  <div class="dr-nav mb-3">
+    {{ lnav.logs_nav_items('api') }}
+    <span class="dr-nav__sep"></span>
+    {{ anav.admin_nav_toggle() }}
+  </div>
+  {{ anav.admin_nav_panel('logs') }}
+
+  <!-- Top bar: stats -->
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <span class="text-muted small">Total:</span>
+      <span class="badge bg-primary">[[ totalLogs ]]</span>
+    </div>
+  </div>
+
+  <log-table
+    ref="logTableRef"
+    fetch-url="/admin/get_api_logs_page"
+    :can-delete="true"
+    :can-moderate="false"
+    :hide-category-filter="true"
+    :csrf-token="csrfToken"
+    @delete="deleteOne"
+    @bulk-delete="bulkDeleteByUuids"
+    @edit="openEdit">
+  </log-table>
+
+  <!-- Edit modal -->
+  <div v-if="editLog" class="modal fade show d-block" style="background:rgba(0,0,0,.5);" @click.self="editLog=null">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold">
+            <i class="fa-solid fa-pen me-2 text-primary"></i>Edit Log #[[ editLog.id ]]
+          </h5>
+          <button class="btn-close" @click="editLog=null"></button>
+        </div>
+        <div class="modal-body pt-2">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Description</label>
+            <textarea v-model="editForm.description" class="form-control form-control-sm" rows="3"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Icon <span class="text-muted fw-normal">(FontAwesome class)</span></label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i :class="editForm.icon || 'fa-solid fa-circle-dot'"></i></span>
+              <input v-model="editForm.icon" class="form-control" placeholder="fa-solid fa-code">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button @click="editLog=null" class="btn btn-sm btn-light border rounded-pill px-4">Cancel</button>
+          <button @click="saveEdit" class="btn btn-sm btn-primary rounded-pill px-4">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /apilogs-app -->
+{% else %}
+<div class="container my-5 text-center">
+  <h4 class="text-danger">Access denied</h4>
+</div>
+{% endif %}
+
+<script type="module">
+import { create_message } from '/static/js/toaster.js'
+import LogTable            from '/static/js/components/log-table.js'
+
+const { createApp, ref, onMounted } = Vue
+
+createApp({
+    delimiters: ['[[', ']]'],
+    components: { 'log-table': LogTable },
+    setup() {
+        const csrfToken   = document.querySelector('input[name="csrf_token"]')?.value || ''
+        const logTableRef = ref(null)
+        const totalLogs   = ref(0)
+        const editLog     = ref(null)
+        const editForm    = ref({ description: '', icon: '' })
+
+        function openEdit(log) {
+            editLog.value  = log
+            editForm.value = { description: log.description || '', icon: log.icon || '' }
+        }
+
+        async function saveEdit() {
+            if (!editLog.value) return
+            try {
+                const res  = await fetch(`/admin/logs/edit/${editLog.value.id}`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body:    JSON.stringify({ ...editForm.value, is_public: !!editLog.value.is_public }),
+                })
+                const data = await res.json()
+                if (data.success) {
+                    logTableRef.value?.fetchData()
+                    editLog.value = null
+                    create_message('Log updated', 'success-subtle')
+                } else {
+                    create_message(data.message || 'Failed', 'danger-subtle')
+                }
+            } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
+        }
+
+        async function fetchTotal() {
+            try {
+                const res  = await fetch('/admin/get_api_logs_page?page=1&per_page=1')
+                const data = await res.json()
+                totalLogs.value = data.total || 0
+            } catch {}
+        }
+
+        async function deleteOne(log) {
+            if (!confirm(`Delete this log entry?\n"${log.description}"`)) return
+            try {
+                await fetch(`/admin/logs/delete/${log.id}`, {
+                    method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+                })
+                logTableRef.value?.fetchData()
+                fetchTotal()
+                create_message('Log deleted', 'success-subtle')
+            } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
+        }
+
+        async function bulkDeleteByUuids(uuids) {
+            if (!uuids.length) return
+            if (!confirm(`Delete ${uuids.length} selected log(s)?`)) return
+            try {
+                const res  = await fetch('/api/log/bulk-delete', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body:    JSON.stringify({ uuids }),
+                })
+                const data = await res.json()
+                logTableRef.value?.fetchData()
+                fetchTotal()
+                create_message(data.message || 'Deleted', 'success-subtle')
+            } catch (e) { create_message('Error: ' + e, 'danger-subtle') }
+        }
+
+        onMounted(() => fetchTotal())
+
+        return { csrfToken, logTableRef, totalLogs, editLog, editForm, openEdit, saveEdit, deleteOne, bulkDeleteByUuids }
+    }
+}).mount('#apilogs-app')
+</script>
+{% endblock %}

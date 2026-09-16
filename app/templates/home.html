@@ -9,6 +9,9 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/voter-popover.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tag/tags.css') }}">
+{% if latest_blog_posts %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/blog/blog.css') }}">
+{% endif %}
 <style>
 /* ── Hero ── */
 .home-hero {
@@ -226,6 +229,49 @@ body.dark-mode .hero-orb-2 {
 .home-sh-dot { width: 7px; height: 7px; border-radius: 50%; background: #0d6efd; flex-shrink: 0; }
 .home-sh-sub { font-size: .76rem; color: var(--subtle-text-color); }
 .home-divider { border: none; border-top: 1px solid var(--border-color); margin: 2rem 0; }
+
+/* ── From the blog ── */
+.home-blog-card {
+    display: flex; gap: 1.1rem;
+    width: 100%;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.1rem;
+    text-decoration: none;
+    transition: border-color .16s, transform .16s, box-shadow .16s;
+}
+.home-blog-card:hover {
+    border-color: rgba(13,110,253,.3);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,.07);
+}
+.home-blog-cover {
+    width: 140px; height: 120px; flex-shrink: 0;
+    border-radius: 11px; object-fit: cover;
+}
+.home-blog-cover-placeholder {
+    width: 140px; height: 120px; flex-shrink: 0;
+    border-radius: 11px;
+    background: linear-gradient(135deg, #0d6efd18 0%, #0a58ca10 100%);
+    display: flex; align-items: center; justify-content: center;
+}
+.home-blog-title {
+    font-size: .98rem; font-weight: 700; color: var(--text-color); line-height: 1.3; margin-bottom: .4rem;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.home-blog-excerpt {
+    font-size: .82rem; color: var(--subtle-text-color); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    margin-bottom: .6rem;
+}
+.home-blog-meta { font-size: .74rem; color: var(--subtle-text-color); display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
+.home-blog-read-more { font-weight: 600; color: #0d6efd; }
+.home-blog-card:hover .home-blog-read-more { text-decoration: underline; }
+@media (max-width: 576px) {
+    .home-blog-card { flex-direction: column; }
+    .home-blog-cover, .home-blog-cover-placeholder { width: 100%; }
+}
 
 /* ── See more ── */
 .btn-see-more {
@@ -521,6 +567,47 @@ body.dark-mode .hero-orb-2 {
             </div>
 
         </div>
+
+        {% if latest_blog_posts %}
+        <!-- ══ FROM THE BLOG ═══════════════════════════════════════════════════ -->
+        <hr class="home-divider">
+        <div class="home-sh mb-3">
+            <div class="home-sh-title"><span class="home-sh-dot" style="background:#6f42c1;"></span>From the <span class="text-primary ms-1">Blog</span></div>
+            <a href="/blog/" class="home-sh-sub text-decoration-none">All posts <i class="fa-solid fa-arrow-right ms-1" style="font-size:.68rem;"></i></a>
+        </div>
+        <div class="row g-3">
+            {% for post in latest_blog_posts %}
+            <div class="col-12 col-md-6 d-flex">
+                <a href="/blog/post/{{ post.uuid }}" class="home-blog-card">
+                    {% if post.cover_image_url %}
+                    <img src="{{ post.cover_image_url }}" alt="{{ post.title }}" class="home-blog-cover">
+                    {% else %}
+                    <div class="home-blog-cover-placeholder">
+                        <i class="fa-solid fa-newspaper fa-2x" style="color:#0d6efd;opacity:.25;"></i>
+                    </div>
+                    {% endif %}
+                    <div class="d-flex flex-column overflow-hidden" style="flex:1;">
+                        <div class="home-blog-title">{{ post.title }}</div>
+                        {% if post.excerpt %}
+                        <p class="home-blog-excerpt">{{ post.excerpt }}</p>
+                        {% endif %}
+                        <div class="home-blog-meta">
+                            <span class="flex-shrink-0"><i class="fa-regular fa-calendar me-1"></i>{{ post.published_at or post.created_at }}</span>
+                            {% if post.tag_names %}
+                            <span class="d-flex flex-wrap gap-1">
+                                {% for tag in post.tag_names[:3] %}
+                                <span class="blog-tag">{{ tag }}</span>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <div class="home-blog-read-more mt-auto pt-2">Read more <i class="fa-solid fa-arrow-right ms-1"></i></div>
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
 
         <!-- ══ RECENTLY ADDED ════════════════════════════════════════════════ -->
         <hr class="home-divider">

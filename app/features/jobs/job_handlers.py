@@ -630,6 +630,19 @@ def handle_delete_github_rules(job, app):
     now        = datetime.datetime.now(tz=datetime.timezone.utc)
     created_by = job.created_by
 
+    # Snapshot the exact rule ids about to be deleted BEFORE the bulk update,
+    # so GithubRepo's aggregates (rule_count/formats/licenses/cve_count) can
+    # be decremented by exactly what's about to change — see
+    # github_repo_core.py's module docstring for the full write-site list.
+    try:
+        pre_ids = [r[0] for r in db.session.query(Rule.id).filter(
+            Rule.source.in_(urls), Rule.is_deleted == False
+        ).all()]
+        from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
+        apply_deltas_for_rule_ids(pre_ids, sign=-1, is_deleted=False)
+    except Exception:
+        pass
+
     # Soft-delete in one bulk update
     updated = Rule.query.filter(Rule.source.in_(urls), Rule.is_deleted == False).update(
         {"is_deleted": True, "deleted_at": now, "deleted_by_id": created_by, "delete_batch_uuid": batch_uuid},
@@ -641,6 +654,25 @@ def handle_delete_github_rules(job, app):
     db.session.commit()
 
     log_job(job, f"Completed — {updated} rule(s) moved to trash (batch: {batch_uuid[:8]}).",
+            level='success', event='done')
+
+
+# ─── github_repo_resync ───────────────────────────────────────────────────────
+
+@register_handler('github_repo_resync')
+def handle_github_repo_resync(job, app):
+    """Full recompute of the GithubRepo registry from Rule (+ RuleSimilarity
+    for conflicts) — the same correctness backstop as the GitHub Sources
+    page's admin "Resync" button, wrapped as a schedulable/background job
+    (see app.features.rule.github_repo_core.rebuild_github_repos_from_rules
+    for the write-site list this repairs drift against)."""
+    log_job(job, 'Resyncing GitHub repo registry from current rule data…', level='info', event='start')
+    from app.features.rule.github_repo_core import rebuild_github_repos_from_rules
+    result = rebuild_github_repos_from_rules()
+    job.total = result['repos']
+    job.done  = result['repos']
+    db.session.commit()
+    log_job(job, f"Done — {result['repos']} repo(s), {result['rules_counted']} rule(s) counted.",
             level='success', event='done')
 
 
@@ -1015,6 +1047,11 @@ def handle_trash_restore_bulk(job, app):
             import time; time.sleep(2)
         chunk = all_ids[i:i + TRASH_BATCH]
         now   = _dt.datetime.now(tz=_dt.timezone.utc)
+        try:
+            from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
+            apply_deltas_for_rule_ids(chunk, sign=+1, is_deleted=True)
+        except Exception:
+            pass
         Rule.query.filter(Rule.id.in_(chunk), Rule.is_deleted == True).update(
             {"is_deleted": False, "deleted_at": None, "deleted_by_id": None, "delete_batch_uuid": None},
             synchronize_session=False,
@@ -1475,6 +1512,11 @@ def handle_connector_pull(job, app):
                                             level='warning', event='progress')
                                 _import_rule_history_new(rule, item.get('update_history', []),
                                                          effective_user_id)
+                            try:
+                                from app.features.rule.github_repo_core import apply_deltas_for_new_rules
+                                apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
+                            except Exception:
+                                pass
                             pg_created    = len(new_rules_pending)
                             rules_created += pg_created
                         except Exception as batch_exc:
@@ -1605,6 +1647,11 @@ def handle_connector_pull(job, app):
                                     _sync_cve_ids(rule, item.get('cve_ids', []))
                                     _import_rule_history_new(rule, item.get('update_history', []),
                                                              effective_user_id)
+                                try:
+                                    from app.features.rule.github_repo_core import apply_deltas_for_new_rules
+                                    apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
+                                except Exception:
+                                    pass
                                 rules_created += len(new_rules_pending)
 
                             db.session.commit()
@@ -2001,6 +2048,312 @@ def handle_bulk_update_decision(job, app):
         job.status = 'done' if ok else 'failed'
         verb = 'accepted' if action == 'accept' else 'rejected'
         log_job(job, f'{count} update(s) {verb}.', level='success' if ok else 'error', event='done')
+    except Exception as e:
+        job.status = 'failed'
+        job.error  = str(e)
+        log_job(job, str(e), level='error', event='failed')
+    db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  pending_update_history_bulk_decision — Accept/Reject/Delete on the Pending
+#  Updates page (RuleUpdateHistory rows), for a bulk action large enough that
+#  running it inline in the request would time out — see rule.py's
+#  bulk_pending_update_decision route for the inline-vs-job threshold.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('pending_update_history_bulk_decision')
+def handle_pending_update_history_bulk_decision(job, app):
+    try:
+        action = job.payload.get('action')  # 'accept' | 'reject' | 'delete'
+        ids    = job.payload.get('ids') or []
+
+        from app.features.rule.rule_core import (
+            accept_update_history, reject_update_history, delete_update_history,
+        )
+        action_fn = {
+            'accept': accept_update_history,
+            'reject': reject_update_history,
+            'delete': delete_update_history,
+        }.get(action)
+
+        job.total = max(len(ids), 1)
+        if not ids or not action_fn:
+            log_job(job, 'Nothing to do.', level='info', event='done')
+            job.status = 'done'
+            job.done = job.total
+            db.session.commit()
+            return
+
+        done_count = 0
+        for i, history_id in enumerate(ids):
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled at {job.done}/{job.total} ({job.progress_pct}% done).",
+                        level='warning', event='cancelled')
+                db.session.commit()
+                return
+            if _should_pause(job):
+                db.session.commit()
+                log_job(job, f"Paused at {job.done}/{job.total} ({job.progress_pct}% done). Click Resume to continue.",
+                        level='info', event='paused')
+                db.session.commit()
+                return
+
+            try:
+                ok = action_fn(history_id)
+                ok = ok[0] if isinstance(ok, tuple) else ok
+                if ok:
+                    done_count += 1
+            except Exception as e:
+                log_job(job, f'Entry {history_id}: {e}', level='warning', event='progress')
+
+            job.done = i + 1
+            if job.done % 25 == 0 or job.done == job.total:
+                log_job(job, f'{action.capitalize()}ed {job.done}/{job.total}…', level='info', event='progress')
+                db.session.commit()
+
+        job.status = 'done'
+        log_job(job, f'{done_count}/{job.total} entr{"y" if job.total == 1 else "ies"} {action}ed.',
+                level='success', event='done')
+    except Exception as e:
+        job.status = 'failed'
+        job.error  = str(e)
+        log_job(job, str(e), level='error', event='failed')
+    db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  audit_suricata_rules — one-time health check for issue #61
+#  (docs/design/suricata_sagan_rework.md): runs every active format=
+#  'suricata' rule through the (now-tightened) SuricataRule.validate() and
+#  buckets it as ok / should-be-sagan / genuinely-broken, so an admin can
+#  act on each bucket with one click afterwards (see suricata_sagan_reclassify
+#  and suricata_audit_act routes in rule.py) instead of guessing.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('audit_suricata_rules')
+def handle_audit_suricata_rules(job, app):
+    try:
+        from app.features.rule.rule_format.available_format.suricata_format import SuricataRule
+        from app.features.rule.rule_format.available_format._snort_family_common import looks_like_sagan
+
+        suricata = SuricataRule()
+        total = Rule.query.filter(Rule.format == 'suricata', Rule.is_deleted == False).count()
+        job.total = max(total, 1)
+        db.session.commit()
+
+        ok_count   = 0
+        sagan_ids  = []
+        broken_ids = []
+
+        # Keyset pagination (WHERE id > last_id ORDER BY id LIMIT N), not
+        # yield_per()/a server-side cursor — psycopg2's named cursor doesn't
+        # survive a commit() while still being iterated ("named cursor
+        # isn't valid anymore"), and this handler needs to commit
+        # periodically for the UI's live progress. Each batch below is a
+        # complete, already-fetched query result, so committing between
+        # batches is safe.
+        BATCH = 1000
+        last_id = 0
+        done = 0
+
+        while True:
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled at {job.done}/{job.total} ({job.progress_pct}% done).",
+                        level='warning', event='cancelled')
+                db.session.commit()
+                return
+            if _should_pause(job):
+                db.session.commit()
+                log_job(job, f"Paused at {job.done}/{job.total} ({job.progress_pct}% done). Click Resume to continue.",
+                        level='info', event='paused')
+                db.session.commit()
+                return
+
+            batch = (Rule.query
+                      .filter(Rule.format == 'suricata', Rule.is_deleted == False, Rule.id > last_id)
+                      .order_by(Rule.id.asc())
+                      .with_entities(Rule.id, Rule.to_string)
+                      .limit(BATCH)
+                      .all())
+            if not batch:
+                break
+
+            for rule_id, content in batch:
+                result = suricata.validate(content or '')
+                if result.ok:
+                    ok_count += 1
+                elif looks_like_sagan(content or ''):
+                    sagan_ids.append(rule_id)
+                else:
+                    broken_ids.append(rule_id)
+                done += 1
+
+            last_id  = batch[-1][0]
+            job.done = done
+            log_job(job, f'Audited {job.done}/{job.total}… {ok_count} ok, '
+                         f'{len(sagan_ids)} look like Sagan, {len(broken_ids)} broken so far.',
+                    level='info', event='progress')
+            db.session.commit()
+
+        # payload is a plain JSON column (not MutableDict) — reassign the
+        # whole dict rather than mutate in place, or SQLAlchemy won't see
+        # the change and this commit silently persists nothing new.
+        job.payload = {**(job.payload or {}), 'ok_count': ok_count,
+                        'sagan_ids': sagan_ids, 'broken_ids': broken_ids}
+        job.status = 'done'
+        log_job(job, f'Audit complete — {ok_count} ok, {len(sagan_ids)} should become Sagan, '
+                     f'{len(broken_ids)} broken (recommend review/trash).',
+                level='success', event='done')
+    except Exception as e:
+        job.status = 'failed'
+        job.error  = str(e)
+        log_job(job, str(e), level='error', event='failed')
+    db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  deep_validate_suricata_rules — real-engine validation over a bounded batch
+#  of Suricata rules (issue #61 suggestion #1). Each call is a real
+#  `suricata -T -v` subprocess run (~0.5-5s — see
+#  docs/design/suricata_language_server_integration.md), so this only ever
+#  processes a bounded slice (payload['limit'], admin-chosen at trigger time)
+#  per job, not the whole corpus — an admin runs it again to cover the next
+#  slice. Resumable via the standard _resume_offset convention if paused
+#  mid-slice.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('deep_validate_suricata_rules')
+def handle_deep_validate_suricata_rules(job, app):
+    try:
+        from app.features.rule.rule_format.deep_validate import (
+            deep_validate_suricata_rule, is_deep_validation_configured,
+        )
+
+        if not is_deep_validation_configured():
+            log_job(job, 'Deep validation is not configured on this instance (SURICATA_BINARY_PATH unset).',
+                    level='error', event='failed')
+            job.status = 'failed'
+            job.error  = 'Not configured'
+            db.session.commit()
+            return
+
+        payload = job.payload or {}
+        limit   = min(int(payload.get('limit') or 500), 5000)
+        offset  = payload.get('_resume_offset', 0)
+
+        query = (Rule.query
+                 .filter(Rule.format == 'suricata', Rule.is_deleted == False)
+                 .order_by(Rule.id.asc())
+                 .with_entities(Rule.id, Rule.to_string))
+
+        if job.total == 0:
+            job.total = min(query.count(), limit)
+            db.session.commit()
+            log_job(job, f'Deep-validating up to {job.total} Suricata rule(s) against a real engine…',
+                    level='info', event='started')
+        elif offset > 0:
+            log_job(job, f'Resuming from offset {offset} ({offset}/{job.total} already done).',
+                    level='info', event='resumed')
+
+        ok_count   = payload.get('_ok_count', 0)
+        failed     = payload.get('_failed', [])  # [{id, title, message}], capped below
+
+        batch = query.offset(offset).limit(limit - offset).all()
+
+        for i, (rule_id, content) in enumerate(batch):
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled at {job.done}/{job.total} ({job.progress_pct}% done).",
+                        level='warning', event='cancelled')
+                db.session.commit()
+                return
+            if _should_pause(job):
+                job.payload = {**payload, '_resume_offset': offset + i,
+                                '_ok_count': ok_count, '_failed': failed}
+                db.session.commit()
+                log_job(job, f"Paused at {job.done}/{job.total} ({job.progress_pct}% done). Click Resume to continue.",
+                        level='info', event='paused')
+                return
+
+            result = deep_validate_suricata_rule(content or '')
+            if result.get('error'):
+                log_job(job, f'Rule #{rule_id}: {result["error"]}', level='warning', event='progress')
+            elif result.get('ok'):
+                ok_count += 1
+            else:
+                rule = Rule.query.get(rule_id)
+                msg = result['diagnostics'][0]['message'] if result.get('diagnostics') else 'Unknown error'
+                if len(failed) < 200:  # cap stored detail — a job.payload isn't meant to hold thousands of messages
+                    failed.append({'id': rule_id, 'title': rule.title if rule else '?', 'message': msg})
+
+            job.done = offset + i + 1
+            if job.done % 20 == 0 or job.done == job.total:
+                log_job(job, f'Deep-validated {job.done}/{job.total}… {ok_count} ok, {len(failed)} failed so far.',
+                        level='info', event='progress')
+                db.session.commit()
+
+        job.payload = {**payload, '_ok_count': ok_count, '_failed': failed,
+                        'ok_count': ok_count, 'failed': failed}
+        job.status = 'done'
+        log_job(job, f'Deep validation complete — {ok_count} ok, {len(failed)} failed a real engine check.',
+                level='success', event='done')
+    except Exception as e:
+        job.status = 'failed'
+        job.error  = str(e)
+        log_job(job, str(e), level='error', event='failed')
+    db.session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  reclassify_suricata_to_sagan — one-time retroactive fix for issue #61:
+#  Suricata rules that are actually Sagan rules (see
+#  docs/design/suricata_sagan_rework.md). ids are resolved up front by the
+#  triggering route (get_mistagged_suricata_rule_ids) so the job's payload
+#  is a stable, already-computed list rather than re-deriving it mid-run.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('reclassify_suricata_to_sagan')
+def handle_reclassify_suricata_to_sagan(job, app):
+    try:
+        ids = job.payload.get('ids') or []
+
+        from app.features.rule.rule_core import reclassify_mistagged_suricata_rules
+
+        job.total = max(len(ids), 1)
+        if not ids:
+            log_job(job, 'Nothing to reclassify.', level='info', event='done')
+            job.status = 'done'
+            job.done = job.total
+            db.session.commit()
+            return
+
+        def _on_progress(n, rule):
+            job.done = n
+            if n % 100 == 0 or n == job.total:
+                log_job(job, f'Reclassified {n}/{job.total}…', level='info', event='progress')
+                db.session.commit()
+
+        def _should_stop():
+            if _is_cancelled(job):
+                log_job(job, f"Cancelled at {job.done}/{job.total} ({job.progress_pct}% done).",
+                        level='warning', event='cancelled')
+                return True
+            if _should_pause(job):
+                db.session.commit()
+                log_job(job, f"Paused at {job.done}/{job.total} ({job.progress_pct}% done). Click Resume to continue.",
+                        level='info', event='paused')
+                return True
+            return False
+
+        count = reclassify_mistagged_suricata_rules(ids, on_progress=_on_progress, should_stop=_should_stop)
+
+        if job.done < job.total and (_is_cancelled(job) or _should_pause(job)):
+            db.session.commit()
+            return
+
+        job.done = job.total
+        job.status = 'done'
+        log_job(job, f'{count} rule(s) reclassified from suricata to sagan.', level='success', event='done')
     except Exception as e:
         job.status = 'failed'
         job.error  = str(e)
@@ -2810,8 +3163,15 @@ def handle_bulk_tag_platforms(job, app):
     saved) since a referenced tag could have been deleted in the meantime —
     if that happened, the job stops immediately rather than silently running
     with a smaller pattern set than the admin configured.
+
+    config_id may also be the ALL_PLATFORM_CONFIGS sentinel ("Run All Saved
+    Configs") — every saved platform_tags config's patterns combined live,
+    deduped by tag_id, instead of one specific saved config.
     """
-    from app.features.rule.field_parser_core import get_config, validate_platform_tag_config, CONFIG_TYPE_PLATFORM_TAGS
+    from app.features.rule.field_parser_core import (
+        get_config, validate_platform_tag_config, combine_all_platform_tag_patterns,
+        CONFIG_TYPE_PLATFORM_TAGS, ALL_PLATFORM_CONFIGS,
+    )
 
     payload       = job.payload or {}
     rule_ids      = payload.get('rule_ids', 'ALL')
@@ -2827,17 +3187,22 @@ def handle_bulk_tag_platforms(job, app):
         db.session.commit()
         return
 
-    cfg = get_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
-    if not cfg:
-        log_job(job, f'Config #{config_id} not found (deleted?) — aborting.', level='error', event='error')
-        job.status = 'failed'
-        job.error  = 'Config not found'
-        db.session.commit()
-        return
+    if config_id == ALL_PLATFORM_CONFIGS:
+        cfg_label = 'all saved configs'
+        ok, error, resolved_patterns = combine_all_platform_tag_patterns()
+    else:
+        cfg = get_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
+        if not cfg:
+            log_job(job, f'Config #{config_id} not found (deleted?) — aborting.', level='error', event='error')
+            job.status = 'failed'
+            job.error  = 'Config not found'
+            db.session.commit()
+            return
+        cfg_label = f'"{cfg.name}"'
+        ok, error, resolved_patterns = validate_platform_tag_config(cfg.config)
 
-    ok, error, resolved_patterns = validate_platform_tag_config(cfg.config)
     if not ok:
-        log_job(job, f'Config "{cfg.name}" is no longer valid — aborting without changing anything: {error}',
+        log_job(job, f'Config {cfg_label} is no longer valid — aborting without changing anything: {error}',
                 level='error', event='error')
         job.status = 'failed'
         job.error  = error
@@ -2846,7 +3211,7 @@ def handle_bulk_tag_platforms(job, app):
 
     active_patterns = [p for p in resolved_patterns if p['enabled']]
     if not active_patterns:
-        log_job(job, f'Config "{cfg.name}" has no enabled patterns — nothing to do.',
+        log_job(job, f'Config {cfg_label} has no enabled patterns — nothing to do.',
                 level='warning', event='done')
         job.done = job.total or 0
         db.session.commit()
@@ -2873,7 +3238,7 @@ def handle_bulk_tag_platforms(job, app):
         job.total = q.count()
         db.session.commit()
         pattern_names = ', '.join(p['label'] for p, _ in compiled)
-        log_job(job, f'Starting — scanning {job.total} rule(s) using config "{cfg.name}" ({pattern_names}).',
+        log_job(job, f'Starting — scanning {job.total} rule(s) using config {cfg_label} ({pattern_names}).',
                 level='info', event='start')
     else:
         log_job(job, f'Resuming from offset {offset}.', level='info', event='resume')
@@ -4423,3 +4788,139 @@ def handle_rule_analysis(job, app):
 
     log_job(job, f'Done — {generated} generated, {failed} failed this run.',
             level='success', event='done')
+
+
+# ─── Rule Git Mirror (see docs/design/rule_git_mirror.md) ───────────────────
+
+@register_handler('rule_git_mirror_sync')
+def handle_rule_git_mirror_sync(job, app):
+    """Runs a Rulesets sync pass — off by default, admin-configured per
+    instance (RuleMirrorConfig, possibly several rows). See
+    rule_mirror_core.sync_mirror() for the actual git plumbing; this
+    handler is just the BackgroundJob glue.
+
+    job.payload may carry a specific 'config_id' (set by that config's own
+    "Run now" button); when absent (e.g. a generic recurring Task
+    Scheduler entry, which has no notion of which config to target),
+    sync_mirror() loops over every currently-enabled config itself."""
+    from app.features.admin.rule_mirror import rule_mirror_core as RuleMirrorModel
+
+    config_id = (job.payload or {}).get('config_id')
+
+    def _log_fn(level, message):
+        log_job(job, message, level=level, event='progress')
+
+    try:
+        result = RuleMirrorModel.sync_mirror(config_id=config_id, job=job, log_fn=_log_fn)
+    except Exception as e:
+        # Full traceback (not just str(e)) — this failure mode has been hard
+        # to pin down from the one-line message alone across a couple of
+        # earlier reports; keep the real location on the job row itself.
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[rule_git_mirror_sync] {tb}")
+        log_job(job, f'Rulesets sync failed: {e}', level='error', event='error')
+        job.status = 'failed'
+        job.error  = tb
+        db.session.commit()
+        if config_id:
+            log_activity(
+                'admin.rule_mirror_sync_failed',
+                f"Rulesets sync failed: {e}",
+                target_type='rule_mirror_config', target_id=config_id, is_public=False,
+            )
+        return
+
+    if result.get('interrupted'):
+        # Paused/cancelled mid-sync — rule_mirror_core already logged exactly
+        # why and saved a resume offset. Nothing else to report: this is not
+        # a completion, so no "Sync complete" line, and job.status is left
+        # alone (it's already 'paused'/'cancelled', set by whatever action
+        # triggered this in the first place).
+        return
+
+    if 'configs_synced' in result:
+        message = (
+            f"Sync complete across {result['configs_synced']} config(s) — "
+            f"{result['written']} rule(s) written, {result['deleted']} removed."
+        )
+        if result.get('configs_failed'):
+            message += f" Skipped (failed): {', '.join(result['configs_failed'])}."
+    else:
+        message = (
+            f"Sync complete — {result['written']} rule(s) written, {result['deleted']} removed"
+            + (' (initial load).' if result['first_sync'] else '.')
+        )
+    log_job(job, message, level='success', event='done')
+
+
+# ─── Gamification recompute ─────────────────────────────────────────────────
+
+@register_handler('recompute_gamification')
+def handle_recompute_gamification(job, app):
+    """Bulk resync of every user's gamification profile — replaces the old
+    admin "Refresh" button's synchronous update_gamification_profiles(),
+    which looped every user with several unbatched queries each. Same
+    paginated/resumable/pausable shape as compute_rule_quality_score;
+    account_core.recompute_gamification_batch() does one GROUP BY query
+    per metric for the whole batch instead of per user — see its
+    docstring for why that matters at this instance's user-base scale."""
+    from app.features.account import account_core as AccountModel
+
+    offset = (job.payload or {}).get('_resume_offset', 0)
+
+    if job.total == 0:
+        job.total = User.query.count()
+        db.session.commit()
+        log_job(job, f"Job started — {job.total} user(s) to recompute.", level='info', event='started')
+    elif offset > 0:
+        log_job(job,
+            f"Resuming from offset {offset} ({offset}/{job.total} already processed, {job.progress_pct}% done)",
+            level='info', event='resumed')
+
+    if job.total == 0:
+        log_job(job, "No users to recompute — nothing to do.", level='warning', event='done')
+        return
+
+    batch_num = 0
+    recomputed = 0
+
+    while True:
+        if _is_cancelled(job):
+            log_job(job,
+                f"Job cancelled at offset {offset} ({job.progress_pct}% done — {recomputed} user(s) recomputed so far).",
+                level='warning', event='cancelled')
+            return
+
+        if _should_pause(job):
+            _save_offset(job, offset)
+            db.session.commit()
+            log_job(job,
+                f"Job paused at offset {offset} ({job.progress_pct}% done — {recomputed} user(s) recomputed so far). "
+                f"Click Resume to continue.",
+                level='info', event='paused')
+            return
+
+        batch_ids = [uid for (uid,) in
+                     db.session.query(User.id).order_by(User.id).offset(offset).limit(BATCH_SIZE).all()]
+        if not batch_ids:
+            break
+
+        try:
+            recomputed += AccountModel.recompute_gamification_batch(batch_ids)
+        except Exception as e:
+            log_job(job, f"Batch at offset {offset} failed: {e}", level='error', event='batch_error')
+            db.session.rollback()
+
+        offset    += len(batch_ids)
+        batch_num += 1
+        job.done   = offset
+        _save_offset(job, offset)
+        db.session.commit()
+
+        if batch_num % LOG_EVERY == 0:
+            log_job(job,
+                f"Progress: {job.done}/{job.total} users ({job.progress_pct}%) — {recomputed} recomputed so far.",
+                level='info', event='progress')
+
+    log_job(job, f"Gamification recompute complete — {recomputed} user(s) processed.", level='success', event='done')

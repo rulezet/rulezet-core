@@ -16,7 +16,7 @@ from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_s
 
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
-from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format
+from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
 from app import db
@@ -92,6 +92,8 @@ def rule() -> render_template:
     ai_generate_available = _ai_generate_available() and (
         current_user.is_admin() or current_user.has_permission('ai.use')
     )
+    from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+    deep_validation_available = is_deep_validation_configured()
 
     # form send to treatment
 
@@ -103,7 +105,8 @@ def rule() -> render_template:
         valide , error = verify_syntax_rule_by_format(rule_dict)
 
         if valide == False:
-                return render_template("rule/rule.html", error=error, form=form, ai_generate_available=ai_generate_available)
+                return render_template("rule/rule.html", error=error, form=form, ai_generate_available=ai_generate_available,
+                                       deep_validation_available=deep_validation_available)
 
         v_data = request.form.get('vulnerabilities')
         form_dict['vulnerabilities'] = v_data
@@ -131,6 +134,18 @@ def rule() -> render_template:
                 except Exception:
                     pass
 
+            r_data = request.form.get('related_rules')
+            if r_data:
+                try:
+                    from app.features.rule_relation.rule_relation_core import add_relation as _add_rel
+                    for entry in json.loads(r_data):
+                        target_id = entry.get('id')
+                        if target_id:
+                            _add_rel(new_rule.id, target_id, entry.get('relation_type') or 'references',
+                                      user_id=current_user.id, source='manual')
+                except Exception:
+                    pass
+
             flash('Rule added !', 'success')
             return redirect(url_for('rule.detail_rule', rule_id=new_rule.id))
         elif isinstance(message, str) and message.startswith("TRASH_CONFLICT:"):
@@ -140,7 +155,8 @@ def rule() -> render_template:
             t_id    = parts[2] if len(parts) > 2 else ''
             t_title = parts[3] if len(parts) > 3 else 'deleted rule'
             flash(f'TRASH_CONFLICT:{t_uuid}:{t_id}:{t_title}', 'warning')
-            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available)
+            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available,
+                                   deep_validation_available=deep_validation_available)
         elif isinstance(message, str) and (message.startswith("DUPLICATE:") or message.startswith("UUID_DUPLICATE:")):
             # An active rule with this exact content (or the same uuid) already
             # exists — go straight to it instead of leaving the user with a
@@ -154,11 +170,14 @@ def rule() -> render_template:
                 flash(f'A rule with {reason} already exists: "{dup_title}".', 'info')
                 return redirect(url_for('rule.detail_rule', rule_id=int(dup_id)))
             flash(f'A rule with {reason} already exists: "{dup_title}".', 'danger')
-            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available)
+            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available,
+                                   deep_validation_available=deep_validation_available)
         else:
             flash(message, 'danger')
-            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available)
-    return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available)
+            return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available,
+                                   deep_validation_available=deep_validation_available)
+    return render_template("rule/rule.html", form=form, ai_generate_available=ai_generate_available,
+                                   deep_validation_available=deep_validation_available)
 
 
 @rule_blueprint.route("/ai_generate_rule", methods=['POST'])
@@ -458,6 +477,7 @@ def edit_rule(rule_id) -> render_template:
                 rule_id, current_user.id,
                 request.form.get('tags'),
                 request.form.get('vulnerabilities'),
+                request.form.get('related_rules'),
             )
             RuleModel.add_contributor(current_user.id, rule_id)
 
@@ -493,13 +513,20 @@ def edit_rule(rule_id) -> render_template:
         form.version.data = rule.version
         form.to_string.data = rule.to_string
         form.original_uuid.data = rule.original_uuid
-        return render_template("rule/edit_rule.html", form=form, rule=rule, restricted_edit=True)
+        from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+        return render_template("rule/edit_rule.html", form=form, rule=rule, restricted_edit=True,
+                               deep_validation_available=is_deep_validation_configured())
 
     if is_owner_or_admin:
         form = EditRuleForm()
         licenses = get_licst_license()
+        # Rules imported from GitHub (see rule_from_github/proposal_core.py)
+        # can carry a free-text license that isn't in licenses.txt — without
+        # it in the choices, WTForms rejects the whole submission with "Not
+        # a valid choice" even when the user never touched the license.
+        if rule.license and rule.license not in licenses:
+            licenses = licenses + [rule.license]
         form.license.choices = [(lic, lic) for lic in licenses]
-
 
         if form.validate_on_submit():
             
@@ -516,7 +543,9 @@ def edit_rule(rule_id) -> render_template:
             valide , error = verify_syntax_rule_by_format(rule_dict)
             if not valide:
                 form.to_string.errors.append(f"Syntax Error: {error}")
-                return render_template("rule/edit_rule.html",error=error, form=form, rule=rule)
+                from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+                return render_template("rule/edit_rule.html",error=error, form=form, rule=rule,
+                                       deep_validation_available=is_deep_validation_configured())
             
             
 
@@ -552,6 +581,8 @@ def edit_rule(rule_id) -> render_template:
                 rule_dict['tags'] = json.loads(t_data) if t_data else []
             except json.JSONDecodeError:
                 rule_dict['tags'] = []
+
+            rule_dict['related_rules'] = request.form.get('related_rules')
 
             success , current_rule = RuleModel.edit_rule_core(rule_dict, rule_id)
             log_activity("rule.edit", f"Edited rule '{current_rule.title}' (id={rule_id})",
@@ -591,19 +622,36 @@ def edit_rule(rule_id) -> render_template:
             flash("Rule modified with success!", "success")
 
             return redirect(url_for('rule.detail_rule', rule_id=current_rule.id))
+
+        if request.method == 'POST':
+            # A real submission failed validation — surface it (silently
+            # re-rendering left the user with no idea their edit wasn't
+            # saved). form.*.data already holds what they submitted, so
+            # leave it alone instead of overwriting it with the old rule
+            # values — otherwise the failure also wipes their edit.
+            error_summary = "; ".join(
+                f"{getattr(form, field).label.text}: {', '.join(errs)}"
+                for field, errs in form.errors.items()
+            )
+            flash(f"Could not save changes — {error_summary}", "danger")
         else:
+            # Plain GET (initial page load) — validate_on_submit() is False
+            # here too (nothing was submitted), but for an unrelated reason:
+            # Flask-WTF only binds request.form into the form on POST, so
+            # every field needs to be populated by hand from the rule.
             form.format.data = rule.format
             form.source.data = rule.source
             form.title.data = rule.title
             form.description.data = rule.description
-            form.license.data = rule.license  # Selected value
+            form.license.data = rule.license
             form.cve_id.data = rule.cve_id
             form.version.data = rule.version
             form.to_string.data = rule.to_string
-            form.original_uuid.data= rule.original_uuid
-            rule.last_modif = datetime.now(timezone.utc)
-            
-        return render_template("rule/edit_rule.html", form=form, rule=rule)
+            form.original_uuid.data = rule.original_uuid
+
+        from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+        return render_template("rule/edit_rule.html", form=form, rule=rule,
+                               deep_validation_available=is_deep_validation_configured())
     else:
         return render_template("access_denied.html")
     
@@ -894,14 +942,20 @@ def _rule_ai_analysis_count(rule_id):
     return q.count()
 
 
+def _rule_linked_rules_count(rule_id):
+    from app.features.rule_relation.rule_relation_core import count_relations_for_rule
+    return count_relations_for_rule(rule_id)
+
+
 def _nav_counts(rule_id):
     return {
-        'similarity_count':  _rule_similarity_count(rule_id),
-        'history_count':     _rule_history_count(rule_id),
-        'proposal_count':    _rule_proposal_count(rule_id),
-        'scope_count':       _rule_scope_count(rule_id),
-        'test_count':        _rule_test_count(rule_id),
-        'ai_analysis_count': _rule_ai_analysis_count(rule_id),
+        'similarity_count':    _rule_similarity_count(rule_id),
+        'history_count':       _rule_history_count(rule_id),
+        'proposal_count':      _rule_proposal_count(rule_id),
+        'scope_count':         _rule_scope_count(rule_id),
+        'test_count':          _rule_test_count(rule_id),
+        'ai_analysis_count':   _rule_ai_analysis_count(rule_id),
+        'linked_rules_count':  _rule_linked_rules_count(rule_id),
     }
 
 
@@ -955,6 +1009,32 @@ def detail_rule(rule_id)-> render_template:
     return render_template("404.html")
 
 
+@rule_blueprint.route("/deep_validate_content", methods=['POST'])
+@login_required
+def deep_validate_content():
+    """On-demand real-engine validation for Suricata rule content (issue #61
+    suggestion #1) — see docs/design/suricata_language_server_integration.md.
+    Never run automatically (a real Suricata engine run is ~0.5-5s per
+    call); only from an explicit button click on the create/edit-rule
+    forms. Suricata-only: a genuine Sagan rule is by definition something
+    a real Suricata engine rejects, so deep-validating one against
+    Suricata semantics is meaningless. Takes {content, format} in the
+    JSON body — works for content that isn't a saved Rule yet (create
+    form) as well as an in-progress edit that may differ from what's
+    actually saved."""
+    data    = request.get_json(silent=True) or {}
+    content = data.get('content') or ''
+    fmt     = (data.get('format') or '').lower()
+    if fmt != 'suricata':
+        return jsonify({"success": False, "message": "Deep validation is only available for Suricata rules."}), 400
+    if not content.strip():
+        return jsonify({"success": False, "message": "No content to validate."}), 400
+
+    from app.features.rule.rule_format.deep_validate import deep_validate_suricata_rule
+    result = deep_validate_suricata_rule(content)
+    return jsonify({"success": True, **result})
+
+
 @rule_blueprint.route("/detail_rule/<int:rule_id>/history", methods=['GET'])
 def detail_rule_history(rule_id):
     """History sub-page for a rule."""
@@ -1000,6 +1080,20 @@ def detail_rule_scope(rule_id):
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
     return render_template("rule/detail_rule/detail_rule_scope.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/linked_rules", methods=['GET'])
+def detail_rule_linked_rules(rule_id):
+    """Linked Rules sub-page for a rule — the curated/auto-detected
+    RuleRelation system (app/features/rule_relation/), NOT the same-
+    source/author 'Related Rules' panel that lives on the Overview tab."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_linked_rules.html", rule=rule,
                            **_nav_counts(rule.id))
 
 
@@ -2754,6 +2848,33 @@ def _ai_fix_available_for(bad_rule) -> bool:
     return cfg.enabled if cfg else True
 
 
+def _suggested_dependency_for(bad_rule) -> dict | None:
+    """When a YARA bad rule's compile error is an undefined identifier that
+    isn't a builtin module/external (see YaraRule.validate's own auto-fix
+    loop), it's likely another rule's name — YARA's cross-rule condition
+    reference (e.g. `condition: Macho and ...`). Looks for a matching-titled
+    rule already on this instance so the edit page can offer to link them
+    and recompile together, instead of the user having to track it down
+    themselves."""
+    if (bad_rule.rule_type or '').lower() != 'yara' or not bad_rule.error_message:
+        return None
+    from app.features.rule.rule_format.available_format.yara_format import (
+        extract_undefined_identifier, find_missing_dependency_rule,
+    )
+    var_name = extract_undefined_identifier(bad_rule.error_message)
+    if not var_name:
+        return None
+    dep_rule = find_missing_dependency_rule(var_name, bad_rule)
+    if not dep_rule:
+        return None
+    return {
+        'var_name':    var_name,
+        'rule_id':     dep_rule.id,
+        'rule_uuid':   dep_rule.uuid,
+        'rule_title':  dep_rule.title,
+    }
+
+
 @rule_blueprint.route('/bad_rule/<int:rule_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_bad_rule(rule_id):
@@ -2785,11 +2906,66 @@ def edit_bad_rule(rule_id):
                     flash(f"Error: {error}", "danger")
                     bad_rule.error_message = error
                     return render_template('rule/edit_bad_rule.html', rule=bad_rule, new_content=new_content,
-                                           ai_fix_available=ai_fix_available)
+                                           ai_fix_available=ai_fix_available,
+                                           suggested_dependency=_suggested_dependency_for(bad_rule))
 
-            return render_template('rule/edit_bad_rule.html', rule=bad_rule, ai_fix_available=ai_fix_available)
+            return render_template('rule/edit_bad_rule.html', rule=bad_rule, ai_fix_available=ai_fix_available,
+                                   suggested_dependency=_suggested_dependency_for(bad_rule))
         return render_template("access_denied.html")
     return render_template('404.html')
+
+
+@rule_blueprint.route('/bad_rule/<int:rule_id>/link_dependency', methods=['POST'])
+@login_required
+def bad_rule_link_dependency(rule_id):
+    """Confirms a suggested cross-rule dependency (see
+    _suggested_dependency_for above): compiles the bad rule TOGETHER with
+    the target rule's own source to confirm the guess, and on success
+    imports the bad rule as-is plus records the dependency as a
+    RuleRelation('depends_on') — see import_bad_rule_with_dependency."""
+    bad_rule = BadRuleModel.get_invalid_rule_by_id(rule_id)
+    if not bad_rule:
+        return jsonify({"success": False, "error": "Not found."}), 404
+    if not (_is_github_manager() or current_user.id == bad_rule.user_id):
+        return jsonify({"success": False, "error": "Forbidden."}), 403
+    if (bad_rule.rule_type or '').lower() != 'yara':
+        return jsonify({"success": False, "error": "Only supported for YARA rules."}), 400
+
+    data = request.get_json(silent=True) or {}
+    target_rule_id = data.get('target_rule_id')
+    content = data.get('content') or bad_rule.raw_content
+    if not target_rule_id:
+        return jsonify({"success": False, "error": "target_rule_id required."}), 400
+
+    from app.core.db_class.db import Rule
+    target_rule = Rule.query.get(int(target_rule_id))
+    if not target_rule or target_rule.is_deleted:
+        return jsonify({"success": False, "error": "Target rule not found."}), 404
+
+    success, error, new_rule = import_bad_rule_with_dependency(bad_rule, content, target_rule, current_user)
+    if not success:
+        return jsonify({"success": False, "error": error}), 400
+
+    if error == "DUPLICATE_REDIRECT":
+        # An active/trashed rule already covers this exact content — the
+        # bad_rule entry is already gone (see import_bad_rule_with_dependency),
+        # so just point the caller at the real, already-existing rule instead
+        # of a dead-end error.
+        return jsonify({
+            "success": True,
+            "redirect": url_for('rule.detail_rule', rule_id=new_rule.id),
+            "message": f'This rule already exists: "{new_rule.title}".',
+        })
+
+    log_activity(
+        "rule.bad_rule_edited",
+        f"Fixed and imported invalid rule id={rule_id} as rule '{new_rule.title}' (id={new_rule.id}), "
+        f"linked to dependency rule '{target_rule.title}' (id={target_rule.id})",
+        target_type="rule", target_id=new_rule.id, target_uuid=new_rule.uuid,
+        extra={"bad_rule_id": rule_id, "dependency_rule_id": target_rule.id},
+        is_public=False,
+    )
+    return jsonify({"success": True, "redirect": url_for('rule.detail_rule', rule_id=new_rule.id)})
 
 
 @rule_blueprint.route('/bad_rule/<int:rule_id>/ai_fix', methods=['POST'])
@@ -3081,18 +3257,95 @@ def get_rules_page_history_():
 
 
 @rule_blueprint.route("/get_rule_changes", methods=['GET'])
-def get_rule_changes()-> render_template:
-    """Get the history of the rule"""
-    page = request.args.get('page', type=int)
-    search = request.args.get('search', type=str)
-    rules = RuleModel.get_old_rule_choice(page, search)
-    if rules:
-        return {"success": True,
-                "rule": [rule.to_json() for rule in rules],
-                "total_pages": rules.pages,
-                "total_rules": rules.total
-            }, 200
-    return {"message": "No Rule"}, 404
+@login_required
+def get_rule_changes() -> jsonify:
+    """Pending Updates page's DataTable fetchUrl — page/per_page/search/
+    sort/dir/format in, {items, total, total_pages} out."""
+    page       = request.args.get('page', 1, type=int)
+    per_page   = request.args.get('per_page', 20, type=int)
+    search     = request.args.get('search', '', type=str).strip() or None
+    sort       = request.args.get('sort', '', type=str).strip() or None
+    direction  = request.args.get('dir', 'desc', type=str)
+    rule_format = request.args.get('format', '', type=str).strip() or None
+
+    rules = RuleModel.get_pending_updates_page(
+        page=page, per_page=per_page, search=search, rule_format=rule_format,
+        sort=sort, direction=direction,
+    )
+    return jsonify({
+        "success": True,
+        "items": [r.to_json() for r in rules.items],
+        "total": rules.total,
+        "total_pages": rules.pages,
+    })
+
+
+# Above this count, a bulk decision (accept/reject/delete) runs as a
+# background job instead of inline in the request — large enough that an
+# inline loop could plausibly time out the request, small enough that most
+# everyday selections (a page, a search-narrowed batch) still get an
+# immediate result with no job/polling UI at all.
+_PENDING_UPDATES_BULK_JOB_THRESHOLD = 100
+
+
+@rule_blueprint.route("/update_github/bulk_decision", methods=['POST'])
+@login_required
+def bulk_pending_update_decision() -> jsonify:
+    """Bulk Accept/Reject/Delete for the Pending Updates page. `ids` is
+    either an explicit list of RuleUpdateHistory ids, or the string 'ALL'
+    meaning every entry currently matching search/format (DataTable's
+    "select all N items matching this filter" flow) — resolved server-side
+    against the same filters, never trusting a client-supplied count."""
+    data   = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip()
+    ids    = data.get('ids')
+    search = (data.get('search') or '').strip() or None
+    rule_format = (data.get('format') or '').strip() or None
+
+    if action not in ('accept', 'reject', 'delete'):
+        return jsonify({"success": False, "message": "Invalid action."}), 400
+
+    if ids == 'ALL':
+        ids = RuleModel.get_pending_updates_ids(search=search, rule_format=rule_format)
+    elif isinstance(ids, list):
+        ids = [int(i) for i in ids if str(i).isdigit()]
+    else:
+        return jsonify({"success": False, "message": "ids must be a list or 'ALL'."}), 400
+
+    if not ids:
+        return jsonify({"success": False, "message": "Nothing matched — no pending update(s) to update."}), 400
+
+    if len(ids) > _PENDING_UPDATES_BULK_JOB_THRESHOLD:
+        from app.features.jobs.jobs_core import create_job
+        job = create_job(
+            job_type='pending_update_history_bulk_decision',
+            payload={'action': action, 'ids': ids},
+            label=f"{action.capitalize()} {len(ids)} pending update(s)",
+            created_by=current_user.id,
+            total=len(ids),
+        )
+        if not job:
+            return jsonify({"success": False, "message": "Failed to queue job."}), 500
+        log_activity('rule.quick_meta', f"Queued bulk {action} of {len(ids)} pending update(s)",
+                     extra={"action": action, "count": len(ids)}, is_public=False)
+        return jsonify({"success": True, "job": job.to_json()})
+
+    action_fn = {
+        'accept': RuleModel.accept_update_history,
+        'reject': RuleModel.reject_update_history,
+        'delete': RuleModel.delete_update_history,
+    }[action]
+
+    done = 0
+    for history_id in ids:
+        ok = action_fn(history_id)
+        ok = ok[0] if isinstance(ok, tuple) else ok
+        if ok:
+            done += 1
+
+    log_activity('rule.quick_meta', f"Bulk {action} of {done}/{len(ids)} pending update(s)",
+                 extra={"action": action, "count": done}, is_public=False)
+    return jsonify({"success": True, "message": f"{done}/{len(ids)} {action}ed.", "done": done})
 
 
 
@@ -3264,11 +3517,217 @@ def get_last_cve_rules() -> dict:
 
     return {"success": True, "rules": serialized, "length": len(serialized)}, 200
 
+
+# ── One-time health check for issue #61 (docs/design/suricata_sagan_rework.md):
+# scans every format='suricata' rule through the tightened SuricataRule.
+# validate() and buckets it as ok / should-be-sagan / genuinely-broken, so an
+# admin can act on each bucket with one click instead of guessing. Temporary
+# admin tool — remove once the migration has been run on a given instance.
+@rule_blueprint.route("/admin/suricata_audit/run", methods=['POST'])
+@login_required
+def suricata_audit_run() -> jsonify:
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='audit_suricata_rules',
+        payload={},
+        label="Audit Suricata rules (issue #61)",
+        created_by=current_user.id,
+    )
+    if not job:
+        return jsonify({"success": False, "message": "Failed to queue job."}), 500
+
+    log_activity('admin.settings_changed', "Queued a Suricata rule audit (issue #61)", is_public=False)
+    return jsonify({"success": True, "job": job.to_json()})
+
+
+@rule_blueprint.route("/admin/suricata_audit/result/<string:job_uuid>", methods=['GET'])
+@login_required
+def suricata_audit_result(job_uuid) -> jsonify:
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    from app.core.db_class.db import BackgroundJob
+    job = BackgroundJob.query.filter_by(uuid=job_uuid, job_type='audit_suricata_rules').first()
+    if not job:
+        return jsonify({"success": False, "message": "Job not found."}), 404
+    if job.status != 'done':
+        return jsonify({"success": False, "message": f"Job is {job.status}, not done yet."}), 400
+
+    payload = job.payload or {}
+    sagan_ids  = payload.get('sagan_ids') or []
+    broken_ids = payload.get('broken_ids') or []
+    return jsonify({
+        "success": True,
+        "ok_count":     payload.get('ok_count', 0),
+        "sagan_ids":    sagan_ids,
+        "broken_ids":   broken_ids,
+        "sagan_count":  len(sagan_ids),
+        "broken_count": len(broken_ids),
+    })
+
+
+@rule_blueprint.route("/admin/suricata_deep_validate/run", methods=['POST'])
+@login_required
+def suricata_deep_validate_run() -> jsonify:
+    """Trigger a bounded batch of real-engine deep validation (issue #61
+    suggestion #1) — see docs/design/suricata_language_server_integration.md.
+    `limit` is admin-chosen (capped at 5000 server-side) rather than the
+    whole corpus: each rule is a real Suricata subprocess run
+    (~0.5-5s), so a run against all ~86k rules would take hours — an
+    admin runs this in bounded batches instead, reviewing between runs."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+    if not is_deep_validation_configured():
+        return jsonify({"success": False, "message": "Deep validation is not configured on this instance."}), 400
+
+    data  = request.get_json(silent=True) or {}
+    limit = min(int(data.get('limit') or 500), 5000)
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='deep_validate_suricata_rules',
+        payload={'limit': limit},
+        label=f"Deep validate up to {limit} Suricata rule(s) (real engine)",
+        created_by=current_user.id,
+    )
+    if not job:
+        return jsonify({"success": False, "message": "Failed to queue job."}), 500
+
+    log_activity('admin.settings_changed', f"Queued a real-engine deep validation batch (limit={limit})", is_public=False)
+    return jsonify({"success": True, "job": job.to_json()})
+
+
+@rule_blueprint.route("/admin/suricata_deep_validate/result/<string:job_uuid>", methods=['GET'])
+@login_required
+def suricata_deep_validate_result(job_uuid) -> jsonify:
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    from app.core.db_class.db import BackgroundJob
+    job = BackgroundJob.query.filter_by(uuid=job_uuid, job_type='deep_validate_suricata_rules').first()
+    if not job:
+        return jsonify({"success": False, "message": "Job not found."}), 404
+    if job.status != 'done':
+        return jsonify({"success": False, "message": f"Job is {job.status}, not done yet."}), 400
+
+    payload = job.payload or {}
+    failed  = payload.get('failed') or []
+    return jsonify({
+        "success":     True,
+        "ok_count":    payload.get('ok_count', 0),
+        "failed":      failed,
+        "failed_count": len(failed),
+    })
+
+
+@rule_blueprint.route("/admin/suricata_audit/reclassify", methods=['POST'])
+@login_required
+def suricata_audit_reclassify() -> jsonify:
+    """Reclassify the audit's 'should be Sagan' bucket — same job as a
+    fresh get_mistagged_suricata_rule_ids() scan, just fed the already-
+    computed ids instead of re-scanning the whole corpus."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (data.get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({"success": False, "message": "Nothing to reclassify."}), 400
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='reclassify_suricata_to_sagan',
+        payload={'ids': ids},
+        label=f"Reclassify {len(ids)} Suricata rule(s) as Sagan",
+        created_by=current_user.id,
+        total=len(ids),
+    )
+    if not job:
+        return jsonify({"success": False, "message": "Failed to queue job."}), 500
+
+    log_activity('admin.settings_changed', f"Queued reclassification of {len(ids)} Suricata rule(s) as Sagan",
+                 extra={"count": len(ids)}, is_public=False)
+    return jsonify({"success": True, "job": job.to_json()})
+
+
+@rule_blueprint.route("/admin/suricata_audit/trash", methods=['POST'])
+@login_required
+def suricata_audit_trash() -> jsonify:
+    """Soft-deletes the audit's 'broken' bucket (moved to Trash, not hard-
+    deleted — reversible from /rule/trash like any other soft delete). A
+    single bulk SQL UPDATE (soft_delete_rule_list), so this runs inline —
+    no job needed even for a few hundred rows."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (data.get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({"success": False, "message": "Nothing to trash."}), 400
+
+    import uuid as _uuid
+    batch_uuid = str(_uuid.uuid4())
+    count = RuleModel.soft_delete_rule_list(ids, current_user.id, batch_uuid=batch_uuid)
+
+    log_activity('admin.settings_changed',
+                 f"Moved {count} broken Suricata rule(s) to trash (issue #61 audit)",
+                 extra={"count": count, "batch_uuid": batch_uuid}, is_public=False)
+    return jsonify({"success": True, "count": count})
+
+
+# ── SID collision report (issue #61 suggestion #3) — a read-only report,
+# not an automatic fix: some collisions are unrelated rules that all reused
+# an obvious "example/dev" SID block, so a human picks which rule in each
+# group keeps the SID. Safe to run on a live prod instance — it's a single
+# GROUP BY query, no bulk write happens unless the admin explicitly trashes
+# rows from the report afterwards.
+@rule_blueprint.route("/admin/sid_collisions/report", methods=['GET'])
+@login_required
+def sid_collisions_report() -> jsonify:
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    groups = RuleModel.get_sid_collision_groups()
+    total_extra_rows = sum(len(g['rules']) - 1 for g in groups)
+    return jsonify({"success": True, "groups": groups, "total_groups": len(groups),
+                     "total_extra_rows": total_extra_rows})
+
+
+@rule_blueprint.route("/admin/sid_collisions/trash", methods=['POST'])
+@login_required
+def sid_collisions_trash() -> jsonify:
+    """Soft-deletes the rule ids a human picked to lose their SID collision
+    (moved to Trash, reversible — see /rule/trash)."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (data.get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({"success": False, "message": "Nothing to trash."}), 400
+
+    import uuid as _uuid
+    batch_uuid = str(_uuid.uuid4())
+    count = RuleModel.soft_delete_rule_list(ids, current_user.id, batch_uuid=batch_uuid)
+
+    log_activity('admin.settings_changed',
+                 f"Moved {count} rule(s) to trash (issue #61 SID collision cleanup)",
+                 extra={"count": count, "batch_uuid": batch_uuid}, is_public=False)
+    return jsonify({"success": True, "count": count})
+
+
 @rule_blueprint.route("/admin/manage_format_rule", methods=["GET", "POST"])
 @login_required
 def manage_format_rule() -> render_template:
     if not current_user.is_admin():
         return render_template("access_denied.html")
+
+    from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
+    suricata_deep_validation_configured = is_deep_validation_configured()
 
     form = CreateFormatRuleForm()
 
@@ -3285,9 +3744,11 @@ def manage_format_rule() -> render_template:
         flash(message, "success" if success else "danger")
 
         if success:
-            return render_template("admin/format.html", form=form)
+            return render_template("admin/format.html", form=form,
+                                   suricata_deep_validation_configured=suricata_deep_validation_configured)
 
-    return render_template("admin/format.html", form=form)
+    return render_template("admin/format.html", form=form,
+                           suricata_deep_validation_configured=suricata_deep_validation_configured)
 
 @rule_blueprint.route("/get_rules_formats_pages", methods=['GET'])
 def get_rules_formats_pages() -> dict:
@@ -4388,6 +4849,30 @@ def bulk_action_github():
 
     return jsonify({"message": "Action not supported"}), 400
 
+
+@rule_blueprint.route("/github/resync_repos", methods=['POST'])
+@login_required
+def resync_github_repos():
+    """Temporary admin action: full recompute of the GithubRepo cache table
+    from Rule (the correctness backstop — see github_repo_core.py). Exists so
+    drift from a missed incremental-sync call site, or from data that
+    predates this table, can always be repaired in one click."""
+    if not _is_github_manager():
+        return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
+
+    from app.features.rule.github_repo_core import rebuild_github_repos_from_rules
+    result = rebuild_github_repos_from_rules()
+    log_activity("github.repos_resynced",
+                 f"Resynced GitHub repo registry: {result['repos']} repo(s), {result['rules_counted']} rule(s)",
+                 extra=result, icon="fa-brands fa-github")
+    return jsonify({
+        "status": "success",
+        "message": f"Resynced {result['repos']} repositories ({result['rules_counted']} rules).",
+        "toast_class": "success-subtle",
+        **result
+    }), 200
+
+
 @rule_blueprint.route("/github_detail", methods=['GET'])
 @login_required
 def github_detail():
@@ -4458,6 +4943,7 @@ def rules_data_table():
         quality_score_min=request.args.get('quality_score_min', None, type=float),
         quality_score_max=request.args.get('quality_score_max', None, type=float),
         has_ai_analysis=request.args.get('has_ai_analysis', 'false', type=str) == 'true',
+        has_relations=request.args.get('has_relations', 'false', type=str) == 'true',
     )
 
     items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)

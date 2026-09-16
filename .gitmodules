@@ -4,15 +4,18 @@
 [submodule "app/modules/misp-taxonomies"]
 	path = app/modules/misp-taxonomies
 	url = https://github.com/MISP/misp-taxonomies.git
+	ignore = dirty
 [submodule "app/modules/misp-galaxy"]
 	path = app/modules/misp-galaxy
 	url = https://github.com/MISP/misp-galaxy.git
+	ignore = dirty
 [submodule "app/modules/pivotick"]
 	path = app/modules/pivotick
 	url = https://github.com/Pivotick/Pivotick.git
 [submodule "app/modules/cti"]
 	path = app/modules/cti
 	url = https://github.com/mitre/cti
+	ignore = dirty
 [submodule "app/modules/rulezet-validation"]
 	path = app/modules/rulezet-validation
 	url = https://github.com/rulezet/rulezet-validation.git

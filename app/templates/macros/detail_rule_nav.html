@@ -1,4 +1,4 @@
-{% macro detail_rule_nav(rule, active, similarity_count=0, history_count=0, proposal_count=0, scope_count=0, test_count=0, ai_analysis_count=0) %}
+{% macro detail_rule_nav(rule, active, similarity_count=0, history_count=0, proposal_count=0, scope_count=0, test_count=0, ai_analysis_count=0, linked_rules_count=0) %}
 <nav class="dr-nav">
     <a href="/rule/detail_rule/{{ rule.id }}"
        class="dr-nav__item {% if active == 'detail' %}active{% endif %}">
@@ -41,6 +41,16 @@
         <span>Similarity</span>
         {% if similarity_count > 0 %}
         <span class="dr-nav__badge">{{ similarity_count }}</span>
+        {% endif %}
+    </a>
+    {% endif %}
+    {% if linked_rules_count > 0 or active == 'linked_rules' %}
+    <a href="/rule/detail_rule/{{ rule.id }}/linked_rules"
+       class="dr-nav__item {% if active == 'linked_rules' %}active{% endif %}">
+        <i class="fa-solid fa-diagram-project"></i>
+        <span>Linked Rules</span>
+        {% if linked_rules_count > 0 %}
+        <span class="dr-nav__badge">{{ linked_rules_count }}</span>
         {% endif %}
     </a>
     {% endif %}

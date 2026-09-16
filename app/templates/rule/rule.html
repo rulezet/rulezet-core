@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <style>
 .rf-label-hint {
     display: inline-flex;
@@ -254,6 +255,13 @@
               <input type="hidden" name="attacks" :value="JSON.stringify(selectedAttacks)">
             </div>
           </div>
+          <div class="row mb-4">
+            <div class="col-12">
+              <related-rule-input v-model="selectedRelatedRules" label="Linked Rules"
+                csrf-token="{{ csrf_token() }}"></related-rule-input>
+              <input type="hidden" name="related_rules" :value="JSON.stringify(selectedRelatedRules)">
+            </div>
+          </div>
 
           <!-- Description & UUID -->
           <p class="form-section-title"><i class="fas fa-align-left me-1"></i>Description &amp; Reference</p>
@@ -293,6 +301,7 @@
             {% if form.to_string.errors %}
             <div class="invalid-feedback d-block mt-1">{{ form.to_string.errors[0] }}</div>
             {% endif %}
+            <deep-validate-suricata :format="manualFormat" :content="manualContent"></deep-validate-suricata>
           </div>
 
           {% if error %}
@@ -354,6 +363,7 @@
               min-height="300px"
               max-height="60vh">
             </smart-editor>
+            <deep-validate-suricata :format="ruleType" :content="parseContent"></deep-validate-suricata>
           </div>
 
           <div class="mb-4">
@@ -832,6 +842,7 @@ window.__manual_version = {{ (form.version.data or '1.0') | tojson }};
 window.__trash_conflict_title = {{ trash_conflict_title | tojson }};
 window.__flash_messages = {{ flash_messages | tojson }};
 window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) | tojson }};
+window.__deep_validation_available = {{ deep_validation_available | default(false) | tojson }};
 </script>
 <script type="module">
 
@@ -842,8 +853,10 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
       import TagInput from '/static/js/tags/tagInput.js';
       import VersionPicker from '/static/js/tags/utils/versionPicker.js';
       import AttackInput from '/static/js/attack/attackInput.js';
+      import RelatedRuleInput from '/static/js/rule_relation/relatedRuleInput.js';
       import LicenseInput from '/static/js/components/LicenseInput.js';
       import AIThinkingSteps from '/static/js/components/ai-thinking-steps.js';
+      import DeepValidateSuricata from '/static/js/rule/DeepValidateSuricata.js';
 
       const VALID_TABS = ['manual', 'parse', 'github', 'zip', 'json', 'ai_generate'];
 
@@ -855,8 +868,10 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
                   'tag-input': TagInput,
                   'version-picker': VersionPicker,
                   'attack-input': AttackInput,
+                  'related-rule-input': RelatedRuleInput,
                   'license-input': LicenseInput,
                   'ai-thinking-steps': AIThinkingSteps,
+                  'deep-validate-suricata': DeepValidateSuricata,
             },
             setup() {
                   const requestedTab = new URLSearchParams(window.location.search).get('tab');
@@ -1188,6 +1203,7 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
                   const detectedVulnerabilities = ref([]);
                   const selectedTags = ref([]);
                   const selectedAttacks = ref([]);
+                  const selectedRelatedRules = ref([]);
 
                   const formData = Vue.reactive({
                         version: window.__manual_version || '1.0',
@@ -1341,6 +1357,7 @@ window.__title_error = {{ (form.title.errors[0] if form.title.errors else none) 
                         detectedVulnerabilities,
                         selectedTags,
                         selectedAttacks,
+                        selectedRelatedRules,
                         formData,
 
                         proposalMessage,

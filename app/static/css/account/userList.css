@@ -276,6 +276,8 @@
 .ul-action-secondary--warn:hover     { background: rgba(240,160,32,.1); color: #c0820a; }
 .ul-action-secondary--danger         { color: #dc3545; border-color: rgba(220,53,69,.3); }
 .ul-action-secondary--danger:hover   { background: rgba(220,53,69,.1); }
+.ul-action-secondary:disabled        { color: var(--subtle-text-color); border-color: var(--border-color); background: transparent; opacity: .45; cursor: not-allowed; }
+.ul-action-secondary:disabled:hover  { background: transparent; }
 
 /* ── Table helpers ── */
 .ul-table-user { display: flex; align-items: center; gap: .55rem; }

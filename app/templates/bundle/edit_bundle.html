@@ -283,6 +283,40 @@
 
     </div><!-- /tab-content -->
 
+    <!-- ── Linked rules confirm modal ── -->
+    <div v-if="linkedRulesModalOpen && pendingAdd" class="modal fade show d-block" style="background:rgba(0,0,0,.5);" @click.self="cancelAddRules">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">
+                        <i class="fa-solid fa-diagram-project me-2 text-warning"></i>Linked rules found
+                    </h5>
+                    <button class="btn-close" @click="cancelAddRules"></button>
+                </div>
+                <div class="modal-body pt-2">
+                    <p class="mb-3">
+                        [[ pendingAdd.rules.length === 1 ? 'This rule is' : 'These rules are' ]] linked to
+                        [[ pendingAdd.extra.size ]] other rule[[ pendingAdd.extra.size === 1 ? '' : 's' ]] not yet in this bundle.
+                        Without them, it might not work as expected.
+                    </p>
+                    <div class="d-flex flex-column gap-1 rounded-3 border p-2 mb-3" style="max-height:220px;overflow-y:auto;background:var(--light-bg-color);">
+                        <div v-for="[id, info] in pendingAdd.extra" :key="id" class="d-flex align-items-center gap-2 small">
+                            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis" style="font-size:.65rem;">[[ info.format ]]</span>
+                            <span class="text-truncate">[[ info.title ]]</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">Add the linked rule[[ pendingAdd.extra.size === 1 ? '' : 's' ]] automatically, or cancel?</p>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button @click="cancelAddRules" class="btn btn-sm btn-light border rounded-pill px-4">Cancel</button>
+                    <button @click="confirmAddRulesWithLinked" class="btn btn-sm btn-primary rounded-pill px-4">
+                        <i class="fa-solid fa-plus me-1"></i>Add rule[[ pendingAdd.rules.length === 1 ? '' : 's' ]] + linked
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <div id="bundle-info" data-bundle-id="{{ bundle.id }}"></div>
@@ -322,12 +356,84 @@ createApp({
         const structureEditor = ref(null)
         const bundleRuleIds   = ref(new Set())
 
-        function onAddRules(rules) {
+        function _commitAddRules(rules) {
             if (structureEditor.value) structureEditor.value.addRules(rules)
             // Optimistic: immediately exclude these rules from the selector
             const updated = new Set(bundleRuleIds.value)
             rules.forEach(r => updated.add(r.id))
             bundleRuleIds.value = updated
+        }
+
+        // Walks the rule-relation graph outward from `rules` (both
+        // directions — either "this rule depends on X" or "X depends on
+        // this rule" can matter), following each newly-found rule's own
+        // links too (transitive: a linked rule may itself need another
+        // rule), until nothing new turns up. Never revisits an id already
+        // in the bundle, already among the rules being added, or already
+        // queued/found — that's the no-duplicate/no-infinite-loop guard,
+        // since relations aren't guaranteed acyclic (two rules can
+        // reference each other). Returns a Map id -> {title, format} for
+        // display, built from the relation rows themselves (rule_title/
+        // rule_format), so the modal doesn't need a second round trip
+        // just to show names before the user decides.
+        async function _collectLinkedRules(rules, alreadyInBundle) {
+            const seen = new Set([...alreadyInBundle, ...rules.map(r => r.id)])
+            const toVisit = rules.map(r => r.id)
+            const extra = new Map()
+            while (toVisit.length) {
+                const id = toVisit.pop()
+                let data
+                try {
+                    data = await (await fetch(`/rule_relation/rule/${id}`)).json()
+                } catch { continue }
+                for (const rel of [...(data.outgoing || []), ...(data.incoming || [])]) {
+                    if (seen.has(rel.rule_id)) continue
+                    seen.add(rel.rule_id)
+                    extra.set(rel.rule_id, { title: rel.rule_title, format: rel.rule_format })
+                    toVisit.push(rel.rule_id)
+                }
+            }
+            return extra
+        }
+
+        // A rule with linked_rules_count > 0 (see /rule/data_table's
+        // serialize_rules_for_data_table) may depend on — or be depended
+        // on by — another rule not in this bundle (a Wazuh <if_sid>, a
+        // Kunai rule() composition, ...). Adding only one side risks a
+        // bundle that doesn't actually work standalone, so this asks
+        // rather than silently adding just what was picked.
+        const linkedRulesModalOpen = ref(false)
+        const pendingAdd           = ref(null)  // { rules, extra: Map(id -> {title, format}) }
+
+        async function onAddRules(rules) {
+            const extra = await _collectLinkedRules(rules, bundleRuleIds.value)
+            if (extra.size === 0) {
+                _commitAddRules(rules)
+                return
+            }
+            pendingAdd.value = { rules, extra }
+            linkedRulesModalOpen.value = true
+        }
+
+        function cancelAddRules() {
+            linkedRulesModalOpen.value = false
+            pendingAdd.value = null
+        }
+
+        async function confirmAddRulesWithLinked() {
+            const { rules, extra } = pendingAdd.value
+            linkedRulesModalOpen.value = false
+            pendingAdd.value = null
+
+            let extraRules = []
+            if (extra.size) {
+                try {
+                    const params = new URLSearchParams({ ids: [...extra.keys()].join(','), per_page: 100 })
+                    const data = await (await fetch(`/rule/data_table?${params}`)).json()
+                    extraRules = data.items || []
+                } catch { create_message('Could not fetch the linked rules — added the originally picked rule(s) only.', 'warning-subtle') }
+            }
+            _commitAddRules([...rules, ...extraRules])
         }
 
         function onPreviewRule(rule) {
@@ -462,6 +568,7 @@ createApp({
         return {
             bundleId, csrfToken, bundleNameShort, bundleNameMedium, structureEditor, bundleRuleIds,
             onAddRules, onPreviewRule, onTreeReady, onTreeSaved,
+            linkedRulesModalOpen, pendingAdd, cancelAddRules, confirmAddRulesWithLinked,
             tags, total_tags, total_pages_tags, current_page_tags,
             save_loading_tags, load_tags, searchQueryTags, sort_order,
             selectedTags, allSelectedTagsObjects,

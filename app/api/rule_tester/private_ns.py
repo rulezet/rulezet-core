@@ -5,9 +5,16 @@ from flask_login import current_user
 from flask_restx import Namespace, Resource
 
 from app.core.utils.activity_log import log_activity
+from app.features.account import account_core as AccountModel
 from app.features.rule import rule_core as RuleModel
 from app.features.rule_tester import rule_tester_core as TesterModel
 from app.features.rule_tester.drivers import registry
+
+
+def _record_test_gamification(user_id):
+    profile = AccountModel.get_or_create_gamification_profile(user_id)
+    if profile:
+        AccountModel.update_rule_tests_gamification(profile.id, user_id)
 
 rule_tester_private_ns = Namespace(
     'Rule Tester — Private 🔑',
@@ -106,6 +113,7 @@ class TestCreate(Resource):
                 is_dangerous       = is_dangerous,
                 danger_description = danger_description,
             )
+            _record_test_gamification(actor.id)
             TesterModel.mark_test_running(test)
 
             try:
@@ -173,6 +181,7 @@ class TestCreate(Resource):
                 is_dangerous       = is_dangerous,
                 danger_description = danger_description,
             )
+            _record_test_gamification(actor.id)
 
             from app import db
             from app.core.db_class.db import BackgroundJob

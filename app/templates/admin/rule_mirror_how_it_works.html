@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+{% import 'macros/admin_nav.html' as anav %}
+
+{% block title %}How Rulesets Works — Rulezet{% endblock %}
+
+{% block head %}
+<style>
+  .hiw-section { scroll-margin-top: 80px; }
+
+  .hiw-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    color: #fff;
+    font-weight: 700;
+    font-size: .85rem;
+    flex-shrink: 0;
+  }
+
+  .hiw-toc-link {
+    display: block;
+    padding: .35rem .75rem;
+    color: var(--subtle-text-color);
+    text-decoration: none;
+    font-size: .82rem;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+    border-radius: 0 4px 4px 0;
+  }
+  .hiw-toc-link:hover {
+    color: #0d6efd;
+    border-left-color: #0d6efd;
+    background: rgba(13,110,253,.06);
+  }
+
+  .hiw-callout {
+    border-left: 3px solid;
+    border-radius: 0 8px 8px 0;
+    padding: .75rem 1rem;
+    font-size: .84rem;
+    margin-bottom: 0;
+  }
+  .hiw-callout--info    { border-color: #0d6efd; background: rgba(13,110,253,.07); }
+  .hiw-callout--warning { border-color: #ffc107; background: rgba(255,193,7,.07); }
+  .hiw-callout--success { border-color: #198754; background: rgba(25,135,84,.07); }
+  .hiw-callout--danger  { border-color: #dc3545; background: rgba(220,53,69,.07); }
+
+  .hiw-agent-card {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--card-bg-color);
+    padding: 1rem 1.1rem;
+    height: 100%;
+  }
+
+  .hiw-code {
+    display: block;
+    background: var(--code-bg-color, #1e1e1e);
+    color: #d4d4d4;
+    border-radius: 8px;
+    padding: .6rem .9rem;
+    font-family: monospace;
+    font-size: .82rem;
+    overflow-x: auto;
+    margin-top: .5rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 px-4">
+
+  <!-- ── Banner ──────────────────────────────────────────────────── -->
+  <div class="explorer-banner mb-4">
+    <img src="{{ url_for('static', filename='image/rulezet_rulesets_logo.png') }}" alt=""
+         class="banner-watermark" style="width:8rem;height:8rem;object-fit:contain;opacity:.06;">
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/admin/rule_mirror" class="text-decoration-none text-muted">Rulesets</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">How it works</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon banner-icon--mascot" style="background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15);">
+        <img src="{{ url_for('static', filename='image/rulezet_rulesets_logo.png') }}" alt="" style="border-radius:8px;">
+      </div>
+      <div>
+        <h2 class="fw-bold mb-1">How Rulesets Works</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:660px;font-size:.95rem;">
+      Rulesets mirrors every active, public rule into a plain git repository — off by default,
+      admin-configured, specific to this instance. This page walks through the layout, how a
+      sync works, the security model, and how to set it up on your own instance.
+    </p>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- ── Sticky Table of Contents ──────────────────────────────── -->
+    <div class="col-lg-3 d-none d-lg-block">
+      <div class="sticky-top" style="top:1.5rem;">
+        <div class="p-3 rounded-3 border shadow-sm" style="background:var(--card-bg-color);border-color:var(--border-color)!important;">
+          <div class="fw-bold mb-3" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--subtle-text-color);">
+            <i class="fa-solid fa-list-ul me-2 text-primary"></i>On this page
+          </div>
+          <nav class="border-start ps-1" style="border-color:var(--border-color)!important;">
+            <a class="hiw-toc-link" href="#overview">Overview</a>
+            <a class="hiw-toc-link" href="#layout">Repository layout</a>
+            <a class="hiw-toc-link" href="#sync">How a sync works</a>
+            <a class="hiw-toc-link" href="#security">Security model</a>
+            <a class="hiw-toc-link" href="#setup">Set it up on your own instance</a>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Main content ──────────────────────────────────────────── -->
+    <div class="col-lg-9">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 1 — Overview
+      ════════════════════════════════════════════════════════════ -->
+      <section id="overview" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-circle-info" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Overview</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          There is no separate "history" folder — a rule's file lives at the <em>same path</em>
+          for its whole life, and every content change is a new commit on that path.
+          <code>git log --follow</code> on any rule's file is its full version history, for free.
+        </p>
+
+        <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+          <div class="hiw-agent-card text-center flex-fill">Rule created / updated / deleted<br><span class="text-muted">in Rulezet</span></div>
+          <i class="fa-solid fa-arrow-right text-primary" style="flex-shrink:0;"></i>
+          <div class="hiw-agent-card text-center flex-fill">Sync job<br><span class="text-muted">(scheduled or "Run now")</span></div>
+          <i class="fa-solid fa-arrow-right text-primary" style="flex-shrink:0;"></i>
+          <div class="hiw-agent-card text-center flex-fill">One commit per rule<br><span class="text-muted">pushed to the mirror repo</span></div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 2 — Repository layout
+      ════════════════════════════════════════════════════════════ -->
+      <section id="layout" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-folder-tree" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Repository layout</h4>
+        </div>
+        <pre class="hiw-code">README.md                   auto-generated — sources, rule counts, Rulezet version
+rules/
+  &lt;source&gt;/                  where the rule came from — a GitHub Sources repo
+                             (e.g. github.com_org_repo), or "manual" for
+                             hand-authored rules
+    &lt;format&gt;/                yara, sigma, suricata, splunk, elastic, kql, ...
+      &lt;shard&gt;/               first 2 hex chars of the rule's uuid
+        &lt;rule-name&gt;-&lt;uuid8&gt;/  slug of the rule's title + first 8 hex chars
+                               of its uuid (uniqueness) — renamed
+                               automatically if the rule's title changes
+          &lt;rule-name&gt;.&lt;ext&gt;    same title slug, correct extension per format
+          metadata.json         title, author, license, description, tags,
+                                 ATT&amp;CK techniques, CVEs, rulezet_url, ...
+          rulezet_link.md        clickable link back to the rule's Rulezet
+                                 page + its uuid in plain text</pre>
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-1"></i>
+          Grouping by source first keeps rules pulled from the same GitHub
+          repository together, since a busy instance can have many different
+          import sources — format is the second-level split within each one.
+        </div>
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-1"></i>
+          <code>metadata.json</code>'s <code>license_verified</code> flag is
+          <code>true</code> only when the rule's license matches a small
+          permissive allow-list (MIT, Apache-2.0, GPL-*, CC-*, ...). Every
+          rule is mirrored regardless — this just makes an unclear or
+          non-permissive license visible instead of silent.
+        </div>
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-1"></i>
+          <code>rulezet_link.md</code> carries the rule's Rulezet uuid in
+          plain text — a clone can be searched (<code>grep -rl &lt;uuid&gt;</code>)
+          to jump straight from a rule on Rulezet to its exact GitHub folder,
+          without recomputing any title slug.
+        </div>
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-1"></i>
+          <code>README.md</code> at the repo root is rewritten on every sync:
+          the Rulezet version that produced it, when it was last synced, and
+          every source currently mirrored with its rule count — each one
+          linking straight back to it.
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 3 — How a sync works
+      ════════════════════════════════════════════════════════════ -->
+      <section id="sync" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-arrows-rotate" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">How a sync works</h4>
+        </div>
+
+        <div class="d-flex flex-column gap-3 mt-2">
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">1</div>
+            <div style="font-size:.88rem;">
+              <strong>First sync</strong><br>
+              <span class="text-muted">
+                Takes every active rule's <em>current</em> content only — it does not replay
+                past edits. Git history for the mirror starts the day it goes live.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">2</div>
+            <div style="font-size:.88rem;">
+              <strong>Every sync after that is incremental</strong><br>
+              <span class="text-muted">
+                Only rules created/updated/deleted since the last sync are touched — one
+                commit per changed rule, one <code>git rm</code> per deleted rule.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">3</div>
+            <div style="font-size:.88rem;">
+              <strong>Two ways to trigger a sync</strong><br>
+              <span class="text-muted">
+                The <a href="/admin/rule_mirror">settings page</a>'s "Run now" button (a one-off
+                <a href="/jobs/list">background job</a>, same as any other admin action), or a
+                recurring schedule in <a href="/admin/tasks/">Workflows</a> ("Rulesets — sync").
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 4 — Security model
+      ════════════════════════════════════════════════════════════ -->
+      <section id="security" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-shield-halved" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Security model</h4>
+        </div>
+        <div class="hiw-callout hiw-callout--warning mb-3">
+          <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>
+          This feature pushes to a third-party service using a stored credential — read this
+          section before enabling it.
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="hiw-agent-card">
+              <div class="fw-bold mb-2"><i class="fa-solid fa-toggle-off text-primary me-2"></i>Off by default, admin-only</div>
+              <p class="text-muted mb-0" style="font-size:.84rem;">
+                Nothing is enabled by install/update scripts — an admin has to explicitly turn
+                it on and configure a repo, per instance.
+              </p>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="hiw-agent-card">
+              <div class="fw-bold mb-2"><i class="fa-solid fa-key text-primary me-2"></i>Its own token, on purpose</div>
+              <p class="text-muted mb-0" style="font-size:.84rem;">
+                Use a token dedicated to this feature — not the <code>GITHUB_TOKEN</code> used
+                for GitHub rule import — ideally a fine-grained PAT restricted to just the
+                mirror repo (contents: read &amp; write, nothing else).
+              </p>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="hiw-agent-card">
+              <div class="fw-bold mb-2"><i class="fa-solid fa-eye-slash text-primary me-2"></i>Never shown again</div>
+              <p class="text-muted mb-0" style="font-size:.84rem;">
+                The settings page only ever shows a masked placeholder once a token is saved —
+                changing it means entering a new value, not revealing the old one.
+              </p>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="hiw-agent-card">
+              <div class="fw-bold mb-2"><i class="fa-solid fa-terminal text-primary me-2"></i>Never in a process list</div>
+              <p class="text-muted mb-0" style="font-size:.84rem;">
+                The token is written straight into the local mirror clone's
+                <code>.git/config</code> (a plain file write) immediately before a push, then
+                cleared right after — never passed as a <code>git</code> command-line argument.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-2 text-primary"></i>
+          Only public content is mirrored — the same rules an anonymous visitor could already
+          browse on this instance.
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 5 — Set it up on your own instance
+      ════════════════════════════════════════════════════════════ -->
+      <section id="setup" class="hiw-section mb-4">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-rocket" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Set it up on your own instance</h4>
+        </div>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Five steps, from a blank GitHub repository to a running mirror. You can repeat this
+          for as many repositories as you like — each one is its own independent entry in the
+          Rulesets table, with its own URL, branch and token.
+        </p>
+
+        <div class="d-flex flex-column gap-3 mt-2">
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">1</div>
+            <div style="font-size:.88rem;">
+              <strong>Create (or pick) a GitHub repository</strong><br>
+              <span class="text-muted">
+                To hold the mirror — it can be completely empty. Public if you want it clonable
+                by anyone, private if it's just for your own team.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">2</div>
+            <div style="font-size:.88rem;">
+              <strong>Create a token scoped to just that repository</strong><br>
+              <span class="text-muted">
+                On GitHub: Settings → Developer settings → Fine-grained personal access tokens
+                → New token, "Only select repositories" → your mirror repo, permission
+                <em>Contents: Read and write</em>, nothing else. The "?" next to the token field
+                in Rulesets walks through this too.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">3</div>
+            <div style="font-size:.88rem;">
+              <strong>Open <a href="/admin/rule_mirror">Admin → Rulesets</a> and add a repository</strong><br>
+              <span class="text-muted">
+                Give it a name, enter the repository URL, branch (defaults to <code>main</code>),
+                and the token from step 2. Save.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">4</div>
+            <div style="font-size:.88rem;">
+              <strong>Toggle "Enabled" and click "Run now"</strong><br>
+              <span class="text-muted">
+                "Run now" always re-tests the connection first — it's not optional, and not just
+                a one-time check: every click confirms the token can still authenticate and has
+                write access to the repo before anything is pushed, so a token revoked on GitHub
+                after the last successful run gets caught immediately instead of failing mid-sync.
+                The wifi icon on a row runs that same test on demand, without launching a sync.
+                Once "Run now" succeeds, track progress on the <a href="/jobs/list">Jobs page</a>
+                — for a large instance this can take a while the first time (it walks every
+                active rule). Each repository's history icon shows every test, trigger and sync
+                for that row.
+              </span>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <div class="hiw-step-num">5</div>
+            <div style="font-size:.88rem;">
+              <strong>Schedule ongoing syncs</strong><br>
+              <span class="text-muted">
+                In <a href="/admin/tasks/">Workflows</a> — create a task of type
+                "Rulesets — sync" with whatever recurrence you want (weekly is a reasonable
+                default). From then on, new/changed/deleted rules keep the mirror current
+                automatically.
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hiw-callout hiw-callout--success mt-4">
+          <i class="fa-solid fa-circle-check me-1"></i>
+          That's it — disable the feature any time by toggling it off on the settings page;
+          nothing further gets pushed, and nothing already mirrored is touched.
+        </div>
+      </section>
+
+      <!-- Back to Rulesets settings -->
+      <div class="text-center pt-3">
+        <a href="/admin/rule_mirror" class="btn btn-primary rounded-pill px-4">
+          <i class="fa-solid fa-arrow-left me-2"></i>Back to Rulesets settings
+        </a>
+      </div>
+
+    </div><!-- /col main -->
+  </div><!-- /row -->
+</div><!-- /container -->
+{% endblock %}

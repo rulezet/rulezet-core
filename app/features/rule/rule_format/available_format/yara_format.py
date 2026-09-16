@@ -1,10 +1,11 @@
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import re
 import yara
-from app.features.rule.rule_core import get_rule
+from app.features.rule.rule_core import get_rule, _active
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult
 from app.core.utils.utils import detect_cve
+from app.core.db_class.db import Rule
 
 
 #################
@@ -56,12 +57,122 @@ def detect_global_rule_risk(content: str) -> dict:
             }
     return {'flagged': False, 'reasons': []}
 
+def extract_undefined_identifier(error_msg: str) -> Optional[str]:
+    """Pulls the identifier name out of a YARA 'undefined identifier "X"'
+    compile error, e.g. what validate() itself matches against YARA_MODULES/
+    ALLOWED_EXTERNALS above — used on the bad-rule edit page to go one step
+    further for the case validate() *can't* auto-fix: X isn't a builtin
+    module or external, it's another rule's name (YARA's cross-rule
+    condition reference, e.g. `condition: Macho and ...`)."""
+    match = re.search(r'undefined identifier "(\w+)"', error_msg or '')
+    return match.group(1) if match else None
+
+
+def find_missing_dependency_rule(var_name: str, bad_rule=None, source: str = None,
+                                  github_path: str = None) -> Optional[Rule]:
+    """Given an identifier YARA couldn't resolve on its own, look for an
+    existing active YARA rule literally named var_name — the rule this one
+    is meant to compile alongside. Returns None for anything validate()
+    would already have auto-handled (a known module/external), since those
+    never reach this far as a standing error.
+
+    Multiple same-titled matches are disambiguated by preferring one from
+    the same github_path, then the same source repo — the rule most likely
+    to actually be the sibling this particular rule was extracted next to.
+    `source`/`github_path` are the direct values when the caller already
+    knows them (e.g. mid-import, from the repo it's currently walking);
+    `bad_rule` is a convenience for the InvalidRuleModel case, read only
+    when the explicit kwargs above aren't given.
+    """
+    if var_name in YaraRule.YARA_MODULES or var_name in YaraRule.ALLOWED_EXTERNALS:
+        return None
+
+    source = source or getattr(bad_rule, 'url', None)
+    github_path = github_path or getattr(bad_rule, 'github_path', None)
+
+    candidates = _active().filter(Rule.format == 'yara', Rule.title == var_name).all()
+    if not candidates:
+        candidates = _active().filter(
+            Rule.format == 'yara', Rule.title.ilike(var_name)
+        ).all()
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+
+    if github_path:
+        same_path = [c for c in candidates if c.github_path == github_path]
+        if same_path:
+            return same_path[0]
+
+    if source:
+        same_source = [c for c in candidates if c.source == source]
+        if same_source:
+            return same_source[0]
+
+    return candidates[0]
+
+
+def try_resolve_yara_missing_dependency(rule_instance, rule_text: str, metadata: dict,
+                                         validation_result: ValidationResult, user,
+                                         source_repo_url: str = None, github_path: str = None):
+    """Second chance before a YARA rule that failed validate() becomes a
+    bad_rule entry: if the failure is an undefined identifier that turns
+    out to be another rule's name (YARA's cross-rule condition reference,
+    e.g. `condition: Macho and ...`) already present on this instance,
+    confirm it by compiling the two together, then import rule_text as-is
+    (never the combined text) and record the dependency as an auto
+    RuleRelation — same idea as the bad_rule edit page's "Link & recompile"
+    action, just applied automatically at import time instead of waiting
+    for a rule to fail first and a human to notice.
+
+    Returns ('created', new_rule), ('skipped', None) — compiled fine
+    together but add_rule_core rejected it (duplicate, dataset-collision
+    guard, ...), the caller's normal duplicate handling applies, not a bad
+    rule — or ('no_match', None) when nothing was resolved, meaning the
+    caller should fall back to its own bad-rule handling as usual.
+    """
+    if rule_instance.format != 'yara' or validation_result.ok:
+        return 'no_match', None
+
+    var_name = extract_undefined_identifier('; '.join(validation_result.errors or []))
+    if not var_name:
+        return 'no_match', None
+
+    target_rule = find_missing_dependency_rule(var_name, source=source_repo_url, github_path=github_path)
+    if not target_rule:
+        return 'no_match', None
+
+    try:
+        yara.compile(source=f"{target_rule.to_string or ''}\n\n{rule_text}")
+    except Exception:
+        return 'no_match', None
+
+    from app.features.rule import rule_core as RuleModel
+    from app.features.rule_relation.rule_relation_core import add_relation
+
+    new_rule, _msg = RuleModel.add_rule_core(metadata, user)
+    if not new_rule:
+        return 'skipped', None
+
+    add_relation(
+        new_rule.id, target_rule.id, 'yara_condition_ref',
+        note=f'Undefined identifier "{var_name}" resolved to this rule at import time',
+        user_id=None, source='auto',
+    )
+    return 'created', new_rule
+
+
 class YaraRule(RuleType):
     @property
     def format(self) -> str:
         return "yara"
 
     YARA_MODULES = {"pe", "math", "cuckoo", "magic", "hash", "dotnet", "elf", "macho"}
+    ALLOWED_EXTERNALS = {
+        "filename", "filepath", "extension", "filetype",
+        "md5", "sha1", "sha256", "owner", "new_file"
+    }
 
     def get_class(self) -> str:
         return "YaraRule"
@@ -70,11 +181,8 @@ class YaraRule(RuleType):
     #   Abstract section  #
     # ---------------------#
     def validate(self, content: str, **kwargs) -> ValidationResult:
-            ALLOWED_EXTERNALS = {
-                "filename", "filepath", "extension", "filetype", 
-                "md5", "sha1", "sha256", "owner", "new_file"
-            }
-            
+            ALLOWED_EXTERNALS = self.ALLOWED_EXTERNALS
+
             externals = {}
             attempts = 0
             max_attempts = 10

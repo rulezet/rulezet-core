@@ -96,11 +96,17 @@ def soft_delete_rule(rule_id: int, user_id: int, batch_uuid: str = None) -> bool
     rule = Rule.query.get(rule_id)
     if not rule or rule.is_deleted:
         return False
+    source = rule.source
     rule.is_deleted        = True
     rule.deleted_at        = datetime.datetime.now(tz=datetime.timezone.utc)
     rule.deleted_by_id     = user_id
     rule.delete_batch_uuid = batch_uuid
     db.session.commit()
+    try:
+        from app.features.rule.github_repo_core import apply_delta
+        apply_delta(source, -1, rule=rule)
+    except Exception:
+        pass
     return True
 
 
@@ -108,6 +114,15 @@ def soft_delete_rule_list(rule_ids: list, user_id: int, batch_uuid: str = None) 
     """Soft-delete a list of rules. Returns the count actually deleted."""
     if not rule_ids:
         return 0
+    # Snapshot per-source counts of exactly what's about to be deleted
+    # BEFORE the bulk UPDATE runs (same filter) — see
+    # github_repo_core.apply_deltas_for_rule_ids.
+    try:
+        from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
+        apply_deltas_for_rule_ids(rule_ids, sign=-1, is_deleted=False)
+    except Exception:
+        pass
+
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     updated = Rule.query.filter(
         Rule.id.in_(rule_ids),
@@ -159,6 +174,11 @@ def restore_rule(rule_id: int):
     rule.deleted_by_id     = None
     rule.delete_batch_uuid = None
     db.session.commit()
+    try:
+        from app.features.rule.github_repo_core import apply_delta
+        apply_delta(rule.source, +1, rule=rule)
+    except Exception:
+        pass
     return True
 
 
@@ -166,6 +186,12 @@ def restore_rules_bulk(rule_ids: list) -> int:
     """Restore multiple soft-deleted rules. Returns count restored."""
     if not rule_ids:
         return 0
+    try:
+        from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
+        apply_deltas_for_rule_ids(rule_ids, sign=+1, is_deleted=True)
+    except Exception:
+        pass
+
     updated = Rule.query.filter(
         Rule.id.in_(rule_ids), Rule.is_deleted == True
     ).update(
@@ -180,6 +206,15 @@ def restore_batch(batch_uuid: str) -> int:
     """Restore all rules sharing the same delete_batch_uuid."""
     if not batch_uuid:
         return 0
+    try:
+        from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
+        batch_rule_ids = [r[0] for r in db.session.query(Rule.id).filter(
+            Rule.delete_batch_uuid == batch_uuid, Rule.is_deleted == True
+        ).all()]
+        apply_deltas_for_rule_ids(batch_rule_ids, sign=+1, is_deleted=True)
+    except Exception:
+        pass
+
     updated = Rule.query.filter(
         Rule.delete_batch_uuid == batch_uuid, Rule.is_deleted == True
     ).update(
@@ -309,6 +344,12 @@ def _wipe_rule_children(rule_ids: list) -> None:
         or_(RuleSimilarity.rule_id.in_(ids), RuleSimilarity.similar_rule_id.in_(ids))
     ).delete(synchronize_session=False)
 
+    # 14. Rule-to-rule relations (has ondelete=CASCADE but be explicit — same
+    # reasoning as step 13)
+    RuleRelation.query.filter(
+        or_(RuleRelation.source_rule_id.in_(ids), RuleRelation.target_rule_id.in_(ids))
+    ).delete(synchronize_session=False)
+
     db.session.flush()
 
 
@@ -390,6 +431,7 @@ def _find_in_trash_by_content(content: str):
 # the submission at the source rather than let the corpus accumulate them.
 _CORPUS_IDENTIFIER_LABEL = {
     'suricata': 'Suricata SID',
+    'sagan': 'Sagan SID',
     'yara': 'YARA rule name',
     'wazuh': 'Wazuh rule ID',
 }
@@ -407,7 +449,7 @@ def _extract_corpus_identifier(rule_format: str, content: str) -> Optional[str]:
     """Extract the identifier that must be unique within its format's corpus."""
     fmt = (rule_format or '').lower()
     content = content or ''
-    if fmt == 'suricata':
+    if fmt in ('suricata', 'sagan'):
         m = re.search(r'\bsid\s*:\s*(\d+)', content, re.IGNORECASE)
         return m.group(1) if m else None
     if fmt == 'yara':
@@ -696,6 +738,12 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
 
         db.session.commit()
 
+        try:
+            from app.features.rule.github_repo_core import apply_delta
+            apply_delta(new_rule.source, +1, rule=new_rule)
+        except Exception:
+            pass  # GithubRepo is a cache — never let a sync failure block rule creation
+
         # Record the creation itself as v1 of the version history + a visible
         # "Rule created" timeline entry — centralized here (not left to each
         # caller) so every creation path (manual form, private API, auto-parse
@@ -804,6 +852,13 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     if not rule:
         return False, None
 
+    # Captured before being overwritten below — source/format/license/cve_id
+    # are all plain editable form fields, and GithubRepo's per-repo
+    # aggregates need the before/after of each to stay accurate. See
+    # github_repo_core.sync_rule_edit.
+    old_source = rule.source
+    old_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id}
+
     rule.format = form_dict["format"]
     rule.title = form_dict["title"]
     rule.license = form_dict["license"]
@@ -869,7 +924,21 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
         except Exception as e:
             pass
 
+    if "related_rules" in form_dict:
+        try:
+            from app.features.rule_relation.rule_relation_core import sync_manual_relations
+            sync_manual_relations(rule.id, form_dict.get("related_rules"), user_id=current_user.id)
+        except Exception:
+            pass
+
     db.session.commit()
+
+    try:
+        from app.features.rule.github_repo_core import sync_rule_edit
+        new_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id}
+        sync_rule_edit(old_source, rule.source, old_snapshot, new_snapshot)
+    except Exception:
+        pass
 
     try:
         from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
@@ -880,7 +949,7 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     return True, rule
 
 
-def apply_restricted_metadata_edit(rule_id, user_id, tags_input, vulnerabilities_input) -> Rule:
+def apply_restricted_metadata_edit(rule_id, user_id, tags_input, vulnerabilities_input, related_rules_input=None) -> Rule:
     """Update ONLY a rule's tags + CVE/vulnerability list — the counterpart
     to edit_rule_core's full-field update, used by the rule.tag_any-scoped
     branch of edit_rule() so a non-owner Tag Manager visiting that page can
@@ -931,6 +1000,13 @@ def apply_restricted_metadata_edit(rule_id, user_id, tags_input, vulnerabilities
 
     db.session.commit()
 
+    if related_rules_input is not None:
+        try:
+            from app.features.rule_relation.rule_relation_core import sync_manual_relations
+            sync_manual_relations(rule.id, related_rules_input, user_id=user_id)
+        except Exception:
+            pass
+
     try:
         from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
         recompute_rule_quality_score(rule)
@@ -943,9 +1019,8 @@ def apply_restricted_metadata_edit(rule_id, user_id, tags_input, vulnerabilities
 # Read
 
 def get_count_rules_by_user_id(user_id) -> int:
-    """Get the count of rules for a specific user"""
-    return Rule.query.filter(Rule.user_id == user_id).count(
-)
+    """Get the count of active (non soft-deleted) rules for a specific user"""
+    return _active().filter(Rule.user_id == user_id).count()
 
 
 
@@ -2767,6 +2842,104 @@ def get_old_rule_choice(page , search=None) -> list:
     return query.paginate(page=page, per_page=20, max_per_page=20)
 
 
+def _pending_updates_base_query(search=None, rule_format=None):
+    """Shared filter behind every "pending GitHub update" listing/bulk-action
+    below — same rule as get_old_rule_choice's base_filters, plus an optional
+    Rule.format join-filter for the Pending Updates page's format dropdown."""
+    base_filters = [
+        RuleUpdateHistory.message != "accepted",
+        RuleUpdateHistory.message != "rejected",
+        or_(
+            RuleUpdateHistory.change_type.is_(None),
+            RuleUpdateHistory.change_type.notin_(_NON_PENDING_CHANGE_TYPES),
+        ),
+    ]
+    if current_user.is_admin():
+        query = RuleUpdateHistory.query.filter(*base_filters)
+    else:
+        query = RuleUpdateHistory.query.filter(
+            *base_filters, RuleUpdateHistory.analyzed_by_user_id == current_user.id
+        )
+    if search:
+        query = query.filter(RuleUpdateHistory.rule_title.ilike(f"%{search}%"))
+    if rule_format:
+        query = query.join(Rule, Rule.id == RuleUpdateHistory.rule_id).filter(Rule.format == rule_format)
+    return query
+
+
+_PENDING_UPDATES_SORTABLE = {
+    'rule_title':   RuleUpdateHistory.rule_title,
+    'analyzed_at':  RuleUpdateHistory.analyzed_at,
+    'success':      RuleUpdateHistory.success,
+}
+
+
+def get_pending_updates_page(page: int = 1, per_page: int = 20, search: str = None,
+                              rule_format: str = None, sort: str = None, direction: str = None):
+    """Paginated feed for the Pending Updates page's DataTable (fetchUrl
+    contract: page/per_page/search/sort/dir -> {items, total, total_pages})."""
+    query = _pending_updates_base_query(search=search, rule_format=rule_format)
+    sort_col = _PENDING_UPDATES_SORTABLE.get(sort, RuleUpdateHistory.analyzed_at)
+    query = query.order_by(sort_col.desc() if direction != 'asc' else sort_col.asc())
+    return query.paginate(page=page, per_page=min(per_page or 20, 100), max_per_page=100)
+
+
+def get_pending_updates_ids(search: str = None, rule_format: str = None) -> list:
+    """Every id currently matching the Pending Updates filters — used to
+    resolve the DataTable's 'ALL' bulk-action sentinel (select all N items
+    matching the current filter, not just the current page)."""
+    return [row.id for row in _pending_updates_base_query(search=search, rule_format=rule_format)
+            .with_entities(RuleUpdateHistory.id).all()]
+
+
+def accept_update_history(history_id: int) -> tuple[bool, str]:
+    """Apply one pending update: writes history.new_content onto the live
+    rule and marks the history row 'accepted' — same logic the single-row
+    Accept button on the Pending Updates page already used, extracted here
+    so bulk/background-job callers share it instead of re-deriving it."""
+    history = RuleUpdateHistory.query.get(history_id)
+    if not history:
+        return False, 'Not found'
+    if history.message in ('accepted', 'rejected'):
+        return True, history.message
+
+    rule = get_rule(history.rule_id)
+    if not rule:
+        return False, 'Rule not found'
+
+    validation = verify_rule_syntaxe(rule, history.new_content)
+    if not validation or not validation.ok:
+        history.message = 'rejected'
+        db.session.commit()
+        return False, 'Invalid syntax'
+
+    rule.to_string = history.new_content
+    history.message = 'accepted'
+    db.session.commit()
+    return True, 'accepted'
+
+
+def reject_update_history(history_id: int) -> tuple[bool, str]:
+    history = RuleUpdateHistory.query.get(history_id)
+    if not history:
+        return False, 'Not found'
+    if history.message not in ('accepted', 'rejected'):
+        history.message = 'rejected'
+        db.session.commit()
+    return True, 'rejected'
+
+
+def delete_update_history(history_id: int) -> bool:
+    """Removes the pending-update entry itself (no accept/reject decision
+    recorded) — for the Delete bulk action, distinct from Reject."""
+    history = RuleUpdateHistory.query.get(history_id)
+    if not history:
+        return False
+    db.session.delete(history)
+    db.session.commit()
+    return True
+
+
 def get_update_pending():
     """Get all the schedules with pending updates for the current user"""
     return RuleUpdateHistory.query.filter(
@@ -2959,8 +3132,19 @@ _GITHUB_URL_PATTERN = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
 
 
 def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc'):
-    github_pattern = _GITHUB_URL_PATTERN
-    author_expr = func.substring(Rule.source, r'github\.com/([^/]+)')
+    """Paginates AND filters/sorts entirely off GithubRepo (a small,
+    incrementally-synced table — see github_repo_core.py) instead of
+    running a live GROUP BY / per-rule scan over the whole Rule table.
+    format/license/cve_count/conflicts all live directly on GithubRepo now
+    (format_counts/license_counts/cve_count/conflict_count), so those
+    filters and the cve_count sort are plain WHERE/ORDER BY on this table —
+    no Rule query at all for them.
+
+    editor_names is the one exception left touching Rule (via an EXISTS
+    semi-join) — which Rulezet user owns a rule is inherently per-rule
+    data, not something GithubRepo aggregates; same for the free-text
+    title search when search_field != 'url'."""
+    from sqlalchemy import func, exists
 
     # Rule.source is stored without a trailing ".git" — a URL pasted straight
     # from GitHub's own "Clone" button has one, which otherwise never matches
@@ -2969,78 +3153,57 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
         search = search.strip().rstrip('/')
         if search.lower().endswith('.git'):
             search = search[:-4]
-    query = db.session.query(
-        Rule.source.label("url"),
-        author_expr.label("author"),
-        func.count(Rule.id).label("rule_count"),
-        func.string_agg(Rule.format.distinct(), text("','")).label("formats"),
-        func.string_agg(Rule.license.distinct(), text("','")).label("licenses"),
-        func.sum(
-            case(
-                (and_(Rule.cve_id.isnot(None), Rule.cve_id != '[]', Rule.cve_id != ''), 1),
-                else_=0
-            )
-        ).label("cve_count"),
-        func.max(
-            db.session.query(func.count(RuleSimilarity.id))
-            .filter(RuleSimilarity.rule_id == Rule.id)
-            .filter(RuleSimilarity.score > 0.99)
-            .as_scalar()
-        ).label("has_high_similarity")
-    ).filter(Rule.source.op('~')(github_pattern), Rule.is_deleted == False)
+
+    query = GithubRepo.query
 
     if format_filter:
-        query = query.filter(Rule.format == format_filter)
+        # .as_integer() > 0 rather than [key].isnot(None): on SQLite the
+        # generic JSON comparator wraps a missing key in JSON_QUOTE(), which
+        # turns SQL NULL into the *string* "null" — so isnot(None) is always
+        # true there. as_integer() casts before that happens and behaves
+        # identically on Postgres.
+        query = query.filter(GithubRepo.format_counts[format_filter].as_integer() > 0)
 
     if author_filter and author_filter != "":
-        query = query.filter(author_expr.ilike(f"%{author_filter}%"))
+        query = query.filter(GithubRepo.author.ilike(f"%{author_filter}%"))
 
     # author_names/editor_names come from MultiPersonFilter — exact names
     # picked from get_github_authors_usage()/get_github_editors_usage(),
     # not free text, hence .in_() rather than ILIKE.
     if author_names:
-        query = query.filter(author_expr.in_(author_names))
+        query = query.filter(GithubRepo.author.in_(author_names))
 
     if editor_names:
         editor_col = func.coalesce(User.username, func.concat(User.first_name, ' ', User.last_name))
-        query = query.join(User, User.id == Rule.user_id).filter(editor_col.in_(editor_names))
+        query = query.filter(exists().where(and_(
+            Rule.source == GithubRepo.url, Rule.is_deleted == False,
+            Rule.user_id == User.id, editor_col.in_(editor_names)
+        )))
 
     if license_filter:
-        query = query.filter(Rule.license == license_filter)
+        query = query.filter(GithubRepo.license_counts[license_filter].as_integer() > 0)
 
     if search:
         if search_field == 'url':
-            query = query.filter(Rule.source.ilike(f"%{search}%"))
+            query = query.filter(GithubRepo.url.ilike(f"%{search}%"))
         else:
-            query = query.filter(
-                or_(
-                    Rule.source.ilike(f"%{search}%"),
-                    Rule.format.ilike(f"%{search}%"),
-                    Rule.title.ilike(f"%{search}%")
-                )
-            )
-
-    query = query.group_by(Rule.source)
+            query = query.filter(or_(
+                GithubRepo.url.ilike(f"%{search}%"),
+                exists().where(and_(
+                    Rule.source == GithubRepo.url, Rule.is_deleted == False,
+                    or_(Rule.format.ilike(f"%{search}%"), Rule.title.ilike(f"%{search}%"))
+                ))
+            ))
 
     if conflicts_only:
-        # has_high_similarity is an aggregate (func.max(...)) — filtering on
-        # it belongs in HAVING, not WHERE. Unlike ORDER BY, Postgres won't
-        # accept the SELECT-list alias here, so the expression is repeated.
-        query = query.having(
-            func.max(
-                db.session.query(func.count(RuleSimilarity.id))
-                .filter(RuleSimilarity.rule_id == Rule.id)
-                .filter(RuleSimilarity.score > 0.99)
-                .as_scalar()
-            ) > 0
-        )
+        query = query.filter(GithubRepo.conflict_count > 0)
 
-    # Sortable columns are all aggregates/expressions from the SELECT above —
-    # sort by the label rather than re-declaring the expression, so this
-    # stays correct if the aggregation logic above ever changes.
-    sort_column = sort if sort in ('url', 'author', 'rule_count', 'cve_count') else 'url'
-    direction   = 'desc' if sort_dir == 'desc' else 'asc'
-    query = query.order_by(text(f'{sort_column} {direction}'))
+    if sort in ('url', 'author', 'rule_count', 'cve_count'):
+        sort_column = getattr(GithubRepo, sort)
+    else:
+        sort_column = GithubRepo.url
+    order_expr = sort_column.desc() if sort_dir == 'desc' else sort_column.asc()
+    query = query.order_by(order_expr)
 
     pagination = query.paginate(page=page, per_page=20)
 
@@ -3083,19 +3246,19 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
                     last_updates_by_url[u] = r
 
     github_data = []
-    for row in pagination.items:
-        url = row.url
+    for repo in pagination.items:
+        url = repo.url
         last_import = last_imports_by_url.get(url)
         last_update = last_updates_by_url.get(url)
 
         github_data.append({
             "url": url,
-            "author": row.author,
-            "rule_count": row.rule_count,
-            "formats": row.formats.split(',') if row.formats else [],
-            "licenses": row.licenses.split(',') if row.licenses else [],
-            "cve_count": row.cve_count,
-            "has_conflicts": (row.has_high_similarity or 0) > 0,
+            "author": repo.author,
+            "rule_count": repo.rule_count,
+            "formats": sorted((repo.format_counts or {}).keys()),
+            "licenses": sorted((repo.license_counts or {}).keys()),
+            "cve_count": repo.cve_count,
+            "has_conflicts": repo.conflict_count > 0,
             "last_import": {
                 "date": last_import.query_date.strftime('%Y-%m-%d %H:%M') if last_import else None,
                 "url_imported": "/rule/import_loading/"+ last_import.uuid if last_import else None,
@@ -3116,21 +3279,18 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
 
 
 def get_github_authors_usage(search_query: str = None):
-    """Distinct GitHub repo owners (extracted from Rule.source) with rule
-    counts, scoped to rules matching the GitHub URL pattern — feeds the
-    Author mode of MultiPersonFilter on the GitHub Sources page."""
-    author_expr = func.substring(Rule.source, r'github\.com/([^/]+)')
-    query = _active().filter(Rule.source.op('~')(_GITHUB_URL_PATTERN))
-
-    if search_query:
-        query = query.filter(author_expr.ilike(f'%{search_query}%'))
-
-    rows = (
-        query.with_entities(author_expr.label('author'), func.count(Rule.id).label('count'))
-        .group_by(author_expr)
-        .order_by(func.count(Rule.id).desc())
-        .all()
+    """Distinct GitHub repo owners with rule counts, summed straight off
+    GithubRepo (author + rule_count are already tracked there — see
+    github_repo_core.py) instead of a live regex-extract scan over Rule —
+    feeds the Author mode of MultiPersonFilter on the GitHub Sources page."""
+    query = (
+        db.session.query(GithubRepo.author.label('author'), func.sum(GithubRepo.rule_count).label('count'))
+        .filter(GithubRepo.author.isnot(None))
     )
+    if search_query:
+        query = query.filter(GithubRepo.author.ilike(f'%{search_query}%'))
+
+    rows = query.group_by(GithubRepo.author).order_by(func.sum(GithubRepo.rule_count).desc()).all()
     return [{"name": r.author, "count": r.count} for r in rows if r.author]
 
 
@@ -3153,16 +3313,17 @@ def get_github_editors_usage(search_query: str = None):
 
 def get_github_licenses_usage():
     """Distinct licenses in use across GitHub-sourced rules, with counts —
-    feeds the License filter on the GitHub Sources page."""
-    rows = (
-        _active()
-        .filter(Rule.source.op('~')(_GITHUB_URL_PATTERN), Rule.license.isnot(None), Rule.license != '')
-        .with_entities(Rule.license.label('license'), func.count(Rule.id).label('count'))
-        .group_by(Rule.license)
-        .order_by(func.count(Rule.id).desc())
-        .all()
-    )
-    return [{"name": r.license, "count": r.count} for r in rows]
+    summed from GithubRepo.license_counts (already tracked per repo)
+    instead of a live scan over Rule. Feeds the License filter on the
+    GitHub Sources page. GithubRepo is small (one row per repo), so
+    summing its per-repo license_counts dicts in Python is cheap and
+    avoids a DB-side JSON-unnest just for this."""
+    totals = {}
+    for (license_counts,) in db.session.query(GithubRepo.license_counts).all():
+        for name, count in (license_counts or {}).items():
+            totals[name] = totals.get(name, 0) + count
+    return [{"name": name, "count": count}
+            for name, count in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
 
 
 def get_rule_count_by_github_page(page: int = 1, search: str = None):
@@ -3208,7 +3369,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          tags=None, editor_names=None, bundle_id=None, attacks=None,
                          status=None, workspace_uuid=None, exclude_workspace_uuid=None,
                          ids=None, has_cve=False, quality_score_min=None, quality_score_max=None,
-                         has_ai_analysis=False):
+                         has_ai_analysis=False, has_relations=False):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -3256,6 +3417,13 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
             AIGeneration.rule_id.isnot(None),
         ).distinct()
         query = query.filter(Rule.id.in_(analyzed_rule_ids))
+
+    if has_relations:
+        from app.core.db_class.db import RuleRelation
+        related_rule_ids = db.session.query(RuleRelation.source_rule_id).union(
+            db.session.query(RuleRelation.target_rule_id)
+        )
+        query = query.filter(Rule.id.in_(related_rule_ids))
 
     col = _DATA_TABLE_SORT_KEYS.get(sort)
     if col is not None:
@@ -3306,6 +3474,9 @@ def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
         ).all()
         votes_map = {v.rule_id: v.vote_type for v in rows}
 
+    from app.features.rule_relation.rule_relation_core import count_relations_for_rules_batch
+    relations_count_by_rule = count_relations_for_rules_batch(rule_ids)
+
     items = []
     for r in rules:
         d = r.to_json()
@@ -3317,6 +3488,7 @@ def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
             d['cves'] = []
         d['attacks'] = attacks_by_rule.get(r.id, [])
         d['user_vote'] = votes_map.get(r.id)
+        d['linked_rules_count'] = relations_count_by_rule.get(r.id, 0)
         items.append(d)
     return items
 
@@ -3498,6 +3670,103 @@ def replace_rule_format(old_format_name: str, new_format_name: str) -> int:
         count += 1
     db.session.commit()
     return count
+
+
+def get_mistagged_suricata_rule_ids() -> list:
+    """Every active format='suricata' rule whose content actually shows
+    Sagan-specific evidence — issue #61 (see
+    docs/design/suricata_sagan_rework.md). Deferred import: rule_format's
+    modules import FROM rule_core (get_rule), so importing back at module
+    level here would be circular."""
+    from app.features.rule.rule_format.available_format._snort_family_common import looks_like_sagan
+
+    ids = []
+    for rule_id, content in (_active().filter(Rule.format == 'suricata')
+                              .with_entities(Rule.id, Rule.to_string).yield_per(500)):
+        if looks_like_sagan(content or ''):
+            ids.append(rule_id)
+    return ids
+
+
+def reclassify_mistagged_suricata_rules(rule_ids: list = None, on_progress=None, should_stop=None) -> int:
+    """Flips Rule.format from 'suricata' to 'sagan' for the given ids (or
+    every currently-mistagged rule when rule_ids is None) — through the ORM
+    so Rule.format's 'set' event listener (db.py) recomputes
+    corpus_identifier under its new format-scoped uniqueness bucket.
+    Requires 'sagan' to already be registered in _extract_corpus_identifier
+    above (it is) — doing this before that lands would silently null out
+    corpus_identifier on every affected row.
+
+    on_progress(n, rule) / should_stop() — same contract as
+    accept_all_update()/reject_all_update(), for a BackgroundJob caller to
+    report live progress and support pause/cancel.
+
+    Returns the number of rows actually updated.
+    """
+    ids = rule_ids if rule_ids is not None else get_mistagged_suricata_rule_ids()
+    count = 0
+    for i, rule_id in enumerate(ids):
+        if should_stop and should_stop():
+            break
+        rule = Rule.query.get(rule_id)
+        if rule and rule.format == 'suricata':
+            rule.format = 'sagan'
+            db.session.commit()
+            count += 1
+        if on_progress:
+            on_progress(i + 1, rule)
+    return count
+
+
+def get_sid_collision_groups(formats: tuple = ('suricata', 'sagan')) -> list:
+    """Issue #61 suggestion #3: SID collisions predating
+    check_identifier_uniqueness() (added 2026-08-11 — this only guards NEW
+    submissions, it never retroactively touched what was already in the
+    corpus). Groups active rules by (format, corpus_identifier) wherever
+    more than one shares it, oldest first per group — the oldest is the one
+    a real Suricata/Sagan engine would actually load, per the issue
+    ("Suricata rejects all but the first loaded"), so it's a reasonable
+    default "keep" when a human reviews the group.
+
+    Returns [{'format', 'sid', 'rules': [{'id','title','source',
+    'github_path','creation_date'}, ...]}], sorted by group size descending.
+    A human should decide which rule in a group actually keeps the SID —
+    some collisions are unrelated rules that all reused an obvious
+    "example/dev" SID block (1000001-1000004 in the issue), not real
+    errors, so this is a report, not an automatic fix.
+    """
+    from sqlalchemy import func
+
+    dupes = (
+        db.session.query(Rule.format, Rule.corpus_identifier, func.count(Rule.id))
+        .filter(Rule.format.in_(formats), Rule.is_deleted == False, Rule.corpus_identifier.isnot(None))
+        .group_by(Rule.format, Rule.corpus_identifier)
+        .having(func.count(Rule.id) > 1)
+        .all()
+    )
+
+    groups = []
+    for fmt, sid, _count in dupes:
+        rules = (
+            _active()
+            .filter(Rule.format == fmt, Rule.corpus_identifier == sid)
+            .order_by(Rule.creation_date.asc())
+            .all()
+        )
+        groups.append({
+            'format': fmt,
+            'sid': sid,
+            'rules': [{
+                'id': r.id,
+                'title': r.title,
+                'source': r.source,
+                'github_path': r.github_path,
+                'creation_date': r.creation_date.strftime('%Y-%m-%d %H:%M') if r.creation_date else None,
+            } for r in rules],
+        })
+
+    groups.sort(key=lambda g: len(g['rules']), reverse=True)
+    return groups
 
 
 def get_importer_result(sid: str):
@@ -4153,6 +4422,39 @@ def verify_rule_syntaxe(rule: Any , new_content) -> Optional[ValidationResult]:
     return None
 
 
+def get_corpus_identifier_collision_warning(rule: Any) -> Optional[str]:
+    """Live check (not the admin-only report's snapshot — see
+    get_sid_collision_groups) for whether THIS specific rule's
+    corpus_identifier (Suricata/Sagan SID, YARA rule name, Wazuh rule ID —
+    see _CORPUS_IDENTIFIER_LABEL) collides with another active rule of the
+    same format, so a viewer lands on the warning just by opening the
+    rule's own detail page instead of only an admin who happens to run the
+    collision report. Returns a plain-text warning (no HTML — rule titles
+    are external, untrusted content) or None when there's nothing to warn
+    about. Capped at 5 named siblings to keep the banner readable when a
+    SID was reused very widely.
+    """
+    fmt = (rule.format or '').lower()
+    identifier = getattr(rule, 'corpus_identifier', None)
+    if fmt not in _CORPUS_IDENTIFIER_LABEL or not identifier:
+        return None
+
+    siblings = (
+        _active()
+        .filter(Rule.format == fmt, Rule.corpus_identifier == identifier, Rule.id != rule.id)
+        .order_by(Rule.creation_date.asc())
+        .all()
+    )
+    if not siblings:
+        return None
+
+    label = _CORPUS_IDENTIFIER_LABEL[fmt]
+    named = [f'#{s.id} "{s.title}"' for s in siblings[:5]]
+    extra = f' and {len(siblings) - 5} more' if len(siblings) > 5 else ''
+    return (f'{label} "{identifier}" is also used by {len(siblings)} other active rule(s): '
+            f'{", ".join(named)}{extra}.')
+
+
 def get_rule_risk_flags(rule: Any) -> dict:
     """
     Compute cross-rule-interference risk flags for a rule's current content.
@@ -4163,7 +4465,10 @@ def get_rule_risk_flags(rule: Any) -> dict:
     'warnings' (flagged but allowed) or 'errors' (a rejected pattern that
     predates this check, e.g. an older or GitHub-imported rule) shows up
     here automatically — no changes needed here when a new format adds
-    its own checks.
+    its own checks. Also includes a live corpus_identifier collision check
+    (issue #61 suggestion #3) — independent of validate(), since a
+    duplicate SID/rule-name/rule-ID isn't a syntax problem with this rule's
+    own content, it's a cross-rule conflict.
 
     Returns {'flagged', 'rejected', 'reasons' (errors+warnings, kept for any
     existing caller that doesn't distinguish them), 'errors', 'warnings'}.
@@ -4174,14 +4479,19 @@ def get_rule_risk_flags(rule: Any) -> dict:
     rejected/dangerous content pattern.
     """
     result = verify_rule_syntaxe(rule, rule.to_string)
-    if result is None:
-        return {'flagged': False, 'rejected': False, 'reasons': [], 'errors': [], 'warnings': []}
+    errors   = list(result.errors) if result else []
+    warnings = list(result.warnings) if result else []
+
+    collision_warning = get_corpus_identifier_collision_warning(rule)
+    if collision_warning:
+        warnings.append(collision_warning)
+
     return {
-        'flagged':  bool(result.warnings) or not result.ok,
-        'rejected': not result.ok,
-        'reasons':  list(result.errors) + list(result.warnings),
-        'errors':   list(result.errors),
-        'warnings': list(result.warnings),
+        'flagged':  bool(warnings) or bool(errors),
+        'rejected': bool(errors),
+        'reasons':  errors + warnings,
+        'errors':   errors,
+        'warnings': warnings,
     }
 
     
@@ -4681,10 +4991,15 @@ def delete_similarity_history(uuid: str):
     try:
         RuleSimilarity.query.filter_by(result_uuid=uuid).delete()
 
-        
+
         SimilarResult.query.filter_by(uuid=uuid).delete()
 
         db.session.commit()
+        try:
+            from app.features.rule.github_repo_core import sync_conflict_counts
+            sync_conflict_counts()
+        except Exception:
+            pass
         return True
     except Exception as e:
         db.session.rollback()

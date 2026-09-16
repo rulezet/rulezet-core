@@ -53,44 +53,61 @@
 
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <small class="text-muted">Last updated: [[ currentDate ]]</small>
-                <button v-if="isAdmin" class="btn btn-sm btn-primary rounded-pill px-3" @click="refreshData('global')" :disabled="is_running"
-                        title="Admin only — recomputes gamification stats for every user">
-                    <template v-if="is_running">
-                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Refreshing…
-                    </template>
-                    <template v-else><i class="fas fa-sync me-1"></i>Refresh</template>
+                <div v-if="isAdmin" class="d-flex align-items-center gap-2">
+                    <job-tracker v-if="refreshJobUuid" :job-uuid="refreshJobUuid" @done="onRefreshJobDone" @failed="onRefreshJobDone"></job-tracker>
+                    <button class="btn btn-sm btn-primary rounded-pill px-3" @click="refreshData()" :disabled="is_running"
+                            title="Admin only — queues a background job that recomputes gamification stats for every user">
+                        <template v-if="is_running">
+                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Refreshing…
+                        </template>
+                        <template v-else><i class="fas fa-sync me-1"></i>Refresh</template>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ══ Top 3 podium ══ -->
+            <div ref="podiumFxRoot" class="ud-fx"></div>
+            <transition name="cb-fade">
+                <div v-if="podiumRankMessage" class="cb-rank-toast">
+                    <i class="fas fa-trophy"></i> [[ podiumRankMessage ]]
+                </div>
+            </transition>
+            <div v-if="topChampions.length" class="cb-podium mb-4">
+                <div v-if="topChampions[1]" class="cb-podium-step cb-podium-step--2" style="animation-delay:.25s">
+                    <div class="cb-podium-medal">🥈</div>
+                    <user-chip :user-id="topChampions[1].user_id" :avatar="topChampions[1].avatar" size="lg" :show-name="false"></user-chip>
+                    <div class="cb-podium-name">[[ topChampions[1].first_name ]] [[ topChampions[1].last_name ]]</div>
+                    <div class="cb-podium-points">[[ topChampions[1].total_points.toLocaleString() ]] pts</div>
+                    <div class="cb-podium-block cb-podium-block--2"></div>
+                </div>
+                <div v-if="topChampions[0]" class="cb-podium-step cb-podium-step--1" style="animation-delay:.5s">
+                    <div class="cb-podium-medal">🥇</div>
+                    <user-chip :user-id="topChampions[0].user_id" :avatar="topChampions[0].avatar" size="lg" :show-name="false"></user-chip>
+                    <div class="cb-podium-name">[[ topChampions[0].first_name ]] [[ topChampions[0].last_name ]]</div>
+                    <div class="cb-podium-points">[[ topChampions[0].total_points.toLocaleString() ]] pts</div>
+                    <div class="cb-podium-block cb-podium-block--1"></div>
+                </div>
+                <div v-if="topChampions[2]" class="cb-podium-step cb-podium-step--3" style="animation-delay:0s">
+                    <div class="cb-podium-medal">🥉</div>
+                    <user-chip :user-id="topChampions[2].user_id" :avatar="topChampions[2].avatar" size="lg" :show-name="false"></user-chip>
+                    <div class="cb-podium-name">[[ topChampions[2].first_name ]] [[ topChampions[2].last_name ]]</div>
+                    <div class="cb-podium-points">[[ topChampions[2].total_points.toLocaleString() ]] pts</div>
+                    <div class="cb-podium-block cb-podium-block--3"></div>
+                </div>
+            </div>
+
+            <!-- ══ Category switcher — one leaderboard visible at a time ══ -->
+            <div class="cb-category-pills mb-3">
+                <button v-for="cat in categories" :key="cat.key" type="button"
+                        class="cb-pill" :class="{ 'cb-pill--active': activeCategory === cat.key }"
+                        @click="activeCategory = cat.key">
+                    <i :class="'fas ' + cat.icon"></i> [[ cat.label ]]
                 </button>
             </div>
 
-            <template v-if="is_running === false">
-
-                <!-- ══ Top 3 podium ══ -->
-                <div v-if="topChampions.length" class="cb-podium mb-4">
-                    <div v-if="topChampions[1]" class="cb-podium-step cb-podium-step--2" style="animation-delay:.25s">
-                        <div class="cb-podium-medal">🥈</div>
-                        <user-chip :user-id="topChampions[1].user_id" :avatar="topChampions[1].avatar" size="lg" :show-name="false"></user-chip>
-                        <div class="cb-podium-name">[[ topChampions[1].first_name ]] [[ topChampions[1].last_name ]]</div>
-                        <div class="cb-podium-points">[[ topChampions[1].total_points.toLocaleString() ]] pts</div>
-                        <div class="cb-podium-block cb-podium-block--2"></div>
-                    </div>
-                    <div v-if="topChampions[0]" class="cb-podium-step cb-podium-step--1" style="animation-delay:.5s">
-                        <div class="cb-podium-medal">🥇</div>
-                        <user-chip :user-id="topChampions[0].user_id" :avatar="topChampions[0].avatar" size="lg" :show-name="false"></user-chip>
-                        <div class="cb-podium-name">[[ topChampions[0].first_name ]] [[ topChampions[0].last_name ]]</div>
-                        <div class="cb-podium-points">[[ topChampions[0].total_points.toLocaleString() ]] pts</div>
-                        <div class="cb-podium-block cb-podium-block--1"></div>
-                    </div>
-                    <div v-if="topChampions[2]" class="cb-podium-step cb-podium-step--3" style="animation-delay:0s">
-                        <div class="cb-podium-medal">🥉</div>
-                        <user-chip :user-id="topChampions[2].user_id" :avatar="topChampions[2].avatar" size="lg" :show-name="false"></user-chip>
-                        <div class="cb-podium-name">[[ topChampions[2].first_name ]] [[ topChampions[2].last_name ]]</div>
-                        <div class="cb-podium-points">[[ topChampions[2].total_points.toLocaleString() ]] pts</div>
-                        <div class="cb-podium-block cb-podium-block--3"></div>
-                    </div>
-                </div>
-
-                <!-- ══ Global Ranking ══ -->
-                <div class="cb-panel mb-4">
+            <transition name="cb-fade" mode="out-in">
+                <!-- Global Ranking — richer, multi-column table -->
+                <div v-if="activeCategory === 'global'" key="global" class="cb-panel mb-4">
                     <div class="cb-panel-header">
                         <span class="cb-panel-title"><i class="fas fa-globe-americas"></i>Global Ranking</span>
                         <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -174,132 +191,69 @@
                     </div>
                 </div>
 
-                <!-- ══ Category Leaders ══ -->
-                <div class="row g-3 mb-4">
-                    <div class="col-lg-6">
-                        <div class="cb-panel h-100">
-                            <div class="cb-panel-header">
-                                <span class="cb-panel-title"><i class="fas fa-check-double"></i>Quality Masters</span>
-                                <div class="dt-search cb-search cb-search--sm">
-                                    <i class="fas fa-search dt-search-icon"></i>
-                                    <input class="dt-search-input" type="text" placeholder="Search…"
-                                           v-model="suggestionsTable.state.search" @input="suggestionsTable.onSearchInput" aria-label="Search" />
-                                    <button v-if="suggestionsTable.state.search" class="dt-search-clear" @click="suggestionsTable.clearSearch()" aria-label="Clear search">
-                                        <i class="fas fa-xmark"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="cb-table-scroll">
-                                <table class="dt-table cb-table--compact">
-                                    <thead class="dt-thead">
-                                        <tr>
-                                            <th class="dt-th cb-col-rank">Rank</th>
-                                            <th class="dt-th cb-col-user">User</th>
-                                            <th class="dt-th cb-col-num dt-th--sortable dt-th--sorted" @click="suggestionsTable.sortColumn('suggestions_accepted')">
-                                                <span class="dt-th-inner">Count <i :class="suggestionsTable.sortIcon('suggestions_accepted')"></i></span>
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody v-if="suggestionsTable.state.items.length">
-                                        <tr v-for="contributor in suggestionsTable.state.items" :key="contributor.user_id" class="dt-row"
-                                            :class="{ 'table-active-user': contributor.user_id == currentUserId }">
-                                            <td class="dt-td cb-col-rank">#[[ contributor.rank ]]</td>
-                                            <td class="dt-td cb-col-user">
-                                                <user-chip :user-id="contributor.user_id" :username="contributor.username" :avatar="contributor.avatar" size="xs"></user-chip>
-                                                <span v-if="contributor.user_id == currentUserId" class="cb-you-badge">You</span>
-                                            </td>
-                                            <td class="dt-td cb-col-num">[[ contributor.suggestions_accepted ]]</td>
-                                        </tr>
-                                    </tbody>
-                                    <tbody v-else><tr><td colspan="3" class="text-center py-3" style="color: var(--subtle-text-color);">
-                                        [[ suggestionsTable.state.loading ? 'Loading…' : 'No contributors found.' ]]
-                                    </td></tr></tbody>
-                                </table>
-                            </div>
-                            <div class="cb-panel-footer">
-                                <pagination-component :current-page="suggestionsTable.state.page" :total-pages="suggestionsTable.state.totalPages"
-                                                       @change-page="suggestionsTable.goToPage"></pagination-component>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-lg-6">
-                        <div class="cb-panel h-100">
-                            <div class="cb-panel-header">
-                                <span class="cb-panel-title"><i class="fas fa-star"></i>Popularity Leaders</span>
-                                <div class="dt-search cb-search cb-search--sm">
-                                    <i class="fas fa-search dt-search-icon"></i>
-                                    <input class="dt-search-input" type="text" placeholder="Search…"
-                                           v-model="popularityTable.state.search" @input="popularityTable.onSearchInput" aria-label="Search" />
-                                    <button v-if="popularityTable.state.search" class="dt-search-clear" @click="popularityTable.clearSearch()" aria-label="Clear search">
-                                        <i class="fas fa-xmark"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="cb-table-scroll">
-                                <table class="dt-table cb-table--compact">
-                                    <thead class="dt-thead">
-                                        <tr>
-                                            <th class="dt-th cb-col-rank">Rank</th>
-                                            <th class="dt-th cb-col-user">User</th>
-                                            <th class="dt-th cb-col-num dt-th--sortable dt-th--sorted" @click="popularityTable.sortColumn('rules_popular_score')">
-                                                <span class="dt-th-inner">Score <i :class="popularityTable.sortIcon('rules_popular_score')"></i></span>
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody v-if="popularityTable.state.items.length">
-                                        <tr v-for="contributor in popularityTable.state.items" :key="contributor.user_id" class="dt-row"
-                                            :class="{ 'table-active-user': contributor.user_id == currentUserId }">
-                                            <td class="dt-td cb-col-rank">#[[ contributor.rank ]]</td>
-                                            <td class="dt-td cb-col-user">
-                                                <user-chip :user-id="contributor.user_id" :username="contributor.username" :avatar="contributor.avatar" size="xs"></user-chip>
-                                                <span v-if="contributor.user_id == currentUserId" class="cb-you-badge">You</span>
-                                            </td>
-                                            <td class="dt-td cb-col-num">[[ contributor.rules_popular_score.toLocaleString() ]]</td>
-                                        </tr>
-                                    </tbody>
-                                    <tbody v-else><tr><td colspan="3" class="text-center py-3" style="color: var(--subtle-text-color);">
-                                        [[ popularityTable.state.loading ? 'Loading…' : 'No contributors found.' ]]
-                                    </td></tr></tbody>
-                                </table>
-                            </div>
-                            <div class="cb-panel-footer">
-                                <pagination-component :current-page="popularityTable.state.page" :total-pages="popularityTable.state.totalPages"
-                                                       @change-page="popularityTable.goToPage"></pagination-component>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ══ How to earn points ══ -->
-                <div class="cb-panel mb-2">
+                <!-- Any other category — one shared compact single-metric table -->
+                <div v-else :key="activeCategory" class="cb-panel mb-4">
                     <div class="cb-panel-header">
-                        <span class="cb-panel-title"><i class="fas fa-circle-question"></i>How to Earn Points</span>
-                    </div>
-                    <div class="cb-panel-body">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <p class="mb-2"><i class="fas fa-check-circle text-success me-2"></i><strong>Suggestion Accepted</strong> — a rule suggestion approved by moderators <span class="text-muted">(major points)</span></p>
-                                <p class="mb-0"><i class="fas fa-cloud-upload-alt text-info me-2"></i><strong>Rule Ownership / Import</strong> — importing new rules into the system <span class="text-muted">(major points)</span></p>
-                            </div>
-                            <div class="col-md-6">
-                                <p class="mb-2"><i class="fas fa-star text-primary me-2"></i><strong>Popular Score</strong> — rules you own get upvotes from the community</p>
-                                <p class="mb-0"><i class="fas fa-fire-alt text-warning me-2"></i><strong>Daily Activity</strong> — a consecutive daily contribution streak <span class="text-muted">(bonus points)</span></p>
-                            </div>
+                        <span class="cb-panel-title"><i :class="'fas ' + currentCategory.icon"></i>[[ currentCategory.label ]]</span>
+                        <div class="dt-search cb-search cb-search--sm">
+                            <i class="fas fa-search dt-search-icon"></i>
+                            <input class="dt-search-input" type="text" placeholder="Search…"
+                                   v-model="currentCategory.table.state.search" @input="currentCategory.table.onSearchInput" aria-label="Search" />
+                            <button v-if="currentCategory.table.state.search" class="dt-search-clear" @click="currentCategory.table.clearSearch()" aria-label="Clear search">
+                                <i class="fas fa-xmark"></i>
+                            </button>
                         </div>
-                        <hr>
-                        <p class="mb-0 small text-muted">
-                            Visit the <strong>My Contributions</strong> tab to track your personal statistics, level progress, and earned badges!
-                        </p>
+                    </div>
+                    <div class="cb-table-scroll">
+                        <table class="dt-table cb-table--compact">
+                            <thead class="dt-thead">
+                                <tr>
+                                    <th class="dt-th cb-col-rank">Rank</th>
+                                    <th class="dt-th cb-col-user">User</th>
+                                    <th class="dt-th cb-col-num dt-th--sortable dt-th--sorted" @click="currentCategory.table.sortColumn(currentCategory.sortKey)">
+                                        <span class="dt-th-inner">[[ currentCategory.colLabel ]] <i :class="currentCategory.table.sortIcon(currentCategory.sortKey)"></i></span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody v-if="currentCategory.table.state.items.length">
+                                <tr v-for="contributor in currentCategory.table.state.items" :key="contributor.user_id" class="dt-row"
+                                    :class="{ 'table-active-user': contributor.user_id == currentUserId }">
+                                    <td class="dt-td cb-col-rank">#[[ contributor.rank ]]</td>
+                                    <td class="dt-td cb-col-user">
+                                        <user-chip :user-id="contributor.user_id" :username="contributor.username" :avatar="contributor.avatar" size="xs"></user-chip>
+                                        <span v-if="contributor.user_id == currentUserId" class="cb-you-badge">You</span>
+                                    </td>
+                                    <td class="dt-td cb-col-num">[[ (contributor[currentCategory.field] ?? 0).toLocaleString() ]]</td>
+                                </tr>
+                            </tbody>
+                            <tbody v-else><tr><td colspan="3" class="text-center py-3" style="color: var(--subtle-text-color);">
+                                [[ currentCategory.table.state.loading ? 'Loading…' : 'No contributors found.' ]]
+                            </td></tr></tbody>
+                        </table>
+                    </div>
+                    <div class="cb-panel-footer">
+                        <pagination-component :current-page="currentCategory.table.state.page" :total-pages="currentCategory.table.state.totalPages"
+                                               @change-page="currentCategory.table.goToPage"></pagination-component>
                     </div>
                 </div>
+            </transition>
 
-            </template>
-            <template v-else>
-                <div class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
-                    <p class="mt-3 text-muted">Updating leaderboard...</p>
+            <!-- ══ How to earn points ══ -->
+            <div class="cb-panel mb-2">
+                <div class="cb-panel-header">
+                    <span class="cb-panel-title"><i class="fas fa-circle-question"></i>How to Earn Points</span>
                 </div>
-            </template>
+                <div class="cb-panel-body d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <p class="mb-0 text-muted">
+                        Suggestions accepted, rules owned, bundles published, tests run, ATT&CK techniques mapped,
+                        community votes, daily streaks — there's a lot more than points shown here.
+                    </p>
+                    <a href="{{ url_for('account.how_to_earn_points') }}" class="btn btn-sm btn-primary rounded-pill px-3">
+                        <i class="fas fa-book-open me-1"></i>How to Earn Points
+                    </a>
+                </div>
+            </div>
+
         </div>
 
         <!-- ── Tab 2: My Contributions ── -->
@@ -332,18 +286,20 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, reactive, onMounted } = Vue
+    const { createApp, ref, reactive, computed, onMounted } = Vue
     import { message_list, create_message } from '/static/js/toaster.js'
     import UserContributionStatsComponent from '/static/js/account/UserContributionStatsComponent.js'
     import UserChip                  from '/static/js/components/UserChip.js'
+    import JobTracker                from '/static/js/jobs/JobTracker.js'
     import PaginationComponent       from '/static/js/rule/paginationComponent.js'
     import RuleList                  from '/static/js/rule/ruleList.js'
     import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
 
-    // Generic paginated/sortable/searchable leaderboard table — used for all
-    // three tables (Global Ranking, Quality Masters, Popularity Leaders),
-    // which only differ by endpoint, default sort column, and page size.
+    // Generic paginated/sortable/searchable leaderboard table — used for every
+    // category (Global Ranking, Quality Masters, Popularity Leaders, Bundle
+    // Architects, Range Testers, MITRE Mappers), which only differ by
+    // endpoint, default sort column, and page size.
     function createLeaderboardTable(endpoint, defaultSortBy, defaultPerPage) {
         const state = reactive({
             items: [], page: 1, totalPages: 1, totalItems: 0,
@@ -408,6 +364,7 @@
         components: {
             UserContributionStatsComponent,
             'user-chip':                   UserChip,
+            'job-tracker':                 JobTracker,
             'pagination-component':        PaginationComponent,
             'rule-list':                   RuleList,
             'tags-displays-list':          TagsDisplaysList,
@@ -421,17 +378,62 @@
             const globalTable       = createLeaderboardTable('/account/leaderboard/global', 'total_points', 10)
             const suggestionsTable  = createLeaderboardTable('/account/leaderboard/category', 'suggestions_accepted', 5)
             const popularityTable   = createLeaderboardTable('/account/leaderboard/category', 'rules_popular_score', 5)
+            const bundleTable       = createLeaderboardTable('/account/leaderboard/category', 'bundles_owned', 5)
+            const testerTable       = createLeaderboardTable('/account/leaderboard/category', 'rule_tests_contributed', 5)
+            const attackTable       = createLeaderboardTable('/account/leaderboard/category', 'attack_mappings_contributed', 5)
+
+            // Only one leaderboard is shown at a time (too many stacked panels
+            // was overwhelming) — a pill switches activeCategory, and the
+            // <transition> in the template fades between panels.
+            const activeCategory = ref('global')
+            const categories = [
+                { key: 'global',      label: 'Global Ranking',     icon: 'fa-globe-americas' },
+                { key: 'quality',     label: 'Quality Masters',    icon: 'fa-check-double', table: suggestionsTable, sortKey: 'suggestions_accepted',        colLabel: 'Accepted',  field: 'suggestions_accepted' },
+                { key: 'popularity',  label: 'Popularity Leaders', icon: 'fa-star',          table: popularityTable,  sortKey: 'rules_popular_score',         colLabel: 'Score',      field: 'rules_popular_score' },
+                { key: 'bundles',     label: 'Bundle Architects',  icon: 'fa-layer-group',   table: bundleTable,      sortKey: 'bundles_owned',               colLabel: 'Bundles',    field: 'bundles_owned' },
+                { key: 'testers',     label: 'Range Testers',      icon: 'fa-flask',         table: testerTable,      sortKey: 'rule_tests_contributed',      colLabel: 'Test Days',  field: 'rule_tests_contributed' },
+                { key: 'attack',      label: 'MITRE Mappers',      icon: 'fa-crosshairs',    table: attackTable,      sortKey: 'attack_mappings_contributed', colLabel: 'Mappings',   field: 'attack_mappings_contributed' },
+            ]
+            const currentCategory = computed(() => categories.find(c => c.key === activeCategory.value))
 
             // Fixed top-3-by-points snapshot for the podium — deliberately
             // independent of the interactive Global Ranking table's own
             // sort/search/date state, so the podium always means the same
             // thing no matter what the user is browsing below.
             const topChampions = ref([])
+            const podiumFxRoot = ref(null)
+            const podiumCelebrated = ref(false)   // fire the confetti once per page load, not on every refetch
+            const podiumRankMessage = ref(null)
+            const PODIUM_FX_COLORS = ['#d4a700', '#9099a2', '#b5651d', '#0d6efd', '#4be08a']
+
+            function launchPodiumConfetti() {
+                const fx = podiumFxRoot.value
+                if (!fx) return
+                fx.innerHTML = ''
+                for (let i = 0; i < 90; i++) {
+                    const piece = document.createElement('div')
+                    piece.className = 'ud-confetti'
+                    piece.style.left = Math.random() * 100 + '%'
+                    piece.style.background = PODIUM_FX_COLORS[i % PODIUM_FX_COLORS.length]
+                    piece.style.animationDelay = (Math.random() * 1.2) + 's'
+                    piece.style.animationDuration = (2.4 + Math.random() * 1.8) + 's'
+                    fx.appendChild(piece)
+                }
+                setTimeout(() => { if (fx) fx.innerHTML = '' }, 4500)
+            }
+
             async function fetchTopChampions() {
                 try {
                     const res  = await fetch('/account/leaderboard/global?sort_by=total_points&dir=desc&page=1&per_page=3')
                     const data = await res.json()
                     topChampions.value = data.leaderboard || []
+                    const myRankIdx = topChampions.value.findIndex(c => c.user_id == currentUserId)
+                    if (!podiumCelebrated.value && currentUserId != null && myRankIdx !== -1) {
+                        podiumCelebrated.value = true
+                        podiumRankMessage.value = `You're #${myRankIdx + 1} on the podium!`
+                        Vue.nextTick(launchPodiumConfetti)
+                        setTimeout(() => { podiumRankMessage.value = null }, 4500)
+                    }
                 } catch {
                     topChampions.value = []
                 }
@@ -451,26 +453,34 @@
             // have Date object (only day years monther hour)
             const currentDate = ref(new Date())
             const is_running = ref(false)
+            const refreshJobUuid = ref(null)
 
-            async function refreshData(action) {
+            // Queues a full recompute as a background job instead of blocking
+            // this request — see job_handlers.handle_recompute_gamification.
+            // The JobTracker in the template polls it and calls
+            // onRefreshJobDone() once it actually finishes.
+            async function refreshData() {
                 is_running.value = true
-                const params = new URLSearchParams()
-                params.append('action', action)
-
-                const url = '/account/refresh?' + params.toString()
-                const res = await fetch(url)
-                currentDate.value = new Date()
-                if (res.ok) {
-                    if (action == 'global') {
-                        await globalTable.fetchPage()
-                        await fetchTopChampions()
-                    } else {
-                        await fetchMyContributions()
-                    }
-                }
+                const res = await fetch('/account/refresh')
                 const data = await res.json()
                 create_message(data.message, data.toast_class)
+                if (res.ok && data.job_uuid) {
+                    refreshJobUuid.value = data.job_uuid
+                } else {
+                    is_running.value = false
+                }
+            }
+
+            async function onRefreshJobDone() {
                 is_running.value = false
+                refreshJobUuid.value = null
+                currentDate.value = new Date()
+                await Promise.all([
+                    globalTable.fetchPage(), suggestionsTable.fetchPage(), popularityTable.fetchPage(),
+                    bundleTable.fetchPage(), testerTable.fetchPage(), attackTable.fetchPage(),
+                    fetchTopChampions(),
+                ])
+                create_message('Gamification recompute complete.', 'success-subtle')
             }
 
             const fetchMyContributions = async () => {
@@ -494,6 +504,9 @@
                     globalTable.fetchPage(),
                     suggestionsTable.fetchPage(),
                     popularityTable.fetchPage(),
+                    bundleTable.fetchPage(),
+                    testerTable.fetchPage(),
+                    attackTable.fetchPage(),
                     fetchTopChampions(),
                 ])
             })
@@ -501,14 +514,17 @@
             // --- EXPOSURE TO TEMPLATE ---
             return {
                 message_list,
-                globalTable, suggestionsTable, popularityTable,
-                topChampions,
+                globalTable, suggestionsTable, popularityTable, bundleTable, testerTable, attackTable,
+                categories, activeCategory, currentCategory,
+                topChampions, podiumFxRoot, podiumRankMessage,
                 userStats,
                 currentUserId, // Exposed for conditional styling
                 isAdmin,
                 refreshData,
                 currentDate,
                 is_running,
+                refreshJobUuid,
+                onRefreshJobDone,
             }
         }
     }).mount('#main-container')

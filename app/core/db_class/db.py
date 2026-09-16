@@ -1178,6 +1178,7 @@ class RuleUpdateHistory(db.Model):
             "analyzed_by_user_id": self.analyzed_by_user_id,
             "analyzed_at": self.analyzed_at.strftime('%Y-%m-%d %H:%M'),
             "analyzed_by_user_name": self.analyzed_by.first_name,
+            "analyzed_by_avatar": self.analyzed_by.get_avatar_url() if self.analyzed_by else None,
             "rule_format": self.get_rule_format(),
             "rule_source": self.get_rule_source(),
             "manuel_submit": self.manuel_submit if self.manuel_submit else False,
@@ -2235,7 +2236,10 @@ POINTS = {
     'rules_owned': 10,
     'rules_liked_or_disliked': 1,
     'consecutive_days_active': 1,
-    'rules_popular_score': 1
+    'rules_popular_score': 1,
+    'bundles_owned': 15,
+    'rule_tests_contributed': 1,
+    'attack_mappings_contributed': 5,
 }
 
 # if you have more than 15000 points you will be level 3...
@@ -2282,7 +2286,7 @@ class Gamification(db.Model):
     # ----------------------------------------------------
     rules_liked = db.Column(db.Integer, default=0, index=True)
     rules_disliked = db.Column(db.Integer, default=0)
-    
+
     # ----------------------------------------------------
     # 5. ACTIVITY / TIMING
     # ----------------------------------------------------
@@ -2290,7 +2294,14 @@ class Gamification(db.Model):
     consecutive_days_active = db.Column(db.Integer, default=0)
 
     # ----------------------------------------------------
-    # 6. RELATIONSHIP
+    # 6. NEWER FEATURES (Bundle, RuleTest, RuleAttackAssociation)
+    # ----------------------------------------------------
+    bundles_owned = db.Column(db.Integer, default=0)
+    rule_tests_contributed = db.Column(db.Integer, default=0)
+    attack_mappings_contributed = db.Column(db.Integer, default=0)
+
+    # ----------------------------------------------------
+    # 7. RELATIONSHIP
     # ----------------------------------------------------
 
     user = db.relationship('User', backref=db.backref('gamification_stats', uselist=False, cascade='all, delete-orphan'))
@@ -2312,6 +2323,9 @@ class Gamification(db.Model):
             "rules_disliked": self.rules_disliked,
             "last_contribution_date": self.last_contribution_date,
             "consecutive_days_active": self.consecutive_days_active,
+            "bundles_owned": self.bundles_owned,
+            "rule_tests_contributed": self.rule_tests_contributed,
+            "attack_mappings_contributed": self.attack_mappings_contributed,
             "global_rank": self.get_global_rank()
         }
     
@@ -2335,6 +2349,10 @@ class Gamification(db.Model):
         score += self.rules_owned * POINTS['rules_owned']
         score += self.rules_popular_score * POINTS['rules_popular_score']
         score += self.rules_liked * POINTS['rules_liked_or_disliked']
+        score += (self.consecutive_days_active or 0) * POINTS['consecutive_days_active']
+        score += (self.bundles_owned or 0) * POINTS['bundles_owned']
+        score += (self.rule_tests_contributed or 0) * POINTS['rule_tests_contributed']
+        score += (self.attack_mappings_contributed or 0) * POINTS['attack_mappings_contributed']
         return score
 
     def calculate_current_level(self, points):
@@ -2361,7 +2379,8 @@ def receive_before_flush(session, flush_context, instances):
     for instance in session.dirty:
         if isinstance(instance, Gamification):
             has_changed = False
-            for field in ['suggestions_accepted', 'rules_owned', 'rules_liked', 'rules_popular_score', 'consecutive_days_active']:
+            for field in ['suggestions_accepted', 'rules_owned', 'rules_liked', 'rules_popular_score', 'consecutive_days_active',
+                          'bundles_owned', 'rule_tests_contributed', 'attack_mappings_contributed']:
                 
                
                 history = attributes.instance_state(instance).get_history(field, passive=PASSIVE_NO_INITIALIZE)
@@ -2375,6 +2394,33 @@ def receive_before_flush(session, flush_context, instances):
                 instance.update_scores()
 
 event.listen(db.session, 'before_flush', receive_before_flush)
+
+
+class UserBadge(db.Model):
+    """One row per badge a user has actually unlocked. The badge catalog
+    itself (name/description/icon/unlock rule) lives in code, not the DB —
+    see app/features/account/badges.py — this table only records *events*
+    (who unlocked what, and when), which is what lets the UI show a
+    congratulations moment exactly once, the first time it becomes true,
+    instead of recomputing the same badge list fresh on every page load."""
+    __tablename__ = "user_badge"
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey("user.id", ondelete='CASCADE'), nullable=False, index=True)
+    badge_key  = db.Column(db.String(64), nullable=False)
+    unlocked_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    user = db.relationship('User', backref=db.backref('badges', cascade='all, delete-orphan'))
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'badge_key', name='uq_user_badge_user_key'),
+    )
+
+    def to_json(self):
+        return {
+            "badge_key": self.badge_key,
+            "unlocked_at": self.unlocked_at.strftime('%Y-%m-%d') if self.unlocked_at else None,
+        }
 
 #####################
 #   Similar Rule    #
@@ -3111,6 +3157,56 @@ class InstanceConfig(db.Model):
         }
 
 
+class RuleMirrorConfig(db.Model):
+    """One "Rulesets" mirror target (see docs/design/rule_git_mirror.md) —
+    an instance can have several, each pushing the same active/public rule
+    set to a different repo. Off by default, admin-configured, per-instance
+    — deliberately NOT tied to GITHUB_TOKEN/IS_OFFICIAL_INSTANCE so a
+    self-hosted instance can point this at its own repo(s) with its own
+    token(s), independent of rulezet.org's own official mirror config.
+
+    github_token is stored the same way Connector.api_key_outbound already
+    is (a plain column — this app's existing trust boundary is DB access,
+    not per-field encryption) but is never re-sent to the browser once
+    saved; the admin UI only ever shows a masked placeholder."""
+    __tablename__ = 'rule_mirror_config'
+    id              = db.Column(db.Integer, primary_key=True)
+    uuid            = db.Column(db.String(36), unique=True, nullable=False)
+    name            = db.Column(db.String(255), nullable=False, default='Rulesets mirror')
+    enabled         = db.Column(db.Boolean, default=False, nullable=False)
+    repo_url        = db.Column(db.String(512), nullable=True)
+    github_token    = db.Column(db.String(512), nullable=True)
+    branch          = db.Column(db.String(128), default='main', nullable=False)
+    last_synced_at  = db.Column(db.DateTime, nullable=True)
+    created_at      = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at      = db.Column(db.DateTime, nullable=True)
+    updated_by_id   = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    # Set only by a successful "Test connection" call (rule_mirror_core.test_config)
+    # — reset to False whenever repo_url/branch/github_token change. "Run now"
+    # is refused, both in the UI and server-side, until this is True: a
+    # mandatory check before ever attempting to push, not just an optional one.
+    is_verified     = db.Column(db.Boolean, default=False, nullable=False)
+    last_error      = db.Column(db.Text, nullable=True)
+    last_tested_at  = db.Column(db.DateTime, nullable=True)
+
+    def to_json(self):
+        return {
+            'id':             self.id,
+            'uuid':           self.uuid,
+            'name':           self.name,
+            'enabled':        self.enabled,
+            'repo_url':       self.repo_url,
+            'has_token':      bool(self.github_token),
+            'branch':         self.branch,
+            'is_verified':    self.is_verified,
+            'last_error':     self.last_error,
+            'last_tested_at': self.last_tested_at.strftime('%Y-%m-%d %H:%M') if self.last_tested_at else None,
+            'last_synced_at': self.last_synced_at.strftime('%Y-%m-%d %H:%M') if self.last_synced_at else None,
+            'updated_at':     self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
+        }
+
+
 class RegisteredInstance(db.Model):
     """Remote Rulezet instances that have phoned home to this instance."""
     __tablename__ = 'registered_instance'
@@ -3637,6 +3733,135 @@ class RuleAttackAssociation(db.Model):
             'user_id':      self.user_id,
             'added_at':     self.added_at.strftime('%Y-%m-%d %H:%M') if self.added_at else None,
             'source':       self.source,
+        }
+
+
+class GithubRepo(db.Model):
+    """Cached registry of distinct GitHub repo URLs referenced by active
+    (non-deleted) rules — powers the GitHub Sources list
+    (/rule/github/list_github_url) without a live GROUP BY over the whole
+    Rule table (that query took 1.3-1.4s per page load on a ~368k-row
+    corpus with no caching at all). rule_count is kept in sync incrementally
+    from every place that changes rule counts per source — see
+    app/features/rule/github_repo_core.py for the write-side helpers and
+    the full list of call sites this depends on staying correct at.
+
+    format_counts/license_counts are {name: count} dicts of this repo's
+    active rules, kept in sync incrementally at the same write sites as
+    rule_count (see github_repo_core.py) — the filter/sort/search logic on
+    the GitHub Sources list reads them (and cve_count/conflict_count)
+    directly off this table, never a live Rule scan.
+
+    conflict_count (distinct rules in this repo with a RuleSimilarity row
+    scoring > 0.99) is the one exception to "same write sites as
+    rule_count": RuleSimilarity itself is produced by a separate, full
+    corpus-wide recompute job (app/features/rule/utils/similar_rules/
+    similarity_class.py wipes and rebuilds the whole table), so
+    conflict_count is instead resynced in one batched pass right after that
+    job finishes — see github_repo_core.sync_conflict_counts().
+    """
+    __tablename__ = 'github_repo'
+
+    id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid           = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    url            = db.Column(db.String(500), unique=True, nullable=False, index=True)
+    author         = db.Column(db.String(255), nullable=True, index=True)
+    rule_count     = db.Column(db.Integer, nullable=False, default=0)
+    format_counts  = db.Column(db.JSON, nullable=False, default=dict)
+    license_counts = db.Column(db.JSON, nullable=False, default=dict)
+    cve_count      = db.Column(db.Integer, nullable=False, default=0)
+    conflict_count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc))
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc),
+                           onupdate=datetime.datetime.now(tz=datetime.timezone.utc))
+    last_synced_at = db.Column(db.DateTime, nullable=True)  # set by a full rebuild, not by incremental deltas
+
+    def to_json(self):
+        return {
+            'id':         self.id,
+            'uuid':       self.uuid,
+            'url':        self.url,
+            'author':     self.author,
+            'rule_count': self.rule_count,
+            'formats':    sorted((self.format_counts or {}).keys()),
+            'licenses':   sorted((self.license_counts or {}).keys()),
+            'cve_count':  self.cve_count,
+            'has_conflicts': self.conflict_count > 0,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
+        }
+
+
+# Manual relation types a user can pick when linking two rules by hand —
+# auto-detected links (source='auto') instead use the format-specific kind
+# that produced them (e.g. 'if_sid', 'correlation_hash') and aren't
+# restricted to this list.
+RULE_RELATION_TYPES = ['references', 'depends_on', 'related', 'variant_of', 'duplicate_of']
+
+
+class RuleRelation(db.Model):
+    """A curated, typed, directional edge between two rules — e.g. a
+    Wazuh rule's <if_sid> pointing at another rule, two Kunai rules
+    sharing a correlation hash, or a user manually noting that one rule
+    is a variant of another. This is NOT RuleSimilarity/SimilarResult
+    (a corpus-wide TF-IDF/FAISS content-similarity scan, fully
+    automatic, no semantics beyond a fuzzy score) — the two systems are
+    unrelated and both stay in place.
+
+    source_rule_id -> target_rule_id is directional (A cites/references
+    B); a rule's detail page shows both directions as separate outgoing/
+    incoming sections rather than trying to store or display this
+    symmetrically.
+    """
+    __tablename__ = 'rule_relation'
+
+    id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid           = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    source_rule_id = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=False, index=True)
+    target_rule_id = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=False, index=True)
+    # Manual links: one of RULE_RELATION_TYPES ('references', 'depends_on',
+    # 'related', 'variant_of', 'duplicate_of'). Auto-detected links: the
+    # format-specific kind, e.g. 'if_sid' | 'if_group' | 'if_matched_sid' |
+    # 'correlation_hash'.
+    relation_type  = db.Column(db.String(32), nullable=False, default='references')
+    # Raw evidence behind the link — the literal if_sid value, the shared
+    # correlation hash, or a short free-text reason for a manual link.
+    note           = db.Column(db.String(255), nullable=True)
+    user_id        = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)   # null = auto-detected
+    source         = db.Column(db.String(20), default='manual')   # 'manual' | 'auto'
+    added_at       = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc))
+
+    source_rule = db.relationship('Rule', foreign_keys=[source_rule_id],
+                                   backref=db.backref('outgoing_relations', lazy='dynamic', cascade='all, delete-orphan'))
+    target_rule = db.relationship('Rule', foreign_keys=[target_rule_id],
+                                   backref=db.backref('incoming_relations', lazy='dynamic', cascade='all, delete-orphan'))
+    user = db.relationship('User', backref=db.backref('rule_relations_created', lazy='dynamic'))
+
+    __table_args__ = (
+        db.UniqueConstraint('source_rule_id', 'target_rule_id', 'relation_type', name='uq_rule_relation_pair_type'),
+        db.CheckConstraint('source_rule_id != target_rule_id', name='ck_rule_relation_no_self_link'),
+    )
+
+    def to_json(self, direction: str = 'outgoing'):
+        """direction='outgoing' flattens target_rule's fields (this is a
+        link FROM the rule you asked about); direction='incoming'
+        flattens source_rule's fields (this is a link pointing AT the
+        rule you asked about) — the caller always gets 'the other rule'
+        under the same keys regardless of which side it queried from."""
+        other = self.target_rule if direction == 'outgoing' else self.source_rule
+        return {
+            'id':            self.id,
+            'uuid':          self.uuid,
+            'relation_type': self.relation_type,
+            'note':          self.note,
+            'source':        self.source,
+            'user_id':       self.user_id,
+            'added_at':      self.added_at.strftime('%Y-%m-%d %H:%M') if self.added_at else None,
+            'rule_id':       other.id if other else None,
+            'rule_title':    other.title if other else None,
+            'rule_format':   other.format if other else None,
+            'rule_uuid':     other.uuid if other else None,
+            'rule_is_deleted': other.is_deleted if other else True,
         }
 
 

@@ -41,7 +41,7 @@
     <user-list
         ref="userListRef"
         fetch-url="/account/users_data_table"
-        :current-user-id="{{ current_user.id }}"
+        :current-user-id="currentUserId"
         default-view="table"
         :initial-per-page="16"
         :sync-url="true"
@@ -138,6 +138,8 @@
     import UserList            from '/static/js/account/userList.js'
     import PaginationComponent from '/static/js/rule/paginationComponent.js'
     import UserChip            from '/static/js/components/UserChip.js'
+
+    const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }}
 
     createApp({
         delimiters: ['[[', ']]'],

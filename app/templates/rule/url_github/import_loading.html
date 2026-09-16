@@ -707,6 +707,29 @@
                         setTimeout(pollScan, 800)
                     } else {
                         status_site.value = 'Found ' + data.complete + ' rule(s).'
+
+                        // Refresh info_session BEFORE flipping is_finished:
+                        // fetchInfoSession() only ran once, at page mount, and
+                        // may have raced ahead of the background import
+                        // thread replacing session_th.info's placeholder
+                        // repo_url (the raw URL the user typed) with the
+                        // canonical GitHub html_url every imported rule's
+                        // Rule.source actually got stamped with (see
+                        // github_repo_metadata()/generic_repo_metadata() in
+                        // utils_import_update.py). <rule-list> below reads
+                        // :source="repoUrl", which prefers info_session's
+                        // repo_url — if that race happened, the table's
+                        // filter permanently pointed at a value no imported
+                        // rule's source matches, so it silently showed zero
+                        // rows despite a successful import. By the time
+                        // import is actually finished, session_th.info is
+                        // guaranteed to already be the canonical version
+                        // (it's set before start() begins processing), so a
+                        // plain re-fetch here is enough to self-heal it.
+                        try {
+                            info_session.value = await (await fetch('/rule/import_get_info_session/{{sid}}')).json()
+                        } catch { /* keep whatever info_session already had */ }
+
                         is_finished.value = true
                         pageReady.value = true
 

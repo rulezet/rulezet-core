@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <style>
 .rf-label-hint {
     display: inline-flex; align-items: center; justify-content: center;
@@ -119,6 +120,9 @@
                             <div class="col-md-4">
                                 <license-input v-model="manualLicense" required></license-input>
                                 <input type="hidden" name="license" :value="manualLicense">
+                                {% if form.license.errors %}
+                                <div class="invalid-feedback d-block">{{ form.license.errors[0] }}</div>
+                                {% endif %}
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group">
@@ -167,6 +171,23 @@
                             </div>
                         </div>
 
+                        <div class="row mb-4 text-start">
+                            <div class="col-12">
+                                <!-- No :rule-id — unlike ATT&CK above, linked-rule
+                                     changes here are NOT persisted immediately.
+                                     They only live in selectedRelatedRules until
+                                     the Save button submits this form, same as
+                                     Tags (see the hidden 'related_rules' field
+                                     below and edit_rule_core's sync_manual_relations). -->
+                                <related-rule-input
+                                    v-model="selectedRelatedRules"
+                                    label="Linked Rules"
+                                    csrf-token="{{ csrf_token() }}">
+                                </related-rule-input>
+                                <input type="hidden" name="related_rules" :value="JSON.stringify(selectedRelatedRules)">
+                            </div>
+                        </div>
+
                         <fieldset {% if restricted_edit %}disabled{% endif %} class="border-0 p-0 m-0" :class="{ 'rf-restricted': restrictedEdit }">
                         <div class="row g-3 mb-4">
                             <div class="col-md-12 text-start">
@@ -207,6 +228,7 @@
                                 {% if form.to_string.errors %}
                                 <div class="invalid-feedback d-block fw-bold mt-2">{{ form.to_string.errors[0] }}</div>
                                 {% endif %}
+                                <deep-validate-suricata :format="editFormat" :content="currentRule.to_string"></deep-validate-suricata>
                             </div>
                         </div>
                         </fieldset>
@@ -243,7 +265,11 @@
     import TagInput from '/static/js/tags/tagInput.js';
     import VersionPicker from '/static/js/tags/utils/versionPicker.js';
     import AttackInput from '/static/js/attack/attackInput.js';
+    import RelatedRuleInput from '/static/js/rule_relation/relatedRuleInput.js';
     import LicenseInput from '/static/js/components/LicenseInput.js';
+    import DeepValidateSuricata from '/static/js/rule/DeepValidateSuricata.js';
+
+    window.__deep_validation_available = {{ deep_validation_available | default(false) | tojson }};
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -253,7 +279,9 @@
             'tag-input': TagInput,
             'version-picker': VersionPicker,
             'attack-input': AttackInput,
+            'related-rule-input': RelatedRuleInput,
             'license-input': LicenseInput,
+            'deep-validate-suricata': DeepValidateSuricata,
         },
         setup() {
 
@@ -267,6 +295,7 @@
             const detectedVulnerabilities = ref([]);
             const selectedTags = ref([]);
             const selectedAttacks = ref([]);
+            const selectedRelatedRules = ref([]);
             const manualLicense = ref('{{ rule.license | e }}');
 
             const formData = reactive({
@@ -315,12 +344,24 @@
                 } catch { selectedAttacks.value = []; }
             }
 
+            async function initRelatedRules() {
+                try {
+                    const res = await fetch(`/rule_relation/rule/${ruleId.value}`);
+                    const data = await res.json();
+                    selectedRelatedRules.value = (data.outgoing || []).map(r => ({
+                        id: r.rule_id, title: r.rule_title, format: r.rule_format,
+                        relation_type: r.relation_type, relation_uuid: r.uuid,
+                    }));
+                } catch { selectedRelatedRules.value = []; }
+            }
+
             onMounted(async () => {
                 await Promise.all([
                     fetchCurrentRule(),
                     initRuleTags(),
                     fetchFormats(),
                     initAttacks(),
+                    initRelatedRules(),
                 ]);
             });
 
@@ -335,6 +376,7 @@
                 rules_formats,
                 selectedTags,
                 selectedAttacks,
+                selectedRelatedRules,
                 formData,
                 restrictedEdit,
             }

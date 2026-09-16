@@ -190,6 +190,7 @@ const LANG_ALIASES = {
     nse: 'lua',       // Nmap Script Engine = Lua
     sigma: 'yaml',    // Sigma rules are YAML
     atr: 'yaml',      // ATR format is YAML
+    kunai: 'yaml',    // Kunai rules are YAML
     splunk: 'yaml',   // Splunk Security Content detections are YAML (SPL lives in the 'search' field)
     wazuh: 'xml',     // Wazuh rules are XML
     zeek: 'text',
@@ -197,6 +198,7 @@ const LANG_ALIASES = {
     nova: 'text',
     kql: 'sql',       // KQL syntax is SQL-like
     elastic: 'toml',  // Elastic Security rules are TOML — see hljs-toml.js
+    sagan: 'suricata',// Sagan shares Suricata's exact header/option grammar (issue #61)
 }
 
 function detect_language(code, hint) {

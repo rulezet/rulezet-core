@@ -10,7 +10,7 @@ from flask import current_app
 
 from app import db
 
-from app.core.db_class.db import Rule, RuleStatus, UpdateResult, User, NewRule
+from app.core.db_class.db import Rule, RuleStatus, UpdateResult, User, NewRule, compute_rule_content_hash
 from app.features.rule import rule_core as RuleModel
 
 
@@ -848,7 +848,15 @@ def Check_for_rule_updates(rule_content, new_rule_content, rule_id):
 
     validation = rule_class.validate(new_rule_content)
 
-    if rule.to_string.strip() != validation.normalized_content.strip():
+    # A plain .strip() comparison flags a "change" on any whitespace/line-
+    # ending noise a re-exported/re-cloned source can introduce (CRLF vs LF,
+    # trailing blank lines, ...) even when the actual rule is byte-for-byte
+    # the same — at scale (a large source re-synced wholesale) this floods
+    # the pending-updates queue with thousands of no-op entries whose diff
+    # then shows no real content changed. Compare with the same normalized
+    # hash already used everywhere else in the app to decide "same content"
+    # (see compute_rule_content_hash / get_rule_by_content) instead.
+    if compute_rule_content_hash(rule.to_string) != compute_rule_content_hash(validation.normalized_content):
 
         # There is a change
         if validation.ok:
@@ -857,6 +865,36 @@ def Check_for_rule_updates(rule_content, new_rule_content, rule_id):
             already_update_by_user = RuleModel.was_last_history_manuel(rule.id)
             if already_update_by_user:
                 return {"message": "Already updated by user", "success": True, "new_content": None}, True, None
+
+            # Real-engine deep validation (issue #61 suggestion #1) — the
+            # grammar-only check above (suricataparser) accepts a rule
+            # syntax-shaped content the real Suricata engine still rejects
+            # (bad protocol, unknown decode event, unreachable file
+            # reference, ...). Suricata-only, opt-in (SURICATA_BINARY_PATH),
+            # and only on an actual content change (not every sync) — see
+            # docs/design/suricata_language_server_integration.md for why
+            # this is affordable per-changed-rule but not per full corpus.
+            if rule_format == 'suricata':
+                from app.features.rule.rule_format.deep_validate import (
+                    deep_validate_suricata_rule, is_deep_validation_configured,
+                )
+                if is_deep_validation_configured():
+                    deep_result = deep_validate_suricata_rule(validation.normalized_content)
+                    if deep_result.get('available') and deep_result.get('ok') is False:
+                        deep_errors = [d['message'] for d in deep_result.get('diagnostics', [])
+                                       if d.get('severity') == 1] or ['real engine rejected this content']
+                        return (
+                            {
+                                # Keep the exact "Update found but invalid:" prefix other
+                                # code paths string-match on (see syntax_valid/
+                                # update_available checks below and in process()).
+                                "message": f"Update found but invalid: [Suricata engine] {'; '.join(deep_errors)}",
+                                "success": True,  # Rule was found and diffed
+                                "new_content": None,  # No valid content to apply
+                            },
+                            True,
+                            None,
+                        )
 
             # Change is valid, return success
             return (

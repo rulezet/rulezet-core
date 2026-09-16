@@ -6,6 +6,9 @@ from suricataparser import parse_rules, parse_rule
 from app.features.rule.rule_core import get_rule
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult
 from app.core.utils.utils import detect_cve
+from app.features.rule.rule_format.available_format._snort_family_common import (
+    SURICATA_PROTOCOLS, SAGAN_ONLY_KEYWORDS, looks_like_sagan,
+)
 
 # ref A3: 'pass' silences the engine for matching traffic without referencing
 # the rule it overrides, and 'bypass' stops further inspection for the flow —
@@ -206,6 +209,16 @@ class SuricataRule(RuleType):
     def get_class(self) -> str:
         return "SuricataRule"
 
+    def detect(self, content: str) -> bool:
+        """
+        Distinguishes a Suricata rule from a Sagan one sharing the same
+        .rule/.rules extension and near-identical header/option grammar —
+        Sagan uses a protocol token ('any'/'syslog') and option keywords
+        (program:, parse_src_ip:, ...) that don't exist in real Suricata.
+        See docs/design/suricata_sagan_rework.md (issue #61).
+        """
+        return not looks_like_sagan(content)
+
     def validate(self, content: str, **kwargs) -> ValidationResult:
         """
         Validate Suricata rules.
@@ -214,6 +227,31 @@ class SuricataRule(RuleType):
             rules = parse_rules(content)
             if not rules:
                 return ValidationResult(ok=False, errors=["No valid Suricata rules found."], normalized_content=content)
+
+            # suricataparser only checks grammar (header/option shape), not
+            # whether the protocol/keywords are actually real in Suricata —
+            # a Sagan rule ("alert any ... program:qdee; parse_src_ip:1;")
+            # parses fine at that level. Reject explicitly instead of
+            # silently accepting a mistagged rule (issue #61).
+            for rule in rules:
+                header_parts = (rule.header or '').split()
+                protocol = header_parts[0].lower() if header_parts else None
+                if protocol and protocol not in SURICATA_PROTOCOLS:
+                    return ValidationResult(
+                        ok=False,
+                        errors=[f'protocol "{protocol}" cannot be used in a signature — '
+                                f'if this is a Sagan rule, it should be imported as format=sagan.'],
+                        normalized_content=content,
+                    )
+                option_names = {opt.name.lower() for opt in rule.options}
+                sagan_keywords = option_names & SAGAN_ONLY_KEYWORDS
+                if sagan_keywords:
+                    return ValidationResult(
+                        ok=False,
+                        errors=[f"unknown rule keyword '{sorted(sagan_keywords)[0]}' — this is a Sagan-only "
+                                f"keyword; if this is a Sagan rule, it should be imported as format=sagan."],
+                        normalized_content=content,
+                    )
 
             risk = detect_suppression_risk(content)
             if risk['rejected']:

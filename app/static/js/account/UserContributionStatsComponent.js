@@ -1,4 +1,21 @@
 import ChartViewer from '/static/js/components/chart-viewer.js';
+import { MASCOT_ENABLED } from '/static/js/components/mascot.js';
+
+// Short, first-person, dry-humor lines matching Rulezy's established voice
+// elsewhere (chatbot greetings, 404 page, rule fixer) — picked at random so
+// a repeat badge-unlock visit doesn't say the exact same thing twice.
+const CONGRATS_LINES = [
+    "Nice, a new badge. I'd clap but I don't have hands.",
+    "Look at you go. I'm mildly impressed, which for me is a lot.",
+    "Achievement unlocked. Somewhere, a rule feels safer already.",
+    "Another one. At this rate you'll out-rank me and that's a personal problem.",
+    "I logged that. I log everything. It's kind of my thing.",
+];
+const ALL_BADGES_LINES = [
+    "Every badge. All of them. I have nothing left to give you except this sentence.",
+    "You cleared the whole shelf. I'm equal parts proud and slightly concerned.",
+    "That's the full set. I'm not crying, there's just dust in my circuits.",
+];
 
 const UserContributionStatsComponent = {
     components: { ChartViewer },
@@ -18,33 +35,41 @@ const UserContributionStatsComponent = {
             global_rank: null
         });
         const loading = Vue.ref(true);
+        const badgeCatalog = Vue.ref([]);   // full catalog — {key, name, description, icon, rulezy_pose}
+        const unlockedKeys = Vue.ref(new Set());
+        const congratsMessage = Vue.ref(null);
+        const congratsPose = Vue.ref('armcross');
+        const fxRoot = Vue.ref(null);
+        const mascotEnabled = MASCOT_ENABLED;
 
         const LEVEL_THRESHOLDS = {
             1: 0, 2: 500, 3: 15000, 4: 30000, 5: 50000, 10: 150000, 20: 300000, 100: 1500000
         };
-        const BADGE_POINTS = {
-            'Bronze Contributor': 1000,
-            'Silver Contributor': 10000,
-            'Gold Contributor': 50000,
-            'Curator Rookie':   { metric: 'suggestions_accepted', min: 5 },
-            'Quality Master':   { metric: 'suggestions_accepted', min: 25 }
+
+        const fetchBadgeCatalog = async () => {
+            try {
+                const res = await fetch('/account/badges_catalog');
+                if (!res.ok) return;
+                const data = await res.json();
+                badgeCatalog.value = data.badges || [];
+            } catch {}
         };
 
-        const getBadgeClass = (name) => {
-            if (name.includes('Master'))      return 'bg-danger text-white border border-light';
-            if (name.includes('Gold'))        return 'bg-warning text-dark border border-dark';
-            if (name.includes('Silver'))      return 'bg-secondary text-white border border-light';
-            if (name.includes('Bronze'))      return 'bg-bronze text-white border border-dark';
-            if (name.includes('Curator'))     return 'bg-info text-white';
-            if (name.includes('Quality'))     return 'bg-success text-white';
-            return 'bg-dark text-white';
-        };
-        const getBadgeIcon = (name) => {
-            if (name.includes('Contributor')) return 'fas fa-star';
-            if (name.includes('Master'))      return 'fas fa-brain';
-            if (name.includes('Curator'))     return 'fas fa-glasses';
-            if (name.includes('Quality'))     return 'fas fa-cogs';
-            return 'fas fa-certificate';
+        const FX_COLORS = ['#0d6efd', '#ffd447', '#ff6b8f', '#4be08a', '#a06bff', '#ff8f6b'];
+        const launchConfetti = () => {
+            const fx = fxRoot.value;
+            if (!fx) return;
+            fx.innerHTML = '';
+            for (let i = 0; i < 70; i++) {
+                const piece = document.createElement('div');
+                piece.className = 'ud-confetti';
+                piece.style.left = Math.random() * 100 + '%';
+                piece.style.background = FX_COLORS[i % FX_COLORS.length];
+                piece.style.animationDelay = (Math.random() * 1.2) + 's';
+                piece.style.animationDuration = (2.4 + Math.random() * 1.8) + 's';
+                fx.appendChild(piece);
+            }
+            setTimeout(() => { if (fx) fx.innerHTML = ''; }, 4500);
         };
 
         const fetchUserStats = async () => {
@@ -54,24 +79,34 @@ const UserContributionStatsComponent = {
                 if (!res.ok) return;
                 const data = await res.json();
                 userStats.value = data.user_stats;
+
+                const badges = data.badges || [];
+                unlockedKeys.value = new Set(badges.map(b => b.badge_key));
+                const newBadges = data.new_badges || [];
+
+                if (mascotEnabled && newBadges.length && badgeCatalog.value.length) {
+                    const firstNew = badgeCatalog.value.find(b => b.key === newBadges[0]);
+                    congratsPose.value = firstNew?.rulezy_pose || 'armcross';
+                    const names = newBadges
+                        .map(k => badgeCatalog.value.find(b => b.key === k)?.name)
+                        .filter(Boolean).join(', ');
+                    const line = CONGRATS_LINES[Math.floor(Math.random() * CONGRATS_LINES.length)];
+                    congratsMessage.value = `${line} <strong>${names}</strong>`;
+                }
+
+                if (mascotEnabled && badgeCatalog.value.length && unlockedKeys.value.size >= badgeCatalog.value.length) {
+                    congratsPose.value = 'armcross';
+                    congratsMessage.value = ALL_BADGES_LINES[Math.floor(Math.random() * ALL_BADGES_LINES.length)];
+                    Vue.nextTick(launchConfetti);
+                }
             } catch {}
             finally { loading.value = false; }
         };
 
-        const computedBadges = Vue.computed(() => {
-            if (userStats.value.total_points === undefined) return [];
-            const badges = [];
-            const stats = userStats.value;
-            for (const [name, threshold] of Object.entries(BADGE_POINTS)) {
-                if (typeof threshold === 'number') {
-                    if (stats.total_points >= threshold) badges.push({ name, description: `Reached ${threshold.toLocaleString()} pts.` });
-                } else if (stats[threshold.metric] >= threshold.min) {
-                    badges.push({ name, description: `${threshold.min}+ ${threshold.metric}.` });
-                }
-            }
-            if (stats.current_level >= 5) badges.push({ name: 'Veteran Contributor', description: 'Level 5+.' });
-            return badges.sort((a, b) => a.name.localeCompare(b.name));
-        });
+        const catalogWithState = Vue.computed(() =>
+            badgeCatalog.value.map(b => ({ ...b, unlocked: unlockedKeys.value.has(b.key) }))
+        );
+        const unlockedCount = Vue.computed(() => unlockedKeys.value.size);
 
         const nextLevelThreshold = Vue.computed(() => {
             const lvl = userStats.value.current_level;
@@ -137,15 +172,29 @@ const UserContributionStatsComponent = {
             }]
         }));
 
-        Vue.onMounted(fetchUserStats);
+        const hasContributionData = Vue.computed(() => {
+            const s = userStats.value;
+            return !!(s && (
+                (s.rules_owned ?? 0) > 0 || (s.suggestions_accepted ?? 0) > 0 ||
+                (s.rules_liked ?? 0) > 0 || (s.consecutive_days_active ?? 0) > 0 ||
+                (s.rules_popular_score ?? 0) > 0
+            ));
+        });
+
+        Vue.onMounted(async () => {
+            await fetchBadgeCatalog();
+            await fetchUserStats();
+        });
 
         return {
-            userStats, loading, computedBadges, nextLevelThreshold, progressPercentage,
-            getBadgeClass, getBadgeIcon, levelGaugeData, radarData, pointsBarData
+            userStats, loading, nextLevelThreshold, progressPercentage,
+            levelGaugeData, radarData, pointsBarData, hasContributionData,
+            catalogWithState, unlockedCount, congratsMessage, congratsPose, fxRoot, mascotEnabled,
         };
     },
     template: `
 <div class="ud-charts-root">
+    <div ref="fxRoot" class="ud-fx"></div>
 
     <div v-if="loading" class="ud-charts-loader">
         <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem;"></div>
@@ -153,6 +202,12 @@ const UserContributionStatsComponent = {
     </div>
 
     <div v-else-if="userStats.total_points !== undefined">
+
+        <!-- Rulezy congrats — shown once when a badge was just unlocked, or all badges are complete -->
+        <div v-if="mascotEnabled && congratsMessage" class="ud-rulezy-congrats">
+            <img :src="'/static/images/rulezy/' + congratsPose + '.png'" alt="Rulezy">
+            <div class="ud-rulezy-congrats__text" v-html="congratsMessage"></div>
+        </div>
 
         <!-- KPI row -->
         <div class="row g-3 mb-4">
@@ -269,7 +324,7 @@ const UserContributionStatsComponent = {
         </div>
 
         <!-- Row 2: Radar + Bar -->
-        <div class="row g-3 mb-4">
+        <div v-if="hasContributionData" class="row g-3 mb-4">
             <div class="col-lg-5">
                 <div class="ud-chart-card ud-chart-card--accent-purple">
                     <chart-viewer :data="radarData" views="radar" height="380px"></chart-viewer>
@@ -281,26 +336,35 @@ const UserContributionStatsComponent = {
                 </div>
             </div>
         </div>
+        <p v-else class="text-muted mb-4 text-center py-4">
+            <i class="fas fa-chart-simple me-2 opacity-25"></i>No contributions yet — this will fill in once there's activity to show.
+        </p>
 
         <!-- Section header -->
         <div class="ud-section-header mb-3">
             <i class="fas fa-award ud-section-icon"></i>
             <div>
                 <div class="ud-section-title">Earned Badges</div>
-                <div class="ud-section-sub">[[ computedBadges.length ]] badge[[ computedBadges.length !== 1 ? 's' : '' ]] unlocked</div>
+                <div class="ud-section-sub">[[ unlockedCount ]] of [[ catalogWithState.length ]] badge[[ catalogWithState.length !== 1 ? 's' : '' ]] unlocked</div>
             </div>
         </div>
 
         <!-- Badges -->
         <div class="ud-badges-card">
-            <template v-if="computedBadges.length">
-                <span v-for="badge in computedBadges" :key="badge.name"
-                      class="badge rounded-pill p-2 fs-6 me-2 mb-2"
-                      :class="getBadgeClass(badge.name)"
-                      :title="badge.description">
-                    <i :class="getBadgeIcon(badge.name) + ' me-1'"></i>[[ badge.name ]]
-                </span>
-            </template>
+            <div v-if="catalogWithState.length" class="ud-badge-grid">
+                <div v-for="badge in catalogWithState" :key="badge.key"
+                     class="ud-badge-tile" :class="['ud-badge-tile--' + badge.color, { 'ud-badge-tile--locked': !badge.unlocked }]"
+                     :title="badge.description">
+                    <div class="ud-badge-tile__icon-wrap">
+                        <img v-if="mascotEnabled" :src="'/static/images/rulezy/' + badge.rulezy_pose + '.png'" alt="" class="ud-badge-tile__icon">
+                        <i v-else :class="'fas ' + badge.icon" :style="{ color: badge.unlocked ? '' : 'var(--subtle-text-color)', fontSize: '1.2rem' }"></i>
+                    </div>
+                    <div>
+                        <div class="ud-badge-tile__name">[[ badge.name ]]</div>
+                        <div class="ud-badge-tile__desc">[[ badge.description ]]</div>
+                    </div>
+                </div>
+            </div>
             <p v-else class="text-muted mb-0 text-center py-3">
                 <i class="fas fa-medal me-2 opacity-25"></i>No badges yet — keep contributing!
             </p>

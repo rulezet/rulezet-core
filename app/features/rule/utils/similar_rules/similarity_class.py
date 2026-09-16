@@ -441,3 +441,13 @@ class Similarity_class:
             )
         except Exception:
             pass
+
+        # RuleSimilarity has no incremental per-rule write path GithubRepo's
+        # usual create/edit/delete sites can hook into (it's this batch job
+        # that produces it) — resync GithubRepo.conflict_count once here,
+        # right after the run that actually changed RuleSimilarity.
+        try:
+            from app.features.rule.github_repo_core import sync_conflict_counts
+            sync_conflict_counts()
+        except Exception:
+            pass

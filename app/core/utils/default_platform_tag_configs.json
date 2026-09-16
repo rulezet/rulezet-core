@@ -2,43 +2,43 @@
   "Platforms": [
     {
       "label": "Windows",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"Win32\"",
+      "tag_name": "misp-galaxy:operating-system=\"Windows\"",
       "regex": "\\bwindows\\b|\\bwin32\\b",
       "enabled": true
     },
     {
       "label": "Linux",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"Linux\"",
+      "tag_name": "misp-galaxy:operating-system=\"Linux\"",
       "regex": "\\blinux\\b",
       "enabled": true
     },
     {
       "label": "macOS",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"MacOS_X\"",
+      "tag_name": "misp-galaxy:operating-system=\"macOS\"",
       "regex": "\\bmac ?os( ?x)?\\b|\\bdarwin\\b",
       "enabled": true
     },
     {
       "label": "Android",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"AndroidOS\"",
+      "tag_name": "misp-galaxy:operating-system=\"Android\"",
       "regex": "\\bandroid\\b",
       "enabled": true
     },
     {
       "label": "Unix",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"Unix\"",
+      "tag_name": "misp-galaxy:operating-system=\"UNIX\"",
       "regex": "\\bunix\\b",
       "enabled": true
     },
     {
       "label": "FreeBSD",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"FreeBSD\"",
+      "tag_name": "misp-galaxy:operating-system=\"FreeBSD\"",
       "regex": "\\bfreebsd\\b",
       "enabled": true
     },
     {
       "label": "Solaris",
-      "tag_name": "ms-caro-malware-full:malware-platform=\"Solaris\"",
+      "tag_name": "misp-galaxy:operating-system=\"Oracle Solaris\"",
       "regex": "\\bsolaris\\b",
       "enabled": true
     }
@@ -300,6 +300,664 @@
       "label": "Black Basta",
       "tag_name": "misp-galaxy:ransomware=\"BlackBasta\"",
       "regex": "\\bblack.?basta\\b",
+      "enabled": true
+    }
+  ],
+  "Threat Actors": [
+    {
+      "label": "APT1",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT1 - G0006\"",
+      "regex": "\\bAPT1\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT3",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT3 - G0022\"",
+      "regex": "\\bAPT3\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT12",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT12 - G0005\"",
+      "regex": "\\bAPT12\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT16",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT16 - G0023\"",
+      "regex": "\\bAPT16\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT17",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT17 - G0025\"",
+      "regex": "\\bAPT17\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT18",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT18 - G0026\"",
+      "regex": "\\bAPT18\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT28",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT28 - G0007\"",
+      "regex": "\\bAPT28\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT29",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT29 - G0016\"",
+      "regex": "\\bAPT29\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT30",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT30 - G0013\"",
+      "regex": "\\bAPT30\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT32",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT32 - G0050\"",
+      "regex": "\\bAPT32\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT33",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT33 - G0064\"",
+      "regex": "\\bAPT33\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT34",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT34 - G0057\"",
+      "regex": "\\bAPT34\\b",
+      "enabled": true
+    },
+    {
+      "label": "APT37",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"APT37 - G0067\"",
+      "regex": "\\bAPT37\\b",
+      "enabled": true
+    },
+    {
+      "label": "Lazarus Group",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Lazarus Group - G0032\"",
+      "regex": "\\bLazarus[\\s-]?Group\\b|\\blazarus\\b",
+      "enabled": true
+    },
+    {
+      "label": "FIN6",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"FIN6 - G0037\"",
+      "regex": "\\bFIN6\\b",
+      "enabled": true
+    },
+    {
+      "label": "FIN7",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"FIN7 - G0046\"",
+      "regex": "\\bFIN7\\b",
+      "enabled": true
+    },
+    {
+      "label": "FIN8",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"FIN8 - G0061\"",
+      "regex": "\\bFIN8\\b",
+      "enabled": true
+    },
+    {
+      "label": "Carbanak",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Carbanak - G0008\"",
+      "regex": "\\bCarbanak\\b",
+      "enabled": true
+    },
+    {
+      "label": "Turla",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Turla - G0010\"",
+      "regex": "\\bTurla\\b",
+      "enabled": true
+    },
+    {
+      "label": "Sandworm Team",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Sandworm Team - G0034\"",
+      "regex": "\\bSandworm[\\s-]?Team\\b|\\bsandworm\\b",
+      "enabled": true
+    },
+    {
+      "label": "MuddyWater",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"MuddyWater - G0069\"",
+      "regex": "\\bMuddyWater\\b",
+      "enabled": true
+    },
+    {
+      "label": "OilRig",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"OilRig - G0049\"",
+      "regex": "\\bOilRig\\b",
+      "enabled": true
+    },
+    {
+      "label": "Equation Group",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Equation - G0020\"",
+      "regex": "\\bEquation[\\s-]?Group\\b|\\bequation\\b.{0,15}group",
+      "enabled": true
+    },
+    {
+      "label": "Dragonfly",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Dragonfly - G0035\"",
+      "regex": "\\bDragonfly\\b",
+      "enabled": true
+    },
+    {
+      "label": "Charming Kitten",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Charming Kitten - G0058\"",
+      "regex": "\\bCharming[\\s-]?Kitten\\b",
+      "enabled": true
+    },
+    {
+      "label": "Magic Hound",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Magic Hound - G0059\"",
+      "regex": "\\bMagic[\\s-]?Hound\\b",
+      "enabled": true
+    },
+    {
+      "label": "Gamaredon",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Gamaredon Group - G0047\"",
+      "regex": "\\bGamaredon\\b|\\bgamaredon\\b",
+      "enabled": true
+    },
+    {
+      "label": "Winnti",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Winnti Group - G0044\"",
+      "regex": "\\bWinnti\\b|\\bwinnti\\b",
+      "enabled": true
+    },
+    {
+      "label": "Axiom",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Axiom - G0001\"",
+      "regex": "\\bAxiom\\b",
+      "enabled": true
+    },
+    {
+      "label": "Darkhotel",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"Darkhotel - G0012\"",
+      "regex": "\\bDarkhotel\\b",
+      "enabled": true
+    },
+    {
+      "label": "menuPass",
+      "tag_name": "misp-galaxy:mitre-enterprise-attack-intrusion-set=\"menuPass - G0045\"",
+      "regex": "\\bmenuPass\\b",
+      "enabled": true
+    }
+  ],
+  "Banking Malware": [
+    {
+      "label": "Zeus",
+      "tag_name": "misp-galaxy:banker=\"Zeus\"",
+      "regex": "\\bZeus\\b",
+      "enabled": true
+    },
+    {
+      "label": "Dridex",
+      "tag_name": "misp-galaxy:banker=\"Dridex\"",
+      "regex": "\\bDridex\\b",
+      "enabled": true
+    },
+    {
+      "label": "Trickbot",
+      "tag_name": "misp-galaxy:banker=\"Trickbot\"",
+      "regex": "\\bTrickbot\\b",
+      "enabled": true
+    },
+    {
+      "label": "Qakbot",
+      "tag_name": "misp-galaxy:banker=\"Qakbot\"",
+      "regex": "\\bQakbot\\b",
+      "enabled": true
+    },
+    {
+      "label": "IcedID",
+      "tag_name": "misp-galaxy:banker=\"IcedID\"",
+      "regex": "\\bIcedID\\b",
+      "enabled": true
+    },
+    {
+      "label": "DanaBot",
+      "tag_name": "misp-galaxy:banker=\"DanaBot\"",
+      "regex": "\\bDanaBot\\b",
+      "enabled": true
+    },
+    {
+      "label": "Gozi",
+      "tag_name": "misp-galaxy:banker=\"Gozi\"",
+      "regex": "\\bGozi\\b",
+      "enabled": true
+    },
+    {
+      "label": "Gozi ISFB",
+      "tag_name": "misp-galaxy:banker=\"Gozi ISFB\"",
+      "regex": "\\bGozi[\\s-]?ISFB\\b",
+      "enabled": true
+    },
+    {
+      "label": "Dyre",
+      "tag_name": "misp-galaxy:banker=\"Dyre\"",
+      "regex": "\\bDyre\\b",
+      "enabled": true
+    },
+    {
+      "label": "Tinba",
+      "tag_name": "misp-galaxy:banker=\"Tinba\"",
+      "regex": "\\bTinba\\b",
+      "enabled": true
+    },
+    {
+      "label": "Ramnit",
+      "tag_name": "misp-galaxy:banker=\"Ramnit\"",
+      "regex": "\\bRamnit\\b",
+      "enabled": true
+    },
+    {
+      "label": "SpyEye",
+      "tag_name": "misp-galaxy:banker=\"SpyEye\"",
+      "regex": "\\bSpyEye\\b",
+      "enabled": true
+    },
+    {
+      "label": "Citadel",
+      "tag_name": "misp-galaxy:banker=\"Citadel\"",
+      "regex": "\\bCitadel\\b",
+      "enabled": true
+    },
+    {
+      "label": "Kronos",
+      "tag_name": "misp-galaxy:banker=\"Kronos\"",
+      "regex": "\\bKronos\\b",
+      "enabled": true
+    },
+    {
+      "label": "GozNym",
+      "tag_name": "misp-galaxy:banker=\"GozNym\"",
+      "regex": "\\bGozNym\\b",
+      "enabled": true
+    },
+    {
+      "label": "Panda Banker",
+      "tag_name": "misp-galaxy:banker=\"Panda Banker\"",
+      "regex": "\\bPanda[\\s-]?Banker\\b",
+      "enabled": true
+    }
+  ],
+  "Backdoors & RATs": [
+    {
+      "label": "SUNBURST",
+      "tag_name": "misp-galaxy:backdoor=\"SUNBURST\"",
+      "regex": "\\bSUNBURST\\b",
+      "enabled": true
+    },
+    {
+      "label": "BazarBackdoor",
+      "tag_name": "misp-galaxy:backdoor=\"BazarBackdoor\"",
+      "regex": "\\bBazarBackdoor\\b",
+      "enabled": true
+    },
+    {
+      "label": "WellMess",
+      "tag_name": "misp-galaxy:backdoor=\"WellMess\"",
+      "regex": "\\bWellMess\\b",
+      "enabled": true
+    },
+    {
+      "label": "ServHelper",
+      "tag_name": "misp-galaxy:backdoor=\"ServHelper\"",
+      "regex": "\\bServHelper\\b",
+      "enabled": true
+    },
+    {
+      "label": "BRICKSTORM",
+      "tag_name": "misp-galaxy:backdoor=\"BRICKSTORM\"",
+      "regex": "\\bBRICKSTORM\\b",
+      "enabled": true
+    },
+    {
+      "label": "PowerMagic",
+      "tag_name": "misp-galaxy:backdoor=\"PowerMagic\"",
+      "regex": "\\bPowerMagic\\b",
+      "enabled": true
+    },
+    {
+      "label": "Merdoor",
+      "tag_name": "misp-galaxy:backdoor=\"Merdoor\"",
+      "regex": "\\bMerdoor\\b",
+      "enabled": true
+    },
+    {
+      "label": "POOLRAT",
+      "tag_name": "misp-galaxy:backdoor=\"POOLRAT\"",
+      "regex": "\\bPOOLRAT\\b",
+      "enabled": true
+    },
+    {
+      "label": "BPFDoor",
+      "tag_name": "misp-galaxy:backdoor=\"BPFDoor\"",
+      "regex": "\\bBPFDoor\\b",
+      "enabled": true
+    },
+    {
+      "label": "Rising Sun",
+      "tag_name": "misp-galaxy:backdoor=\"Rising Sun\"",
+      "regex": "\\bRising[\\s-]?Sun\\b",
+      "enabled": true
+    },
+    {
+      "label": "Asruex",
+      "tag_name": "misp-galaxy:backdoor=\"Asruex\"",
+      "regex": "\\bAsruex\\b",
+      "enabled": true
+    },
+    {
+      "label": "PHANTOMNET",
+      "tag_name": "misp-galaxy:backdoor=\"PHANTOMNET\"",
+      "regex": "\\bPHANTOMNET\\b",
+      "enabled": true
+    }
+  ],
+  "Exploit Kits": [
+    {
+      "label": "RIG",
+      "tag_name": "misp-galaxy:exploit-kit=\"RIG\"",
+      "regex": "\\bRIG\\b",
+      "enabled": true
+    },
+    {
+      "label": "Angler",
+      "tag_name": "misp-galaxy:exploit-kit=\"Angler\"",
+      "regex": "\\bAngler\\b",
+      "enabled": true
+    },
+    {
+      "label": "Neutrino",
+      "tag_name": "misp-galaxy:exploit-kit=\"Neutrino\"",
+      "regex": "\\bNeutrino\\b",
+      "enabled": true
+    },
+    {
+      "label": "Magnitude",
+      "tag_name": "misp-galaxy:exploit-kit=\"Magnitude\"",
+      "regex": "\\bMagnitude\\b",
+      "enabled": true
+    },
+    {
+      "label": "Fallout",
+      "tag_name": "misp-galaxy:exploit-kit=\"Fallout\"",
+      "regex": "\\bFallout\\b",
+      "enabled": true
+    },
+    {
+      "label": "Sundown",
+      "tag_name": "misp-galaxy:exploit-kit=\"Sundown\"",
+      "regex": "\\bSundown\\b",
+      "enabled": true
+    },
+    {
+      "label": "Nuclear",
+      "tag_name": "misp-galaxy:exploit-kit=\"Nuclear\"",
+      "regex": "\\bNuclear\\b",
+      "enabled": true
+    },
+    {
+      "label": "BlackHole",
+      "tag_name": "misp-galaxy:exploit-kit=\"BlackHole\"",
+      "regex": "\\bBlackHole\\b",
+      "enabled": true
+    },
+    {
+      "label": "Astrum",
+      "tag_name": "misp-galaxy:exploit-kit=\"Astrum\"",
+      "regex": "\\bAstrum\\b",
+      "enabled": true
+    },
+    {
+      "label": "Underminer",
+      "tag_name": "misp-galaxy:exploit-kit=\"Underminer\"",
+      "regex": "\\bUnderminer\\b",
+      "enabled": true
+    },
+    {
+      "label": "Spelevo",
+      "tag_name": "misp-galaxy:exploit-kit=\"Spelevo\"",
+      "regex": "\\bSpelevo\\b",
+      "enabled": true
+    },
+    {
+      "label": "GrandSoft",
+      "tag_name": "misp-galaxy:exploit-kit=\"GrandSoft\"",
+      "regex": "\\bGrandSoft\\b",
+      "enabled": true
+    }
+  ],
+  "Wipers": [
+    {
+      "label": "NotPetya",
+      "tag_name": "misp-galaxy:wiper=\"NotPetya\"",
+      "regex": "\\bNotPetya\\b",
+      "enabled": true
+    },
+    {
+      "label": "Shamoon",
+      "tag_name": "misp-galaxy:wiper=\"Shamoon\"",
+      "regex": "\\bShamoon\\b",
+      "enabled": true
+    },
+    {
+      "label": "WhisperGate",
+      "tag_name": "misp-galaxy:wiper=\"WhisperGate\"",
+      "regex": "\\bWhisperGate\\b",
+      "enabled": true
+    },
+    {
+      "label": "HermeticWiper",
+      "tag_name": "misp-galaxy:wiper=\"HermeticWiper\"",
+      "regex": "\\bHermeticWiper\\b",
+      "enabled": true
+    },
+    {
+      "label": "CaddyWiper",
+      "tag_name": "misp-galaxy:wiper=\"CaddyWiper\"",
+      "regex": "\\bCaddyWiper\\b",
+      "enabled": true
+    },
+    {
+      "label": "IsaacWiper",
+      "tag_name": "misp-galaxy:wiper=\"IsaacWiper\"",
+      "regex": "\\bIsaacWiper\\b",
+      "enabled": true
+    },
+    {
+      "label": "KillDisk",
+      "tag_name": "misp-galaxy:wiper=\"KillDisk\"",
+      "regex": "\\bKillDisk\\b",
+      "enabled": true
+    },
+    {
+      "label": "StoneDrill",
+      "tag_name": "misp-galaxy:wiper=\"StoneDrill\"",
+      "regex": "\\bStoneDrill\\b",
+      "enabled": true
+    },
+    {
+      "label": "Destover",
+      "tag_name": "misp-galaxy:wiper=\"Destover\"",
+      "regex": "\\bDestover\\b",
+      "enabled": true
+    },
+    {
+      "label": "AcidRain",
+      "tag_name": "misp-galaxy:wiper=\"AcidRain\"",
+      "regex": "\\bAcidRain\\b",
+      "enabled": true
+    },
+    {
+      "label": "FoxBlade",
+      "tag_name": "misp-galaxy:wiper=\"FoxBlade\"",
+      "regex": "\\bFoxBlade\\b",
+      "enabled": true
+    }
+  ],
+  "Infostealers": [
+    {
+      "label": "AZORult",
+      "tag_name": "misp-galaxy:stealer=\"AZORult\"",
+      "regex": "\\bAZORult\\b",
+      "enabled": true
+    },
+    {
+      "label": "Vidar",
+      "tag_name": "misp-galaxy:stealer=\"Vidar\"",
+      "regex": "\\bVidar\\b",
+      "enabled": true
+    },
+    {
+      "label": "Rhadamanthys",
+      "tag_name": "misp-galaxy:stealer=\"Rhadamanthys\"",
+      "regex": "\\bRhadamanthys\\b",
+      "enabled": true
+    },
+    {
+      "label": "Mars Stealer",
+      "tag_name": "misp-galaxy:stealer=\"Mars Stealer\"",
+      "regex": "\\bMars[\\s-]?Stealer\\b",
+      "enabled": true
+    },
+    {
+      "label": "Oski Stealer",
+      "tag_name": "misp-galaxy:stealer=\"Oski Stealer\"",
+      "regex": "\\bOski[\\s-]?Stealer\\b",
+      "enabled": true
+    },
+    {
+      "label": "FormBook",
+      "tag_name": "misp-galaxy:stealer=\"FormBook\"",
+      "regex": "\\bFormBook\\b",
+      "enabled": true
+    },
+    {
+      "label": "Ave Maria",
+      "tag_name": "misp-galaxy:stealer=\"Ave Maria\"",
+      "regex": "\\bAve[\\s-]?Maria\\b|\\bavemaria\\b",
+      "enabled": true
+    },
+    {
+      "label": "Prynt Stealer",
+      "tag_name": "misp-galaxy:stealer=\"Prynt Stealer\"",
+      "regex": "\\bPrynt[\\s-]?Stealer\\b",
+      "enabled": true
+    },
+    {
+      "label": "SnakeStealer",
+      "tag_name": "misp-galaxy:stealer=\"SnakeStealer\"",
+      "regex": "\\bSnakeStealer\\b",
+      "enabled": true
+    }
+  ],
+  "Botnets": [
+    {
+      "label": "Mirai",
+      "tag_name": "misp-galaxy:botnet=\"Mirai\"",
+      "regex": "\\bMirai\\b",
+      "enabled": true
+    },
+    {
+      "label": "Conficker",
+      "tag_name": "misp-galaxy:botnet=\"Conficker\"",
+      "regex": "\\bConficker\\b",
+      "enabled": true
+    },
+    {
+      "label": "Necurs",
+      "tag_name": "misp-galaxy:botnet=\"Necurs\"",
+      "regex": "\\bNecurs\\b",
+      "enabled": true
+    },
+    {
+      "label": "Andromeda",
+      "tag_name": "misp-galaxy:botnet=\"Andromeda\"",
+      "regex": "\\bAndromeda\\b",
+      "enabled": true
+    },
+    {
+      "label": "Gafgyt",
+      "tag_name": "misp-galaxy:botnet=\"Gafgyt\"",
+      "regex": "\\bGafgyt\\b",
+      "enabled": true
+    },
+    {
+      "label": "Qbot",
+      "tag_name": "misp-galaxy:botnet=\"Qbot\"",
+      "regex": "\\bQbot\\b",
+      "enabled": true
+    },
+    {
+      "label": "Glupteba",
+      "tag_name": "misp-galaxy:botnet=\"Glupteba\"",
+      "regex": "\\bGlupteba\\b",
+      "enabled": true
+    },
+    {
+      "label": "Kelihos",
+      "tag_name": "misp-galaxy:botnet=\"Kelihos\"",
+      "regex": "\\bKelihos\\b",
+      "enabled": true
+    },
+    {
+      "label": "Trinoo",
+      "tag_name": "misp-galaxy:botnet=\"Trinoo\"",
+      "regex": "\\bTrinoo\\b",
+      "enabled": true
+    },
+    {
+      "label": "MyDoom",
+      "tag_name": "misp-galaxy:botnet=\"MyDoom\"",
+      "regex": "\\bMyDoom\\b",
+      "enabled": true
+    },
+    {
+      "label": "Waledac",
+      "tag_name": "misp-galaxy:botnet=\"Waledac\"",
+      "regex": "\\bWaledac\\b",
+      "enabled": true
+    },
+    {
+      "label": "Rustock",
+      "tag_name": "misp-galaxy:botnet=\"Rustock\"",
+      "regex": "\\bRustock\\b",
+      "enabled": true
+    },
+    {
+      "label": "Srizbi",
+      "tag_name": "misp-galaxy:botnet=\"Srizbi\"",
+      "regex": "\\bSrizbi\\b",
+      "enabled": true
+    }
+  ],
+  "Cryptominers": [
+    {
+      "label": "Lemon Duck",
+      "tag_name": "misp-galaxy:cryptominers=\"Lemon Duck\"",
+      "regex": "\\bLemon[\\s-]?Duck\\b",
+      "enabled": true
+    },
+    {
+      "label": "WannaMine",
+      "tag_name": "misp-galaxy:cryptominers=\"WannaMine\"",
+      "regex": "\\bWannaMine\\b",
+      "enabled": true
+    },
+    {
+      "label": "Blue Mockingbird",
+      "tag_name": "misp-galaxy:cryptominers=\"Blue Mockingbird Cryptominer\"",
+      "regex": "\\bBlue[\\s-]?Mockingbird\\b|\\bblue.?mockingbird\\b",
       "enabled": true
     }
   ]

@@ -817,3 +817,166 @@ body.dark-mode .user-rules-management-component .column-filter-options {
     padding: 1.2rem 1.4rem;
     display: flex; flex-wrap: wrap; align-content: flex-start;
 }
+
+/* ── Badge grid (catalog view — locked + unlocked) ─────────────── */
+.ud-badge-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: .75rem;
+    width: 100%;
+}
+.ud-badge-tile {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .65rem .8rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--border-color);
+    background: var(--light-bg-color);
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    will-change: transform;
+}
+.ud-badge-tile--locked { opacity: .45; filter: grayscale(1); }
+.ud-badge-tile__icon-wrap {
+    width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+}
+.ud-badge-tile__icon {
+    width: 30px; height: 30px; object-fit: contain;
+}
+.ud-badge-tile__name { font-weight: 700; font-size: .82rem; color: var(--text-color); }
+.ud-badge-tile__desc { font-size: .72rem; color: var(--subtle-text-color); }
+
+/* Accent per badge color — left border + icon chip tint, unlocked only.
+   Each color also gets its own hover animation so no two badges move the
+   same way when you mouse over them. */
+.ud-badge-tile--blue:not(.ud-badge-tile--locked)   { border-left-color: #0d6efd; }
+.ud-badge-tile--teal:not(.ud-badge-tile--locked)   { border-left-color: #0dcaf0; }
+.ud-badge-tile--green:not(.ud-badge-tile--locked)  { border-left-color: #198754; }
+.ud-badge-tile--gold:not(.ud-badge-tile--locked)   { border-left-color: #d4a700; }
+.ud-badge-tile--purple:not(.ud-badge-tile--locked) { border-left-color: #6f42c1; }
+.ud-badge-tile--orange:not(.ud-badge-tile--locked) { border-left-color: #fd7e14; }
+
+.ud-badge-tile--blue   .ud-badge-tile__icon-wrap { background: rgba(13,110,253,.12); }
+.ud-badge-tile--teal   .ud-badge-tile__icon-wrap { background: rgba(13,202,240,.12); }
+.ud-badge-tile--green  .ud-badge-tile__icon-wrap { background: rgba(25,135,84,.12); }
+.ud-badge-tile--gold   .ud-badge-tile__icon-wrap { background: rgba(255,193,7,.15); }
+.ud-badge-tile--purple .ud-badge-tile__icon-wrap { background: rgba(111,66,193,.12); }
+.ud-badge-tile--orange .ud-badge-tile__icon-wrap { background: rgba(253,126,20,.12); }
+
+.ud-badge-tile--blue.ud-badge-tile--locked .ud-badge-tile__icon-wrap,
+.ud-badge-tile--teal.ud-badge-tile--locked .ud-badge-tile__icon-wrap,
+.ud-badge-tile--green.ud-badge-tile--locked .ud-badge-tile__icon-wrap,
+.ud-badge-tile--gold.ud-badge-tile--locked .ud-badge-tile__icon-wrap,
+.ud-badge-tile--purple.ud-badge-tile--locked .ud-badge-tile__icon-wrap,
+.ud-badge-tile--orange.ud-badge-tile--locked .ud-badge-tile__icon-wrap { background: var(--border-color); }
+
+.ud-badge-tile--blue:not(.ud-badge-tile--locked):hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 18px rgba(13,110,253,.25);
+    border-color: #0d6efd;
+}
+.ud-badge-tile--teal:not(.ud-badge-tile--locked):hover {
+    animation: udBadgeWiggle .5s ease;
+    box-shadow: 0 8px 18px rgba(13,202,240,.25);
+    border-color: #0dcaf0;
+}
+.ud-badge-tile--green:not(.ud-badge-tile--locked):hover {
+    animation: udBadgeBounce .5s ease;
+    box-shadow: 0 8px 18px rgba(25,135,84,.25);
+    border-color: #198754;
+}
+.ud-badge-tile--gold:not(.ud-badge-tile--locked)   { position: relative; overflow: hidden; }
+.ud-badge-tile--gold:not(.ud-badge-tile--locked):hover {
+    box-shadow: 0 8px 18px rgba(212,167,0,.3);
+    border-color: #d4a700;
+}
+.ud-badge-tile--gold:not(.ud-badge-tile--locked):hover::after {
+    content: '';
+    position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255,255,255,.55), transparent);
+    animation: udBadgeShine .8s ease;
+}
+.ud-badge-tile--purple:not(.ud-badge-tile--locked):hover {
+    animation: udBadgePulse .5s ease;
+    box-shadow: 0 8px 18px rgba(111,66,193,.25);
+    border-color: #6f42c1;
+}
+.ud-badge-tile--orange:not(.ud-badge-tile--locked):hover {
+    animation: udBadgeShake .4s ease;
+    box-shadow: 0 8px 18px rgba(253,126,20,.25);
+    border-color: #fd7e14;
+}
+
+@keyframes udBadgeWiggle {
+    0%, 100% { transform: rotate(0); }
+    25%      { transform: rotate(-3deg); }
+    75%      { transform: rotate(3deg); }
+}
+@keyframes udBadgeBounce {
+    0%, 100% { transform: translateY(0); }
+    30%      { transform: translateY(-8px); }
+    55%      { transform: translateY(0); }
+    75%      { transform: translateY(-3px); }
+}
+@keyframes udBadgeShine {
+    from { left: -60%; }
+    to   { left: 130%; }
+}
+@keyframes udBadgePulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.05); }
+}
+@keyframes udBadgeShake {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(-3px); }
+    40%      { transform: translateX(3px); }
+    60%      { transform: translateX(-2px); }
+    80%      { transform: translateX(2px); }
+}
+
+/* ── Rulezy badge-unlock congrats popover ──────────────────────── */
+.ud-rulezy-congrats {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .85rem 1.1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(13,110,253,.25);
+    background: rgba(13,110,253,.06);
+    margin-bottom: 1rem;
+    animation: udCongratsPop .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+.ud-rulezy-congrats img { width: 48px; height: 48px; object-fit: contain; flex-shrink: 0; }
+.ud-rulezy-congrats__text { font-size: .88rem; color: var(--text-color); }
+.ud-rulezy-congrats__text strong { color: #0d6efd; }
+@keyframes udCongratsPop {
+    from { opacity: 0; transform: translateY(-10px) scale(.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── All-badges-unlocked confetti (pure CSS, same technique as the
+   starfield game's victory effect) ────────────────────────────── */
+.ud-fx {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 2000;
+}
+.ud-confetti {
+    position: absolute;
+    top: -20px;
+    width: 8px;
+    height: 14px;
+    opacity: .9;
+    animation-name: ud-confetti-fall;
+    animation-timing-function: ease-in;
+    animation-fill-mode: forwards;
+}
+@keyframes ud-confetti-fall {
+    0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(70vh) rotate(540deg); opacity: 0; }
+}

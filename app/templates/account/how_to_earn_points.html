@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block title %}How to Earn Points — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-3" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        {% if mascot_enabled %}
+        <img src="{{ url_for('static', filename='images/rulezy/reflexion.png') }}" alt="" class="banner-watermark" style="opacity:.08;">
+        {% else %}
+        <i class="fa-solid fa-star banner-watermark"></i>
+        {% endif %}
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('account.contributor') }}" class="text-decoration-none text-muted">Leaderboard</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">How to Earn Points</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon{% if mascot_enabled %} banner-icon--mascot{% endif %}">
+                {% if mascot_enabled %}
+                <img src="{{ url_for('static', filename='images/rulezy/reflexion.png') }}" alt="Rulezy">
+                {% else %}
+                <i class="fa-solid fa-star"></i>
+                {% endif %}
+            </div>
+            <div><h2 class="fw-bold mb-1">How to Earn Points</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:650px;font-size:.95rem;">
+            Every point source, every badge, and how leveling works — straight from the same values the
+            leaderboard itself uses, so this page can't drift out of date.
+        </p>
+    </div>
+
+    {% if mascot_enabled %}
+    <div class="rulezy-say rulezy-say--below mb-4" tabindex="0">
+        <img src="{{ url_for('static', filename='images/rulezy/reflexion.png') }}" alt="Rulezy" class="rulezy-say__avatar">
+        <div class="rulezy-say__bubble">I read every line of this page. Riveting stuff. Anyway — go earn some points.</div>
+    </div>
+    {% endif %}
+
+    <!-- ── Point sources ── -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3"><i class="fa-solid fa-coins text-warning me-2"></i>Point Sources</h5>
+            <div class="row g-3">
+                {% for src in point_sources %}
+                <div class="col-md-6">
+                    <div class="rounded-3 border p-3 h-100" style="background:var(--light-bg-color);">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <i class="fa-solid {{ src.icon }} text-primary me-2"></i>
+                                <strong>{{ src.label }}</strong>
+                            </div>
+                            <span class="badge bg-primary rounded-pill">+{{ src.points }} pt{{ 's' if src.points != 1 else '' }}</span>
+                        </div>
+                        <p class="text-muted small mb-0 mt-2">{{ src.description }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Levels ── -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3"><i class="fa-solid fa-ranking-star text-info me-2"></i>Levels</h5>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Level</th><th>Points required</th></tr></thead>
+                    <tbody>
+                        {% for level, threshold in level_thresholds %}
+                        <tr><td>Level {{ level }}</td><td>{{ '{:,}'.format(threshold) }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Badges ── -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3"><i class="fa-solid fa-award text-success me-2"></i>Badges</h5>
+            <div class="ud-badge-grid">
+                {% for badge in badges %}
+                <div class="ud-badge-tile ud-badge-tile--{{ badge.color }}" title="{{ badge.description }}">
+                    <div class="ud-badge-tile__icon-wrap">
+                        {% if mascot_enabled %}
+                        <img src="{{ url_for('static', filename='images/rulezy/' + badge.rulezy_pose + '.png') }}" alt="" class="ud-badge-tile__icon">
+                        {% else %}
+                        <i class="fa-solid {{ badge.icon }}" style="font-size:1.2rem;"></i>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="ud-badge-tile__name">{{ badge.name }}</div>
+                        <div class="ud-badge-tile__desc">{{ badge.description }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <p class="text-center text-muted small mb-5">
+        Track your own progress on the <a href="{{ url_for('account.contributor') }}">Contributor Leaderboard</a>.
+    </p>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp } = Vue
+    createApp({ delimiters: ['[[', ']]'] }).mount('#main-container')
+</script>
+{% endblock %}

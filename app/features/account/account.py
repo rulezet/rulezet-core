@@ -217,6 +217,28 @@ def promote_remove_admin() -> jsonify:
     else:
         return render_template("access_denied.html")
 
+@account_blueprint.route("/toggle_user_verified", methods=['POST'])
+@login_required
+def toggle_user_verified() -> jsonify:
+    """Admin action: flip a user's verified badge on/off (Users admin list)."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    data    = request.get_json() or {}
+    user_id = int(data.get('userId', 0)) or None
+    if not user_id:
+        return jsonify({"success": False, "message": "Missing userId"}), 400
+
+    success, verified = AccountModel.toggle_user_verified(user_id)
+    if not success:
+        return jsonify({"success": False, "message": "User not found"}), 404
+
+    log_activity("admin.settings_changed",
+                 f"{'Verified' if verified else 'Unverified'} user id={user_id}",
+                 target_type="user", target_id=user_id)
+    return jsonify({"success": True, "verified": verified})
+
+
 @account_blueprint.route("/delete_user", methods=['POST'])
 @login_required
 def delete_user() -> render_template:
@@ -224,6 +246,10 @@ def delete_user() -> render_template:
     data    = request.get_json() or {}
     user_id = int(data.get('id', 0)) or None
     if current_user.is_admin():
+        if AccountModel.is_protected_system_user(AccountModel.get_user(user_id)):
+            return {"message": "This is a system account (e.g. a connector's shadow user) and can't be deleted",
+                    "success": False,
+                    "toast_class" : "danger-subtle"}, 400
         delete = AccountModel.delete_user_core(user_id)
         if delete:
             log_activity("admin.delete_user", f"Deleted user id={user_id}",
@@ -315,12 +341,23 @@ def users_data_table():
         for uid, rid, rname in role_rows:
             roles_by_user.setdefault(uid, []).append({'id': rid, 'name': rname})
 
+    from app.core.db_class.db import Connector
+    protected_user_ids = set(
+        uid for (uid,) in db.session.query(Connector.shadow_user_id)
+        .filter(Connector.shadow_user_id.in_(user_ids), Connector.is_system == True)
+        .all()
+    ) if user_ids else set()
+
     items = []
     for u in pagination.items:
         j = u.to_json()
         j['rule_count']   = rule_counts.get(u.id, 0)
         j['bundle_count'] = bundle_counts.get(u.id, 0)
         j['roles']        = roles_by_user.get(u.id, [])
+        # Shadow user of a system connector (e.g. "Rulezet Official") —
+        # owns synced content, can't be deleted from here (see
+        # account_core.is_protected_system_user).
+        j['is_protected_system_user'] = u.id in protected_user_ids
         items.append(j)
 
     return jsonify({'items': items, 'total': pagination.total, 'total_pages': pagination.pages})
@@ -650,13 +687,59 @@ def remove_rule_favorite() -> jsonify:
 #####################
 @account_blueprint.route("/contributor")
 @login_required
-def contributor() -> str: 
+def contributor() -> str:
     """Contributor page"""
     return render_template("account/contributor.html")
 
 
+_POINT_SOURCE_COPY = {
+    'suggestions_accepted':        {'label': 'Suggestion Accepted',   'icon': 'fa-check-circle',    'description': 'An edit suggestion of yours gets approved.'},
+    'rules_owned':                 {'label': 'Rule Ownership',        'icon': 'fa-cloud-upload-alt', 'description': 'You author or import a rule (soft-deleted rules don\'t count).'},
+    'bundles_owned':                {'label': 'Bundle Published',      'icon': 'fa-layer-group',      'description': 'You publish a bundle.'},
+    'rule_tests_contributed':       {'label': 'Rule Testing',          'icon': 'fa-flask',            'description': 'You run at least one rule test on a given day (counted per day, not per test).'},
+    'attack_mappings_contributed':  {'label': 'ATT&CK Mapping',        'icon': 'fa-crosshairs',       'description': 'You manually map a rule to a MITRE ATT&CK technique.'},
+    'rules_popular_score':          {'label': 'Popular Score',         'icon': 'fa-star',             'description': 'Rules you own get upvoted by the community (net of downvotes).'},
+    'rules_liked_or_disliked':      {'label': 'Casting a Vote',        'icon': 'fa-thumbs-up',        'description': 'You upvote or downvote a rule or bundle.'},
+    'consecutive_days_active':      {'label': 'Daily Streak',          'icon': 'fa-fire-alt',         'description': 'You contribute something on consecutive days.'},
+}
+
+
+@account_blueprint.route("/how_to_earn_points")
+@login_required
+def how_to_earn_points() -> str:
+    """Explains every point source and the full badge catalog — reads
+    straight from POINTS (db.py) and BADGES (badges.py) so it can never
+    drift out of sync with the real values, unlike the old hand-duplicated
+    frontend copy this replaces."""
+    from ...core.db_class.db import POINTS, LEVEL_THRESHOLDS
+    from .badges import badges_catalog_json
+
+    point_sources = [
+        {**copy, 'key': key, 'points': POINTS[key]}
+        for key, copy in _POINT_SOURCE_COPY.items()
+    ]
+
+    return render_template(
+        "account/how_to_earn_points.html",
+        point_sources=point_sources,
+        level_thresholds=sorted(LEVEL_THRESHOLDS.items()),
+        badges=badges_catalog_json(),
+    )
+
+
+@account_blueprint.route("/badges_catalog")
+@login_required
+def badges_catalog():
+    """JSON badge catalog — used by UserContributionStatsComponent to show
+    the full set (locked + unlocked) instead of only whichever ones a user
+    has already earned. Same source as how_to_earn_points, just as JSON."""
+    from .badges import badges_catalog_json
+    return jsonify({"badges": badges_catalog_json()})
+
+
 _VALID_LEADERBOARD_SORTS = ['total_points', 'suggestions_accepted', 'rules_owned',
-                            'rules_popular_score', 'last_contribution_date']
+                            'rules_popular_score', 'last_contribution_date',
+                            'bundles_owned', 'rule_tests_contributed', 'attack_mappings_contributed']
 _VALID_ACTIVE_SINCE = ['week', 'month', 'year']
 
 
@@ -753,23 +836,27 @@ def get_user_contributions(user_id):
 @account_blueprint.route('/refresh', methods=['GET'])
 @login_required
 def refresh():
-    """Recup the my contributions"""
+    """Queue a full gamification recompute as a background job. Used to
+    run synchronously inside this request (looping every user with
+    several unbatched queries each) — see
+    job_handlers.handle_recompute_gamification /
+    account_core.recompute_gamification_batch for why that doesn't scale
+    and what replaced it."""
     if not current_user.is_admin():
         return jsonify({"message": "Admin access required", "success": False, "toast_class": "danger-subtle"}), 403
 
-    action = request.args.get('action')
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='recompute_gamification',
+        label='Gamification — recompute all users',
+        payload={},
+        created_by=current_user.id,
+    )
+    log_activity('admin.gamification_recompute_triggered', 'Triggered a full gamification recompute',
+                 target_type='job', target_id=job.id)
 
-    success = AccountModel.refreshData(action)
-    if not success:
-        return jsonify({"message": "Failed to refresh data", "success": False , "toast_class" : "danger-subtle"}), 500
-    
-    # update the user with the reel value like If someone has already like or propose an edit 
-    success_ = AccountModel.update_gamification_profiles()
-    if not success_:
-        return jsonify({"message": "Error to update the gameifcation section", "success": False , "toast_class" : "danger-subtle"}), 500
-
-
-    return jsonify({"message": "Data refreshed", "success": True , "toast_class" : "success-subtle"}), 200
+    return jsonify({"message": "Recompute job queued", "success": True, "toast_class": "success-subtle",
+                     "job_uuid": job.uuid}), 200
 
 # get_total_users
 @account_blueprint.route('/get_total_users', methods=['GET'])
@@ -879,30 +966,45 @@ def bulk_parse_fields_trigger_platform_tags():
     if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         return jsonify({'success': False, 'message': 'Admin or Tag manager only'}), 403
     from app.features.jobs.jobs_core import create_job
-    from app.features.rule.field_parser_core import get_config, validate_platform_tag_config, CONFIG_TYPE_PLATFORM_TAGS
+    from app.features.rule.field_parser_core import (
+        get_config, validate_platform_tag_config, combine_all_platform_tag_patterns,
+        CONFIG_TYPE_PLATFORM_TAGS, ALL_PLATFORM_CONFIGS,
+    )
 
-    data      = request.get_json(force=True) or {}
-    config_id = data.get('config_id')
+    data          = request.get_json(force=True) or {}
+    config_id     = data.get('config_id')
+    rule_ids      = data.get('rule_ids', 'ALL')
+    format_filter = (data.get('format_filter') or '').strip() or None
     if not config_id:
         return jsonify({'success': False, 'message': 'config_id is required — save a platform-tag config first.'}), 400
+    if rule_ids != 'ALL' and not isinstance(rule_ids, list):
+        return jsonify({'success': False, 'message': 'rule_ids must be "ALL" or a list of rule ids.'}), 400
 
-    cfg = get_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
-    if not cfg:
-        return jsonify({'success': False, 'message': 'Platform-tag config not found.'}), 404
+    if config_id == ALL_PLATFORM_CONFIGS:
+        ok, error, resolved = combine_all_platform_tag_patterns()
+        if not ok:
+            return jsonify({'success': False, 'message': error}), 400
+        cfg_name = f'All saved configs — {len(resolved)} pattern(s) combined'
+    else:
+        cfg = get_config(config_id, config_type=CONFIG_TYPE_PLATFORM_TAGS)
+        if not cfg:
+            return jsonify({'success': False, 'message': 'Platform-tag config not found.'}), 404
 
-    ok, error, _resolved = validate_platform_tag_config(cfg.config)
-    if not ok:
-        return jsonify({'success': False, 'message': f'Config is invalid, not launching: {error}'}), 400
+        ok, error, _resolved = validate_platform_tag_config(cfg.config)
+        if not ok:
+            return jsonify({'success': False, 'message': f'Config is invalid, not launching: {error}'}), 400
+        cfg_name = cfg.name
 
+    scope_desc = f'{len(rule_ids)} selected rule(s)' if rule_ids != 'ALL' else (f'format={format_filter}' if format_filter else 'all rules')
     job = create_job(
         job_type='bulk_tag_platforms',
-        label=f'Detect & tag platforms ({cfg.name})',
-        payload={'rule_ids': 'ALL', 'format_filter': None, 'config_id': cfg.id},
+        label=f'Detect & tag platforms ({cfg_name}) — {scope_desc}',
+        payload={'rule_ids': rule_ids, 'format_filter': format_filter, 'config_id': config_id},
         created_by=current_user.id,
     )
     if not job:
         return jsonify({'success': False, 'message': 'Failed to create job'}), 500
-    log_activity('admin.bulk_tag_platforms', f'Triggered platform-tag detection for all rules using config "{cfg.name}"',
+    log_activity('admin.bulk_tag_platforms', f'Triggered platform-tag detection ({scope_desc}) using config "{cfg_name}"',
                  target_type='job', target_id=job.id, target_uuid=job.uuid)
     return jsonify({'success': True, 'job': job.to_json(), 'message': 'Platform tagging job queued!'})
 
@@ -1063,9 +1165,10 @@ def get_user_activity_stats(user_id):
 
     
     total_votes = r_likes + r_dislikes + b_likes + b_dislikes
-    trust_score = 100
-    if total_votes > 0:
-        trust_score = round((r_likes + b_likes) / total_votes * 100, 1)
+    # None (not 100) when there's nothing to evaluate — defaulting to 100
+    # made a brand new user with zero votes look like a proven top
+    # contributor, which isn't a real trust score, just an absence of data.
+    trust_score = round((r_likes + b_likes) / total_votes * 100, 1) if total_votes > 0 else None
 
     return jsonify({
         "activity_stats": {

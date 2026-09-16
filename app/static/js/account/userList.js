@@ -12,6 +12,10 @@
  *   toggle-admin(user)
  *   delete-user(user)
  *
+ * Verified toggle is handled internally (calls /account/toggle_user_verified
+ * itself, same pattern as the role picker's toggleUserRole) — no event to
+ * wire up in the parent.
+ *
  * Expose:
  *   fetchData()
  */
@@ -294,9 +298,17 @@ export default {
                             :title="user.admin ? 'Remove admin' : 'Promote to admin'">
                         <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
                     </button>
+                    <button class="ul-action-secondary"
+                            :class="{ 'ul-action-secondary--warn': !user.is_verified }"
+                            :disabled="verifyingIds.has(user.id)"
+                            @click="toggleVerified(user)"
+                            :title="user.is_verified ? 'Remove verified badge' : 'Mark as verified'">
+                        <i :class="user.is_verified ? 'fas fa-circle-check' : 'fas fa-circle-xmark'"></i>
+                    </button>
                     <button class="ul-action-secondary ul-action-secondary--danger"
-                            @click="$emit('delete-user', user)"
-                            title="Delete user">
+                            :disabled="user.is_protected_system_user"
+                            @click="!user.is_protected_system_user && $emit('delete-user', user)"
+                            :title="user.is_protected_system_user ? 'System account (owns synced content) — cannot be deleted' : 'Delete user'">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -456,9 +468,17 @@ export default {
                                         @click="$emit('toggle-admin', user)">
                                     <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
                                 </button>
+                                <button class="dt-action-btn"
+                                        :class="!user.is_verified ? 'dt-action-btn--warn' : ''"
+                                        :disabled="verifyingIds.has(user.id)"
+                                        :title="user.is_verified ? 'Remove verified badge' : 'Mark as verified'"
+                                        @click="toggleVerified(user)">
+                                    <i :class="user.is_verified ? 'fas fa-circle-check' : 'fas fa-circle-xmark'"></i>
+                                </button>
                                 <button class="dt-action-btn dt-action-btn--danger"
-                                        title="Delete user"
-                                        @click="$emit('delete-user', user)">
+                                        :disabled="user.is_protected_system_user"
+                                        :title="user.is_protected_system_user ? 'System account (owns synced content) — cannot be deleted' : 'Delete user'"
+                                        @click="!user.is_protected_system_user && $emit('delete-user', user)">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -570,6 +590,30 @@ export default {
                 )
             } else {
                 create_message(data.message || 'Failed to update role.', 'danger-subtle')
+            }
+        }
+
+        // ── Verified toggle ──────────────────────────────────────────────
+        const verifyingIds = reactive(new Set())
+        async function toggleVerified(user) {
+            if (verifyingIds.has(user.id)) return
+            verifyingIds.add(user.id)
+            try {
+                const res  = await apiFetch('/account/toggle_user_verified', 'POST', { userId: user.id })
+                const data = await res.json()
+                if (data.success) {
+                    user.is_verified = data.verified
+                    create_message(
+                        data.verified ? `${user.first_name} is now verified` : `Verified badge removed from ${user.first_name}`,
+                        'success-subtle'
+                    )
+                } else {
+                    create_message(data.message || 'Failed to update verified status.', 'danger-subtle')
+                }
+            } catch {
+                create_message('Network error', 'danger-subtle')
+            } finally {
+                verifyingIds.delete(user.id)
             }
         }
 
@@ -710,6 +754,7 @@ export default {
             onSearchInput, clearSearch, onFilterChange, resetFilters,
             setSort, sortIcon, onCardSortChange, goToPage, toggleReveal, fetchData,
             toggleRoleMenu, hasRole, toggleUserRole,
+            verifyingIds, toggleVerified,
         }
     },
 }

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Linked Rules — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<style>[v-cloak] { display: none; }</style>
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav with context %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-diagram-project banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+                        [[ RULE_TITLE_SHORT ]]
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Linked Rules</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-diagram-project"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Linked Rules</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width: 640px; font-size: 0.95rem;">
+            Curated and auto-detected relationships between this rule and others — a manual note that two rules
+            are related, or a direct reference the rule's own format uses (a Wazuh &lt;if_sid&gt;, a Kunai
+            <code>rule(name)</code> composition, ...). Distinct from the same-source/author "Related Rules" panel
+            on the Overview tab.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'linked_rules', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count, test_count=test_count, ai_analysis_count=ai_analysis_count, linked_rules_count=linked_rules_count) }}
+
+    <!-- ── Direction switcher ── -->
+    <nav class="dr-nav mb-3" style="display:inline-flex;">
+        <button type="button" class="dr-nav__item" :class="{ active: direction === 'outgoing' }" @click="direction = 'outgoing'">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            <span>Links to (<span>[[ outgoingTotal ]]</span>)</span>
+            <i class="fa-solid fa-circle-question opacity-50" style="font-size:.7rem;"
+                title="Rules this one points to — this rule depends on, references, or otherwise cites them."></i>
+        </button>
+        <button type="button" class="dr-nav__item" :class="{ active: direction === 'incoming' }" @click="direction = 'incoming'">
+            <i class="fa-solid fa-arrow-down-left-and-arrow-up-right-to-center"></i>
+            <span>Linked from (<span>[[ incomingTotal ]]</span>)</span>
+            <i class="fa-solid fa-circle-question opacity-50" style="font-size:.7rem;"
+                title="Rules that point to this one — they depend on, reference, or otherwise cite this rule."></i>
+        </button>
+    </nav>
+
+    <!-- Loading -->
+    <div v-if="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading…</span>
+        </div>
+    </div>
+
+    <template v-else>
+        <!-- Both card and table views (RuleList's own toolbar toggle switches
+             between them) show a "Relation" badge/column per row — how this
+             rule relates to the one being viewed (e.g. "depends on" /
+             "used by"), via showRelationType + relationLabels. -->
+        <rule-list v-if="currentIds.length"
+            :key="'linked-' + direction"
+            mode="read"
+            default-view="table"
+            fetch-url="/rule/data_table"
+            :ids="currentIds"
+            :show-relation-type="true"
+            :relation-labels="currentLabels"
+            :show-filters="false"
+            :show-create="false"
+            :show-export="false"
+            :sync-url="false"
+            :can-vote="isAuthenticated"
+            :can-favorite="isAuthenticated"
+            :current-user-id="currentUserId"
+            :current-user-is-admin="isAdmin"
+            :current-user-is-authenticated="isAuthenticated"
+            :csrf-token="csrfToken"
+            :initial-per-page="20">
+        </rule-list>
+
+        <div v-else class="card border-0 shadow-sm rounded-4 p-5 text-center">
+            <i class="fa-solid fa-diagram-project fa-2x mb-3 d-block opacity-25"></i>
+            <p class="mb-0" style="color: var(--subtle-text-color);">
+                [[ direction === 'incoming' ? 'No rule links to this one.' : 'This rule has no linked rules yet.' ]]
+            </p>
+        </div>
+    </template>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, computed, onMounted } = Vue;
+    import RuleList from '/static/js/rule/ruleList.js';
+    import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
+    import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
+
+    const rule_id = {{ rule.id }};
+    const RULE_TITLE = {{ rule.title | tojson }};
+    const RULE_TITLE_SHORT = RULE_TITLE.length > 40 ? RULE_TITLE.slice(0, 40) + '…' : RULE_TITLE;
+
+    const isAuthenticated = {{ current_user.is_authenticated | tojson }};
+    const isAdmin         = {{ current_user.is_admin()        | tojson }};
+    const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }};
+    const csrfToken       = '{{ csrf_token() }}';
+
+    // Each relation_type reads differently depending on which side is
+    // showing it: on the 'outgoing' tab this rule IS the source (e.g. "this
+    // rule depends on X"); on the 'incoming' tab this rule IS the target of
+    // someone else's relation (e.g. "used by X"), not the same phrase again.
+    const RELATION_TYPE_LABELS = {
+        references:       { forward: 'references',              reverse: 'referenced by' },
+        depends_on:        { forward: 'depends on',              reverse: 'used by' },
+        related:           { forward: 'related to',              reverse: 'related to' },
+        variant_of:        { forward: 'variant of',              reverse: 'has variant' },
+        duplicate_of:      { forward: 'duplicate of',             reverse: 'duplicated by' },
+        if_sid:            { forward: 'requires (if_sid)',        reverse: 'used by (if_sid)' },
+        if_group:          { forward: 'requires (if_group)',      reverse: 'used by (if_group)' },
+        if_matched_sid:    { forward: 'requires (if_matched_sid)', reverse: 'used by (if_matched_sid)' },
+        if_matched_group:  { forward: 'requires (if_matched_group)', reverse: 'used by (if_matched_group)' },
+        rule_ref:          { forward: 'uses (rule composition)',  reverse: 'used by (rule composition)' },
+    };
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: {
+            'rule-list':                   RuleList,
+            'tags-displays-list':          TagsDisplaysList,
+            'vulnerability-displays-list': VulnerabilityDisplaysList,
+        },
+        setup() {
+            const direction = ref('outgoing');
+            const loading   = ref(true);
+            // Both directions come back in a single unpaginated call (see
+            // get_relations_for_rule) — <rule-list> below does its own
+            // pagination over whichever direction's id list is handed to
+            // it via :ids, so switching tabs is just a local read, no
+            // refetch (and no separate "count for the other tab" request
+            // like the old hand-rolled list needed).
+            const relations = ref({ outgoing: [], incoming: [] });
+
+            const outgoingTotal = computed(() => relations.value.outgoing.length);
+            const incomingTotal = computed(() => relations.value.incoming.length);
+            const currentItems  = computed(() => relations.value[direction.value] || []);
+            const currentIds    = computed(() => currentItems.value.map(r => r.rule_id));
+            const currentLabels = computed(() => {
+                const map = {};
+                for (const r of currentItems.value) map[r.rule_id] = typeLabel(r.relation_type);
+                return map;
+            });
+
+            function typeLabel(t) {
+                const entry = RELATION_TYPE_LABELS[t];
+                if (!entry) return t;
+                return direction.value === 'incoming' ? entry.reverse : entry.forward;
+            }
+
+            async function fetchRelations() {
+                loading.value = true;
+                try {
+                    const res = await fetch(`/rule_relation/rule/${rule_id}`);
+                    if (res.ok) relations.value = await res.json();
+                } finally {
+                    loading.value = false;
+                }
+            }
+
+            onMounted(fetchRelations);
+
+            return {
+                RULE_TITLE_SHORT, direction, loading,
+                outgoingTotal, incomingTotal, currentIds, currentLabels,
+                isAuthenticated, isAdmin, currentUserId, csrfToken,
+            };
+        }
+    }).mount('#main-container');
+</script>
+{% endblock %}

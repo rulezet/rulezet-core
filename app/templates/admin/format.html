@@ -5,6 +5,7 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
 <style>
     .fl-rename-section {
         border: 1px solid var(--border-color);
@@ -173,6 +174,195 @@
 
     {{ anav.admin_nav('formats') }}
 
+    <!-- Temporary admin tool for issue #61 — audits every Suricata rule
+         (tightened SuricataRule.validate()), buckets it as ok / should-be-
+         Sagan / genuinely broken, and lets the admin act on each bucket in
+         one click. Remove this card once the migration has been run. -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-3">
+                <div class="flex-shrink-0" style="width:40px;height:40px;border-radius:9px;background:rgba(255,193,7,.15);color:#c07000;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold mb-1">Suricata rule audit</h6>
+                    <p class="text-muted mb-2" style="font-size:.85rem;">
+                        One-time health check for <a href="https://github.com/rulezet/rulezet-core/issues/61" target="_blank" rel="noreferrer">issue #61</a> —
+                        runs every <code>suricata</code> rule through real syntax/protocol validation and sorts it into
+                        <strong>ok</strong>, <strong>should be Sagan</strong> (<code>alert any</code>/<code>alert syslog</code>, <code>program:</code>, …), or
+                        <strong>genuinely broken</strong>.
+                    </p>
+
+                    <button v-if="!auditJobUuid && !auditResult" type="button"
+                            class="btn btn-sm btn-warning rounded-pill px-3" :disabled="auditBusy" @click="runAudit">
+                        <i class="fa-solid" :class="auditBusy ? 'fa-spinner fa-spin' : 'fa-magnifying-glass-chart'"></i>
+                        Run full audit
+                    </button>
+
+                    <div v-if="auditJobUuid && !auditResult" class="mt-2">
+                        <job-tracker :job-uuid="auditJobUuid" @done="onAuditDone" @failed="auditJobUuid = null"></job-tracker>
+                    </div>
+
+                    <div v-if="auditResult" class="mt-2">
+                        <div class="d-flex gap-4 flex-wrap mb-3">
+                            <div><span class="fw-bold text-success">[[ auditResult.ok_count ]]</span> <span class="text-muted small">ok</span></div>
+                            <div><span class="fw-bold" style="color:#c07000;">[[ auditResult.sagan_count ]]</span> <span class="text-muted small">should be Sagan</span></div>
+                            <div><span class="fw-bold text-danger">[[ auditResult.broken_count ]]</span> <span class="text-muted small">genuinely broken</span></div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <button v-if="auditResult.sagan_count > 0" type="button"
+                                    class="btn btn-sm btn-outline-warning rounded-pill px-3" :disabled="actionBusy" @click="actReclassify">
+                                <i class="fa-solid fa-arrows-rotate"></i>
+                                Reclassify [[ auditResult.sagan_count ]] as Sagan
+                            </button>
+                            <button v-if="auditResult.broken_count > 0" type="button"
+                                    class="btn btn-sm btn-outline-danger rounded-pill px-3" :disabled="actionBusy" @click="actTrash">
+                                <i class="fa-solid fa-trash"></i>
+                                Move [[ auditResult.broken_count ]] broken rule[[ auditResult.broken_count === 1 ? '' : 's' ]] to Trash
+                            </button>
+                            <button type="button" class="btn btn-sm btn-link text-muted" @click="resetAudit">
+                                <i class="fa-solid fa-rotate-left me-1"></i>Run again
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="actionJobUuid" class="mt-3">
+                        <job-tracker :job-uuid="actionJobUuid" @done="actionJobUuid = null" @failed="actionJobUuid = null"></job-tracker>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SID collision report (issue #61 suggestion #3) — a report, not an
+         automatic fix: a human picks which rule in each group keeps the
+         SID. Remove this card once the residual collisions have been
+         reviewed on this instance. -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-3">
+                <div class="flex-shrink-0" style="width:40px;height:40px;border-radius:9px;background:rgba(220,53,69,.1);color:#dc3545;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-clone"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold mb-1">SID collision report</h6>
+                    <p class="text-muted mb-2" style="font-size:.85rem;">
+                        Same SID claimed by several unrelated Suricata/Sagan rules — the underlying engine only ever
+                        loads the first one. Predates <code>check_identifier_uniqueness()</code> (added 2026-08-11),
+                        which already blocks new collisions — this is only about what's already in the corpus.
+                        Oldest rule in each group is pre-checked as "keep" (the one an engine would actually load);
+                        review before trashing the rest.
+                    </p>
+
+                    <button v-if="!sidGroups" type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3"
+                            :disabled="sidBusy" @click="runSidReport">
+                        <i class="fa-solid" :class="sidBusy ? 'fa-spinner fa-spin' : 'fa-magnifying-glass'"></i>
+                        Run SID collision report
+                    </button>
+
+                    <div v-if="sidGroups">
+                        <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                            <span class="small text-muted">
+                                [[ sidGroups.length ]] group[[ sidGroups.length === 1 ? '' : 's' ]],
+                                [[ sidTotalExtra ]] extra row[[ sidTotalExtra === 1 ? '' : 's' ]] pre-selected to trash.
+                            </span>
+                            <button type="button" class="btn btn-sm btn-link text-muted p-0" @click="sidGroups = null">
+                                <i class="fa-solid fa-rotate-left me-1"></i>Run again
+                            </button>
+                        </div>
+
+                        <div v-if="sidGroups.length === 0" class="text-success small">
+                            <i class="fa-solid fa-check-circle me-1"></i>No collisions found.
+                        </div>
+
+                        <details v-for="group in sidGroups" :key="group.format + ':' + group.sid"
+                                  class="mb-2" style="border:1px solid var(--border-color);border-radius:10px;padding:.5rem .75rem;">
+                            <summary style="cursor:pointer;font-size:.85rem;">
+                                <span class="badge" style="background:#1a1a1a;color:#fff;text-transform:uppercase;font-size:.65rem;">[[ group.format ]]</span>
+                                SID <code>[[ group.sid ]]</code> — [[ group.rules.length ]] rules
+                            </summary>
+                            <table class="table table-sm mb-0 mt-2" style="font-size:.8rem;">
+                                <tbody>
+                                    <tr v-for="(rule, idx) in group.rules" :key="rule.id">
+                                        <td style="width:28px;">
+                                            <input type="checkbox" :checked="sidSelected.has(rule.id)"
+                                                   @change="toggleSidSelected(rule.id)">
+                                        </td>
+                                        <td>
+                                            <a :href="'/rule/detail_rule/' + rule.id" target="_blank">[[ rule.title ]]</a>
+                                            <span v-if="idx === 0" class="badge bg-success-subtle text-success ms-1" style="font-size:.62rem;">oldest — keep</span>
+                                        </td>
+                                        <td class="text-muted text-truncate" style="max-width:220px;">[[ rule.source ]]</td>
+                                        <td class="text-muted">[[ rule.creation_date ]]</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </details>
+
+                        <div class="d-flex align-items-center gap-2 mt-3" v-if="sidGroups.length > 0">
+                            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3"
+                                    :disabled="sidActionBusy || sidSelected.size === 0" @click="trashSidSelected">
+                                <i class="fa-solid fa-trash"></i>
+                                Move [[ sidSelected.size ]] selected rule[[ sidSelected.size === 1 ? '' : 's' ]] to Trash
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Real-engine deep validation batches (issue #61 suggestion #1) — only
+         shown when this instance has opted in (SURICATA_BINARY_PATH set).
+         See docs/design/suricata_language_server_integration.md: each rule
+         is a real Suricata subprocess run, so this always runs a bounded
+         batch, never the whole corpus in one go. -->
+    {% if suricata_deep_validation_configured %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-3">
+                <div class="flex-shrink-0" style="width:40px;height:40px;border-radius:9px;background:rgba(13,110,253,.1);color:#0d6efd;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-microscope"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold mb-1">Deep validate with Suricata engine (batch)</h6>
+                    <p class="text-muted mb-2" style="font-size:.85rem;">
+                        Real <code>suricata -T -v</code> run per rule — catches what the grammar-only check above
+                        can't (bad decode events, unreachable file references, ...), but is genuinely slow
+                        (~0.5-5s/rule). Runs a bounded batch, not the whole corpus — run again to cover the next batch.
+                    </p>
+
+                    <div v-if="!dvJobUuid && !dvResult" class="d-flex align-items-center gap-2">
+                        <input type="number" class="form-control form-control-sm" style="width:110px;"
+                               v-model.number="dvLimit" min="1" max="5000" placeholder="500">
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" :disabled="dvBusy" @click="runDeepValidateBatch">
+                            <i class="fa-solid" :class="dvBusy ? 'fa-spinner fa-spin' : 'fa-microscope'"></i>
+                            Run batch
+                        </button>
+                    </div>
+
+                    <div v-if="dvJobUuid && !dvResult" class="mt-2">
+                        <job-tracker :job-uuid="dvJobUuid" @done="onDvDone" @failed="dvJobUuid = null"></job-tracker>
+                    </div>
+
+                    <div v-if="dvResult" class="mt-2">
+                        <div class="d-flex gap-4 flex-wrap mb-2">
+                            <div><span class="fw-bold text-success">[[ dvResult.ok_count ]]</span> <span class="text-muted small">passed real engine</span></div>
+                            <div><span class="fw-bold text-danger">[[ dvResult.failed_count ]]</span> <span class="text-muted small">failed real engine</span></div>
+                        </div>
+                        <div v-for="f in dvResult.failed" :key="f.id" class="small mb-1 p-2 rounded-3" style="background:rgba(220,53,69,.08);">
+                            <a :href="'/rule/detail_rule/' + f.id" target="_blank">#[[ f.id ]] [[ f.title ]]</a> — [[ f.message ]]
+                        </div>
+                        <button type="button" class="btn btn-sm btn-link text-muted p-0 mt-2" @click="dvResult = null">
+                            <i class="fa-solid fa-rotate-left me-1"></i>Run another batch
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <format-list ref="formatListRef" csrf-token="{{ csrf_token() }}"></format-list>
 
 </div>
@@ -184,19 +374,206 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref } = Vue
+    const { createApp, ref, reactive } = Vue
     import { create_message }  from '/static/js/toaster.js'
     import FormatList          from '/static/js/rule/formatList.js'
     import PaginationComponent from '/static/js/rule/paginationComponent.js'
+    import JobTracker          from '/static/js/jobs/JobTracker.js'
 
     window.create_message = create_message
+    const csrfToken = '{{ csrf_token() }}'
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'format-list': FormatList, 'pagination-component': PaginationComponent },
+        components: { 'format-list': FormatList, 'pagination-component': PaginationComponent, 'job-tracker': JobTracker },
         setup() {
             const formatListRef = ref(null)
-            return { formatListRef }
+
+            const auditBusy    = ref(false)
+            const auditJobUuid = ref(null)
+            const auditResult  = ref(null)
+            const actionBusy   = ref(false)
+            const actionJobUuid = ref(null)
+
+            async function runAudit() {
+                auditBusy.value = true
+                try {
+                    const res = await fetch('/rule/admin/suricata_audit/run', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken },
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        auditJobUuid.value = data.job.uuid
+                    } else {
+                        create_message(data.message || 'Failed to queue audit.', 'danger-subtle')
+                    }
+                } finally {
+                    auditBusy.value = false
+                }
+            }
+
+            async function onAuditDone() {
+                const jobUuid = auditJobUuid.value
+                try {
+                    const res = await fetch('/rule/admin/suricata_audit/result/' + jobUuid)
+                    const data = await res.json()
+                    if (data.success) {
+                        auditResult.value = data
+                    } else {
+                        create_message(data.message || 'Failed to load audit result.', 'danger-subtle')
+                    }
+                } finally {
+                    auditJobUuid.value = null
+                }
+            }
+
+            function resetAudit() {
+                auditResult.value = null
+                auditJobUuid.value = null
+            }
+
+            async function actReclassify() {
+                actionBusy.value = true
+                try {
+                    const res = await fetch('/rule/admin/suricata_audit/reclassify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ ids: auditResult.value.sagan_ids }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        actionJobUuid.value = data.job.uuid
+                        auditResult.value = null
+                        create_message('Reclassification queued.', 'info-subtle')
+                    } else {
+                        create_message(data.message || 'Failed to queue job.', 'danger-subtle')
+                    }
+                } finally {
+                    actionBusy.value = false
+                }
+            }
+
+            async function actTrash() {
+                actionBusy.value = true
+                try {
+                    const res = await fetch('/rule/admin/suricata_audit/trash', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ ids: auditResult.value.broken_ids }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        create_message(`${data.count} rule(s) moved to trash.`, 'success-subtle')
+                        auditResult.value = null
+                    } else {
+                        create_message(data.message || 'Failed to trash rules.', 'danger-subtle')
+                    }
+                } finally {
+                    actionBusy.value = false
+                }
+            }
+
+            const sidBusy       = ref(false)
+            const sidGroups     = ref(null)
+            const sidTotalExtra = ref(0)
+            const sidSelected   = reactive(new Set())
+            const sidActionBusy = ref(false)
+
+            async function runSidReport() {
+                sidBusy.value = true
+                try {
+                    const res = await fetch('/rule/admin/sid_collisions/report')
+                    const data = await res.json()
+                    if (data.success) {
+                        sidGroups.value = data.groups
+                        sidTotalExtra.value = data.total_extra_rows
+                        sidSelected.clear()
+                        // Pre-select every rule except the oldest (index 0) in each group.
+                        for (const group of data.groups) {
+                            group.rules.slice(1).forEach(r => sidSelected.add(r.id))
+                        }
+                    } else {
+                        create_message(data.message || 'Failed to load report.', 'danger-subtle')
+                    }
+                } finally {
+                    sidBusy.value = false
+                }
+            }
+
+            function toggleSidSelected(id) {
+                if (sidSelected.has(id)) sidSelected.delete(id)
+                else sidSelected.add(id)
+            }
+
+            async function trashSidSelected() {
+                sidActionBusy.value = true
+                try {
+                    const res = await fetch('/rule/admin/sid_collisions/trash', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ ids: Array.from(sidSelected) }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        create_message(`${data.count} rule(s) moved to trash.`, 'success-subtle')
+                        sidGroups.value = null
+                    } else {
+                        create_message(data.message || 'Failed to trash rules.', 'danger-subtle')
+                    }
+                } finally {
+                    sidActionBusy.value = false
+                }
+            }
+
+            // ── Deep validate batch (real Suricata engine — issue #61) ──
+            const dvBusy    = ref(false)
+            const dvLimit   = ref(500)
+            const dvJobUuid = ref(null)
+            const dvResult  = ref(null)
+
+            async function runDeepValidateBatch() {
+                dvBusy.value = true
+                try {
+                    const res = await fetch('/rule/admin/suricata_deep_validate/run', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ limit: dvLimit.value || 500 }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        dvJobUuid.value = data.job.uuid
+                    } else {
+                        create_message(data.message || 'Failed to queue job.', 'danger-subtle')
+                    }
+                } finally {
+                    dvBusy.value = false
+                }
+            }
+
+            async function onDvDone() {
+                const jobUuid = dvJobUuid.value
+                try {
+                    const res = await fetch('/rule/admin/suricata_deep_validate/result/' + jobUuid)
+                    const data = await res.json()
+                    if (data.success) {
+                        dvResult.value = data
+                    } else {
+                        create_message(data.message || 'Failed to load result.', 'danger-subtle')
+                    }
+                } finally {
+                    dvJobUuid.value = null
+                }
+            }
+
+            return {
+                formatListRef,
+                auditBusy, auditJobUuid, auditResult, actionBusy, actionJobUuid,
+                runAudit, onAuditDone, resetAudit, actReclassify, actTrash,
+                sidBusy, sidGroups, sidTotalExtra, sidSelected, sidActionBusy,
+                runSidReport, toggleSidSelected, trashSidSelected,
+                dvBusy, dvLimit, dvJobUuid, dvResult, runDeepValidateBatch, onDvDone,
+            }
         }
     }).mount('#main-container')
 </script>
