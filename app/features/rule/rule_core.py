@@ -4120,6 +4120,51 @@ def search_rules_by_cve_patterns(vulnerabilities: list[str]) -> dict:
     }
 
 
+def search_rules_by_attack_patterns(technique_ids: list[str]) -> dict:
+    """
+    Search rules mapped (via RuleAttackAssociation) to one or more MITRE ATT&CK
+    technique IDs (e.g. T1059, T1059.001). Mirrors search_rules_by_cve_patterns.
+    """
+
+    base_url = request.url_root.rstrip("/") + "/rule/detail_rule/"
+
+    # Distinct rule IDs first: a plain DISTINCT/JOIN on Rule itself fails in
+    # Postgres because Rule.quality_score_breakdown is a json column (no
+    # equality operator), and a rule can match several requested techniques.
+    matching_ids = (
+        db.session.query(RuleAttackAssociation.rule_id)
+        .filter(RuleAttackAssociation.technique_id.in_(technique_ids))
+        .distinct()
+    )
+    query = Rule.query.filter(Rule.is_deleted == False, Rule.id.in_(matching_ids))
+
+    all_rules = query.order_by(Rule.last_modif.desc()).all()
+
+    final_rules = []
+    for rule in all_rules:
+        rule_data = rule.to_json()
+
+        rule_data["detail_url"] = f"{base_url}{rule.id}"
+        rule_data["matched_techniques"] = sorted({
+            a.technique_id for a in rule.attack_assocs if a.technique_id in technique_ids
+        })
+
+        if rule.last_modif:
+            rule_data["formatted_date"] = rule.last_modif.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            rule_data["formatted_date"] = None
+
+        final_rules.append(rule_data)
+
+    total_count = len(all_rules)
+
+    return {
+        "totals": total_count,
+        "total_all_rules": total_count,
+        "rules": final_rules
+    }
+
+
 def get_new_rule(new_rule_id):
     return NewRule.query.get(new_rule_id)
 

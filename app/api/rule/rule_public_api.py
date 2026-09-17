@@ -488,8 +488,62 @@ class RulesByCVE(Resource):
         result = RuleModel.search_rules_by_cve_patterns(cve_patterns)
 
         return {
-            "detected_patterns": cve_patterns, 
+            "detected_patterns": cve_patterns,
             "total_matches": result.get("total_all_rules", 0),
             "stats": result.get("totals", 0),
-            "results": result.get("rules", []) 
+            "results": result.get("rules", [])
+        }, 200
+
+
+    ###########################################
+    #   Get all rules by ATT&CK technique id  #
+    ###########################################
+
+
+@rule_public_ns.route('/search_rules_by_attack')
+@rule_public_ns.doc(
+    description="""
+Search for all rules mapped to specific **MITRE ATT&CK technique IDs** (e.g. T1059, T1059.001).
+
+This endpoint automatically detects and normalizes technique identifiers from the input string, then performs a broad search across the rules database.
+
+### Query Parameter
+
+| Parameter      | Type   | Description                                                            |
+|----------------|--------|-------------------------------------------------------------------------|
+| technique_ids  | string | A comma-separated list or a raw string containing one or more technique IDs |
+
+### Example cURL Request
+
+```bash
+curl -G "http://127.0.0.1:7009/api/rule/public/search_rules_by_attack" \
+    --data-urlencode "technique_ids=T1059,T1059.001"
+
+""",
+params={'technique_ids': 'One or more MITRE ATT&CK technique identifiers'} )
+
+class RulesByAttackTechnique(Resource):
+    def get(self):
+        """ Search rules by MITRE ATT&CK technique identifiers """
+        raw_input = request.args.get('technique_ids', '')
+        if not raw_input:
+            return {"error": "No IDs provided."}, 400
+        # utils.detect_attack_technique returns (True, '["T1059"]')
+        success, technique_json = utils.detect_attack_technique(raw_input)
+
+        if not success:
+            return {"error": "Detection failed."}, 500
+
+        technique_patterns = json.loads(technique_json)
+
+        if not technique_patterns:
+            return {"error": "No valid identifiers detected."}, 404
+
+        result = RuleModel.search_rules_by_attack_patterns(technique_patterns)
+
+        return {
+            "detected_patterns": technique_patterns,
+            "total_matches": result.get("total_all_rules", 0),
+            "stats": result.get("totals", 0),
+            "results": result.get("rules", [])
         }, 200
