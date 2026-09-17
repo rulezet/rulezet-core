@@ -9,7 +9,7 @@ import datetime
 import zipfile
 import requests
 from sqlalchemy.exc import SQLAlchemyError
-from flask import current_app, jsonify, send_file
+from flask import current_app, jsonify, request, send_file
 from flask_login import current_user
 from sqlalchemy import and_, case, or_, text
 from sqlalchemy.orm import joinedload
@@ -4084,7 +4084,7 @@ def search_rules_by_cve_patterns(vulnerabilities: list[str]) -> dict:
     """
 
     
-    base_url = "https://rulezet.org/rule/detail_rule/"
+    base_url = request.url_root.rstrip("/") + "/rule/detail_rule/"
     query = Rule.query
 
     if vulnerabilities:
@@ -4118,7 +4118,6 @@ def search_rules_by_cve_patterns(vulnerabilities: list[str]) -> dict:
         "total_all_rules": total_count,
         "rules": final_rules
     }
-
 
 
 def get_new_rule(new_rule_id):
