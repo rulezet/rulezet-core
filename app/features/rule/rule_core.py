@@ -4470,6 +4470,30 @@ def verify_rule_syntaxe(rule: Any , new_content) -> Optional[ValidationResult]:
     return None
 
 
+def validate_rule_syntax(rule_format: str, content: str) -> Optional[ValidationResult]:
+    """Run the same per-format syntax check a rule goes through at creation
+    time (verify_rule_syntaxe above), without a DB Rule object and without
+    ever persisting anything — for a dry-run "would this rule be accepted"
+    check (e.g. the public /validate endpoint).
+
+    Returns None when rule_format matches no known RuleType implementation
+    (the caller distinguishes "unknown format" from "invalid content").
+    """
+    load_all_rule_formats()
+    wanted = (rule_format or "").strip().lower()
+    if not wanted:
+        return None
+
+    for RuleClass in RuleType.__subclasses__():
+        try:
+            instance = RuleClass()
+            if instance.format.lower() == wanted:
+                return instance.validate(content)
+        except Exception:
+            continue
+    return None
+
+
 def get_corpus_identifier_collision_warning(rule: Any) -> Optional[str]:
     """Live check (not the admin-only report's snapshot — see
     get_sid_collision_groups) for whether THIS specific rule's

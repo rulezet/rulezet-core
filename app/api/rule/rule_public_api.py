@@ -547,3 +547,55 @@ class RulesByAttackTechnique(Resource):
             "stats": result.get("totals", 0),
             "results": result.get("rules", [])
         }, 200
+
+
+    ###########################################
+    #   Validate rule syntax (dry run)        #
+    ###########################################
+
+
+@rule_public_ns.route('/validate')
+@rule_public_ns.doc(
+    description="""
+Check whether a rule's content is **syntactically valid** for a given format — the same
+per-format check a rule goes through on creation/import, run here as a dry run: nothing
+is saved, no rule is created.
+
+### JSON body
+
+| Field    | Type   | Description                                                              |
+|----------|--------|---------------------------------------------------------------------------|
+| format   | string | Rule format, e.g. yara, sigma, suricata, zeek, wazuh, nse, crs, nova, splunk, elastic, sagan, kql, atr, kunai |
+| content  | string | The rule's raw content to validate                                       |
+
+### Example cURL Request
+
+```bash
+curl -X POST "http://127.0.0.1:7009/api/rule/public/validate" \
+    -H "Content-Type: application/json" \
+    -d '{"format": "sigma", "content": "title: Example\\nlogsource:\\n  category: process_creation\\n..."}'
+```
+""",
+)
+class ValidateRule(Resource):
+    def post(self):
+        """ Validate a rule's syntax without creating it """
+        payload = request.get_json(silent=True) or {}
+        rule_format = (payload.get("format") or "").strip()
+        content = payload.get("content") or ""
+
+        if not rule_format:
+            return {"error": "No format provided."}, 400
+        if not content.strip():
+            return {"error": "No content provided."}, 400
+
+        result = RuleModel.validate_rule_syntax(rule_format, content)
+        if result is None:
+            return {"error": f"Unknown or unsupported format: {rule_format}"}, 404
+
+        return {
+            "format": rule_format,
+            "valid": bool(result.ok),
+            "errors": result.errors or [],
+            "warnings": result.warnings or [],
+        }, 200
