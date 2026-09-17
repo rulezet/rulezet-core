@@ -6,6 +6,7 @@ from app.features.rule.rule_core import get_rule, _active
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult
 from app.core.utils.utils import detect_cve
 from app.core.db_class.db import Rule
+from flask import current_app
 
 
 #################
@@ -173,6 +174,7 @@ class YaraRule(RuleType):
         "filename", "filepath", "extension", "filetype",
         "md5", "sha1", "sha256", "owner", "new_file"
     }
+    ALLOWED_EXTERNALS.update(current_app.config.get('YARA_ADDITIONAL_EXTERNAL'))
 
     def get_class(self) -> str:
         return "YaraRule"
