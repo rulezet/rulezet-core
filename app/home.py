@@ -1,12 +1,12 @@
 import json
 import os
-import time
 from flask import send_from_directory
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, send_from_directory, abort
 from flask_login import current_user, login_required
 from flask import get_flashed_messages
 from flask_login import login_required, current_user
 
+from app import cache
 from app.core.utils.utils import get_version
 from app.core.utils.activity_log import log_activity
 
@@ -88,37 +88,25 @@ def home() -> render_template:
         latest_blog_posts=latest_blog_posts,
     )
 
-# Process-local cache for home_charts() — these are homepage overview
-# charts (rule counts by month/format/CVE/ATT&CK, the activity calendar),
-# not live data anyone needs up-to-the-second, and some of these queries
-# (activity_calendar in particular pulls every ActivityLog row in the
-# window into Python to bucket by day) are real work to redo on every
-# single home page visit. Refreshed once a day is plenty. A plain
-# in-process dict is enough (not Redis/Flask-Caching): the production web
-# tier is a single gunicorn process (--workers 1, see manage.py) so there's
-# only ever one copy to keep warm, no cross-process staleness to worry
-# about.
-_HOME_CHARTS_CACHE: dict = {}
-_HOME_CHARTS_TTL_SECONDS = 24 * 60 * 60
-
-
 @home_blueprint.route("/home_charts/<tab>")
+@cache.cached(timeout=60 * 60 * 24, query_string=True)
 def home_charts(tab):
-    """Lazy chart loader — fetches only the requested tab's data, cached for
-    a day (see _HOME_CHARTS_CACHE above)."""
+    """Lazy chart loader — fetches only the requested tab's data.
+
+    Cached a day via Flask-Caching (see the `cache` object in app/__init__.py
+    and CACHE_TYPE in config.py): these are homepage overview charts (rule
+    counts by month/format/CVE/ATT&CK, the activity calendar), not live data
+    anyone needs up-to-the-second, and some of these queries
+    (activity_calendar in particular pulls every ActivityLog row in the
+    window into Python to bucket by day) are real work to redo on every
+    single home page visit. query_string=True so /home_charts/activity_
+    calendar?period=month and ?period=year cache separately instead of
+    colliding on the same key.
+    """
     import datetime, json as _json
     from sqlalchemy import func
     from app.core.db_class.db import Rule
     from app import db
-
-    cache_key = tab if tab != 'activity_calendar' else f"activity_calendar:{request.args.get('period', 'year')}"
-    cached = _HOME_CHARTS_CACHE.get(cache_key)
-    if cached and (time.time() - cached['at']) < _HOME_CHARTS_TTL_SECONDS:
-        return jsonify(cached['data'])
-
-    def _respond(payload):
-        _HOME_CHARTS_CACHE[cache_key] = {'data': payload, 'at': time.time()}
-        return jsonify(payload)
 
     if tab == 'total':
         now = datetime.datetime.utcnow()
@@ -163,7 +151,7 @@ def home_charts(tab):
             running_total += created_bucket.get(l, 0) - deleted_bucket.get(l, 0)
             values.append(running_total)
 
-        return _respond({'title': 'Total Rules Over Time', 'subtitle': 'Cumulative — last 6 months',
+        return jsonify({'title': 'Total Rules Over Time', 'subtitle': 'Cumulative — last 6 months',
                         'categories': nice, 'series': [{'name': 'Total Rules', 'values': values}]})
 
     if tab == 'timeline':
@@ -185,7 +173,7 @@ def home_charts(tab):
                 .filter(Rule.is_deleted == False, Rule.creation_date >= cutoff)
                 .group_by('m').all())
         bucket = {r[0]: r[1] for r in rows if r[0]}
-        return _respond({'title': 'Rules Added / Month', 'subtitle': 'Last 6 months',
+        return jsonify({'title': 'Rules Added / Month', 'subtitle': 'Last 6 months',
                         'categories': nice, 'series': [{'name': 'Rules Added', 'values': [bucket.get(l, 0) for l in labels]}]})
 
     if tab == 'formats':
@@ -194,7 +182,7 @@ def home_charts(tab):
                 .group_by(Rule.format)
                 .order_by(func.count(Rule.id).desc())
                 .limit(10).all())
-        return _respond({'title': 'Rules by Format',
+        return jsonify({'title': 'Rules by Format',
                         'categories': [r[0] or 'Unknown' for r in rows],
                         'series': [{'name': 'Rules', 'values': [r[1] for r in rows]}]})
 
@@ -212,7 +200,7 @@ def home_charts(tab):
                 if cid:
                     counter[cid] = counter.get(cid, 0) + 1
         top = sorted(counter.items(), key=lambda x: x[1], reverse=True)[:10]
-        return _respond({'title': 'CVEs with the most rules',
+        return jsonify({'title': 'CVEs with the most rules',
                         'categories': [c[0] for c in top],
                         'series': [{'name': 'Rules', 'values': [c[1] for c in top]}]})
 
@@ -236,7 +224,7 @@ def home_charts(tab):
                 key = dt.strftime('%Y-%m-%d')
                 bucket[key] = bucket.get(key, 0) + 1
 
-        return _respond({
+        return jsonify({
             'title':         'Platform Activity',
             'subtitle':      subtitle_map.get(period, 'Last 12 months'),
             'calendar_data': [[day, count] for day, count in sorted(bucket.items())],
@@ -252,7 +240,7 @@ def home_charts(tab):
                 .group_by(RuleAttackAssociation.technique_id)
                 .order_by(func.count(RuleAttackAssociation.id).desc())
                 .limit(10).all())
-        return _respond({'title': 'ATT&CK techniques with the most rules',
+        return jsonify({'title': 'ATT&CK techniques with the most rules',
                         'categories': [r[0] for r in rows],
                         'series': [{'name': 'Rules', 'values': [r[1] for r in rows]}]})
 

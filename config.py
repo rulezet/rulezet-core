@@ -71,6 +71,18 @@ class Config:
    
     YARA_ADDITIONAL_EXTERNAL = empty_split(os.environ.get('YARA_ADDITIONAL_EXTERNAL', ''), ',')
 
+    # Flask-Caching — SimpleCache (in-process dict, no extra infra) is the
+    # right fit as long as the web tier is a single gunicorn process
+    # (--workers 1, see manage.py's start-prod): there's only one copy to
+    # keep warm, no cross-process staleness to worry about. If that ever
+    # changes to multiple worker processes, switch CACHE_TYPE to
+    # 'RedisCache' (+ CACHE_REDIS_URL) so every process shares one cache —
+    # every @cache.cached()/cache.get()/cache.set() call site stays
+    # unchanged, only this config moves.
+    CACHE_TYPE = os.environ.get('CACHE_TYPE', 'SimpleCache')
+    CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', 300))
+    CACHE_REDIS_URL = os.environ.get('CACHE_REDIS_URL', '')
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
@@ -91,6 +103,10 @@ class TestingConfig(Config):
     SECRET_KEY = "testing-secret-key-do-not-use-in-production"
     SQLALCHEMY_DATABASE_URI = "sqlite:///rulezet-test.sqlite"
     WTF_CSRF_ENABLED = False
+    # NullCache — every @cache.cached() call is a live no-op miss, so tests
+    # always see fresh data instead of a stale value left over from an
+    # earlier test in the same run.
+    CACHE_TYPE = 'NullCache'
 
     
     SESSION_TYPE = "filesystem" # else error with session
