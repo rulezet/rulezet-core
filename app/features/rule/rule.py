@@ -223,6 +223,18 @@ def rules_list() -> render_template:
 
     return render_template("rule/rules_list.html", url_filters=url_filters)
 
+
+@rule_blueprint.route("/feed/suricata.rules", methods=['GET'])
+def suricata_feed():
+    """
+    Plain-text feed of every active Suricata rule — the URL to hand
+    suricata-update as a custom source (`url:` in its sources index),
+    since /rule/rules_list is an HTML page it can't consume. No auth,
+    public, same as any other rule source suricata-update polls.
+    """
+    return RuleModel.get_suricata_feed_text()
+
+
 # without search
 @rule_blueprint.route("/get_rules_page", methods=['GET'])
 def get_rules_page() -> jsonify:
