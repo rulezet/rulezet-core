@@ -1164,7 +1164,8 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                               });
                               const data = await res.json();
                               if (res.status === 201) {
-                                    window.location.href = "/rule/import_loading/" + data.session_uuid;
+                                    const b = branch.value.trim();
+                                    window.location.href = "/rule/import_loading/" + data.session_uuid + (b ? "?branch=" + encodeURIComponent(b) : "");
                               } else {
                                     importError.value = data.message || "An unexpected error occurred.";
                                     create_message(data.message, data.toast_class || "danger-subtle");

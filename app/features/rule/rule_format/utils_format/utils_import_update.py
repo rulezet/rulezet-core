@@ -177,7 +177,22 @@ def is_github_repo_accessible(repo_url):
         if response.status_code == 401:
             return False, "GITHUB_TOKEN was rejected by GitHub (401 Bad credentials) — it is invalid or revoked. Generate a new one at https://github.com/settings/tokens and update it in Admin → Settings."
 
-        return False, response.text
+        # Secondary rate limit / abuse detection (a 403 without
+        # X-RateLimit-Remaining: 0 — GitHub uses Retry-After for this one).
+        if response.status_code == 403:
+            retry_after = response.headers.get('Retry-After')
+            when = f"in {retry_after}s" if retry_after else "shortly"
+            return False, f"GitHub API temporarily throttled this request — try again {when}."
+
+        if response.status_code == 404:
+            return False, "Repository not found, or the token can't see it (private repo?)."
+
+        # Never echo GitHub's raw response body below this point — for a
+        # rate-limit response in particular it includes the caller's own
+        # public IP address ("API rate limit exceeded for 203.0.113.4 ..."),
+        # which has no business being displayed back in the UI or stored in
+        # an import session's error field.
+        return False, f"GitHub API returned an unexpected status ({response.status_code})."
     except Exception as e:
         return False , str(e)
 

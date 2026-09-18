@@ -29,9 +29,12 @@
             [[ !is_finished ? 'Importing rules from GitHub, live.' : 'Here is what was imported from this repository.' ]]
         </p>
         <div v-if="repoUrl" class="d-flex align-items-center gap-2 mt-2 flex-wrap">
-            <a :href="repoUrl" target="_blank" rel="noreferrer" class="ul-repo-stat" style="text-decoration:none;" title="Open on GitHub">
+            <a :href="repoUrlWithBranch" target="_blank" rel="noreferrer" class="ul-repo-stat" style="text-decoration:none;" title="Open on GitHub">
                 <i class="fa-brands fa-github"></i>[[ repoUrl ]]
             </a>
+            <span v-if="importBranch" class="badge bg-light text-muted fw-normal border-0" style="font-size:.72rem;">
+                <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ importBranch ]]
+            </span>
             <button class="ul-job-ctrl-btn" title="Copy URL" @click="copyRepoUrl()">
                 <i class="fas" :class="repoUrlCopied ? 'fa-check' : 'fa-copy'"></i>
             </button>
@@ -287,7 +290,7 @@
                         </template>
 
                         <template v-else>
-                            <a v-if="repoUrl" :href="repoUrl" target="_blank" rel="noreferrer" class="ul-repo-name">[[ repoUrl ]]</a>
+                            <a v-if="repoUrl" :href="repoUrlWithBranch" target="_blank" rel="noreferrer" class="ul-repo-name">[[ repoUrl ]]</a>
                             <p class="ul-repo-desc mb-0" v-if="info_session.description">[[ info_session.description ]]</p>
                         </template>
                     </div>
@@ -487,6 +490,22 @@
 
             const repoUrl = computed(() =>
                 info_session.value.repo_url || (result_data.value.info && result_data.value.info.repo_url) || ''
+            )
+
+            // The branch this import actually ran against — info_session.branch
+            // (set server-side from the import form's branch field) is the
+            // authoritative source; the ?branch= query param is a fallback for
+            // older sessions/results that predate branch tracking.
+            const importBranch = computed(() =>
+                info_session.value.branch
+                || (result_data.value.info && result_data.value.info.branch)
+                || new URLSearchParams(window.location.search).get('branch')
+                || ''
+            )
+            const repoUrlWithBranch = computed(() =>
+                repoUrl.value && importBranch.value
+                    ? `${repoUrl.value.replace(/\/$/, '').replace(/\.git$/, '')}/tree/${encodeURIComponent(importBranch.value)}`
+                    : repoUrl.value
             )
 
             const repoUrlCopied = ref(false)
@@ -816,7 +835,7 @@
                 pageReady,
                 currentPhase, sessionError, phaseTitle, phaseSub, scanFoundCount,
                 isGithubManager, rateLimitStatus, rateLimitResetLabel, fetchRateLimitStatus,
-                repoUrl, repoUrlCopied, copyRepoUrl,
+                repoUrl, repoUrlWithBranch, importBranch, repoUrlCopied, copyRepoUrl,
 
                 logEntries, logEl,
                 liveImported, liveSkipped, liveBad,
