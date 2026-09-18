@@ -10,7 +10,7 @@ import datetime
 import zipfile
 import requests
 from sqlalchemy.exc import SQLAlchemyError
-from flask import current_app, jsonify, request, send_file
+from flask import current_app, jsonify, request, send_file, Response
 from flask_login import current_user
 from sqlalchemy import and_, case, or_, text
 from sqlalchemy.orm import joinedload
@@ -4744,6 +4744,33 @@ def export_rules_by_urls_as_zip(urls):
         as_attachment=True,
         download_name=f"github_rules_export_{datetime.date.today()}.zip"
     )
+
+
+def get_suricata_feed_text():
+    """
+    Plain-text feed of every active Suricata rule, one per line (a blank
+    line between rules) — the shape suricata-update expects for a custom
+    source `url:` pointing at a single .rules file (see
+    https://suricata-update.readthedocs.io — a source can be a single
+    rules file or an archive of many; this is the single-file form).
+    No auth, no pagination: meant to be polled unattended by
+    suricata-update, same as any other public rule source it consumes.
+    """
+    rules = (
+        _active()
+        .filter(Rule.format.ilike('suricata'),
+                Rule.to_string.isnot(None), Rule.to_string != '')
+        .order_by(Rule.id.asc())
+        .all()
+    )
+    header = (
+        f"# Rulezet Suricata rule feed — {len(rules)} rule(s)\n"
+        f"# Generated {datetime.datetime.now(tz=datetime.timezone.utc).isoformat()}\n"
+        f"# https://rulezet.org\n\n"
+    )
+    body = "\n\n".join(r.to_string.strip() for r in rules)
+    return Response(header + body + "\n", mimetype='text/plain')
+
 
 def delete_importer_history(id):
     try:
