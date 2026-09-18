@@ -133,6 +133,23 @@ export default {
         // ignores user_id entirely for anyone else — see get_bad_rules_users_usage).
         if (props.currentUserIsAdmin) watch(formatFilter, fetchUserList)
 
+        // ── Format filter options — fetched from FormatRule (the same
+        // source of truth as the rule create/edit format dropdown, see
+        // edit_rule.html's fetchFormats()) instead of a hardcoded list, so
+        // a newly added format shows up here automatically.
+        const formatOptions = ref([])
+        async function fetchFormatOptions() {
+            try {
+                const res = await fetch('/rule/get_rules_formats')
+                if (res.ok) {
+                    const data = await res.json()
+                    formatOptions.value = data.formats || []
+                }
+            } catch {
+                formatOptions.value = []
+            }
+        }
+
         // ── Sort — server-side, same setSort/sortIcon convention as RuleList ──
         const sortKey = ref(props.syncUrl ? _p('sort', 'created_at') : 'created_at')
         const sortDir = ref(props.syncUrl ? _p('dir', 'desc') : 'desc')
@@ -348,6 +365,7 @@ export default {
 
         onMounted(() => {
             fetchData(1)
+            fetchFormatOptions()
             if (props.currentUserIsAdmin) fetchUserList()
         })
 
@@ -356,7 +374,7 @@ export default {
             filtersOpen, perPage,
             isSelectable, selectedIds, isSelected, toggleItem, allOnPageSelected, someOnPageSelected,
             togglePageSelection, clearSelection, selectionCount, showBulkBar, emitBulkAction,
-            search, searchField, formatFilter, userFilter, userList, hasActiveFilters,
+            search, searchField, formatFilter, formatOptions, userFilter, userList, hasActiveFilters,
             TOGGLEABLE_COLS, colVisible, toggleColumn, tableColspan,
             allExpanded, expandAll, collapseAll,
             sortKey, sortDir, setSort, sortIcon,
@@ -462,14 +480,7 @@ export default {
                 </div>
                 <select class="rl-fmt-select-overlay" v-model="formatFilter" @change="onFilterChange" aria-label="Format">
                     <option value="">All formats</option>
-                    <option value="yara">YARA</option>
-                    <option value="sigma">Sigma</option>
-                    <option value="suricata">Suricata</option>
-                    <option value="zeek">Zeek</option>
-                    <option value="wazuh">Wazuh</option>
-                    <option value="nse">NSE</option>
-                    <option value="crs">CRS</option>
-                    <option value="nova">NOVA</option>
+                    <option v-for="fmt in formatOptions" :key="fmt.id" :value="fmt.name">{{ fmt.name.toUpperCase() }}</option>
                 </select>
             </div>
 
