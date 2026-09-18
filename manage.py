@@ -352,10 +352,32 @@ def cmd_start() -> None:
     header(f"Starting Rulezet v{app_version()} (development)")
     info(f"Serving at {url}")
     info("Press CTRL+C to stop")
+
+    # Same split as start-prod: the background job worker, telemetry loop,
+    # update-checker and both schedulers run in worker.py, their own
+    # process, not inside app.py's dev server. Nothing here forces this the
+    # way gunicorn's --timeout/--max-requests do in prod, but keeping dev
+    # and prod on the same process shape means a job-worker bug shows up
+    # here first, in dev, instead of only in prod.
+    worker_proc = subprocess.Popen(
+        [PYTHON, "worker.py"], cwd=ROOT,
+        env={**_venv_env(), "FLASKENV": "development"},
+    )
     try:
-        run([PYTHON, "app.py"], extra_env={"FLASKENV": "development"})
+        run(
+            [PYTHON, "app.py"],
+            extra_env={"FLASKENV": "development", "RULEZET_EXTERNAL_WORKER": "1"},
+        )
     except KeyboardInterrupt:
         print("\n\033[0;37m  · Server stopped.\033[0m")
+    finally:
+        if worker_proc.poll() is None:
+            info("Stopping background worker process…")
+            worker_proc.terminate()
+            try:
+                worker_proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                worker_proc.kill()
 
 
 def cmd_start_prod() -> None:
