@@ -31,7 +31,13 @@ os.environ.setdefault('FLASKENV', 'development')
 load_dotenv()
 
 _cli_mode = args.init_db or args.recreate_db or args.delete_db or args.seed_defaults
-app = create_app(start_worker=not _cli_mode)
+# manage.py's `start` launches worker.py as its own process alongside this
+# one (same split as production's start-prod/worker.py — see there for why)
+# and sets this so app.py doesn't ALSO start a second, duplicate copy of the
+# job worker/telemetry/scheduler threads. Running app.py directly (without
+# going through manage.py) still starts everything in-process as before.
+_external_worker = os.environ.get('RULEZET_EXTERNAL_WORKER') == '1'
+app = create_app(start_worker=not _cli_mode and not _external_worker)
 
 @app.errorhandler(404)
 def error_page_not_found(e):
