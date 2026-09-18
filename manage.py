@@ -394,27 +394,32 @@ def cmd_start_prod() -> None:
     header(f"Starting Rulezet v{app_version()} (production)")
     info(f"Serving at {public_url}")
     info("Press CTRL+C to stop")
+
+    # `flask run` (Werkzeug's dev server) used to run here — it's not built
+    # for production (no real worker/thread pooling, no timeout enforcement,
+    # prone to one slow client stalling everything). gunicorn was already a
+    # dependency and even had a GUNICORN path constant defined above, just
+    # never wired up.
+    #
+    # The background job worker, telemetry loop, update-checker and the two
+    # schedulers (GitHub sync / admin tasks) run in a SEPARATE process
+    # (worker.py, create_app(start_worker=True)) — never inside a gunicorn
+    # web worker (wsgi.py now uses start_worker=False). They used to run as
+    # in-process threads here, which put a running job at the mercy of
+    # gunicorn's own request-handling watchdogs: --timeout kills a worker
+    # that hasn't responded in time (fine for a hung HTTP handler, not for a
+    # legitimately long background job sharing that same process), and
+    # --max-requests recycles a worker after N requests (killing any job
+    # still running past that point, however far from done). Splitting them
+    # into worker.py removes both failure modes, and as a bonus means
+    # --workers below can be raised past 1 for real request parallelism
+    # without the job-worker's claim-a-job race that justified keeping it at
+    # 1 before (see worker.py's docstring for the full reasoning).
+    worker_proc = subprocess.Popen(
+        [PYTHON, "worker.py"], cwd=ROOT,
+        env={**_venv_env(), "FLASKENV": "production"},
+    )
     try:
-        # `flask run` (Werkzeug's dev server) used to run here — it's not
-        # built for production (no real worker/thread pooling, no timeout
-        # enforcement, prone to one slow client stalling everything).
-        # gunicorn was already a dependency and even had a GUNICORN path
-        # constant defined above, just never wired up.
-        #
-        # --workers 1 (not N) is deliberate, not a placeholder: create_app()
-        # starts the background job worker, the telemetry loop and the
-        # update-checker loop as in-process threads (app/__init__.py). Each
-        # of those is a singleton by design — the job worker in particular
-        # claims a pending job with a plain read-then-commit, not an atomic
-        # claim, so two processes both running it would race and could
-        # double-process the same job. Multiple gunicorn *worker processes*
-        # would each call create_app() independently and start their own
-        # copy of all three. --threads gives real request concurrency
-        # (gunicorn's gthread worker) without that risk, matching the
-        # single-process-many-threads model app.py's threaded=True already
-        # used. Moving to multiple worker processes for CPU parallelism is
-        # a real further win, but needs the job worker's claim made atomic
-        # (and the other two loops gated to one worker) first.
         threads = os.environ.get("GUNICORN_THREADS", "8")
         run([
             GUNICORN,
@@ -431,6 +436,14 @@ def cmd_start_prod() -> None:
         ], extra_env={"FLASKENV": "production"})
     except KeyboardInterrupt:
         print("\n\033[0;37m  · Server stopped.\033[0m")
+    finally:
+        if worker_proc.poll() is None:
+            info("Stopping background worker process…")
+            worker_proc.terminate()
+            try:
+                worker_proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                worker_proc.kill()
 
 
 def cmd_test() -> None:
