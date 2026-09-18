@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 from flask import get_flashed_messages
 from flask_login import login_required, current_user
 
+from app import cache
 from app.core.utils.utils import get_version
 from app.core.utils.activity_log import log_activity
 
@@ -88,8 +89,20 @@ def home() -> render_template:
     )
 
 @home_blueprint.route("/home_charts/<tab>")
+@cache.cached(timeout=60 * 60 * 24, query_string=True)
 def home_charts(tab):
-    """Lazy chart loader — fetches only the requested tab's data."""
+    """Lazy chart loader — fetches only the requested tab's data.
+
+    Cached a day via Flask-Caching (see the `cache` object in app/__init__.py
+    and CACHE_TYPE in config.py): these are homepage overview charts (rule
+    counts by month/format/CVE/ATT&CK, the activity calendar), not live data
+    anyone needs up-to-the-second, and some of these queries
+    (activity_calendar in particular pulls every ActivityLog row in the
+    window into Python to bucket by day) are real work to redo on every
+    single home page visit. query_string=True so /home_charts/activity_
+    calendar?period=month and ?period=year cache separately instead of
+    colliding on the same key.
+    """
     import datetime, json as _json
     from sqlalchemy import func
     from app.core.db_class.db import Rule

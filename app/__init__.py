@@ -5,6 +5,7 @@ from flask_wtf import CSRFProtect
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_session import Session
+from flask_caching import Cache
 from sqlalchemy.orm import sessionmaker
 from config import config as Config
 import os
@@ -19,6 +20,10 @@ login_manager = LoginManager()
 sess = Session()
 ThreadLocalSession = None
 mail = Mail()
+# Shared app-wide cache — `from app import cache` and use
+# @cache.cached(timeout=..., ...)/cache.get()/cache.set() anywhere. See
+# config.py's CACHE_TYPE for the backend (SimpleCache today, Redis-ready).
+cache = Cache()
 
 def create_app(start_worker=True):
     load_dotenv()
@@ -56,6 +61,7 @@ def create_app(start_worker=True):
     sess.init_app(app)
 
     mail.init_app(app)
+    cache.init_app(app)
 
     from .home import home_blueprint
 

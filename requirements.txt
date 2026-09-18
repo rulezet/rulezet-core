@@ -4,6 +4,7 @@ Flask-Login
 flask-session
 flask-sqlalchemy
 Flask-Migrate
+Flask-Caching
 Flask-WTF
 Flask-Mail
 WTForms

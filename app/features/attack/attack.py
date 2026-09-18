@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, render_template, abort
 from flask_login import login_required, current_user
+from app import cache
 from . import attack_core as AttackModel
 from ..jobs import jobs_core as JobModel
 
@@ -27,12 +28,17 @@ def stats():
 
 
 @attack_blueprint.route('/techniques/usage')
+@cache.cached(timeout=60, query_string=True)
 def techniques_usage():
     """Techniques associated with at least one rule matching every currently
     active RuleList filter (format, tags, sources, licenses, CVEs, author...),
     with counts scoped to that filtered set. Used by the RuleList ATT&CK
     filter dropdown — this is what keeps its counts accurate as other
-    filters are applied (e.g. picking format=suricata)."""
+    filters are applied (e.g. picking format=suricata).
+
+    Cached 60s (see the comment above get_rules_sources_usage in rule.py
+    for the same pattern/reasoning) — this refetches on every other filter
+    change too."""
     from ...core.db_class.db import RuleAttackAssociation, AttackTechnique, Rule
     from app import db
     from sqlalchemy import func
