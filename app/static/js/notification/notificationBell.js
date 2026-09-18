@@ -5,10 +5,11 @@
  * Mounts on #notif-bell-app.
  * Opens/closes the #notifOffcanvas Bootstrap offcanvas.
  *
- * Polling strategy (mirrors jobWidget):
- *   - One fetch on mount.
- *   - Active 15 s poll while the offcanvas is open OR while there are active job notifications.
- *   - Stops automatically when nothing is active.
+ * No background polling at all: every fetch (bell badge/count, "All" tab,
+ * "Jobs" tab) happens once on mount/open and on explicit events (a job you
+ * just started, a notification you just read). Reload the page to see
+ * something new that arrived while you weren't looking — nothing here
+ * silently hits the server on a timer.
  *
  * Bell persistence rule for jobs:
  *   A job notification stays visible in the bell until BOTH:
@@ -16,10 +17,7 @@
  *     2. The user has read it (clicked on it)
  */
 
-const { createApp, ref, computed, onMounted, onUnmounted, watch } = Vue
-
-const POLL_INTERVAL = 15_000
-
+const { createApp, ref, computed, onMounted } = Vue
 
 function csrf() {
     return document.getElementById('csrf_token')?.value || ''
@@ -74,8 +72,6 @@ const NotificationBell = {
         const offcanvasEl     = ref(null)
         const bannerDismissed = ref(false)
         let bsOffcanvas   = null
-        let timer         = null
-        let isOpen        = false
 
         // Read user preference from localStorage
         const notifStyle = computed(() => localStorage.getItem('rz-notif-style') || 'discrete')
@@ -93,10 +89,6 @@ const NotificationBell = {
             return items.value
         })
 
-        const hasActiveJobs = computed(() =>
-            items.value.some(n => n.is_job_active || n.notif_type === 'session_running')
-        )
-
         // ── Fetch ─────────────────────────────────────────────────────────────
         async function fetchBell() {
             try {
@@ -110,32 +102,15 @@ const NotificationBell = {
             loading.value = false
         }
 
-        // ── Polling ───────────────────────────────────────────────────────────
-        function startPolling() {
-            if (timer) return
-            timer = setInterval(fetchBell, POLL_INTERVAL)
-        }
-
-        function stopPolling() {
-            if (timer) { clearInterval(timer); timer = null }
-        }
-
-        function refreshPollingState() {
-            if (isOpen || hasActiveJobs.value) {
-                startPolling()
-            } else {
-                stopPolling()
-            }
-        }
-
-        watch(hasActiveJobs, refreshPollingState)
-
         // ── Open / close offcanvas ────────────────────────────────────────────
+        // No background timer here — the bell badge/count is a snapshot as
+        // of the last fetch (mount, opening the panel, or an explicit event
+        // like a job you just started or a notification you just read).
+        // Live job *progress* still updates without a reload — see
+        // NotificationPanel's dedicated /notifications/bell/jobs poll below.
         function openBell() {
             if (bsOffcanvas) {
                 bsOffcanvas.show()
-                isOpen = true
-                startPolling()
                 fetchBell()
             }
         }
@@ -187,21 +162,16 @@ const NotificationBell = {
             offcanvasEl.value = document.getElementById('notifOffcanvas')
             if (offcanvasEl.value && window.bootstrap?.Offcanvas) {
                 bsOffcanvas = new bootstrap.Offcanvas(offcanvasEl.value)
-                offcanvasEl.value.addEventListener('show.bs.offcanvas',  () => { isOpen = true;  startPolling() })
-                offcanvasEl.value.addEventListener('hide.bs.offcanvas',  () => { isOpen = false; refreshPollingState() })
+                offcanvasEl.value.addEventListener('show.bs.offcanvas', fetchBell)
             }
             fetchBell()
-            window.addEventListener('rz:job-created', () => { fetchBell(); startPolling() })
+            window.addEventListener('rz:job-created', fetchBell)
             window.addEventListener('rz:notif-read', fetchBell)
-        })
-
-        onUnmounted(() => {
-            stopPolling()
         })
 
         return {
             items, loading, activeTab, unreadCount, showBanner,
-            filteredItems, hasActiveJobs,
+            filteredItems,
             openBell, markRead, deleteNotif, markAllRead, clickNotif, dismissBanner,
             progressFillClass, progressWidth,
             bubbleClass, typeLabel, relativeTime,
@@ -244,7 +214,6 @@ const NotificationPanel = {
         const jobItems    = ref([])
         const loading     = ref(true)
         const activeTab   = ref('all')
-        let timer         = null
 
         async function fetchBell() {
             try {
@@ -273,21 +242,7 @@ const NotificationPanel = {
             if (activeTab.value === 'jobs') return jobItems.value
             return items.value
         })
-        const hasActiveJobs = computed(() =>
-            items.value.some(n => n.notif_type === 'session_running') ||
-            jobItems.value.some(n => n.is_job_active)
-        )
-
         function fetchAll() { fetchBell(); fetchJobs() }
-
-        function startPolling() {
-            if (timer) return
-            timer = setInterval(fetchAll, POLL_INTERVAL)
-        }
-        function stopPolling() {
-            if (timer) { clearInterval(timer); timer = null }
-        }
-        watch(hasActiveJobs, v => { v ? startPolling() : stopPolling() })
 
         async function markRead(notif) {
             if (notif.is_read) return
@@ -332,16 +287,14 @@ const NotificationPanel = {
         onMounted(() => {
             const el = document.getElementById('notifOffcanvas')
             if (el) {
-                el.addEventListener('show.bs.offcanvas', () => { fetchAll(); startPolling() })
-                el.addEventListener('hide.bs.offcanvas', () => { if (!hasActiveJobs.value) stopPolling() })
+                el.addEventListener('show.bs.offcanvas', fetchAll)
             }
             fetchAll()
-            window.addEventListener('rz:job-created', () => { fetchAll(); startPolling() })
+            window.addEventListener('rz:job-created', fetchAll)
         })
-        onUnmounted(stopPolling)
 
         return {
-            items, jobItems, loading, activeTab, unreadCount, unreadJobCount, filteredItems, hasActiveJobs,
+            items, jobItems, loading, activeTab, unreadCount, unreadJobCount, filteredItems,
             markRead, deleteNotif, markAllRead, clickNotif,
             progressFillClass, progressWidth,
             bubbleClass, typeLabel: t => TYPE_LABEL[t] || t, relativeTime,
