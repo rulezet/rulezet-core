@@ -2503,6 +2503,15 @@ export default {
         watch(viewMode, () => { page.value = 1; fetchData() })
         watch(aiAnalysisOnly, () => { page.value = 1; fetchData() })
 
+        // `source`/`branch` are normally static for a given page (set once by
+        // the parent and never touched again), so this never used to matter
+        // — but the GitHub repo detail page's branch picker changes `branch`
+        // on the same mounted <rule-list> after the fact (no full reload),
+        // and without this the list silently kept showing the old branch's
+        // rules until the page was manually reloaded.
+        watch(() => props.source, () => { page.value = 1; fetchData() })
+        watch(() => props.branch, () => { page.value = 1; fetchData() })
+
         // Auto-expand all items when search field is "content"
         watch(items, (newItems) => {
             if (searchField.value === 'content') {
