@@ -17,7 +17,7 @@ from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_s
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
-from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
+from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_github_repo_live_info, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
 from app import db
 from . import rule_core as RuleModel
@@ -4554,17 +4554,26 @@ def check_updates_by_url():
     if not valid_urls:
         return {"message": "No valid GitHub URLs provided.", "toast_class": "danger-subtle"}, 400
 
+    # Only urls[0] is ever actually used (Update_class only supports a single
+    # repo per by_url session — see its __init__) — its branch (when the
+    # GitHub Sources list row that triggered this represents one specific
+    # branch of a multi-branch repo) must travel with it, or the update would
+    # silently check the repo's default branch instead of the branch the
+    # rules being checked actually came from.
+    branch = next((u.get("branch") for u in urls if u.get("url") == valid_urls[0] and u.get("branch")), None)
+
     info = {
-        "mode": "by_url", 
-        "count": len(valid_urls), 
-        "initiated_by": current_user.first_name, 
-        "repo_url": valid_urls[0], 
-        "license": None, 
-        "author": current_user.last_name, 
+        "mode": "by_url",
+        "count": len(valid_urls),
+        "initiated_by": current_user.first_name,
+        "repo_url": valid_urls[0],
+        "branch": branch,
+        "license": None,
+        "author": current_user.last_name,
         "descriprtion": None
     }
 
-    update_session = UpdateModel.Update_class(valid_urls, current_user, info, mode="by_url")
+    update_session = UpdateModel.Update_class(valid_urls, current_user, info, mode="by_url", branch=branch)
     UpdateModel.sessions.append(update_session)
     update_session.start()
 
@@ -4914,6 +4923,22 @@ def github_rate_limit_status():
     if not _is_github_manager():
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
     return jsonify(get_github_rate_limit_status()), 200
+
+
+@rule_blueprint.route("/github/repo_live_info", methods=['GET'])
+@login_required
+def github_repo_live_info_route():
+    """Server-side proxy (uses GITHUB_TOKEN) for the "GitHub Repository info"
+    panel's live stars/forks/commits/branches/contributors data — open to
+    any logged-in user, same audience as the page(s) embedding that panel
+    (github_detail, github_proposal_detail_page). Replaces a client-side,
+    unauthenticated direct call to api.github.com that both leaked the
+    visitor's own IP in GitHub's raw rate-limit error body and hit the
+    unauthenticated 60/hour cap constantly. See get_github_repo_live_info()."""
+    url = request.args.get("url", type=str)
+    if not url or not valider_repo_github(url):
+        return jsonify({"message": "No valid GitHub URL was provided."}), 400
+    return jsonify(get_github_repo_live_info(url)), 200
 
 
 @rule_blueprint.route("/github_detail", methods=['GET'])

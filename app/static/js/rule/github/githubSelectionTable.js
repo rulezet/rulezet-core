@@ -196,6 +196,22 @@ const GitHubSelectionTable = {
             return item.branch ? item.url + '::' + item.branch : item.url;
         },
 
+        // Rows for the same repo (one per branch — see get_optimized_github_data)
+        // are always adjacent in githubUrls: the server sorts/paginates on
+        // GithubRepo (one row per repo) and only expands into per-branch rows
+        // afterwards. Adjacency is therefore safe to rely on regardless of the
+        // active sort column, so a simple "same url as neighbor" check is
+        // enough to visually tie the group together instead of it reading as
+        // unrelated repos that merely happen to share a name.
+        isRepoGroupContinuation(index) {
+            return index > 0 && this.githubUrls[index - 1].url === this.githubUrls[index].url;
+        },
+        isRepoGroupStart(index) {
+            return !this.isRepoGroupContinuation(index)
+                && index < this.githubUrls.length - 1
+                && this.githubUrls[index + 1].url === this.githubUrls[index].url;
+        },
+
         repoTreeUrl(item) {
             if (!item || !item.url) return item ? item.url : '';
             return item.branch ? item.url.replace(/\.git$/, '') + '/tree/' + item.branch : item.url;
@@ -369,16 +385,22 @@ const GitHubSelectionTable = {
         },
 
         async updateSingleRepo(item) {
-            if (!confirm(`Check for updates for: ${item.url}?`)) return;
+            const label = item.branch ? `${item.url} (branch: ${item.branch})` : item.url;
+            if (!confirm(`Check for updates for: ${label}?`)) return;
             item.isUpdating = true;
             try {
+                // item.branch matters: a repo imported from more than one
+                // branch renders as one row per branch (same url) — without
+                // sending it, the update would silently check the repo's
+                // default branch instead of the branch this row's rules
+                // actually came from.
                 const response = await fetch('/rule/check_updates_by_url', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': this.csrfToken
                     },
-                    body: JSON.stringify({ url: [{ url: item.url }] }),
+                    body: JSON.stringify({ url: [{ url: item.url, branch: item.branch || null }] }),
                 });
                 if (response.status === 201) {
                     const data = await response.json();
@@ -550,7 +572,12 @@ const GitHubSelectionTable = {
                 <tbody v-if="!loading">
                     <template v-for="(item, index) in githubUrls" :key="rowKey(item)">
                         <tr class="dt-row"
-                            :class="{ 'dt-row--selected': isItemChecked(item.url), 'dt-row--expanded': expandedRows.has(rowKey(item)) }"
+                            :class="{
+                                'dt-row--selected': isItemChecked(item.url),
+                                'dt-row--expanded': expandedRows.has(rowKey(item)),
+                                'dt-row--repo-group-start': isRepoGroupStart(index),
+                                'dt-row--repo-group-continuation': isRepoGroupContinuation(index),
+                            }"
                             style="cursor:pointer"
                             @click="toggleRow(rowKey(item))">
                             <td class="dt-td dt-td--checkbox" @click.stop>
@@ -559,11 +586,22 @@ const GitHubSelectionTable = {
                                        @change="updateSelection(item.url, $event.target.checked)">
                             </td>
                             <td class="dt-td">
-                                <div class="d-flex align-items-center">
+                                <div v-if="!isRepoGroupContinuation(index)" class="d-flex align-items-center">
                                     <div class="bg-light rounded p-2 me-3 flex-shrink-0">
                                         <i class="fab fa-github fa-lg"></i>
                                     </div>
-                                    <div class="fw-bold text-dark" style="white-space:nowrap;">[[ item.url ]]</div>
+                                    <div class="fw-bold text-dark" style="white-space:nowrap;">
+                                        [[ item.url ]]
+                                        <span v-if="isRepoGroupStart(index)"
+                                              class="badge bg-primary-soft text-primary rounded-pill ms-1"
+                                              style="font-size:.65rem;font-weight:600;"
+                                              :title="'Rules from this repo were imported from ' + item.branches.length + ' different branches'">
+                                            <i class="fas fa-code-branch me-1"></i>[[ item.branches.length ]] branches
+                                        </span>
+                                    </div>
+                                </div>
+                                <div v-else class="dt-repo-group-connector">
+                                    <i class="fas fa-code-branch"></i> same repository — different branch
                                 </div>
                             </td>
                             <td v-show="colVisible.author" class="dt-td">[[ item.author || '—' ]]</td>

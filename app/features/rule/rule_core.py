@@ -3664,8 +3664,12 @@ def get_all_rule_by_url_github_page(page: int = 1, search: str = None, url: str 
     
     return pagination, total_count
 
-def get_all_rule_by_url_github(url: str = None, current_user_: User = None):
-    """Get list of Rules whose source contains a specific GitHub project URL."""
+def get_all_rule_by_url_github(url: str = None, current_user_: User = None, branch: str = None):
+    """Get list of Rules whose source contains a specific GitHub project URL.
+
+    `branch`, when given, narrows to rules imported from that exact branch —
+    a repo imported from more than one branch (see Rule.branch) must never
+    have another branch's rules checked/updated against this branch's clone."""
     query = _active().filter(Rule.source.isnot(None))
 
     if current_user_.is_admin():
@@ -3677,6 +3681,9 @@ def get_all_rule_by_url_github(url: str = None, current_user_: User = None):
 
         if url:
             query = query.filter(Rule.source.ilike(f"%{url}%"))
+
+    if branch:
+        query = query.filter(Rule.branch == branch)
 
     return query.all()
 

@@ -210,6 +210,28 @@
 .dt-row--selected { background: rgba(13, 110, 253, .07); }
 .dt-row--expanded { background: var(--light-bg-color); }
 
+/* Same repo, split into one row per branch (GitHub Sources list) — a
+   left accent bar ties the group together, with the continuation row(s)
+   losing their own top border so they visually merge under the group's
+   first row instead of reading as two unrelated repos. */
+.dt-row--repo-group-start,
+.dt-row--repo-group-continuation { border-left: 3px solid rgba(13, 110, 253, .35); }
+.dt-row--repo-group-continuation {
+    border-top: none;
+    margin-top: -1px;
+    background: rgba(13, 110, 253, .025);
+}
+.dt-row--repo-group-continuation:hover { background: var(--light-bg-color); }
+.dt-repo-group-connector {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding-left: 2.75rem;
+    color: var(--subtle-text-color);
+    font-size: .8rem;
+}
+.dt-repo-group-connector i { font-size: .75rem; opacity: .6; }
+
 .dt-td { padding: .55rem .75rem; color: var(--text-color); vertical-align: middle; }
 .dt-td--truncate {
     max-width: 220px;
