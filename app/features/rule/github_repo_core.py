@@ -458,8 +458,15 @@ def backfill_rule_branches_from_default(progress_cb=None) -> dict:
     background job can report progress (this makes one HTTP request per
     distinct repo, so a large registry can take a while).
 
-    Returns {'repos_checked', 'repos_updated', 'rules_updated', 'errors': [...]}.
+    Stops early (instead of burning through the rest of the list one 403
+    at a time) the moment GitHub's own rate-limit headers say the quota is
+    exhausted, and reports exactly when it resets — see
+    get_github_rate_limit_status() for the live version of that same check.
+
+    Returns {'repos_checked', 'repos_updated', 'rules_updated', 'errors',
+    'rate_limited', 'reset_at' (ISO, only when rate_limited)}.
     """
+    import datetime
     from app.features.rule.rule_format.utils_format.utils_import_update import (
         github_repo_to_api_url, _github_auth_headers,
     )
@@ -476,9 +483,24 @@ def backfill_rule_branches_from_default(progress_cb=None) -> dict:
     repos_updated = 0
     rules_updated = 0
     errors = []
+    rate_limited = False
+    reset_at = None
+    checked = 0
     for i, url in enumerate(urls):
+        checked = i + 1
         try:
             resp = requests.get(github_repo_to_api_url(url), headers=_github_auth_headers(), timeout=8)
+            # GitHub sends these on every response, success or failure —
+            # stop as soon as the quota hits 0 instead of logging one 403
+            # per remaining repo for no benefit.
+            if resp.headers.get('X-RateLimit-Remaining') == '0':
+                reset_ts = resp.headers.get('X-RateLimit-Reset')
+                reset_at = (
+                    datetime.datetime.fromtimestamp(int(reset_ts), tz=datetime.timezone.utc).isoformat()
+                    if reset_ts else None
+                )
+                rate_limited = True
+                break
             if resp.status_code != 200:
                 errors.append(f"{url}: GitHub API returned {resp.status_code}")
                 continue
@@ -505,8 +527,11 @@ def backfill_rule_branches_from_default(progress_cb=None) -> dict:
         rebuild_github_repos_from_rules()
 
     return {
-        'repos_checked': len(urls),
+        'repos_total': len(urls),
+        'repos_checked': checked,
         'repos_updated': repos_updated,
+        'rate_limited': rate_limited,
+        'reset_at': reset_at,
         'rules_updated': rules_updated,
         'errors': errors,
     }

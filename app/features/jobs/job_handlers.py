@@ -698,12 +698,24 @@ def handle_github_repo_branch_backfill(job, app):
         log_job(job, f"  {err}", level='warning', event='progress')
     if len(result['errors']) > 20:
         log_job(job, f"  … and {len(result['errors']) - 20} more error(s).", level='warning', event='progress')
-    log_job(
-        job,
-        f"Done — checked {result['repos_checked']} repo(s), backfilled "
-        f"{result['rules_updated']} rule(s) across {result['repos_updated']} repo(s).",
-        level='success', event='done',
-    )
+
+    if result['rate_limited']:
+        reset_msg = f" — resets at {result['reset_at']}" if result['reset_at'] else ""
+        log_job(
+            job,
+            f"Stopped — GitHub API rate limit hit after {result['repos_checked']}/{result['repos_total']} "
+            f"repo(s) ({result['repos_updated']} updated, {result['rules_updated']} rule(s) backfilled so far)"
+            f"{reset_msg}. Safe to re-run \"Backfill branches\" once the limit resets — it only ever "
+            f"touches rules still missing a branch.",
+            level='warning', event='done',
+        )
+    else:
+        log_job(
+            job,
+            f"Done — checked {result['repos_checked']} repo(s), backfilled "
+            f"{result['rules_updated']} rule(s) across {result['repos_updated']} repo(s).",
+            level='success', event='done',
+        )
 
 
 # ─── delete_activity_logs ─────────────────────────────────────────────────────

@@ -39,6 +39,39 @@ def get_github_api_base() -> str:
         return 'https://api.github.com'
     return f'https://{host}/api/v3'
 
+
+def get_github_rate_limit_status() -> dict:
+    """Current GitHub REST API rate-limit status (the 'core' bucket — the
+    one every plain GET /repos/... call in this app draws from). Hitting
+    GET /rate_limit does NOT itself consume a request against that quota
+    (GitHub explicitly exempts it), so this is safe to call as often as an
+    admin page wants to show "how long until the API is usable again"
+    without making the situation worse.
+
+    Returns {'limit', 'remaining', 'reset_at' (ISO 8601 UTC),
+    'reset_in_seconds', 'authenticated'} — or {'error': str} if the call
+    itself fails (e.g. no network)."""
+    try:
+        resp = requests.get(
+            f'{get_github_api_base()}/rate_limit',
+            headers=_github_auth_headers(),
+            timeout=8,
+        )
+        resp.raise_for_status()
+        core = resp.json().get('resources', {}).get('core', {})
+        reset_ts = core.get('reset')
+        reset_at = datetime.datetime.fromtimestamp(reset_ts, tz=datetime.timezone.utc) if reset_ts else None
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        return {
+            'limit':            core.get('limit'),
+            'remaining':        core.get('remaining'),
+            'reset_at':         reset_at.isoformat() if reset_at else None,
+            'reset_in_seconds': max(0, int((reset_at - now).total_seconds())) if reset_at else None,
+            'authenticated':    bool(os.environ.get('GITHUB_TOKEN')),
+        }
+    except requests.RequestException as e:
+        return {'error': str(e)}
+
 def get_repo_name_from_url(repo_url):
     """Extract the full repository path (owner/repo) from its Git URL."""
     parts = repo_url.rstrip('/').split('/')

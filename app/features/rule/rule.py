@@ -17,7 +17,7 @@ from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_s
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
-from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
+from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
 from app import db
 from . import rule_core as RuleModel
@@ -4903,6 +4903,17 @@ def backfill_github_branches():
         "toast_class": "success-subtle",
         "job_uuid": job.uuid,
     }), 201
+
+
+@rule_blueprint.route("/github/rate_limit_status", methods=['GET'])
+@login_required
+def github_rate_limit_status():
+    """Live GitHub API rate-limit status — admin/GitHub-manager only, same
+    audience as Resync/Backfill branches, since it's only actionable
+    context for those. GET /rate_limit doesn't itself cost a request."""
+    if not _is_github_manager():
+        return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
+    return jsonify(get_github_rate_limit_status()), 200
 
 
 @rule_blueprint.route("/github_detail", methods=['GET'])

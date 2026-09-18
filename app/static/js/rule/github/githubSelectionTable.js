@@ -47,6 +47,9 @@ const GitHubSelectionTable = {
             isActionLoading: false,
             resyncing: false,
             backfilling: false,
+            // Live GitHub API rate-limit status (admin/GitHub-manager only —
+            // fetched once on mount and after a Backfill run, never polled).
+            rateLimitStatus: null,
 
             sortKey: new URLSearchParams(window.location.search).get('sort') || 'url',
             sortDir: new URLSearchParams(window.location.search).get('dir') || 'asc',
@@ -83,6 +86,14 @@ const GitHubSelectionTable = {
         isAdmin() {
             return this.currentUserIsAdmin === 'true' || this.currentUserIsAdmin === true;
         },
+        rateLimitResetLabel() {
+            const s = this.rateLimitStatus;
+            if (!s || s.reset_in_seconds == null) return '';
+            const mins = Math.ceil(s.reset_in_seconds / 60);
+            if (mins <= 1) return 'less than a minute';
+            if (mins < 60) return `${mins} min`;
+            return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+        },
         selectedCount() {
             if (this.isAllSelectedMode) {
                 return this.totalUrls - this.excludedIds.size;
@@ -116,6 +127,7 @@ const GitHubSelectionTable = {
     },
     mounted() {
         document.addEventListener('click', this.handleColPickerOutsideClick);
+        if (this.isAdmin) this.fetchRateLimitStatus();
     },
     beforeUnmount() {
         document.removeEventListener('click', this.handleColPickerOutsideClick);
@@ -258,6 +270,18 @@ const GitHubSelectionTable = {
         // ── One-off repair: backfill Rule.branch for rules imported before
         // that column existed, from each repo's real GitHub default branch.
         // Backgrounded (unlike Resync) since it's one API call per repo. ──
+        // GET /rate_limit doesn't cost a request against the quota it
+        // reports on — safe to call freely, still never on a timer (fetched
+        // on mount, and on-demand via the refresh icon next to the badge).
+        async fetchRateLimitStatus() {
+            try {
+                const res = await fetch('/rule/github/rate_limit_status')
+                if (res.ok) this.rateLimitStatus = await res.json()
+            } catch {
+                this.rateLimitStatus = null
+            }
+        },
+
         async backfillBranches() {
             if (this.backfilling) return;
             this.backfilling = true;
@@ -386,6 +410,23 @@ const GitHubSelectionTable = {
                     <i class="fas fa-code-branch" :class="{ 'fa-spin': backfilling }"></i>
                     <span>[[ backfilling ? 'Starting…' : 'Backfill branches' ]]</span>
                 </button>
+                <div v-if="isAdmin && rateLimitStatus && !rateLimitStatus.error"
+                     class="d-flex align-items-center gap-1 px-2 rounded-pill"
+                     :class="rateLimitStatus.remaining === 0 ? 'bg-danger-subtle text-danger' : 'text-muted'"
+                     style="font-size:.75rem;"
+                     :title="rateLimitStatus.authenticated ? 'Using GITHUB_TOKEN' : 'No GITHUB_TOKEN configured — only 60 requests/hour'">
+                    <i class="fa-brands fa-github"></i>
+                    <span v-if="rateLimitStatus.remaining === 0">
+                        Rate limited — back in [[ rateLimitResetLabel ]]
+                    </span>
+                    <span v-else>
+                        GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]]
+                    </span>
+                    <button type="button" class="btn btn-sm p-0 border-0 text-muted" style="line-height:1;"
+                            title="Refresh" @click="fetchRateLimitStatus">
+                        <i class="fas fa-rotate" style="font-size:.65rem;"></i>
+                    </button>
+                </div>
                 <div class="dt-col-picker-wrap">
                     <button class="dt-toolbar-btn" ref="colPickerBtn"
                             :class="{ 'dt-toolbar-btn--active': showColPicker }"
