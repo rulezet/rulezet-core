@@ -721,7 +721,7 @@ def create_from_release():
         'content': content,
         'is_draft': True,
         'is_public': False,
-        'cover_image_url': '/static/images/release.png',
+        'cover_image_url': '/static/images/release.jpeg',
         'external_links': [{'label': 'GitHub Release Note', 'url': release_url}],
         'tag_names': release_tags,
     }, user_id=current_user.id)
