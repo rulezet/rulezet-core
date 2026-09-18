@@ -414,6 +414,33 @@
         </div>
 
         {% if current_user.is_admin() or current_user.has_permission('github.manage') %}
+        <!-- ── GitHub API rate-limit banner — big and hard to miss when
+             actually exhausted, since it explains an otherwise-confusing
+             import failure. Silent (no banner at all) when healthy. ── -->
+        <div v-if="rateLimitStatus && rateLimitStatus.remaining === 0"
+             class="d-flex align-items-center gap-3 p-3 mb-4 rounded-3"
+             style="background:rgba(220,53,69,.1);border:2px solid rgba(220,53,69,.35);">
+          <i class="fas fa-triangle-exclamation" style="color:#dc3545;font-size:1.4rem;flex-shrink:0;"></i>
+          <div class="flex-grow-1">
+            <div class="fw-bold" style="color:#dc3545;font-size:.95rem;">GitHub API rate limit reached</div>
+            <div style="font-size:.83rem;color:var(--text-color);">
+              Imports and branch lookups will fail until it resets — back in <strong>[[ rateLimitResetLabel ]]</strong>.
+              <span v-if="!rateLimitStatus.authenticated">Add a <code>GITHUB_TOKEN</code> to raise the limit from 60 to 5000 requests/hour.</span>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 flex-shrink-0" @click="fetchRateLimitStatus">
+            <i class="fas fa-rotate me-1"></i>Recheck
+          </button>
+        </div>
+        <div v-else-if="rateLimitStatus && !rateLimitStatus.error"
+             class="d-flex align-items-center gap-2 mb-3" style="font-size:.75rem;color:var(--subtle-text-color);">
+          <i class="fa-brands fa-github"></i>
+          <span>GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]] requests remaining</span>
+          <button type="button" class="btn btn-sm p-0 border-0 text-muted" style="line-height:1;" title="Refresh" @click="fetchRateLimitStatus">
+            <i class="fas fa-rotate" style="font-size:.65rem;"></i>
+          </button>
+        </div>
+
         <div>
           <div class="mb-3">
             <div class="d-flex align-items-center gap-1 mb-1">
@@ -1308,9 +1335,30 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         } catch {}
                   }
 
+                  // ── GitHub API rate-limit status (admin/GitHub-manager only,
+                  // same audience as the import form above) — GET /rate_limit
+                  // is exempt from the quota it reports on, so it's free to
+                  // call; fetched on mount and on-demand, never on a timer. ──
+                  const rateLimitStatus = ref(null);
+                  async function fetchRateLimitStatus() {
+                        try {
+                              const res = await fetch('/rule/github/rate_limit_status');
+                              if (res.ok) rateLimitStatus.value = await res.json();
+                        } catch { rateLimitStatus.value = null; }
+                  }
+                  const rateLimitResetLabel = Vue.computed(() => {
+                        const s = rateLimitStatus.value;
+                        if (!s || s.reset_in_seconds == null) return '';
+                        const mins = Math.ceil(s.reset_in_seconds / 60);
+                        if (mins <= 1) return 'less than a minute';
+                        if (mins < 60) return `${mins} min`;
+                        return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+                  });
+
                   onMounted(() => {
                         fetchRulesFormats();
                         if (!isAdminUser) fetchMyProposals();
+                        else fetchRateLimitStatus();
                         if (activeTab.value === 'parse') restoreParseDraft();
                         if (activeTab.value === 'json')  restoreJsonDraft();
                   });
@@ -1319,6 +1367,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   return {
                         activeTab,
                         message_list,
+                        isAdminUser, rateLimitStatus, rateLimitResetLabel, fetchRateLimitStatus,
                         trashConflictTitle, flashMessages, titleError,
                         manualLicense,
                         selectedLicense,

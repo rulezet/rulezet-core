@@ -392,6 +392,25 @@ const GitHubSelectionTable = {
 
     template: `
     <div class="dt-wrapper">
+        <!-- ── GitHub API rate-limit banner — big and hard to miss when
+             actually exhausted (explains otherwise-confusing import/backfill
+             failures); silent when healthy (see the small pill in the
+             toolbar instead). Admin/GitHub-manager only. ── -->
+        <div v-if="isAdmin && rateLimitStatus && rateLimitStatus.remaining === 0"
+             class="d-flex align-items-center gap-3 p-3 mb-3 rounded-3"
+             style="background:rgba(220,53,69,.1);border:2px solid rgba(220,53,69,.35);">
+            <i class="fas fa-triangle-exclamation" style="color:#dc3545;font-size:1.4rem;flex-shrink:0;"></i>
+            <div class="flex-grow-1">
+                <div class="fw-bold" style="color:#dc3545;font-size:.95rem;">GitHub API rate limit reached</div>
+                <div style="font-size:.83rem;color:var(--text-color);">
+                    Resync, Backfill and any per-repo GitHub lookups will fail until it resets — back in <strong>[[ rateLimitResetLabel ]]</strong>.
+                    <span v-if="!rateLimitStatus.authenticated">Add a <code>GITHUB_TOKEN</code> to raise the limit from 60 to 5000 requests/hour.</span>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 flex-shrink-0" @click="fetchRateLimitStatus">
+                <i class="fas fa-rotate me-1"></i>Recheck
+            </button>
+        </div>
         <github-filter
             ref="filter"
             :api-endpoint="apiEndpoint"
@@ -410,18 +429,12 @@ const GitHubSelectionTable = {
                     <i class="fas fa-code-branch" :class="{ 'fa-spin': backfilling }"></i>
                     <span>[[ backfilling ? 'Starting…' : 'Backfill branches' ]]</span>
                 </button>
-                <div v-if="isAdmin && rateLimitStatus && !rateLimitStatus.error"
-                     class="d-flex align-items-center gap-1 px-2 rounded-pill"
-                     :class="rateLimitStatus.remaining === 0 ? 'bg-danger-subtle text-danger' : 'text-muted'"
+                <div v-if="isAdmin && rateLimitStatus && !rateLimitStatus.error && rateLimitStatus.remaining !== 0"
+                     class="d-flex align-items-center gap-1 px-2 rounded-pill text-muted"
                      style="font-size:.75rem;"
                      :title="rateLimitStatus.authenticated ? 'Using GITHUB_TOKEN' : 'No GITHUB_TOKEN configured — only 60 requests/hour'">
                     <i class="fa-brands fa-github"></i>
-                    <span v-if="rateLimitStatus.remaining === 0">
-                        Rate limited — back in [[ rateLimitResetLabel ]]
-                    </span>
-                    <span v-else>
-                        GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]]
-                    </span>
+                    <span>GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]]</span>
                     <button type="button" class="btn btn-sm p-0 border-0 text-muted" style="line-height:1;"
                             title="Refresh" @click="fetchRateLimitStatus">
                         <i class="fas fa-rotate" style="font-size:.65rem;"></i>
