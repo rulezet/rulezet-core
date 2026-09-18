@@ -33,12 +33,10 @@ flask_session
 node_modules    
 app/rule/output_rules
 /backup/dumps
-/static/uploads/*
+app/static/uploads/*
 app/modules/*
 !app/modules/cti
 !app/modules/rulezet-validation
-app/static/uploads/avatars
-app/static/uploads/pivotick_backgrounds
 
 # rulezet-validation mirror (regenerable build output, see job_handlers.py:rule_validation_run)
 data/rulezet_validation/
