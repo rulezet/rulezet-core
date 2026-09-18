@@ -726,7 +726,8 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
             vote_down=0,
             to_string=new_to_string,
             cve_id=json.dumps(vuln_list),
-            github_path=form_dict.get("github_path") or None
+            github_path=form_dict.get("github_path") or None,
+            branch=form_dict.get("branch") or None
         )
 
         db.session.add(new_rule)
@@ -876,7 +877,7 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     # aggregates need the before/after of each to stay accurate. See
     # github_repo_core.sync_rule_edit.
     old_source = rule.source
-    old_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id}
+    old_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id, 'branch': rule.branch}
 
     rule.format = form_dict["format"]
     rule.title = form_dict["title"]
@@ -954,7 +955,7 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
 
     try:
         from app.features.rule.github_repo_core import sync_rule_edit
-        new_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id}
+        new_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id, 'branch': rule.branch}
         sync_rule_edit(old_source, rule.source, old_snapshot, new_snapshot)
     except Exception:
         db.session.rollback()
@@ -3276,6 +3277,7 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             "rule_count": repo.rule_count,
             "formats": sorted((repo.format_counts or {}).keys()),
             "licenses": sorted((repo.license_counts or {}).keys()),
+            "branches": sorted(b for b in (repo.branch_counts or {}).keys() if b),
             "cve_count": repo.cve_count,
             "has_conflicts": repo.conflict_count > 0,
             "last_import": {

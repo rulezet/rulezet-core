@@ -313,6 +313,12 @@ class Rule(db.Model):
     cve_id = db.Column(db.String , nullable=True)
 
     github_path = db.Column(db.String , nullable=True)
+    # Git branch this rule was imported from (e.g. "main", "dev") — set at
+    # import time from the branch picked in the import UI. NULL for rules
+    # imported before this column existed, or not imported from GitHub at
+    # all; backfilled best-effort from the source repo's own default
+    # branch rather than assumed to be "main".
+    branch = db.Column(db.String(255), nullable=True)
 
     # MD5 of the whitespace-normalized, lowercased to_string — kept in sync by the
     # `set` event below. Lets duplicate-content lookups use an index instead of a
@@ -385,6 +391,7 @@ class Rule(db.Model):
             "cve_id": self.cve_id if self.cve_id is not None else [],
             "editor": self.get_rule_user_first_name_by_id(),
             "github_path": self.github_path if self.github_path else None,
+            "branch": self.branch if self.branch else None,
             "editor_avatar": submitter_avatar,
             "sync_instance_url": self.sync_instance_url,
             "status": self.status or 'draft',
@@ -3771,6 +3778,11 @@ class GithubRepo(db.Model):
     rule_count     = db.Column(db.Integer, nullable=False, default=0)
     format_counts  = db.Column(db.JSON, nullable=False, default=dict)
     license_counts = db.Column(db.JSON, nullable=False, default=dict)
+    # {branch_name: active-rule-count} — same incremental-sync convention as
+    # format_counts/license_counts (see github_repo_core.py). A rule with no
+    # recorded branch (imported before this column existed) simply doesn't
+    # contribute an entry here, same as a rule with no format/license.
+    branch_counts  = db.Column(db.JSON, nullable=False, default=dict)
     cve_count      = db.Column(db.Integer, nullable=False, default=0)
     conflict_count = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc))
@@ -3787,6 +3799,7 @@ class GithubRepo(db.Model):
             'rule_count': self.rule_count,
             'formats':    sorted((self.format_counts or {}).keys()),
             'licenses':   sorted((self.license_counts or {}).keys()),
+            'branches':   sorted(b for b in (self.branch_counts or {}).keys() if b),
             'cve_count':  self.cve_count,
             'has_conflicts': self.conflict_count > 0,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,

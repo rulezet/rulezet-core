@@ -676,6 +676,36 @@ def handle_github_repo_resync(job, app):
             level='success', event='done')
 
 
+# ─── github_repo_branch_backfill ───────────────────────────────────────────────
+
+@register_handler('github_repo_branch_backfill')
+def handle_github_repo_branch_backfill(job, app):
+    """One-off repair: stamp Rule.branch for rules imported before that
+    column existed, using each repo's own GitHub-reported default_branch
+    (never a hardcoded "main" guess — see
+    github_repo_core.backfill_rule_branches_from_default). Background job
+    since it's one HTTP request per distinct repo in the registry."""
+    log_job(job, 'Looking up each repo\'s default branch on GitHub…', level='info', event='start')
+    from app.features.rule.github_repo_core import backfill_rule_branches_from_default
+
+    def _progress(done, total):
+        job.total = total
+        job.done = done
+        db.session.commit()
+
+    result = backfill_rule_branches_from_default(progress_cb=_progress)
+    for err in result['errors'][:20]:
+        log_job(job, f"  {err}", level='warning', event='progress')
+    if len(result['errors']) > 20:
+        log_job(job, f"  … and {len(result['errors']) - 20} more error(s).", level='warning', event='progress')
+    log_job(
+        job,
+        f"Done — checked {result['repos_checked']} repo(s), backfilled "
+        f"{result['rules_updated']} rule(s) across {result['repos_updated']} repo(s).",
+        level='success', event='done',
+    )
+
+
 # ─── delete_activity_logs ─────────────────────────────────────────────────────
 
 LOG_DELETE_BATCH = 1000

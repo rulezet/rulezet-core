@@ -77,9 +77,10 @@ def _rule_has_cve(cve_id) -> bool:
 
 
 def _apply_repo_counts(url: str, count_delta: int, format_deltas: dict = None,
-                        license_deltas: dict = None, cve_delta: int = 0, _retry: bool = True) -> None:
-    """Low-level: adjust rule_count, format_counts, license_counts and
-    cve_count on one GithubRepo row in one read-modify-write. Creates the
+                        license_deltas: dict = None, cve_delta: int = 0,
+                        branch_deltas: dict = None, _retry: bool = True) -> None:
+    """Low-level: adjust rule_count, format_counts, license_counts,
+    branch_counts and cve_count on one GithubRepo row in one read-modify-write. Creates the
     row on first positive count_delta; deletes it once rule_count would hit
     0 or below (a repo with 0 active rules doesn't belong in a "sources
     with rules" list).
@@ -112,6 +113,7 @@ def _apply_repo_counts(url: str, count_delta: int, format_deltas: dict = None,
             rule_count=0,
             format_counts={},
             license_counts={},
+            branch_counts={},
             cve_count=0,
         )
         db.session.add(repo)
@@ -145,6 +147,15 @@ def _apply_repo_counts(url: str, count_delta: int, format_deltas: dict = None,
             lc.pop(key, None)
     repo.license_counts = lc
 
+    bc = dict(repo.branch_counts or {})
+    for key, d in (branch_deltas or {}).items():
+        if not key:
+            continue
+        bc[key] = bc.get(key, 0) + d
+        if bc[key] <= 0:
+            bc.pop(key, None)
+    repo.branch_counts = bc
+
     repo.cve_count = max(0, (repo.cve_count or 0) + cve_delta)
 
     try:
@@ -156,22 +167,24 @@ def _apply_repo_counts(url: str, count_delta: int, format_deltas: dict = None,
         # Someone else's commit for this same url landed between our SELECT
         # and our commit — the row exists now, so retry once as a plain
         # update instead of losing this delta.
-        _apply_repo_counts(url, count_delta, format_deltas, license_deltas, cve_delta, _retry=False)
+        _apply_repo_counts(url, count_delta, format_deltas, license_deltas, cve_delta,
+                            branch_deltas, _retry=False)
 
 
 def apply_delta(url: str, delta: int, rule=None) -> None:
     """+delta or -delta to one repo (rule_count, and — when `rule` is given
-    — that rule's format/license/cve contribution too). Pass `rule` at
+    — that rule's format/license/branch/cve contribution too). Pass `rule` at
     every create/soft-delete/restore call site; it's always the ORM object
     already in scope there, so there's no reason to skip it and let the
-    per-format/license/cve aggregates go stale until the next rebuild."""
+    per-format/license/branch/cve aggregates go stale until the next rebuild."""
     if rule is None:
         _apply_repo_counts(url, delta)
         return
     format_deltas  = {rule.format: delta} if rule.format else None
     license_deltas = {rule.license: delta} if rule.license else None
+    branch_deltas  = {rule.branch: delta} if rule.branch else None
     cve_delta = delta if _rule_has_cve(rule.cve_id) else 0
-    _apply_repo_counts(url, delta, format_deltas, license_deltas, cve_delta)
+    _apply_repo_counts(url, delta, format_deltas, license_deltas, cve_delta, branch_deltas)
 
 
 def apply_deltas_for_rule_ids(rule_ids: list, sign: int, is_deleted: bool = None) -> None:
@@ -186,25 +199,27 @@ def apply_deltas_for_rule_ids(rule_ids: list, sign: int, is_deleted: bool = None
     """
     if not rule_ids:
         return
-    q = db.session.query(Rule.source, Rule.format, Rule.license, Rule.cve_id).filter(Rule.id.in_(rule_ids))
+    q = db.session.query(Rule.source, Rule.format, Rule.license, Rule.cve_id, Rule.branch).filter(Rule.id.in_(rule_ids))
     if is_deleted is not None:
         q = q.filter(Rule.is_deleted == is_deleted)
 
     agg = {}
-    for source, fmt, lic, cve_id in q.all():
+    for source, fmt, lic, cve_id, branch in q.all():
         if not is_github_source(source):
             continue
-        a = agg.setdefault(source, {'count': 0, 'formats': {}, 'licenses': {}, 'cve': 0})
+        a = agg.setdefault(source, {'count': 0, 'formats': {}, 'licenses': {}, 'cve': 0, 'branches': {}})
         a['count'] += sign
         if fmt:
             a['formats'][fmt] = a['formats'].get(fmt, 0) + sign
         if lic:
             a['licenses'][lic] = a['licenses'].get(lic, 0) + sign
+        if branch:
+            a['branches'][branch] = a['branches'].get(branch, 0) + sign
         if _rule_has_cve(cve_id):
             a['cve'] += sign
 
     for source, a in agg.items():
-        _apply_repo_counts(source, a['count'], a['formats'], a['licenses'], a['cve'])
+        _apply_repo_counts(source, a['count'], a['formats'], a['licenses'], a['cve'], a['branches'])
 
 
 def apply_deltas_for_new_rules(rules: list) -> None:
@@ -220,17 +235,19 @@ def apply_deltas_for_new_rules(rules: list) -> None:
     for rule in rules:
         if not is_github_source(rule.source):
             continue
-        a = agg.setdefault(rule.source, {'count': 0, 'formats': {}, 'licenses': {}, 'cve': 0})
+        a = agg.setdefault(rule.source, {'count': 0, 'formats': {}, 'licenses': {}, 'cve': 0, 'branches': {}})
         a['count'] += 1
         if rule.format:
             a['formats'][rule.format] = a['formats'].get(rule.format, 0) + 1
         if rule.license:
             a['licenses'][rule.license] = a['licenses'].get(rule.license, 0) + 1
+        if rule.branch:
+            a['branches'][rule.branch] = a['branches'].get(rule.branch, 0) + 1
         if _rule_has_cve(rule.cve_id):
             a['cve'] += 1
 
     for source, a in agg.items():
-        _apply_repo_counts(source, a['count'], a['formats'], a['licenses'], a['cve'])
+        _apply_repo_counts(source, a['count'], a['formats'], a['licenses'], a['cve'], a['branches'])
 
 
 def sync_rule_edit(old_source: str, new_source: str, old_snapshot: dict, new_snapshot: dict) -> None:
@@ -245,13 +262,14 @@ def sync_rule_edit(old_source: str, new_source: str, old_snapshot: dict, new_sna
     new_source = (new_source or '').strip()
     old_fmt, old_lic = old_snapshot.get('format'), old_snapshot.get('license')
     new_fmt, new_lic = new_snapshot.get('format'), new_snapshot.get('license')
+    old_branch, new_branch = old_snapshot.get('branch'), new_snapshot.get('branch')
     old_cve = _rule_has_cve(old_snapshot.get('cve_id'))
     new_cve = _rule_has_cve(new_snapshot.get('cve_id'))
 
     if old_source == new_source:
         if not is_github_source(old_source):
             return
-        fd, ld = {}, {}
+        fd, ld, bd = {}, {}, {}
         if old_fmt != new_fmt:
             if old_fmt:
                 fd[old_fmt] = fd.get(old_fmt, 0) - 1
@@ -262,21 +280,32 @@ def sync_rule_edit(old_source: str, new_source: str, old_snapshot: dict, new_sna
                 ld[old_lic] = ld.get(old_lic, 0) - 1
             if new_lic:
                 ld[new_lic] = ld.get(new_lic, 0) + 1
+        # branch isn't an editable form field today, so old_branch ==
+        # new_branch in practice — this stays symmetric with format/license
+        # in case that ever changes, at no extra cost.
+        if old_branch != new_branch:
+            if old_branch:
+                bd[old_branch] = bd.get(old_branch, 0) - 1
+            if new_branch:
+                bd[new_branch] = bd.get(new_branch, 0) + 1
         cve_delta = (1 if new_cve else 0) - (1 if old_cve else 0)
-        if fd or ld or cve_delta:
-            _apply_repo_counts(old_source, 0, fd, ld, cve_delta)
+        if fd or ld or bd or cve_delta:
+            _apply_repo_counts(old_source, 0, fd, ld, cve_delta, bd)
         return
 
     # Source changed — the rule leaves old_source's repo entirely and joins
     # new_source's, each handled independently since they're different rows.
+    # Its branch (unedited) moves with it.
     if is_github_source(old_source):
         fd = {old_fmt: -1} if old_fmt else None
         ld = {old_lic: -1} if old_lic else None
-        _apply_repo_counts(old_source, -1, fd, ld, -1 if old_cve else 0)
+        bd = {old_branch: -1} if old_branch else None
+        _apply_repo_counts(old_source, -1, fd, ld, -1 if old_cve else 0, bd)
     if is_github_source(new_source):
         fd = {new_fmt: 1} if new_fmt else None
         ld = {new_lic: 1} if new_lic else None
-        _apply_repo_counts(new_source, 1, fd, ld, 1 if new_cve else 0)
+        bd = {new_branch: 1} if new_branch else None
+        _apply_repo_counts(new_source, 1, fd, ld, 1 if new_cve else 0, bd)
 
 
 def sync_conflict_counts() -> dict:
@@ -343,6 +372,12 @@ def rebuild_github_repos_from_rules() -> dict:
         .group_by(Rule.source, Rule.license)
         .all()
     )
+    branch_rows = (
+        db.session.query(Rule.source, Rule.branch, func.count(Rule.id))
+        .filter(*active_github, Rule.branch.isnot(None), Rule.branch != '')
+        .group_by(Rule.source, Rule.branch)
+        .all()
+    )
     cve_rows = (
         db.session.query(Rule.source, func.count(Rule.id))
         .filter(*active_github, Rule.cve_id.isnot(None), Rule.cve_id != '[]', Rule.cve_id != '')
@@ -363,6 +398,9 @@ def rebuild_github_repos_from_rules() -> dict:
     license_counts_by_url = {}
     for source, lic, count in license_rows:
         license_counts_by_url.setdefault(source, {})[lic] = count
+    branch_counts_by_url = {}
+    for source, br, count in branch_rows:
+        branch_counts_by_url.setdefault(source, {})[br] = count
     cve_count_by_url = dict(cve_rows)
     conflict_count_by_url = dict(conflict_rows)
 
@@ -382,6 +420,7 @@ def rebuild_github_repos_from_rules() -> dict:
         repo.author          = _extract_author(source)
         repo.format_counts   = format_counts_by_url.get(source, {})
         repo.license_counts  = license_counts_by_url.get(source, {})
+        repo.branch_counts   = branch_counts_by_url.get(source, {})
         repo.cve_count       = cve_count_by_url.get(source, 0)
         repo.conflict_count  = conflict_count_by_url.get(source, 0)
 
@@ -401,3 +440,73 @@ def rebuild_github_repos_from_rules() -> dict:
     db.session.commit()
 
     return {'repos': len(seen_urls), 'rules_counted': total_rules}
+
+
+def backfill_rule_branches_from_default(progress_cb=None) -> dict:
+    """One-off repair for rules imported before Rule.branch existed: for
+    every distinct GitHub source with at least one active rule missing a
+    branch, ask GitHub's API for that repo's actual default branch
+    (`default_branch` on GET /repos/{owner}/{repo}) and stamp it onto those
+    rules — never a hardcoded "main" guess, since plenty of repos default
+    to "master" or something else entirely.
+
+    Safe to re-run: only ever touches rows where Rule.branch IS NULL, so a
+    rule that already has a branch (explicitly picked at import time, or
+    already backfilled) is never overwritten by a guess.
+
+    progress_cb(done, total), if given, is called after each repo so a
+    background job can report progress (this makes one HTTP request per
+    distinct repo, so a large registry can take a while).
+
+    Returns {'repos_checked', 'repos_updated', 'rules_updated', 'errors': [...]}.
+    """
+    from app.features.rule.rule_format.utils_format.utils_import_update import (
+        github_repo_to_api_url, _github_auth_headers,
+    )
+    import requests
+
+    urls = [
+        row[0] for row in
+        db.session.query(Rule.source).filter(
+            Rule.is_deleted == False, Rule.branch.is_(None),
+            Rule.source.op('~')(_GITHUB_URL_PATTERN.pattern),
+        ).distinct().all()
+    ]
+
+    repos_updated = 0
+    rules_updated = 0
+    errors = []
+    for i, url in enumerate(urls):
+        try:
+            resp = requests.get(github_repo_to_api_url(url), headers=_github_auth_headers(), timeout=8)
+            if resp.status_code != 200:
+                errors.append(f"{url}: GitHub API returned {resp.status_code}")
+                continue
+            default_branch = resp.json().get('default_branch')
+            if not default_branch:
+                errors.append(f"{url}: no default_branch in API response")
+                continue
+            updated = Rule.query.filter(
+                Rule.source == url, Rule.is_deleted == False, Rule.branch.is_(None)
+            ).update({'branch': default_branch}, synchronize_session=False)
+            db.session.commit()
+            if updated:
+                repos_updated += 1
+                rules_updated += updated
+        except requests.RequestException as e:
+            errors.append(f"{url}: {e}")
+        finally:
+            if progress_cb:
+                progress_cb(i + 1, len(urls))
+
+    # Rule.branch is now populated for these rows — resync the aggregate
+    # branch_counts the same way any other bulk Rule change would.
+    if rules_updated:
+        rebuild_github_repos_from_rules()
+
+    return {
+        'repos_checked': len(urls),
+        'repos_updated': repos_updated,
+        'rules_updated': rules_updated,
+        'errors': errors,
+    }

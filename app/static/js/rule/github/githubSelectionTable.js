@@ -9,6 +9,7 @@ import { message_list, create_message } from '/static/js/toaster.js'
 const TOGGLEABLE_COLS = [
     { key: 'author',    label: 'Author' },
     { key: 'formats',   label: 'Formats' },
+    { key: 'branches',  label: 'Branches' },
     { key: 'license',   label: 'License' },
     { key: 'cves',      label: 'CVEs' },
     { key: 'conflicts', label: 'Conflicts' },
@@ -45,6 +46,7 @@ const GitHubSelectionTable = {
             expandedRows: new Set(),
             isActionLoading: false,
             resyncing: false,
+            backfilling: false,
 
             sortKey: new URLSearchParams(window.location.search).get('sort') || 'url',
             sortDir: new URLSearchParams(window.location.search).get('dir') || 'asc',
@@ -245,6 +247,29 @@ const GitHubSelectionTable = {
             }
         },
 
+        // ── One-off repair: backfill Rule.branch for rules imported before
+        // that column existed, from each repo's real GitHub default branch.
+        // Backgrounded (unlike Resync) since it's one API call per repo. ──
+        async backfillBranches() {
+            if (this.backfilling) return;
+            this.backfilling = true;
+            try {
+                const res = await fetch('/rule/github/backfill_branches', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': this.csrfToken
+                    }
+                });
+                const data = await res.json();
+                create_message(data.message || 'Branch backfill started.', data.toast_class || 'success-subtle');
+            } catch (err) {
+                create_message('Could not start branch backfill.', 'danger-subtle');
+            } finally {
+                this.backfilling = false;
+            }
+        },
+
         // ── Single repo delete — smart: sync if small, job if large ──────────
         async deleteSingleRepo(url) {
             this.isActionLoading = true;
@@ -348,6 +373,11 @@ const GitHubSelectionTable = {
                     <i class="fas fa-rotate" :class="{ 'fa-spin': resyncing }"></i>
                     <span>[[ resyncing ? 'Resyncing…' : 'Resync' ]]</span>
                 </button>
+                <button v-if="isAdmin" class="dt-toolbar-btn" :disabled="backfilling"
+                        @click="backfillBranches" title="Backfill missing branch info for older imports, from each repo's real GitHub default branch">
+                    <i class="fas fa-code-branch" :class="{ 'fa-spin': backfilling }"></i>
+                    <span>[[ backfilling ? 'Starting…' : 'Backfill branches' ]]</span>
+                </button>
                 <div class="dt-col-picker-wrap">
                     <button class="dt-toolbar-btn" ref="colPickerBtn"
                             :class="{ 'dt-toolbar-btn--active': showColPicker }"
@@ -423,6 +453,7 @@ const GitHubSelectionTable = {
                             </div>
                         </th>
                         <th v-show="colVisible.formats" class="dt-th">Formats</th>
+                        <th v-show="colVisible.branches" class="dt-th">Branches</th>
                         <th v-show="colVisible.license" class="dt-th">License</th>
                         <th v-show="colVisible.cves" class="dt-th text-center dt-th--sortable"
                             :class="{ 'dt-th--sorted': sortKey === 'cve_count' }"
@@ -467,6 +498,15 @@ const GitHubSelectionTable = {
                                       class="badge bg-dark text-white me-1"
                                       style="text-transform:uppercase;">[[ fmt ]]</span>
                                 <span v-if="!item.formats.length" class="text-muted small">—</span>
+                            </td>
+                            <td v-show="colVisible.branches" class="dt-td">
+                                <span v-for="br in item.branches" :key="br"
+                                      class="badge bg-light text-muted fw-normal border-0 me-1"
+                                      style="font-size:.7rem;"
+                                      title="Rules from this repo were imported from this branch">
+                                    <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ br ]]
+                                </span>
+                                <span v-if="!item.branches || !item.branches.length" class="text-muted small" title="No branch recorded — imported before branch tracking, or run Backfill branches">—</span>
                             </td>
                             <td v-show="colVisible.license" class="dt-td" @click.stop>
                                 <span v-for="lic in (item.licensesExpanded ? item.licenses : (item.licenses || []).slice(0, 10))" :key="lic"
@@ -618,6 +658,16 @@ const GitHubSelectionTable = {
                                                         </span>
                                                         <span v-if="!item.formats.length"
                                                               class="text-muted small">None</span>
+                                                    </div>
+                                                    <small class="text-muted d-block mb-2 mt-3 text-uppercase fw-bold"
+                                                           style="font-size:0.7rem">Imported Branches</small>
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        <span v-for="br in item.branches" :key="br"
+                                                              class="badge border text-dark fw-normal">
+                                                            <i class="fas fa-code-branch me-1" style="font-size:.6rem;"></i>[[ br ]]
+                                                        </span>
+                                                        <span v-if="!item.branches || !item.branches.length"
+                                                              class="text-muted small">Not recorded</span>
                                                     </div>
                                                 </div>
                                             </div>

@@ -4873,6 +4873,38 @@ def resync_github_repos():
     }), 200
 
 
+@rule_blueprint.route("/github/backfill_branches", methods=['POST'])
+@login_required
+def backfill_github_branches():
+    """Admin action: queue a background job that stamps Rule.branch for
+    rules imported before that column existed, using each repo's own
+    GitHub-reported default branch (never a hardcoded "main" guess) — see
+    github_repo_core.backfill_rule_branches_from_default. Backgrounded
+    (unlike resync_github_repos) since it makes one GitHub API call per
+    distinct repo in the registry."""
+    if not _is_github_manager():
+        return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='github_repo_branch_backfill',
+        payload={},
+        label="Backfill rule branches from GitHub defaults",
+        created_by=current_user.id,
+    )
+    if not job:
+        return jsonify({"message": "Failed to queue job.", "toast_class": "danger-subtle"}), 500
+
+    log_activity("github.branch_backfill_queued", "Queued GitHub rule-branch backfill job",
+                 extra={"job_uuid": job.uuid}, is_public=False)
+    return jsonify({
+        "status": "success",
+        "message": "Branch backfill started — track it on the Jobs page.",
+        "toast_class": "success-subtle",
+        "job_uuid": job.uuid,
+    }), 201
+
+
 @rule_blueprint.route("/github_detail", methods=['GET'])
 @login_required
 def github_detail():

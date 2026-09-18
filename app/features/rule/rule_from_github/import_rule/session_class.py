@@ -318,8 +318,12 @@ class Session_class:
 
                 validation = rule_instance.validate(clean_text)
                 metadata = rule_instance.parse_metadata(clean_text, enriched_info, validation)
-                # add to metadata the enriched info (github_path)
+                # add to metadata the enriched info (github_path, branch) —
+                # same pattern for both: no format parser needs to know
+                # about these, they're stamped on after parse_metadata()
+                # returns so every format gets them uniformly.
                 metadata["github_path"] = rel_path
+                metadata["branch"] = self.info.get("branch")
                 rule_name = metadata.get("title") or os.path.basename(rel_path)
                 with loc_app.app_context():
                     local_user = db.session.merge(user)
