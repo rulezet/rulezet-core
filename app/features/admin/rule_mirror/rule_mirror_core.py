@@ -586,6 +586,62 @@ def test_config(config: RuleMirrorConfig) -> tuple:
     return True, f"Connected to '{slug}' with push access."
 
 
+def get_repo_info(config: RuleMirrorConfig) -> tuple:
+    """Read-only GitHub repo metadata for the admin UI's "Repo info" panel
+    (owner/avatar, description, default branch, visibility, size, stars,
+    open issues, last push, license, and whether the stored token still has
+    push access). Deliberately separate from test_config(): this is called
+    on demand every time an admin expands the panel, and must never mutate
+    is_verified/last_error/last_tested_at — those reflect the last
+    deliberate "Test connection"/"Run now" action, not an incidental repo
+    info lookup. Returns (success, data_or_message)."""
+    if not config.repo_url or not config.github_token:
+        return False, "Set a repository URL and token first."
+
+    slug = _repo_slug(config.repo_url)
+    if not slug or '/' not in slug:
+        return False, "Repository URL doesn't look like a GitHub repo (expected https://github.com/org/repo)."
+
+    try:
+        resp = requests.get(
+            f'https://api.github.com/repos/{slug}',
+            headers={
+                'Authorization': f'Bearer {config.github_token}',
+                'Accept': 'application/vnd.github+json',
+            },
+            timeout=10,
+        )
+    except requests.RequestException as e:
+        return False, f"Network error reaching GitHub: {e}"
+
+    if resp.status_code == 401:
+        return False, "GitHub rejected the token (401 Bad credentials)."
+    if resp.status_code == 404:
+        return False, f"Repository '{slug}' not found, or the token can't see it."
+    if resp.status_code != 200:
+        return False, f"GitHub API returned {resp.status_code}."
+
+    data = resp.json()
+    license_info = data.get('license') or {}
+    owner = data.get('owner') or {}
+    return True, {
+        'full_name':      data.get('full_name', slug),
+        'description':    data.get('description'),
+        'html_url':       data.get('html_url', f'https://github.com/{slug}'),
+        'owner_login':    owner.get('login'),
+        'owner_avatar':   owner.get('avatar_url'),
+        'private':        data.get('private', False),
+        'default_branch': data.get('default_branch'),
+        'pushed_at':      data.get('pushed_at'),
+        'updated_at':     data.get('updated_at'),
+        'size_kb':        data.get('size', 0),
+        'stargazers':     data.get('stargazers_count', 0),
+        'open_issues':    data.get('open_issues_count', 0),
+        'license':        license_info.get('spdx_id') or license_info.get('name'),
+        'has_push_access': bool((data.get('permissions') or {}).get('push')),
+    }
+
+
 # ─── Sync ──────────────────────────────────────────────────────────────────
 
 INITIAL_LOAD_BATCH_SIZE = 500   # rules per commit on the very first sync

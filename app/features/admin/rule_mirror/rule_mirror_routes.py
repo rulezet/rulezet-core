@@ -115,6 +115,23 @@ def test_config(config_uuid):
     return jsonify({'success': ok, 'message': message, 'config': config.to_json()}), 200
 
 
+@rule_mirror_blueprint.route('/admin/rule_mirror/repo_info/<string:config_uuid>', methods=['GET'])
+def repo_info(config_uuid):
+    """On-demand GitHub repo metadata for the admin UI's "Repo info" panel —
+    called only when an admin expands that panel for a given row, never on
+    page load (see rulesetsTable.js's toggleRepoInfo(), same lazy-fetch
+    pattern as the History panel), so listing N configs never fires N
+    GitHub API calls up front."""
+    config = RuleMirrorModel.get_config_by_uuid(config_uuid)
+    if not config:
+        return jsonify({'success': False, 'message': 'Not found.'}), 404
+
+    ok, result = RuleMirrorModel.get_repo_info(config)
+    if not ok:
+        return jsonify({'success': False, 'message': result}), 200
+    return jsonify({'success': True, 'repo': result}), 200
+
+
 @rule_mirror_blueprint.route('/admin/rule_mirror/run_now/<string:config_uuid>', methods=['POST'])
 def run_now(config_uuid):
     config = RuleMirrorModel.get_config_by_uuid(config_uuid)

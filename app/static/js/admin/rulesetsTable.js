@@ -83,6 +83,7 @@ const RulesetRow = {
 
     async function toggleHistory() {
       expanded.value = !expanded.value
+      if (expanded.value) repoInfoExpanded.value = false   // one panel open at a time
       if (expanded.value && !historyLoaded.value) {
         historyLoading.value = true
         try {
@@ -92,6 +93,45 @@ const RulesetRow = {
         } catch { historyItems.value = [] }
         finally { historyLoading.value = false }
       }
+    }
+
+    // ── Repo info panel — GitHub metadata fetched lazily on first expand,
+    // never on page load (list_configs()/refresh() never touches GitHub at
+    // all — only this call does, and only once an admin actually asks for
+    // it). Cached in repoInfoLoaded so re-toggling doesn't re-hit the API;
+    // "Refresh" re-fetches explicitly.
+    const repoInfoExpanded = ref(false)
+    const repoInfoLoaded   = ref(false)
+    const repoInfoLoading  = ref(false)
+    const repoInfo         = ref(null)
+    const repoInfoError    = ref('')
+
+    async function fetchRepoInfo() {
+      repoInfoLoading.value = true
+      repoInfoError.value = ''
+      try {
+        const r = await fetch(`/admin/rule_mirror/repo_info/${props.c.uuid}`)
+        const data = await r.json()
+        if (data.success) {
+          repoInfo.value = data.repo
+        } else {
+          repoInfo.value = null
+          repoInfoError.value = data.message || 'Could not fetch repo info.'
+        }
+        repoInfoLoaded.value = true
+      } catch {
+        repoInfo.value = null
+        repoInfoError.value = 'Could not fetch repo info.'
+        repoInfoLoaded.value = true
+      } finally {
+        repoInfoLoading.value = false
+      }
+    }
+
+    async function toggleRepoInfo() {
+      repoInfoExpanded.value = !repoInfoExpanded.value
+      if (repoInfoExpanded.value) expanded.value = false   // one panel open at a time
+      if (repoInfoExpanded.value && !repoInfoLoaded.value) await fetchRepoInfo()
     }
 
     async function doPost(url, body) {
@@ -168,6 +208,7 @@ const RulesetRow = {
       actionBusy, testing, expanded, historyLoading, historyItems, visibleHistory, hasMoreHistory,
       actionBadgeClass, actionIcon, dotClass,
       toggleHistory, loadMoreHistory, testConnection, toggleEnabled, runNow, deleteConfig,
+      repoInfoExpanded, repoInfoLoading, repoInfo, repoInfoError, toggleRepoInfo, fetchRepoInfo,
     }
   },
   template: `
@@ -212,6 +253,9 @@ const RulesetRow = {
     <div class="rms-actions">
       <button class="rms-btn" title="History" @click="toggleHistory" :class="{ 'rms-btn--active': expanded }">
         <i class="fa-solid fa-clock-rotate-left"></i>
+      </button>
+      <button class="rms-btn" title="Repo info" @click="toggleRepoInfo" :disabled="!c.repo_url || !c.has_token" :class="{ 'rms-btn--active': repoInfoExpanded }">
+        <i class="fa-brands fa-github"></i>
       </button>
       <button class="rms-btn" title="Test connection" @click="testConnection" :disabled="testing || !c.repo_url || !c.has_token">
         <span v-if="testing" class="spinner-border spinner-border-sm"></span>
@@ -264,6 +308,52 @@ const RulesetRow = {
           </button>
         </div>
       </template>
+    </div>
+  </td>
+</tr>
+<tr v-if="repoInfoExpanded" class="rms-tr-expand">
+  <td colspan="6">
+    <div class="rms-history-panel">
+      <div v-if="repoInfoLoading" class="text-center py-3">
+        <div class="spinner-border spinner-border-sm text-primary"></div>
+      </div>
+      <div v-else-if="repoInfoError" class="text-center py-3">
+        <div class="text-danger" style="font-size:.82rem;"><i class="fa-solid fa-triangle-exclamation me-1"></i>[[ repoInfoError ]]</div>
+        <button class="btn btn-sm btn-outline-secondary rounded-pill px-3 mt-2" style="font-size:.75rem;" @click="fetchRepoInfo">
+          <i class="fa-solid fa-rotate me-1"></i>Retry
+        </button>
+      </div>
+      <div v-else-if="repoInfo" class="rms-repoinfo">
+        <div class="d-flex align-items-start gap-3 mb-3">
+          <img v-if="repoInfo.owner_avatar" :src="repoInfo.owner_avatar" alt="" style="width:40px;height:40px;border-radius:8px;">
+          <div class="flex-grow-1">
+            <div class="d-flex align-items-center gap-2">
+              <a :href="repoInfo.html_url" target="_blank" rel="noopener" class="fw-semibold" style="font-size:.9rem;">[[ repoInfo.full_name ]]</a>
+              <span class="badge rounded-pill" :class="repoInfo.private ? 'bg-secondary' : 'bg-success-subtle text-success'" style="font-size:.65rem;">
+                [[ repoInfo.private ? 'Private' : 'Public' ]]
+              </span>
+              <span class="badge rounded-pill" :class="repoInfo.has_push_access ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'" style="font-size:.65rem;">
+                <i class="fa-solid" :class="repoInfo.has_push_access ? 'fa-check' : 'fa-xmark'"></i> Push access
+              </span>
+            </div>
+            <div v-if="repoInfo.description" class="text-muted" style="font-size:.8rem;">[[ repoInfo.description ]]</div>
+          </div>
+          <a :href="repoInfo.html_url" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill px-3" style="font-size:.75rem;white-space:nowrap;">
+            <i class="fa-brands fa-github me-1"></i>Go to repository<i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:.65rem;"></i>
+          </a>
+          <button class="rms-btn" title="Refresh" @click="fetchRepoInfo">
+            <i class="fa-solid fa-rotate"></i>
+          </button>
+        </div>
+        <div class="row g-2" style="font-size:.78rem;">
+          <div class="col-6 col-md-3"><span class="text-muted">Default branch</span><br><span class="fw-semibold">[[ repoInfo.default_branch || '—' ]]</span></div>
+          <div class="col-6 col-md-3"><span class="text-muted">Last push</span><br><span class="fw-semibold">[[ repoInfo.pushed_at || '—' ]]</span></div>
+          <div class="col-6 col-md-3"><span class="text-muted">Stars</span><br><span class="fw-semibold">[[ repoInfo.stargazers ]]</span></div>
+          <div class="col-6 col-md-3"><span class="text-muted">Open issues</span><br><span class="fw-semibold">[[ repoInfo.open_issues ]]</span></div>
+          <div class="col-6 col-md-3"><span class="text-muted">Size</span><br><span class="fw-semibold">[[ repoInfo.size_kb ]] KB</span></div>
+          <div class="col-6 col-md-3"><span class="text-muted">License</span><br><span class="fw-semibold">[[ repoInfo.license || '—' ]]</span></div>
+        </div>
+      </div>
     </div>
   </td>
 </tr>
