@@ -5,10 +5,15 @@
  * Mounts on #notif-bell-app.
  * Opens/closes the #notifOffcanvas Bootstrap offcanvas.
  *
- * Polling strategy (mirrors jobWidget):
- *   - One fetch on mount.
- *   - Active 15 s poll while the offcanvas is open OR while there are active job notifications.
- *   - Stops automatically when nothing is active.
+ * Polling strategy:
+ *   - General notifications (bell badge/count, "All" tab) are fetched once
+ *     on mount/open and on explicit events (a job you just started, a
+ *     notification you just read) — no background timer. See a new one by
+ *     reloading the page.
+ *   - The ONE exception: while a job is actively running, the "Jobs" tab
+ *     feed (/notifications/bell/jobs) keeps polling every 15s so its
+ *     progress bar moves live — that's the one thing worth not making
+ *     someone reload the page to see.
  *
  * Bell persistence rule for jobs:
  *   A job notification stays visible in the bell until BOTH:
@@ -74,8 +79,6 @@ const NotificationBell = {
         const offcanvasEl     = ref(null)
         const bannerDismissed = ref(false)
         let bsOffcanvas   = null
-        let timer         = null
-        let isOpen        = false
 
         // Read user preference from localStorage
         const notifStyle = computed(() => localStorage.getItem('rz-notif-style') || 'discrete')
@@ -93,10 +96,6 @@ const NotificationBell = {
             return items.value
         })
 
-        const hasActiveJobs = computed(() =>
-            items.value.some(n => n.is_job_active || n.notif_type === 'session_running')
-        )
-
         // ── Fetch ─────────────────────────────────────────────────────────────
         async function fetchBell() {
             try {
@@ -110,32 +109,15 @@ const NotificationBell = {
             loading.value = false
         }
 
-        // ── Polling ───────────────────────────────────────────────────────────
-        function startPolling() {
-            if (timer) return
-            timer = setInterval(fetchBell, POLL_INTERVAL)
-        }
-
-        function stopPolling() {
-            if (timer) { clearInterval(timer); timer = null }
-        }
-
-        function refreshPollingState() {
-            if (isOpen || hasActiveJobs.value) {
-                startPolling()
-            } else {
-                stopPolling()
-            }
-        }
-
-        watch(hasActiveJobs, refreshPollingState)
-
         // ── Open / close offcanvas ────────────────────────────────────────────
+        // No background timer here — the bell badge/count is a snapshot as
+        // of the last fetch (mount, opening the panel, or an explicit event
+        // like a job you just started or a notification you just read).
+        // Live job *progress* still updates without a reload — see
+        // NotificationPanel's dedicated /notifications/bell/jobs poll below.
         function openBell() {
             if (bsOffcanvas) {
                 bsOffcanvas.show()
-                isOpen = true
-                startPolling()
                 fetchBell()
             }
         }
@@ -187,21 +169,16 @@ const NotificationBell = {
             offcanvasEl.value = document.getElementById('notifOffcanvas')
             if (offcanvasEl.value && window.bootstrap?.Offcanvas) {
                 bsOffcanvas = new bootstrap.Offcanvas(offcanvasEl.value)
-                offcanvasEl.value.addEventListener('show.bs.offcanvas',  () => { isOpen = true;  startPolling() })
-                offcanvasEl.value.addEventListener('hide.bs.offcanvas',  () => { isOpen = false; refreshPollingState() })
+                offcanvasEl.value.addEventListener('show.bs.offcanvas', fetchBell)
             }
             fetchBell()
-            window.addEventListener('rz:job-created', () => { fetchBell(); startPolling() })
+            window.addEventListener('rz:job-created', fetchBell)
             window.addEventListener('rz:notif-read', fetchBell)
-        })
-
-        onUnmounted(() => {
-            stopPolling()
         })
 
         return {
             items, loading, activeTab, unreadCount, showBanner,
-            filteredItems, hasActiveJobs,
+            filteredItems,
             openBell, markRead, deleteNotif, markAllRead, clickNotif, dismissBanner,
             progressFillClass, progressWidth,
             bubbleClass, typeLabel, relativeTime,
@@ -280,9 +257,12 @@ const NotificationPanel = {
 
         function fetchAll() { fetchBell(); fetchJobs() }
 
+        // Only the Jobs feed keeps polling — general notifications ("All"
+        // tab) are a snapshot from the last fetchAll(), refreshed by
+        // reopening the panel or reloading the page, not a background timer.
         function startPolling() {
             if (timer) return
-            timer = setInterval(fetchAll, POLL_INTERVAL)
+            timer = setInterval(fetchJobs, POLL_INTERVAL)
         }
         function stopPolling() {
             if (timer) { clearInterval(timer); timer = null }
