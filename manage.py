@@ -389,12 +389,46 @@ def cmd_start_prod() -> None:
     ok("Default data up to date")
 
     # 3. Start
-    public_url = os.environ.get("INSTANCE_PUBLIC_URL") or "http://0.0.0.0:80"
+    port = os.environ.get("PORT", "80")
+    public_url = os.environ.get("INSTANCE_PUBLIC_URL") or f"http://0.0.0.0:{port}"
     header(f"Starting Rulezet v{app_version()} (production)")
     info(f"Serving at {public_url}")
     info("Press CTRL+C to stop")
     try:
-        run([FLASK, "run", "--host=0.0.0.0", "--port=80"], extra_env={"FLASKENV": "production"})
+        # `flask run` (Werkzeug's dev server) used to run here — it's not
+        # built for production (no real worker/thread pooling, no timeout
+        # enforcement, prone to one slow client stalling everything).
+        # gunicorn was already a dependency and even had a GUNICORN path
+        # constant defined above, just never wired up.
+        #
+        # --workers 1 (not N) is deliberate, not a placeholder: create_app()
+        # starts the background job worker, the telemetry loop and the
+        # update-checker loop as in-process threads (app/__init__.py). Each
+        # of those is a singleton by design — the job worker in particular
+        # claims a pending job with a plain read-then-commit, not an atomic
+        # claim, so two processes both running it would race and could
+        # double-process the same job. Multiple gunicorn *worker processes*
+        # would each call create_app() independently and start their own
+        # copy of all three. --threads gives real request concurrency
+        # (gunicorn's gthread worker) without that risk, matching the
+        # single-process-many-threads model app.py's threaded=True already
+        # used. Moving to multiple worker processes for CPU parallelism is
+        # a real further win, but needs the job worker's claim made atomic
+        # (and the other two loops gated to one worker) first.
+        threads = os.environ.get("GUNICORN_THREADS", "8")
+        run([
+            GUNICORN,
+            "wsgi:app",
+            "--bind", f"0.0.0.0:{port}",
+            "--worker-class", "gthread",
+            "--workers", "1",
+            "--threads", threads,
+            "--timeout", "120",
+            "--max-requests", "1000",
+            "--max-requests-jitter", "100",
+            "--access-logfile", "-",
+            "--error-logfile", "-",
+        ], extra_env={"FLASKENV": "production"})
     except KeyboardInterrupt:
         print("\n\033[0;37m  · Server stopped.\033[0m")
 
