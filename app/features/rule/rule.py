@@ -4823,11 +4823,19 @@ def bulk_action_github():
     action = data.get('action')
     mode = data.get('mode', 'partial')
     excluded_ids = data.get('excluded_ids') or []
-
+    # mode='all' excludes are URL-level only — "select every GitHub source"
+    # has no per-branch granularity there; a per-row exclude just drops that
+    # repo's URL entirely from the global set.
+    excluded_urls = [e.get('url') if isinstance(e, dict) else e for e in excluded_ids]
 
     if mode == 'all':
-        target_urls = RuleModel.get_all_github_sources(exclude_urls=excluded_ids)
+        target_urls = RuleModel.get_all_github_sources(exclude_urls=excluded_urls)
     else:
+        # partial mode: each entry is {'url':, 'branch':} (branch may be
+        # None) — branch narrows the action to that exact branch instead of
+        # every branch of that url. See githubSelectionTable.js's per-row
+        # checkbox / rowKey — a repo split into per-branch rows can now have
+        # just one branch selected for delete/export.
         target_urls = data.get('selected_ids') or []
     if action == 'delete':
         if not target_urls:

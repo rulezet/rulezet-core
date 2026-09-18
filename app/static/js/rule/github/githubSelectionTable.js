@@ -40,8 +40,13 @@ const GitHubSelectionTable = {
             currentPage: 1,
             totalPages: 1,
             loading: false,
-            selectedIds: new Set(),
-            excludedIds: new Set(),
+            // Keyed by rowKey(item) (url, or url::branch for a multi-branch
+            // repo's row) so a repo split into several branch-rows can have
+            // just one branch selected — the value carries {url, branch} so
+            // the backend can filter to that exact branch instead of
+            // sweeping every branch of that url (see updateSelection).
+            selectedIds: new Map(),
+            excludedIds: new Map(),
             isAllSelectedMode: false,
             expandedRows: new Set(),
             isActionLoading: false,
@@ -102,7 +107,7 @@ const GitHubSelectionTable = {
         },
         isPageFullySelected() {
             if (this.githubUrls.length === 0) return false;
-            return this.githubUrls.every(item => this.isItemChecked(item.url));
+            return this.githubUrls.every(item => this.isItemChecked(item));
         },
         showSelectBanner() {
             if (this.githubUrls.length === 0) return false;
@@ -120,8 +125,8 @@ const GitHubSelectionTable = {
                 search_query: filter.searchQuery || '',
                 search_field: filter.searchField || 'url',
                 format_filter: filter.selectedFormat || '',
-                selected_ids: Array.from(this.selectedIds),
-                excluded_ids: Array.from(this.excludedIds)
+                selected_ids: Array.from(this.selectedIds.values()),
+                excluded_ids: Array.from(this.excludedIds.values())
             };
         }
     },
@@ -222,24 +227,27 @@ const GitHubSelectionTable = {
             else this.expandedRows.add(key);
         },
 
-        updateSelection(itemUrl, isChecked) {
+        updateSelection(item, isChecked) {
+            const key = this.rowKey(item);
+            const value = { url: item.url, branch: item.branch || null };
             if (this.isAllSelectedMode) {
-                if (!isChecked) this.excludedIds.add(itemUrl);
-                else this.excludedIds.delete(itemUrl);
+                if (!isChecked) this.excludedIds.set(key, value);
+                else this.excludedIds.delete(key);
             } else {
-                if (isChecked) this.selectedIds.add(itemUrl);
-                else this.selectedIds.delete(itemUrl);
+                if (isChecked) this.selectedIds.set(key, value);
+                else this.selectedIds.delete(key);
             }
         },
 
-        isItemChecked(itemUrl) {
-            if (this.isAllSelectedMode) return !this.excludedIds.has(itemUrl);
-            return this.selectedIds.has(itemUrl);
+        isItemChecked(item) {
+            const key = this.rowKey(item);
+            if (this.isAllSelectedMode) return !this.excludedIds.has(key);
+            return this.selectedIds.has(key);
         },
 
         toggleAllOnPage(event) {
             const checked = event.target.checked;
-            this.githubUrls.forEach(item => this.updateSelection(item.url, checked));
+            this.githubUrls.forEach(item => this.updateSelection(item, checked));
         },
 
         toggleGlobalSelectAll() {
@@ -573,7 +581,7 @@ const GitHubSelectionTable = {
                     <template v-for="(item, index) in githubUrls" :key="rowKey(item)">
                         <tr class="dt-row"
                             :class="{
-                                'dt-row--selected': isItemChecked(item.url),
+                                'dt-row--selected': isItemChecked(item),
                                 'dt-row--expanded': expandedRows.has(rowKey(item)),
                                 'dt-row--repo-group-start': isRepoGroupStart(index),
                                 'dt-row--repo-group-continuation': isRepoGroupContinuation(index),
@@ -582,8 +590,9 @@ const GitHubSelectionTable = {
                             @click="toggleRow(rowKey(item))">
                             <td class="dt-td dt-td--checkbox" @click.stop>
                                 <input type="checkbox" class="dt-checkbox"
-                                       :checked="isItemChecked(item.url)"
-                                       @change="updateSelection(item.url, $event.target.checked)">
+                                       :checked="isItemChecked(item)"
+                                       :title="item.branch ? 'Select just this branch (' + item.branch + ')' : 'Select this repository'"
+                                       @change="updateSelection(item, $event.target.checked)">
                             </td>
                             <td class="dt-td">
                                 <div v-if="!isRepoGroupContinuation(index)" class="d-flex align-items-center">

@@ -1,6 +1,7 @@
 
 import json
 from collections import Counter
+import io
 import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -135,16 +136,44 @@ def soft_delete_rule_list(rule_ids: list, user_id: int, batch_uuid: str = None) 
     return updated
 
 
+def _normalize_url_branch_items(items) -> list[tuple[str, str | None]]:
+    """Normalize a bulk-action selection into (url, branch) pairs — each
+    item is either a plain url string (every branch of that repo) or a
+    {'url':, 'branch':} dict (branch may be None/absent, same as a plain
+    string). Used by soft_delete_all_by_url / export_rules_by_urls_as_zip
+    so a repo split into per-branch rows (see get_optimized_github_data)
+    can have just one branch targeted instead of always sweeping every
+    branch of that url."""
+    if isinstance(items, str):
+        items = [items]
+    pairs = []
+    for it in items or []:
+        if isinstance(it, dict):
+            url = (it.get('url') or '').strip()
+            branch = it.get('branch') or None
+        else:
+            url = (it or '').strip()
+            branch = None
+        if url:
+            pairs.append((url, branch))
+    return pairs
+
+
 def soft_delete_all_by_url(urls: list, user_id: int) -> tuple[bool, str, int]:
-    """Soft-delete all rules whose source matches the given GitHub URLs, as one batch."""
+    """Soft-delete all rules matching the given GitHub source selections, as
+    one batch. Each selection is a url string (every branch) or a
+    {'url':, 'branch':} dict (that exact branch only)."""
     try:
-        if not urls:
+        pairs = _normalize_url_branch_items(urls)
+        if not pairs:
             return False, "No URL provided", 0
-        if isinstance(urls, str):
-            urls = [urls.strip()]
         batch_uuid = str(uuid.uuid4())
+        conditions = [
+            and_(Rule.source == url, Rule.branch == branch) if branch else (Rule.source == url)
+            for url, branch in pairs
+        ]
         rule_ids = [r[0] for r in db.session.query(Rule.id).filter(
-            Rule.source.in_(urls), Rule.is_deleted == False
+            or_(*conditions), Rule.is_deleted == False
         ).all()]
         count = soft_delete_rule_list(rule_ids, user_id, batch_uuid=batch_uuid)
         return True, f"{count} rules moved to trash", count
@@ -4664,28 +4693,33 @@ def get_all_github_sources(exclude_urls=None):
 
 def export_rules_by_urls_as_zip(urls):
     """
-    Exports rules into a ZIP file structure.
+    Exports rules into a ZIP file structure. Each selection is a url string
+    (every branch of that repo) or a {'url':, 'branch':} dict (that exact
+    branch only) — see _normalize_url_branch_items.
     Structure:
-    /repo_name/info.json
-    /repo_name/rules/rule_1.json
-    /repo_name/rules/rule_2.json
+    /repo_name[__branch]/info.json
+    /repo_name[__branch]/rules/rule_1.json
+    /repo_name[__branch]/rules/rule_2.json
     """
-    if isinstance(urls, str):
-        target_urls = [urls.strip()]
-    else:
-        target_urls = [u.strip() for u in urls]
+    pairs = _normalize_url_branch_items(urls)
 
     memory_file = io.BytesIO()
-    
+
     with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for url in target_urls:
+        for url, branch in pairs:
             folder_name = url.replace('https://', '').replace('http://', '').replace('/', '_').strip('_')
-            
-            rules = _active().filter(Rule.source == url).all()
-            
+            if branch:
+                folder_name += '__' + branch.replace('/', '_')
+
+            rules_query = _active().filter(Rule.source == url)
+            if branch:
+                rules_query = rules_query.filter(Rule.branch == branch)
+            rules = rules_query.all()
+
 
             repo_info = {
                 "repository_url": url,
+                "branch": branch,
                 "exported_at": datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
                 "total_rules_found": len(rules),
                 "platform": "rulezet.org"
