@@ -139,6 +139,10 @@ def insert_default_formats():
         # previously mistagged as suricata since both share the same
         # .rule/.rules extension and near-identical grammar.
         {"name": "sagan", "can_be_execute": False},
+        # No rule_tester driver — the query matches against Plum-Island's
+        # own scan index (Kvrocks/Meilisearch), not something runnable
+        # locally. See https://github.com/D4-project/Plum-Antibodies.
+        {"name": "plum", "can_be_execute": False},
     ]
 
     # get_admin_user() looks up the literal default demo admin

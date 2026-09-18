@@ -27,6 +27,7 @@ const FORMAT_META = {
     nse:      { icon: 'fa-solid fa-terminal',      color: '#0dcaf0' },
     wazuh:    { icon: 'fa-solid fa-lock',          color: '#198754' },
     elastic:  { icon: 'fa-solid fa-database',      color: '#e83e8c' },
+    plum:     { icon: 'fa-solid fa-magnifying-glass-chart', color: '#795548' },
 }
 function fmtIcon(name)  { return FORMAT_META[name?.toLowerCase()]?.icon  || 'fa-solid fa-file-code' }
 function fmtColor(name) { return FORMAT_META[name?.toLowerCase()]?.color || '#6c757d' }

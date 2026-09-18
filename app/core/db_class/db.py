@@ -408,9 +408,10 @@ class Rule(db.Model):
             'crs': 'conf',
             'nova': 'nov',
             'splunk': 'yml',
-            'elastic': 'toml'
+            'elastic': 'toml',
+            'plum': 'yaml'
         }
-        
+
         return extensions.get(format_name, 'txt')
 
     # ref A8: Zeek and NSE (Lua-based Nmap scripts) submissions are arbitrary
@@ -1316,6 +1317,7 @@ class BundleNode(db.Model):
         'nse': '.nse',
         'nova': '.yaml',
         'crs': '.conf',
+        'plum': '.yaml',
         'no format': '.txt'
     }
 

@@ -191,6 +191,7 @@ const LANG_ALIASES = {
     sigma: 'yaml',    // Sigma rules are YAML
     atr: 'yaml',      // ATR format is YAML
     kunai: 'yaml',    // Kunai rules are YAML
+    plum: 'yaml',     // Plum-Antibodies rules are YAML
     splunk: 'yaml',   // Splunk Security Content detections are YAML (SPL lives in the 'search' field)
     wazuh: 'xml',     // Wazuh rules are XML
     zeek: 'text',

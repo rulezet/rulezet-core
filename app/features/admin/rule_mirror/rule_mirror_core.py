@@ -61,6 +61,7 @@ _EXTENSION_BY_FORMAT = {
     'yara': 'yar', 'sigma': 'yml', 'suricata': 'rules', 'zeek': 'zeek',
     'wazuh': 'xml', 'nse': 'nse', 'crs': 'conf', 'nova': 'nov',
     'splunk': 'yml', 'elastic': 'toml', 'kql': 'kql', 'atr': 'toml',
+    'plum': 'yaml',
 }
 
 # Loose allow-list for the license_verified flag in metadata.yaml — not a
