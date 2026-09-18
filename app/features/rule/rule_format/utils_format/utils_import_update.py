@@ -189,10 +189,18 @@ def github_repo_to_api_url(git_url: str) -> str:
 def extract_github_repo_metadata(data: dict, selected_license: str) -> dict:
     """
     Extract useful metadata from a GitHub repository API response.
-    
+
     Args:
         data (dict): JSON response from GitHub's repo API.
-    
+        selected_license (str): license the user explicitly picked in the
+            import form. Takes priority over GitHub's auto-detected repo
+            license — the user may know the repo's top-level LICENSE
+            doesn't actually cover the rule content itself (e.g. a AGPL
+            code repo whose rules/data files are meant to be reused under
+            a more permissive license), so an explicit choice must not be
+            silently discarded. Falls back to GitHub's detection only when
+            the user left the field blank.
+
     Returns:
         dict: Simplified metadata about the repository.
     """
@@ -214,14 +222,14 @@ def extract_github_repo_metadata(data: dict, selected_license: str) -> dict:
         "updated_at": data.get("updated_at"),
         "pushed_at": data.get("pushed_at"),
         "license": (
-            data.get("license", {}).get("spdx_id")
-            if data.get("license")
-            else selected_license
+            selected_license
+            if selected_license
+            else (data.get("license", {}).get("spdx_id") if data.get("license") else None)
         ),
         "license_name": (
-            data.get("license", {}).get("name")
-            if data.get("license")
-            else selected_license
+            selected_license
+            if selected_license
+            else (data.get("license", {}).get("name") if data.get("license") else None)
         ),
         "stars": data.get("stargazers_count", 0),
         "watchers": data.get("watchers_count", 0),
