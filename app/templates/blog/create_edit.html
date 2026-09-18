@@ -329,7 +329,9 @@
                         <tag-input v-model="selectedTags"
                                    label=""
                                    :user-id="currentUserId"
-                                   placeholder="Search or select tags…">
+                                   allow-create
+                                   :csrf="csrfToken"
+                                   placeholder="Search tags, or type #linux #test to create new ones…">
                         </tag-input>
                     </div>
                 </div>
