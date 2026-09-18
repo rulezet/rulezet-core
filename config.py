@@ -11,6 +11,9 @@ except OSError:
     _APP_VERSION = 'unknown'
 
 
+def empty_split(s, delim=None):
+    return [x for x in s.split(delim) if x]
+
 class Config:
     load_dotenv()
 
@@ -66,8 +69,7 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', os.environ.get('MAIL_USERNAME', ''))
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
    
-    
-
+    YARA_ADDITIONAL_EXTERNAL = empty_split(os.environ.get('YARA_ADDITIONAL_EXTERNAL', ''), ',')
 
 
 class DevelopmentConfig(Config):
