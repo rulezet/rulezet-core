@@ -57,6 +57,12 @@ def get_github_rate_limit_status() -> dict:
             headers=_github_auth_headers(),
             timeout=8,
         )
+        if resp.status_code == 401:
+            # Distinct from a plain RequestException below — a 401 here
+            # means the configured GITHUB_TOKEN itself is invalid/revoked,
+            # not that the quota ran out. Worth saying plainly: uncommenting
+            # a dead token in .env doesn't revive it on GitHub's side.
+            return {'error': 'GITHUB_TOKEN was rejected by GitHub (401) — it is invalid or revoked. Generate a new one at https://github.com/settings/tokens.'}
         resp.raise_for_status()
         core = resp.json().get('resources', {}).get('core', {})
         reset_ts = core.get('reset')
@@ -151,9 +157,27 @@ def is_github_repo_accessible(repo_url):
         api_url = f"{get_github_api_base()}/repos/{path}"
 
         response = requests.get(api_url, headers=_github_auth_headers(), timeout=5)
+        if response.status_code == 200:
+            return True, ""
 
-        # A status code of 200 indicates the repository is accessible
-        return response.status_code == 200 , "" if response.status_code == 200 else response.text
+        # Surface a clear, actionable message instead of GitHub's raw JSON
+        # error body — this is the message a stalled import shows verbatim
+        # on the loading page, so "rate limit exceeded" needs to say when
+        # it'll work again, not just quote {"message": "API rate limit..."}.
+        if response.headers.get('X-RateLimit-Remaining') == '0':
+            reset_ts = response.headers.get('X-RateLimit-Reset')
+            if reset_ts:
+                mins = max(1, round((int(reset_ts) - datetime.datetime.now().timestamp()) / 60))
+                when = f"in {mins} min" if mins < 60 else f"in {mins // 60}h {mins % 60}m"
+            else:
+                when = "soon"
+            token_hint = "" if os.environ.get('GITHUB_TOKEN') else " Add a GITHUB_TOKEN (Admin → Settings) to raise it from 60 to 5000 requests/hour."
+            return False, f"GitHub API rate limit exceeded — resets {when}.{token_hint}"
+
+        if response.status_code == 401:
+            return False, "GITHUB_TOKEN was rejected by GitHub (401 Bad credentials) — it is invalid or revoked. Generate a new one at https://github.com/settings/tokens and update it in Admin → Settings."
+
+        return False, response.text
     except Exception as e:
         return False , str(e)
 

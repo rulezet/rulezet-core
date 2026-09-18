@@ -396,7 +396,19 @@ const GitHubSelectionTable = {
              actually exhausted (explains otherwise-confusing import/backfill
              failures); silent when healthy (see the small pill in the
              toolbar instead). Admin/GitHub-manager only. ── -->
-        <div v-if="isAdmin && rateLimitStatus && rateLimitStatus.remaining === 0"
+        <div v-if="isAdmin && rateLimitStatus && rateLimitStatus.error"
+             class="d-flex align-items-center gap-3 p-3 mb-3 rounded-3"
+             style="background:rgba(220,53,69,.1);border:2px solid rgba(220,53,69,.35);">
+            <i class="fas fa-key" style="color:#dc3545;font-size:1.4rem;flex-shrink:0;"></i>
+            <div class="flex-grow-1">
+                <div class="fw-bold" style="color:#dc3545;font-size:.95rem;">GitHub API not reachable</div>
+                <div style="font-size:.83rem;color:var(--text-color);">[[ rateLimitStatus.error ]]</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 flex-shrink-0" @click="fetchRateLimitStatus">
+                <i class="fas fa-rotate me-1"></i>Recheck
+            </button>
+        </div>
+        <div v-else-if="isAdmin && rateLimitStatus && rateLimitStatus.remaining === 0"
              class="d-flex align-items-center gap-3 p-3 mb-3 rounded-3"
              style="background:rgba(220,53,69,.1);border:2px solid rgba(220,53,69,.35);">
             <i class="fas fa-triangle-exclamation" style="color:#dc3545;font-size:1.4rem;flex-shrink:0;"></i>

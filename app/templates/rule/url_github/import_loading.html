@@ -54,9 +54,30 @@
             </div>
             <p class="ul-progress-title mb-1">Import failed</p>
             <p class="ul-progress-sub mb-3">[[ sessionError ]]</p>
-            <a href="/rule/create_rule?tab=github" class="btn btn-sm btn-secondary rounded-pill px-3">
-                <i class="fas fa-arrow-left me-1"></i> Back to import
-            </a>
+
+            <!-- GitHub API status — admin/GitHub-manager only, shown right
+                 here since a rate limit or a dead token is the most common
+                 reason this specific error happened. -->
+            <div v-if="isGithubManager && rateLimitStatus" class="d-inline-block text-start mx-auto mb-3 p-3 rounded-3"
+                 style="background:rgba(220,53,69,.08);border:1px solid rgba(220,53,69,.25);max-width:480px;">
+                <div v-if="rateLimitStatus.error" style="font-size:.82rem;color:var(--text-color);">
+                    <i class="fas fa-key me-1" style="color:#dc3545;"></i><strong>GitHub API not reachable:</strong> [[ rateLimitStatus.error ]]
+                </div>
+                <div v-else-if="rateLimitStatus.remaining === 0" style="font-size:.82rem;color:var(--text-color);">
+                    <i class="fas fa-hourglass-half me-1" style="color:#dc3545;"></i>
+                    <strong>GitHub API rate limit reached</strong> — resets in [[ rateLimitResetLabel ]].
+                    <span v-if="!rateLimitStatus.authenticated">Add a <code>GITHUB_TOKEN</code> (Admin → Settings) to raise it from 60 to 5000 requests/hour.</span>
+                </div>
+                <div v-else style="font-size:.78rem;color:var(--subtle-text-color);">
+                    <i class="fa-brands fa-github me-1"></i>GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]] requests remaining — this failure wasn't rate-limiting.
+                </div>
+            </div>
+
+            <div>
+                <a href="/rule/create_rule?tab=github" class="btn btn-sm btn-secondary rounded-pill px-3">
+                    <i class="fas fa-arrow-left me-1"></i> Back to import
+                </a>
+            </div>
         </div>
     </div>
 
@@ -397,10 +418,11 @@
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
 
-    const isAuthenticated = {{ current_user.is_authenticated | tojson }}
-    const isAdmin         = {{ current_user.is_admin()        | tojson }}
-    const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
-    const csrfToken       = '{{ csrf_token() }}'
+    const isAuthenticated  = {{ current_user.is_authenticated | tojson }}
+    const isAdmin          = {{ current_user.is_admin()        | tojson }}
+    const isGithubManager  = {{ (current_user.is_admin() or current_user.has_permission('github.manage')) | tojson }}
+    const currentUserId    = {{ current_user.id if current_user.is_authenticated else 'null' }}
+    const csrfToken        = '{{ csrf_token() }}'
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -431,6 +453,27 @@
             const currentPhase   = ref('preparing')
             const sessionError   = ref(null)
             const scanFoundCount = ref(0)  // running "rules found so far" counter while phase === 'scanning'
+
+            // GitHub API rate-limit / token status — admin/GitHub-manager
+            // only, fetched once the import errors out (that's the only
+            // time it's actionable context here) and on-demand. Never on a
+            // timer, same convention as the other two surfaces that show it
+            // (GitHub Sources list, /rule/create_rule's GitHub tab).
+            const rateLimitStatus = ref(null)
+            async function fetchRateLimitStatus() {
+                try {
+                    const res = await fetch('/rule/github/rate_limit_status')
+                    if (res.ok) rateLimitStatus.value = await res.json()
+                } catch { rateLimitStatus.value = null }
+            }
+            const rateLimitResetLabel = computed(() => {
+                const s = rateLimitStatus.value
+                if (!s || s.reset_in_seconds == null) return ''
+                const mins = Math.ceil(s.reset_in_seconds / 60)
+                if (mins <= 1) return 'less than a minute'
+                if (mins < 60) return `${mins} min`
+                return `${Math.floor(mins / 60)}h ${mins % 60}m`
+            })
 
             const phaseTitle = computed(() => {
                 if (currentPhase.value === 'preparing') return 'Connecting to the repository…'
@@ -670,6 +713,7 @@
                     if (data.phase === 'error') {
                         sessionError.value = data.error || 'Something went wrong while preparing this import.'
                         pageReady.value = true
+                        if (isGithubManager) fetchRateLimitStatus()
                         return // stop polling — nothing more will happen on this session
                     }
 
@@ -771,6 +815,7 @@
                 is_finished,
                 pageReady,
                 currentPhase, sessionError, phaseTitle, phaseSub, scanFoundCount,
+                isGithubManager, rateLimitStatus, rateLimitResetLabel, fetchRateLimitStatus,
                 repoUrl, repoUrlCopied, copyRepoUrl,
 
                 logEntries, logEl,
