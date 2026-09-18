@@ -23,7 +23,7 @@ VULN_ID_PATTERN = re.compile(
 )
 
 
-@workspace_blueprint.route('/my_rules')
+@workspace_blueprint.route('/')
 @login_required
 def my_rules():
     return render_template('workspace/my_rules.html')
@@ -152,7 +152,7 @@ def workspace_kpis(ws_uuid):
     return jsonify(counts)
 
 
-@workspace_blueprint.route('/<ws_uuid>/detail')
+@workspace_blueprint.route('/<ws_uuid>')
 @login_required
 def workspace_detail(ws_uuid):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)

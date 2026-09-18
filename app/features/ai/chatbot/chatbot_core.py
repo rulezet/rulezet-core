@@ -26,7 +26,7 @@ _ROUTES = {
     'create_rule_page':       ('/rule/create_rule', 'user'),
     'bundles_list':           ('/bundle/list', 'user'),
     'create_bundle_page':     ('/bundle/create', 'user'),
-    'workspaces':             ('/workspace/my_rules', 'user'),
+    'workspaces':             ('/workspace', 'user'),
     'dashboard':              ('/dashboard/', 'user'),
     'notifications':          ('/notifications/', 'user'),
     'my_tags':                ('/tags/my_tags', 'user'),

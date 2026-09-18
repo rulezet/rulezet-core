@@ -20,7 +20,7 @@
         <nav aria-label="breadcrumb" class="mb-2">
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                <li class="breadcrumb-item"><a href="/workspace/my_rules" class="text-decoration-none text-muted">My Rules</a></li>
+                <li class="breadcrumb-item"><a href="/workspace" class="text-decoration-none text-muted">Workspaces</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">[[ wsNameShort ]]</li>
             </ol>
         </nav>
@@ -46,7 +46,8 @@
     </div>
 
     <!-- ── Metadata + Taxonomy card ───────────────────── -->
-    <div class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card" style="border-radius:12px;">
+    <div class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card position-relative" style="border-radius:12px;">
+        <div class="premium-accent-line"></div>
         <div class="card-watermark-detail"><i :class="'fa-solid ' + wsIcon"></i></div>
         <div class="card-body p-4">
 
@@ -179,24 +180,39 @@
     <!-- KPI strip -->
     <div class="wd-kpi-strip mb-4">
         <div class="wd-kpi-card wd-kpi-card--total" :class="{ 'wd-kpi-card--active': activeStatus === null }" @click="setStatus(null)">
-            <div class="wd-kpi-card__value">[[ kpiCounts.total ]]</div>
-            <div class="wd-kpi-card__label">Total</div>
+            <div class="wd-kpi-icon"><i class="fa-solid fa-layer-group"></i></div>
+            <div class="wd-kpi-body">
+                <div class="wd-kpi-value">[[ kpiCounts.total ]]</div>
+                <div class="wd-kpi-label">Total</div>
+            </div>
         </div>
         <div class="wd-kpi-card wd-kpi-card--draft" :class="{ 'wd-kpi-card--active': activeStatus === 'draft' }" @click="setStatus('draft')">
-            <div class="wd-kpi-card__value">[[ kpiCounts.draft ]]</div>
-            <div class="wd-kpi-card__label"><i class="fa-solid fa-pencil me-1"></i>Draft</div>
+            <div class="wd-kpi-icon"><i class="fa-solid fa-pencil"></i></div>
+            <div class="wd-kpi-body">
+                <div class="wd-kpi-value">[[ kpiCounts.draft ]]</div>
+                <div class="wd-kpi-label">Draft</div>
+            </div>
         </div>
         <div class="wd-kpi-card wd-kpi-card--testing" :class="{ 'wd-kpi-card--active': activeStatus === 'testing' }" @click="setStatus('testing')">
-            <div class="wd-kpi-card__value">[[ kpiCounts.testing ]]</div>
-            <div class="wd-kpi-card__label"><i class="fa-solid fa-flask me-1"></i>Testing</div>
+            <div class="wd-kpi-icon"><i class="fa-solid fa-flask"></i></div>
+            <div class="wd-kpi-body">
+                <div class="wd-kpi-value">[[ kpiCounts.testing ]]</div>
+                <div class="wd-kpi-label">Testing</div>
+            </div>
         </div>
         <div class="wd-kpi-card wd-kpi-card--production" :class="{ 'wd-kpi-card--active': activeStatus === 'production' }" @click="setStatus('production')">
-            <div class="wd-kpi-card__value">[[ kpiCounts.production ]]</div>
-            <div class="wd-kpi-card__label"><i class="fa-solid fa-circle-check me-1"></i>Production</div>
+            <div class="wd-kpi-icon"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="wd-kpi-body">
+                <div class="wd-kpi-value">[[ kpiCounts.production ]]</div>
+                <div class="wd-kpi-label">Production</div>
+            </div>
         </div>
         <div class="wd-kpi-card wd-kpi-card--deprecated" :class="{ 'wd-kpi-card--active': activeStatus === 'deprecated' }" @click="setStatus('deprecated')">
-            <div class="wd-kpi-card__value">[[ kpiCounts.deprecated ]]</div>
-            <div class="wd-kpi-card__label"><i class="fa-solid fa-ban me-1"></i>Deprecated</div>
+            <div class="wd-kpi-icon"><i class="fa-solid fa-ban"></i></div>
+            <div class="wd-kpi-body">
+                <div class="wd-kpi-value">[[ kpiCounts.deprecated ]]</div>
+                <div class="wd-kpi-label">Deprecated</div>
+            </div>
         </div>
     </div>
 
@@ -225,6 +241,12 @@
             <i class="fa-solid fa-boxes-stacked"></i>
             <span>Bundles</span>
             <span class="dr-nav__badge" v-if="associatedBundles.length > 0">[[ associatedBundles.length ]]</span>
+        </button>
+        <button type="button" class="dr-nav__item" :class="{ active: activeTab === 'roadmap' }"
+                @click="activeTab = 'roadmap'">
+            <i class="fa-solid fa-rocket"></i>
+            <span>What's Next</span>
+            <span class="wd-roadmap-badge wd-roadmap-badge--nav">Preview</span>
         </button>
     </nav>
 
@@ -539,6 +561,128 @@
                             </a>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         WHAT'S NEXT TAB — roadmap preview only, nothing here is wired up
+         yet. Purely to show where the workspace is headed as it grows
+         into a full personal-workspace hub.
+         ══════════════════════════════════════ -->
+    <div v-show="activeTab === 'roadmap'">
+        <div class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card position-relative" style="border-radius:12px;">
+            <div class="premium-accent-line"></div>
+            <div class="card-watermark-detail"><i class="fa-solid fa-rocket"></i></div>
+            <div class="card-body p-4 p-md-5">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="fa-solid fa-rocket text-primary"></i>
+                    <h5 class="fw-bold mb-0">What's coming to Workspaces</h5>
+                </div>
+                <p class="text-muted mb-4" style="max-width:640px;font-size:.9rem;">
+                    Workspaces are becoming a full personal staging area — drafting, testing and
+                    organizing rules before they're ever published. Here's a preview of what's
+                    planned. Nothing below is functional yet.
+                </p>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="wd-roadmap-card">
+                            <div class="wd-roadmap-card__icon" style="background:rgba(13,110,253,.12);color:#0d6efd;">
+                                <i class="fa-solid fa-plug"></i>
+                            </div>
+                            <div class="wd-roadmap-card__body">
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="fw-bold mb-0">Connector</h6>
+                                    <span class="wd-roadmap-badge">Coming soon</span>
+                                </div>
+                                <p class="text-muted mb-0" style="font-size:.82rem;">
+                                    Configure a push connector for this workspace — a target URL that
+                                    forwards its rules out to an external tool (SIEM, EDR, your own
+                                    pipeline) whenever they change.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="wd-roadmap-card">
+                            <div class="wd-roadmap-card__icon" style="background:rgba(217,119,6,.12);color:#d97706;">
+                                <i class="fa-solid fa-pen-ruler"></i>
+                            </div>
+                            <div class="wd-roadmap-card__body">
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="fw-bold mb-0">Draft Rules</h6>
+                                    <span class="wd-roadmap-badge">Coming soon</span>
+                                </div>
+                                <p class="text-muted mb-0" style="font-size:.82rem;">
+                                    Write and iterate on rule content directly inside the workspace,
+                                    before it becomes a real published Rule — a proper staging area
+                                    instead of pasting drafts into notes.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="wd-roadmap-card">
+                            <div class="wd-roadmap-card__icon" style="background:rgba(25,135,84,.12);color:#198754;">
+                                <i class="fa-solid fa-list-check"></i>
+                            </div>
+                            <div class="wd-roadmap-card__body">
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="fw-bold mb-0">Publish Checklist</h6>
+                                    <span class="wd-roadmap-badge">Coming soon</span>
+                                </div>
+                                <p class="text-muted mb-0" style="font-size:.82rem;">
+                                    A go/no-go checklist (references, license, ATT&amp;CK tags, test
+                                    coverage) a draft has to clear before it can be promoted to a real
+                                    published rule.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="wd-roadmap-card">
+                            <div class="wd-roadmap-card__icon" style="background:rgba(111,66,193,.12);color:#6f42c1;">
+                                <i class="fa-solid fa-flask-vial"></i>
+                            </div>
+                            <div class="wd-roadmap-card__body">
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="fw-bold mb-0">Test History</h6>
+                                    <span class="wd-roadmap-badge">Coming soon</span>
+                                </div>
+                                <p class="text-muted mb-0" style="font-size:.82rem;">
+                                    A log of every Rule Tester run against this workspace's drafts, so
+                                    you can track how a rule's detection improved across iterations.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="wd-roadmap-card">
+                            <div class="wd-roadmap-card__icon" style="background:rgba(13,202,240,.12);color:#0dcaf0;">
+                                <i class="fa-solid fa-timeline"></i>
+                            </div>
+                            <div class="wd-roadmap-card__body">
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="fw-bold mb-0">Activity Feed</h6>
+                                    <span class="wd-roadmap-badge">Coming soon</span>
+                                </div>
+                                <p class="text-muted mb-0" style="font-size:.82rem;">
+                                    A workspace-scoped timeline of what changed and when — rules added,
+                                    drafts edited, documents updated — useful even solo, to retrace your
+                                    own steps.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-2 mt-4 pt-3" style="border-top:1px solid var(--border-color);">
+                    <i class="fa-solid fa-comment-dots text-muted" style="font-size:.85rem;"></i>
+                    <span class="text-muted" style="font-size:.82rem;">
+                        Have an idea for this space? Let us know — this roadmap will keep growing.
+                    </span>
                 </div>
             </div>
         </div>
@@ -1330,7 +1474,7 @@
                     })
                     if ((await r.json()).success) {
                         create_message('Workspace deleted', 'success')
-                        window.location.href = '/workspace/my_rules'
+                        window.location.href = '/workspace'
                     }
                 } catch { create_message('Failed to delete workspace', 'danger') }
             }
