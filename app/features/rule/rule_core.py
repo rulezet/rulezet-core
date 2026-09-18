@@ -444,6 +444,20 @@ _CORPUS_IDENTIFIER_LABEL = {
 # share the same placeholder.
 EMPTY_UUID_VALUES = {"none", "null", "unknown", "n/a", "na", ""}
 
+# Formats whose parse_metadata() sets original_uuid to a real, stable
+# per-rule identifier — needed for relation resolution (KunaiRule's
+# rule(name) cross-references) and repo re-sync matching — but one that is
+# only meaningful within its own ruleset, not guaranteed unique across
+# every different author/repo ever imported into this instance (Kunai's
+# dotted rule `name`, e.g. "kill.critical.service", is a community
+# convention of uniqueness *within one ruleset*, not a global id).
+# add_rule_core()'s uuid-duplicate check below is otherwise instance-wide
+# and format-agnostic — for these formats it's skipped entirely so two
+# same-named-but-different-content rules from unrelated sources are
+# compared on content instead (see get_rule_by_content below), rather than
+# the second one being wrongly rejected before its content is ever looked at.
+_LOCALLY_SCOPED_ORIGINAL_UUID_FORMATS = {"kunai"}
+
 
 def _extract_corpus_identifier(rule_format: str, content: str) -> Optional[str]:
     """Extract the identifier that must be unique within its format's corpus."""
@@ -636,7 +650,8 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         # native uuid") are excluded — otherwise every uuid-less rule ever
         # imported, across every format and source, would collide with the
         # first one and never import again.
-        if new_original_uuid and new_original_uuid.lower() not in EMPTY_UUID_VALUES:
+        if (new_original_uuid and new_original_uuid.lower() not in EMPTY_UUID_VALUES
+                and (form_dict.get("format") or "").lower() not in _LOCALLY_SCOPED_ORIGINAL_UUID_FORMATS):
             existing_by_uuid = _active().filter(
                 or_(Rule.uuid == new_original_uuid, Rule.original_uuid == new_original_uuid)
             ).first()
