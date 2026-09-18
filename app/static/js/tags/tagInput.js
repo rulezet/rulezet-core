@@ -62,9 +62,17 @@ const TagInput = {
             if (colonIdx === -1) return name;
             const rawNs = name.slice(0, colonIdx);
             const rest  = name.slice(colonIdx + 1);
-            const eqIdx = rest.indexOf('=');
-            if (eqIdx === -1) return `${rawNs}:${rest}`;
-            const pred = rest.slice(0, eqIdx);
+            // Only a genuine MISP-galaxy predicate="value" pair ends the
+            // string in a closing quote right after "=" — e.g.
+            // 'tool="Cobalt Strike"'. A plain value that merely contains a
+            // literal "=" (a version constraint like '"<=0.6"', a raw
+            // key=value string, …) must be left untouched instead of being
+            // torn apart at the first "=" found anywhere in the string
+            // (that previously turned 'kunai:"<=0.6"' into
+            // 'kunai:"<="<=0.6"').
+            const predMatch = rest.match(/^(.*?)="(.*)"$/);
+            if (!predMatch) return `${rawNs}:${rest}`;
+            const pred = predMatch[1];
             return `${rawNs}:${pred}=${valueOf(name)}`;
         }
 
