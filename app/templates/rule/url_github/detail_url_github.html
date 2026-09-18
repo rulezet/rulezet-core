@@ -218,6 +218,16 @@
                     </span>
                 </div>
             </div>
+            <div class="d-flex align-items-center gap-2 px-3 py-2 rounded-3" v-if="stats.branches && stats.branches.length"
+                 style="background:var(--light-bg-color);border:1px solid var(--border-color);"
+                 title="Branch(es) these rules were actually imported from">
+                <i class="fa-solid fa-code-branch text-primary"></i>
+                <div class="d-flex gap-1 flex-wrap align-items-center">
+                    <span v-for="b in stats.branches" :key="b.name" class="badge bg-primary-subtle text-primary">
+                        [[ b.name ]] · [[ b.count ]]
+                    </span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -460,12 +470,33 @@
         </div><!-- /gh-collapse-body -->
     </div><!-- /card -->
 
+    <!-- ── Branch picker — only shown when this source has rules from more
+         than one branch. Filters the rule-list below to just that branch;
+         "All branches" (empty) shows everything, same as today. ── -->
+    <div v-if="stats && stats.branches && stats.branches.length > 1" class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <span class="text-muted small text-uppercase fw-bold" style="letter-spacing:.04em;">
+            <i class="fa-solid fa-code-branch me-1"></i>Branch
+        </span>
+        <button type="button" class="btn btn-sm rounded-pill px-3"
+                :class="!selectedBranch ? 'btn-primary' : 'btn-outline-secondary'"
+                @click="selectBranch('')">
+            All branches
+        </button>
+        <button v-for="b in stats.branches" :key="b.name" type="button"
+                class="btn btn-sm rounded-pill px-3"
+                :class="selectedBranch === b.name ? 'btn-primary' : 'btn-outline-secondary'"
+                @click="selectBranch(b.name)">
+            [[ b.name ]] <span class="opacity-75">([[ b.count ]])</span>
+        </button>
+    </div>
+
     <!-- ── Rule list ── -->
     <rule-list
         mode="manage"
         default-view="card"
         fetch-url="/rule/data_table"
         :source="repoUrl"
+        :branch="selectedBranch || null"
         :can-vote="isAuthenticated"
         :can-favorite="isAuthenticated"
         :current-user-id="currentUserId"
@@ -535,6 +566,21 @@
         },
         setup() {
             const stats               = ref(null)
+            // Which branch's rules to show — from Rulezet's own DB
+            // (Rule.branch / stats.value.branches), not the live GitHub
+            // `branches` ref below (that one is just this repo's current
+            // branch list on GitHub, unrelated to what was actually
+            // imported). Read from the URL on load so the choice survives
+            // a reload/share, written back on every change.
+            const selectedBranch      = ref(new URLSearchParams(window.location.search).get('branch') || '')
+            function selectBranch(name) {
+                selectedBranch.value = name || ''
+                const params = new URLSearchParams(window.location.search)
+                if (selectedBranch.value) params.set('branch', selectedBranch.value)
+                else params.delete('branch')
+                const qs = params.toString()
+                history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''))
+            }
             const ghExpanded          = ref(false)
             const ghFetched           = ref(false)
             const ghRepo              = ref(null)
@@ -600,6 +646,7 @@
 
             return {
                 message_list, stats,
+                selectedBranch, selectBranch,
                 ghExpanded, toggleGh,
                 ghRepo, ghLoading, ghError,
                 commits, commitsLoading,

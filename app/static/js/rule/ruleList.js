@@ -94,6 +94,11 @@ export default {
         defaultView:        { type: String,           default: 'card' },
         fetchUrl:           { type: String,           default: '/rule/data_table' },
         source:             { type: String,           default: null },
+        // Narrows to rules imported from this exact git branch (Rule.branch)
+        // — combined with `source` on the GitHub repo detail page so an
+        // admin can view just one branch's rules when a repo has more than
+        // one imported. No effect when unset (most rules have no branch).
+        branch:             { type: String,           default: null },
         // Pins the sidebar facet counts (tags/ATT&CK/vulnerabilities/licenses/person)
         // to a fixed author, the same way `source` already pins them to a fixed
         // source. Only used when there's no source to pin by (e.g. a rule with no
@@ -1940,6 +1945,7 @@ export default {
                 if (sortKey.value)                   params.set('sort', sortKey.value)
                 if (sortKey.value)                   params.set('dir', sortDir.value)
                 if (props.source)                    params.set('source', props.source)
+                if (props.branch)                    params.set('branch', props.branch)
                 if (props.ids)                        params.set('ids', Array.isArray(props.ids) ? props.ids.join(',') : props.ids)
                 if (numericUserId.value)             params.set('user_id', numericUserId.value)
                 else if (scopeMine.value && numericCurrentUserId.value) params.set('user_id', numericCurrentUserId.value)

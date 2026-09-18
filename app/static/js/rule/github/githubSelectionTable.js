@@ -176,9 +176,17 @@ const GitHubSelectionTable = {
             this.$refs.filter.fetchUrls(page);
         },
 
-        toggleRow(url) {
-            if (this.expandedRows.has(url)) this.expandedRows.delete(url);
-            else this.expandedRows.add(url);
+        // A repo imported from >1 branch now renders as one row per branch
+        // (same url, different item.branch) — keyed by url+branch so the
+        // two rows expand/collapse independently instead of being tied
+        // together by a shared url-only key.
+        rowKey(item) {
+            return item.branch ? item.url + '::' + item.branch : item.url;
+        },
+
+        toggleRow(key) {
+            if (this.expandedRows.has(key)) this.expandedRows.delete(key);
+            else this.expandedRows.add(key);
         },
 
         updateSelection(itemUrl, isChecked) {
@@ -469,11 +477,11 @@ const GitHubSelectionTable = {
                     </tr>
                 </thead>
                 <tbody v-if="!loading">
-                    <template v-for="(item, index) in githubUrls" :key="item.url">
+                    <template v-for="(item, index) in githubUrls" :key="rowKey(item)">
                         <tr class="dt-row"
-                            :class="{ 'dt-row--selected': isItemChecked(item.url), 'dt-row--expanded': expandedRows.has(item.url) }"
+                            :class="{ 'dt-row--selected': isItemChecked(item.url), 'dt-row--expanded': expandedRows.has(rowKey(item)) }"
                             style="cursor:pointer"
-                            @click="toggleRow(item.url)">
+                            @click="toggleRow(rowKey(item))">
                             <td class="dt-td dt-td--checkbox" @click.stop>
                                 <input type="checkbox" class="dt-checkbox"
                                        :checked="isItemChecked(item.url)"
@@ -500,13 +508,13 @@ const GitHubSelectionTable = {
                                 <span v-if="!item.formats.length" class="text-muted small">—</span>
                             </td>
                             <td v-show="colVisible.branches" class="dt-td">
-                                <span v-for="br in item.branches" :key="br"
-                                      class="badge bg-light text-muted fw-normal border-0 me-1"
+                                <span v-if="item.branch"
+                                      class="badge bg-light text-muted fw-normal border-0"
                                       style="font-size:.7rem;"
-                                      title="Rules from this repo were imported from this branch">
-                                    <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ br ]]
+                                      :title="item.branches.length > 1 ? 'This repo has rules from ' + item.branches.length + ' branches — this row is just ' + item.branch : 'Rules from this repo were imported from this branch'">
+                                    <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ item.branch ]]
                                 </span>
-                                <span v-if="!item.branches || !item.branches.length" class="text-muted small" title="No branch recorded — imported before branch tracking, or run Backfill branches">—</span>
+                                <span v-else class="text-muted small" title="No branch recorded — imported before branch tracking, or run Backfill branches">—</span>
                             </td>
                             <td v-show="colVisible.license" class="dt-td" @click.stop>
                                 <span v-for="lic in (item.licensesExpanded ? item.licenses : (item.licenses || []).slice(0, 10))" :key="lic"
@@ -587,7 +595,7 @@ const GitHubSelectionTable = {
                                         </div>
                                     </div>
 
-                                    <a :href="'/rule/github_detail?url=' + encodeURIComponent(item.url)"
+                                    <a :href="'/rule/github_detail?url=' + encodeURIComponent(item.url) + (item.branch ? '&branch=' + encodeURIComponent(item.branch) : '')"
                                        class="dt-action-btn" title="View Details">
                                         <i class="fas fa-eye"></i>
                                     </a>
@@ -603,8 +611,8 @@ const GitHubSelectionTable = {
 
                                     <!-- Expand: always last -->
                                     <button class="dt-action-btn dt-action-btn--expand"
-                                            :class="{ 'is-expanded': expandedRows.has(item.url) }"
-                                            title="Expand" @click="toggleRow(item.url)">
+                                            :class="{ 'is-expanded': expandedRows.has(rowKey(item)) }"
+                                            title="Expand" @click="toggleRow(rowKey(item))">
                                         <i class="fas fa-chevron-down dt-expand-chevron" style="font-size:.65rem;"></i>
                                     </button>
                                 </div>
@@ -612,7 +620,7 @@ const GitHubSelectionTable = {
                         </tr>
 
                         <!-- ── Expanded detail row ── -->
-                        <tr v-if="expandedRows.has(item.url)" class="dt-row-expand">
+                        <tr v-if="expandedRows.has(rowKey(item))" class="dt-row-expand">
                             <td :colspan="tableColspan" class="dt-expand-cell">
                                     <div class="animate__animated animate__fadeIn">
 
@@ -663,7 +671,9 @@ const GitHubSelectionTable = {
                                                            style="font-size:0.7rem">Imported Branches</small>
                                                     <div class="d-flex flex-wrap gap-1">
                                                         <span v-for="br in item.branches" :key="br"
-                                                              class="badge border text-dark fw-normal">
+                                                              class="badge fw-normal"
+                                                              :class="br === item.branch ? 'bg-primary text-white' : 'border text-dark'"
+                                                              :title="br === item.branch ? 'This row' : ''">
                                                             <i class="fas fa-code-branch me-1" style="font-size:.6rem;"></i>[[ br ]]
                                                         </span>
                                                         <span v-if="!item.branches || !item.branches.length"

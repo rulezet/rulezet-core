@@ -2024,12 +2024,17 @@ def parse_facet_filters(args, exclude=()) -> dict:
     return filters
 
 
-def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None, status=None, workspace_uuid=None, exclude_workspace_uuid=None, ids: list[int] | None = None) -> Rule:
+def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None, status=None, workspace_uuid=None, exclude_workspace_uuid=None, ids: list[int] | None = None, branch: str | None = None) -> Rule:
     """Filter the rules with specific field targeting"""
     query = _active()
 
     if ids:
         query = query.filter(Rule.id.in_(ids))
+
+    # Exact match — unlike `source` (ILIKE substring), a branch name is an
+    # exact value, not free text (see Rule.branch / GithubRepo.branch_counts).
+    if branch:
+        query = query.filter(Rule.branch == branch)
 
     if search:
         search = search.strip()
@@ -3270,14 +3275,14 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
         url = repo.url
         last_import = last_imports_by_url.get(url)
         last_update = last_updates_by_url.get(url)
+        branch_names = sorted(b for b in (repo.branch_counts or {}).keys() if b)
 
-        github_data.append({
+        base_row = {
             "url": url,
             "author": repo.author,
-            "rule_count": repo.rule_count,
             "formats": sorted((repo.format_counts or {}).keys()),
             "licenses": sorted((repo.license_counts or {}).keys()),
-            "branches": sorted(b for b in (repo.branch_counts or {}).keys() if b),
+            "branches": branch_names,
             "cve_count": repo.cve_count,
             "has_conflicts": repo.conflict_count > 0,
             "last_import": {
@@ -3294,7 +3299,25 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
                 "new_rules_count": len(last_update.new_rules) if last_update else 0,
                 "found": last_update.found if last_update else 0
             } if last_update else None
-        })
+        }
+
+        # A repo imported from more than one branch gets one row per branch
+        # (same url/name, its own rule_count) instead of one row hiding a
+        # combined total — the two rows are visually "linked" purely by
+        # showing the same url, distinguished only by a branch badge.
+        if len(branch_names) > 1:
+            for branch_name in branch_names:
+                github_data.append({
+                    **base_row,
+                    "branch": branch_name,
+                    "rule_count": (repo.branch_counts or {}).get(branch_name, 0),
+                })
+        else:
+            github_data.append({
+                **base_row,
+                "branch": branch_names[0] if branch_names else None,
+                "rule_count": repo.rule_count,
+            })
 
     return github_data, pagination.total, pagination.pages
 
@@ -3390,7 +3413,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          tags=None, editor_names=None, bundle_id=None, attacks=None,
                          status=None, workspace_uuid=None, exclude_workspace_uuid=None,
                          ids=None, has_cve=False, quality_score_min=None, quality_score_max=None,
-                         has_ai_analysis=False, has_relations=False):
+                         has_ai_analysis=False, has_relations=False, branch=None):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -3413,6 +3436,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         status=status,
         workspace_uuid=workspace_uuid,
         exclude_workspace_uuid=exclude_workspace_uuid,
+        branch=branch,
         ids=ids,
     )
 
@@ -3578,6 +3602,19 @@ def get_github_source_stats(url: str) -> dict:
             .scalar()
         ) or 0
 
+    # Every branch that has contributed active rules to this source, with
+    # its own count — same source_filter as everything else above (not
+    # GithubRepo.branch_counts, which is keyed by exact url and could
+    # diverge from this looser .git-suffix-tolerant match). Feeds the
+    # branch picker on the GitHub source detail page.
+    branch_rows = (
+        db.session.query(Rule.branch, func.count(Rule.id))
+        .filter(Rule.is_deleted == False, source_filter, Rule.branch.isnot(None))
+        .group_by(Rule.branch)
+        .order_by(func.count(Rule.id).desc())
+        .all()
+    )
+
     return {
         'total_rules':    total,
         'formats':        [{'name': f or 'unknown', 'count': c} for f, c in formats],
@@ -3585,6 +3622,7 @@ def get_github_source_stats(url: str) -> dict:
         'licenses_count': licenses_count,
         'cve_count':      len(cve_set),
         'attack_count':   attack_count,
+        'branches':       [{'name': b, 'count': c} for b, c in branch_rows],
         'last_update':    last.last_modif.strftime('%Y-%m-%d %H:%M') if last else None,
         'first_import':   first.creation_date.strftime('%Y-%m-%d %H:%M') if first else None,
     }
