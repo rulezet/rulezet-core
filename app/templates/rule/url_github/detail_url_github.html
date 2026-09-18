@@ -171,7 +171,7 @@
         </div>
         <p class="text-muted mb-3" style="max-width: 700px; font-size: 0.95rem;">
             All detection rules imported from
-            <a :href="repoUrl" target="_blank" rel="noreferrer" class="fw-semibold text-decoration-none">
+            <a :href="repoTreeUrl" target="_blank" rel="noreferrer" class="fw-semibold text-decoration-none">
                 [[ repoUrl ]] <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:.7rem;"></i>
             </a>
         </p>
@@ -521,7 +521,7 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, onMounted } = Vue
+    const { createApp, ref, computed, onMounted } = Vue
     import { message_list } from '/static/js/toaster.js'
     import RuleList                  from '/static/js/rule/ruleList.js'
     import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
@@ -581,6 +581,10 @@
                 const qs = params.toString()
                 history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''))
             }
+            const repoTreeUrl = computed(() => {
+                if (!repoUrl) return repoUrl
+                return selectedBranch.value ? repoUrl.replace(/\.git$/, '') + '/tree/' + selectedBranch.value : repoUrl
+            })
             const ghExpanded          = ref(false)
             const ghFetched           = ref(false)
             const ghRepo              = ref(null)
@@ -654,7 +658,7 @@
                 contributors, contributorsLoading,
                 fmtNum, fmtSize, fmtDate,
                 isAuthenticated, isAdmin, currentUserId, csrfToken,
-                repoUrl, repoDisplay,
+                repoUrl, repoDisplay, repoTreeUrl,
             }
         }
     }).mount('#main-container')

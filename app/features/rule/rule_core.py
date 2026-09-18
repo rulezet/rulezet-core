@@ -2010,6 +2010,7 @@ def parse_facet_filters(args, exclude=()) -> dict:
         'exact_match':     args.get('exact_match') == 'true',
         'rule_type':       args.get('rule_type') or None,
         'source':          _csv('sources'),
+        'branch':          _csv('branches'),
         'license':         _csv('licenses'),
         'tags':            _csv('tags'),
         'vulnerabilities': _csv('vulnerabilities'),
@@ -2033,8 +2034,11 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
 
     # Exact match — unlike `source` (ILIKE substring), a branch name is an
     # exact value, not free text (see Rule.branch / GithubRepo.branch_counts).
+    # Accepts a single branch (the pinned-source-detail-page use case) or a
+    # CSV string / list (the interactive multi-select Sources filter).
     if branch:
-        query = query.filter(Rule.branch == branch)
+        branch_list = [b.strip() for b in branch.split(',')] if isinstance(branch, str) else branch
+        query = query.filter(Rule.branch.in_(branch_list))
 
     if search:
         search = search.strip()
@@ -4856,6 +4860,26 @@ def get_licenses_usage_with_filter(search_query, filters: dict = None):
         query = query.filter(Rule.license.ilike(f'%{search_query}%'))
 
     return query.group_by(Rule.license).order_by(func.count(Rule.id).desc()).all()
+
+
+def get_branches_usage_with_filter(search_query=None, filters: dict = None):
+    """
+    Groups rules by git branch and counts them, scoped to rules matching every
+    OTHER currently active filter ('branch' must already be excluded from
+    `filters`). Rules with no branch (not imported from GitHub, or imported
+    before branch tracking existed) are excluded, same as source/license.
+    """
+    base_ids = filter_rules(**(filters or {})).order_by(None).with_entities(Rule.id).subquery()
+
+    query = db.session.query(
+        Rule.branch.label('branch'),
+        func.count(Rule.id).label('count')
+    ).filter(Rule.id.in_(db.session.query(base_ids)), Rule.branch != None, Rule.branch != '')
+
+    if search_query:
+        query = query.filter(Rule.branch.ilike(f'%{search_query}%'))
+
+    return query.group_by(Rule.branch).order_by(func.count(Rule.id).desc()).all()
 
 
 def get_authors_usage_with_filter(search_query=None, filters: dict = None):

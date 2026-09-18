@@ -4953,6 +4953,11 @@ def rules_data_table():
     if source:
         sources = (sources or []) + [source]
 
+    branches = _csv_arg('branches')
+    branch   = request.args.get('branch', None, type=str)
+    if branch:
+        branches = (branches or []) + [branch]
+
     authors_list  = _csv_arg('authors')
     single_author = request.args.get('author', None, type=str)
     author_filter = authors_list or ([single_author] if single_author else None)
@@ -4987,7 +4992,7 @@ def rules_data_table():
         quality_score_max=request.args.get('quality_score_max', None, type=float),
         has_ai_analysis=request.args.get('has_ai_analysis', 'false', type=str) == 'true',
         has_relations=request.args.get('has_relations', 'false', type=str) == 'true',
-        branch=request.args.get('branch', None, type=str),
+        branch=branches,
     )
 
     items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)
@@ -5480,6 +5485,17 @@ def get_rules_licenses_usage():
     licenses = RuleModel.get_licenses_usage_with_filter(search_query, filters=filters)
 
     return jsonify([{"name": s.license, "count": s.count} for s in licenses])
+
+
+@rule_blueprint.route('/get_rules_branches_usage')
+def get_rules_branches_usage():
+    """Returns the list of git branches, scoped to rules matching every other active filter."""
+    search_query = request.args.get('q', '').strip()
+    filters = RuleModel.parse_facet_filters(request.args, exclude=['branch'])
+
+    branches = RuleModel.get_branches_usage_with_filter(search_query, filters=filters)
+
+    return jsonify([{"name": b.branch, "count": b.count} for b in branches])
 
 
 @rule_blueprint.route('/get_rules_authors_usage')
@@ -6085,6 +6101,7 @@ def get_trash_rules():
             'title':             r.title,
             'format':            r.format,
             'source':            r.source,
+            'branch':            r.branch,
             'author':            r.author,
             'description':       r.description,
             'to_string':         r.to_string,

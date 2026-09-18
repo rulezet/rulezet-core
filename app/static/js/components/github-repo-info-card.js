@@ -11,8 +11,9 @@
  * Props:
  *   repo-url        (String)  — required; e.g. https://github.com/owner/repo(.git)
  *   start-expanded   (Boolean) — default false
+ *   branch           (String)  — optional; when set, repo/commits links point at this branch instead of the default
  */
-const { ref } = Vue;
+const { ref, computed } = Vue;
 
 function fmtNum(n) {
     if (n === undefined || n === null) return '—';
@@ -42,6 +43,7 @@ const GithubRepoInfoCard = {
     props: {
         repoUrl: { type: String, required: true },
         startExpanded: { type: Boolean, default: false },
+        branch: { type: String, default: null },
     },
     setup(props) {
         const ghExpanded = ref(props.startExpanded);
@@ -111,6 +113,15 @@ const GithubRepoInfoCard = {
             loadGhData();
         }
 
+        const repoTreeUrl = computed(() => {
+            if (!ghRepo.value) return null;
+            return props.branch ? ghRepo.value.html_url + '/tree/' + props.branch : ghRepo.value.html_url;
+        });
+        const commitsUrl = computed(() => {
+            if (!ghRepo.value) return null;
+            return props.branch ? ghRepo.value.html_url + '/commits/' + props.branch : ghRepo.value.html_url + '/commits';
+        });
+
         return {
             ghExpanded, toggleGh,
             ghRepo, ghLoading, ghError,
@@ -118,6 +129,7 @@ const GithubRepoInfoCard = {
             branches, branchesLoading,
             contributors, contributorsLoading,
             fmtNum, fmtSize, fmtDate,
+            repoTreeUrl, commitsUrl,
         };
     },
     template: `
@@ -162,7 +174,7 @@ const GithubRepoInfoCard = {
                             <a :href="ghRepo.owner.html_url" target="_blank" rel="noreferrer"
                                class="fw-semibold text-decoration-none" style="font-size:.9rem;">[[ ghRepo.owner.login ]]</a>
                             <span class="text-muted">/</span>
-                            <a :href="ghRepo.html_url" target="_blank" rel="noreferrer"
+                            <a :href="repoTreeUrl" target="_blank" rel="noreferrer"
                                class="fw-bold text-decoration-none" style="font-size:.9rem;">[[ ghRepo.name ]]</a>
                             <span v-if="ghRepo.archived" class="badge bg-warning text-dark">Archived</span>
                             <span v-if="ghRepo.fork" class="badge bg-secondary">Fork</span>
@@ -246,7 +258,7 @@ const GithubRepoInfoCard = {
                     <div class="col-lg-7">
                         <div class="gh-sub-header">
                             <i class="fa-solid fa-code-commit"></i> Recent commits
-                            <a v-if="ghRepo" :href="ghRepo.html_url + '/commits'" target="_blank" rel="noreferrer"
+                            <a v-if="ghRepo" :href="commitsUrl" target="_blank" rel="noreferrer"
                                class="ms-auto text-decoration-none" style="font-size:.72rem;color:#0d6efd;text-transform:none;letter-spacing:0;font-weight:400;">
                                 See all <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:.6rem;"></i>
                             </a>

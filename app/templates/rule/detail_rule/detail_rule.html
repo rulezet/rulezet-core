@@ -214,7 +214,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                             <small class="text-truncate">
                                                 <template
                                                     v-if="currentRule.source && currentRule.source.startsWith('http')">
-                                                    <a :href="currentRule.source" rel="noreferrer" target="_blank"
+                                                    <a :href="githubSourceUrl(currentRule)" rel="noreferrer" target="_blank"
                                                         class="text-primary text-decoration-none">
                                                         [[ currentRule.source ]]
                                                     </a>
@@ -1349,7 +1349,12 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                     const rest = path.slice(idx + marker.length).split('/');
                     path = rest.slice(2).join('/'); // drop <owner>/<repo[--branch]> segments
                 }
-                return rule.source.replace(/\.git$/, '') + '/blob/HEAD/' + path;
+                return rule.source.replace(/\.git$/, '') + '/blob/' + (rule.branch || 'HEAD') + '/' + path;
+            }
+
+            function githubSourceUrl(rule) {
+                if (!rule || !rule.source) return rule ? rule.source : '';
+                return rule.branch ? rule.source.replace(/\.git$/, '') + '/tree/' + rule.branch : rule.source;
             }
 
             // ── Server-side data passed via window.__ vars ──────────────
@@ -1938,6 +1943,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 Ownership,
                 favorite,
                 githubBlobUrl,
+                githubSourceUrl,
                 current_user_is_admin,
                 message_list,
                 fetchCurrentUser,

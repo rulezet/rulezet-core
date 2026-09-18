@@ -384,7 +384,7 @@
           <!-- Source -->
           <div v-if="contentRule.source" class="mb-3 d-flex align-items-center gap-2">
             <i class="fa-brands fa-github" style="color:var(--subtle-text-color);"></i>
-            <a :href="contentRule.source" target="_blank" rel="noreferrer"
+            <a :href="sourceLink(contentRule)" target="_blank" rel="noreferrer"
                class="small text-truncate" style="color:#0d6efd; max-width:500px;">
               [[ contentRule.source ]]
             </a>
@@ -470,6 +470,11 @@ createApp({
         const url = new URL(src)
         return url.pathname.replace(/^\//, '').replace(/\.git$/, '')
       } catch { return src.slice(0, 40) }
+    }
+
+    function sourceLink(rule) {
+      if (!rule || !rule.source) return rule ? rule.source : ''
+      return rule.branch ? rule.source.replace(/\.git$/, '') + '/tree/' + rule.branch : rule.source
     }
 
     // Highlight code when modal opens
@@ -641,7 +646,7 @@ createApp({
       batchRulesCount, allSelected,
       toggleSelectAll, fetchRules, debouncedFetch, resetFilters,
       highlightId,
-      shortSource, openContentModal,
+      shortSource, sourceLink, openContentModal,
       conflictData, resolveConflict,
       restoreOne, permanentDeleteOne, restoreBulk, permanentDeleteBulk,
       restoreBatch, deleteBatch, restoreAll, deleteAll,

@@ -196,6 +196,11 @@ const GitHubSelectionTable = {
             return item.branch ? item.url + '::' + item.branch : item.url;
         },
 
+        repoTreeUrl(item) {
+            if (!item || !item.url) return item ? item.url : '';
+            return item.branch ? item.url.replace(/\.git$/, '') + '/tree/' + item.branch : item.url;
+        },
+
         toggleRow(key) {
             if (this.expandedRows.has(key)) this.expandedRows.delete(key);
             else this.expandedRows.add(key);
@@ -761,7 +766,7 @@ const GitHubSelectionTable = {
                                                 <div class="p-3 border rounded h-100">
                                                     <small class="text-muted d-block mb-2 text-uppercase fw-bold"
                                                            style="font-size:0.7rem">Repository Link</small>
-                                                    <a :href="item.url" target="_blank"
+                                                    <a :href="repoTreeUrl(item)" target="_blank"
                                                        class="btn btn-sm btn-outline-dark w-100 text-truncate">
                                                         <i class="fab fa-github me-2"></i>Open on GitHub
                                                     </a>
