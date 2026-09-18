@@ -13,7 +13,7 @@ import datetime
 import difflib
 import re
 
-_VALID_FORMATS = {'yara', 'sigma', 'suricata', 'zeek', 'wazuh', 'nse', 'crs', 'nova', 'elastic', 'splunk'}
+_VALID_FORMATS = {'yara', 'sigma', 'suricata', 'zeek', 'wazuh', 'nse', 'crs', 'nova', 'elastic', 'splunk', 'plum'}
 
 # destination_key -> (path, minimum role). "admin" destinations are refused
 # for a non-admin caller in _navigate() below — the model only ever picks a
@@ -26,7 +26,7 @@ _ROUTES = {
     'create_rule_page':       ('/rule/create_rule', 'user'),
     'bundles_list':           ('/bundle/list', 'user'),
     'create_bundle_page':     ('/bundle/create', 'user'),
-    'workspaces':             ('/workspace/my_rules', 'user'),
+    'workspaces':             ('/workspace', 'user'),
     'dashboard':              ('/dashboard/', 'user'),
     'notifications':          ('/notifications/', 'user'),
     'my_tags':                ('/tags/my_tags', 'user'),

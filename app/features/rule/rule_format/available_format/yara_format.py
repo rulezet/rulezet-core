@@ -6,6 +6,7 @@ from app.features.rule.rule_core import get_rule, _active
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult
 from app.core.utils.utils import detect_cve
 from app.core.db_class.db import Rule
+from flask import current_app
 
 
 #################
@@ -84,7 +85,7 @@ def find_missing_dependency_rule(var_name: str, bad_rule=None, source: str = Non
     `bad_rule` is a convenience for the InvalidRuleModel case, read only
     when the explicit kwargs above aren't given.
     """
-    if var_name in YaraRule.YARA_MODULES or var_name in YaraRule.ALLOWED_EXTERNALS:
+    if var_name in YaraRule.YARA_MODULES or var_name in allowed_externals():
         return None
 
     source = source or getattr(bad_rule, 'url', None)
@@ -163,6 +164,27 @@ def try_resolve_yara_missing_dependency(rule_instance, rule_text: str, metadata:
     return 'created', new_rule
 
 
+def allowed_externals() -> set:
+    """YaraRule.ALLOWED_EXTERNALS plus any admin-configured
+    YARA_ADDITIONAL_EXTERNAL identifiers (see .env_default) — read lazily,
+    on every call, since current_app is only valid inside an active
+    request/job app context, never at class-definition/import time. Doing
+    this as a class-body-level `ALLOWED_EXTERNALS.update(current_app...)`
+    instead raises RuntimeError("Working outside of application context")
+    the moment this module is imported anywhere without one already pushed
+    — e.g. tests/rules/test_yara_format.py imports YaraRule at module
+    scope, before any fixture runs — and load_all_rule_formats() swallows
+    that exception with just a print(), silently dropping the entire
+    "yara" format from RuleType.__subclasses__() rather than crashing
+    loudly.
+    """
+    try:
+        extra = current_app.config.get('YARA_ADDITIONAL_EXTERNAL') or []
+    except RuntimeError:
+        extra = []
+    return YaraRule.ALLOWED_EXTERNALS | set(extra)
+
+
 class YaraRule(RuleType):
     @property
     def format(self) -> str:
@@ -181,7 +203,7 @@ class YaraRule(RuleType):
     #   Abstract section  #
     # ---------------------#
     def validate(self, content: str, **kwargs) -> ValidationResult:
-            ALLOWED_EXTERNALS = self.ALLOWED_EXTERNALS
+            ALLOWED_EXTERNALS = allowed_externals()
 
             externals = {}
             attempts = 0

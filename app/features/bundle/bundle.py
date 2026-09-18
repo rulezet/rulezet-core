@@ -645,6 +645,7 @@ EXTENSION_MAP = {
     'nse': '.nse',
     'nova': '.yaml',
     'crs': '.conf',
+    'plum': '.yaml',
     'no format': '.txt'
 }
 

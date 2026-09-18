@@ -450,4 +450,4 @@ class Similarity_class:
             from app.features.rule.github_repo_core import sync_conflict_counts
             sync_conflict_counts()
         except Exception:
-            pass
+            db.session.rollback()

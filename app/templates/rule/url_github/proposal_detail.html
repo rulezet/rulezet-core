@@ -67,7 +67,7 @@
         </div>
 
         <!-- GitHub repository info -->
-        <github-repo-info-card :repo-url="proposal.repo_url" start-expanded></github-repo-info-card>
+        <github-repo-info-card :repo-url="proposal.repo_url" :branch="proposal.branch || null" start-expanded></github-repo-info-card>
 
         <!-- Existing rules with this source — only relevant while a decision is still pending -->
         <div v-if="existingRulesCount > 0 && proposal.status === 'pending'" class="card border-0 shadow-sm rounded-3 mb-4" style="border-left:3px solid #fd7e14;">

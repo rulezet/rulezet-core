@@ -215,6 +215,25 @@ def detect_cve(text):
     return True ,json.dumps(result_list)
 
 
+def detect_attack_technique(text):
+    """
+    Detect MITRE ATT&CK technique identifiers (e.g. T1059, T1059.001) in the
+    given text. Returns a JSON string of a sorted list of unique identifiers.
+    Mirrors detect_cve.
+    """
+    if not text:
+        return False, json.dumps([])
+
+    technique_pattern = re.compile(r"\bT\d{4}(?:\.\d{3})?\b", re.IGNORECASE)
+    matches = technique_pattern.findall(text)
+
+    if not matches:
+        return True, json.dumps([])
+
+    cleaned = sorted({m.upper() for m in matches})
+    return True, json.dumps(cleaned)
+
+
 def update_or_clone_repo(repo_url: str) -> str | None:
     """
     Clone or update a GitHub repo into Rules_Github/<owner>/<repo>.

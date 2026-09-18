@@ -33,7 +33,7 @@ class Update_class:
     Threaded class to manage batch rule updates with thread-safe DB operations.
     """
 
-    def __init__(self, repo_sources, user: User, info: dict, mode: str = "by_rule", is_generic_source: bool = False) -> None:
+    def __init__(self, repo_sources, user: User, info: dict, mode: str = "by_rule", is_generic_source: bool = False, branch: str = None) -> None:
         self.uuid = str(uuid4())
         self.thread_count = 1
         self.jobs = Queue()
@@ -52,6 +52,12 @@ class Update_class:
         # by_url only — a repo synced from a non-GitHub host (see
         # GithubSyncScheduleRepo.is_generic_source / check_updates_by_url).
         self.is_generic_source = is_generic_source
+        # by_url only — when the GitHub Sources list row that triggered this
+        # check represents one specific branch of a multi-branch repo, the
+        # check must run against that exact branch's clone/rules, not the
+        # repo's default branch (see clone_or_access_repo's branch-specific
+        # cache directories and get_all_rule_by_url_github's branch filter).
+        self.branch = branch
         # Unwrap immediately if `user` is a Flask-Login LocalProxy (existing
         # call sites pass `current_user` directly, from inside request
         # context). Storing the proxy itself would be fine here but not once
@@ -99,12 +105,12 @@ class Update_class:
         cp = 0
         if self.mode == "by_url":
             cp = 0
-            repo_dir, exists = clone_or_access_repo(self.repo_sources, is_generic_source=self.is_generic_source)
+            repo_dir, exists = clone_or_access_repo(self.repo_sources, branch=self.branch, is_generic_source=self.is_generic_source)
 
             self.local_repo_path = repo_dir
 
             # found all the rule in the repo currently in Rulezet
-            rules_listes_github = RuleModel.get_all_rule_by_url_github(self.repo_sources , self.current_user)
+            rules_listes_github = RuleModel.get_all_rule_by_url_github(self.repo_sources, self.current_user, branch=self.branch)
 
             # Only diff against last check if we already had this repo cloned —
             # a brand-new clone has no meaningful "before" state to diff against.
@@ -120,7 +126,7 @@ class Update_class:
                 # of just giving up.
                 try:
                     delete_existing_repo_folder(repo_dir)
-                    repo_dir, _ = clone_or_access_repo(self.repo_sources, is_generic_source=self.is_generic_source)
+                    repo_dir, _ = clone_or_access_repo(self.repo_sources, branch=self.branch, is_generic_source=self.is_generic_source)
                     self.local_repo_path = repo_dir
                     sha_before = None  # fresh clone — nothing meaningful to diff against
                     success = True

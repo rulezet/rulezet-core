@@ -17,7 +17,7 @@ from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_s
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
-from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
+from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_github_repo_live_info, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
 from app import db
 from . import rule_core as RuleModel
@@ -4554,17 +4554,26 @@ def check_updates_by_url():
     if not valid_urls:
         return {"message": "No valid GitHub URLs provided.", "toast_class": "danger-subtle"}, 400
 
+    # Only urls[0] is ever actually used (Update_class only supports a single
+    # repo per by_url session — see its __init__) — its branch (when the
+    # GitHub Sources list row that triggered this represents one specific
+    # branch of a multi-branch repo) must travel with it, or the update would
+    # silently check the repo's default branch instead of the branch the
+    # rules being checked actually came from.
+    branch = next((u.get("branch") for u in urls if u.get("url") == valid_urls[0] and u.get("branch")), None)
+
     info = {
-        "mode": "by_url", 
-        "count": len(valid_urls), 
-        "initiated_by": current_user.first_name, 
-        "repo_url": valid_urls[0], 
-        "license": None, 
-        "author": current_user.last_name, 
+        "mode": "by_url",
+        "count": len(valid_urls),
+        "initiated_by": current_user.first_name,
+        "repo_url": valid_urls[0],
+        "branch": branch,
+        "license": None,
+        "author": current_user.last_name,
         "descriprtion": None
     }
 
-    update_session = UpdateModel.Update_class(valid_urls, current_user, info, mode="by_url")
+    update_session = UpdateModel.Update_class(valid_urls, current_user, info, mode="by_url", branch=branch)
     UpdateModel.sessions.append(update_session)
     update_session.start()
 
@@ -4814,11 +4823,19 @@ def bulk_action_github():
     action = data.get('action')
     mode = data.get('mode', 'partial')
     excluded_ids = data.get('excluded_ids') or []
-
+    # mode='all' excludes are URL-level only — "select every GitHub source"
+    # has no per-branch granularity there; a per-row exclude just drops that
+    # repo's URL entirely from the global set.
+    excluded_urls = [e.get('url') if isinstance(e, dict) else e for e in excluded_ids]
 
     if mode == 'all':
-        target_urls = RuleModel.get_all_github_sources(exclude_urls=excluded_ids)
+        target_urls = RuleModel.get_all_github_sources(exclude_urls=excluded_urls)
     else:
+        # partial mode: each entry is {'url':, 'branch':} (branch may be
+        # None) — branch narrows the action to that exact branch instead of
+        # every branch of that url. See githubSelectionTable.js's per-row
+        # checkbox / rowKey — a repo split into per-branch rows can now have
+        # just one branch selected for delete/export.
         target_urls = data.get('selected_ids') or []
     if action == 'delete':
         if not target_urls:
@@ -4873,6 +4890,65 @@ def resync_github_repos():
     }), 200
 
 
+@rule_blueprint.route("/github/backfill_branches", methods=['POST'])
+@login_required
+def backfill_github_branches():
+    """Admin action: queue a background job that stamps Rule.branch for
+    rules imported before that column existed, using each repo's own
+    GitHub-reported default branch (never a hardcoded "main" guess) — see
+    github_repo_core.backfill_rule_branches_from_default. Backgrounded
+    (unlike resync_github_repos) since it makes one GitHub API call per
+    distinct repo in the registry."""
+    if not _is_github_manager():
+        return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
+
+    from app.features.jobs.jobs_core import create_job
+    job = create_job(
+        job_type='github_repo_branch_backfill',
+        payload={},
+        label="Backfill rule branches from GitHub defaults",
+        created_by=current_user.id,
+    )
+    if not job:
+        return jsonify({"message": "Failed to queue job.", "toast_class": "danger-subtle"}), 500
+
+    log_activity("github.branch_backfill_queued", "Queued GitHub rule-branch backfill job",
+                 extra={"job_uuid": job.uuid}, is_public=False)
+    return jsonify({
+        "status": "success",
+        "message": "Branch backfill started — track it on the Jobs page.",
+        "toast_class": "success-subtle",
+        "job_uuid": job.uuid,
+    }), 201
+
+
+@rule_blueprint.route("/github/rate_limit_status", methods=['GET'])
+@login_required
+def github_rate_limit_status():
+    """Live GitHub API rate-limit status — admin/GitHub-manager only, same
+    audience as Resync/Backfill branches, since it's only actionable
+    context for those. GET /rate_limit doesn't itself cost a request."""
+    if not _is_github_manager():
+        return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
+    return jsonify(get_github_rate_limit_status()), 200
+
+
+@rule_blueprint.route("/github/repo_live_info", methods=['GET'])
+@login_required
+def github_repo_live_info_route():
+    """Server-side proxy (uses GITHUB_TOKEN) for the "GitHub Repository info"
+    panel's live stars/forks/commits/branches/contributors data — open to
+    any logged-in user, same audience as the page(s) embedding that panel
+    (github_detail, github_proposal_detail_page). Replaces a client-side,
+    unauthenticated direct call to api.github.com that both leaked the
+    visitor's own IP in GitHub's raw rate-limit error body and hit the
+    unauthenticated 60/hour cap constantly. See get_github_repo_live_info()."""
+    url = request.args.get("url", type=str)
+    if not url or not valider_repo_github(url):
+        return jsonify({"message": "No valid GitHub URL was provided."}), 400
+    return jsonify(get_github_repo_live_info(url)), 200
+
+
 @rule_blueprint.route("/github_detail", methods=['GET'])
 @login_required
 def github_detail():
@@ -4910,6 +4986,11 @@ def rules_data_table():
     if source:
         sources = (sources or []) + [source]
 
+    branches = _csv_arg('branches')
+    branch   = request.args.get('branch', None, type=str)
+    if branch:
+        branches = (branches or []) + [branch]
+
     authors_list  = _csv_arg('authors')
     single_author = request.args.get('author', None, type=str)
     author_filter = authors_list or ([single_author] if single_author else None)
@@ -4944,6 +5025,7 @@ def rules_data_table():
         quality_score_max=request.args.get('quality_score_max', None, type=float),
         has_ai_analysis=request.args.get('has_ai_analysis', 'false', type=str) == 'true',
         has_relations=request.args.get('has_relations', 'false', type=str) == 'true',
+        branch=branches,
     )
 
     items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)
@@ -5436,6 +5518,17 @@ def get_rules_licenses_usage():
     licenses = RuleModel.get_licenses_usage_with_filter(search_query, filters=filters)
 
     return jsonify([{"name": s.license, "count": s.count} for s in licenses])
+
+
+@rule_blueprint.route('/get_rules_branches_usage')
+def get_rules_branches_usage():
+    """Returns the list of git branches, scoped to rules matching every other active filter."""
+    search_query = request.args.get('q', '').strip()
+    filters = RuleModel.parse_facet_filters(request.args, exclude=['branch'])
+
+    branches = RuleModel.get_branches_usage_with_filter(search_query, filters=filters)
+
+    return jsonify([{"name": b.branch, "count": b.count} for b in branches])
 
 
 @rule_blueprint.route('/get_rules_authors_usage')
@@ -6041,6 +6134,7 @@ def get_trash_rules():
             'title':             r.title,
             'format':            r.format,
             'source':            r.source,
+            'branch':            r.branch,
             'author':            r.author,
             'description':       r.description,
             'to_string':         r.to_string,

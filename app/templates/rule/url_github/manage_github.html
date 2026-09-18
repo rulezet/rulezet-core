@@ -7,6 +7,7 @@
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/importer.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/sync_schedule.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/github-proposal-table.css') }}">
+<link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/components/chart-viewer.css') }}">
 <style>
 .row-highlight-import {
     outline: 2px solid #0d6efd !important;
@@ -15,6 +16,80 @@
 .row-highlight-update {
     outline: 2px solid #ffc107 !important;
     background: rgba(255,193,7,.1) !important;
+}
+
+/* ── GitHub API quota card — pinned to the banner's top-right corner,
+   same idiom as the small badge cluster used on rule/bundle detail pages
+   (.explorer-banner is already position:relative). ── */
+.gh-quota-card {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .65rem .9rem;
+    border-radius: 14px;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 14px rgba(0,0,0,.06);
+    min-width: 210px;
+}
+.gh-quota-card__chart {
+    width: 46px;
+    height: 46px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.gh-quota-card__icon-fallback {
+    font-size: 1.3rem;
+    color: var(--subtle-text-color);
+}
+.gh-quota-card__body { min-width: 0; }
+.gh-quota-card__label {
+    font-size: .65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--subtle-text-color);
+    margin-bottom: 2px;
+}
+.gh-quota-card__value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--text-color);
+}
+.gh-quota-card__value-sep { color: var(--subtle-text-color); font-weight: 400; margin: 0 1px; }
+.gh-quota-card__sub {
+    font-size: .68rem;
+    color: var(--subtle-text-color);
+    white-space: nowrap;
+}
+.gh-quota-card__refresh {
+    border: none;
+    background: transparent;
+    color: var(--subtle-text-color);
+    font-size: .75rem;
+    padding: 4px 6px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+.gh-quota-card__refresh:hover { background: var(--light-bg-color); color: #0d6efd; }
+
+/* Banner content needs room on the right so its own text never runs
+   under the absolutely-positioned quota card on narrow-ish viewports. */
+@media (min-width: 768px) {
+    .explorer-banner:has(.gh-quota-card) { padding-right: 15rem; }
+}
+/* Below that, drop out of absolute positioning entirely and just stack
+   the card under the banner text instead of overlapping it. */
+@media (max-width: 767.98px) {
+    .gh-quota-card { position: static; margin-top: 1rem; width: 100%; }
 }
 </style>
 {% endblock %}
@@ -42,6 +117,46 @@
         <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
             Monitor imported repositories, review update history, and automate recurring GitHub syncs.
         </p>
+        {% if current_user.is_admin() or current_user.has_permission('github.manage') %}
+        <!-- ── GitHub API quota — admin/GitHub-manager only, top-right corner
+             of the banner (same "badges in the corner" idiom used on detail
+             pages). Donut = used vs remaining out of the hourly limit;
+             fetched once on mount + on-demand, never on a timer. ── -->
+        <div class="gh-quota-card">
+            <div class="gh-quota-card__chart">
+                <chart-viewer v-if="rateLimitStatus && !rateLimitStatus.error" :data="rateLimitChartData"
+                              views="donut" height="100%" :minimal="true"></chart-viewer>
+                <i v-else class="fa-brands fa-github gh-quota-card__icon-fallback"
+                   :class="{ 'text-danger': rateLimitStatus && rateLimitStatus.error }"></i>
+            </div>
+            <div class="gh-quota-card__body">
+                <div class="gh-quota-card__label">
+                    <i class="fa-brands fa-github me-1"></i>GitHub API quota
+                </div>
+                <template v-if="rateLimitStatus && rateLimitStatus.error">
+                    <div class="gh-quota-card__value text-danger" style="font-size:.82rem;">Token error</div>
+                    <div class="gh-quota-card__sub text-danger">[[ rateLimitStatus.error ]]</div>
+                </template>
+                <template v-else-if="rateLimitStatus">
+                    <div class="gh-quota-card__value" :class="{ 'text-danger': rateLimitStatus.remaining === 0 }">
+                        [[ rateLimitStatus.remaining ]]<span class="gh-quota-card__value-sep">/</span>[[ rateLimitStatus.limit ]]
+                    </div>
+                    <div class="gh-quota-card__sub">
+                        <span v-if="rateLimitStatus.remaining === 0" class="text-danger fw-semibold">Resets in [[ rateLimitResetLabel ]]</span>
+                        <span v-else>requests remaining this hour</span>
+                    </div>
+                </template>
+                <template v-else>
+                    <div class="gh-quota-card__value">
+                        <span class="spinner-border spinner-border-sm text-muted"></span>
+                    </div>
+                </template>
+            </div>
+            <button type="button" class="gh-quota-card__refresh" title="Refresh" @click="fetchRateLimitStatus">
+                <i class="fas fa-rotate"></i>
+            </button>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Running sessions — inline live panel, only shown when something is actually running -->
@@ -794,13 +909,44 @@
     import ScheduleRecurrencePicker from '/static/js/rule/scheduleRecurrencePicker.js'
     import UserChip from '/static/js/components/UserChip.js'
     import GithubProposalTable from '/static/js/rule/github/githubProposalTable.js'
+    import ChartViewer from '/static/js/components/chart-viewer.js'
 
     const csrfToken = '{{ csrf_token() }}'
+    const isGithubManager = {{ (current_user.is_admin() or current_user.has_permission('github.manage')) | tojson }}
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { PaginationComponent, RepoSelectionTable, ScheduleRecurrencePicker, UserChip, GithubProposalTable },
+        components: { PaginationComponent, RepoSelectionTable, ScheduleRecurrencePicker, UserChip, GithubProposalTable, ChartViewer },
         setup() {
+            // ── GitHub API quota (admin/GitHub-manager only) — fetched once
+            // on mount + on-demand, never on a timer. Same backend endpoint
+            // as the GitHub Sources list / create-rule GitHub tab.
+            const rateLimitStatus = ref(null)
+            async function fetchRateLimitStatus() {
+                try {
+                    const res = await fetch('/rule/github/rate_limit_status')
+                    if (res.ok) rateLimitStatus.value = await res.json()
+                } catch { rateLimitStatus.value = null }
+            }
+            const rateLimitResetLabel = computed(() => {
+                const s = rateLimitStatus.value
+                if (!s || s.reset_in_seconds == null) return ''
+                const mins = Math.ceil(s.reset_in_seconds / 60)
+                if (mins <= 1) return 'less than a minute'
+                if (mins < 60) return `${mins} min`
+                return `${Math.floor(mins / 60)}h ${mins % 60}m`
+            })
+            const rateLimitChartData = computed(() => {
+                const s = rateLimitStatus.value
+                const remaining = s ? s.remaining : 0
+                const used = s ? Math.max(0, s.limit - s.remaining) : 0
+                return {
+                    categories: ['Remaining', 'Used'],
+                    colors: [remaining === 0 ? '#dc3545' : '#0d6efd', 'var(--border-color)'],
+                    series: [{ name: 'Requests', values: [remaining, used] }],
+                }
+            })
+
             //  #############################
             //  #       Importer section    #
             //  #############################
@@ -923,6 +1069,7 @@
                 }
             }
             fetchSessionRunning()
+            if (isGithubManager) fetchRateLimitStatus()
 
             const runningTotal = computed(() => (running_sessions.value?.length || 0) + (running_sessions_update.value?.length || 0))
 
@@ -1430,6 +1577,7 @@
             {% endif %}
 
             return {
+                rateLimitStatus, fetchRateLimitStatus, rateLimitResetLabel, rateLimitChartData,
                 message_list,
                 history_list,
                 total_history,

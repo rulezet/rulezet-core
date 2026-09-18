@@ -8,46 +8,59 @@
 }
 
 .wd-kpi-card {
-    flex: 1 1 120px;
-    min-width: 100px;
-    padding: 14px 16px;
-    border-radius: 12px;
-    border: 2px solid var(--border-color);
+    flex: 1 1 160px;
+    min-width: 140px;
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    padding: 1rem 1.15rem;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
     background: var(--card-bg-color);
+    box-shadow: 0 2px 12px rgba(0,0,0,.06);
     cursor: pointer;
-    transition: all .18s;
-    text-align: center;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
     user-select: none;
 }
 .wd-kpi-card:hover {
-    border-color: #0d6efd;
     transform: translateY(-2px);
-    box-shadow: 0 4px 14px rgba(13,110,253,.12);
+    box-shadow: 0 6px 20px rgba(0,0,0,.1);
 }
 .wd-kpi-card--active {
     border-color: currentColor;
-    box-shadow: 0 4px 14px rgba(0,0,0,.12);
 }
-.wd-kpi-card__value {
-    font-size: 1.6rem;
+.wd-kpi-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+.wd-kpi-body { flex: 1; min-width: 0; }
+.wd-kpi-value {
+    font-size: 1.5rem;
     font-weight: 700;
-    line-height: 1;
-    margin-bottom: 4px;
+    line-height: 1.1;
+    color: var(--text-color);
 }
-.wd-kpi-card__label {
-    font-size: .72rem;
+.wd-kpi-label {
+    font-size: .7rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: .05em;
     color: var(--subtle-text-color);
+    margin-top: 2px;
 }
 
 /* KPI color variants */
-.wd-kpi-card--total        { color: #0d6efd; }
-.wd-kpi-card--draft        { color: #6c757d; }
-.wd-kpi-card--testing      { color: #d97706; }
-.wd-kpi-card--production   { color: #198754; }
-.wd-kpi-card--deprecated   { color: #dc3545; }
+.wd-kpi-card--total        .wd-kpi-icon { background: rgba(13,110,253,.12);  color: #0d6efd; }
+.wd-kpi-card--draft        .wd-kpi-icon { background: rgba(108,117,125,.12); color: #6c757d; }
+.wd-kpi-card--testing      .wd-kpi-icon { background: rgba(217,119,6,.12);   color: #d97706; }
+.wd-kpi-card--production   .wd-kpi-icon { background: rgba(25,135,84,.12);   color: #198754; }
+.wd-kpi-card--deprecated   .wd-kpi-icon { background: rgba(220,53,69,.12);   color: #dc3545; }
 
 .wd-kpi-card--total.wd-kpi-card--active      { border-color: #0d6efd; background: rgba(13,110,253,.06); }
 .wd-kpi-card--draft.wd-kpi-card--active      { border-color: #6c757d; background: rgba(108,117,125,.06); }
@@ -266,3 +279,45 @@
 }
 .wd-empty-state i { font-size: 2.5rem; margin-bottom: .75rem; opacity: .4; display: block; }
 .wd-empty-state p { font-size: .88rem; margin: 0; }
+
+/* ── "What's Next" roadmap preview ─────────────────────────── */
+.wd-roadmap-card {
+    display: flex;
+    align-items: flex-start;
+    gap: .9rem;
+    height: 100%;
+    padding: 1.1rem 1.2rem;
+    border-radius: 14px;
+    border: 1px dashed var(--border-color);
+    background: var(--light-bg-color);
+}
+.wd-roadmap-card__icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+.wd-roadmap-card__body { flex: 1; min-width: 0; }
+.wd-roadmap-badge {
+    display: inline-block;
+    padding: .1rem .5rem;
+    border-radius: 999px;
+    font-size: .62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    background: rgba(13,110,253,.12);
+    color: #0d6efd;
+    white-space: nowrap;
+}
+
+/* Same badge, sized for the nav tab it decorates instead of a card body */
+.wd-roadmap-badge--nav {
+    margin-left: 2px;
+    padding: .05rem .4rem;
+    font-size: .58rem;
+}

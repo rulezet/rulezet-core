@@ -641,7 +641,7 @@ def handle_delete_github_rules(job, app):
         from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
         apply_deltas_for_rule_ids(pre_ids, sign=-1, is_deleted=False)
     except Exception:
-        pass
+        db.session.rollback()
 
     # Soft-delete in one bulk update
     updated = Rule.query.filter(Rule.source.in_(urls), Rule.is_deleted == False).update(
@@ -674,6 +674,48 @@ def handle_github_repo_resync(job, app):
     db.session.commit()
     log_job(job, f"Done — {result['repos']} repo(s), {result['rules_counted']} rule(s) counted.",
             level='success', event='done')
+
+
+# ─── github_repo_branch_backfill ───────────────────────────────────────────────
+
+@register_handler('github_repo_branch_backfill')
+def handle_github_repo_branch_backfill(job, app):
+    """One-off repair: stamp Rule.branch for rules imported before that
+    column existed, using each repo's own GitHub-reported default_branch
+    (never a hardcoded "main" guess — see
+    github_repo_core.backfill_rule_branches_from_default). Background job
+    since it's one HTTP request per distinct repo in the registry."""
+    log_job(job, 'Looking up each repo\'s default branch on GitHub…', level='info', event='start')
+    from app.features.rule.github_repo_core import backfill_rule_branches_from_default
+
+    def _progress(done, total):
+        job.total = total
+        job.done = done
+        db.session.commit()
+
+    result = backfill_rule_branches_from_default(progress_cb=_progress)
+    for err in result['errors'][:20]:
+        log_job(job, f"  {err}", level='warning', event='progress')
+    if len(result['errors']) > 20:
+        log_job(job, f"  … and {len(result['errors']) - 20} more error(s).", level='warning', event='progress')
+
+    if result['rate_limited']:
+        reset_msg = f" — resets at {result['reset_at']}" if result['reset_at'] else ""
+        log_job(
+            job,
+            f"Stopped — GitHub API rate limit hit after {result['repos_checked']}/{result['repos_total']} "
+            f"repo(s) ({result['repos_updated']} updated, {result['rules_updated']} rule(s) backfilled so far)"
+            f"{reset_msg}. Safe to re-run \"Backfill branches\" once the limit resets — it only ever "
+            f"touches rules still missing a branch.",
+            level='warning', event='done',
+        )
+    else:
+        log_job(
+            job,
+            f"Done — checked {result['repos_checked']} repo(s), backfilled "
+            f"{result['rules_updated']} rule(s) across {result['repos_updated']} repo(s).",
+            level='success', event='done',
+        )
 
 
 # ─── delete_activity_logs ─────────────────────────────────────────────────────
@@ -1051,7 +1093,7 @@ def handle_trash_restore_bulk(job, app):
             from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
             apply_deltas_for_rule_ids(chunk, sign=+1, is_deleted=True)
         except Exception:
-            pass
+            db.session.rollback()
         Rule.query.filter(Rule.id.in_(chunk), Rule.is_deleted == True).update(
             {"is_deleted": False, "deleted_at": None, "deleted_by_id": None, "delete_batch_uuid": None},
             synchronize_session=False,
@@ -1512,11 +1554,16 @@ def handle_connector_pull(job, app):
                                             level='warning', event='progress')
                                 _import_rule_history_new(rule, item.get('update_history', []),
                                                          effective_user_id)
-                            try:
-                                from app.features.rule.github_repo_core import apply_deltas_for_new_rules
-                                apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
-                            except Exception:
-                                pass
+                            # Not wrapped in its own try/except: this whole
+                            # block is still inside the outer try that flushed
+                            # new_rules_pending above (not yet committed) — a
+                            # swallowed-but-uncaught failure here would leave
+                            # the session poisoned while still reporting
+                            # pg_created/rules_created as success. Let it
+                            # propagate to the outer except below, which
+                            # correctly rolls back and counts these as errors.
+                            from app.features.rule.github_repo_core import apply_deltas_for_new_rules
+                            apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
                             pg_created    = len(new_rules_pending)
                             rules_created += pg_created
                         except Exception as batch_exc:
@@ -1647,11 +1694,16 @@ def handle_connector_pull(job, app):
                                     _sync_cve_ids(rule, item.get('cve_ids', []))
                                     _import_rule_history_new(rule, item.get('update_history', []),
                                                              effective_user_id)
-                                try:
-                                    from app.features.rule.github_repo_core import apply_deltas_for_new_rules
-                                    apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
-                                except Exception:
-                                    pass
+                                # Not wrapped in its own try/except — same
+                                # reasoning as connector_pull above: this is
+                                # still inside the outer try that flushed
+                                # new_rules_pending (not yet committed), so a
+                                # swallowed failure here would leave the
+                                # session poisoned while still reporting
+                                # rules_created as success. Let it propagate
+                                # to the outer except below, which rolls back.
+                                from app.features.rule.github_repo_core import apply_deltas_for_new_rules
+                                apply_deltas_for_new_rules([rule for item, rule in new_rules_pending])
                                 rules_created += len(new_rules_pending)
 
                             db.session.commit()

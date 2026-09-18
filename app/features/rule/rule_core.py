@@ -1,6 +1,7 @@
 
 import json
 from collections import Counter
+import io
 import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -9,7 +10,7 @@ import datetime
 import zipfile
 import requests
 from sqlalchemy.exc import SQLAlchemyError
-from flask import current_app, jsonify, send_file
+from flask import current_app, jsonify, request, send_file
 from flask_login import current_user
 from sqlalchemy import and_, case, or_, text
 from sqlalchemy.orm import joinedload
@@ -106,7 +107,7 @@ def soft_delete_rule(rule_id: int, user_id: int, batch_uuid: str = None) -> bool
         from app.features.rule.github_repo_core import apply_delta
         apply_delta(source, -1, rule=rule)
     except Exception:
-        pass
+        db.session.rollback()
     return True
 
 
@@ -121,7 +122,7 @@ def soft_delete_rule_list(rule_ids: list, user_id: int, batch_uuid: str = None) 
         from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
         apply_deltas_for_rule_ids(rule_ids, sign=-1, is_deleted=False)
     except Exception:
-        pass
+        db.session.rollback()
 
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     updated = Rule.query.filter(
@@ -135,16 +136,44 @@ def soft_delete_rule_list(rule_ids: list, user_id: int, batch_uuid: str = None) 
     return updated
 
 
+def _normalize_url_branch_items(items) -> list[tuple[str, str | None]]:
+    """Normalize a bulk-action selection into (url, branch) pairs — each
+    item is either a plain url string (every branch of that repo) or a
+    {'url':, 'branch':} dict (branch may be None/absent, same as a plain
+    string). Used by soft_delete_all_by_url / export_rules_by_urls_as_zip
+    so a repo split into per-branch rows (see get_optimized_github_data)
+    can have just one branch targeted instead of always sweeping every
+    branch of that url."""
+    if isinstance(items, str):
+        items = [items]
+    pairs = []
+    for it in items or []:
+        if isinstance(it, dict):
+            url = (it.get('url') or '').strip()
+            branch = it.get('branch') or None
+        else:
+            url = (it or '').strip()
+            branch = None
+        if url:
+            pairs.append((url, branch))
+    return pairs
+
+
 def soft_delete_all_by_url(urls: list, user_id: int) -> tuple[bool, str, int]:
-    """Soft-delete all rules whose source matches the given GitHub URLs, as one batch."""
+    """Soft-delete all rules matching the given GitHub source selections, as
+    one batch. Each selection is a url string (every branch) or a
+    {'url':, 'branch':} dict (that exact branch only)."""
     try:
-        if not urls:
+        pairs = _normalize_url_branch_items(urls)
+        if not pairs:
             return False, "No URL provided", 0
-        if isinstance(urls, str):
-            urls = [urls.strip()]
         batch_uuid = str(uuid.uuid4())
+        conditions = [
+            and_(Rule.source == url, Rule.branch == branch) if branch else (Rule.source == url)
+            for url, branch in pairs
+        ]
         rule_ids = [r[0] for r in db.session.query(Rule.id).filter(
-            Rule.source.in_(urls), Rule.is_deleted == False
+            or_(*conditions), Rule.is_deleted == False
         ).all()]
         count = soft_delete_rule_list(rule_ids, user_id, batch_uuid=batch_uuid)
         return True, f"{count} rules moved to trash", count
@@ -178,7 +207,7 @@ def restore_rule(rule_id: int):
         from app.features.rule.github_repo_core import apply_delta
         apply_delta(rule.source, +1, rule=rule)
     except Exception:
-        pass
+        db.session.rollback()
     return True
 
 
@@ -190,7 +219,7 @@ def restore_rules_bulk(rule_ids: list) -> int:
         from app.features.rule.github_repo_core import apply_deltas_for_rule_ids
         apply_deltas_for_rule_ids(rule_ids, sign=+1, is_deleted=True)
     except Exception:
-        pass
+        db.session.rollback()
 
     updated = Rule.query.filter(
         Rule.id.in_(rule_ids), Rule.is_deleted == True
@@ -213,7 +242,7 @@ def restore_batch(batch_uuid: str) -> int:
         ).all()]
         apply_deltas_for_rule_ids(batch_rule_ids, sign=+1, is_deleted=True)
     except Exception:
-        pass
+        db.session.rollback()
 
     updated = Rule.query.filter(
         Rule.delete_batch_uuid == batch_uuid, Rule.is_deleted == True
@@ -444,6 +473,20 @@ _CORPUS_IDENTIFIER_LABEL = {
 # share the same placeholder.
 EMPTY_UUID_VALUES = {"none", "null", "unknown", "n/a", "na", ""}
 
+# Formats whose parse_metadata() sets original_uuid to a real, stable
+# per-rule identifier — needed for relation resolution (KunaiRule's
+# rule(name) cross-references) and repo re-sync matching — but one that is
+# only meaningful within its own ruleset, not guaranteed unique across
+# every different author/repo ever imported into this instance (Kunai's
+# dotted rule `name`, e.g. "kill.critical.service", is a community
+# convention of uniqueness *within one ruleset*, not a global id).
+# add_rule_core()'s uuid-duplicate check below is otherwise instance-wide
+# and format-agnostic — for these formats it's skipped entirely so two
+# same-named-but-different-content rules from unrelated sources are
+# compared on content instead (see get_rule_by_content below), rather than
+# the second one being wrongly rejected before its content is ever looked at.
+_LOCALLY_SCOPED_ORIGINAL_UUID_FORMATS = {"kunai"}
+
 
 def _extract_corpus_identifier(rule_format: str, content: str) -> Optional[str]:
     """Extract the identifier that must be unique within its format's corpus."""
@@ -636,7 +679,8 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         # native uuid") are excluded — otherwise every uuid-less rule ever
         # imported, across every format and source, would collide with the
         # first one and never import again.
-        if new_original_uuid and new_original_uuid.lower() not in EMPTY_UUID_VALUES:
+        if (new_original_uuid and new_original_uuid.lower() not in EMPTY_UUID_VALUES
+                and (form_dict.get("format") or "").lower() not in _LOCALLY_SCOPED_ORIGINAL_UUID_FORMATS):
             existing_by_uuid = _active().filter(
                 or_(Rule.uuid == new_original_uuid, Rule.original_uuid == new_original_uuid)
             ).first()
@@ -711,7 +755,8 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
             vote_down=0,
             to_string=new_to_string,
             cve_id=json.dumps(vuln_list),
-            github_path=form_dict.get("github_path") or None
+            github_path=form_dict.get("github_path") or None,
+            branch=form_dict.get("branch") or None
         )
 
         db.session.add(new_rule)
@@ -742,7 +787,11 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
             from app.features.rule.github_repo_core import apply_delta
             apply_delta(new_rule.source, +1, rule=new_rule)
         except Exception:
-            pass  # GithubRepo is a cache — never let a sync failure block rule creation
+            # GithubRepo is a cache — never let a sync failure block rule
+            # creation, but DO roll back: an uncaught IntegrityError here
+            # leaves the session unusable for the rest of the request
+            # (e.g. the notify_followers_new_rule call right after this).
+            db.session.rollback()
 
         # Record the creation itself as v1 of the version history + a visible
         # "Rule created" timeline entry — centralized here (not left to each
@@ -857,7 +906,7 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     # aggregates need the before/after of each to stay accurate. See
     # github_repo_core.sync_rule_edit.
     old_source = rule.source
-    old_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id}
+    old_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id, 'branch': rule.branch}
 
     rule.format = form_dict["format"]
     rule.title = form_dict["title"]
@@ -935,10 +984,10 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
 
     try:
         from app.features.rule.github_repo_core import sync_rule_edit
-        new_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id}
+        new_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id, 'branch': rule.branch}
         sync_rule_edit(old_source, rule.source, old_snapshot, new_snapshot)
     except Exception:
-        pass
+        db.session.rollback()
 
     try:
         from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
@@ -1990,6 +2039,7 @@ def parse_facet_filters(args, exclude=()) -> dict:
         'exact_match':     args.get('exact_match') == 'true',
         'rule_type':       args.get('rule_type') or None,
         'source':          _csv('sources'),
+        'branch':          _csv('branches'),
         'license':         _csv('licenses'),
         'tags':            _csv('tags'),
         'vulnerabilities': _csv('vulnerabilities'),
@@ -2004,12 +2054,20 @@ def parse_facet_filters(args, exclude=()) -> dict:
     return filters
 
 
-def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None, status=None, workspace_uuid=None, exclude_workspace_uuid=None, ids: list[int] | None = None) -> Rule:
+def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None, status=None, workspace_uuid=None, exclude_workspace_uuid=None, ids: list[int] | None = None, branch: str | None = None) -> Rule:
     """Filter the rules with specific field targeting"""
     query = _active()
 
     if ids:
         query = query.filter(Rule.id.in_(ids))
+
+    # Exact match — unlike `source` (ILIKE substring), a branch name is an
+    # exact value, not free text (see Rule.branch / GithubRepo.branch_counts).
+    # Accepts a single branch (the pinned-source-detail-page use case) or a
+    # CSV string / list (the interactive multi-select Sources filter).
+    if branch:
+        branch_list = [b.strip() for b in branch.split(',')] if isinstance(branch, str) else branch
+        query = query.filter(Rule.branch.in_(branch_list))
 
     if search:
         search = search.strip()
@@ -3250,13 +3308,14 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
         url = repo.url
         last_import = last_imports_by_url.get(url)
         last_update = last_updates_by_url.get(url)
+        branch_names = sorted(b for b in (repo.branch_counts or {}).keys() if b)
 
-        github_data.append({
+        base_row = {
             "url": url,
             "author": repo.author,
-            "rule_count": repo.rule_count,
             "formats": sorted((repo.format_counts or {}).keys()),
             "licenses": sorted((repo.license_counts or {}).keys()),
+            "branches": branch_names,
             "cve_count": repo.cve_count,
             "has_conflicts": repo.conflict_count > 0,
             "last_import": {
@@ -3273,7 +3332,25 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
                 "new_rules_count": len(last_update.new_rules) if last_update else 0,
                 "found": last_update.found if last_update else 0
             } if last_update else None
-        })
+        }
+
+        # A repo imported from more than one branch gets one row per branch
+        # (same url/name, its own rule_count) instead of one row hiding a
+        # combined total — the two rows are visually "linked" purely by
+        # showing the same url, distinguished only by a branch badge.
+        if len(branch_names) > 1:
+            for branch_name in branch_names:
+                github_data.append({
+                    **base_row,
+                    "branch": branch_name,
+                    "rule_count": (repo.branch_counts or {}).get(branch_name, 0),
+                })
+        else:
+            github_data.append({
+                **base_row,
+                "branch": branch_names[0] if branch_names else None,
+                "rule_count": repo.rule_count,
+            })
 
     return github_data, pagination.total, pagination.pages
 
@@ -3369,7 +3446,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          tags=None, editor_names=None, bundle_id=None, attacks=None,
                          status=None, workspace_uuid=None, exclude_workspace_uuid=None,
                          ids=None, has_cve=False, quality_score_min=None, quality_score_max=None,
-                         has_ai_analysis=False, has_relations=False):
+                         has_ai_analysis=False, has_relations=False, branch=None):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
     advanced filter bar (tags, licenses, vulnerabilities, sources, exact
@@ -3392,6 +3469,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         status=status,
         workspace_uuid=workspace_uuid,
         exclude_workspace_uuid=exclude_workspace_uuid,
+        branch=branch,
         ids=ids,
     )
 
@@ -3557,6 +3635,19 @@ def get_github_source_stats(url: str) -> dict:
             .scalar()
         ) or 0
 
+    # Every branch that has contributed active rules to this source, with
+    # its own count — same source_filter as everything else above (not
+    # GithubRepo.branch_counts, which is keyed by exact url and could
+    # diverge from this looser .git-suffix-tolerant match). Feeds the
+    # branch picker on the GitHub source detail page.
+    branch_rows = (
+        db.session.query(Rule.branch, func.count(Rule.id))
+        .filter(Rule.is_deleted == False, source_filter, Rule.branch.isnot(None))
+        .group_by(Rule.branch)
+        .order_by(func.count(Rule.id).desc())
+        .all()
+    )
+
     return {
         'total_rules':    total,
         'formats':        [{'name': f or 'unknown', 'count': c} for f, c in formats],
@@ -3564,6 +3655,7 @@ def get_github_source_stats(url: str) -> dict:
         'licenses_count': licenses_count,
         'cve_count':      len(cve_set),
         'attack_count':   attack_count,
+        'branches':       [{'name': b, 'count': c} for b, c in branch_rows],
         'last_update':    last.last_modif.strftime('%Y-%m-%d %H:%M') if last else None,
         'first_import':   first.creation_date.strftime('%Y-%m-%d %H:%M') if first else None,
     }
@@ -3601,8 +3693,12 @@ def get_all_rule_by_url_github_page(page: int = 1, search: str = None, url: str 
     
     return pagination, total_count
 
-def get_all_rule_by_url_github(url: str = None, current_user_: User = None):
-    """Get list of Rules whose source contains a specific GitHub project URL."""
+def get_all_rule_by_url_github(url: str = None, current_user_: User = None, branch: str = None):
+    """Get list of Rules whose source contains a specific GitHub project URL.
+
+    `branch`, when given, narrows to rules imported from that exact branch —
+    a repo imported from more than one branch (see Rule.branch) must never
+    have another branch's rules checked/updated against this branch's clone."""
     query = _active().filter(Rule.source.isnot(None))
 
     if current_user_.is_admin():
@@ -3614,6 +3710,9 @@ def get_all_rule_by_url_github(url: str = None, current_user_: User = None):
 
         if url:
             query = query.filter(Rule.source.ilike(f"%{url}%"))
+
+    if branch:
+        query = query.filter(Rule.branch == branch)
 
     return query.all()
 
@@ -4080,7 +4179,7 @@ def search_rules_by_cve_patterns(vulnerabilities: list[str]) -> dict:
     """
 
     
-    base_url = "https://rulezet.org/rule/detail_rule/"
+    base_url = request.url_root.rstrip("/") + "/rule/detail_rule/"
     query = Rule.query
 
     if vulnerabilities:
@@ -4115,6 +4214,50 @@ def search_rules_by_cve_patterns(vulnerabilities: list[str]) -> dict:
         "rules": final_rules
     }
 
+
+def search_rules_by_attack_patterns(technique_ids: list[str]) -> dict:
+    """
+    Search rules mapped (via RuleAttackAssociation) to one or more MITRE ATT&CK
+    technique IDs (e.g. T1059, T1059.001). Mirrors search_rules_by_cve_patterns.
+    """
+
+    base_url = request.url_root.rstrip("/") + "/rule/detail_rule/"
+
+    # Distinct rule IDs first: a plain DISTINCT/JOIN on Rule itself fails in
+    # Postgres because Rule.quality_score_breakdown is a json column (no
+    # equality operator), and a rule can match several requested techniques.
+    matching_ids = (
+        db.session.query(RuleAttackAssociation.rule_id)
+        .filter(RuleAttackAssociation.technique_id.in_(technique_ids))
+        .distinct()
+    )
+    query = Rule.query.filter(Rule.is_deleted == False, Rule.id.in_(matching_ids))
+
+    all_rules = query.order_by(Rule.last_modif.desc()).all()
+
+    final_rules = []
+    for rule in all_rules:
+        rule_data = rule.to_json()
+
+        rule_data["detail_url"] = f"{base_url}{rule.id}"
+        rule_data["matched_techniques"] = sorted({
+            a.technique_id for a in rule.attack_assocs if a.technique_id in technique_ids
+        })
+
+        if rule.last_modif:
+            rule_data["formatted_date"] = rule.last_modif.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            rule_data["formatted_date"] = None
+
+        final_rules.append(rule_data)
+
+    total_count = len(all_rules)
+
+    return {
+        "totals": total_count,
+        "total_all_rules": total_count,
+        "rules": final_rules
+    }
 
 
 def get_new_rule(new_rule_id):
@@ -4422,6 +4565,30 @@ def verify_rule_syntaxe(rule: Any , new_content) -> Optional[ValidationResult]:
     return None
 
 
+def validate_rule_syntax(rule_format: str, content: str) -> Optional[ValidationResult]:
+    """Run the same per-format syntax check a rule goes through at creation
+    time (verify_rule_syntaxe above), without a DB Rule object and without
+    ever persisting anything — for a dry-run "would this rule be accepted"
+    check (e.g. the public /validate endpoint).
+
+    Returns None when rule_format matches no known RuleType implementation
+    (the caller distinguishes "unknown format" from "invalid content").
+    """
+    load_all_rule_formats()
+    wanted = (rule_format or "").strip().lower()
+    if not wanted:
+        return None
+
+    for RuleClass in RuleType.__subclasses__():
+        try:
+            instance = RuleClass()
+            if instance.format.lower() == wanted:
+                return instance.validate(content)
+        except Exception:
+            continue
+    return None
+
+
 def get_corpus_identifier_collision_warning(rule: Any) -> Optional[str]:
     """Live check (not the admin-only report's snapshot — see
     get_sid_collision_groups) for whether THIS specific rule's
@@ -4526,28 +4693,33 @@ def get_all_github_sources(exclude_urls=None):
 
 def export_rules_by_urls_as_zip(urls):
     """
-    Exports rules into a ZIP file structure.
+    Exports rules into a ZIP file structure. Each selection is a url string
+    (every branch of that repo) or a {'url':, 'branch':} dict (that exact
+    branch only) — see _normalize_url_branch_items.
     Structure:
-    /repo_name/info.json
-    /repo_name/rules/rule_1.json
-    /repo_name/rules/rule_2.json
+    /repo_name[__branch]/info.json
+    /repo_name[__branch]/rules/rule_1.json
+    /repo_name[__branch]/rules/rule_2.json
     """
-    if isinstance(urls, str):
-        target_urls = [urls.strip()]
-    else:
-        target_urls = [u.strip() for u in urls]
+    pairs = _normalize_url_branch_items(urls)
 
     memory_file = io.BytesIO()
-    
+
     with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for url in target_urls:
+        for url, branch in pairs:
             folder_name = url.replace('https://', '').replace('http://', '').replace('/', '_').strip('_')
-            
-            rules = _active().filter(Rule.source == url).all()
-            
+            if branch:
+                folder_name += '__' + branch.replace('/', '_')
+
+            rules_query = _active().filter(Rule.source == url)
+            if branch:
+                rules_query = rules_query.filter(Rule.branch == branch)
+            rules = rules_query.all()
+
 
             repo_info = {
                 "repository_url": url,
+                "branch": branch,
                 "exported_at": datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
                 "total_rules_found": len(rules),
                 "platform": "rulezet.org"
@@ -4729,6 +4901,26 @@ def get_licenses_usage_with_filter(search_query, filters: dict = None):
         query = query.filter(Rule.license.ilike(f'%{search_query}%'))
 
     return query.group_by(Rule.license).order_by(func.count(Rule.id).desc()).all()
+
+
+def get_branches_usage_with_filter(search_query=None, filters: dict = None):
+    """
+    Groups rules by git branch and counts them, scoped to rules matching every
+    OTHER currently active filter ('branch' must already be excluded from
+    `filters`). Rules with no branch (not imported from GitHub, or imported
+    before branch tracking existed) are excluded, same as source/license.
+    """
+    base_ids = filter_rules(**(filters or {})).order_by(None).with_entities(Rule.id).subquery()
+
+    query = db.session.query(
+        Rule.branch.label('branch'),
+        func.count(Rule.id).label('count')
+    ).filter(Rule.id.in_(db.session.query(base_ids)), Rule.branch != None, Rule.branch != '')
+
+    if search_query:
+        query = query.filter(Rule.branch.ilike(f'%{search_query}%'))
+
+    return query.group_by(Rule.branch).order_by(func.count(Rule.id).desc()).all()
 
 
 def get_authors_usage_with_filter(search_query=None, filters: dict = None):
@@ -4999,7 +5191,7 @@ def delete_similarity_history(uuid: str):
             from app.features.rule.github_repo_core import sync_conflict_counts
             sync_conflict_counts()
         except Exception:
-            pass
+            db.session.rollback()
         return True
     except Exception as e:
         db.session.rollback()

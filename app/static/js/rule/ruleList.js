@@ -48,6 +48,7 @@
 import PaginationComponent      from '/static/js/rule/paginationComponent.js'
 import MultiVulnerabilityFilter from '/static/js/vulnerability/multiVulnerabilityFilter.js'
 import MultiSourceFilter        from '/static/js/rule/multiSourceFilter.js'
+import MultiBranchFilter        from '/static/js/rule/multiBranchFilter.js'
 import MultiLicenseFilter       from '/static/js/rule/multiLicenseFilter.js'
 import MultiPersonFilter        from '/static/js/rule/multiPersonFilter.js'
 import MultiTagFilter           from '/static/js/tags/multiTagFIlter.js'
@@ -73,6 +74,7 @@ export default {
         PaginationComponent,
         MultiVulnerabilityFilter,
         MultiSourceFilter,
+        MultiBranchFilter,
         MultiLicenseFilter,
         MultiTagFilter,
         MultiPersonFilter,
@@ -94,6 +96,11 @@ export default {
         defaultView:        { type: String,           default: 'card' },
         fetchUrl:           { type: String,           default: '/rule/data_table' },
         source:             { type: String,           default: null },
+        // Narrows to rules imported from this exact git branch (Rule.branch)
+        // — combined with `source` on the GitHub repo detail page so an
+        // admin can view just one branch's rules when a repo has more than
+        // one imported. No effect when unset (most rules have no branch).
+        branch:             { type: String,           default: null },
         // Pins the sidebar facet counts (tags/ATT&CK/vulnerabilities/licenses/person)
         // to a fixed author, the same way `source` already pins them to a fixed
         // source. Only used when there's no source to pin by (e.g. a rule with no
@@ -445,6 +452,20 @@ export default {
                             :filter-context="facetContextParams"
                             @change="onFilterChange">
                         </multi-source-filter>
+                    </div>
+
+                    <div class="rl-fp-multi-item" v-if="!isFilterHidden('branches') && !branch">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-code-branch text-secondary"></i> Branch
+                        </span>
+                        <multi-branch-filter v-model="selectedBranches"
+                            api-endpoint="/rule/get_rules_branches_usage"
+                            placeholder="Filter branches…"
+                            :userId="numericUserId"
+                            :source-rules="source || ''"
+                            :filter-context="facetContextParams"
+                            @change="onFilterChange">
+                        </multi-branch-filter>
                     </div>
 
                     <div class="rl-fp-multi-item" v-if="!isFilterHidden('vulnerabilities')">
@@ -1452,7 +1473,7 @@ export default {
                                             <span class="rl-expand-k">
                                                 <i class="fas fa-link me-1"></i>Source
                                             </span>
-                                            <a :href="rule.source" target="_blank" rel="noreferrer"
+                                            <a :href="githubLink(rule)" target="_blank" rel="noreferrer"
                                                class="rl-expand-v text-primary rl-expand-source-link">
                                                 {{ rule.source }}
                                             </a>
@@ -1635,6 +1656,7 @@ export default {
         const ruleType         = ref(_p('rule_type', init.format || ''))
         const selectedTags     = ref(_arr('tags',            init.tags || ''))
         const selectedSources  = ref(_arr('sources',         init.sources || ''))
+        const selectedBranches = ref(_arr('branches',        init.branches || ''))
         const selectedLicenses = ref(_arr('licenses',        init.licenses || ''))
         const selectedVulns    = ref(_arr('vulnerabilities', init.vulnerabilities || ''))
         const selectedAttacks  = ref(_arr('attacks',         init.attacks         || ''))
@@ -1717,7 +1739,7 @@ export default {
             ? props.defaultView
             : (localStorage.getItem('rz-list-view') || 'card')
         const viewMode    = ref(_p('view', _defaultView))
-        const _hasUrlFilters = ['tags','sources','licenses','vulnerabilities','attacks','authors','editors',
+        const _hasUrlFilters = ['tags','sources','branches','licenses','vulnerabilities','attacks','authors','editors',
                                 'rule_type','search_field','exact_match','person_mode','scope']
                                .some(k => _url.has(k))
         const filtersOpen = ref(_hasUrlFilters)
@@ -1852,6 +1874,7 @@ export default {
             (scopeMine.value ? 1 : 0) +
             (isFilterHidden('tags') ? 0 : selectedTags.value.length) +
             (isFilterHidden('sources') ? 0 : selectedSources.value.length) +
+            (isFilterHidden('branches') ? 0 : selectedBranches.value.length) +
             (isFilterHidden('licenses') ? 0 : selectedLicenses.value.length) +
             (isFilterHidden('vulnerabilities') ? 0 : selectedVulns.value.length) +
             (isFilterHidden('attacks') ? 0 : selectedAttacks.value.length) +
@@ -1883,6 +1906,7 @@ export default {
             _upd('view',    viewMode.value !== props.defaultView ? viewMode.value : null)
             _upd('tags',            selectedTags.value.join(',')    || null)
             _upd('sources',         selectedSources.value.join(',') || null)
+            _upd('branches',        selectedBranches.value.join(',')|| null)
             _upd('licenses',        selectedLicenses.value.join(',')|| null)
             _upd('vulnerabilities', selectedVulns.value.join(',')   || null)
             _upd('attacks',         selectedAttacks.value.join(',') || null)
@@ -1940,11 +1964,13 @@ export default {
                 if (sortKey.value)                   params.set('sort', sortKey.value)
                 if (sortKey.value)                   params.set('dir', sortDir.value)
                 if (props.source)                    params.set('source', props.source)
+                if (props.branch)                    params.set('branch', props.branch)
                 if (props.ids)                        params.set('ids', Array.isArray(props.ids) ? props.ids.join(',') : props.ids)
                 if (numericUserId.value)             params.set('user_id', numericUserId.value)
                 else if (scopeMine.value && numericCurrentUserId.value) params.set('user_id', numericCurrentUserId.value)
                 if (selectedTags.value.length)       params.set('tags', selectedTags.value.join(','))
                 if (selectedSources.value.length)    params.set('sources', selectedSources.value.join(','))
+                if (selectedBranches.value.length)   params.set('branches', selectedBranches.value.join(','))
                 if (selectedLicenses.value.length)   params.set('licenses', selectedLicenses.value.join(','))
                 if (selectedVulns.value.length)      params.set('vulnerabilities', selectedVulns.value.join(','))
                 if (selectedAttacks.value.length)    params.set('attacks', selectedAttacks.value.join(','))
@@ -2019,6 +2045,7 @@ export default {
             scopeMine.value      = false
             if (!isFilterHidden('tags'))            selectedTags.value   = []
             if (!isFilterHidden('sources'))         selectedSources.value = []
+            if (!isFilterHidden('branches'))        selectedBranches.value = []
             if (!isFilterHidden('licenses'))        selectedLicenses.value = []
             if (!isFilterHidden('vulnerabilities')) selectedVulns.value   = []
             if (!isFilterHidden('attacks'))         selectedAttacks.value = []
@@ -2371,6 +2398,18 @@ export default {
                 .replace(/"/g, '&quot;')
         }
 
+        // ── GitHub source link (branch/file-aware when available) ──────────
+        function githubLink(rule) {
+            if (!rule || !rule.source) return rule ? rule.source : ''
+            const base = rule.source.replace(/\.git$/, '')
+            if (rule.github_path) {
+                const path = rule.github_path.replace(/^\/+/, '')
+                return base + '/blob/' + (rule.branch || 'HEAD') + '/' + path
+            }
+            if (rule.branch) return base + '/tree/' + rule.branch
+            return rule.source
+        }
+
         // ── Date formatting ───────────────────────────────────────────────
         function fromNow(dateStr) {
             if (!dateStr) return ''
@@ -2440,6 +2479,8 @@ export default {
             if (selectedTags.value.length)     p.set('tags', selectedTags.value.join(','))
             if (selectedSources.value.length)  p.set('sources', selectedSources.value.join(','))
             else if (props.source)             p.set('sources', props.source)
+            if (selectedBranches.value.length) p.set('branches', selectedBranches.value.join(','))
+            else if (props.branch)             p.set('branches', props.branch)
             if (selectedLicenses.value.length) p.set('licenses', selectedLicenses.value.join(','))
             if (selectedVulns.value.length)    p.set('vulnerabilities', selectedVulns.value.join(','))
             if (selectedAttacks.value.length)  p.set('attacks', selectedAttacks.value.join(','))
@@ -2458,6 +2499,7 @@ export default {
             ruleType.value !== '' ||
             selectedTags.value.length > 0 ||
             selectedSources.value.length > 0 ||
+            selectedBranches.value.length > 0 ||
             selectedLicenses.value.length > 0 ||
             selectedVulns.value.length > 0 ||
             selectedAttacks.value.length > 0 ||
@@ -2497,6 +2539,15 @@ export default {
         watch(viewMode, () => { page.value = 1; fetchData() })
         watch(aiAnalysisOnly, () => { page.value = 1; fetchData() })
 
+        // `source`/`branch` are normally static for a given page (set once by
+        // the parent and never touched again), so this never used to matter
+        // — but the GitHub repo detail page's branch picker changes `branch`
+        // on the same mounted <rule-list> after the fact (no full reload),
+        // and without this the list silently kept showing the old branch's
+        // rules until the page was manually reloaded.
+        watch(() => props.source, () => { page.value = 1; fetchData() })
+        watch(() => props.branch, () => { page.value = 1; fetchData() })
+
         // Auto-expand all items when search field is "content"
         watch(items, (newItems) => {
             if (searchField.value === 'content') {
@@ -2514,7 +2565,7 @@ export default {
             sortKey, sortDir, search,
             // Filters
             filtersOpen, ruleType, searchField, exactMatch, cardSort, qualityMin, qualityMax, onQualityRangeChange,
-            selectedTags, selectedSources, selectedLicenses, selectedVulns, selectedAttacks,
+            selectedTags, selectedSources, selectedBranches, selectedLicenses, selectedVulns, selectedAttacks,
             personFilter, onPersonFilterChange,
             scopeMine, aiAnalysisOnly, hasRelationsOnly, MASCOT_ENABLED,
             rulesFormats, activeFilterCount,
@@ -2542,7 +2593,7 @@ export default {
             toggleExpand,
             handleVote, handleFavorite,
             emitBulkAction, emitSend,
-            fromNow, formatDate, qualityBadgeClass, highlight, matchedHighlightTerms, matchedStringCount,
+            fromNow, formatDate, qualityBadgeClass, highlight, githubLink, matchedHighlightTerms, matchedStringCount,
             // Status
             statusIcon, statusLabel, canChangeStatus, cycleStatus,
             // Export

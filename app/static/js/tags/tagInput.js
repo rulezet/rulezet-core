@@ -18,6 +18,22 @@ const TagInput = {
         // is reached replaces the current selection instead of being a no-op,
         // which is the least surprising behavior for a "pick one" field.
         maxTags: { type: Number, default: null },
+        // Opt-in (default off, so rule/bundle/platform-tag pickers keep
+        // curating from the existing catalog only): lets the user type a
+        // name with no match — or several at once, space/comma-separated,
+        // "#" optional (e.g. "#linux #test #theo") — and create it via
+        // POST /tags/create_tag instead of only picking from what exists.
+        // Blog posts are the first user of this (ad-hoc post tags like
+        // "release"/"v1.7.2" that aren't a curated taxonomy entry).
+        allowCreate: { type: Boolean, default: false },
+        // Visibility given to a tag created through this picker. Blog posts
+        // default to 'public' (the post itself is public once published);
+        // create_tag() itself defaults to 'private' when omitted.
+        createVisibility: { type: String, default: 'public' },
+        // Required alongside allowCreate — /tags/create_tag is a normal
+        // (non-API) POST route, so it's covered by CSRF protection like
+        // any other form submission (see tagCreateModal.js's own csrf prop).
+        csrf: { type: String, default: '' },
     },
     emits: ['update:modelValue'],
     delimiters: ['[[', ']]'],
@@ -137,6 +153,103 @@ const TagInput = {
 
         const isTagSelected = (tagId) => props.modelValue.some(t => t.id === tagId);
 
+        // ── Ad-hoc tag creation (allowCreate only) ──────────────────────────
+        const isCreatingTags = Vue.ref(false);
+        const createTagsError = Vue.ref('');
+
+        // "#linux, #test #theo" -> ['linux', 'test', 'theo'] — "#" is
+        // optional and stripped either way, split on whitespace/commas,
+        // de-duplicated case-insensitively while keeping first spelling.
+        function parseTagTokens(raw) {
+            const seen = new Set();
+            const names = [];
+            for (const part of (raw || '').split(/[\s,]+/)) {
+                const name = part.trim().replace(/^#+/, '');
+                if (!name) continue;
+                const key = name.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                names.push(name);
+            }
+            return names;
+        }
+
+        const pendingCreateTokens = Vue.computed(() => props.allowCreate ? parseTagTokens(searchQuery.value) : []);
+
+        // Looks up one exact tag name (case-insensitive) — a dedicated
+        // lookup per token rather than reusing filteredSuggestions, since
+        // those match the whole raw (possibly multi-token) query string.
+        async function findExistingTagByName(name) {
+            try {
+                const params = new URLSearchParams({ search: name, limit: '10' });
+                if (props.userId) params.append('user_id', String(props.userId));
+                const res = await fetch(`/tags/get_all_tags?${params}`);
+                if (!res.ok) return null;
+                const data = await res.json();
+                const needle = name.toLowerCase();
+                return (data.tags || []).find(t => t.name.toLowerCase() === needle) || null;
+            } catch (e) {
+                console.error('TagInput lookup error:', e);
+                return null;
+            }
+        }
+
+        async function createTagByName(name) {
+            const res = await fetch('/tags/create_tag', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrf },
+                body: JSON.stringify({ name, visibility: props.createVisibility }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.status === 'success' && data.tag) {
+                // create_tag's response only carries id/uuid/name/color —
+                // fill in the rest with the same defaults the backend gives
+                // a manually-created tag so the chip/dropdown render exactly
+                // like any other tag (see tags_core.create_tag()).
+                return { icon: 'fa-tag', visibility: props.createVisibility, ...data.tag };
+            }
+            // "A tag with this name already exists" — a race with someone
+            // else, or a name outside this picker's own search scope
+            // (private tag owned by another user). Either way, resolve it
+            // by name instead of failing the whole batch.
+            if (res.status === 201 && data.status === 'error') {
+                return await findExistingTagByName(name);
+            }
+            throw new Error(data.message || 'Could not create tag.');
+        }
+
+        // Resolves every parsed token — existing tag selected as-is, unknown
+        // ones created — then adds whichever aren't already selected.
+        async function createAndSelectTags() {
+            const names = pendingCreateTokens.value;
+            if (!names.length || isCreatingTags.value) return;
+            isCreatingTags.value = true;
+            createTagsError.value = '';
+            try {
+                const resolved = [];
+                for (const name of names) {
+                    const existing = await findExistingTagByName(name);
+                    resolved.push(existing || await createTagByName(name));
+                }
+                let next = props.modelValue;
+                for (const tag of resolved) {
+                    if (!tag || next.some(t => t.id === tag.id)) continue;
+                    next = (props.maxTags != null && next.length >= props.maxTags) ? [tag] : [...next, tag];
+                }
+                emit('update:modelValue', next);
+                searchQuery.value = '';
+                searchResults.value = [];
+            } catch (e) {
+                createTagsError.value = e.message || 'Could not create tag(s).';
+            } finally {
+                isCreatingTags.value = false;
+            }
+        }
+
+        function onSearchEnter() {
+            if (props.allowCreate && searchQuery.value.trim()) createAndSelectTags();
+        }
+
         function toggleTag(tag) {
             if (isTagSelected(tag.id)) {
                 emit('update:modelValue', props.modelValue.filter(t => t.id !== tag.id));
@@ -192,6 +305,7 @@ const TagInput = {
             toggleTag, isTagSelected, toggleDropdown, openDropdown,
             getTextColor, mapIcon, tagLabel,
             sortedGroupedTags, activeType, activeNamespace,
+            isCreatingTags, createTagsError, pendingCreateTokens, createAndSelectTags, onSearchEnter,
         };
     },
     template: `
@@ -202,7 +316,7 @@ const TagInput = {
                 <span class="input-group-text border-0" style="background: var(--card-bg-color); cursor:pointer">
                     <i class="fas fa-tags small" style="color: #0d6efd"></i>
                 </span>
-                <input type="text" v-model="searchQuery" @focus="openDropdown"
+                <input type="text" v-model="searchQuery" @focus="openDropdown" @keydown.enter.prevent="onSearchEnter"
                     class="form-control border-0 shadow-none px-2"
                     :placeholder="placeholder"
                     style="height:46px; background: var(--card-bg-color); color: var(--text-color)">
@@ -246,9 +360,26 @@ const TagInput = {
                             </small>
                         </div>
                     </div>
-                    <div v-if="!isSearching && filteredSuggestions.length === 0" class="text-center py-4">
+                    <div v-if="!isSearching && filteredSuggestions.length === 0 && !allowCreate" class="text-center py-4">
                         <i class="fas fa-search fa-2x mb-2 opacity-25 d-block" style="color: var(--text-color)"></i>
                         <p class="fw-bold small mb-0" style="color: var(--text-color)">No tags found.</p>
+                    </div>
+
+                    <!-- Ad-hoc creation (allowCreate only) — offered once nothing
+                         in the catalog matches the raw query as typed. -->
+                    <div v-if="!isSearching && filteredSuggestions.length === 0 && allowCreate" class="text-center py-3">
+                        <i class="fas fa-tag fa-2x mb-2 opacity-25 d-block" style="color: var(--text-color)"></i>
+                        <p class="fw-bold small mb-2" style="color: var(--text-color)">No matching tag yet.</p>
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" :disabled="isCreatingTags || !pendingCreateTokens.length"
+                                @click.stop="createAndSelectTags">
+                            <span v-if="isCreatingTags" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fas fa-plus me-1"></i>
+                            Create [[ pendingCreateTokens.map(n => '#' + n).join(', ') ]]
+                        </button>
+                        <p class="mb-0 mt-2" style="font-size:.72rem; color: var(--subtle-text-color);">
+                            Tip: separate several with spaces or commas, e.g. "#linux #test #theo".
+                        </p>
+                        <p v-if="createTagsError" class="text-danger small mb-0 mt-2">[[ createTagsError ]]</p>
                     </div>
                 </div>
 

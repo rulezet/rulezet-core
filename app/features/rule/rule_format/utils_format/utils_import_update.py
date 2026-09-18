@@ -39,6 +39,45 @@ def get_github_api_base() -> str:
         return 'https://api.github.com'
     return f'https://{host}/api/v3'
 
+
+def get_github_rate_limit_status() -> dict:
+    """Current GitHub REST API rate-limit status (the 'core' bucket — the
+    one every plain GET /repos/... call in this app draws from). Hitting
+    GET /rate_limit does NOT itself consume a request against that quota
+    (GitHub explicitly exempts it), so this is safe to call as often as an
+    admin page wants to show "how long until the API is usable again"
+    without making the situation worse.
+
+    Returns {'limit', 'remaining', 'reset_at' (ISO 8601 UTC),
+    'reset_in_seconds', 'authenticated'} — or {'error': str} if the call
+    itself fails (e.g. no network)."""
+    try:
+        resp = requests.get(
+            f'{get_github_api_base()}/rate_limit',
+            headers=_github_auth_headers(),
+            timeout=8,
+        )
+        if resp.status_code == 401:
+            # Distinct from a plain RequestException below — a 401 here
+            # means the configured GITHUB_TOKEN itself is invalid/revoked,
+            # not that the quota ran out. Worth saying plainly: uncommenting
+            # a dead token in .env doesn't revive it on GitHub's side.
+            return {'error': 'GITHUB_TOKEN was rejected by GitHub (401) — it is invalid or revoked. Generate a new one at https://github.com/settings/tokens.'}
+        resp.raise_for_status()
+        core = resp.json().get('resources', {}).get('core', {})
+        reset_ts = core.get('reset')
+        reset_at = datetime.datetime.fromtimestamp(reset_ts, tz=datetime.timezone.utc) if reset_ts else None
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        return {
+            'limit':            core.get('limit'),
+            'remaining':        core.get('remaining'),
+            'reset_at':         reset_at.isoformat() if reset_at else None,
+            'reset_in_seconds': max(0, int((reset_at - now).total_seconds())) if reset_at else None,
+            'authenticated':    bool(os.environ.get('GITHUB_TOKEN')),
+        }
+    except requests.RequestException as e:
+        return {'error': str(e)}
+
 def get_repo_name_from_url(repo_url):
     """Extract the full repository path (owner/repo) from its Git URL."""
     parts = repo_url.rstrip('/').split('/')
@@ -110,6 +149,38 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
     return repo_dir, existe
 
 
+def _clean_github_error(response) -> str:
+    """Turn a non-2xx GitHub API response into a clear, actionable message —
+    never GitHub's raw JSON error body. For a rate-limit response in
+    particular that body includes the caller's own public IP address
+    ("API rate limit exceeded for 203.0.113.4 ..."), which has no business
+    being displayed back in the UI or stored in a session's error field."""
+    if response.headers.get('X-RateLimit-Remaining') == '0':
+        reset_ts = response.headers.get('X-RateLimit-Reset')
+        if reset_ts:
+            mins = max(1, round((int(reset_ts) - datetime.datetime.now().timestamp()) / 60))
+            when = f"in {mins} min" if mins < 60 else f"in {mins // 60}h {mins % 60}m"
+        else:
+            when = "soon"
+        token_hint = "" if os.environ.get('GITHUB_TOKEN') else " Add a GITHUB_TOKEN (Admin → Settings) to raise it from 60 to 5000 requests/hour."
+        return f"GitHub API rate limit exceeded — resets {when}.{token_hint}"
+
+    if response.status_code == 401:
+        return "GITHUB_TOKEN was rejected by GitHub (401 Bad credentials) — it is invalid or revoked. Generate a new one at https://github.com/settings/tokens and update it in Admin → Settings."
+
+    # Secondary rate limit / abuse detection (a 403 without
+    # X-RateLimit-Remaining: 0 — GitHub uses Retry-After for this one).
+    if response.status_code == 403:
+        retry_after = response.headers.get('Retry-After')
+        when = f"in {retry_after}s" if retry_after else "shortly"
+        return f"GitHub API temporarily throttled this request — try again {when}."
+
+    if response.status_code == 404:
+        return "Repository not found, or the token can't see it (private repo?)."
+
+    return f"GitHub API returned an unexpected status ({response.status_code})."
+
+
 def is_github_repo_accessible(repo_url):
     """Verify if a GitHub repository is public and accessible."""
     try:
@@ -118,11 +189,79 @@ def is_github_repo_accessible(repo_url):
         api_url = f"{get_github_api_base()}/repos/{path}"
 
         response = requests.get(api_url, headers=_github_auth_headers(), timeout=5)
+        if response.status_code == 200:
+            return True, ""
 
-        # A status code of 200 indicates the repository is accessible
-        return response.status_code == 200 , "" if response.status_code == 200 else response.text
+        # Surface a clear, actionable message instead of GitHub's raw JSON
+        # error body — this is the message a stalled import shows verbatim
+        # on the loading page, so "rate limit exceeded" needs to say when
+        # it'll work again, not just quote {"message": "API rate limit..."}.
+        return False, _clean_github_error(response)
     except Exception as e:
         return False , str(e)
+
+
+def get_github_repo_live_info(repo_url: str) -> dict:
+    """Server-side, authenticated (GITHUB_TOKEN) equivalent of the
+    stars/forks/commits/branches/contributors data the "GitHub Repository
+    info" panel shows (GithubRepoInfoCard / the GitHub source detail page).
+
+    This used to be 4 direct, unauthenticated `fetch()` calls to
+    api.github.com from EVERY visitor's own browser — capped at 60/hour per
+    visitor IP, and a rate-limit hit echoed that visitor's own public IP
+    back in GitHub's raw error body. Proxying through here uses our
+    GITHUB_TOKEN (5000/hour, shared) and never returns a raw GitHub error
+    body (see _clean_github_error).
+
+    Each of the 4 calls fails independently — a repo-info failure doesn't
+    block the other three, matching the old client-side Promise.allSettled
+    behavior. Returns {'repo', 'repo_error', 'commits', 'branches',
+    'contributors'}."""
+    clean = repo_url.rstrip('/')
+    if clean.endswith('.git'):
+        clean = clean[:-4]
+    repo_name = get_repo_name_from_url(clean)
+    if not repo_name:
+        return {'repo': None, 'repo_error': 'Could not parse repository name from URL.',
+                'commits': [], 'branches': [], 'contributors': []}
+
+    headers = dict(_github_auth_headers())
+    headers['Accept'] = 'application/vnd.github+json'
+    base = f"{get_github_api_base()}/repos/{repo_name}"
+
+    def _get(path, params=None):
+        try:
+            return requests.get(f"{base}{path}", headers=headers, params=params, timeout=8)
+        except requests.RequestException:
+            return None
+
+    repo = None
+    repo_error = None
+    resp = _get('')
+    if resp is None:
+        repo_error = "Could not reach GitHub."
+    elif resp.status_code == 200:
+        repo = resp.json()
+    else:
+        repo_error = _clean_github_error(resp)
+
+    commits = []
+    resp = _get('/commits', params={'per_page': 10})
+    if resp is not None and resp.status_code == 200:
+        commits = resp.json()
+
+    branches = []
+    resp = _get('/branches', params={'per_page': 50})
+    if resp is not None and resp.status_code == 200:
+        branches = resp.json()
+
+    contributors = []
+    resp = _get('/contributors', params={'per_page': 20, 'anon': 'false'})
+    if resp is not None and resp.status_code == 200:
+        contributors = resp.json()
+
+    return {'repo': repo, 'repo_error': repo_error, 'commits': commits,
+            'branches': branches, 'contributors': contributors}
 
 def delete_existing_repo_folder(local_dir):
     """Delete the existing folder if it exists."""
@@ -189,10 +328,18 @@ def github_repo_to_api_url(git_url: str) -> str:
 def extract_github_repo_metadata(data: dict, selected_license: str) -> dict:
     """
     Extract useful metadata from a GitHub repository API response.
-    
+
     Args:
         data (dict): JSON response from GitHub's repo API.
-    
+        selected_license (str): license the user explicitly picked in the
+            import form. Takes priority over GitHub's auto-detected repo
+            license — the user may know the repo's top-level LICENSE
+            doesn't actually cover the rule content itself (e.g. a AGPL
+            code repo whose rules/data files are meant to be reused under
+            a more permissive license), so an explicit choice must not be
+            silently discarded. Falls back to GitHub's detection only when
+            the user left the field blank.
+
     Returns:
         dict: Simplified metadata about the repository.
     """
@@ -214,14 +361,14 @@ def extract_github_repo_metadata(data: dict, selected_license: str) -> dict:
         "updated_at": data.get("updated_at"),
         "pushed_at": data.get("pushed_at"),
         "license": (
-            data.get("license", {}).get("spdx_id")
-            if data.get("license")
-            else selected_license
+            selected_license
+            if selected_license
+            else (data.get("license", {}).get("spdx_id") if data.get("license") else None)
         ),
         "license_name": (
-            data.get("license", {}).get("name")
-            if data.get("license")
-            else selected_license
+            selected_license
+            if selected_license
+            else (data.get("license", {}).get("name") if data.get("license") else None)
         ),
         "stars": data.get("stargazers_count", 0),
         "watchers": data.get("watchers_count", 0),

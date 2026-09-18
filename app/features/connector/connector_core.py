@@ -522,6 +522,13 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
         from app.features.rule.github_repo_core import apply_delta
         apply_delta(rule.source, +1, rule=rule)
     except Exception:
+        # Deliberately no db.session.rollback() here, unlike every other
+        # github_repo_core call site: this function only flushes (the rule
+        # above is not committed yet — the caller batches many of these
+        # into one commit), so a rollback would discard that pending insert
+        # too, not just apply_delta's own failed one. This branch is
+        # currently unreachable in practice (both real callers always pass
+        # a truthy local_match), so left as a swallow rather than reworked.
         pass
     return 'created'
 

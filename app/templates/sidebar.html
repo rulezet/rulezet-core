@@ -362,7 +362,7 @@
                            <i class="fa-solid fa-gauge-high me-2"></i>Dashboard</a></li>
                      <li><a href="/account/" class="dropdown-item">
                            <i class="fa-solid fa-user-circle me-2"></i>Profile</a></li>
-                     <li><a href="/workspace/my_rules" class="dropdown-item {% if request.path.startswith('/workspace') %}active{% endif %}">
+                     <li><a href="/workspace" class="dropdown-item {% if request.path.startswith('/workspace') %}active{% endif %}">
                            <i class="fa-solid fa-layer-group me-2"></i>Workspaces</a></li>
                      <li><a href="/rule/owner_rules" class="dropdown-item {% if request.path == '/rule/owner_rules' %}active{% endif %}">
                            <i class="fa-solid fa-user-shield me-2"></i>My Rules</a></li>
@@ -418,7 +418,7 @@
       { label: 'My Rules', url: '/rule/owner_rules', icon: 'fa-user-shield', keywords: ['my rules', 'owner'] },
       { label: 'My Tags', url: '/tags/my_tags', icon: 'fa-tags', keywords: ['my tags', 'tags'] },
       { label: 'My Jobs', url: '/jobs/list', icon: 'fa-tasks', keywords: ['my jobs', 'jobs'] },
-      { label: 'Workspaces', url: '/workspace/my_rules', icon: 'fa-layer-group', keywords: ['workspaces'] },
+      { label: 'Workspaces', url: '/workspace', icon: 'fa-layer-group', keywords: ['workspaces'] },
       { label: 'Notifications', url: '/notifications/', icon: 'fa-bell', keywords: ['notifications'] },
       { label: 'Create Bundle', url: '/bundle/create', icon: 'fa-folder-plus', keywords: ['create bundle'] },
       { label: 'Add Rules', url: '/rule/create_rule', icon: 'fa-file-circle-plus', keywords: ['create rule', 'add rule'] },

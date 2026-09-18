@@ -2,8 +2,12 @@
  * GithubRepoInfoCard — collapsible "live GitHub repository info" card:
  * owner/name/description, KPI strip (stars/forks/issues/watchers/size),
  * info cells (language/license/branch/dates), topics, recent commits,
- * branches and top contributors. Fetches directly from the public GitHub
- * REST API on first expand (no Rulezet backend round-trip).
+ * branches and top contributors. Fetches through Rulezet's own
+ * /rule/github/repo_live_info proxy on first expand (server-side,
+ * authenticated with GITHUB_TOKEN) — NOT a direct browser call to
+ * api.github.com: that used to cap every visitor at 60 req/hour and, on a
+ * rate-limit hit, echo that visitor's own public IP back in GitHub's raw
+ * error body.
  *
  * Extracted from app/templates/rule/url_github/detail_url_github.html so
  * any page needing this exact panel doesn't duplicate the markup/JS.
@@ -11,8 +15,9 @@
  * Props:
  *   repo-url        (String)  — required; e.g. https://github.com/owner/repo(.git)
  *   start-expanded   (Boolean) — default false
+ *   branch           (String)  — optional; when set, repo/commits links point at this branch instead of the default
  */
-const { ref } = Vue;
+const { ref, computed } = Vue;
 
 function fmtNum(n) {
     if (n === undefined || n === null) return '—';
@@ -28,20 +33,13 @@ function fmtDate(iso) {
     return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-async function ghFetch(path) {
-    const r = await fetch(`https://api.github.com${path}`, {
-        headers: { 'Accept': 'application/vnd.github+json' }
-    });
-    if (!r.ok) throw new Error(String(r.status));
-    return r.json();
-}
-
 const GithubRepoInfoCard = {
     name: 'GithubRepoInfoCard',
     delimiters: ['[[', ']]'],
     props: {
         repoUrl: { type: String, required: true },
         startExpanded: { type: Boolean, default: false },
+        branch: { type: String, default: null },
     },
     setup(props) {
         const ghExpanded = ref(props.startExpanded);
@@ -56,13 +54,6 @@ const GithubRepoInfoCard = {
         const contributors = ref([]);
         const contributorsLoading = ref(false);
 
-        function repoPath() {
-            return props.repoUrl
-                .replace(/^https?:\/\/github\.com\//, '')
-                .replace(/\.git$/, '')
-                .replace(/\/$/, '');
-        }
-
         async function loadGhData() {
             ghLoading.value = true;
             commitsLoading.value = true;
@@ -70,32 +61,26 @@ const GithubRepoInfoCard = {
             contributorsLoading.value = true;
             ghError.value = null;
 
-            const path = repoPath();
-            const [repoRes, commitsRes, branchesRes, contribRes] = await Promise.allSettled([
-                ghFetch(`/repos/${path}`),
-                ghFetch(`/repos/${path}/commits?per_page=10`),
-                ghFetch(`/repos/${path}/branches?per_page=50`),
-                ghFetch(`/repos/${path}/contributors?per_page=20&anon=false`),
-            ]);
+            try {
+                const res = await fetch('/rule/github/repo_live_info?url=' + encodeURIComponent(props.repoUrl));
+                const data = await res.json();
 
-            ghLoading.value = false;
-            if (repoRes.status === 'fulfilled') {
-                ghRepo.value = repoRes.value;
-            } else {
-                const code = repoRes.reason && repoRes.reason.message;
-                if (code === '403') ghError.value = 'GitHub API rate limit reached. Try again in a few minutes.';
-                else if (code === '404') ghError.value = 'Repository not found or is private.';
-                else ghError.value = `GitHub API error (${code}).`;
+                ghLoading.value = false;
+                if (data.repo) ghRepo.value = data.repo;
+                else ghError.value = data.repo_error || data.message || 'GitHub API error.';
+
+                commitsLoading.value = false;
+                commits.value = data.commits || [];
+
+                branchesLoading.value = false;
+                branches.value = data.branches || [];
+
+                contributorsLoading.value = false;
+                contributors.value = data.contributors || [];
+            } catch (e) {
+                ghLoading.value = commitsLoading.value = branchesLoading.value = contributorsLoading.value = false;
+                ghError.value = 'Could not reach the server.';
             }
-
-            commitsLoading.value = false;
-            if (commitsRes.status === 'fulfilled') commits.value = commitsRes.value;
-
-            branchesLoading.value = false;
-            if (branchesRes.status === 'fulfilled') branches.value = branchesRes.value;
-
-            contributorsLoading.value = false;
-            if (contribRes.status === 'fulfilled') contributors.value = contribRes.value;
         }
 
         async function toggleGh() {
@@ -111,6 +96,15 @@ const GithubRepoInfoCard = {
             loadGhData();
         }
 
+        const repoTreeUrl = computed(() => {
+            if (!ghRepo.value) return null;
+            return props.branch ? ghRepo.value.html_url + '/tree/' + props.branch : ghRepo.value.html_url;
+        });
+        const commitsUrl = computed(() => {
+            if (!ghRepo.value) return null;
+            return props.branch ? ghRepo.value.html_url + '/commits/' + props.branch : ghRepo.value.html_url + '/commits';
+        });
+
         return {
             ghExpanded, toggleGh,
             ghRepo, ghLoading, ghError,
@@ -118,6 +112,7 @@ const GithubRepoInfoCard = {
             branches, branchesLoading,
             contributors, contributorsLoading,
             fmtNum, fmtSize, fmtDate,
+            repoTreeUrl, commitsUrl,
         };
     },
     template: `
@@ -162,7 +157,7 @@ const GithubRepoInfoCard = {
                             <a :href="ghRepo.owner.html_url" target="_blank" rel="noreferrer"
                                class="fw-semibold text-decoration-none" style="font-size:.9rem;">[[ ghRepo.owner.login ]]</a>
                             <span class="text-muted">/</span>
-                            <a :href="ghRepo.html_url" target="_blank" rel="noreferrer"
+                            <a :href="repoTreeUrl" target="_blank" rel="noreferrer"
                                class="fw-bold text-decoration-none" style="font-size:.9rem;">[[ ghRepo.name ]]</a>
                             <span v-if="ghRepo.archived" class="badge bg-warning text-dark">Archived</span>
                             <span v-if="ghRepo.fork" class="badge bg-secondary">Fork</span>
@@ -246,7 +241,7 @@ const GithubRepoInfoCard = {
                     <div class="col-lg-7">
                         <div class="gh-sub-header">
                             <i class="fa-solid fa-code-commit"></i> Recent commits
-                            <a v-if="ghRepo" :href="ghRepo.html_url + '/commits'" target="_blank" rel="noreferrer"
+                            <a v-if="ghRepo" :href="commitsUrl" target="_blank" rel="noreferrer"
                                class="ms-auto text-decoration-none" style="font-size:.72rem;color:#0d6efd;text-transform:none;letter-spacing:0;font-weight:400;">
                                 See all <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:.6rem;"></i>
                             </a>

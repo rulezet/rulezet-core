@@ -29,9 +29,12 @@
             [[ !is_finished ? 'Importing rules from GitHub, live.' : 'Here is what was imported from this repository.' ]]
         </p>
         <div v-if="repoUrl" class="d-flex align-items-center gap-2 mt-2 flex-wrap">
-            <a :href="repoUrl" target="_blank" rel="noreferrer" class="ul-repo-stat" style="text-decoration:none;" title="Open on GitHub">
+            <a :href="repoUrlWithBranch" target="_blank" rel="noreferrer" class="ul-repo-stat" style="text-decoration:none;" title="Open on GitHub">
                 <i class="fa-brands fa-github"></i>[[ repoUrl ]]
             </a>
+            <span v-if="importBranch" class="badge bg-light text-muted fw-normal border-0" style="font-size:.72rem;">
+                <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ importBranch ]]
+            </span>
             <button class="ul-job-ctrl-btn" title="Copy URL" @click="copyRepoUrl()">
                 <i class="fas" :class="repoUrlCopied ? 'fa-check' : 'fa-copy'"></i>
             </button>
@@ -54,9 +57,30 @@
             </div>
             <p class="ul-progress-title mb-1">Import failed</p>
             <p class="ul-progress-sub mb-3">[[ sessionError ]]</p>
-            <a href="/rule/create_rule?tab=github" class="btn btn-sm btn-secondary rounded-pill px-3">
-                <i class="fas fa-arrow-left me-1"></i> Back to import
-            </a>
+
+            <!-- GitHub API status — admin/GitHub-manager only, shown right
+                 here since a rate limit or a dead token is the most common
+                 reason this specific error happened. -->
+            <div v-if="isGithubManager && rateLimitStatus" class="d-inline-block text-start mx-auto mb-3 p-3 rounded-3"
+                 style="background:rgba(220,53,69,.08);border:1px solid rgba(220,53,69,.25);max-width:480px;">
+                <div v-if="rateLimitStatus.error" style="font-size:.82rem;color:var(--text-color);">
+                    <i class="fas fa-key me-1" style="color:#dc3545;"></i><strong>GitHub API not reachable:</strong> [[ rateLimitStatus.error ]]
+                </div>
+                <div v-else-if="rateLimitStatus.remaining === 0" style="font-size:.82rem;color:var(--text-color);">
+                    <i class="fas fa-hourglass-half me-1" style="color:#dc3545;"></i>
+                    <strong>GitHub API rate limit reached</strong> — resets in [[ rateLimitResetLabel ]].
+                    <span v-if="!rateLimitStatus.authenticated">Add a <code>GITHUB_TOKEN</code> (Admin → Settings) to raise it from 60 to 5000 requests/hour.</span>
+                </div>
+                <div v-else style="font-size:.78rem;color:var(--subtle-text-color);">
+                    <i class="fa-brands fa-github me-1"></i>GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]] requests remaining — this failure wasn't rate-limiting.
+                </div>
+            </div>
+
+            <div>
+                <a href="/rule/create_rule?tab=github" class="btn btn-sm btn-secondary rounded-pill px-3">
+                    <i class="fas fa-arrow-left me-1"></i> Back to import
+                </a>
+            </div>
         </div>
     </div>
 
@@ -266,7 +290,7 @@
                         </template>
 
                         <template v-else>
-                            <a v-if="repoUrl" :href="repoUrl" target="_blank" rel="noreferrer" class="ul-repo-name">[[ repoUrl ]]</a>
+                            <a v-if="repoUrl" :href="repoUrlWithBranch" target="_blank" rel="noreferrer" class="ul-repo-name">[[ repoUrl ]]</a>
                             <p class="ul-repo-desc mb-0" v-if="info_session.description">[[ info_session.description ]]</p>
                         </template>
                     </div>
@@ -397,10 +421,11 @@
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
 
-    const isAuthenticated = {{ current_user.is_authenticated | tojson }}
-    const isAdmin         = {{ current_user.is_admin()        | tojson }}
-    const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
-    const csrfToken       = '{{ csrf_token() }}'
+    const isAuthenticated  = {{ current_user.is_authenticated | tojson }}
+    const isAdmin          = {{ current_user.is_admin()        | tojson }}
+    const isGithubManager  = {{ (current_user.is_admin() or current_user.has_permission('github.manage')) | tojson }}
+    const currentUserId    = {{ current_user.id if current_user.is_authenticated else 'null' }}
+    const csrfToken        = '{{ csrf_token() }}'
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -432,6 +457,27 @@
             const sessionError   = ref(null)
             const scanFoundCount = ref(0)  // running "rules found so far" counter while phase === 'scanning'
 
+            // GitHub API rate-limit / token status — admin/GitHub-manager
+            // only, fetched once the import errors out (that's the only
+            // time it's actionable context here) and on-demand. Never on a
+            // timer, same convention as the other two surfaces that show it
+            // (GitHub Sources list, /rule/create_rule's GitHub tab).
+            const rateLimitStatus = ref(null)
+            async function fetchRateLimitStatus() {
+                try {
+                    const res = await fetch('/rule/github/rate_limit_status')
+                    if (res.ok) rateLimitStatus.value = await res.json()
+                } catch { rateLimitStatus.value = null }
+            }
+            const rateLimitResetLabel = computed(() => {
+                const s = rateLimitStatus.value
+                if (!s || s.reset_in_seconds == null) return ''
+                const mins = Math.ceil(s.reset_in_seconds / 60)
+                if (mins <= 1) return 'less than a minute'
+                if (mins < 60) return `${mins} min`
+                return `${Math.floor(mins / 60)}h ${mins % 60}m`
+            })
+
             const phaseTitle = computed(() => {
                 if (currentPhase.value === 'preparing') return 'Connecting to the repository…'
                 if (currentPhase.value === 'scanning')  return 'Searching for rules…'
@@ -444,6 +490,22 @@
 
             const repoUrl = computed(() =>
                 info_session.value.repo_url || (result_data.value.info && result_data.value.info.repo_url) || ''
+            )
+
+            // The branch this import actually ran against — info_session.branch
+            // (set server-side from the import form's branch field) is the
+            // authoritative source; the ?branch= query param is a fallback for
+            // older sessions/results that predate branch tracking.
+            const importBranch = computed(() =>
+                info_session.value.branch
+                || (result_data.value.info && result_data.value.info.branch)
+                || new URLSearchParams(window.location.search).get('branch')
+                || ''
+            )
+            const repoUrlWithBranch = computed(() =>
+                repoUrl.value && importBranch.value
+                    ? `${repoUrl.value.replace(/\/$/, '').replace(/\.git$/, '')}/tree/${encodeURIComponent(importBranch.value)}`
+                    : repoUrl.value
             )
 
             const repoUrlCopied = ref(false)
@@ -670,6 +732,7 @@
                     if (data.phase === 'error') {
                         sessionError.value = data.error || 'Something went wrong while preparing this import.'
                         pageReady.value = true
+                        if (isGithubManager) fetchRateLimitStatus()
                         return // stop polling — nothing more will happen on this session
                     }
 
@@ -771,7 +834,8 @@
                 is_finished,
                 pageReady,
                 currentPhase, sessionError, phaseTitle, phaseSub, scanFoundCount,
-                repoUrl, repoUrlCopied, copyRepoUrl,
+                isGithubManager, rateLimitStatus, rateLimitResetLabel, fetchRateLimitStatus,
+                repoUrl, repoUrlWithBranch, importBranch, repoUrlCopied, copyRepoUrl,
 
                 logEntries, logEl,
                 liveImported, liveSkipped, liveBad,

@@ -9,6 +9,7 @@ import { message_list, create_message } from '/static/js/toaster.js'
 const TOGGLEABLE_COLS = [
     { key: 'author',    label: 'Author' },
     { key: 'formats',   label: 'Formats' },
+    { key: 'branches',  label: 'Branches' },
     { key: 'license',   label: 'License' },
     { key: 'cves',      label: 'CVEs' },
     { key: 'conflicts', label: 'Conflicts' },
@@ -39,12 +40,21 @@ const GitHubSelectionTable = {
             currentPage: 1,
             totalPages: 1,
             loading: false,
-            selectedIds: new Set(),
-            excludedIds: new Set(),
+            // Keyed by rowKey(item) (url, or url::branch for a multi-branch
+            // repo's row) so a repo split into several branch-rows can have
+            // just one branch selected — the value carries {url, branch} so
+            // the backend can filter to that exact branch instead of
+            // sweeping every branch of that url (see updateSelection).
+            selectedIds: new Map(),
+            excludedIds: new Map(),
             isAllSelectedMode: false,
             expandedRows: new Set(),
             isActionLoading: false,
             resyncing: false,
+            backfilling: false,
+            // Live GitHub API rate-limit status (admin/GitHub-manager only —
+            // fetched once on mount and after a Backfill run, never polled).
+            rateLimitStatus: null,
 
             sortKey: new URLSearchParams(window.location.search).get('sort') || 'url',
             sortDir: new URLSearchParams(window.location.search).get('dir') || 'asc',
@@ -81,6 +91,14 @@ const GitHubSelectionTable = {
         isAdmin() {
             return this.currentUserIsAdmin === 'true' || this.currentUserIsAdmin === true;
         },
+        rateLimitResetLabel() {
+            const s = this.rateLimitStatus;
+            if (!s || s.reset_in_seconds == null) return '';
+            const mins = Math.ceil(s.reset_in_seconds / 60);
+            if (mins <= 1) return 'less than a minute';
+            if (mins < 60) return `${mins} min`;
+            return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+        },
         selectedCount() {
             if (this.isAllSelectedMode) {
                 return this.totalUrls - this.excludedIds.size;
@@ -89,7 +107,7 @@ const GitHubSelectionTable = {
         },
         isPageFullySelected() {
             if (this.githubUrls.length === 0) return false;
-            return this.githubUrls.every(item => this.isItemChecked(item.url));
+            return this.githubUrls.every(item => this.isItemChecked(item));
         },
         showSelectBanner() {
             if (this.githubUrls.length === 0) return false;
@@ -107,13 +125,14 @@ const GitHubSelectionTable = {
                 search_query: filter.searchQuery || '',
                 search_field: filter.searchField || 'url',
                 format_filter: filter.selectedFormat || '',
-                selected_ids: Array.from(this.selectedIds),
-                excluded_ids: Array.from(this.excludedIds)
+                selected_ids: Array.from(this.selectedIds.values()),
+                excluded_ids: Array.from(this.excludedIds.values())
             };
         }
     },
     mounted() {
         document.addEventListener('click', this.handleColPickerOutsideClick);
+        if (this.isAdmin) this.fetchRateLimitStatus();
     },
     beforeUnmount() {
         document.removeEventListener('click', this.handleColPickerOutsideClick);
@@ -174,29 +193,61 @@ const GitHubSelectionTable = {
             this.$refs.filter.fetchUrls(page);
         },
 
-        toggleRow(url) {
-            if (this.expandedRows.has(url)) this.expandedRows.delete(url);
-            else this.expandedRows.add(url);
+        // A repo imported from >1 branch now renders as one row per branch
+        // (same url, different item.branch) — keyed by url+branch so the
+        // two rows expand/collapse independently instead of being tied
+        // together by a shared url-only key.
+        rowKey(item) {
+            return item.branch ? item.url + '::' + item.branch : item.url;
         },
 
-        updateSelection(itemUrl, isChecked) {
+        // Rows for the same repo (one per branch — see get_optimized_github_data)
+        // are always adjacent in githubUrls: the server sorts/paginates on
+        // GithubRepo (one row per repo) and only expands into per-branch rows
+        // afterwards. Adjacency is therefore safe to rely on regardless of the
+        // active sort column, so a simple "same url as neighbor" check is
+        // enough to visually tie the group together instead of it reading as
+        // unrelated repos that merely happen to share a name.
+        isRepoGroupContinuation(index) {
+            return index > 0 && this.githubUrls[index - 1].url === this.githubUrls[index].url;
+        },
+        isRepoGroupStart(index) {
+            return !this.isRepoGroupContinuation(index)
+                && index < this.githubUrls.length - 1
+                && this.githubUrls[index + 1].url === this.githubUrls[index].url;
+        },
+
+        repoTreeUrl(item) {
+            if (!item || !item.url) return item ? item.url : '';
+            return item.branch ? item.url.replace(/\.git$/, '') + '/tree/' + item.branch : item.url;
+        },
+
+        toggleRow(key) {
+            if (this.expandedRows.has(key)) this.expandedRows.delete(key);
+            else this.expandedRows.add(key);
+        },
+
+        updateSelection(item, isChecked) {
+            const key = this.rowKey(item);
+            const value = { url: item.url, branch: item.branch || null };
             if (this.isAllSelectedMode) {
-                if (!isChecked) this.excludedIds.add(itemUrl);
-                else this.excludedIds.delete(itemUrl);
+                if (!isChecked) this.excludedIds.set(key, value);
+                else this.excludedIds.delete(key);
             } else {
-                if (isChecked) this.selectedIds.add(itemUrl);
-                else this.selectedIds.delete(itemUrl);
+                if (isChecked) this.selectedIds.set(key, value);
+                else this.selectedIds.delete(key);
             }
         },
 
-        isItemChecked(itemUrl) {
-            if (this.isAllSelectedMode) return !this.excludedIds.has(itemUrl);
-            return this.selectedIds.has(itemUrl);
+        isItemChecked(item) {
+            const key = this.rowKey(item);
+            if (this.isAllSelectedMode) return !this.excludedIds.has(key);
+            return this.selectedIds.has(key);
         },
 
         toggleAllOnPage(event) {
             const checked = event.target.checked;
-            this.githubUrls.forEach(item => this.updateSelection(item.url, checked));
+            this.githubUrls.forEach(item => this.updateSelection(item, checked));
         },
 
         toggleGlobalSelectAll() {
@@ -242,6 +293,41 @@ const GitHubSelectionTable = {
                 create_message('Resync failed.', 'danger-subtle');
             } finally {
                 this.resyncing = false;
+            }
+        },
+
+        // ── One-off repair: backfill Rule.branch for rules imported before
+        // that column existed, from each repo's real GitHub default branch.
+        // Backgrounded (unlike Resync) since it's one API call per repo. ──
+        // GET /rate_limit doesn't cost a request against the quota it
+        // reports on — safe to call freely, still never on a timer (fetched
+        // on mount, and on-demand via the refresh icon next to the badge).
+        async fetchRateLimitStatus() {
+            try {
+                const res = await fetch('/rule/github/rate_limit_status')
+                if (res.ok) this.rateLimitStatus = await res.json()
+            } catch {
+                this.rateLimitStatus = null
+            }
+        },
+
+        async backfillBranches() {
+            if (this.backfilling) return;
+            this.backfilling = true;
+            try {
+                const res = await fetch('/rule/github/backfill_branches', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': this.csrfToken
+                    }
+                });
+                const data = await res.json();
+                create_message(data.message || 'Branch backfill started.', data.toast_class || 'success-subtle');
+            } catch (err) {
+                create_message('Could not start branch backfill.', 'danger-subtle');
+            } finally {
+                this.backfilling = false;
             }
         },
 
@@ -307,16 +393,22 @@ const GitHubSelectionTable = {
         },
 
         async updateSingleRepo(item) {
-            if (!confirm(`Check for updates for: ${item.url}?`)) return;
+            const label = item.branch ? `${item.url} (branch: ${item.branch})` : item.url;
+            if (!confirm(`Check for updates for: ${label}?`)) return;
             item.isUpdating = true;
             try {
+                // item.branch matters: a repo imported from more than one
+                // branch renders as one row per branch (same url) — without
+                // sending it, the update would silently check the repo's
+                // default branch instead of the branch this row's rules
+                // actually came from.
                 const response = await fetch('/rule/check_updates_by_url', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': this.csrfToken
                     },
-                    body: JSON.stringify({ url: [{ url: item.url }] }),
+                    body: JSON.stringify({ url: [{ url: item.url, branch: item.branch || null }] }),
                 });
                 if (response.status === 201) {
                     const data = await response.json();
@@ -335,6 +427,37 @@ const GitHubSelectionTable = {
 
     template: `
     <div class="dt-wrapper">
+        <!-- ── GitHub API rate-limit banner — big and hard to miss when
+             actually exhausted (explains otherwise-confusing import/backfill
+             failures); silent when healthy (see the small pill in the
+             toolbar instead). Admin/GitHub-manager only. ── -->
+        <div v-if="isAdmin && rateLimitStatus && rateLimitStatus.error"
+             class="d-flex align-items-center gap-3 p-3 mb-3 rounded-3"
+             style="background:rgba(220,53,69,.1);border:2px solid rgba(220,53,69,.35);">
+            <i class="fas fa-key" style="color:#dc3545;font-size:1.4rem;flex-shrink:0;"></i>
+            <div class="flex-grow-1">
+                <div class="fw-bold" style="color:#dc3545;font-size:.95rem;">GitHub API not reachable</div>
+                <div style="font-size:.83rem;color:var(--text-color);">[[ rateLimitStatus.error ]]</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 flex-shrink-0" @click="fetchRateLimitStatus">
+                <i class="fas fa-rotate me-1"></i>Recheck
+            </button>
+        </div>
+        <div v-else-if="isAdmin && rateLimitStatus && rateLimitStatus.remaining === 0"
+             class="d-flex align-items-center gap-3 p-3 mb-3 rounded-3"
+             style="background:rgba(220,53,69,.1);border:2px solid rgba(220,53,69,.35);">
+            <i class="fas fa-triangle-exclamation" style="color:#dc3545;font-size:1.4rem;flex-shrink:0;"></i>
+            <div class="flex-grow-1">
+                <div class="fw-bold" style="color:#dc3545;font-size:.95rem;">GitHub API rate limit reached</div>
+                <div style="font-size:.83rem;color:var(--text-color);">
+                    Resync, Backfill and any per-repo GitHub lookups will fail until it resets — back in <strong>[[ rateLimitResetLabel ]]</strong>.
+                    <span v-if="!rateLimitStatus.authenticated">Add a <code>GITHUB_TOKEN</code> to raise the limit from 60 to 5000 requests/hour.</span>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 flex-shrink-0" @click="fetchRateLimitStatus">
+                <i class="fas fa-rotate me-1"></i>Recheck
+            </button>
+        </div>
         <github-filter
             ref="filter"
             :api-endpoint="apiEndpoint"
@@ -348,6 +471,22 @@ const GitHubSelectionTable = {
                     <i class="fas fa-rotate" :class="{ 'fa-spin': resyncing }"></i>
                     <span>[[ resyncing ? 'Resyncing…' : 'Resync' ]]</span>
                 </button>
+                <button v-if="isAdmin" class="dt-toolbar-btn" :disabled="backfilling"
+                        @click="backfillBranches" title="Backfill missing branch info for older imports, from each repo's real GitHub default branch">
+                    <i class="fas fa-code-branch" :class="{ 'fa-spin': backfilling }"></i>
+                    <span>[[ backfilling ? 'Starting…' : 'Backfill branches' ]]</span>
+                </button>
+                <div v-if="isAdmin && rateLimitStatus && !rateLimitStatus.error && rateLimitStatus.remaining !== 0"
+                     class="d-flex align-items-center gap-1 px-2 rounded-pill text-muted"
+                     style="font-size:.75rem;"
+                     :title="rateLimitStatus.authenticated ? 'Using GITHUB_TOKEN' : 'No GITHUB_TOKEN configured — only 60 requests/hour'">
+                    <i class="fa-brands fa-github"></i>
+                    <span>GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]]</span>
+                    <button type="button" class="btn btn-sm p-0 border-0 text-muted" style="line-height:1;"
+                            title="Refresh" @click="fetchRateLimitStatus">
+                        <i class="fas fa-rotate" style="font-size:.65rem;"></i>
+                    </button>
+                </div>
                 <div class="dt-col-picker-wrap">
                     <button class="dt-toolbar-btn" ref="colPickerBtn"
                             :class="{ 'dt-toolbar-btn--active': showColPicker }"
@@ -423,6 +562,7 @@ const GitHubSelectionTable = {
                             </div>
                         </th>
                         <th v-show="colVisible.formats" class="dt-th">Formats</th>
+                        <th v-show="colVisible.branches" class="dt-th">Branches</th>
                         <th v-show="colVisible.license" class="dt-th">License</th>
                         <th v-show="colVisible.cves" class="dt-th text-center dt-th--sortable"
                             :class="{ 'dt-th--sorted': sortKey === 'cve_count' }"
@@ -438,22 +578,39 @@ const GitHubSelectionTable = {
                     </tr>
                 </thead>
                 <tbody v-if="!loading">
-                    <template v-for="(item, index) in githubUrls" :key="item.url">
+                    <template v-for="(item, index) in githubUrls" :key="rowKey(item)">
                         <tr class="dt-row"
-                            :class="{ 'dt-row--selected': isItemChecked(item.url), 'dt-row--expanded': expandedRows.has(item.url) }"
+                            :class="{
+                                'dt-row--selected': isItemChecked(item),
+                                'dt-row--expanded': expandedRows.has(rowKey(item)),
+                                'dt-row--repo-group-start': isRepoGroupStart(index),
+                                'dt-row--repo-group-continuation': isRepoGroupContinuation(index),
+                            }"
                             style="cursor:pointer"
-                            @click="toggleRow(item.url)">
+                            @click="toggleRow(rowKey(item))">
                             <td class="dt-td dt-td--checkbox" @click.stop>
                                 <input type="checkbox" class="dt-checkbox"
-                                       :checked="isItemChecked(item.url)"
-                                       @change="updateSelection(item.url, $event.target.checked)">
+                                       :checked="isItemChecked(item)"
+                                       :title="item.branch ? 'Select just this branch (' + item.branch + ')' : 'Select this repository'"
+                                       @change="updateSelection(item, $event.target.checked)">
                             </td>
                             <td class="dt-td">
-                                <div class="d-flex align-items-center">
+                                <div v-if="!isRepoGroupContinuation(index)" class="d-flex align-items-center">
                                     <div class="bg-light rounded p-2 me-3 flex-shrink-0">
                                         <i class="fab fa-github fa-lg"></i>
                                     </div>
-                                    <div class="fw-bold text-dark" style="white-space:nowrap;">[[ item.url ]]</div>
+                                    <div class="fw-bold text-dark" style="white-space:nowrap;">
+                                        [[ item.url ]]
+                                        <span v-if="isRepoGroupStart(index)"
+                                              class="badge bg-primary-soft text-primary rounded-pill ms-1"
+                                              style="font-size:.65rem;font-weight:600;"
+                                              :title="'Rules from this repo were imported from ' + item.branches.length + ' different branches'">
+                                            <i class="fas fa-code-branch me-1"></i>[[ item.branches.length ]] branches
+                                        </span>
+                                    </div>
+                                </div>
+                                <div v-else class="dt-repo-group-connector">
+                                    <i class="fas fa-code-branch"></i> same repository — different branch
                                 </div>
                             </td>
                             <td v-show="colVisible.author" class="dt-td">[[ item.author || '—' ]]</td>
@@ -467,6 +624,15 @@ const GitHubSelectionTable = {
                                       class="badge bg-dark text-white me-1"
                                       style="text-transform:uppercase;">[[ fmt ]]</span>
                                 <span v-if="!item.formats.length" class="text-muted small">—</span>
+                            </td>
+                            <td v-show="colVisible.branches" class="dt-td">
+                                <span v-if="item.branch"
+                                      class="badge bg-light text-muted fw-normal border-0"
+                                      style="font-size:.7rem;"
+                                      :title="item.branches.length > 1 ? 'This repo has rules from ' + item.branches.length + ' branches — this row is just ' + item.branch : 'Rules from this repo were imported from this branch'">
+                                    <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ item.branch ]]
+                                </span>
+                                <span v-else class="text-muted small" title="No branch recorded — imported before branch tracking, or run Backfill branches">—</span>
                             </td>
                             <td v-show="colVisible.license" class="dt-td" @click.stop>
                                 <span v-for="lic in (item.licensesExpanded ? item.licenses : (item.licenses || []).slice(0, 10))" :key="lic"
@@ -547,7 +713,7 @@ const GitHubSelectionTable = {
                                         </div>
                                     </div>
 
-                                    <a :href="'/rule/github_detail?url=' + encodeURIComponent(item.url)"
+                                    <a :href="'/rule/github_detail?url=' + encodeURIComponent(item.url) + (item.branch ? '&branch=' + encodeURIComponent(item.branch) : '')"
                                        class="dt-action-btn" title="View Details">
                                         <i class="fas fa-eye"></i>
                                     </a>
@@ -563,8 +729,8 @@ const GitHubSelectionTable = {
 
                                     <!-- Expand: always last -->
                                     <button class="dt-action-btn dt-action-btn--expand"
-                                            :class="{ 'is-expanded': expandedRows.has(item.url) }"
-                                            title="Expand" @click="toggleRow(item.url)">
+                                            :class="{ 'is-expanded': expandedRows.has(rowKey(item)) }"
+                                            title="Expand" @click="toggleRow(rowKey(item))">
                                         <i class="fas fa-chevron-down dt-expand-chevron" style="font-size:.65rem;"></i>
                                     </button>
                                 </div>
@@ -572,7 +738,7 @@ const GitHubSelectionTable = {
                         </tr>
 
                         <!-- ── Expanded detail row ── -->
-                        <tr v-if="expandedRows.has(item.url)" class="dt-row-expand">
+                        <tr v-if="expandedRows.has(rowKey(item))" class="dt-row-expand">
                             <td :colspan="tableColspan" class="dt-expand-cell">
                                     <div class="animate__animated animate__fadeIn">
 
@@ -619,6 +785,18 @@ const GitHubSelectionTable = {
                                                         <span v-if="!item.formats.length"
                                                               class="text-muted small">None</span>
                                                     </div>
+                                                    <small class="text-muted d-block mb-2 mt-3 text-uppercase fw-bold"
+                                                           style="font-size:0.7rem">Imported Branches</small>
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        <span v-for="br in item.branches" :key="br"
+                                                              class="badge fw-normal"
+                                                              :class="br === item.branch ? 'bg-primary text-white' : 'border text-dark'"
+                                                              :title="br === item.branch ? 'This row' : ''">
+                                                            <i class="fas fa-code-branch me-1" style="font-size:.6rem;"></i>[[ br ]]
+                                                        </span>
+                                                        <span v-if="!item.branches || !item.branches.length"
+                                                              class="text-muted small">Not recorded</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div class="col-md-4">
@@ -635,7 +813,7 @@ const GitHubSelectionTable = {
                                                 <div class="p-3 border rounded h-100">
                                                     <small class="text-muted d-block mb-2 text-uppercase fw-bold"
                                                            style="font-size:0.7rem">Repository Link</small>
-                                                    <a :href="item.url" target="_blank"
+                                                    <a :href="repoTreeUrl(item)" target="_blank"
                                                        class="btn btn-sm btn-outline-dark w-100 text-truncate">
                                                         <i class="fab fa-github me-2"></i>Open on GitHub
                                                     </a>
