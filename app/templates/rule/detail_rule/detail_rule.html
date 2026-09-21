@@ -744,6 +744,41 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                     <i class="fab fa-github me-1"></i>GitHub
                                 </a>
 
+                                <!-- Rulesets mirror(s) — server-rendered (not part of currentRule's
+                                     JSON): empty whenever no enabled+verified mirror config exists, or
+                                     the rule is soft-deleted. An instance can run several mirror targets
+                                     at once (RuleMirrorConfig is multi-row), so this is a plain link only
+                                     when there's exactly one — a dropdown to pick which repo otherwise,
+                                     same pattern as the Download button above.
+                                     See get_mirror_github_urls in rule_mirror_core.py. -->
+                                {% if mirror_github_urls|length == 1 %}
+                                <a href="{{ mirror_github_urls[0].url }}"
+                                   target="_blank" rel="noopener noreferrer"
+                                   class="btn btn-sm rounded-pill px-3"
+                                   style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                   title="View this rule's mirrored folder on GitHub ({{ mirror_github_urls[0].name }})">
+                                    <i class="fa-solid fa-code-branch me-1"></i>Rulesets
+                                </a>
+                                {% elif mirror_github_urls|length > 1 %}
+                                <div class="dropdown">
+                                    <button class="btn btn-sm rounded-pill px-3 dropdown-toggle"
+                                            style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                            data-bs-toggle="dropdown"
+                                            title="View this rule's mirrored folder on GitHub — pick a mirror">
+                                        <i class="fa-solid fa-code-branch me-1"></i>Rulesets
+                                    </button>
+                                    <ul class="dropdown-menu shadow border-0" style="border-radius:12px; background:var(--card-bg-color);">
+                                        {% for mirror in mirror_github_urls %}
+                                        <li>
+                                            <a class="dropdown-item small" href="{{ mirror.url }}" target="_blank" rel="noopener noreferrer" style="color:var(--text-color);">
+                                                <i class="fab fa-github me-2 opacity-50"></i>{{ mirror.name }}
+                                            </a>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+
                                 <!-- Report -->
                                 {% if current_user.is_authenticated %}
                                 <report-modal
