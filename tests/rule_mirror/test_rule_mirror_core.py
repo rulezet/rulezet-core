@@ -249,11 +249,12 @@ def test_run_incremental_sync_processes_changed_and_removed_across_batches(app, 
         assert job.done == 8
         assert job.total == 8
         assert len(_rule_dirs_on_disk(local_dir)) == 5
-        # One isolated commit per changed rule — the "removed" rules here were
-        # never actually mirrored in the first place (fresh test repo), so
-        # removing them is a real no-op _commit() correctly skips (same as a
-        # rewrite-identical-content skip elsewhere): nothing to un-stage.
-        assert sum(1 for _ in repo.iter_commits()) == 5
+        # Commits are batched now (one per INITIAL_LOAD_BATCH_SIZE=2 batch),
+        # not one per rule: 5 changed rules -> 3 batches (2+2+1) -> 3 commits.
+        # The "removed" phase produces zero commits — those rules were never
+        # actually mirrored in this fresh test repo, so removing them is a
+        # real no-op _commit() correctly skips: nothing to un-stage.
+        assert sum(1 for _ in repo.iter_commits()) == 3
 
 
 def test_run_incremental_sync_pause_then_resume_covers_every_rule_once(app, monkeypatch, tmp_path):
