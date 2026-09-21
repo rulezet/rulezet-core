@@ -267,12 +267,13 @@ def cmd_help() -> None:
                   {D}  install deps from requirements.txt → init DB{R}
                   {D}→ Run once after cloning the repo{R}
 
-  {G}start{R}         {D}Start the development server (FLASKENV=development){R}
+  {G}start{R}         {D}Start locally (FLASKENV=development): worker.py + gunicorn wsgi:app{R}
+                  {D}  same launch as start-prod, just dev env/port — see start-prod{R}
                   {D}→ Use this for local development{R}
 
   {G}start-prod{R}    {D}Full production launch:{R}
                   {D}  backup → sync with origin → pip install → ensure ollama → db upgrade{R}
-                  {D}  → flask run --host=0.0.0.0 --port=80{R}
+                  {D}  → worker.py (background jobs, its own process) + gunicorn wsgi:app --bind 0.0.0.0:80{R}
                   {D}→ Use this on the production server (needs root for port 80){R}
                   {D}→ "Sync with origin" hard-resets to origin/<branch> — any local{R}
                   {D}  commit or edit on the server is discarded, never blocks on conflicts{R}
@@ -346,28 +347,36 @@ def cmd_init() -> None:
     ok("Ready. Run:  python3 manage.py start")
 
 
-def cmd_start() -> None:
-    _check_venv()
-    url = f"http://{os.environ.get('FLASK_URL', '127.0.0.1')}:{os.environ.get('FLASK_PORT', 7009)}"
-    header(f"Starting Rulezet v{app_version()} (development)")
-    info(f"Serving at {url}")
-    info("Press CTRL+C to stop")
-
-    # Same split as start-prod: the background job worker, telemetry loop,
-    # update-checker and both schedulers run in worker.py, their own
-    # process, not inside app.py's dev server. Nothing here forces this the
-    # way gunicorn's --timeout/--max-requests do in prod, but keeping dev
-    # and prod on the same process shape means a job-worker bug shows up
-    # here first, in dev, instead of only in prod.
+def _run_gunicorn_with_worker(flaskenv: str, port: str) -> None:
+    """Starts worker.py (background job worker, telemetry loop, update-
+    checker, both schedulers — its own process, never inside a gunicorn
+    web worker, see start-prod's note below) plus gunicorn serving
+    wsgi:app. Shared by `start` and `start-prod` so dev runs on the exact
+    same process shape as prod (same gunicorn flags, same worker split) —
+    only FLASKENV/port differ — instead of dev using app.py's bundled
+    Werkzeug dev server. That means no code-reload-on-save in dev anymore,
+    traded for catching gunicorn/worker-split issues here instead of only
+    in prod.
+    """
     worker_proc = subprocess.Popen(
         [PYTHON, "worker.py"], cwd=ROOT,
-        env={**_venv_env(), "FLASKENV": "development"},
+        env={**_venv_env(), "FLASKENV": flaskenv},
     )
     try:
-        run(
-            [PYTHON, "app.py"],
-            extra_env={"FLASKENV": "development", "RULEZET_EXTERNAL_WORKER": "1"},
-        )
+        threads = os.environ.get("GUNICORN_THREADS", "8")
+        run([
+            GUNICORN,
+            "wsgi:app",
+            "--bind", f"0.0.0.0:{port}",
+            "--worker-class", "gthread",
+            "--workers", "1",
+            "--threads", threads,
+            "--timeout", "120",
+            "--max-requests", "1000",
+            "--max-requests-jitter", "100",
+            "--access-logfile", "-",
+            "--error-logfile", "-",
+        ], extra_env={"FLASKENV": flaskenv})
     except KeyboardInterrupt:
         print("\n\033[0;37m  · Server stopped.\033[0m")
     finally:
@@ -378,6 +387,16 @@ def cmd_start() -> None:
                 worker_proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 worker_proc.kill()
+
+
+def cmd_start() -> None:
+    _check_venv()
+    port = os.environ.get("FLASK_PORT", "7009")
+    url = f"http://{os.environ.get('FLASK_URL', '127.0.0.1')}:{port}"
+    header(f"Starting Rulezet v{app_version()} (development)")
+    info(f"Serving at {url}")
+    info("Press CTRL+C to stop")
+    _run_gunicorn_with_worker("development", port)
 
 
 def cmd_start_prod() -> None:
@@ -410,62 +429,15 @@ def cmd_start_prod() -> None:
     run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "production"})
     ok("Default data up to date")
 
-    # 3. Start
+    # 3. Start — same gunicorn+worker.py launch as `start`, see
+    # _run_gunicorn_with_worker's docstring for why this isn't `flask run`
+    # or an in-process worker.
     port = os.environ.get("PORT", "80")
     public_url = os.environ.get("INSTANCE_PUBLIC_URL") or f"http://0.0.0.0:{port}"
     header(f"Starting Rulezet v{app_version()} (production)")
     info(f"Serving at {public_url}")
     info("Press CTRL+C to stop")
-
-    # `flask run` (Werkzeug's dev server) used to run here — it's not built
-    # for production (no real worker/thread pooling, no timeout enforcement,
-    # prone to one slow client stalling everything). gunicorn was already a
-    # dependency and even had a GUNICORN path constant defined above, just
-    # never wired up.
-    #
-    # The background job worker, telemetry loop, update-checker and the two
-    # schedulers (GitHub sync / admin tasks) run in a SEPARATE process
-    # (worker.py, create_app(start_worker=True)) — never inside a gunicorn
-    # web worker (wsgi.py now uses start_worker=False). They used to run as
-    # in-process threads here, which put a running job at the mercy of
-    # gunicorn's own request-handling watchdogs: --timeout kills a worker
-    # that hasn't responded in time (fine for a hung HTTP handler, not for a
-    # legitimately long background job sharing that same process), and
-    # --max-requests recycles a worker after N requests (killing any job
-    # still running past that point, however far from done). Splitting them
-    # into worker.py removes both failure modes, and as a bonus means
-    # --workers below can be raised past 1 for real request parallelism
-    # without the job-worker's claim-a-job race that justified keeping it at
-    # 1 before (see worker.py's docstring for the full reasoning).
-    worker_proc = subprocess.Popen(
-        [PYTHON, "worker.py"], cwd=ROOT,
-        env={**_venv_env(), "FLASKENV": "production"},
-    )
-    try:
-        threads = os.environ.get("GUNICORN_THREADS", "8")
-        run([
-            GUNICORN,
-            "wsgi:app",
-            "--bind", f"0.0.0.0:{port}",
-            "--worker-class", "gthread",
-            "--workers", "1",
-            "--threads", threads,
-            "--timeout", "120",
-            "--max-requests", "1000",
-            "--max-requests-jitter", "100",
-            "--access-logfile", "-",
-            "--error-logfile", "-",
-        ], extra_env={"FLASKENV": "production"})
-    except KeyboardInterrupt:
-        print("\n\033[0;37m  · Server stopped.\033[0m")
-    finally:
-        if worker_proc.poll() is None:
-            info("Stopping background worker process…")
-            worker_proc.terminate()
-            try:
-                worker_proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                worker_proc.kill()
+    _run_gunicorn_with_worker("production", port)
 
 
 def cmd_test() -> None:

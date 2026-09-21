@@ -11,6 +11,9 @@ These exercise the git plumbing against a real local repo (git.Repo.init
 in a tmp dir) — no network, no real GitHub remote — so _maybe_push is a
 no-op stand-in here; that part is unrelated to what's under test.
 """
+import datetime as _dt
+import uuid as _uuid
+
 import git
 import pytest
 
@@ -40,10 +43,27 @@ def _clear_seed_rules():
     db.session.commit()
 
 
-def _make_rule(title, fmt='yara'):
+def _make_rule(title, fmt='yara', creation_date=None):
     rule = Rule(
         title=title, format=fmt, to_string=f'rule {title.replace(" ", "_")} {{ condition: true }}',
         is_deleted=False, vote_up=0, vote_down=0, source=None, author='tester',
+        creation_date=creation_date or _dt.datetime.now(tz=_dt.timezone.utc),
+        uuid=str(_uuid.uuid4()),
+    )
+    db.session.add(rule)
+    db.session.commit()
+    return rule
+
+
+def _make_removed_rule(title, deleted_at, fmt='yara'):
+    """A rule that's already soft-deleted as of creation — for exercising
+    _run_incremental_sync's "removed since cutoff" phase, which looks at
+    Rule.is_deleted/deleted_at directly (not _active())."""
+    rule = Rule(
+        title=title, format=fmt, to_string=f'rule {title.replace(" ", "_")} {{ condition: true }}',
+        is_deleted=True, deleted_at=deleted_at, vote_up=0, vote_down=0, source=None, author='tester',
+        creation_date=_dt.datetime.now(tz=_dt.timezone.utc),
+        uuid=str(_uuid.uuid4()),
     )
     db.session.add(rule)
     db.session.commit()
@@ -53,15 +73,28 @@ def _make_rule(title, fmt='yara'):
 def _make_repo_env(tmp_path):
     local_dir = str(tmp_path / 'repo')
     repo = git.Repo.init(local_dir, initial_branch='main')
+    # Mirrors _ensure_local_repo's repo-local identity (rule_mirror_core.py)
+    # — needed since _commit below now shells out to the native `git commit`
+    # CLI, which (unlike GitPython's repo.index.commit()) hard-fails with no
+    # identity configured anywhere.
+    with repo.config_writer() as cw:
+        cw.set_value('user', 'name', 'Rulezet Mirror Sync')
+        cw.set_value('user', 'email', 'noreply@rulezet-mirror.local')
     logs = []
 
     def _log(level, message):
         logs.append((level, message))
 
     def _commit(message):
+        # Exact same logic as rule_mirror_core.py's real _commit closure —
+        # native `git commit` (CLI), not GitPython's repo.index.commit(),
+        # which rebuilds/sorts the whole index in pure Python on every call
+        # (measured ~1.85s/commit at 180k tracked files vs ~240ms for the
+        # CLI, at production scale that gap is what turned the incremental
+        # sync's one-commit-per-rule design into a days-long run).
         if repo.head.is_valid() and not repo.index.diff(repo.head.commit):
             return
-        repo.index.commit(message)
+        repo.git.commit('-m', message, '--quiet')
 
     def _maybe_push():
         pass  # no remote configured in these tests — nothing to push to
@@ -182,3 +215,150 @@ def test_run_initial_sync_cancel_mid_run_stops_and_saves_cursor(app, monkeypatch
         assert written == 2
         assert len(_rule_dirs_on_disk(local_dir)) == 2
         assert job.payload.get('_resume_after_id') is not None
+
+
+# ── _run_incremental_sync ──────────────────────────────────────────────────
+# Same hardening as _run_initial_sync (keyset pagination, DB-persisted
+# progress, pause/cancel/resume) but for the "delta since last sync" path,
+# added after a bulk operation touching ~20k rules' last_modif at once
+# turned out to break that path's old "deltas are always small" assumption —
+# see rule_mirror_core.py's module-level notes. Two phases in one run
+# (changed rules, then removed rules), each keyset-paginated and each rule
+# still getting its own isolated git commit (unlike the initial sync, which
+# batches commits — see the module docstring for why incremental can't).
+
+def test_run_incremental_sync_processes_changed_and_removed_across_batches(app, monkeypatch, tmp_path):
+    with app.app_context():
+        _clear_seed_rules()
+        cutoff = _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(hours=1)
+        now = _dt.datetime.now(tz=_dt.timezone.utc)
+        changed = [_make_rule(f'Incr Changed {i}', creation_date=now) for i in range(5)]
+        removed = [_make_removed_rule(f'Incr Removed {i}', deleted_at=now) for i in range(3)]
+        monkeypatch.setattr(mirror, 'INITIAL_LOAD_BATCH_SIZE', 2)   # forces multiple batches in both phases
+
+        repo, local_dir, logs, _log, _commit, _maybe_push = _make_repo_env(tmp_path)
+        job = FakeJob()
+
+        written, deleted, interrupted = mirror._run_incremental_sync(
+            repo, local_dir, cutoff, job, _log, _commit, _maybe_push
+        )
+
+        assert interrupted is False
+        assert written == 5
+        assert deleted == 3
+        assert job.done == 8
+        assert job.total == 8
+        assert len(_rule_dirs_on_disk(local_dir)) == 5
+        # One isolated commit per changed rule — the "removed" rules here were
+        # never actually mirrored in the first place (fresh test repo), so
+        # removing them is a real no-op _commit() correctly skips (same as a
+        # rewrite-identical-content skip elsewhere): nothing to un-stage.
+        assert sum(1 for _ in repo.iter_commits()) == 5
+
+
+def test_run_incremental_sync_pause_then_resume_covers_every_rule_once(app, monkeypatch, tmp_path):
+    with app.app_context():
+        _clear_seed_rules()
+        cutoff = _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(hours=1)
+        now = _dt.datetime.now(tz=_dt.timezone.utc)
+        changed = [_make_rule(f'Incr Resume {i}', creation_date=now) for i in range(4)]
+        removed = [_make_removed_rule(f'Incr Resume Removed {i}', deleted_at=now) for i in range(2)]
+        monkeypatch.setattr(mirror, 'INITIAL_LOAD_BATCH_SIZE', 1)   # pause after the very first rule
+
+        repo, local_dir, logs, _log, base_commit, _maybe_push = _make_repo_env(tmp_path)
+        job = FakeJob()
+        paused = {'done': False}
+
+        def _commit_then_pause(message):
+            base_commit(message)
+            if not paused['done']:
+                paused['done'] = True
+                job.status = 'paused'
+
+        written1, deleted1, interrupted1 = mirror._run_incremental_sync(
+            repo, local_dir, cutoff, job, _log, _commit_then_pause, _maybe_push
+        )
+
+        assert interrupted1 is True
+        assert written1 == 1
+        assert deleted1 == 0
+        assert job.payload.get('_resume_incr_phase') == 'changed'
+        assert job.payload.get('_resume_incr_after_id') is not None
+
+        # Resume: fresh FakeJob carrying over the saved cursor, same repo/local_dir.
+        job2 = FakeJob(payload=dict(job.payload), total=job.total)
+        written2, deleted2, interrupted2 = mirror._run_incremental_sync(
+            repo, local_dir, cutoff, job2, _log, base_commit, _maybe_push
+        )
+
+        assert interrupted2 is False
+        assert written2 == 4                        # cumulative, not just this run's slice
+        assert deleted2 == 2
+        assert job2.done == 6
+        assert len(_rule_dirs_on_disk(local_dir)) == 4
+        # 4 real commits (the "removed" rules were never actually mirrored in
+        # this fresh test repo, so removing them is a genuine no-op _commit()
+        # correctly skips — see the batches test above for the same point).
+        assert sum(1 for _ in repo.iter_commits()) == 4
+
+
+def test_run_incremental_sync_cancel_mid_run_stops_and_saves_cursor(app, monkeypatch, tmp_path):
+    with app.app_context():
+        _clear_seed_rules()
+        cutoff = _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(hours=1)
+        now = _dt.datetime.now(tz=_dt.timezone.utc)
+        changed = [_make_rule(f'Incr Cancel {i}', creation_date=now) for i in range(4)]
+        monkeypatch.setattr(mirror, 'INITIAL_LOAD_BATCH_SIZE', 1)
+
+        repo, local_dir, logs, _log, base_commit, _maybe_push = _make_repo_env(tmp_path)
+        job = FakeJob()
+        cancel_after = {'count': 0}
+
+        def _commit_then_cancel(message):
+            base_commit(message)
+            cancel_after['count'] += 1
+            if cancel_after['count'] == 2:
+                job.status = 'cancelled'
+
+        written, deleted, interrupted = mirror._run_incremental_sync(
+            repo, local_dir, cutoff, job, _log, _commit_then_cancel, _maybe_push
+        )
+
+        assert interrupted is True
+        assert written == 2
+        assert deleted == 0
+        assert len(_rule_dirs_on_disk(local_dir)) == 2
+        assert job.payload.get('_resume_incr_after_id') is not None
+
+
+def test_commit_works_with_no_global_git_identity(app, monkeypatch, tmp_path):
+    """Regression test for the native-`git commit`-CLI switch in _commit
+    (see its docstring in rule_mirror_core.py): unlike GitPython's
+    repo.index.commit() — which silently synthesizes an author from the OS
+    user when nothing is configured — the CLI hard-fails with "Please tell
+    me who you are" if no identity is set anywhere. _ensure_local_repo now
+    sets a repo-local user.name/user.email specifically to cover a server
+    with no global git config at all; this proves that's sufficient by
+    pointing HOME at an empty directory so ~/.gitconfig can't exist."""
+    empty_home = tmp_path / 'empty_home'
+    empty_home.mkdir()
+    monkeypatch.setenv('HOME', str(empty_home))
+    for var in ('GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'):
+        monkeypatch.delenv(var, raising=False)
+
+    with app.app_context():
+        _clear_seed_rules()
+        rules = [_make_rule(f'NoIdentity Rule {i}') for i in range(3)]
+
+        # _make_repo_env sets the same repo-local identity _ensure_local_repo
+        # does — with HOME now pointing at an empty dir, that local config is
+        # the ONLY identity available anywhere, exactly like a fresh server.
+        repo, local_dir, logs, _log, _commit, _maybe_push = _make_repo_env(tmp_path)
+        job = FakeJob()
+
+        written, interrupted = mirror._run_initial_sync(repo, local_dir, job, _log, _commit, _maybe_push)
+
+        assert interrupted is False
+        assert written == 3
+        assert len(_rule_dirs_on_disk(local_dir)) == 3
+        assert repo.head.commit.author.email == 'noreply@rulezet-mirror.local'
