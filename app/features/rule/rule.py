@@ -314,6 +314,7 @@ def get_rules_page_with_user_id() -> jsonify:
 
 # get page with filter
 @rule_blueprint.route("/get_rules_page_filter", methods=['GET'])
+@cache.cached(timeout=60, query_string=True, unless=lambda: current_user.is_authenticated)
 def get_rules_page_filter() -> jsonify:
     """Get all the rules with filter"""
     page = int(request.args.get("page", 1))
@@ -363,8 +364,27 @@ def get_rules_page_filter() -> jsonify:
     total_rules = query.count()
     rules = query.offset((page - 1) * per_page).limit(per_page).all()
 
+    # Batch-fetch submitters and (for a logged-in viewer) favorite status for
+    # this page's rules — one query each instead of Rule.to_json() issuing
+    # one per rule. See its docstring.
+    from app.core.db_class.db import User, RuleFavoriteUser
+    user_ids = {r.user_id for r in rules if r.user_id}
+    submitters_by_id = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
+
+    favorited_ids = set()
+    if current_user.is_authenticated and rules:
+        favorited_ids = {
+            f.rule_id for f in RuleFavoriteUser.query.filter(
+                RuleFavoriteUser.user_id == current_user.id,
+                RuleFavoriteUser.rule_id.in_([r.id for r in rules]),
+            ).all()
+        }
+
     return jsonify({
-        "rule": [r.to_json() for r in rules],
+        "rule": [
+            r.to_json(submitter=submitters_by_id.get(r.user_id), is_favorited=r.id in favorited_ids)
+            for r in rules
+        ],
         "total_rules": total_rules,
         "total_pages": ceil(total_rules / per_page)
     }), 200

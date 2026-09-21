@@ -158,12 +158,20 @@ def remove_from_rule(rule_id, technique_id):
 # ── Heatmap & technique detail ────────────────────────────────────────────────
 
 @attack_blueprint.route('/heatmap')
+@cache.cached(timeout=60 * 60 * 6)
 def heatmap():
     return render_template('attack/heatmap.html')
 
 
 @attack_blueprint.route('/heatmap_data')
+@cache.cached(timeout=60 * 60 * 6)
 def heatmap_data():
+    """Global ATT&CK coverage across every active rule — same for every
+    visitor (no request.args, no current_user) and expensive to build (scans
+    every Rule + RuleAttackAssociation). Cached 6h: a handful of rules
+    changing their technique tags is invisible against the whole catalogue,
+    so a few hours of staleness costs nothing worth avoiding this query on
+    every page view for."""
     from app.features.attack.attack_core import get_global_coverage
     return jsonify(get_global_coverage())
 
