@@ -4175,30 +4175,45 @@ def get_all_rules_in_json_dump(data: Dict[str, Any]) -> dict:
 def search_rules_by_cve_patterns(vulnerabilities: list[str]) -> dict:
     """
     Search rules by matching CVE patterns inside the cve_id string column.
-    Optimized to use a single SQL query.
-    """
 
-    
+    Same request/response shape as before (an external vulnerability-lookup
+    tool depends on it) — only the internals changed:
+      - filters out soft-deleted rules (was querying Rule directly instead
+        of _active(), so a deleted rule with a matching CVE used to still
+        show up in results)
+      - batch-fetches submitters once instead of Rule.to_json() issuing one
+        User query per matched rule — this can return hundreds/thousands of
+        rows for a popular CVE, so that was hundreds/thousands of extra
+        queries per call
+    The ILIKE '%"..."%' scan itself is still a full table scan (leading
+    wildcard defeats any index on cve_id) — fixing that for real needs an
+    index/schema change, not just this function; left alone here since it
+    doesn't change perf-only, in-place fixes are what's asked for right now.
+    """
     base_url = request.url_root.rstrip("/") + "/rule/detail_rule/"
-    query = Rule.query
+    query = _active()
 
     if vulnerabilities:
         vuln_filters = []
         for v in vulnerabilities:
             search_pattern = '%"' + v + '"%'
             vuln_filters.append(Rule.cve_id.ilike(search_pattern))
-        
+
         query = query.filter(or_(*vuln_filters))
-        
+
 
     all_rules = query.order_by(Rule.last_modif.desc()).all()
-    
+
+    from app.core.db_class.db import User
+    user_ids = {r.user_id for r in all_rules if r.user_id}
+    submitters_by_id = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
+
     final_rules = []
     for rule in all_rules:
-        rule_data = rule.to_json()
-        
+        rule_data = rule.to_json(submitter=submitters_by_id.get(rule.user_id))
+
         rule_data["detail_url"] = f"{base_url}{rule.id}"
-        
+
         if rule.last_modif:
             rule_data["formatted_date"] = rule.last_modif.strftime('%Y-%m-%d %H:%M:%S')
         else:

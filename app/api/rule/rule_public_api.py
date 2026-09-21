@@ -9,6 +9,7 @@ from flask_restx import Resource, Namespace
 
 from app.api.utils.rule_validation import *
 
+from app import cache
 from app.core.utils import utils
 from app.features.misp.rule.misp_object import get_rule_misp_object
 from ...features.rule import rule_core as RuleModel
@@ -466,9 +467,16 @@ curl -G "http://127.0.0.1:7009/api/rule/public/search_rules_by_cve" \
 """,
 params={'cve_ids': 'One or more vulnerability identifiers (CVE, GHSA, etc.)'} ) 
 
-class RulesByCVE(Resource): 
-    def get(self): 
-        """ Search rules by vulnerability identifiers """ 
+class RulesByCVE(Resource):
+    # Same route, same request params, same JSON shape — an external
+    # vulnerability-lookup tool calls this heavily and depends on the exact
+    # response format. Caching by cve_ids (query_string=True) just avoids
+    # re-running the underlying full-table ILIKE scan for a repeat/near-
+    # simultaneous lookup of the same identifiers; a fresh scan still runs
+    # for anything not seen in the last 60s.
+    @cache.cached(timeout=60, query_string=True)
+    def get(self):
+        """ Search rules by vulnerability identifiers """
         raw_input = request.args.get('cve_ids', '') 
         if not raw_input: 
             return {"error": "No IDs provided."}, 400
