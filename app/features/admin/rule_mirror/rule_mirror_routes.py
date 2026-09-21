@@ -93,8 +93,8 @@ def delete_config(config_uuid):
     if not config:
         return jsonify({'success': False, 'message': 'Not found.'}), 404
 
-    RuleMirrorModel.delete_config(config)
-    return jsonify({'success': True}), 200
+    ok, message = RuleMirrorModel.delete_config(config)
+    return jsonify({'success': ok, 'message': message}), (200 if ok else 400)
 
 
 @rule_mirror_blueprint.route('/admin/rule_mirror/history/<string:config_uuid>', methods=['GET'])
