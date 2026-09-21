@@ -278,6 +278,11 @@ def cmd_help() -> None:
                   {D}→ "Sync with origin" hard-resets to origin/<branch> — any local{R}
                   {D}  commit or edit on the server is discarded, never blocks on conflicts{R}
 
+  {G}restart-prod{R}  {D}Just start-prod's launch step — worker.py + gunicorn, no backup/{R}
+                  {D}  sync/deps/migrations first{R}
+                  {D}→ Use this on prod when the code's already up to date and you just{R}
+                  {D}  need the app process back up (e.g. after killing a stuck worker.py){R}
+
   {G}test{R}          {D}Run the full test suite (FLASKENV=testing){R}
 
   {G}update{R}        {D}sync with origin + pip install + ensure ollama + flask db upgrade{R}
@@ -440,6 +445,21 @@ def cmd_start_prod() -> None:
     _run_gunicorn_with_worker("production", port)
 
 
+def cmd_restart_prod() -> None:
+    """Just step 3 of start-prod: (re)start gunicorn+worker.py in
+    production mode — no backup, no git sync, no deps/migrations/seed.
+    For when the code is already up to date (or a bad worker.py just needs
+    killing and relaunching) and a full start-prod's backup+update pass
+    would be redundant/slow."""
+    _check_venv()
+    port = os.environ.get("PORT", "80")
+    public_url = os.environ.get("INSTANCE_PUBLIC_URL") or f"http://0.0.0.0:{port}"
+    header(f"Starting Rulezet v{app_version()} (production, no update)")
+    info(f"Serving at {public_url}")
+    info("Press CTRL+C to stop")
+    _run_gunicorn_with_worker("production", port)
+
+
 def cmd_test() -> None:
     _check_venv()
     header("Running tests")
@@ -532,18 +552,19 @@ def cmd_db_reload() -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 COMMANDS: dict[str, object] = {
-    "init":       cmd_init,
-    "start":      cmd_start,
-    "start-prod": cmd_start_prod,
-    "test":       cmd_test,
-    "update":     cmd_update,
-    "backup":     cmd_backup,
-    "restore":    cmd_restore,
-    "deploy":     cmd_deploy,
-    "db":         cmd_db,
-    "db-init":    cmd_db_init,
-    "db-reload":  cmd_db_reload,
-    "help":       cmd_help,
+    "init":         cmd_init,
+    "start":        cmd_start,
+    "start-prod":   cmd_start_prod,
+    "restart-prod": cmd_restart_prod,
+    "test":         cmd_test,
+    "update":       cmd_update,
+    "backup":       cmd_backup,
+    "restore":      cmd_restore,
+    "deploy":       cmd_deploy,
+    "db":           cmd_db,
+    "db-init":      cmd_db_init,
+    "db-reload":    cmd_db_reload,
+    "help":         cmd_help,
 }
 
 
