@@ -468,6 +468,51 @@ def delete_config(config: RuleMirrorConfig) -> tuple:
     return True, "Config deleted."
 
 
+def get_mirror_github_urls(rule) -> list:
+    """GitHub URL(s) for this rule's own folder in the Rulesets mirror
+    (the "View on GitHub" link on a rule's detail page) — the reverse of
+    _rule_relative_dir/_link_file_for, which write the same layout from
+    the mirror side.
+
+    An instance can run SEVERAL mirror targets at once (RuleMirrorConfig
+    is explicitly multi-row — see its docstring), each pushing to a
+    different repo, so this returns one entry per enabled+verified config
+    rather than picking just one — the caller decides how to present that
+    (a single link if there's one, a picker if there's more). Returns []
+    when there's nothing to link to: no enabled+verified config at all, or
+    the rule is soft-deleted (never mirrored).
+
+    Not a guarantee any of these paths already exist on GitHub yet: the
+    mirror syncs on its own schedule, not on every rule edit, so a brand-
+    new or just-renamed rule's link can briefly 404 until the next sync
+    catches up — same caveat as any "view on GitHub" link for content
+    that's mirrored asynchronously.
+    """
+    if rule.is_deleted:
+        return []
+
+    configs = (
+        RuleMirrorConfig.query
+        .filter_by(enabled=True, is_verified=True)
+        .order_by(RuleMirrorConfig.id)
+        .all()
+    )
+
+    rel_dir = _rule_relative_dir(rule)
+    links = []
+    for config in configs:
+        if not config.repo_url:
+            continue
+        slug = _repo_slug(config.repo_url)
+        if not slug:
+            continue
+        links.append({
+            'name': config.name,
+            'url':  f"https://github.com/{slug}/tree/{config.branch}/{rel_dir}",
+        })
+    return links
+
+
 # ─── Git plumbing ──────────────────────────────────────────────────────────
 
 def _local_repo_dir(config: RuleMirrorConfig) -> str:

@@ -916,11 +916,13 @@ def detail_rule_by_uuid(rule_uuid):
         current_user_vote = _rv.vote_type if _rv else None
     if rule:
         rule_risk = RuleModel.get_rule_risk_flags(rule)
+        from app.features.admin.rule_mirror.rule_mirror_core import get_mirror_github_urls
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
                                rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
+                               mirror_github_urls=get_mirror_github_urls(rule),
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
@@ -1037,11 +1039,13 @@ def detail_rule(rule_id)-> render_template:
         current_user_vote = _rv.vote_type if _rv else None
     if rule:
         rule_risk = RuleModel.get_rule_risk_flags(rule)
+        from app.features.admin.rule_mirror.rule_mirror_core import get_mirror_github_urls
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
                                rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
+                               mirror_github_urls=get_mirror_github_urls(rule),
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
