@@ -6,10 +6,17 @@ one folder per rule, named after the rule itself (not its raw uuid) with
 a short uuid suffix for uniqueness — <rule-name>.<ext> + metadata.json +
 rulezet_link.md (a clickable link back to the rule's Rulezet page, plus
 its uuid in plain text, so a rule can be found on GitHub from its Rulezet
-uuid alone). History is native git history (a rule's content file gets a
-new, isolated commit each time its content changes — see _sync_one_config
-— so GitHub's own diff view shows exactly the old vs. new content; no
-separate "historique" folder, no duplicated content). A generated
+uuid alone). History is native git history (a rule's update writes to the
+same path and gets committed — see _run_incremental_sync — so `git log
+--follow`/GitHub's per-file history on that path shows exactly the old vs.
+new content over time; no separate "historique" folder, no duplicated
+content). Commits are batched per sync run (one commit per ~500-rule
+batch, not one isolated commit per rule — git resolves history per FILE,
+not per commit, so a file's own history still comes up correctly even
+when its commit also touched hundreds of other rules; batching was needed
+because one `git add`+`git commit` process spawn per rule measured ~4s/
+rule on the real ~600k-file mirror, turning a 20k-rule delta into the
+better part of a day). A generated
 README.md at the repo root lists every source currently mirrored (with a
 link back to it) and the Rulezet version, refreshed on every sync. Off by
 default, per-instance, admin-configured — an instance can run several
@@ -979,12 +986,25 @@ def _run_incremental_sync(repo, local_dir: str, cutoff, job, _log, _commit, _may
     Now paginated by keyset (same reasoning as _run_initial_sync — see its
     docstring) with progress checkpointed to the DB after every batch, a
     push after every batch (bounds how much work a crash mid-run can cost,
-    same as the initial sync), and cooperative pause/cancel. Unlike the
-    initial sync it still gives each changed/removed rule its own isolated
-    git commit rather than batching commits — see the module docstring:
-    that per-rule commit is what makes GitHub's diff view show exactly
-    what changed on that one rule, and it's why this can't just reuse
-    _run_initial_sync's batch-commit shape.
+    same as the initial sync), and cooperative pause/cancel.
+
+    Commits are now batched (one per INITIAL_LOAD_BATCH_SIZE-sized batch,
+    same as the initial sync), not one isolated commit per rule like this
+    function used to do. That used to be deliberate — see the module
+    docstring's "History = native git history" note — on the assumption
+    that per-rule isolation was needed for GitHub's diff view to show
+    exactly what changed on one rule. It isn't: GitHub (and plain `git log
+    --follow -- <path>`) resolves history per FILE, not per commit, so a
+    file's own history/diff still comes up correctly even when the commit
+    that touched it also touched 499 other files. What's lost is only the
+    repo-root commit list reading as one line per rule; drilling into any
+    one rule's file still works exactly as before. Confirmed necessary in
+    production: even the native-git-CLI fix (see _commit) still measured
+    ~4s/rule end to end on the real ~600k-file mirror (slower than this
+    file's own local benchmark, which used a smaller/faster-disk repo) —
+    at 20k+ rules that's still the better part of a day. Batching collapses
+    the per-rule `git add`+`git commit` process-spawn/index-touch overhead
+    down to once per 500 rules instead of once per rule.
 
     Returns (written, deleted, interrupted) as true cumulative totals
     (this run's work plus whatever earlier resumed attempts already did),
@@ -1071,15 +1091,18 @@ def _run_incremental_sync(repo, local_dir: str, cutoff, job, _log, _commit, _may
                 tags_by_rule = get_tags_for_rules_batch(batch_ids)
             techniques_by_rule = get_techniques_for_rules_batch(batch_ids)
 
+            staged_paths = []
             for rule in batch:
-                for rel_dir in _write_rule(local_dir, rule, tags_by_rule, techniques_by_rule):
-                    repo.git.add(rel_dir)
-                _commit(f"update: {rule.format}/{rule.uuid} - {rule.title}")
+                staged_paths.extend(_write_rule(local_dir, rule, tags_by_rule, techniques_by_rule))
                 written += 1
                 last_id = rule.id
                 if written % INCREMENTAL_PROGRESS_EVERY == 0:
                     _save_progress('changed')
                     _log_progress()
+
+            if staged_paths:
+                repo.git.add(*staged_paths)
+            _commit(f"update: {len(batch)} rule(s)")
 
             _save_progress('changed')
             _maybe_push()
@@ -1118,12 +1141,13 @@ def _run_incremental_sync(repo, local_dir: str, cutoff, job, _log, _commit, _may
                 repo.index.remove([rel_dir], r=True)
             except Exception:
                 pass  # already gone from the index/working tree — fine
-            _commit(f"remove: {rule.format}/{rule.uuid} - {rule.title}")
             deleted += 1
             last_id = rule.id
             if deleted % INCREMENTAL_PROGRESS_EVERY == 0:
                 _save_progress('removed')
                 _log_progress()
+
+        _commit(f"remove: {len(batch)} rule(s)")
 
         _save_progress('removed')
         _maybe_push()
