@@ -2,8 +2,10 @@ import os
 
 from dotenv import load_dotenv
 
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Read version from the project root 'version' file once at import time
-_version_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'version')
+_version_file = os.path.join(_BASE_DIR, 'version')
 try:
     with open(_version_file) as _vf:
         _APP_VERSION = _vf.read().strip()
@@ -71,16 +73,25 @@ class Config:
    
     YARA_ADDITIONAL_EXTERNAL = empty_split(os.environ.get('YARA_ADDITIONAL_EXTERNAL', ''), ',')
 
-    # Flask-Caching — SimpleCache (in-process dict, no extra infra) is the
-    # right fit as long as the web tier is a single gunicorn process
-    # (--workers 1, see manage.py's start-prod): there's only one copy to
-    # keep warm, no cross-process staleness to worry about. If that ever
-    # changes to multiple worker processes, switch CACHE_TYPE to
+    # Flask-Caching. FileSystemCache (was SimpleCache — an in-process dict)
+    # because SimpleCache doesn't actually survive as long as its timeout
+    # implies: gunicorn's --max-requests 1000 (see manage.py's
+    # _run_gunicorn_with_worker) periodically kills and replaces the
+    # single worker process, which wipes an in-process dict outright —
+    # every request (including the high-volume public API endpoints)
+    # counts toward that 1000, so on a busy instance the cache can get
+    # reset every few minutes regardless of a 6h timeout, defeating it in
+    # practice ("I loaded this page once, why did it reload everything a
+    # minute later" was exactly this). FileSystemCache writes entries to
+    # disk instead, so they outlive a worker recycle. Still single-copy/
+    # no cross-process staleness as long as --workers stays 1. If that
+    # ever changes to multiple worker processes, switch CACHE_TYPE to
     # 'RedisCache' (+ CACHE_REDIS_URL) so every process shares one cache —
     # every @cache.cached()/cache.get()/cache.set() call site stays
     # unchanged, only this config moves.
-    CACHE_TYPE = os.environ.get('CACHE_TYPE', 'SimpleCache')
+    CACHE_TYPE = os.environ.get('CACHE_TYPE', 'FileSystemCache')
     CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', 300))
+    CACHE_DIR = os.environ.get('CACHE_DIR', os.path.join(_BASE_DIR, 'data', 'flask_cache'))
     CACHE_REDIS_URL = os.environ.get('CACHE_REDIS_URL', '')
 
 
