@@ -363,13 +363,25 @@ class Rule(db.Model):
         rule = Rule.query.get(id)
         return rule.title if rule else None
     
-    def to_json(self):
-        is_favorited = False
-        if not current_user.is_anonymous():
-            is_favorited = RuleFavoriteUser.query.filter_by(user_id=current_user.id, rule_id=self.id).first() is not None
+    def to_json(self, submitter=None, is_favorited=None):
+        """submitter/is_favorited let a caller serialising many rules at
+        once (a rule list page) batch-fetch both up front — one query for
+        every submitter, one for the current user's favorites among the
+        whole page — instead of this method re-querying User and
+        RuleFavoriteUser once per rule (was 1-2 extra round trips per row,
+        e.g. ~20 queries for a 10-rule page). See rule.py's
+        get_rules_page_filter for the batched caller. Left None (the
+        default) for every other call site, which keeps the original
+        per-call lookups."""
+        if is_favorited is None:
+            is_favorited = False
+            if not current_user.is_anonymous():
+                is_favorited = RuleFavoriteUser.query.filter_by(user_id=current_user.id, rule_id=self.id).first() is not None
 
-        submitter = User.query.get(self.user_id)
+        if submitter is None:
+            submitter = User.query.get(self.user_id)
         submitter_avatar = submitter.get_avatar_url() if submitter else None
+        editor_name = (submitter.first_name + " " + submitter.last_name) if submitter else None
         return {
             "id": self.id,
             "format": self.format,
@@ -389,7 +401,7 @@ class Rule(db.Model):
             "to_string": self.to_string,
             "is_favorited": is_favorited,
             "cve_id": self.cve_id if self.cve_id is not None else [],
-            "editor": self.get_rule_user_first_name_by_id(),
+            "editor": editor_name,
             "github_path": self.github_path if self.github_path else None,
             "branch": self.branch if self.branch else None,
             "editor_avatar": submitter_avatar,
