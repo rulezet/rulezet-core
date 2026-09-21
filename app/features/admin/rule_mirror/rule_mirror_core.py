@@ -658,6 +658,14 @@ def get_repo_info(config: RuleMirrorConfig) -> tuple:
 # ─── Sync ──────────────────────────────────────────────────────────────────
 
 INITIAL_LOAD_BATCH_SIZE = 500   # rules per commit on the very first sync
+# How often _run_incremental_sync checkpoints job.done/writes a log line
+# *within* a batch, not just at the end of one — each rule there is its
+# own git commit (~0.4-0.6s), so waiting for a full 500-rule batch left
+# the admin progress bar (and the job log) looking frozen for minutes at a
+# time with zero visibility into whether it was actually moving or hung.
+# Cheap: a DB commit every 25 rules, not a git push (that's still gated by
+# PUSH_EVERY_N_COMMITS below, per-batch).
+INCREMENTAL_PROGRESS_EVERY = 25
 # Was 1000 (= a push every 500k rules — one push for a ~600k-rule initial
 # load, meaning hours of work could sit unpushed and be lost on a crash
 # before ever reaching GitHub). 20 batches = 10k rules between pushes —
@@ -1003,6 +1011,10 @@ def _run_incremental_sync(repo, local_dir: str, cutoff, job, _log, _commit, _may
         ).count()
         job.total = changed_total + removed_total
         db.session.commit()
+        _log('info', f"Incremental delta: {changed_total} changed rule(s), {removed_total} removed "
+                      f"rule(s) — {job.total} total. One isolated git commit per rule, so this is "
+                      f"paced by disk/git, not instant — progress updates every "
+                      f"{INCREMENTAL_PROGRESS_EVERY} rules.")
 
     if last_id:
         _log('info', f"Resuming incremental sync ({phase}) after rule id {last_id} "
@@ -1065,6 +1077,9 @@ def _run_incremental_sync(repo, local_dir: str, cutoff, job, _log, _commit, _may
                 _commit(f"update: {rule.format}/{rule.uuid} - {rule.title}")
                 written += 1
                 last_id = rule.id
+                if written % INCREMENTAL_PROGRESS_EVERY == 0:
+                    _save_progress('changed')
+                    _log_progress()
 
             _save_progress('changed')
             _maybe_push()
@@ -1106,6 +1121,9 @@ def _run_incremental_sync(repo, local_dir: str, cutoff, job, _log, _commit, _may
             _commit(f"remove: {rule.format}/{rule.uuid} - {rule.title}")
             deleted += 1
             last_id = rule.id
+            if deleted % INCREMENTAL_PROGRESS_EVERY == 0:
+                _save_progress('removed')
+                _log_progress()
 
         _save_progress('removed')
         _maybe_push()
