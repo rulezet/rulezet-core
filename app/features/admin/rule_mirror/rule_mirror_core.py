@@ -426,10 +426,32 @@ def get_config_history(config: RuleMirrorConfig) -> list:
     ]
 
 
-def delete_config(config: RuleMirrorConfig):
+def delete_config(config: RuleMirrorConfig) -> tuple:
     """Removes the config row and its local working clone. Never touches
     the remote GitHub repo itself — only this instance's own settings and
-    local checkout of it."""
+    local checkout of it.
+
+    Refuses while ANY rule_git_mirror_sync job is still pending/running —
+    deleting mid-sync rmtree's the local clone out from under the worker
+    thread actively reading/writing it, and/or leaves it trying to save
+    progress against a config_id that no longer resolves to anything
+    (this is what an "ObjectDeletedError: BackgroundJob has been deleted"
+    crash mid-run traces back to). Not scoped to just jobs referencing
+    *this* config's id: a scheduler-triggered sweep run (target_picker:
+    'none' in task_types.py) has no config_id in its payload at all since
+    it walks every enabled config in turn, and the job worker only ever
+    runs one 'default'-lane job at a time anyway, so "any sync job
+    active" and "a sync job active for this config" are the same check in
+    practice — simpler and can't miss the sweep case.
+    """
+    from app.core.db_class.db import BackgroundJob
+    active_sync = BackgroundJob.query.filter(
+        BackgroundJob.job_type == 'rule_git_mirror_sync',
+        BackgroundJob.status.in_(['pending', 'running']),
+    ).first()
+    if active_sync:
+        return False, "A Rulesets sync is still running — cancel it first, then delete."
+
     config_id, name = config.id, config.name
     local_dir = _local_repo_dir(config)
     db.session.delete(config)
@@ -443,6 +465,7 @@ def delete_config(config: RuleMirrorConfig):
         target_id=config_id,
         is_public=False,
     )
+    return True, "Config deleted."
 
 
 # ─── Git plumbing ──────────────────────────────────────────────────────────
