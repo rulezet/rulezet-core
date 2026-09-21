@@ -782,52 +782,15 @@ def _sync_one_config(config: RuleMirrorConfig, job=None, log_fn=None) -> dict:
             # the whole backlog being silently treated as already mirrored.
             return {'written': written, 'deleted': 0, 'first_sync': True, 'interrupted': True}
     else:
-        from sqlalchemy import or_
-        query = _active().filter(or_(Rule.creation_date > cutoff, Rule.last_modif > cutoff))
-        changed = query.all()
-
-        removed = Rule.query.filter(Rule.is_deleted == True, Rule.deleted_at > cutoff).all()
-
-        if job:
-            job.total = len(changed) + len(removed)
-            job.done = 0
-            db.session.commit()
-
-        # Incremental deltas are small (whatever changed since the last
-        # sync) — loading all of their tags/techniques up front in one
-        # batch, unlike the initial load, is not a scale concern.
-        changed_ids = [r.id for r in changed]
-        from app.features.rule.rule_core import get_tags_for_rules_batch
-        from app.features.attack.attack_core import get_techniques_for_rules_batch
-        # get_tags_for_rules_batch checks flask_login's current_user to decide
-        # public-only vs. full visibility — outside any request (a background
-        # job), that proxy resolves to None rather than an anonymous user, and
-        # None.is_authenticated crashes the whole sync. A throwaway request
-        # context gives flask_login a real (logged-out) current_user to check,
-        # which is what actually makes this "public tags only" instead of just
-        # broken.
-        from flask import current_app
-        with current_app.test_request_context():
-            tags_by_rule = get_tags_for_rules_batch(changed_ids)
-        techniques_by_rule = get_techniques_for_rules_batch(changed_ids)
-
-        for rule in changed:
-            for rel_dir in _write_rule(local_dir, rule, tags_by_rule, techniques_by_rule):
-                repo.git.add(rel_dir)
-            _commit(f"update: {rule.format}/{rule.uuid} - {rule.title}")
-            written += 1
-            if job:
-                job.done += 1
-        for rule in removed:
-            rel_dir = _remove_rule_dir(local_dir, rule)
-            try:
-                repo.index.remove([rel_dir], r=True)
-            except Exception:
-                pass  # already gone from the index/working tree — fine
-            _commit(f"remove: {rule.format}/{rule.uuid} - {rule.title}")
-            deleted += 1
-            if job:
-                job.done += 1
+        written, deleted, interrupted = _run_incremental_sync(
+            repo, local_dir, cutoff, job, _log, _commit, _maybe_push
+        )
+        if interrupted:
+            # Same reasoning as the initial-sync branch above: stop here so
+            # the resume offset _run_incremental_sync already saved is
+            # honoured by the next run instead of last_synced_at silently
+            # marking this whole delta as mirrored.
+            return {'written': written, 'deleted': deleted, 'first_sync': False, 'interrupted': True}
 
     readme_path = os.path.join(local_dir, 'README.md')
     with open(readme_path, 'w', encoding='utf-8') as f:
@@ -967,3 +930,160 @@ def _run_initial_sync(repo, local_dir: str, job, _log, _commit, _maybe_push) -> 
     # invocation's slice, so the final "sync complete" summary is accurate
     # even for a run that took several pause/resume cycles to finish.
     return done_before_this_run + written, False
+
+
+def _run_incremental_sync(repo, local_dir: str, cutoff, job, _log, _commit, _maybe_push) -> tuple:
+    """Mirrors whatever changed since the last sync (new/updated rules,
+    soft-deletes). Used to load the whole delta with one `.all()` and only
+    commit `job.done`/the resume offset to the DB once, at the very end —
+    fine on the assumption the docstring made ("incremental deltas are
+    small"), which broke the day a single bulk operation touched
+    last_modif on ~20k rules at once: the progress bar sat at 0% for the
+    entire run (nothing was ever persisted until the last line) and the
+    whole ~600k-row table's worth of ORM objects/tag+technique lookups got
+    pulled into memory in one shot.
+
+    Now paginated by keyset (same reasoning as _run_initial_sync — see its
+    docstring) with progress checkpointed to the DB after every batch, a
+    push after every batch (bounds how much work a crash mid-run can cost,
+    same as the initial sync), and cooperative pause/cancel. Unlike the
+    initial sync it still gives each changed/removed rule its own isolated
+    git commit rather than batching commits — see the module docstring:
+    that per-rule commit is what makes GitHub's diff view show exactly
+    what changed on that one rule, and it's why this can't just reuse
+    _run_initial_sync's batch-commit shape.
+
+    Returns (written, deleted, interrupted) as true cumulative totals
+    (this run's work plus whatever earlier resumed attempts already did),
+    same convention as _run_initial_sync's return.
+    """
+    from app.features.rule.rule_core import _active, get_tags_for_rules_batch
+    from app.features.attack.attack_core import get_techniques_for_rules_batch
+    from flask import current_app
+    from app.features.jobs.job_handlers import _is_cancelled, _should_pause
+    from sqlalchemy import or_
+
+    payload = job.payload or {} if job else {}
+    phase          = payload.get('_resume_incr_phase', 'changed')
+    last_id        = int(payload.get('_resume_incr_after_id', 0))
+    written_before = int(payload.get('_resume_incr_written', 0))
+    deleted_before = int(payload.get('_resume_incr_deleted', 0))
+
+    if job and not job.total:
+        changed_total = _active().filter(
+            or_(Rule.creation_date > cutoff, Rule.last_modif > cutoff)
+        ).count()
+        removed_total = Rule.query.filter(
+            Rule.is_deleted == True, Rule.deleted_at > cutoff
+        ).count()
+        job.total = changed_total + removed_total
+        db.session.commit()
+
+    if last_id:
+        _log('info', f"Resuming incremental sync ({phase}) after rule id {last_id} "
+                      f"({written_before + deleted_before}/{job.total if job else '?'} done so far)…")
+
+    written = 0   # this invocation only, same convention as _run_initial_sync
+    deleted = 0
+
+    def _save_progress(new_phase):
+        if job:
+            p = dict(job.payload or {})
+            p['_resume_incr_phase']    = new_phase
+            p['_resume_incr_after_id'] = last_id
+            p['_resume_incr_written']  = written_before + written
+            p['_resume_incr_deleted']  = deleted_before + deleted
+            job.payload = p
+            job.done    = (written_before + written) + (deleted_before + deleted)
+            db.session.commit()
+
+    def _log_progress():
+        _log('info', f"Progress: {(written_before + written) + (deleted_before + deleted)} "
+                      f"rule(s) mirrored so far" + (f"/{job.total}" if job else "") + ".")
+
+    # ── Phase 1: created/updated rules — get an isolated commit each ───────
+    if phase == 'changed':
+        base_query = _active().filter(
+            or_(Rule.creation_date > cutoff, Rule.last_modif > cutoff)
+        ).order_by(Rule.id)
+
+        while True:
+            if job and _is_cancelled(job):
+                _log('warning', f"Sync cancelled after rule id {last_id} "
+                                 f"({written} update(s), {deleted} removal(s) this run).")
+                _save_progress('changed')
+                _maybe_push()
+                return written_before + written, deleted_before + deleted, True
+            if job and _should_pause(job):
+                _save_progress('changed')
+                _maybe_push()
+                _log('info', f"Sync paused after rule id {last_id} "
+                              f"({written} update(s), {deleted} removal(s) this run). Click Resume to continue.")
+                return written_before + written, deleted_before + deleted, True
+
+            batch = base_query.filter(Rule.id > last_id).limit(INITIAL_LOAD_BATCH_SIZE).all()
+            if not batch:
+                break
+
+            batch_ids = [r.id for r in batch]
+            # See the module docstring's security notes / _sync_one_config —
+            # a background job has no request context, so get_tags_for_rules_batch
+            # needs a throwaway one to resolve current_user to logged-out
+            # instead of crashing on None.
+            with current_app.test_request_context():
+                tags_by_rule = get_tags_for_rules_batch(batch_ids)
+            techniques_by_rule = get_techniques_for_rules_batch(batch_ids)
+
+            for rule in batch:
+                for rel_dir in _write_rule(local_dir, rule, tags_by_rule, techniques_by_rule):
+                    repo.git.add(rel_dir)
+                _commit(f"update: {rule.format}/{rule.uuid} - {rule.title}")
+                written += 1
+                last_id = rule.id
+
+            _save_progress('changed')
+            _maybe_push()
+            _log_progress()
+
+        phase   = 'removed'
+        last_id = 0
+        _save_progress('removed')
+
+    # ── Phase 2: soft-deleted rules ─────────────────────────────────────────
+    base_query = Rule.query.filter(
+        Rule.is_deleted == True, Rule.deleted_at > cutoff
+    ).order_by(Rule.id)
+
+    while True:
+        if job and _is_cancelled(job):
+            _log('warning', f"Sync cancelled after rule id {last_id} "
+                             f"({written} update(s), {deleted} removal(s) this run).")
+            _save_progress('removed')
+            _maybe_push()
+            return written_before + written, deleted_before + deleted, True
+        if job and _should_pause(job):
+            _save_progress('removed')
+            _maybe_push()
+            _log('info', f"Sync paused after rule id {last_id} "
+                          f"({written} update(s), {deleted} removal(s) this run). Click Resume to continue.")
+            return written_before + written, deleted_before + deleted, True
+
+        batch = base_query.filter(Rule.id > last_id).limit(INITIAL_LOAD_BATCH_SIZE).all()
+        if not batch:
+            break
+
+        for rule in batch:
+            rel_dir = _remove_rule_dir(local_dir, rule)
+            try:
+                repo.index.remove([rel_dir], r=True)
+            except Exception:
+                pass  # already gone from the index/working tree — fine
+            _commit(f"remove: {rule.format}/{rule.uuid} - {rule.title}")
+            deleted += 1
+            last_id = rule.id
+
+        _save_progress('removed')
+        _maybe_push()
+        _log_progress()
+
+    return written_before + written, deleted_before + deleted, False
