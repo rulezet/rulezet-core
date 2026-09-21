@@ -70,10 +70,26 @@ def home() -> render_template:
         and RuleModel.get_total_rules_count() == 0
     )
     from app.core.db_class.db import AttackTechnique
-    total_rules   = Rule.query.filter_by(is_deleted=False).count()
-    total_bundles = Bundle.query.count()
-    total_attacks = AttackTechnique.query.count()
-    rule_formats  = RuleModel.get_all_rule_format()
+
+    # Platform-wide counts — same for every visitor and barely move given
+    # how many rules Rulezet already has (a handful of new/edited rules is
+    # invisible in the total). Cached separately from the rest of this view
+    # (not via @cache.cached on the whole route) because show_import_hint
+    # and the CSRF token below are per-user/per-session and must never be
+    # served from a shared cache.
+    platform_stats = cache.get('home_platform_stats')
+    if platform_stats is None:
+        platform_stats = {
+            'total_rules':   Rule.query.filter_by(is_deleted=False).count(),
+            'total_bundles': Bundle.query.count(),
+            'total_attacks': AttackTechnique.query.count(),
+            'rule_formats':  RuleModel.get_all_rule_format(),
+        }
+        cache.set('home_platform_stats', platform_stats, timeout=60 * 60 * 6)
+    total_rules   = platform_stats['total_rules']
+    total_bundles = platform_stats['total_bundles']
+    total_attacks = platform_stats['total_attacks']
+    rule_formats  = platform_stats['rule_formats']
 
     from app.features.blog import blog_core as BlogModel
     latest_posts = BlogModel.get_posts_paginated(page=1, per_page=2, is_admin=False)
@@ -1470,12 +1486,19 @@ def admin_settings_chatbot_toggle():
 
 
 @home_blueprint.route('/platform/insights')
+@cache.cached(timeout=60 * 60 * 6)
 def platform_insights():
     return render_template('platform/stats.html')
 
 
 @home_blueprint.route('/platform/insights_data')
+@cache.cached(timeout=60 * 60 * 6)
 def platform_insights_data():
+    # Instance-wide stats, identical for every visitor (no request.args, no
+    # current_user use below) and cheap to get stale — every query here
+    # scans/aggregates across the whole Rule/User/Bundle/... tables, and at
+    # Rulezet's scale a few hours of drift is invisible against the totals.
+    # 6h so it still catches up same-day instead of only once every 24h.
     import datetime
     from collections import defaultdict
     from sqlalchemy import func
