@@ -606,11 +606,10 @@
                             </div>
                             <timeline :items="historyItems" :loading="historyLoading && !historyItems.length"
                                       @view-content="openHistoryDiff"></timeline>
-                            <div v-if="historyPage < historyPages" class="text-center mt-3">
-                                <button type="button" class="bd-btn" @click="loadHistory(historyPage + 1)" :disabled="historyLoading">
-                                    <i :class="historyLoading ? 'fas fa-spinner fa-spin' : 'fa-solid fa-angles-down'"></i>
-                                    <span>Load older changes</span>
-                                </button>
+                            <div v-if="historyPages > 1" class="bfp-footer">
+                                <pagination-component :current-page="historyPage" :total-pages="historyPages"
+                                    @change-page="p => loadHistory(p)"></pagination-component>
+                                <span class="bfp-range">[[ historyTotal ]] change[[ historyTotal === 1 ? '' : 's' ]] · page [[ historyPage ]] of [[ historyPages ]]</span>
                             </div>
                         </div>
 
@@ -821,6 +820,7 @@
     import BundleReleasesPanel from '/static/js/bundle/BundleReleasesPanel.js';
     import BundleReleaseRules from '/static/js/bundle/BundleReleaseRules.js';
     import HelpTip from '/static/js/components/help-tip.js';
+    import PaginationComponent from '/static/js/rule/paginationComponent.js';
     import BundleNotesPanel from '/static/js/bundle/BundleNotesPanel.js';
     import { flattenFiles, isRuleNode, docIcon, extOf, RULE_ICON, downloadFromUrl, downloadText, renderSafeMarkdown } from '/static/js/bundle/bundleFileTypes.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
@@ -847,6 +847,7 @@
             'bundle-releases-panel': BundleReleasesPanel,
             'bundle-release-rules': BundleReleaseRules,
             'help-tip': HelpTip,
+            'pagination-component': PaginationComponent,
             'bundle-notes-panel': BundleNotesPanel,
             'code-viewer': CodeViewer,
             'tag-display': TagDisplay,
@@ -1489,10 +1490,6 @@
             }
 
 
-            // Graph is initialized lazily: only once, when the container is visible.
-            // Triggers either when MISP data arrives (if tab already open)
-            // or when the tab is first shown (if data already loaded).
-            let _graphInited = false;
             // DESCRIPTION — markdown rendered with the same sanitiser +
             // hardening as bundle files; collapsed past DESC_MAX_H px.
             const DESC_MAX_H    = 220;
@@ -1551,10 +1548,10 @@
                 if (historyLoading.value) return;
                 historyLoading.value = true;
                 try {
-                    const res = await fetch(`/bundle/history/${bundle_id}?page=${page}`);
+                    const res = await fetch(`/bundle/history/${bundle_id}?page=${page}&per_page=10`);
                     const data = await res.json();
                     if (data.success) {
-                        historyEntries.value = page === 1 ? data.entries : [...historyEntries.value, ...data.entries];
+                        historyEntries.value = data.entries;          // one page of 10 at a time
                         historyPage.value = data.page;
                         historyPages.value = data.pages;
                         historyTotal.value = data.total;
@@ -1827,7 +1824,7 @@
                     tags: (e?.Tag || []).length,
                 };
             });
-            function showMispJson() { mispView.value = 'json'; _graphInited = false; }
+            function showMispJson() { mispView.value = 'json'; }
             async function showMispGraph() {
                 if (mispView.value === 'graph') return;
                 mispView.value = 'graph';
@@ -1836,7 +1833,6 @@
                 requestAnimationFrame(() => {
                     try {
                         if (!document.getElementById('misp-graph-container') || !_mispParsed.value) return;
-                        _graphInited = true;
                         initBundleGraph('misp-graph-container', JSON.stringify(_mispParsed.value), { graphType: 'bundle' });
                     } catch (e) {
                         console.error('MISP graph', e);
@@ -1845,7 +1841,6 @@
                 });
             }
             function reloadMisp() { mispError.value = false; _mispParsed.value = null; _loadMisp(); }
-            function _maybeInitGraph() { /* graph is on demand — see showMispGraph() */ }
 
             onMounted(async () => {
                 await init();
@@ -1894,7 +1889,7 @@
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,
-                historyItems, historyPage, historyPages, historyLoading, historyDiff, loadHistory, openHistoryDiff, DownloadBundleFiles, DownloadAttackCoverage, DownloadBundleFull, mispJson, mispLoading, mispError, toggleContent,
+                historyItems, historyPage, historyPages, historyTotal, historyLoading, historyDiff, loadHistory, openHistoryDiff, DownloadBundleFiles, DownloadAttackCoverage, DownloadBundleFull, mispJson, mispLoading, mispError, toggleContent,
 
                 current_user_is_admin,
 
