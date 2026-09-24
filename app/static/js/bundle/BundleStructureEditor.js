@@ -13,6 +13,8 @@
  *   focusRuleId  Number         select + reveal this rule once the tree is loaded
  *                               (arriving from the bundle's Health tab)
  *   focusNote    String         the issue to show above that rule's preview
+ *   focusPath    String         select + reveal this custom file ("Folder/sub/README.md")
+ *                               (the detail page's "Edit" on a file)
  *
  * Emits:
  *   tree-saved — after a successful save
@@ -233,6 +235,7 @@ export default {
         csrfToken: { type: String, default: '' },
         focusRuleId: { type: Number, default: null },
         focusNote:   { type: String, default: '' },
+        focusPath:   { type: String, default: '' },
     },
 
     emits: ['tree-saved', 'tree-ready'],
@@ -649,6 +652,26 @@ export default {
             treeLoaded.value = true
             emit('tree-ready', [...extractRuleIds(treeData.value)])
             if (props.focusRuleId) focusRule(props.focusRuleId)
+            else if (props.focusPath) focusFile(props.focusPath)
+        }
+
+        // Custom file by its path in the tree (names joined with '/')
+        function focusFile(path) {
+            const find = (nodes, prefix) => {
+                for (const n of nodes || []) {
+                    const p = prefix ? prefix + '/' + n.name : n.name
+                    if (n.type === 'file' && !isRule(n) && p === path) return n
+                    const hit = find(n.children, p)
+                    if (hit) return hit
+                }
+                return null
+            }
+            const node = find(treeData.value, '')
+            if (!node) {
+                create_message('This file is no longer in the structure', 'warning-subtle')
+                return
+            }
+            _reveal(node)
         }
 
         // Select a rule of the tree, open its preview and bring its row
@@ -667,6 +690,10 @@ export default {
                 create_message('This rule is not placed in the structure — drop it into a folder from the library', 'warning-subtle')
                 return
             }
+            _reveal(node)
+        }
+
+        async function _reveal(node) {
             selectNode(node)
             await nextTick()
             const row = document.querySelector(`.bse-tree-item[data-id="${CSS.escape(String(node.id))}"] > .bse-node-row`)

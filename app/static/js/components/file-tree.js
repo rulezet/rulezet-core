@@ -10,8 +10,12 @@
  *   mode          String   'read' (select only) | 'read-plus' (select + inline preview)
  *   fetch-content Function Async (node) => string — called in read-plus when a file is clicked
  *
+ *   row-actions   Array    Optional buttons shown on file rows (on hover; always on touch):
+ *                          [{ key, label, icon }] — clicking one emits row-action({ action: key, node })
+ *
  * Events:
  *   select(node)  — emitted when user clicks a file or directory
+ *   row-action({ action, node })
  *
  * Expose:
  *   reveal(path)  — unfold every folder above the node with that `path`,
@@ -77,6 +81,8 @@ const FtNode = {
         const ft_search       = inject('ft_search',        ref(''))
         const ft_selected     = inject('ft_selected',      ref(null))
         const ft_on_select    = inject('ft_on_select',     () => {})
+        const ft_row_actions  = inject('ft_row_actions',   ref([]))
+        const ft_on_action    = inject('ft_on_action',     () => {})
         const ft_reveal       = inject('ft_reveal',        ref(null))
 
         // ft_force = { mode: 'expand' | 'collapse', keep } set by the toolbar
@@ -139,7 +145,7 @@ const FtNode = {
 
         return {
             open, icon_info, is_selected, visible_children, on_click,
-            ft_search,
+            ft_search, ft_row_actions, ft_on_action,
         }
     },
 
@@ -161,6 +167,12 @@ const FtNode = {
         <span v-if="node.badge" class="ft-badge" :style="node.color ? { color: node.color, borderColor: node.color + '55', background: node.color + '14' } : null">{{ node.badge }}</span>
         <span v-if="node.type === 'dir' && node.children" class="ft-count">
             {{ node.children.length }}
+        </span>
+        <span v-if="node.type !== 'dir' && ft_row_actions.length" class="ft-row-actions">
+            <button v-for="a in ft_row_actions" :key="a.key" type="button" class="ft-row-action"
+                    :title="a.label" @click.stop="ft_on_action({ action: a.key, node })">
+                <i :class="a.icon"></i><span>{{ a.label }}</span>
+            </button>
         </span>
     </div>
 
@@ -194,9 +206,10 @@ export default {
         loading:      { type: Boolean,  default: false },
         mode:         { type: String,   default: 'read' },    // 'read' | 'read-plus'
         fetchContent: { type: Function, default: null },
+        rowActions:   { type: Array,    default: () => [] },
     },
 
-    emits: ['select'],
+    emits: ['select', 'row-action'],
 
     setup(props, { emit }) {
         const search          = ref('')
@@ -210,6 +223,8 @@ export default {
         provide('ft_search',    search)
         provide('ft_selected',  selected_node)
         provide('ft_on_select', on_select)
+        provide('ft_row_actions', computed(() => props.rowActions || []))
+        provide('ft_on_action', (payload) => emit('row-action', payload))
 
         const ft_reveal = ref(null)
         const root_el   = ref(null)

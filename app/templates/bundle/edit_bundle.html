@@ -96,6 +96,7 @@
                     ref="structureEditor"
                     :focus-rule-id="focusRuleId"
                     :focus-note="focusNote"
+                    :focus-path="focusPath"
                     :bundle-id="bundleId"
                     :csrf-token="csrfToken"
                     @tree-ready="onTreeReady"
@@ -368,6 +369,7 @@ const _BUNDLE_NAME = {{ bundle.name | tojson }}
 const _BUNDLE_DESCRIPTION = {{ (form.description.data or '') | tojson }}
 const _FOCUS_RULE_ID = {{ ((request.args.get('focus_rule') or 0)|int) or 'null' }}
 const _FOCUS_NOTE = {{ (request.args.get('issue') or '')[:600] | tojson }}
+const _FOCUS_PATH = {{ (request.args.get('focus_path') or '')[:1000] | tojson }}
 
 createApp({
     delimiters: ['[[', ']]'],
@@ -608,7 +610,7 @@ createApp({
             fetchTags, initBundleTags, toggleSelection, clearSelection,
             getContrastYIQ, visiblePagesTags, saveTags, handleRefreshList,
             detectedVulnerabilities, initialDescription: _BUNDLE_DESCRIPTION,
-            focusRuleId: _FOCUS_RULE_ID, focusNote: _FOCUS_NOTE,
+            focusRuleId: _FOCUS_RULE_ID, focusNote: _FOCUS_NOTE, focusPath: _FOCUS_PATH,
         }
     },
 }).mount('#page-app')

@@ -37,9 +37,10 @@ export default {
         hasPrev: { type: Boolean, default: false },
         hasNext: { type: Boolean, default: false },
         origin:  { type: String,  default: '' },
+        canEdit: { type: Boolean, default: false },   // owner / admin → "Edit" opens the bundle editor on this file
     },
 
-    emits: ['close', 'prev', 'next', 'locate'],
+    emits: ['close', 'prev', 'next', 'locate', 'edit'],
 
     template: `
     <teleport to="body">
@@ -85,6 +86,10 @@ export default {
                                     :title="file.isRule ? 'Show this rule in the Rules tab' : 'Show this file in Files & Documents'">
                                 <i :class="file.isRule ? 'fa-solid fa-shield-halved' : 'fa-solid fa-file-lines'"></i>
                                 <span>{{ file.isRule ? 'Show in Rules' : 'Show in Files' }}</span>
+                            </button>
+                            <button v-if="canEdit" type="button" class="bfv-locate" title="Open the bundle editor with this file selected"
+                                    @click="$emit('edit', file)">
+                                <i class="fa-solid fa-pen"></i><span>Edit</span>
                             </button>
                             <button type="button" class="bfv-btn" title="Download file" @click="download">
                                 <i class="fa-solid fa-download"></i>

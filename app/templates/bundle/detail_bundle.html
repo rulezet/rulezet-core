@@ -481,7 +481,9 @@
                                     </button>
                                 </div>
                             </div>
-                            <file-tree v-if="allFiles.length" ref="fileTreeRef" :nodes="fileTreeNodes" mode="read" @select="handleFileTreeSelect"></file-tree>
+                            <file-tree v-if="allFiles.length" ref="fileTreeRef" :nodes="fileTreeNodes" mode="read" @select="handleFileTreeSelect"
+                                :row-actions="canEditStructure ? [{ key: 'edit', label: 'Edit', icon: 'fa-solid fa-pen' }] : []"
+                                @row-action="onTreeRowAction"></file-tree>
                             <div v-else class="text-center py-4 small" style="color:var(--subtle-text-color);">
                                 <i class="fa-regular fa-folder-open me-1"></i>This bundle has no structure yet.
                             </div>
@@ -767,6 +769,8 @@
                     :has-prev="openedIndex > 0"
                     :has-next="openedIndex > -1 && openedIndex < viewerList.length - 1"
                     :origin="openedOrigin"
+                    :can-edit="canEditStructure"
+                    @edit="f => openInEditor(f)"
                     @prev="stepFile(-1)" @next="stepFile(1)"
                     @locate="locateOpenedFile"
                     @close="closeFile">
@@ -1736,6 +1740,21 @@
                 if (!open.length) return null;
                 return { count: open.length, critical: open.some(n => n.severity === 'critical'), first: open[0].title };
             });
+            // Owner / admin: "Edit" on any file of the structure (and in the viewer)
+            // → bundle editor with that file selected. Not on a frozen release.
+            const _meId = {{ current_user.id if current_user.is_authenticated else 'null' }};
+            const canEditStructure = computed(() =>
+                !!bundle.value && !viewRelease.value && (is_admin.value || (_meId !== null && bundle.value.user_id === _meId)));
+            function editorUrlFor(file) {
+                const q = file.isRule ? { focus_rule: file.rule_id } : { focus_path: file.path };
+                return `/bundle/edit/${bundle_id}?` + new URLSearchParams(q);
+            }
+            function openInEditor(file) { if (file) window.location.href = editorUrlFor(file); }
+            function onTreeRowAction({ action, node }) {
+                if (action !== 'edit') return;
+                openInEditor(allFiles.value.find(f => f.id === node.path));
+            }
+
             // What "#" can reference in a note: rules and files of the bundle
             const noteRefs = computed(() => allFiles.value.map(f => f.isRule
                 ? { kind: 'rule', id: f.rule_id, label: f.name.replace(/\.[^.]+$/, '') }
@@ -1885,7 +1904,7 @@
                 treeData, fileTreeNodes, allFiles, docFiles,
                 openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
                 openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
-                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList,
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,
