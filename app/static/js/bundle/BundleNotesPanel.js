@@ -6,15 +6,34 @@
  * can view the bundle reads; logged-in users write while the bundle is
  * public; authors edit/delete their own notes; owner/admin resolve.
  *
- * Props:  bundleId, csrfToken, isAuthenticated
- * Emits:  loaded({ open, notes })
+ * Props:  bundleId, csrfToken, isAuthenticated,
+ *         refs  [{ kind: 'rule', id, label } | { kind: 'file', path, label }] — what "#" can reference
+ * Emits:  loaded({ open, notes }), open-ref({ kind, ref })
+ *
+ * Tokens (inserted by the pickers, rendered as chips):
+ *   @[Name](12)                 a user — notified if they can see the bundle
+ *   #[Rule title](rule:345)     a rule of the bundle
+ *   #[docs/README.md](file:…)   a file of the bundle (path, URI-encoded)
  */
 
-import SmartEditor from '/static/js/components/smart-editor.js'
 import { create_message } from '/static/js/toaster.js'
 import { renderSafeMarkdown } from '/static/js/bundle/bundleFileTypes.js'
 
-const { ref, reactive, computed } = Vue
+const { ref, reactive, computed, nextTick } = Vue
+
+const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+// Tokens → chips, before markdown rendering (the result still goes through
+// the sanitiser; everything user-typed is escaped here).
+function preprocessNote(text) {
+    return String(text || '')
+        .replace(/@\[([^\]]+)\]\((\d+)\)/g, (m, name, id) =>
+            `<span class="bn-mention" data-user="${id}" role="button" tabindex="0">@${esc(name)}</span>`)
+        .replace(/#\[([^\]]+)\]\((rule|file):([^)\s]+)\)/g, (m, label, kind, ref) =>
+            `<span class="bn-ref bn-ref--${kind}" data-ref-kind="${kind}" data-ref="${esc(ref)}" role="button" tabindex="0">` +
+            `<i class="fa-solid ${kind === 'rule' ? 'fa-shield-halved' : 'fa-file-lines'}"></i>${esc(label)}</span>`)
+}
+const renderNote = (text) => renderSafeMarkdown(preprocessNote(text))
 
 const SEVERITY = {
     critical: { label: 'Critical', icon: 'fa-solid fa-circle-exclamation' },
@@ -24,15 +43,15 @@ const SEVERITY = {
 
 export default {
     name: 'BundleNotesPanel',
-    components: { SmartEditor },
 
     props: {
         bundleId:        { type: [Number, String], required: true },
         csrfToken:       { type: String, default: '' },
         isAuthenticated: { type: Boolean, default: false },
+        refs:            { type: Array, default: () => [] },
     },
 
-    emits: ['loaded'],
+    emits: ['loaded', 'open-ref'],
 
     template: `
     <div class="bn-root">
@@ -65,9 +84,29 @@ export default {
                 </label>
             </div>
             <div class="br-field">
-                <span>Note <em>(Markdown)</em></span>
-                <smart-editor :key="form.key" v-model="form.content" mode="markdown" min-height="160px" max-height="420px"
-                    placeholder="Explain what doesn't work, in which setup, and any workaround."></smart-editor>
+                <span>Note <em>(Markdown — type <b>@</b> to mention someone, <b>#</b> to reference a rule or file of the bundle)</em></span>
+                <div class="bn-composer">
+                    <div class="bn-composer-tabs">
+                        <button type="button" :class="{ active: !preview }" @click="preview = false"><i class="fa-solid fa-pen"></i>Write</button>
+                        <button type="button" :class="{ active: preview }" @click="showPreview"><i class="fa-solid fa-eye"></i>Preview</button>
+                    </div>
+                    <div v-show="!preview" class="bn-composer-body">
+                        <textarea ref="ta" v-model="form.content" class="bn-textarea" rows="7"
+                            placeholder="Explain what doesn't work, in which setup, and any workaround."
+                            @input="onInput" @keydown="onKeydown" @click="onInput" @blur="closePickerSoon"></textarea>
+                        <ul v-if="picker.mode" class="bn-picker" role="listbox">
+                            <li v-if="picker.loading" class="bn-picker-empty"><i class="fas fa-spinner fa-spin me-1"></i>Searching…</li>
+                            <li v-else-if="!picker.items.length" class="bn-picker-empty">
+                                {{ picker.mode === 'user' ? 'No user found' : 'No rule or file matches' }}
+                            </li>
+                            <li v-for="(it, i) in picker.items" :key="i" class="bn-picker-item"
+                                :class="{ active: i === picker.index }" @mousedown.prevent="choose(it)" role="option">
+                                <i :class="it.icon"></i><span>{{ it.label }}</span><small v-if="it.sub">{{ it.sub }}</small>
+                            </li>
+                        </ul>
+                    </div>
+                    <div v-show="preview" class="bfv-md bn-body bn-preview" v-html="previewHtml" @click="onBodyClick"></div>
+                </div>
             </div>
             <div class="br-form-actions">
                 <button type="button" class="bd-btn bd-btn--ghost" @click="form.open = false">Cancel</button>
@@ -109,7 +148,7 @@ export default {
                                 :title="armed === n.id ? 'Click again to delete' : 'Delete'" @click="remove(n)"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </header>
-                <div class="bfv-md bn-body" v-html="html[n.id] || ''"></div>
+                <div class="bfv-md bn-body" v-html="html[n.id] || ''" @click="onBodyClick" @keydown.enter="onBodyClick"></div>
             </article>
         </div>
     </div>
@@ -144,7 +183,7 @@ export default {
                 notes.value = d.notes
                 canCreate.value = d.can_create
                 blockedReason.value = d.create_blocked_reason || ''
-                for (const n of d.notes) html[n.id] = await renderSafeMarkdown(n.content)
+                for (const n of d.notes) html[n.id] = await renderNote(n.content)
                 loaded.value = true
                 emit('loaded', { open: d.open, notes: d.notes })
             } catch (e) {
@@ -157,11 +196,102 @@ export default {
             }
         }
 
+        // ── Write / Preview + @ / # pickers ───────────────────────────
+        const ta = ref(null)
+        const preview = ref(false)
+        const previewHtml = ref('')
+        const picker = reactive({ mode: null, items: [], index: 0, loading: false, start: 0 })
+        let searchT = null, reqId = 0, blurT = null
+
+        async function showPreview() {
+            previewHtml.value = form.content ? await renderNote(form.content) : '<p><em>Nothing to preview.</em></p>'
+            preview.value = true
+        }
+        function closePicker() { picker.mode = null; picker.items = []; picker.index = 0; picker.loading = false }
+        function closePickerSoon() { clearTimeout(blurT); blurT = setTimeout(closePicker, 150) }
+
+        function onInput() {
+            const el = ta.value
+            if (!el) return
+            const before = form.content.slice(0, el.selectionStart)
+            const u = before.match(/(^|\s)@([\w.\-]{0,30})$/)
+            const h = before.match(/(^|\s)#([^\s#@\[\]()]{0,40})$/)
+            if (u) {
+                picker.start = el.selectionStart - u[2].length - 1
+                const q = u[2]
+                picker.mode = 'user'
+                picker.index = 0
+                if (q.length < 2) { picker.items = []; picker.loading = false; return }
+                picker.loading = true
+                clearTimeout(searchT)
+                const my = ++reqId
+                searchT = setTimeout(async () => {
+                    try {
+                        const d = await fetch('/account/search_mentionable_users?q=' + encodeURIComponent(q)).then(r => r.json())
+                        if (my !== reqId) return
+                        picker.items = (d.users || []).map(x => ({ kind: 'user', id: x.id, label: x.username || x.first_name || 'User',
+                                                                   sub: x.first_name && x.username ? x.first_name : '', icon: 'fa-solid fa-at' }))
+                    } catch { if (my === reqId) picker.items = [] }
+                    finally { if (my === reqId) picker.loading = false }
+                }, 200)
+            } else if (h) {
+                picker.start = el.selectionStart - h[2].length - 1
+                const q = h[2].toLowerCase()
+                picker.mode = 'ref'
+                picker.index = 0
+                picker.loading = false
+                picker.items = props.refs
+                    .filter(r => !q || r.label.toLowerCase().includes(q) || String(r.id || '').startsWith(q))
+                    .slice(0, 12)
+                    .map(r => ({ ...r, icon: r.kind === 'rule' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-file-lines',
+                                 sub: r.kind === 'rule' ? '#' + r.id : 'file' }))
+            } else {
+                closePicker()
+            }
+        }
+
+        function choose(it) {
+            clearTimeout(blurT)
+            const el = ta.value
+            const end = el ? el.selectionStart : picker.start
+            const clean = (t) => String(t).replace(/[\[\]()]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+            const token = it.kind === 'user' ? `@[${clean(it.label)}](${it.id}) `
+                        : it.kind === 'rule' ? `#[${clean(it.label)}](rule:${it.id}) `
+                        : `#[${clean(it.label)}](file:${encodeURIComponent(it.path)}) `
+            form.content = form.content.slice(0, picker.start) + token + form.content.slice(end)
+            closePicker()
+            nextTick(() => { if (el) { el.focus(); const p = picker.start + token.length; el.setSelectionRange(p, p) } })
+        }
+
+        function onKeydown(e) {
+            if (!picker.mode || !picker.items.length) { if (e.key === 'Escape') closePicker(); return }
+            if (e.key === 'ArrowDown') { e.preventDefault(); picker.index = (picker.index + 1) % picker.items.length }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); picker.index = (picker.index - 1 + picker.items.length) % picker.items.length }
+            else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); choose(picker.items[picker.index]) }
+            else if (e.key === 'Escape') closePicker()
+        }
+
+        // Chips in rendered notes
+        function onBodyClick(e) {
+            const refEl = e.target.closest('[data-ref-kind]')
+            if (refEl) {
+                const kind = refEl.dataset.refKind
+                let refVal = refEl.dataset.ref
+                if (kind === 'file') { try { refVal = decodeURIComponent(refVal) } catch {} }
+                emit('open-ref', { kind, ref: refVal })
+                return
+            }
+            const userEl = e.target.closest('[data-user]')
+            if (userEl) window.location.href = '/account/detail_user/' + encodeURIComponent(userEl.dataset.user)
+        }
+
         function openForm(n = null) {
             Object.assign(form, n
                 ? { open: true, id: n.id, title: n.title, content: n.content, severity: n.severity }
                 : { open: true, id: null, title: '', content: '', severity: 'warning' })
             form.key++
+            preview.value = false
+            closePicker()
         }
 
         async function save() {
@@ -172,7 +302,7 @@ export default {
                     method: form.id ? 'PUT' : 'POST', headers: H(),
                     body: JSON.stringify({ title: form.title, content: form.content, severity: form.severity }),
                 }))
-                create_message(d.message, 'success-subtle')
+                create_message(d.message, d.not_notified && d.not_notified.length ? 'warning-subtle' : 'success-subtle')
                 form.open = false
                 await load()
             } catch (e) {
@@ -208,6 +338,7 @@ export default {
         }
 
         load()
-        return { notes, html, loading, loaded, loadError, busy, canCreate, blockedReason, armed, form, fmt, openForm, save, setStatus, remove, SEVERITY }
+        return { ta, preview, previewHtml, picker, showPreview, closePickerSoon, onInput, onKeydown, choose, onBodyClick,
+                 notes, html, loading, loaded, loadError, busy, canCreate, blockedReason, armed, form, fmt, openForm, save, setStatus, remove, SEVERITY }
     },
 }

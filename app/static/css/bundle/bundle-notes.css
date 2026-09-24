@@ -52,3 +52,46 @@
 .bn-banner--critical > i { color: #dc3545; }
 .bn-banner:hover { filter: brightness(.98); }
 @media (max-width: 640px) { .bn-body { padding-left: 14px; } }
+
+/* ── Composer: Write / Preview + @ / # pickers ── */
+.bn-composer { border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-bg-color); overflow: visible; }
+.bn-composer-tabs { display: flex; gap: 2px; padding: 4px; border-bottom: 1px solid var(--border-color); background: var(--light-bg-color); border-radius: 12px 12px 0 0; }
+.bn-composer-tabs button {
+    display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent;
+    padding: 5px 12px; border-radius: 8px; font-size: .78rem; font-weight: 600; color: var(--subtle-text-color);
+}
+.bn-composer-tabs button.active { background: var(--card-bg-color); color: #0d6efd; box-shadow: 0 1px 3px rgba(0, 0, 0, .06); }
+.bn-composer-body { position: relative; }
+.bn-textarea {
+    display: block; width: 100%; min-height: 160px; resize: vertical;
+    border: 0; outline: none; padding: 12px 14px; background: transparent; color: var(--text-color);
+    font-size: .88rem; line-height: 1.55; border-radius: 0 0 12px 12px;
+}
+.bn-preview { padding: 12px 14px; min-height: 160px; }
+.bn-picker {
+    position: absolute; left: 12px; right: 12px; top: 100%; z-index: 30; margin: 4px 0 0; padding: 4px;
+    list-style: none; max-height: 260px; overflow-y: auto;
+    background: var(--card-bg-color); border: 1px solid rgba(13, 110, 253, .3); border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .15);
+}
+.bn-picker-item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 7px; cursor: pointer;
+    font-size: .82rem; color: var(--text-color); min-width: 0;
+}
+.bn-picker-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bn-picker-item small { color: var(--subtle-text-color); font-family: 'JetBrains Mono', 'Fira Code', monospace; flex-shrink: 0; }
+.bn-picker-item i { color: #0d6efd; width: 14px; text-align: center; }
+.bn-picker-item.active, .bn-picker-item:hover { background: rgba(13, 110, 253, .08); }
+.bn-picker-empty { padding: 6px 10px; font-size: .8rem; color: var(--subtle-text-color); }
+
+/* ── Chips in rendered notes ── */
+.bn-mention, .bn-ref {
+    display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; margin: 0 1px;
+    border-radius: 999px; font-size: .84em; font-weight: 600; cursor: pointer; vertical-align: baseline;
+    line-height: 1.6; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.bn-mention { color: #6f42c1; background: rgba(111, 66, 193, .1); border: 1px solid rgba(111, 66, 193, .25); }
+.bn-ref { color: #0d6efd; background: rgba(13, 110, 253, .08); border: 1px solid rgba(13, 110, 253, .25); }
+.bn-ref--file { color: #0f9488; background: rgba(20, 184, 166, .1); border-color: rgba(20, 184, 166, .3); }
+.bn-ref i { font-size: .8em; }
+.bn-mention:hover, .bn-ref:hover { filter: brightness(.95); text-decoration: underline; }

@@ -97,3 +97,46 @@ def test_notes_cannot_be_touched_through_another_bundle(client, app):
         from app.core.db_class.db import BundleNote
         db.session.expire_all()
         assert BundleNote.query.filter_by(bundle_id=b1.id).count() == 0     # deleted with the bundle
+
+
+def _mention_count(user_id):
+    from app.core.db_class.db import Notification
+    db.session.expire_all()
+    return Notification.query.filter_by(user_id=user_id, notif_type="user_mentioned").count()
+
+
+def test_mentions_notify_only_users_who_can_see_the_bundle(client, app):
+    with app.app_context():
+        b = make_bundle()                                   # public, owned by owner()
+        target, author = other(), admin()
+        login(client, author)
+        text = f"Heads-up @[neo]({target.id}) and myself @[me]({author.id})"
+        r = _note(client, b.id, {**NOTE, "content": text})
+        assert r.status_code == 201 and r.get_json()["not_notified"] == []
+        assert _mention_count(target.id) == 1
+        assert _mention_count(author.id) == 0              # never notify yourself
+
+        # editing without new mentions → no second notification
+        note_id = r.get_json()["note"]["id"]
+        client.put(f"/bundle/{b.id}/notes/{note_id}", json={**NOTE, "content": text + " (edited)"})
+        assert _mention_count(target.id) == 1
+
+        # private bundle: a regular user can't see it → not notified, author told
+        db.session.get(Bundle, b.id).access = False
+        db.session.commit()
+        login(client, author)
+        r = client.put(f"/bundle/{b.id}/notes/{note_id}",
+                       json={**NOTE, "content": text + f" and @[owner]({owner().id}) @[neo2]({target.id})"})
+        d = r.get_json()
+        assert _mention_count(owner().id) == 1               # the owner can see it → notified
+        assert _mention_count(target.id) == 1                # already mentioned before → not re-notified
+
+
+def test_private_bundle_mention_of_outsider_is_reported(client, app):
+    with app.app_context():
+        b = make_bundle(public=False)
+        login(client, owner())                               # owner can write on a private bundle
+        r = _note(client, b.id, {**NOTE, "content": f"ping @[neo]({other().id})"})
+        assert r.get_json()["not_notified"] == [other().id]
+        assert _mention_count(other().id) == 0
+        assert "not notified" in r.get_json()["message"]

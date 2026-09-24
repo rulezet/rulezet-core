@@ -588,6 +588,7 @@
                                 </div>
                             </div>
                             <bundle-notes-panel :bundle-id="bundle_id" :csrf-token="csrfToken"
+                                :refs="noteRefs" @open-ref="openNoteRef"
                                 :is-authenticated="{{ current_user.is_authenticated | tojson }}"
                                 @loaded="d => notesSummary = d"></bundle-notes-panel>
                         </div>
@@ -1738,6 +1739,20 @@
                 if (!open.length) return null;
                 return { count: open.length, critical: open.some(n => n.severity === 'critical'), first: open[0].title };
             });
+            // What "#" can reference in a note: rules and files of the bundle
+            const noteRefs = computed(() => allFiles.value.map(f => f.isRule
+                ? { kind: 'rule', id: f.rule_id, label: f.name.replace(/\.[^.]+$/, '') }
+                : { kind: 'file', path: f.path, label: f.path }));
+            function openNoteRef({ kind, ref }) {
+                const file = kind === 'rule'
+                    ? allFiles.value.find(f => f.isRule && String(f.rule_id) === String(ref))
+                    : allFiles.value.find(f => !f.isRule && f.path === ref);
+                if (!file) {
+                    create_message(kind === 'rule' ? 'This rule is no longer in the bundle' : 'This file is no longer in the bundle', 'warning-subtle');
+                    return;
+                }
+                openFile(file, allFiles.value, 'notes');
+            }
             function scrollToZone() {
                 nextTick(() => document.querySelector('.bd-zone')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
             }
@@ -1875,7 +1890,7 @@
                 treeData, fileTreeNodes, allFiles, docFiles,
                 openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
                 openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
-                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList,
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,

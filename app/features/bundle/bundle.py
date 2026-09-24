@@ -12,6 +12,7 @@ from app.core.utils.activity_log import log_activity
 
 from app import db
 import io
+import re
 import zipfile
 import json
 from flask import send_file, request
@@ -443,6 +444,35 @@ def _mark_editable_items(health, bundle):
 # note — they get it back only through the bundle's share link.
 
 NOTE_SEVERITIES = ("info", "warning", "critical")
+_MENTION_RE = re.compile(r"@\[[^\]]+\]\((\d+)\)")
+
+
+def _mentioned_ids(text):
+    return {int(x) for x in _MENTION_RE.findall(text or "")}
+
+
+def _notify_note_mentions(bundle, note, previous_text=""):
+    """Notify users @mentioned in a note — only newly mentioned ones, and only
+    if they can see the bundle (public, or owner / admin of a private one —
+    share-link holders can't be known server-side and the key is never sent
+    in a notification). Returns the ids that could NOT be notified."""
+    from app.core.db_class.db import User
+    from app.features.notification.notification_core import notify_user_mentioned
+    new_ids = _mentioned_ids(note.content) - _mentioned_ids(previous_text) - {current_user.id}
+    skipped = []
+    for uid in new_ids:
+        u = db.session.get(User, uid)
+        if not u:
+            continue
+        if not (bundle.access or u.id == bundle.user_id or u.is_admin()):
+            skipped.append(u.id)
+            continue
+        try:
+            notify_user_mentioned(u.id, current_user.id, f"note '{note.title}' on bundle '{bundle.name}'",
+                                  f"/bundle/detail/{bundle.id}#notes")
+        except Exception:
+            pass
+    return skipped
 
 
 def _note_guard(bundle_id, write=False):
@@ -513,9 +543,14 @@ def create_bundle_note(bundle_id):
     note = BundleNote(uuid=str(_uuid.uuid4()), bundle_id=bundle_id, user_id=current_user.id, **payload)
     db.session.add(note)
     db.session.commit()
+    skipped = _notify_note_mentions(bundle, note)
     log_activity("bundle.note_create", f"Added a note on bundle '{bundle.name}': {note.title}",
                  target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=bool(bundle.access))
-    return {"success": True, "note": note.to_json(), "message": "Note published", "toast_class": "success-subtle"}, 201
+    msg = "Note published"
+    if skipped:
+        msg += f" — {len(skipped)} mentioned user(s) can't see this private bundle and were not notified"
+    return {"success": True, "note": note.to_json(), "message": msg, "toast_class": "success-subtle",
+            "not_notified": skipped}, 201
 
 
 def _own_note_or_error(bundle, note_id, need="edit"):
@@ -543,11 +578,15 @@ def update_bundle_note(bundle_id, note_id):
     payload, error = _note_payload()
     if error:
         return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
+    previous = note.content
     for k, v in payload.items():
         setattr(note, k, v)
     note.updated_at = _dt.datetime.now(_dt.timezone.utc)
     db.session.commit()
-    return {"success": True, "note": note.to_json(), "message": "Note updated", "toast_class": "success-subtle"}, 200
+    skipped = _notify_note_mentions(bundle, note, previous_text=previous)
+    msg = "Note updated" + (f" — {len(skipped)} mentioned user(s) can't see this private bundle and were not notified" if skipped else "")
+    return {"success": True, "note": note.to_json(), "message": msg, "toast_class": "success-subtle",
+            "not_notified": skipped}, 200
 
 
 @bundle_blueprint.route("/<int:bundle_id>/notes/<int:note_id>/status", methods=['POST'])
