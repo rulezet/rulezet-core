@@ -303,19 +303,27 @@ def _strictest(tags, ranks):
 
 
 def check_marking(rules, tags_by_rule, bundle_tags):
-    """A bundle can't be shared more widely than its most restricted rule."""
+    """A bundle can't be shared more widely than its most restricted rule.
+
+    A bundle without a TLP (or PAP) tag is treated as CLEAR — the platform's
+    default marking — so only rules *more* restricted than clear (green,
+    amber, red…) are flagged; tlp:clear / tlp:white rules never are."""
     items, messages = [], []
     for label, ranks in (("TLP", TLP_RANK), ("PAP", PAP_RANK)):
         b = _strictest(bundle_tags, ranks)
+        b_rank = ranks[b] if b else 0
+        flagged = 0
         for r in rules.values():
             rt = _strictest(tags_by_rule.get(r.id, ()), ranks)
-            if rt and (b is None or ranks[rt] > ranks[b]):
-                items.append(_item(r, f"This rule is {rt.upper()} but the bundle is " + (f"marked {b.upper()}" if b else f"not marked with any {label}") + " — sharing the bundle would leak it."))
-        if b is None and any(_strictest(tags_by_rule.get(r.id, ()), ranks) for r in rules.values()):
+            if rt and ranks[rt] > b_rank:
+                flagged += 1
+                where = f"marked {b.upper()}" if b else f"not marked with any {label} (treated as {label}:CLEAR)"
+                items.append(_item(r, f"This rule is {rt.upper()} but the bundle is {where} — sharing the bundle would leak it."))
+        if b is None and flagged:
             messages.append(f"the bundle has no {label} tag")
     if not items:
         return _check("marking", "TLP / PAP consistency", "ok",
-                      "No rule is more restricted than the bundle's own TLP/PAP marking.")
+                      "No rule is more restricted than the bundle's own TLP/PAP marking (no marking = CLEAR).")
     msg = (f"{len(items)} rule{'s are' if len(items) > 1 else ' is'} more restricted than the bundle — "
            "sharing the bundle at its marking would leak them. Raise the bundle's TLP/PAP or remove those rules.")
     if messages:

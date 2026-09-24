@@ -173,3 +173,26 @@ def test_health_edit_opens_the_bundle_editor_for_managers_only(client, app):
         start = html.index("{# Arrived") if "{# Arrived" in html else html.index("Health check —") - 1200
         assert "v-pre" in html[start:html.index("Health check —")]
         assert "[[ 1+1 ]]" in banner
+
+
+def test_marking_without_bundle_tlp_only_flags_restricted_rules(client, app):
+    """Regression: a bundle with no TLP/PAP tag flagged every rule carrying
+    tlp:clear / tlp:white (i.e. every rule, since tlp:clear is auto-attached)."""
+    from app.core.db_class.db import RuleTagAssociation
+    import uuid
+    with app.app_context():
+        clear = make_rule("clear", "yara", "rule clear_r { condition: true }")
+        white = make_rule("white", "yara", "rule white_r { condition: true }")
+        amber = make_rule("amber", "yara", "rule amber_r { condition: true }")
+        for r, t in ((clear, "tlp:clear"), (white, "TLP:WHITE"), (amber, "tlp:amber"), (clear, "pap:clear")):
+            db.session.add(RuleTagAssociation(uuid=str(uuid.uuid4()), rule_id=r.id, tag_id=tag(t).id, user_id=owner().id))
+        db.session.commit()
+        b = make_bundle()                       # no TLP / PAP tag on the bundle
+        login(client, owner())
+        save_structure(client, b.id, [D("Main", [R(clear.id), R(white.id)])])
+        assert _health(client, b.id)["marking"]["level"] == "ok"
+
+        save_structure(client, b.id, [D("Main", [R(clear.id), R(white.id), R(amber.id)])])
+        m = _health(client, b.id)["marking"]
+        assert m["level"] == "error" and [i["rule_id"] for i in m["items"]] == [amber.id]
+        assert "no TLP tag" in m["message"]
