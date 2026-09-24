@@ -139,3 +139,16 @@
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     color: #0d6efd; background: rgba(13, 110, 253, .1); border: 1px solid rgba(13, 110, 253, .3);
 }
+
+/* "Fix it for me" */
+.bh-item-fix { flex-shrink: 0; }
+.am-rule-act--fix {
+    border-color: transparent;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(13, 110, 253, .25);
+}
+.am-rule-act--fix:hover:not(:disabled) { color: #fff; filter: brightness(1.08); background: linear-gradient(135deg, #0d6efd, #0a58ca); }
+.am-rule-act--fix:disabled { opacity: .6; }
+.am-rule-act--armed { background: #dc3545 !important; box-shadow: 0 2px 8px rgba(220, 53, 69, .3) !important; }
+@media (max-width: 640px) { .bh-item-fix { align-self: stretch; } .bh-item-fix .am-rule-act { width: 100%; justify-content: center; } }

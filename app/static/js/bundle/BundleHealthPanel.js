@@ -9,11 +9,13 @@
  *   bundleId  Number|String  required
  *   active    Boolean        load on first activation (the report can take ~1s)
  *   release   String         version to check instead of the live bundle ('' = live)
+ *   csrfToken String         for "Fix it for me" (POST /bundle/<id>/health/fix)
  *
  * Emits:
  *   loaded(health)                 — after each (re)load
  *   show-structure(ruleId)         — "In structure" on an item
  *   show-list({ ruleId, name })    — "In list" on an item
+ *   fixed()                        — a fix was applied (parent reloads tree / lists)
  */
 
 import { create_message } from '/static/js/toaster.js'
@@ -41,9 +43,10 @@ export default {
         bundleId: { type: [Number, String], required: true },
         active:   { type: Boolean, default: false },
         release:  { type: String,  default: '' },
+        csrfToken: { type: String, default: '' },
     },
 
-    emits: ['loaded', 'show-structure', 'show-list'],
+    emits: ['loaded', 'show-structure', 'show-list', 'fixed'],
 
     template: `
     <div class="bh-root">
@@ -104,6 +107,16 @@ export default {
                                     <i :class="it.rule_id ? 'fa-solid fa-shield-halved' : 'fa-solid fa-folder'"></i>{{ it.name }}
                                 </span>
                                 <span class="bh-item-detail">{{ it.detail }}</span>
+                            </div>
+                            <div v-if="it.fix && !release" class="bh-item-fix">
+                                <button type="button" class="am-rule-act am-rule-act--fix"
+                                        :class="{ 'am-rule-act--armed': armedFix === c.key + i }"
+                                        :disabled="fixing"
+                                        :title="it.fix.confirm ? 'Click, then click again to confirm' : 'Apply this fix now'"
+                                        @click="applyFix(c, it, c.key + i)">
+                                    <i :class="fixing === c.key + i ? 'fas fa-spinner fa-spin' : 'fa-solid fa-wand-magic-sparkles'"></i>
+                                    <span>{{ armedFix === c.key + i ? 'Click again to confirm' : it.fix.label }}</span>
+                                </button>
                             </div>
                             <div v-if="it.rule_id" class="bh-item-actions">
                                 <a v-if="it.can_edit && !release" :href="editUrl(c, it)" class="am-rule-act am-rule-act--edit"
@@ -204,6 +217,44 @@ export default {
             return `/bundle/edit/${props.bundleId}?${q}`
         }
 
+        // "Fix it for me" — two clicks for destructive fixes
+        const armedFix = ref(null)
+        const fixing   = ref(null)
+        let _armT = null
+        async function applyFix(c, it, key) {
+            if (it.fix.confirm && armedFix.value !== key) {
+                armedFix.value = key
+                clearTimeout(_armT)
+                _armT = setTimeout(() => { armedFix.value = null }, 3500)
+                return
+            }
+            armedFix.value = null
+            fixing.value = key
+            try {
+                const res = await fetch(`/bundle/${props.bundleId}/health/fix`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
+                    body: JSON.stringify({ fix: it.fix }),
+                })
+                const data = await res.json().catch(() => ({}))
+                create_message(data.message || (res.ok ? 'Fixed' : `Fix failed (HTTP ${res.status})`),
+                               data.toast_class || (res.ok ? 'success-subtle' : 'danger-subtle'))
+                if (res.ok && data.success) {
+                    emit('fixed')
+                    const before = health.value?.score
+                    await load(true)
+                    if (health.value && before != null && health.value.score !== before)
+                        create_message(`Health score ${before} → ${health.value.score}`, 'success-subtle')
+                    flash.value = false; await nextTick(); flash.value = true
+                    setTimeout(() => { flash.value = false }, 1600)
+                }
+            } catch (e) {
+                create_message('Fix failed (' + (e.message || e) + ')', 'danger-subtle')
+            } finally {
+                fixing.value = null
+            }
+        }
+
         function toggle(key) {
             const s = new Set(open.value)
             s.has(key) ? s.delete(key) : s.add(key)
@@ -221,6 +272,6 @@ export default {
         })
 
         return { health, loading, error, open, showAll, sortedChecks, verdict, load, rerun, toggle, visibleItems,
-                 canRerun, flash, checkedAgo, editUrl, LEVELS, PREVIEW }
+                 canRerun, flash, checkedAgo, editUrl, armedFix, fixing, applyFix, LEVELS, PREVIEW }
     },
 }

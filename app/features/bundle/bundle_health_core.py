@@ -109,8 +109,13 @@ def _fmt(rule):
     return (rule.format or "").lower()
 
 
-def _item(rule, detail="", name=None):
-    return {"rule_id": rule.id if rule else None, "name": name or (rule.title if rule else ""), "detail": detail}
+def _item(rule, detail="", name=None, **meta):
+    """One finding. `meta` = structured facts (flowbit name, missing Wazuh
+    parent id, tag…) used by bundle_health_fix_core to offer a one-click fix."""
+    it = {"rule_id": rule.id if rule else None, "name": name or (rule.title if rule else ""), "detail": detail}
+    if meta:
+        it["meta"] = meta
+    return it
 
 
 # How to resolve each kind of finding — shown under the check's message
@@ -174,7 +179,8 @@ def check_collisions(rules):
         if len(rs) > 1:
             for r in rs:
                 others = ", ".join(f"'{x.title}'" for x in rs if x is not r)[:200]
-                items.append(_item(r, f"Uses {kind} {ident}, which is also used by {others}. A sensor loads only one of them."))
+                items.append(_item(r, f"Uses {kind} {ident}, which is also used by {others}. A sensor loads only one of them.",
+                                   kind=kind, ident=ident))
     if not items:
         return _check("collisions", "Identifier collisions", "ok",
                       "No duplicate SIDs, YARA rule names, Wazuh ids or Sigma ids.")
@@ -203,7 +209,8 @@ def check_dependencies(rules):
     for bit, rs in need_bits.items():
         if bit not in set_bits:
             for r in rs:
-                items.append(_item(r, f"Checks flowbit '{bit}' (flowbits:isset), but no rule of the bundle sets it — this rule can never fire."))
+                items.append(_item(r, f"Checks flowbit '{bit}' (flowbits:isset), but no rule of the bundle sets it — this rule can never fire.",
+                                   flowbit=bit, fmt=_fmt(r)))
 
     # Wazuh if_sid / if_matched_sid → a rule id present in the bundle.
     # Ids below 100000 are Wazuh's own default ruleset, shipped with every
@@ -220,7 +227,8 @@ def check_dependencies(rules):
                 if int(i) < WAZUH_CUSTOM_MIN:
                     builtin_refs.add(i)
                     continue
-                items.append(_item(r, f"Depends on custom Wazuh rule {i} (<{tag}>), which is not in the bundle — this rule can never fire."))
+                items.append(_item(r, f"Depends on custom Wazuh rule {i} (<{tag}>), which is not in the bundle — this rule can never fire.",
+                                   wazuh_parent=i))
 
     # Sigma correlations → referenced rules by name or id
     sigma_refs = set()
@@ -237,7 +245,8 @@ def check_dependencies(rules):
         if m:
             for ref in re.findall(r"-\s*['\"]?([^'\"\n]+?)['\"]?\s*$", m.group(1), re.M):
                 if ref.strip().lower() not in sigma_refs:
-                    items.append(_item(r, f"This correlation needs the rule '{ref.strip()}', which is not in the bundle."))
+                    items.append(_item(r, f"This correlation needs the rule '{ref.strip()}', which is not in the bundle.",
+                                       sigma_ref=ref.strip()))
 
     # YARA include "..." — files that won't exist next to the bundle
     for r in rules.values():
@@ -286,7 +295,7 @@ def check_syntax(rules, refresh=False):
     for r in rules.values():
         ok, err = _syntax_of(r, refresh)
         if not ok:
-            items.append(_item(r, (err or "invalid syntax")[:300]))
+            items.append(_item(r, (err or "invalid syntax")[:300], invalid=True))
     if not items:
         return _check("syntax", "Syntax", "ok", "Every rule passes its format's validator.")
     return _check("syntax", "Syntax", "error",
@@ -318,7 +327,8 @@ def check_marking(rules, tags_by_rule, bundle_tags):
             if rt and ranks[rt] > b_rank:
                 flagged += 1
                 where = f"marked {b.upper()}" if b else f"not marked with any {label} (treated as {label}:CLEAR)"
-                items.append(_item(r, f"This rule is {rt.upper()} but the bundle is {where} — sharing the bundle would leak it."))
+                items.append(_item(r, f"This rule is {rt.upper()} but the bundle is {where} — sharing the bundle would leak it.",
+                                   marking=rt, family=label))
         if b is None and flagged:
             messages.append(f"the bundle has no {label} tag")
     if not items:
@@ -359,7 +369,7 @@ def check_duplicates(rules, node_rule_ids, nodes=()):
             detail = f"The same rule appears {n} times in the structure"
             if locs:
                 detail += " — in " + ", ".join(f"'{l}'" for l in locs[:6])
-            items.append(_item(rules[rid], detail + ". Keep one copy."))
+            items.append(_item(rules[rid], detail + ". Keep one copy.", placed_times=n))
     by_content = defaultdict(list)
     for r in rules.values():
         body = re.sub(r"\s+", " ", (r.to_string or "")).strip()
@@ -368,7 +378,8 @@ def check_duplicates(rules, node_rule_ids, nodes=()):
     for rs in by_content.values():
         if len(rs) > 1:
             for r in rs:
-                items.append(_item(r, "Identical content to another rule of the bundle: " + ", ".join(x.title for x in rs if x is not r)[:160]))
+                items.append(_item(r, "Identical content to another rule of the bundle: " + ", ".join(x.title for x in rs if x is not r)[:160],
+                                   identical_to=[x.id for x in rs if x is not r]))
     if not items:
         return _check("duplicates", "Duplicates", "ok", "No rule is included twice, no two rules have the same content.")
     return _check("duplicates", "Duplicates", "warning",
@@ -415,16 +426,17 @@ def check_structure(nodes, assoc_ids, node_rule_ids, rules):
     placed = set(node_rule_ids)
     for rid in sorted(assoc_ids - placed):
         if rid in rules:
-            items.append(_item(rules[rid], "Attached to the bundle but not placed in any folder — it is missing from the structure download."))
+            items.append(_item(rules[rid], "Attached to the bundle but not placed in any folder — it is missing from the structure download.",
+                                   unplaced=True))
     children = defaultdict(int)
     for n in nodes:
         if n.parent_id:
             children[n.parent_id] += 1
     for n in nodes:
         if n.node_type == "folder" and not children.get(n.id):
-            items.append({"rule_id": None, "name": n.name, "detail": "Empty folder."})
+            items.append({"rule_id": None, "name": n.name, "detail": "Empty folder.", "meta": {"node_id": n.id, "empty": "folder"}})
         elif n.node_type == "file" and not n.rule_id and not (n.custom_content or "").strip():
-            items.append({"rule_id": None, "name": n.name, "detail": "Empty file."})
+            items.append({"rule_id": None, "name": n.name, "detail": "Empty file.", "meta": {"node_id": n.id, "empty": "file"}})
     if not items:
         return _check("structure", "Structure", "ok", "Every rule is placed, no empty folder or file.")
     return _check("structure", "Structure", "info", f"{len(items)} housekeeping item{'s' if len(items) > 1 else ''}: rules not placed in a folder, empty folders or empty files.", items)
