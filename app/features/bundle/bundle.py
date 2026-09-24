@@ -10,6 +10,7 @@ from ..rule import rule_core as RuleModel
 from ..account import account_core as AccountModel
 from app.core.utils.activity_log import log_activity
 
+from app import db
 import io
 import zipfile
 import json
@@ -93,7 +94,7 @@ def get_all_bundles():
 #  action  #
 ############
 
-@bundle_blueprint.route("/delete", methods=['GET'])
+@bundle_blueprint.route("/delete", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
 def delete() :     
     """Delete a bundle"""     
@@ -395,6 +396,233 @@ def bundle_history_entry(bundle_id, entry_id):
     return jsonify({"success": True, "entry": entry.to_json(include_descriptions=True)}), 200
 
 
+@bundle_blueprint.route("/<int:bundle_id>/rule_content/<int:rule_id>", methods=['GET'])
+def bundle_rule_content(bundle_id, rule_id):
+    """Content of one rule of the bundle (lazy-loaded by the viewer / editor)."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+    if not BundleModel.can_view_bundle(bundle):
+        return {"success": False, "message": "Access denied", "toast_class": "danger"}, 403
+    rel, err = _requested_release(bundle_id)
+    if err:
+        return err
+    if rel is not None:
+        # frozen content — works even if the rule was edited or deleted since
+        r = (rel.snapshot.get("rules") or {}).get(str(rule_id))
+        if not r:
+            return {"success": False, "message": "Rule not in this release", "toast_class": "danger"}, 404
+        return {"success": True, "rule_id": rule_id, "uuid": r["uuid"], "title": r["title"],
+                "format": r["format"], "content": r["content"], "release": rel.version}, 200
+    rule = BundleModel.get_rule_content_in_bundle(bundle_id, rule_id)
+    if not rule:
+        return {"success": False, "message": "Rule not found in this bundle", "toast_class": "danger"}, 404
+    return {"success": True, "rule_id": rule.id, "uuid": rule.uuid, "title": rule.title,
+            "format": rule.format or "", "content": rule.to_string or ""}, 200
+
+
+def _mark_editable_items(health, bundle):
+    """Flag each finding with can_edit — the bundle's owner or an admin can
+    jump to the bundle editor with that rule selected in the structure."""
+    if not health:
+        return
+    manager = _is_bundle_manager(bundle)
+    for c in health["checks"]:
+        for i in c["items"]:
+            i["can_edit"] = bool(manager and i.get("rule_id"))
+
+
+@bundle_blueprint.route("/<int:bundle_id>/health", methods=['GET'])
+def bundle_health_report(bundle_id):
+    """Pre-deployment checks for the bundle (Health tab)."""
+    from .bundle_health_core import bundle_health
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+    if not BundleModel.can_view_bundle(bundle):
+        return {"success": False, "message": "Access denied", "toast_class": "danger"}, 403
+    # ?refresh=1 re-validates every rule (bypasses the syntax cache) — costly,
+    # so only the owner / an admin can force it.
+    rel, err = _requested_release(bundle_id)
+    if err:
+        return err
+    if rel is not None:
+        return jsonify({"success": True, "health": bundle_health(bundle_id, release=rel),
+                        "can_rerun": False, "release": rel.version}), 200
+    refresh = bool(request.args.get('refresh', type=int))
+    if refresh and not _is_bundle_manager(bundle):
+        return {"success": False, "message": "Only the owner or an admin can re-run the checks", "toast_class": "danger-subtle"}, 403
+    health = bundle_health(bundle_id, refresh=refresh)
+    _mark_editable_items(health, bundle)
+    return jsonify({"success": True, "health": health,
+                    "can_rerun": _is_bundle_manager(bundle)}), 200
+
+
+# ── Releases (versioned, frozen) ──────────────────────────────────────────
+
+def _release_guard(bundle_id, manage=False):
+    """(bundle, error_response) — read access for everyone who can view,
+    owner/admin for publishing/deleting."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return None, ({"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404)
+    if not BundleModel.can_view_bundle(bundle):
+        return None, ({"success": False, "message": "Access denied", "toast_class": "danger"}, 403)
+    if manage and not _is_bundle_manager(bundle):
+        return None, ({"success": False, "message": "Only the owner or an admin can manage releases", "toast_class": "danger"}, 403)
+    return bundle, None
+
+
+def _release_or_current(bundle_id, ref):
+    from .bundle_release_core import build_snapshot
+    from app.core.db_class.db import BundleRelease
+    if ref in (None, "", "current"):
+        return "current", build_snapshot(bundle_id)
+    rel = BundleRelease.query.filter_by(bundle_id=bundle_id, id=int(ref)).first() if str(ref).isdigit() else None
+    return (rel.version, rel.snapshot) if rel else (None, None)
+
+
+def _requested_release(bundle_id):
+    """(release, error_response) for an optional ?release=<id|version>.
+    (None, None) when no release is requested (= the live bundle)."""
+    from .bundle_release_core import get_release
+    ref = request.args.get("release", type=str)
+    if not ref:
+        return None, None
+    rel = get_release(bundle_id, ref)
+    if rel is None:
+        return None, ({"success": False, "message": f"Release '{ref}' not found", "toast_class": "danger-subtle"}, 404)
+    return rel, None
+
+
+@bundle_blueprint.route("/<int:bundle_id>/releases/<string:ref>/view", methods=['GET'])
+def view_bundle_release(bundle_id, ref):
+    """Everything the detail page needs to render the bundle *as released*."""
+    from .bundle_release_core import get_release, release_view
+    bundle, err = _release_guard(bundle_id)
+    if err:
+        return err
+    rel = get_release(bundle_id, ref)
+    if rel is None:
+        return {"success": False, "message": f"Release '{ref}' not found", "toast_class": "danger-subtle"}, 404
+    return jsonify({"success": True, **release_view(rel)}), 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/releases", methods=['GET'])
+def list_bundle_releases(bundle_id):
+    from .bundle_release_core import status_since
+    from app.core.db_class.db import BundleRelease
+    bundle, err = _release_guard(bundle_id)
+    if err:
+        return err
+    releases = (BundleRelease.query.filter_by(bundle_id=bundle_id)
+                .order_by(BundleRelease.created_at.desc(), BundleRelease.id.desc()).all())
+    latest_changes = status_since(releases[0]) if releases else None
+    return jsonify({
+        "success": True,
+        "releases": [r.to_json() for r in releases],
+        "latest_changes": latest_changes,
+        "can_manage": _is_bundle_manager(bundle),
+    }), 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/releases/draft", methods=['GET'])
+@login_required
+def draft_bundle_release(bundle_id):
+    from .bundle_release_core import draft_release
+    bundle, err = _release_guard(bundle_id, manage=True)
+    if err:
+        return err
+    return jsonify({"success": True, **draft_release(bundle_id)}), 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/releases", methods=['POST'])
+@login_required
+def create_bundle_release(bundle_id):
+    from .bundle_release_core import create_release
+    bundle, err = _release_guard(bundle_id, manage=True)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    rel, error = create_release(bundle_id, current_user, data.get("version"), data.get("title"), data.get("notes"))
+    if error:
+        return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
+    log_activity("bundle.release", f"Published release {rel.version} of bundle '{bundle.name}'",
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=bool(bundle.access))
+    return {"success": True, "release": rel.to_json(),
+            "message": f"Release {rel.version} published", "toast_class": "success-subtle"}, 201
+
+
+@bundle_blueprint.route("/<int:bundle_id>/releases/<int:release_id>", methods=['DELETE'])
+@login_required
+def delete_bundle_release(bundle_id, release_id):
+    from app.core.db_class.db import BundleRelease
+    bundle, err = _release_guard(bundle_id, manage=True)
+    if err:
+        return err
+    rel = BundleRelease.query.filter_by(bundle_id=bundle_id, id=release_id).first()
+    if not rel:
+        return {"success": False, "message": "Release not found", "toast_class": "danger"}, 404
+    version = rel.version
+    db.session.delete(rel)
+    db.session.commit()
+    log_activity("bundle.release_delete", f"Deleted release {version} of bundle '{bundle.name}'",
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
+    return {"success": True, "message": f"Release {version} deleted", "toast_class": "success-subtle"}, 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/releases/<int:release_id>/changes", methods=['GET'])
+def bundle_release_changes(bundle_id, release_id):
+    """What differs between this release and `against` (another release id, or 'current')."""
+    from .bundle_release_core import compare_snapshots, changelog_markdown
+    bundle, err = _release_guard(bundle_id)
+    if err:
+        return err
+    base_label, base = _release_or_current(bundle_id, release_id)
+    other_label, other = _release_or_current(bundle_id, request.args.get("against", "current"))
+    if base is None or other is None:
+        return {"success": False, "message": "Release not found", "toast_class": "danger"}, 404
+    diff = compare_snapshots(base, other)
+    return jsonify({"success": True, "from": base_label, "to": other_label, "diff": diff,
+                    "markdown": changelog_markdown(diff)}), 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/releases/<int:release_id>/rule/<int:rule_id>/diff", methods=['GET'])
+def bundle_release_rule_diff(bundle_id, release_id, rule_id):
+    """Old/new content of one rule between a release and `against` (release id or 'current')."""
+    bundle, err = _release_guard(bundle_id)
+    if err:
+        return err
+    base_label, base = _release_or_current(bundle_id, release_id)
+    other_label, other = _release_or_current(bundle_id, request.args.get("against", "current"))
+    if base is None or other is None:
+        return {"success": False, "message": "Release not found", "toast_class": "danger"}, 404
+    o = (base.get("rules") or {}).get(str(rule_id))
+    n = (other.get("rules") or {}).get(str(rule_id))
+    if not o and not n:
+        return {"success": False, "message": "Rule not in either version", "toast_class": "danger"}, 404
+    return jsonify({"success": True, "rule_id": rule_id, "title": (n or o)["title"], "format": (n or o)["format"],
+                    "from": base_label, "to": other_label,
+                    "old": (o or {}).get("content", ""), "new": (n or {}).get("content", "")}), 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/releases/<int:release_id>/download", methods=['GET'])
+def download_bundle_release(bundle_id, release_id):
+    from .bundle_release_core import release_zip
+    from app.core.db_class.db import BundleRelease
+    bundle, err = _release_guard(bundle_id)
+    if err:
+        return err
+    rel = BundleRelease.query.filter_by(bundle_id=bundle_id, id=release_id).first()
+    if not rel:
+        return {"success": False, "message": "Release not found", "toast_class": "danger"}, 404
+    BundleModel.increment_download_count(bundle_id)
+    safe_name = "".join(c for c in bundle.name if c.isalnum() or c in (' ', '_')).strip().replace(' ', '_') or "bundle"
+    safe_ver = "".join(c for c in rel.version if c.isalnum() or c in ".-_+")
+    return send_file(release_zip(rel), as_attachment=True,
+                     download_name=f"{safe_name}_{safe_ver}.zip", mimetype='application/zip')
+
+
 @bundle_blueprint.route("/get_bundle_json/<int:bundle_id>")
 def get_bundle_json(bundle_id):
     bundle = BundleModel.get_bundle_by_id(bundle_id)
@@ -402,21 +630,24 @@ def get_bundle_json(bundle_id):
         abort(404)
     if not BundleModel.can_view_bundle(bundle):
         abort(403)
-    # Fetch only top-level nodes (those without parents)
-    root_nodes = BundleModel.get_only_root_nodes(bundle_id)
-    
-    # If the bundle is new and empty, return a default root
-    if not root_nodes:
-        structure = [{"id": "root", "name": "Main Bundle", "type": "folder", "children": []}]
-    else:
+    # ?full=1 keeps the legacy payload (rule content inlined); default is the
+    # light tree — rule content is fetched on demand (rule_content route).
+    if request.args.get('full', type=int):
+        root_nodes = BundleModel.get_only_root_nodes(bundle_id)
         structure = [node.to_tree_json() for node in root_nodes]
+    else:
+        structure = BundleModel.build_tree_json(bundle_id)
+
+    # If the bundle is new and empty, return a default root
+    if not structure:
+        structure = [{"id": "root", "name": "Main Bundle", "type": "folder", "children": []}]
 
     return jsonify({
         "success": True, 
         "structure": structure
     }), 200
 # -----------------------------------------------------------------------------------------------------------------------------
-@bundle_blueprint.route("/add_rule_bundle", methods=['GET'])
+@bundle_blueprint.route("/add_rule_bundle", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
 def add_rule_bundle() :     
     """Add a rule in a bundle"""     
@@ -475,7 +706,7 @@ def update_bundle_tags(bundle_id):
 
 
 
-@bundle_blueprint.route("/remove", methods=['GET'])
+@bundle_blueprint.route("/remove", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
 def remove() :     
     """Remove a rule in a bundle"""     
@@ -563,7 +794,7 @@ def get_bundle():
     }, 200
 
 
-@bundle_blueprint.route("/change_description", methods=['GET'])
+@bundle_blueprint.route("/change_description", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
 def change_description():
     """Chamge the description of the association rule/bundle (the reason to the presence of the rule in the bundle)."""
@@ -599,7 +830,7 @@ def change_description():
             "toast_class" : "danger"
         }, 401
 
-@bundle_blueprint.route("/edit_access", methods=['GET'])
+@bundle_blueprint.route("/edit_access", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 def edit_access():
     """Edit access to a bundle."""
     bundle_id = request.args.get('id', type=int)
@@ -638,7 +869,7 @@ def edit_access():
     }, 200
 
 
-@bundle_blueprint.route("/evaluate", methods=['GET'])
+@bundle_blueprint.route("/evaluate", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
 def evaluate():
     """Evaluate a bundle and return aggregated statistics."""
@@ -760,9 +991,28 @@ def bundle_voters():
 #   Download section    #
 #########################
 
+def _release_download(bundle_id, part):
+    """Frozen version of a per-section download (?release=<id|version>)."""
+    from .bundle_release_core import release_zip, release_zip_part
+    bundle, err = _release_guard(bundle_id)
+    if err:
+        return err
+    rel, err = _requested_release(bundle_id)
+    if err:
+        return err
+    BundleModel.increment_download_count(bundle_id)
+    safe_name = "".join(c for c in bundle.name if c.isalnum() or c in (' ', '_')).strip().replace(' ', '_') or "bundle"
+    safe_ver = "".join(c for c in rel.version if c.isalnum() or c in ".-_+")
+    buf = release_zip(rel) if part == "full" else release_zip_part(rel, part)
+    suffix = {"full": "", "structure": "_structure", "rules": "_rules", "files": "_files"}[part]
+    return send_file(buf, as_attachment=True, download_name=f"{safe_name}_{safe_ver}{suffix}.zip", mimetype='application/zip')
+
+
 @bundle_blueprint.route('/download', methods=['GET'])
 def download_bundle():
     bundle_id = request.args.get("bundle_id", type=int)
+    if request.args.get("release"):
+        return _release_download(bundle_id, "rules")
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     rules = BundleModel.get_rules_from_bundle(bundle_id)  
 
@@ -848,6 +1098,8 @@ def add_node_to_zip(zip_file, node, current_path=""):
 @bundle_blueprint.route('/download_structure', methods=['GET'])
 def download_bundle_structure():     
     bundle_id = request.args.get("bundle_id", type=int)
+    if request.args.get("release"):
+        return _release_download(bundle_id, "structure")
     bundle = BundleModel.get_bundle_by_id(bundle_id)
 
     if not bundle:
@@ -910,6 +1162,8 @@ def _count_custom_files(node):
 def download_bundle_files():
     """ZIP of every non-rule file in the bundle structure, folder layout kept."""
     bundle_id = request.args.get("bundle_id", type=int)
+    if bundle_id and request.args.get("release"):
+        return _release_download(bundle_id, "files")
     bundle = BundleModel.get_bundle_by_id(bundle_id) if bundle_id else None
     if not bundle:
         return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
@@ -988,6 +1242,8 @@ def download_bundle_full():
     (tags, CVEs, rules), the full structure with rules and files, per-rule
     JSON, ATT&CK coverage and the MISP event."""
     bundle_id = request.args.get("bundle_id", type=int)
+    if bundle_id and request.args.get("release"):
+        return _release_download(bundle_id, "full")
     bundle = BundleModel.get_bundle_by_id(bundle_id) if bundle_id else None
     if not bundle:
         return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
@@ -1133,7 +1389,7 @@ def get_bundles_page_filter_with_id():
 #############
 
 # Transforme from BundleRuleAssociation to a structure compatible with the UI
-@bundle_blueprint.route("/update_bundle_from_structure", methods=['GET'])
+@bundle_blueprint.route("/update_bundle_from_structure", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
 def update_bundle_from_structure():
     bundle_id = request.args.get("id", type=int)
@@ -1155,7 +1411,7 @@ def update_bundle_from_structure():
 #   Comment section   #
 #######################
 
-@bundle_blueprint.route("/add_comment", methods=['GET'])
+@bundle_blueprint.route("/add_comment", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 def add_comment():
     """Add a comment to a bundle."""
 
@@ -1209,7 +1465,7 @@ def get_comments():
 
 # delete_comment
 
-@bundle_blueprint.route("/delete_comment", methods=['GET'])
+@bundle_blueprint.route("/delete_comment", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
 def delete_comment():
     comment_id = request.args.get('comment_id', type=int)
@@ -1239,7 +1495,7 @@ def delete_comment():
     
 # edit_comment
 
-@bundle_blueprint.route("/edit_comment", methods=['GET'])
+@bundle_blueprint.route("/edit_comment", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
 def edit_comment():
     comment_id = request.args.get('comment_id', type=int)
@@ -1261,7 +1517,7 @@ def edit_comment():
     else:
         return {"message": "Not authorized or comment not found.", "toast_class": "danger-subtle"}, 403
     
-@bundle_blueprint.route("/add_reaction", methods=['GET'])
+@bundle_blueprint.route("/add_reaction", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
 def add_reaction():
     """ Add a reaction to a comment."""
@@ -1294,6 +1550,9 @@ def get_bundle_tag_ids(bundle_id):
 @bundle_blueprint.route('/get_bundle_tags_display/<int:bundle_id>')
 def get_bundle_tags_display(bundle_id):
     """Returns full tag objects associated with a bundle for display purposes."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle or not BundleModel.can_view_bundle(bundle):
+        return jsonify({"success": False, "message": "Access denied"}), 403
     try:
         tags = BundleModel.get_tags_for_bundle(bundle_id)
         
@@ -1309,6 +1568,9 @@ def get_bundle_tags_display(bundle_id):
 @bundle_blueprint.route('/get_bundle_vulnerabilities_display/<int:bundle_id>')
 def get_bundle_vulnerabilities_display(bundle_id):
     """Returns the list of vulnerability identifier strings."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle or not BundleModel.can_view_bundle(bundle):
+        return jsonify({"success": False, "message": "Access denied"}), 403
     try:
         v_list = BundleModel.get_vulnerabilities_for_bundle(bundle_id)
         
@@ -1357,6 +1619,9 @@ def get_bundle_creators_usage():
 
 @bundle_blueprint.route("/get_tags/<int:bundle_id>")
 def get_bundle_tags(bundle_id):
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle or not BundleModel.can_view_bundle(bundle):
+        return jsonify({"tags": [], "message": "Access denied"}), 403
     try:
         user_id = request.args.get('user_id', type=int)
 
@@ -1599,10 +1864,11 @@ def bundle_data_table():
             query = query.filter(Bundle.access.is_(True))
 
     _sort_map = {
-        'created_at': Bundle.created_at,
-        'updated_at': Bundle.updated_at,
-        'name':       Bundle.name,
-        'vote_up':    Bundle.vote_up,
+        'created_at':     Bundle.created_at,
+        'updated_at':     Bundle.updated_at,
+        'name':           Bundle.name,
+        'vote_up':        Bundle.vote_up,
+        'download_count': Bundle.download_count,
     }
     sort_col = _sort_map.get(sort_by, Bundle.created_at)
     query = query.order_by(desc(sort_col) if sort_dir == 'desc' else asc(sort_col))
@@ -1613,8 +1879,35 @@ def bundle_data_table():
     items = []
     for b in pagination.items:
         j = b.to_json()
+        j.pop('view_count', None)
         j['tags'] = BundleModel.get_tags_for_bundle_json(b.id)
         items.append(j)
+
+    # Same facts in card and table view: files/folders, latest release —
+    # two grouped queries for the whole page (no per-bundle query).
+    page_ids = [b.id for b in pagination.items]
+    if page_ids:
+        from sqlalchemy import func as _f, case as _case
+        from app.core.db_class.db import BundleNode as _BN, BundleRelease as _BR
+        counts = {bid: (files or 0, folders or 0) for bid, files, folders in (
+            db.session.query(
+                _BN.bundle_id,
+                _f.sum(_case(((_BN.node_type == 'file') & (_BN.rule_id.is_(None)), 1), else_=0)),
+                _f.sum(_case((_BN.node_type == 'folder', 1), else_=0)),
+            ).filter(_BN.bundle_id.in_(page_ids)).group_by(_BN.bundle_id))}
+        rel_rows = (db.session.query(_BR.bundle_id, _BR.version, _BR.created_at, _BR.id)
+                    .filter(_BR.bundle_id.in_(page_ids))
+                    .order_by(_BR.bundle_id, _BR.created_at.desc(), _BR.id.desc()).all())
+        latest, n_rel = {}, {}
+        for bid, version, created, _id in rel_rows:
+            n_rel[bid] = n_rel.get(bid, 0) + 1
+            latest.setdefault(bid, {"version": version, "created_at": created.strftime('%Y-%m-%d %H:%M')})
+        for item in items:
+            files, folders = counts.get(item['id'], (0, 0))
+            item['number_of_files'] = int(files)
+            item['number_of_folders'] = int(folders)
+            item['latest_release'] = latest.get(item['id'])
+            item['release_count'] = n_rel.get(item['id'], 0)
 
     try:
         from app.features.attack.attack_core import get_techniques_for_bundles_batch
@@ -1692,5 +1985,8 @@ def attack_coverage(bundle_id):
         return jsonify({'error': 'Bundle not found'}), 404
     if not BundleModel.can_view_bundle(bundle):
         abort(403)
-    data = BundleModel.get_attack_coverage(bundle_id)
+    rel, err = _requested_release(bundle_id)
+    if err:
+        return err
+    data = BundleModel.get_attack_coverage(bundle_id, snapshot_rules=(rel.snapshot.get("rules") or {}) if rel else None)
     return jsonify(data)

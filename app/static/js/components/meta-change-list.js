@@ -39,6 +39,7 @@ const FIELD_ICONS = {
     files_renamed:   'fa-i-cursor',
     folders:         'fa-folder-tree',
     share_link:      'fa-link',
+    release:         'fa-tag',
 }
 
 function field_icon(field) {

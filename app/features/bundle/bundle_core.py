@@ -926,7 +926,13 @@ def save_workspace(bundle_id, structure):
     :param structure: Description
     """
     try:
-        BundleNode.query.filter_by(bundle_id=bundle_id).delete()
+        # ORM delete (not a bulk query.delete()): nodes already loaded in this
+        # session — by the history / release / health snapshot taken just
+        # before — must leave the identity map, otherwise a re-used primary
+        # key (SQLite) collides with the stale object and the save fails.
+        for old in BundleNode.query.filter_by(bundle_id=bundle_id).all():
+            db.session.delete(old)
+        db.session.flush()
 
         def save_recursive(nodes, parent_id=None):
             for node in nodes:
@@ -950,8 +956,61 @@ def save_workspace(bundle_id, structure):
     except Exception as e:
         db.session.rollback()
         return False
+def build_tree_json(bundle_id: int) -> list:
+    """Light structure for the detail page / editor: same shape as
+    BundleNode.to_tree_json(), but rule nodes carry no `content` (fetched on
+    demand from /bundle/<id>/rule_content/<rule_id>) and the whole tree is
+    built from two queries instead of one query per node.
+    Custom files keep their content (they're capped by validate_structure)."""
+    from sqlalchemy import func
+    nodes = BundleNode.query.filter_by(bundle_id=bundle_id).order_by(BundleNode.id).all()
+    if not nodes:
+        return []
+    rule_ids = {n.rule_id for n in nodes if n.rule_id}
+    rules = {}
+    if rule_ids:
+        for rid, title, fmt, deleted, size in (
+            db.session.query(Rule.id, Rule.title, Rule.format, Rule.is_deleted, func.length(Rule.to_string))
+            .filter(Rule.id.in_(rule_ids))
+        ):
+            rules[rid] = (title, fmt, deleted, size or 0)
+
+    children = {}
+    for n in nodes:
+        children.setdefault(n.parent_id, []).append(n)
+
+    def to_json(n):
+        if n.rule_id:
+            info = rules.get(n.rule_id)
+            if not info or info[2]:
+                return {"id": f"rule_{n.rule_id}_{n.id}", "name": "(deleted rule)", "type": "file",
+                        "content": "", "children": [], "rule_id": n.rule_id, "format": "", "deleted": True}
+            title, fmt, _, size = info
+            ext = Rule(format=fmt).get_extension()
+            return {"id": f"rule_{n.rule_id}_{n.id}", "name": f"{(title or '').rstrip('.')}.{ext}",
+                    "type": n.node_type, "rule_id": n.rule_id, "format": fmt or "",
+                    "size": size, "lazy": True, "children": []}
+        return {"id": f"node_{n.id}", "name": n.name, "type": n.node_type,
+                "content": n.custom_content or "",
+                "children": [to_json(c) for c in children.get(n.id, [])]}
+
+    return [to_json(n) for n in children.get(None, [])]
+
+
+def get_rule_content_in_bundle(bundle_id: int, rule_id: int):
+    """The rule if it's part of the bundle (tree node or association) and not trashed."""
+    in_bundle = (BundleNode.query.filter_by(bundle_id=bundle_id, rule_id=rule_id).first() is not None
+                 or BundleRuleAssociation.query.filter_by(bundle_id=bundle_id, rule_id=rule_id).first() is not None)
+    if not in_bundle:
+        return None
+    rule = db.session.get(Rule, rule_id)
+    if not rule or rule.is_deleted:
+        return None
+    return rule
+
+
 def get_only_root_nodes(bundle_id):
-    return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).all()
+    return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).order_by(BundleNode.id).all()
 
 def extract_rule_ids(structure):
     """Recursively extract all rule_id values from the tree structure."""
@@ -1380,7 +1439,7 @@ def get_bundle_by_id(bundle_id: int):
     return Bundle.query.get(bundle_id)
 
 def get_only_root_nodes(bundle_id: int):
-    return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).all()
+    return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).order_by(BundleNode.id).all()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1460,11 +1519,16 @@ def _parse_generic(content: str):
             for m in _TECH_RE.finditer(content)]
 
 
-def get_attack_coverage(bundle_id: int) -> dict:
+def get_attack_coverage(bundle_id: int, snapshot_rules: dict | None = None) -> dict:
     """
     Return MITRE ATT&CK coverage data for all rules in a bundle.
     Reads from RuleAttackAssociation (populated by the auto-parse job).
     Falls back to on-the-fly parsing when the DB has no associations yet.
+
+    snapshot_rules: a release snapshot's `rules` ({id: {title, uuid, format,
+    content}}) — coverage of that frozen set instead of the live bundle
+    (rules deleted since keep their mapping; the fallback parses the
+    frozen content).
     """
     from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
 
@@ -1472,16 +1536,21 @@ def get_attack_coverage(bundle_id: int) -> dict:
     if not bundle:
         return None
 
-    # All rule IDs in the bundle
-    rule_rows = (
-        db.session.query(Rule.id, Rule.title, Rule.uuid)
-        .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
-        .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
-        .all()
-    )
-    total_rules = len(rule_rows)
-    rule_map = {r.id: {'id': r.id, 'name': r.title or '', 'uuid': str(r.uuid) if r.uuid else ''}
-                for r in rule_rows}
+    if snapshot_rules is not None:
+        rule_map = {int(k): {'id': int(k), 'name': v.get('title') or '', 'uuid': v.get('uuid') or ''}
+                    for k, v in snapshot_rules.items()}
+        total_rules = len(rule_map)
+    else:
+        # All rule IDs in the bundle
+        rule_rows = (
+            db.session.query(Rule.id, Rule.title, Rule.uuid)
+            .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
+            .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
+            .all()
+        )
+        total_rules = len(rule_rows)
+        rule_map = {r.id: {'id': r.id, 'name': r.title or '', 'uuid': str(r.uuid) if r.uuid else ''}
+                    for r in rule_rows}
     rule_ids = list(rule_map.keys())
 
     # Fetch associations from DB
@@ -1500,7 +1569,7 @@ def get_attack_coverage(bundle_id: int) -> dict:
     use_fallback = not assoc_rows and rule_ids
 
     if use_fallback:
-        return _get_attack_coverage_parsed(bundle_id, rule_map, total_rules)
+        return _get_attack_coverage_parsed(bundle_id, rule_map, total_rules, snapshot_rules)
 
     # tactic_key -> technique_id -> list of rule dicts
     coverage: dict = _dd(lambda: _dd(list))
@@ -1553,14 +1622,17 @@ def get_attack_coverage(bundle_id: int) -> dict:
     }
 
 
-def _get_attack_coverage_parsed(bundle_id: int, rule_map: dict, total_rules: int) -> dict:
+def _get_attack_coverage_parsed(bundle_id: int, rule_map: dict, total_rules: int, snapshot_rules: dict | None = None) -> dict:
     """Fallback: parse rule content directly when no DB associations exist yet."""
-    rows = (
-        db.session.query(Rule.id, Rule.format, Rule.to_string)
-        .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
-        .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
-        .all()
-    )
+    if snapshot_rules is not None:
+        rows = [(int(k), (v.get('format') or '').lower(), v.get('content') or '') for k, v in snapshot_rules.items()]
+    else:
+        rows = (
+            db.session.query(Rule.id, Rule.format, Rule.to_string)
+            .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
+            .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
+            .all()
+        )
 
     coverage: dict = _dd(lambda: _dd(list))
     rules_with_attack: set = set()

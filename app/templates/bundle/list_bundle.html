@@ -136,7 +136,7 @@
                 if (!bundleToDelete.value) return
                 isDeleting.value = true
                 try {
-                    const res  = await fetch(`/bundle/delete?id=${bundleToDelete.value.id}`)
+                    const res  = await fetch(`/bundle/delete?id=${bundleToDelete.value.id}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
                     const data = await res.json()
                     if (res.ok) {
                         create_message(data.message || 'Bundle deleted.', data.toast_class || 'success-subtle')

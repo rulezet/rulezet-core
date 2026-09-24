@@ -1335,7 +1335,10 @@ class BundleNode(db.Model):
         "BundleNode", 
         backref=db.backref('parent', remote_side=[id]), 
         cascade="all, delete-orphan",
-        passive_deletes=True
+        passive_deletes=True,
+        # save_workspace inserts nodes depth-first in display order, so id
+        # order == the order the user arranged them in (was unordered)
+        order_by="BundleNode.id",
     )
     
     rule = db.relationship("Rule") 
@@ -1521,7 +1524,7 @@ class BundleHistory(db.Model):
                              default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     user = db.relationship('User')
-    bundle = db.relationship('Bundle', backref=db.backref('history', lazy='dynamic', cascade='all, delete-orphan', passive_deletes=True))
+    bundle = db.relationship('Bundle', backref=db.backref('history', lazy='dynamic', cascade='all, delete-orphan'))
 
     def to_json(self, include_descriptions=False):
         data = {
@@ -1543,6 +1546,53 @@ class BundleHistory(db.Model):
             data["old_description"] = (self.old_snapshot or {}).get('description') or ''
             data["new_description"] = (self.new_snapshot or {}).get('description') or ''
         return data
+
+
+class BundleRelease(db.Model):
+    """A published, frozen version of a bundle ("v1.2").
+
+    `snapshot` holds everything needed to reproduce exactly what was
+    released, independently of later edits to the bundle or its rules:
+    bundle metadata, the structure tree, every custom file's content and
+    every rule's content (+ a hash used to detect upstream changes).
+    See bundle_release_core.build_snapshot().
+    """
+    __tablename__ = 'bundle_release'
+    __table_args__ = (db.UniqueConstraint('bundle_id', 'version', name='uq_bundle_release_version'),)
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    bundle_id   = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    version     = db.Column(db.String(40), nullable=False)
+    title       = db.Column(db.String(255), nullable=True)
+    notes       = db.Column(db.Text, nullable=True)          # markdown changelog
+    rule_count  = db.Column(db.Integer, nullable=False, default=0)
+    file_count  = db.Column(db.Integer, nullable=False, default=0)
+    health_score = db.Column(db.Integer, nullable=True)
+    snapshot    = db.Column(db.JSON, nullable=False)
+    created_at  = db.Column(db.DateTime, nullable=False,
+                            default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+
+    user = db.relationship('User')
+    bundle = db.relationship('Bundle', backref=db.backref('releases', lazy='dynamic', cascade='all, delete-orphan'))
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "uuid": self.uuid,
+            "bundle_id": self.bundle_id,
+            "version": self.version,
+            "title": self.title,
+            "notes": self.notes or "",
+            "rule_count": self.rule_count,
+            "file_count": self.file_count,
+            "health_score": self.health_score,
+            "user_id": self.user_id,
+            "user_name": self.user.first_name if self.user else None,
+            "user_avatar": self.user.get_avatar_url() if self.user else None,
+            "created_at": self.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+        }
 
 
 class BundleReactionComment(db.Model):
