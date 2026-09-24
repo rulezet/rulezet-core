@@ -163,7 +163,7 @@
 
                 <!-- Open known issues (community notes) -->
                 <div v-if="notesAlert" class="bn-banner" :class="{ 'bn-banner--critical': notesAlert.critical }"
-                     role="button" tabindex="0" @click="setTab('notes'); _scrollToZone()" @keydown.enter="setTab('notes'); _scrollToZone()">
+                     role="button" tabindex="0" @click="setTab('notes'); scrollToZone()" @keydown.enter="setTab('notes'); scrollToZone()">
                     <i :class="notesAlert.critical ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-triangle-exclamation'"></i>
                     <span><strong>[[ notesAlert.count ]] open known issue[[ notesAlert.count > 1 ? 's' : '' ]]</strong> reported on this bundle —
                         <em>[[ notesAlert.first ]]</em><template v-if="notesAlert.count > 1"> and more</template>.</span>
@@ -1738,7 +1738,7 @@
                 if (!open.length) return null;
                 return { count: open.length, critical: open.some(n => n.severity === 'critical'), first: open[0].title };
             });
-            function _scrollToZone() {
+            function scrollToZone() {
                 nextTick(() => document.querySelector('.bd-zone')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
             }
             const healthSummary = ref(null);
@@ -1875,7 +1875,7 @@
                 treeData, fileTreeNodes, allFiles, docFiles,
                 openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
                 openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
-                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, _scrollToZone, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList,
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,
