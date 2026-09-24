@@ -59,14 +59,6 @@
 .bd-section-name { font-weight: 700; font-size: 1rem; color: var(--text-color); }
 .bd-section-sub { font-size: .8rem; color: var(--subtle-text-color); }
 
-.bd-help {
-    font-size: .75rem;
-    margin-left: 4px;
-    opacity: .45;
-    cursor: help;
-    vertical-align: 1px;
-}
-.bd-help:hover { opacity: .8; }
 
 .bd-section-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
@@ -123,7 +115,6 @@
 }
 
 .bd-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.bd-chips-sep { width: 1px; height: 18px; background: var(--border-color); margin: 0 4px; }
 
 .bd-chip {
     display: inline-flex;

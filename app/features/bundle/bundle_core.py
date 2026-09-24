@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from sqlalchemy import Tuple, and_, or_
+from sqlalchemy import and_, or_
 from flask_login import current_user
 from ... import db
 from ...core.db_class.db import *
@@ -1435,11 +1435,6 @@ def get_paginated_rules_info_by_bundle(bundle_id: int, page: int):
     pagination.items = enriched_items
     return pagination
 
-def get_bundle_by_id(bundle_id: int):
-    return Bundle.query.get(bundle_id)
-
-def get_only_root_nodes(bundle_id: int):
-    return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).order_by(BundleNode.id).all()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
