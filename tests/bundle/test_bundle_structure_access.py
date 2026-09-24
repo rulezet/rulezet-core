@@ -7,8 +7,7 @@ import zipfile
 from app import db
 from app.core.db_class.db import Bundle, BundleNode
 
-from bundle_helpers import (D, F, R, SURICATA, admin, as_anonymous, fresh, login, make_bundle, make_rule, other, owner,
-                            save_structure)
+from bundle_helpers import D, F, R, fresh, login, make_bundle, make_rule, other, owner, save_structure
 
 
 # ── validate_structure ────────────────────────────────────────────────────
@@ -205,3 +204,21 @@ def test_share_token_never_leaks_in_json(client, app):
         token = client.post(f"/bundle/{b.id}/share").get_json()["url"].split("share=")[1]
         for u in (f"/bundle/get_bundle?bundle_id={b.id}", f"/bundle/history/{b.id}"):
             assert token not in client.get(u).get_data(as_text=True), u
+
+
+def test_share_key_never_leaks_in_referer_or_activity_log(client, app):
+    from app.core.db_class.db import ActivityLog
+    with app.app_context():
+        b = make_bundle(public=False)
+        login(client, owner())
+        token = client.post(f"/bundle/{b.id}/share").get_json()["url"].split("share=")[1]
+        viewer = app.test_client()
+        login(viewer, other())
+        viewer.get(f"/bundle/share/{token}")
+        page = viewer.get(f"/bundle/detail/{b.id}?share={token}")
+        assert page.status_code == 200
+        assert page.headers.get("Referrer-Policy") == "same-origin"
+        db.session.expire_all()
+        logs = ActivityLog.query.all()
+        assert any(l.action == "bundle.share_open" for l in logs)
+        assert not any(token in (l.url or "") + (l.description or "") + str(l.extra or "") for l in logs)

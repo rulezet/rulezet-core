@@ -6,7 +6,7 @@ import datetime
 import uuid
 
 from app import db
-from app.core.db_class.db import Bundle, Rule, Tag, User
+from app.core.db_class.db import Rule, Tag, User
 
 
 def user(email):

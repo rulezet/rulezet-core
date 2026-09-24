@@ -127,7 +127,7 @@ def test_mentions_notify_only_users_who_can_see_the_bundle(client, app):
         login(client, author)
         r = client.put(f"/bundle/{b.id}/notes/{note_id}",
                        json={**NOTE, "content": text + f" and @[owner]({owner().id}) @[neo2]({target.id})"})
-        d = r.get_json()
+        assert r.status_code == 200
         assert _mention_count(owner().id) == 1               # the owner can see it → notified
         assert _mention_count(target.id) == 1                # already mentioned before → not re-notified
 
@@ -173,3 +173,11 @@ def test_note_tags_are_limited_to_curated_taxonomies(client, app):
         names = [t["name"] for t in client.get("/bundle/note_tags?q=red").get_json()["tags"]]
         assert "tlp:red" not in names
         assert fp.name in [t["name"] for t in client.get("/bundle/note_tags?q=false").get_json()["tags"]]
+
+
+def test_note_rate_limit(client, app):
+    with app.app_context():
+        b = make_bundle()
+        login(client, other())
+        codes = [_note(client, b.id, {**NOTE, "title": f"Note number {i}"}).status_code for i in range(11)]
+        assert codes[:10] == [201] * 10 and codes[10] == 429
