@@ -205,3 +205,59 @@
     flex: 1 1 0;
     min-width: 0;
 }
+
+/* ── Markdown description in cards / expanded rows (bundleList descFor) ──
+   Compact typography, clipped with a fade so a long README-style
+   description never pushes the list around. */
+.bl-md-desc {
+    font-size: .82rem;
+    line-height: 1.55;
+    color: var(--subtle-text-color);
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent);
+            mask-image: linear-gradient(to bottom, #000 65%, transparent);
+}
+.bl-md-desc--card   { max-height: 5.2em; }    /* ~3 lines */
+.bl-md-desc--expand { max-height: 11em; margin-top: 4px; }
+
+.bl-md-desc > :first-child { margin-top: 0; }
+.bl-md-desc p, .bl-md-desc ul, .bl-md-desc ol, .bl-md-desc blockquote, .bl-md-desc pre, .bl-md-desc table { margin: 0 0 .35em; }
+.bl-md-desc h1, .bl-md-desc h2, .bl-md-desc h3,
+.bl-md-desc h4, .bl-md-desc h5, .bl-md-desc h6 {
+    font-size: .88rem;
+    font-weight: 700;
+    color: var(--text-color);
+    margin: 0 0 .25em;
+}
+.bl-md-desc ul, .bl-md-desc ol { padding-left: 1.2em; }
+.bl-md-desc code {
+    font-size: .76rem;
+    background: var(--light-bg-color);
+    padding: 0 4px;
+    border-radius: 4px;
+}
+.bl-md-desc pre { background: var(--light-bg-color); padding: 6px 8px; border-radius: 6px; font-size: .74rem; }
+.bl-md-desc pre code { background: none; padding: 0; }
+.bl-md-desc blockquote { border-left: 3px solid var(--border-color); padding-left: .6em; }
+.bl-md-desc table { font-size: .76rem; border-collapse: collapse; }
+.bl-md-desc th, .bl-md-desc td { border: 1px solid var(--border-color); padding: 2px 6px; }
+.bl-md-desc hr { margin: .4em 0; }
+.bl-md-desc a { color: #0d6efd; }
+.bl-md-desc .bfv-img-ph {
+    display: inline-block;
+    padding: 0 6px;
+    border: 1px dashed var(--border-color);
+    border-radius: 4px;
+    font-size: .74rem;
+}
+
+.bl-md-more {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: .76rem;
+    font-weight: 600;
+    color: #0d6efd;
+    text-decoration: none;
+}
+.bl-md-more:hover { text-decoration: underline; }

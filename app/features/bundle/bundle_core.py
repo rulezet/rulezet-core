@@ -7,6 +7,7 @@ from ...core.db_class.db import *
 from app.core.db_class.db import Bundle, BundleRuleAssociation
 from typing import Dict, Any, Union , List
 from ..rule import rule_core as RuleModel
+from .bundle_history_core import tracked, record_bundle_created
 import json
 from collections import Counter
 
@@ -59,6 +60,8 @@ def create_bundle(form_dict , user) -> Bundle:
         db.session.rollback()
         raise e
 
+    record_bundle_created(new_bundle.id, user)
+
     try:
         from app.features.notification.notification_core import notify_followers_new_bundle
         notify_followers_new_bundle(new_bundle, user.id)
@@ -67,6 +70,7 @@ def create_bundle(form_dict , user) -> Bundle:
 
     return new_bundle
 
+@tracked("rules")
 def add_rules_to_bundle(bundle_id: int, rule_ids: list[int]) -> bool:
     try:
         existing_rule_ids = {
@@ -96,6 +100,78 @@ def add_rules_to_bundle(bundle_id: int, rule_ids: list[int]) -> bool:
 
 
 
+# ── Access & private share links ─────────────────────────────────────────
+
+_SHARE_SESSION_KEY = "bundle_share_grants"
+
+
+def has_share_grant(bundle) -> bool:
+    """True if the current (logged-in) user opened this bundle's *current*
+    share link in this session. Regenerating the link invalidates it."""
+    import hmac
+    from flask import session, has_request_context
+    if not bundle or not bundle.share_token or not has_request_context():
+        return False
+    if not current_user.is_authenticated:
+        return False
+    granted = (session.get(_SHARE_SESSION_KEY) or {}).get(str(bundle.id))
+    return bool(granted) and hmac.compare_digest(str(granted), bundle.share_token)
+
+
+def can_view_bundle(bundle) -> bool:
+    """Single read-access rule for a bundle: public, owner, admin, or a
+    logged-in user holding the current private share link."""
+    if not bundle:
+        return False
+    if bundle.access:
+        return True
+    if not current_user.is_authenticated:
+        return False
+    if current_user.id == bundle.user_id or current_user.is_admin():
+        return True
+    return has_share_grant(bundle)
+
+
+def grant_share_access(token: str):
+    """Resolve a share token; on success remember it in the session and
+    return the bundle (None if the token is unknown/revoked)."""
+    from flask import session
+    if not token or len(token) > 64:
+        return None
+    bundle = Bundle.query.filter_by(share_token=token).first()
+    if not bundle:
+        return None
+    grants = dict(session.get(_SHARE_SESSION_KEY) or {})
+    grants[str(bundle.id)] = token
+    session[_SHARE_SESSION_KEY] = grants
+    session.modified = True
+    return bundle
+
+
+@tracked("sharing")
+def regenerate_share_token(bundle_id: int):
+    """Create or replace the bundle's share token. Returns the new token."""
+    import secrets
+    bundle = db.session.get(Bundle, bundle_id)
+    if not bundle:
+        return None
+    bundle.share_token = secrets.token_urlsafe(32)
+    bundle.share_token_created_at = datetime.datetime.now(tz=datetime.timezone.utc)
+    db.session.commit()
+    return bundle.share_token
+
+
+@tracked("sharing")
+def revoke_share_token(bundle_id: int) -> bool:
+    bundle = db.session.get(Bundle, bundle_id)
+    if not bundle:
+        return False
+    bundle.share_token = None
+    bundle.share_token_created_at = None
+    db.session.commit()
+    return True
+
+
 def get_bundle_by_id(bundle_id: int) -> Bundle | None:
     """
     Retrieve a Bundle by its ID.
@@ -114,13 +190,6 @@ def get_bundle_by_uuid(uuid: str) -> Bundle | None:
     """
     return Bundle.query.filter_by(uuid=uuid).first()
 
-def add_view(bundle_id: int) -> bool:
-    bundle = Bundle.query.get(bundle_id)
-    if bundle:
-        bundle.view_count += 1
-        db.session.commit()
-        return True
-    return False
 def  get_association_by_id(association_id: int) -> Bundle | None:
     """
     Retrieve a Bundle by its ID.
@@ -252,6 +321,7 @@ def get_total_bundles_count() -> int:
 
 
 
+@tracked("details")
 def update_bundle(bundle_id: int, form_dict: dict ) -> Bundle | None:
     """
     Update a bundle's details.
@@ -306,6 +376,7 @@ def delete_bundle(bundle_id: int) -> bool:
     return True
 
 
+@tracked("rules")
 def add_rule_to_bundle(bundle_id: int, rule_id: int , description: str) -> bool:
     """
     Add a single rule to a bundle.
@@ -341,6 +412,7 @@ def add_rule_to_bundle(bundle_id: int, rule_id: int , description: str) -> bool:
         return True
     return False 
 
+@tracked("tags", user_arg=2)
 def update_bundle_tags(bundle_id: int, tags: List[int], user: User) -> bool:
     """
     Syncs the tags associated with a bundle without deleting existing ones
@@ -517,6 +589,7 @@ def get_total_rule_from_bundle_count(bundle_id: int) -> int:
         .count()
     )
 
+@tracked("rules")
 def remove_rule_from_bundle(bundle_id: int, rule_id: int) -> bool:
     """
     Remove a single rule from a bundle.
@@ -639,6 +712,7 @@ def get_bundles_by_workspace(workspace_id: int) -> List[Bundle]:
     )
 
 
+@tracked("visibility")
 def toggle_bundle_accessibility(bundle_id: int) -> bool:
     """
     Toggle the accessibility of a bundle between public and private.
@@ -763,6 +837,87 @@ def remove_has_voted(vote, bundle_id , id) -> bool:
     return False 
 
 
+# Bundle structures are user-supplied and served back to every viewer —
+# cap their size so one bundle can't be used as free file hosting / DoS.
+MAX_STRUCTURE_NODES = 5000
+MAX_FILE_BYTES      = 1 * 1024 * 1024    # per custom file
+MAX_TOTAL_BYTES     = 20 * 1024 * 1024   # all custom files together
+MAX_DEPTH           = 20
+
+
+def validate_structure(structure) -> str | None:
+    """Return an error message if the tree coming from the editor is not
+    acceptable, else None. Checks shape, node types, name length, depth,
+    per-file / total size. Nodes referencing missing/trashed rules are pruned."""
+    if not isinstance(structure, list):
+        return "Invalid structure"
+
+    count = 0
+    total = 0
+    rule_ids = set()
+    stack = [(n, 1) for n in structure]
+    while stack:
+        node, depth = stack.pop()
+        count += 1
+        if count > MAX_STRUCTURE_NODES:
+            return f"Too many items in this bundle (max {MAX_STRUCTURE_NODES})"
+        if depth > MAX_DEPTH:
+            return f"Folders are nested too deep (max {MAX_DEPTH} levels)"
+        if not isinstance(node, dict) or node.get('type') not in ('folder', 'file'):
+            return "Invalid item in structure"
+        rid = node.get('rule_id')
+        name = node.get('name')
+        if rid is not None:
+            # Rule nodes: the name is just the rule title (may contain '/'),
+            # never used as a path — the tree/ZIPs rebuild it from Rule.title.
+            if not isinstance(name, str) or not name.strip():
+                node['name'] = 'rule'
+            elif len(name) > 255:
+                node['name'] = name[:255]
+        else:
+            if not isinstance(name, str) or not name.strip() or len(name) > 255:
+                return "Every file and folder needs a name of 1-255 characters"
+            if name.strip() in ('.', '..') or '/' in name or '\\' in name:
+                return f"Invalid name: {name[:40]}"
+
+        if rid is not None:
+            if isinstance(rid, str) and rid.isdigit():
+                rid = node['rule_id'] = int(rid)
+            if not isinstance(rid, int) or isinstance(rid, bool):
+                return "Invalid rule reference"
+            rule_ids.add(rid)
+        elif node.get('type') == 'file':
+            content = node.get('content') or ''
+            if not isinstance(content, str):
+                return "Invalid file content"
+            size = len(content.encode('utf-8'))
+            if size > MAX_FILE_BYTES:
+                return f"File '{name[:40]}' is too large (max {MAX_FILE_BYTES // 1024} KB)"
+            total += size
+            if total > MAX_TOTAL_BYTES:
+                return f"Bundle files are too large in total (max {MAX_TOTAL_BYTES // (1024 * 1024)} MB)"
+        children = node.get('children') or []
+        if not isinstance(children, list):
+            return "Invalid structure"
+        if node.get('type') == 'file' and children:
+            return "Files can't contain other items"
+        stack.extend((c, depth + 1) for c in children)
+
+    if rule_ids:
+        found = {r.id for r in Rule.query.filter(Rule.id.in_(rule_ids), Rule.is_deleted == False)
+                 .with_entities(Rule.id).all()}
+        missing = rule_ids - found
+        if missing:
+            # Drop nodes pointing at trashed / non-existent rules (in place)
+            # instead of failing the save — they can't be shown anyway.
+            def prune(nodes):
+                nodes[:] = [n for n in nodes if n.get('rule_id') not in missing]
+                for n in nodes:
+                    prune(n.get('children') or [])
+            prune(structure)
+    return None
+
+
 def save_workspace(bundle_id, structure):
     """
     Docstring for save_workspace
@@ -858,6 +1013,7 @@ def update_bundle_from_structure(bundle_id, structure):
         return False
     
 
+@tracked("structure")
 def update_bundle_from_rule_id_into_structure(bundle_id):
     """
     Ensure every rule in BundleRuleAssociation has a matching BundleNode,

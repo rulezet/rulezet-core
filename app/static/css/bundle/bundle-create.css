@@ -1,0 +1,60 @@
+/*
+  bundle-create.css — "Create a Bundle" page. Section headers and buttons
+  come from bundle-detail.css (.bd-section-*, .bd-btn).
+*/
+
+.bc-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: .75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--subtle-text-color);
+}
+
+.bc-side-title {
+    font-size: .75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--subtle-text-color);
+    margin-bottom: 12px;
+}
+
+.bc-visibility {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    cursor: pointer;
+    margin: 0;
+}
+.bc-visibility .form-check-input { width: 2.4em; height: 1.3em; margin-top: 2px; cursor: pointer; }
+.bc-hint { font-size: .78rem; color: var(--subtle-text-color); line-height: 1.45; margin-top: 2px; }
+
+.bc-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.bc-steps li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: .85rem;
+    color: var(--text-color);
+}
+.bc-steps li > i {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 110, 253, .1);
+    color: #0d6efd;
+    font-size: .8rem;
+}
+
+.bc-submit { width: 100%; justify-content: center; padding: 11px 16px; font-size: .9rem; }

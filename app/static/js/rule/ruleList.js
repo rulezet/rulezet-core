@@ -22,6 +22,8 @@
  *   canVote             Boolean                                default:false
  *   canFavorite         Boolean                                default:false
  *   canEdit             Boolean                                default:false
+ *   extraRowActions     Array  [{ key, label, icon }]           default:[] — page-specific
+ *                       per-rule buttons; clicking one emits row-action({ action: key, rule })
  *   canDelete           Boolean                                default:false
  *   bulkActions         Array    [{key,label,icon?,variant?}]  default:[]
  *   initialPerPage      Number                                 default:12
@@ -123,6 +125,9 @@ export default {
         canVote:            { type: Boolean,          default: false },
         canFavorite:        { type: Boolean,          default: false },
         canEdit:            { type: Boolean,          default: false },
+        // Opt-in, page-local per-row buttons (e.g. bundle detail: "Show in
+        // structure"). No effect on pages that don't pass it.
+        extraRowActions:    { type: Array,            default: () => [] },
         canDelete:          { type: Boolean,          default: false },
         bulkActions:        { type: Array,            default: () => [] },
         initialPerPage:     { type: Number,           default: 12 },
@@ -222,7 +227,7 @@ export default {
         showConfirmButton:  { type: Boolean,             default: true },
     },
 
-    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'toggle-select', 'rule-drag-start', 'rule-drag-end', 'status-change'],
+    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'toggle-select', 'rule-drag-start', 'rule-drag-end', 'status-change', 'row-action'],
 
     // 'ruleType'/'onFilterChange' let a parent page drive the format filter
     // from outside (e.g. clicking a "12 YARA rules" stat elsewhere on the
@@ -908,6 +913,11 @@ export default {
                                             <i class="fas fa-eye me-2 text-muted"></i>View Detail
                                         </a>
                                     </li>
+                                    <li v-for="act in extraRowActions" :key="act.key">
+                                        <button class="dropdown-item rounded-2" @click="$emit('row-action', { action: act.key, rule })">
+                                            <i :class="act.icon + ' me-2 text-primary'"></i>{{ act.label }}
+                                        </button>
+                                    </li>
                                     <template v-if="currentUserIsAuthenticated">
                                         <li>
                                             <report-modal
@@ -1289,6 +1299,12 @@ export default {
 
                             <td class="dt-td dt-td--actions">
                                 <div class="dt-actions">
+                                    <button v-for="act in extraRowActions" :key="act.key"
+                                            class="dt-action-btn rl-extra-action"
+                                            :title="act.label"
+                                            @click.stop="$emit('row-action', { action: act.key, rule })">
+                                        <i :class="act.icon"></i>
+                                    </button>
                                     <!-- Favori : toujours visible -->
                                     <button v-if="canFavorite"
                                             class="dt-action-btn"
@@ -2547,6 +2563,7 @@ export default {
         // rules until the page was manually reloaded.
         watch(() => props.source, () => { page.value = 1; fetchData() })
         watch(() => props.branch, () => { page.value = 1; fetchData() })
+        watch(() => props.ids, () => { page.value = 1; fetchData() })
 
         // Auto-expand all items when search field is "content"
         watch(items, (newItems) => {

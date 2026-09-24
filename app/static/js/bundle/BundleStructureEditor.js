@@ -21,6 +21,7 @@
 import SmartEditor from '/static/js/components/smart-editor.js'
 import CodeViewer  from '/static/js/components/code-viewer.js'
 import { create_message } from '/static/js/toaster.js'
+import { editorModeFor, docIcon, RULE_ICON } from '/static/js/bundle/bundleFileTypes.js'
 
 const { ref, onMounted, onUnmounted, nextTick, watch } = Vue
 
@@ -34,6 +35,7 @@ const TREE_ITEM_TEMPLATE = `
             'bse-node-row--selected': selectedId === node.id,
             'bse-node-row--drop-target': localDropTarget && node.type === 'folder',
             'bse-node-row--multi': multiSet && multiSet.has(node.id),
+            'bse-node-row--doc': node.type === 'file' && !isRule(node),
         }"
         :title="multiSet && multiSet.size ? 'Ctrl/Cmd+click to add to selection' : ''"
         @click.stop="onRowClick($event, node)"
@@ -54,10 +56,10 @@ const TREE_ITEM_TEMPLATE = `
             <i :class="collapsed ? 'fas fa-folder text-warning' : 'fas fa-folder-open text-warning'"
                style="font-size:.78rem;flex-shrink:0;"></i>
         </template>
-        <!-- File: single icon -->
+        <!-- File: rule = blue shield, custom file = per-extension teal icon -->
         <i v-else
-            :class="isRule(node) ? 'fas fa-file-code text-primary' : 'fas fa-file-signature text-success'"
-            style="font-size:.78rem;flex-shrink:0;">
+            :class="fileIcon(node).icon"
+            :style="{ fontSize: '.78rem', flexShrink: 0, color: fileIcon(node).color }">
         </i>
 
         <input v-if="renamingId === node.id" ref="renameInput" class="bse-node-name-input"
@@ -135,6 +137,7 @@ const TreeItem = {
     },
     methods: {
         isRule(node) { return node && String(node.id).startsWith('rule_') },
+        fileIcon(node) { return this.isRule(node) ? RULE_ICON : docIcon(node.name) },
         toggleCollapse() { this.collapsed = !this.collapsed },
 
         // Custom (non-rule) files keep a locked extension while renaming —
@@ -373,8 +376,10 @@ export default {
             <template v-else>
                 <div class="bse-preview-header">
                     <span class="bse-preview-filename">
-                        <i v-if="selectedNode"
-                           :class="selectedNode.type === 'folder' ? 'fas fa-folder text-warning' : 'fas fa-file-code text-primary'"
+                        <i v-if="selectedNode && selectedNode.type === 'folder'" class="fas fa-folder text-warning me-2"></i>
+                        <i v-else-if="selectedNode"
+                           :class="(isRule(selectedNode) ? RULE_ICON : docIcon(selectedNode.name)).icon"
+                           :style="{ color: (isRule(selectedNode) ? RULE_ICON : docIcon(selectedNode.name)).color }"
                            class="me-2"></i>
                         <i v-else class="fas fa-eye text-success me-2"></i>
                         {{ selectedNode ? selectedNode.name : 'Preview: ' + previewName }}
@@ -401,10 +406,11 @@ export default {
                 <!-- Editable custom file -->
                 <smart-editor
                     v-if="selectedNode && selectedNode.type === 'file' && !isRule(selectedNode)"
+                    :key="selectedNode.id + '|' + selectedNode.name"
                     :model-value="selectedNode.content ?? ''"
                     @update:model-value="onContentChange"
-                    mode="code"
-                    language="text"
+                    :mode="editorModeFor(selectedNode.name).mode"
+                    :language="editorModeFor(selectedNode.name).language"
                     min-height="300px"
                     max-height="300px">
                 </smart-editor>
@@ -588,16 +594,26 @@ export default {
         // ── Helpers ────────────────────────────────────────────────
         const isRule = (node) => node && String(node.id).startsWith('rule_')
 
+        // Same rules as the backend (validate_structure): no path separators,
+        // no control chars, not '.'/'..', max 255 chars.
+        const cleanName = (raw) => {
+            const n = String(raw || '').replace(/[\/\\]/g, '_').replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, '').trim()
+            return (n === '.' || n === '..') ? '' : n.slice(0, 240)
+        }
+
         // Highlighting: <code-viewer> is given the raw rule format string
         // directly (:language="rule.format || 'auto'") and resolves it
         // itself via its own LANG_ALIASES map — same convention as the
         // rule detail page — instead of duplicating a second, incomplete
         // format->language table here.
 
+        // Fallback only — rule JSON carries `extension` (Rule.get_extension(),
+        // the backend source of truth) and it's used first in _fileName().
         const _ext = (format) => {
             const map = {
-                yara: '.yar', sigma: '.yaml', nova: '.yaml', suricata: '.rules',
-                zeek: '.zeek', wazuh: '.xml', nse: '.nse', crs: '.conf', kunai: '.kun',
+                yara: '.yar', sigma: '.yml', suricata: '.rules', sagan: '.rules', snort: '.rules',
+                zeek: '.zeek', wazuh: '.xml', nse: '.nse', crs: '.conf', nova: '.nov',
+                splunk: '.yml', elastic: '.toml', kql: '.kql', kunai: '.kun', atr: '.yaml', plum: '.yaml',
             }
             return map[(format || '').toLowerCase()] || '.txt'
         }
@@ -606,7 +622,8 @@ export default {
         // Wazuh titles do, e.g. "Integrity checksum changed.") — appending
         // _ext() straight onto that produced a double dot before the
         // extension ("...changed..xml"). Strip trailing dots first.
-        const _fileName = (rule) => rule.title.replace(/\.+$/, '') + _ext(rule.format)
+        const _fileName = (rule) => (rule.title || '').replace(/\.+$/, '') +
+            (rule.extension ? '.' + rule.extension : _ext(rule.format))
 
         // ── Load / save ────────────────────────────────────────────
         async function loadTree() {
@@ -654,6 +671,7 @@ export default {
                     return true
                 } else {
                     saveStatus.value = 'error'
+                    if (data.message) create_message(data.message, data.toast_class || 'danger-subtle')
                     saveStatusTimer = setTimeout(() => { saveStatus.value = '' }, 4000)
                 }
             } catch {
@@ -735,7 +753,7 @@ export default {
 
         // Add folder
         function confirmAddFolder() {
-            const name = folderText.value.trim()
+            const name = cleanName(folderText.value)
             if (!name) { create_message('Folder name required', 'warning-subtle'); return }
             const target = currentTarget.value || treeData.value
             const node = { id: 'f_' + Date.now(), name, type: 'folder', children: [], content: '' }
@@ -747,7 +765,7 @@ export default {
 
         // Add file
         function confirmAddFile() {
-            const base = fileNameText.value.trim()
+            const base = cleanName(fileNameText.value)
             if (!base) { create_message('File name required', 'warning-subtle'); return }
             const target = currentTarget.value || treeData.value
             const fullName = base.endsWith(fileExt.value) ? base : base + fileExt.value
@@ -774,7 +792,7 @@ export default {
             // rename-confirm, then unmounting the input on the next render
             // fires a native blur which fires rename-confirm again).
             if (!nodeToRename.value || nodeToRename.value.id !== node.id) return
-            const base = (text || '').trim()
+            const base = cleanName(text)
             if (base) {
                 const dot = (node.type === 'file' && !isRule(node)) ? node.name.lastIndexOf('.') : -1
                 const ext = dot > 0 ? node.name.slice(dot) : ''
@@ -886,6 +904,7 @@ export default {
             saving, saveStatus, lastSavedAt, rootDropActive,
             folderText, fileNameText, fileExt, nodeToRename, creationMode,
             isRule, selectNode, clearDisplay, setPreview, prepareTarget,
+            editorModeFor, docIcon, RULE_ICON,
             confirmAddFolder, confirmAddFile, cancelCreation,
             beginRename, confirmRename, cancelRename,
             beginDelete, saveStructure, saveNow, onContentChange,

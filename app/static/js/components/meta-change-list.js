@@ -5,7 +5,8 @@
  * Props:
  *   changes  Array    Required. Output of the backend's `diff_rule_snapshots()`:
  *                      [{ field, label, type: 'scalar', old, new }, ...]
- *                      [{ field, label, type: 'list', added: [...], removed: [...] }, ...]
+ *                      [{ field, label, type: 'list', added: [...], removed: [...], changed?: [...] }, ...]
+ *                     (`changed` = neutral "~" entries, e.g. edited/moved files — used by bundle history)
  *   compact  Boolean  Smaller variant for embedding inside a timeline row (default: false)
  *
  * Usage:
@@ -27,6 +28,17 @@ const FIELD_ICONS = {
     tags:        'fa-tags',
     cve_ids:            'fa-bug',
     attack_techniques:  'fa-crosshairs',
+    // bundle history fields
+    name:            'fa-heading',
+    access:          'fa-lock-open',
+    vulnerabilities: 'fa-bug',
+    rules:           'fa-shield-halved',
+    rules_moved:     'fa-arrows-up-down-left-right',
+    files:           'fa-file-lines',
+    files_modified:  'fa-file-pen',
+    files_renamed:   'fa-i-cursor',
+    folders:         'fa-folder-tree',
+    share_link:      'fa-link',
 }
 
 function field_icon(field) {
@@ -55,6 +67,7 @@ export default {
             <span class="mcl-tags">
                 <span v-for="t in c.added"   :key="'add-'+t" class="mcl-tag mcl-tag--added">+{{ t }}</span>
                 <span v-for="t in c.removed" :key="'rem-'+t" class="mcl-tag mcl-tag--removed">-{{ t }}</span>
+                <span v-for="t in (c.changed || [])" :key="'chg-'+t" class="mcl-tag mcl-tag--changed">~{{ t }}</span>
             </span>
         </template>
         <template v-else>

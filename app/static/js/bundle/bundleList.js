@@ -52,6 +52,7 @@ import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDis
 import AttackDisplayList        from '/static/js/attack/attackDisplayList.js'
 import UserChip                 from '/static/js/components/UserChip.js'
 import CodeViewer               from '/static/js/components/code-viewer.js'
+import { renderSafeMarkdown }   from '/static/js/bundle/bundleFileTypes.js'
 import { create_message }       from '/static/js/toaster.js'
 import ReportModal              from '/static/js/components/ReportModal.js'
 import VoterPopover             from '/static/js/components/VoterPopover.js'
@@ -124,7 +125,6 @@ export default {
                     <option value="newest">Newest</option>
                     <option value="oldest">Oldest</option>
                     <option value="most_voted">Most voted</option>
-                    <option value="most_viewed">Most viewed</option>
                     <option value="name_asc">A → Z</option>
                 </select>
 
@@ -405,10 +405,9 @@ export default {
                     </div>
 
                     <!-- Description -->
-                    <p class="rl-card-desc mb-3"
-                       style="-webkit-line-clamp:3;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden;">
-                        <span v-html="highlight(bundle.description || 'No description.')"></span>
-                    </p>
+                    <div v-if="bundle.description" class="rl-card-desc bl-md-desc bl-md-desc--card mb-3"
+                         v-html="descFor(bundle)"></div>
+                    <p v-else class="rl-card-desc mb-3 fst-italic">No description.</p>
 
                     <!-- Format badges + rule count -->
                     <div class="d-flex flex-wrap gap-1 mb-2" @click.stop>
@@ -445,10 +444,6 @@ export default {
 
                     <!-- Meta strip -->
                     <div class="rl-card-meta">
-                        <span class="rl-meta-item">
-                            <i class="fas fa-eye"></i>
-                            <span>{{ bundle.view_count }} views</span>
-                        </span>
                         <span class="rl-meta-item">
                             <i class="fas fa-download"></i>
                             <span>{{ bundle.download_count }} downloads</span>
@@ -706,7 +701,7 @@ export default {
 
                             <td v-show="colVisible.description" class="dt-td dt-td--truncate">
                                 <span class="text-muted"
-                                      v-html="highlight(bundle.description || '—')"></span>
+                                      v-html="highlight(mdToText(bundle.description) || '—')"></span>
                             </td>
 
                             <td v-show="colVisible.author" class="dt-td" @click.stop>
@@ -848,10 +843,6 @@ export default {
                                             <span class="rl-expand-v">{{ bundle.number_of_rules }}</span>
                                         </div>
                                         <div class="rl-expand-kv">
-                                            <span class="rl-expand-k">Views</span>
-                                            <span class="rl-expand-v">{{ bundle.view_count }}</span>
-                                        </div>
-                                        <div class="rl-expand-kv">
                                             <span class="rl-expand-k">Downloads</span>
                                             <span class="rl-expand-v">{{ bundle.download_count }}</span>
                                         </div>
@@ -868,9 +859,10 @@ export default {
                                         <span class="rl-expand-k">
                                             <i class="fas fa-quote-left me-1 opacity-50"></i>Description
                                         </span>
-                                        <p class="mb-0 text-muted" style="font-size:.83rem;line-height:1.5;">
-                                            {{ bundle.description }}
-                                        </p>
+                                        <div class="bl-md-desc bl-md-desc--expand" v-html="descFor(bundle)"></div>
+                                        <a :href="'/bundle/detail/' + bundle.id" class="bl-md-more">
+                                            Full description <i class="fa-solid fa-arrow-right ms-1"></i>
+                                        </a>
                                     </div>
 
                                     <!-- Tags + CVEs + Rules list -->
@@ -1294,7 +1286,6 @@ export default {
                 newest:      { key: 'created_at', dir: 'desc' },
                 oldest:      { key: 'created_at', dir: 'asc'  },
                 most_voted:  { key: 'vote_up',    dir: 'desc' },
-                most_viewed: { key: 'view_count',  dir: 'desc' },
                 name_asc:    { key: 'name',        dir: 'asc'  },
             }
             const s = map[cardSort.value]
@@ -1413,6 +1404,58 @@ export default {
         })
 
         // ── Highlight ────────────────────────────────────────────────────
+        // Descriptions are markdown — list views show them as plain text
+        function mdToText(md) {
+            if (!md) return ''
+            return String(md)
+                .replace(/```[\s\S]*?```/g, ' ')              // fenced code
+                .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')      // images -> alt
+                .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')       // links -> text
+                .replace(/<[^>]+>/g, ' ')                       // raw html
+                .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, '') // headings, quotes, lists
+                .replace(/(\*\*|__|\*|_|~~|`)/g, '')           // emphasis / inline code
+                .replace(/^\s*([-*_]\s*){3,}$/gm, ' ')           // hr
+                .replace(/\s+/g, ' ')
+                .trim()
+        }
+
+        // Rendered (sanitised + hardened) markdown per bundle, cached by
+        // id+content; search matches are highlighted inside text nodes only.
+        const _descCache = reactive({})
+        function _descKey(b) { return b.id + ':' + (b.description || '').length + ':' + (b.description || '').slice(0, 32) }
+        watch(items, (list) => {
+            for (const b of list || []) {
+                const k = _descKey(b)
+                if (!b.description || _descCache[k] !== undefined) continue
+                _descCache[k] = ''
+                renderSafeMarkdown(b.description).then(html => { _descCache[k] = html }).catch(() => {})
+            }
+        }, { immediate: true })
+
+        function _highlightHtml(html) {
+            const q = search.value.trim()
+            if (!html || !q || q.length < 2) return html
+            const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+            const doc = new DOMParser().parseFromString(html, 'text/html')
+            const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+            const nodes = []
+            while (walker.nextNode()) nodes.push(walker.currentNode)
+            for (const n of nodes) {
+                if (!re.test(n.nodeValue)) continue
+                re.lastIndex = 0
+                const span = doc.createElement('span')
+                span.innerHTML = _esc(n.nodeValue).replace(re, m => `<mark class="rl-highlight">${m}</mark>`)
+                n.replaceWith(...span.childNodes)
+            }
+            return doc.body.innerHTML
+        }
+
+        function descFor(b) {
+            const html = _descCache[_descKey(b)]
+            // Until the markdown is rendered, show the plain-text version
+            return html ? _highlightHtml(html) : highlight(mdToText(b.description))
+        }
+
         function highlight(text) {
             if (!text) return ''
             const q = search.value.trim()
@@ -1482,7 +1525,7 @@ export default {
             toggleRuleExpand, isRuleExpanded,
             fetchBundleRules,
             handleVote, emitBulkAction, emitSend,
-            fromNow, formatDate, highlight,
+            fromNow, formatDate, highlight, mdToText, descFor,
         }
     },
 }

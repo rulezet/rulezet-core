@@ -4,6 +4,9 @@
  * Props:
  *   items        Array   Required. Each item: { uuid, title, description, level,
  *                        category, action, created_at, actor_name, meta }
+ *                        Optional `hint: { label, icon }` renders a clickable
+ *                        hint in the body that emits view-content(item).
+ *                        Optional `icon` overrides the dot icon.
  *   loading      Boolean Show skeleton rows
  *   group-by-day Boolean Group items under sticky day headers (default: true)
  *   max-desc     Number  Max chars shown in description before truncation (default: 180)
@@ -262,6 +265,14 @@ export default {
                                    @click.stop>
                                     <i class="fas fa-arrow-up-right-from-square me-1"></i>View proposal
                                 </a>
+                            </div>
+
+                            <!-- Generic action hint (e.g. bundle history "see description diff") -->
+                            <div v-if="item.hint" class="d-flex gap-2 flex-wrap">
+                                <div class="tl-diff-hint" style="cursor:pointer;" @click.stop="$emit('view-content', item)">
+                                    <i :class="(item.hint.icon || 'fas fa-code-compare') + ' me-1'"></i>
+                                    {{ item.hint.label }}
+                                </div>
                             </div>
 
                             <!-- Content / diff hints for version events -->

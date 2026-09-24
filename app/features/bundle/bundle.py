@@ -5,6 +5,7 @@ from app.features.bundle.bundle_form import AddNewBundleForm, EditBundleForm
 from app.core.utils.utils import form_to_dict, safe_referrer
 from app.features.misp.bundle.misp_object import get_bundle_misp_event
 from . import bundle_core as BundleModel
+from .bundle_history_core import track_bundle_change, get_bundle_history_page, get_bundle_history_entry, diff_snapshots as diff_bundle_snapshots
 from ..rule import rule_core as RuleModel
 from ..account import account_core as AccountModel
 from app.core.utils.activity_log import log_activity
@@ -149,10 +150,12 @@ def detail(bundle_id) :
     """Go to detail of a bundle"""    
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if bundle: 
-        if bundle.access or current_user.is_admin() or current_user.id == bundle.user_id:
-            # add one to the wiew
-            success = BundleModel.add_view(bundle_id)
-            return render_template("bundle/detail_bundle.html", bundle_id=bundle_id, bundle_name=bundle.name)
+        resp = _apply_share_param(bundle)
+        if resp is not None:
+            return resp
+        if _can_view_bundle(bundle):
+            return render_template("bundle/detail_bundle.html", bundle_id=bundle_id, bundle_name=bundle.name,
+                                   via_share_link=not bundle.access and not _is_bundle_manager(bundle))
         else:
             return render_template("access_denied.html"),403
     else:
@@ -163,10 +166,12 @@ def detail_uuid(bundle_uuid) :
     """Go to detail of a bundle"""
     bundle = BundleModel.get_bundle_by_uuid(bundle_uuid)
     if bundle:
-        if bundle.access or current_user.is_admin() or current_user.id == bundle.user_id:
-            # add one to the wiew
-            success = BundleModel.add_view(bundle.id)
-            return render_template("bundle/detail_bundle.html", bundle_id=bundle.id, bundle_name=bundle.name)
+        resp = _apply_share_param(bundle)
+        if resp is not None:
+            return resp
+        if _can_view_bundle(bundle):
+            return render_template("bundle/detail_bundle.html", bundle_id=bundle.id, bundle_name=bundle.name,
+                                   via_share_link=not bundle.access and not _is_bundle_manager(bundle))
         else:
             return render_template("access_denied.html"),403
     else:
@@ -203,11 +208,17 @@ def save_workspace(bundle_id):
     if current_user.id != bundle.user_id and not current_user.is_admin():
         return {"success": False, "toast_class": "danger", "message": "You don't have the permission to do that!"}, 401
 
-    s = BundleModel.update_bundle_from_structure(bundle_id, structure)
-    if not s:
-        return {"success": False, "toast_class": "danger", "message": "Error updating rule view count"}, 500
+    error = BundleModel.validate_structure(structure)
+    if error:
+        return {"success": False, "toast_class": "danger-subtle", "message": error}, 400
 
-    success = BundleModel.save_workspace(bundle_id, structure)
+    # Both steps rewrite the bundle's rules/tree — tracked as one history
+    # entry (coalesced across the editor's autosaves, see bundle_history_core).
+    with track_bundle_change(bundle_id, "structure", user=current_user):
+        s = BundleModel.update_bundle_from_structure(bundle_id, structure)
+        if not s:
+            return {"success": False, "toast_class": "danger", "message": "Error updating rule view count"}, 500
+        success = BundleModel.save_workspace(bundle_id, structure)
 
     if success:
         log_activity(
@@ -221,12 +232,175 @@ def save_workspace(bundle_id):
     else:
         return {"success": False, "toast_class": "danger", "message": "Error saving workspace"}, 500
 
+def _can_view_bundle(bundle):
+    return BundleModel.can_view_bundle(bundle)
+
+
+def _is_bundle_manager(bundle):
+    return current_user.is_authenticated and (current_user.id == bundle.user_id or current_user.is_admin())
+
+
+# ── Private share link ────────────────────────────────────────────────────
+
+def _share_url(token):
+    bundle = BundleModel.Bundle.query.filter_by(share_token=token).first() if token else None
+    if bundle is None:
+        return url_for("bundle.open_shared_bundle", token=token, _external=True)
+    # The detail URL itself carries the key (?share=…) — opening it grants
+    # access (after login) and the key stays visible in the address bar.
+    return url_for("bundle.detail", bundle_id=bundle.id, share=token, _external=True)
+
+
+@bundle_blueprint.route("/share/<string:token>", methods=['GET'])
+@login_required
+def open_shared_bundle(token):
+    """Share link entry point: needs an account; grants this session access
+    to the (private) bundle, then lands on its detail page."""
+    bundle = BundleModel.grant_share_access(token)
+    if not bundle:
+        flash("This share link is invalid or has been revoked.", "danger")
+        return render_template("access_denied.html"), 403
+    log_activity("bundle.share_open", f"Opened bundle '{bundle.name}' via share link",
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
+    # Keep the key visible in the URL: the page itself shows it was reached
+    # through a share link, and the URL keeps working on its own.
+    return redirect(url_for("bundle.detail", bundle_id=bundle.id, share=token))
+
+
+def _apply_share_param(bundle):
+    """`?share=<token>` on a detail URL: grant access like /bundle/share/<token>.
+    Returns a redirect to the login page when the visitor isn't logged in
+    (a share link always requires an account), else None."""
+    token = request.args.get("share", type=str)
+    if not token or bundle.access:
+        return None
+    if not current_user.is_authenticated:
+        return redirect(url_for("account.login", next=request.full_path))
+    BundleModel.grant_share_access(token)   # unknown/revoked token → nothing granted
+    return None
+
+
+@bundle_blueprint.route("/<int:bundle_id>/share", methods=['GET'])
+@login_required
+def get_share_link(bundle_id):
+    """Owner/admin: current share link (or none)."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+    if not _is_bundle_manager(bundle):
+        return {"success": False, "message": "Only the owner or an admin can manage the share link", "toast_class": "danger"}, 403
+    return {
+        "success": True,
+        "url": _share_url(bundle.share_token) if bundle.share_token else None,
+        "created_at": bundle.share_token_created_at.strftime('%Y-%m-%d %H:%M') if bundle.share_token_created_at else None,
+        "is_public": bool(bundle.access),
+    }, 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/share", methods=['POST'])
+@login_required
+def regenerate_share_link(bundle_id):
+    """Owner/admin: create or regenerate the share link (old one stops working)."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+    if not _is_bundle_manager(bundle):
+        return {"success": False, "message": "Only the owner or an admin can manage the share link", "toast_class": "danger"}, 403
+    had_link = bool(bundle.share_token)
+    token = BundleModel.regenerate_share_token(bundle_id)
+    if not token:
+        return {"success": False, "message": "Could not create the share link", "toast_class": "danger"}, 500
+    log_activity("bundle.share_regenerate" if had_link else "bundle.share_create",
+                 f"{'Regenerated' if had_link else 'Created'} share link for bundle '{bundle.name}'",
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
+    return {
+        "success": True,
+        "url": _share_url(token),
+        "message": "Share link regenerated — the previous link no longer works" if had_link else "Share link created",
+        "toast_class": "success-subtle",
+    }, 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/share", methods=['DELETE'])
+@login_required
+def revoke_share_link(bundle_id):
+    """Owner/admin: revoke the share link."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+    if not _is_bundle_manager(bundle):
+        return {"success": False, "message": "Only the owner or an admin can manage the share link", "toast_class": "danger"}, 403
+    BundleModel.revoke_share_token(bundle_id)
+    log_activity("bundle.share_revoke", f"Revoked share link for bundle '{bundle.name}'",
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
+    return {"success": True, "message": "Share link revoked", "toast_class": "success-subtle"}, 200
+
+
+@bundle_blueprint.route("/history/<int:bundle_id>", methods=['GET'])
+def bundle_history(bundle_id):
+    """Paginated change history of a bundle (History tab)."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+    if not _can_view_bundle(bundle):
+        return {"success": False, "message": "Access denied", "toast_class": "danger"}, 403
+
+    page = max(request.args.get('page', 1, type=int), 1)
+    pagination = get_bundle_history_page(bundle_id, page=page, per_page=30)
+    entries = []
+    for h in pagination.items:
+        e = h.to_json()
+        # Re-derive the readable diff from the stored snapshots so older rows
+        # benefit from display improvements (e.g. description excerpts).
+        if h.old_snapshot and h.new_snapshot:
+            e["changes"] = diff_bundle_snapshots(h.old_snapshot, h.new_snapshot)
+        entries.append(e)
+
+    # Bundles created before history existed: synthesize their creation
+    # event at the very end of the timeline so it never starts empty.
+    is_last_page = page >= max(pagination.pages, 1)
+    if is_last_page and not any(e["action"] == "created" for e in entries) \
+            and not bundle.history.filter_by(action="created").first():
+        owner = bundle.user
+        entries.append({
+            "id": None, "uuid": f"created-{bundle.uuid}", "bundle_id": bundle.id,
+            "user_id": bundle.user_id,
+            "user_name": owner.first_name if owner else None,
+            "user_avatar": owner.get_avatar_url() if owner else None,
+            "action": "created", "summary": "Bundle created", "changes": [],
+            "created_at": bundle.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+            "updated_at": None, "has_description_diff": False, "synthetic": True,
+        })
+
+    return jsonify({
+        "success": True,
+        "entries": entries,
+        "page": page,
+        "pages": pagination.pages,
+        "total": pagination.total + (1 if entries and entries[-1].get("synthetic") else 0),
+    }), 200
+
+
+@bundle_blueprint.route("/history/<int:bundle_id>/<int:entry_id>", methods=['GET'])
+def bundle_history_entry(bundle_id, entry_id):
+    """One history entry with the full old/new description (for the diff view)."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+    if not _can_view_bundle(bundle):
+        return {"success": False, "message": "Access denied", "toast_class": "danger"}, 403
+    entry = get_bundle_history_entry(bundle_id, entry_id)
+    if not entry:
+        return {"success": False, "message": "History entry not found", "toast_class": "danger"}, 404
+    return jsonify({"success": True, "entry": entry.to_json(include_descriptions=True)}), 200
+
+
 @bundle_blueprint.route("/get_bundle_json/<int:bundle_id>")
 def get_bundle_json(bundle_id):
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if not bundle:
         abort(404)
-    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         abort(403)
     # Fetch only top-level nodes (those without parents)
     root_nodes = BundleModel.get_only_root_nodes(bundle_id)
@@ -333,7 +507,7 @@ def get_rules_page_from_bundle() :
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if not bundle:
         abort(404)
-    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         abort(403)
     rule_list = BundleModel.get_all_rule_bundles_page(page , bundle_id)
     total_rules = BundleModel.get_total_rule_from_bundle_count(bundle_id)
@@ -360,7 +534,7 @@ def get_bundle():
             "message": f"No bundle found with id {bundle_id}",
             "success": False
         }, 404
-    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         abort(403)
 
     rules_ids_from_bundle = BundleModel.get_rule_ids_by_bundle(bundle_id)
@@ -482,7 +656,7 @@ def evaluate():
             "success": False
         }, 404
     
-    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         return {
             "success": False,
             "message": "You don't have the permission to evaluate this bundle",
@@ -567,8 +741,7 @@ def bundle_voters():
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if not bundle:
         return jsonify({"message": "Bundle not found"}), 404
-    if not bundle.access and (not current_user.is_authenticated or
-                              (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         return jsonify({"message": "You don't have the permission to view this bundle"}), 401
 
     from app.core.db_class.db import BundleVote as _BV
@@ -600,7 +773,7 @@ def download_bundle():
             "toast_class": "danger"
         }, 400
     
-    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         return {
             "success": False,
             "message": "You don't have the permission to download this bundle",
@@ -613,13 +786,13 @@ def download_bundle():
         zip_file.writestr("bundle_info.txt", bundle_info_json)
 
         for rule in rules:
-            ext = "txt" # Change into .yara .... for each format
-            base_filename = f"{rule.title.replace(' ', '_')}_{rule.id}"
+            ext = rule.get_extension()
+            base_filename = f"{_safe_zip_name((rule.title or '').replace(' ', '_').rstrip('.'), 'rule')}_{rule.id}"
 
             code_filename = f"{base_filename}.{ext}"
             zip_file.writestr(code_filename, rule.to_string or "")
 
-            json_filename = f"{base_filename}.txt"  # .json
+            json_filename = f"{base_filename}.json"
             rule_json = json.dumps(rule.to_json(), indent=2)
             zip_file.writestr(json_filename, rule_json)
 
@@ -636,32 +809,28 @@ def download_bundle():
 
 
 
-EXTENSION_MAP = {
-    'yara': '.yar',
-    'sigma': '.yaml',
-    'suricata': '.rules',
-    'zeek': '.zeek',
-    'wazuh': '.xml',
-    'nse': '.nse',
-    'nova': '.yaml',
-    'crs': '.conf',
-    'plum': '.yaml',
-    'no format': '.txt'
-}
+def _safe_zip_name(name, fallback="untitled"):
+    """One path segment for a ZIP entry built from a user-typed name.
+    Strips separators and control chars and refuses '.'/'..', so an archive
+    can never write outside its extraction folder (zip slip)."""
+    clean = "".join(c for c in str(name or "") if c.isprintable())
+    clean = clean.replace("/", "_").replace("\\", "_").replace(":", "_").strip()
+    if clean in ("", ".", ".."):
+        return fallback
+    return clean[:200]
+
 
 def add_node_to_zip(zip_file, node, current_path=""):
     """
     Independent recursive function to build the ZIP directory tree.
     """
+    if node.rule_id and (not node.rule or node.rule.is_deleted):
+        return  # trashed / missing rule — never ship its content
     if node.rule_id and node.rule:
-        rule_format = node.rule.format.lower() if node.rule.format else 'no format'
-        extension = EXTENSION_MAP.get(rule_format, '.txt')
-        
-        clean_title = node.rule.title.replace("/", "_").replace("\\", "_")
-        filename = f"{clean_title}{extension}"
+        filename = f"{_safe_zip_name((node.rule.title or '').rstrip('.'), 'rule')}.{node.rule.get_extension()}"
         content = node.rule.to_string
     else:
-        filename = node.name
+        filename = _safe_zip_name(node.name)
         content = node.custom_content or ""
 
     entry_path = f"{current_path}/{filename}".strip("/")
@@ -689,7 +858,7 @@ def download_bundle_structure():
         }, 400
 
     # Permission check
-    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         return {
             "success": False,
             "message": "Unauthorized access",
@@ -717,6 +886,166 @@ def download_bundle_structure():
         mimetype='application/zip'
     )
 
+def _add_custom_files_to_zip(zip_file, node, current_path=""):
+    """Like add_node_to_zip, but only writes the non-rule files (README.md,
+    notes.txt…), keeping their folder path. Empty folders are skipped."""
+    entry_path = f"{current_path}/{_safe_zip_name(node.name)}".strip("/")
+    if node.node_type == 'folder':
+        for child in node.children:
+            _add_custom_files_to_zip(zip_file, child, entry_path)
+        return 0
+    if node.rule_id:
+        return 0
+    zip_file.writestr(entry_path, node.custom_content or "")
+    return 1
+
+
+def _count_custom_files(node):
+    if node.node_type == 'folder':
+        return sum(_count_custom_files(c) for c in node.children)
+    return 0 if node.rule_id else 1
+
+
+@bundle_blueprint.route('/download_files', methods=['GET'])
+def download_bundle_files():
+    """ZIP of every non-rule file in the bundle structure, folder layout kept."""
+    bundle_id = request.args.get("bundle_id", type=int)
+    bundle = BundleModel.get_bundle_by_id(bundle_id) if bundle_id else None
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+
+    if not BundleModel.can_view_bundle(bundle):
+        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 401
+
+    root_nodes = BundleModel.get_only_root_nodes(bundle_id)
+    if not sum(_count_custom_files(r) for r in root_nodes):
+        return {"success": False, "message": "This bundle has no files besides rules", "toast_class": "warning-subtle"}, 404
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for root in root_nodes:
+            _add_custom_files_to_zip(zip_file, root)
+    zip_buffer.seek(0)
+
+    safe_bundle_name = "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
+    return send_file(
+        zip_buffer,
+        as_attachment=True,
+        download_name=f"{safe_bundle_name}_files.zip",
+        mimetype='application/zip'
+    )
+
+def _full_bundle_readme(bundle, meta, tags, vulns, rules, n_files):
+    """README.md at the root of the full export: everything a human needs
+    to understand the bundle without opening Rulezet."""
+    def md_cell(v):
+        return str(v).replace("|", "\\|").replace("\n", " ")
+
+    lines = [f"# {bundle.name}", ""]
+    lines += [
+        "| | |", "|---|---|",
+        f"| **UUID** | `{bundle.uuid}` |",
+        f"| **Author** | {md_cell(meta.get('user_name') or meta.get('author') or '—')} |",
+        f"| **Created** | {meta.get('created_at', '—')} |",
+        f"| **Updated** | {meta.get('updated_at', '—')} |",
+        f"| **Visibility** | {'Public' if bundle.access else 'Private'} |",
+        f"| **Verified** | {'Yes' if bundle.is_verified else 'No'} |",
+        f"| **Rules** | {len(rules)} |",
+        f"| **Files & documents** | {n_files} |",
+        f"| **Formats** | {md_cell(', '.join(sorted({(r.format or 'unknown').lower() for r in rules})) or '—')} |",
+        f"| **Votes** | 👍 {bundle.vote_up or 0} · 👎 {bundle.vote_down or 0} |",
+        "",
+        "## Description", "",
+        (bundle.description or "_No description._").strip(), "",
+        "## Tags", "",
+    ]
+    lines += [f"- `{t.get('name')}`" + (f" — {md_cell(t.get('description'))}" if t.get('description') else "") for t in tags] or ["_None_"]
+    lines += ["", "## Vulnerabilities (CVE / identifiers)", ""]
+    lines += [f"- {v}" for v in vulns] or ["_None_"]
+    lines += ["", "## Rules", "", "| Title | Format | UUID |", "|---|---|---|"]
+    lines += [f"| {md_cell(r.title)} | {r.format or '—'} | `{r.uuid}` |" for r in rules] or ["| — | — | — |"]
+    lines += [
+        "", "## Archive layout", "",
+        "- `README.md` — this file",
+        "- `description.md` — the bundle description (Markdown)",
+        "- `bundle.json` — full metadata: bundle, tags, vulnerabilities, rules, structure tree",
+        "- `structure/` — the bundle's folders, rules and files exactly as organised on Rulezet",
+        "- `rules/` — every rule with its full JSON metadata",
+        "- `attack_coverage.json` — MITRE ATT&CK coverage",
+        "- `misp_event.json` — the bundle as a MISP event",
+        "",
+        "---",
+        "> ⚠️ Community content: rules and files are user-submitted and not reviewed by Rulezet. "
+        "Inspect them before running or deploying, preferably in an isolated environment.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+@bundle_blueprint.route('/download_full', methods=['GET'])
+def download_bundle_full():
+    """Everything about a bundle in one ZIP: README + description, metadata
+    (tags, CVEs, rules), the full structure with rules and files, per-rule
+    JSON, ATT&CK coverage and the MISP event."""
+    bundle_id = request.args.get("bundle_id", type=int)
+    bundle = BundleModel.get_bundle_by_id(bundle_id) if bundle_id else None
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+
+    if not BundleModel.can_view_bundle(bundle):
+        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 401
+
+    meta = bundle.to_json()
+    meta.pop("view_count", None)
+    tags = BundleModel.get_tags_for_bundle_json(bundle_id)
+    vulns = BundleModel.get_vulnerabilities_for_bundle(bundle_id)
+    rules = BundleModel.get_rules_from_bundle(bundle_id)
+    root_nodes = BundleModel.get_only_root_nodes(bundle_id)
+    n_files = sum(_count_custom_files(r) for r in root_nodes)
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("README.md", _full_bundle_readme(bundle, meta, tags, vulns, rules, n_files))
+        zf.writestr("description.md", bundle.description or "")
+
+        zf.writestr("bundle.json", json.dumps({
+            "bundle": meta,
+            "tags": tags,
+            "vulnerabilities": vulns,
+            "rules": [{"id": r.id, "uuid": r.uuid, "title": r.title, "format": r.format} for r in rules],
+            "structure": [n.to_tree_json() for n in root_nodes],
+        }, indent=2, default=str))
+
+        for root in root_nodes:
+            add_node_to_zip(zf, root, "structure")
+
+        for rule in rules:
+            base = f"rules/{_safe_zip_name((rule.title or '').replace(' ', '_').rstrip('.'), 'rule')}_{rule.id}"
+            zf.writestr(f"{base}.{rule.get_extension()}", rule.to_string or "")
+            zf.writestr(f"{base}.json", json.dumps(rule.to_json(), indent=2, default=str))
+
+        # Optional extras — a failure there must not cost the user the whole export
+        try:
+            zf.writestr("attack_coverage.json", json.dumps(BundleModel.get_attack_coverage(bundle_id), indent=2, default=str))
+        except Exception:
+            pass
+        try:
+            event = get_bundle_misp_event(bundle_id)
+            if event:
+                zf.writestr("misp_event.json", json.dumps(event, indent=2, default=str))
+        except Exception:
+            pass
+
+    BundleModel.increment_download_count(bundle_id)
+    zip_buffer.seek(0)
+    safe_bundle_name = "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_') or "bundle"
+    return send_file(
+        zip_buffer,
+        as_attachment=True,
+        download_name=f"{safe_bundle_name}_full.zip",
+        mimetype='application/zip'
+    )
+
 @bundle_blueprint.route('/download_misp', methods=['GET'])
 def download_bundle_misp():
     bundle_id = request.args.get("bundle_id", type=int)
@@ -727,7 +1056,7 @@ def download_bundle_misp():
     if not bundle:
         return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 400
 
-    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 401
 
     event_json = get_bundle_misp_event(bundle_id)
@@ -1083,7 +1412,7 @@ def get_bundle_page():
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if not bundle:
         return {"message": f"No bundle found with id {bundle_id}", "success": False}, 404
-    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         abort(403)
 
     pagination = BundleModel.get_paginated_rules_info_by_bundle(bundle_id, page)
@@ -1274,7 +1603,6 @@ def bundle_data_table():
         'updated_at': Bundle.updated_at,
         'name':       Bundle.name,
         'vote_up':    Bundle.vote_up,
-        'view_count': Bundle.view_count,
     }
     sort_col = _sort_map.get(sort_by, Bundle.created_at)
     query = query.order_by(desc(sort_col) if sort_dir == 'desc' else asc(sort_col))
@@ -1362,7 +1690,7 @@ def attack_coverage(bundle_id):
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if not bundle:
         return jsonify({'error': 'Bundle not found'}), 404
-    if not bundle.access and (not current_user.is_authenticated or (current_user.id != bundle.user_id and not current_user.is_admin())):
+    if not BundleModel.can_view_bundle(bundle):
         abort(403)
     data = BundleModel.get_attack_coverage(bundle_id)
     return jsonify(data)

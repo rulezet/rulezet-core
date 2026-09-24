@@ -1093,3 +1093,7 @@
     opacity: .6;
     flex-shrink: 0;
 }
+
+/* extraRowActions (page-specific per-rule buttons, e.g. bundle "Show in structure") */
+.dt-action-btn.rl-extra-action { color: #0d6efd; }
+.dt-action-btn.rl-extra-action:hover { background: rgba(13, 110, 253, .1); }

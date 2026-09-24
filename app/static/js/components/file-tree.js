@@ -3,15 +3,22 @@
  *
  * Props:
  *   nodes         Array    Tree nodes: [{ name, type: 'file'|'dir', path, ext, children }]
+ *                          Optional per node: icon / color (override the ext icon),
+ *                          badge (small label after the name), variant (adds
+ *                          .ft-row--<variant>), defaultOpen (dirs; else open if depth < 2)
  *   loading       Boolean  Show skeleton
  *   mode          String   'read' (select only) | 'read-plus' (select + inline preview)
  *   fetch-content Function Async (node) => string — called in read-plus when a file is clicked
  *
  * Events:
  *   select(node)  — emitted when user clicks a file or directory
+ *
+ * Expose:
+ *   reveal(path)  — unfold every folder above the node with that `path`,
+ *                   mark it selected and scroll it into view (briefly flashed)
  */
 
-const { ref, computed, watch, provide, inject } = Vue
+const { ref, computed, watch, provide, inject, nextTick } = Vue
 
 // ── Icon mapping ───────────────────────────────────────────────────────────────
 
@@ -70,23 +77,40 @@ const FtNode = {
         const ft_search       = inject('ft_search',        ref(''))
         const ft_selected     = inject('ft_selected',      ref(null))
         const ft_on_select    = inject('ft_on_select',     () => {})
+        const ft_reveal       = inject('ft_reveal',        ref(null))
 
-        const open = ref(props.depth < 2)
+        // ft_force = { mode: 'expand' | 'collapse', keep } set by the toolbar
+        // toggle. Persistent (not a one-shot pulse): folders mounted later —
+        // children of a folder that just opened — follow it too.
+        function forced(val) {
+            if (!val || props.node.type !== 'dir') return null
+            if (val.mode === 'expand') return true
+            if (val.mode === 'collapse') return props.node.path === val.keep
+            return null
+        }
+        const open = ref(forced(ft_force.value) ?? props.node.defaultOpen ?? props.depth < 2)
 
         watch(ft_force, (val) => {
-            if (props.node.type !== 'dir') return
-            if (val === 'collapse') open.value = false
-            if (val === 'expand')   open.value = true
+            const f = forced(val)
+            if (f !== null) open.value = f
         })
 
         watch(ft_search, (f) => {
             if (f) open.value = true
         })
 
+        // reveal(): open this folder if it's an ancestor of the target
+        // immediate: sub-folders are only mounted once their parent opens,
+        // i.e. *after* reveal() ran — they must check the target on mount.
+        watch(ft_reveal, (r) => {
+            if (r && props.node.type === 'dir' && r.ancestors.has(props.node.path)) open.value = true
+        }, { immediate: true })
+
         const icon_info = computed(() => {
             if (props.node.type === 'dir') {
                 return { icon: open.value ? 'fa-folder-open' : 'fa-folder', color: '#f59e0b' }
             }
+            if (props.node.icon) return { icon: props.node.icon, color: props.node.color || '#9ca3af' }
             return file_icon(props.node.ext)
         })
 
@@ -124,14 +148,17 @@ const FtNode = {
     <div
         :class="['ft-row',
                  node.type === 'dir'  ? 'ft-row--dir'  : 'ft-row--file',
-                 is_selected          ? 'ft-row--selected' : '']"
+                 is_selected          ? 'ft-row--selected' : '',
+                 node.variant         ? 'ft-row--' + node.variant : '']"
         :style="{ paddingLeft: (depth * 14 + 8) + 'px' }"
+        :data-ft-path="node.path"
         @click="on_click">
         <i v-if="node.type === 'dir'"
            :class="['fas', 'ft-chevron', open ? 'fa-chevron-down' : 'fa-chevron-right']"></i>
         <span v-else class="ft-chevron"></span>
-        <i :class="'fas ' + icon_info.icon + ' ft-icon'" :style="{ color: icon_info.color }"></i>
+        <i :class="(icon_info.icon.includes(' ') ? '' : 'fas ') + icon_info.icon + ' ft-icon'" :style="{ color: icon_info.color }"></i>
         <span class="ft-name">{{ node.name }}</span>
+        <span v-if="node.badge" class="ft-badge" :style="node.color ? { color: node.color, borderColor: node.color + '55', background: node.color + '14' } : null">{{ node.badge }}</span>
         <span v-if="node.type === 'dir' && node.children" class="ft-count">
             {{ node.children.length }}
         </span>
@@ -184,6 +211,43 @@ export default {
         provide('ft_selected',  selected_node)
         provide('ft_on_select', on_select)
 
+        const ft_reveal = ref(null)
+        const root_el   = ref(null)
+        provide('ft_reveal', ft_reveal)
+
+        function _ancestors(nodes, path, trail = []) {
+            for (const n of nodes || []) {
+                if (n.path === path) return { node: n, trail }
+                if (n.children) {
+                    const hit = _ancestors(n.children, path, [...trail, n.path])
+                    if (hit) return hit
+                }
+            }
+            return null
+        }
+
+        async function reveal(path) {
+            const hit = _ancestors(props.nodes, path)
+            if (!hit) return false
+            search.value = ''
+            ft_reveal.value = { ancestors: new Set(hit.trail), at: Date.now() }
+            selected_node.value = hit.node
+            // each level mounts on its parent's render — wait until the row exists
+            let row = null
+            for (let i = 0; i < 25 && !row; i++) {
+                await nextTick()
+                row = root_el.value?.querySelector(`[data-ft-path="${CSS.escape(path)}"]`)
+            }
+            row = row || root_el.value?.querySelector(`[data-ft-path="${CSS.escape(path)}"]`)
+            if (row) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                row.classList.remove('ft-row--flash')
+                void row.offsetWidth
+                row.classList.add('ft-row--flash')
+            }
+            return true
+        }
+
         const can_preview = computed(() =>
             selected_node.value && !BINARY_EXTS.has(selected_node.value.ext?.toLowerCase())
         )
@@ -222,15 +286,20 @@ export default {
             preview_loading.value = false
         }
 
-        function collapse_all() {
-            ft_force.value = 'collapse'
-            setTimeout(() => { ft_force.value = null }, 50)
+        // Single toggle: expand everything / collapse everything except the
+        // first root folder (so the tree never collapses to a bare line).
+        const all_expanded = ref(false)
+        function toggle_all() {
+            if (all_expanded.value) {
+                const first = (props.nodes || []).find(n => n.type === 'dir')
+                ft_force.value = { mode: 'collapse', keep: first ? first.path : null }
+            } else {
+                ft_force.value = { mode: 'expand' }
+            }
+            all_expanded.value = !all_expanded.value
         }
-
-        function expand_all() {
-            ft_force.value = 'expand'
-            setTimeout(() => { ft_force.value = null }, 50)
-        }
+        function collapse_all() { all_expanded.value = true;  toggle_all() }
+        function expand_all()   { all_expanded.value = false; toggle_all() }
 
         function close_preview() {
             selected_node.value   = null
@@ -251,13 +320,15 @@ export default {
 
         return {
             search, selected_node, preview_content, preview_loading, preview_error,
-            can_preview,
-            collapse_all, expand_all, close_preview, download_file,
+            can_preview, reveal, root_el,
+            collapse_all, expand_all, toggle_all, all_expanded, close_preview, download_file,
         }
     },
 
+    expose: ['reveal'],
+
     template: `
-<div class="ft">
+<div class="ft" ref="root_el">
 
     <!-- ── Toolbar ─────────────────────────────────────────────── -->
     <div class="ft-toolbar">
@@ -274,11 +345,10 @@ export default {
             </button>
         </div>
         <div class="ft-toolbar-actions">
-            <button class="ft-toolbar-btn" title="Expand all" @click="expand_all">
-                <i class="fas fa-chevron-down"></i>
-            </button>
-            <button class="ft-toolbar-btn" title="Collapse all" @click="collapse_all">
-                <i class="fas fa-chevron-right"></i>
+            <button class="ft-toolbar-btn ft-toolbar-btn--toggle" @click="toggle_all"
+                    :title="all_expanded ? 'Collapse every folder except the first one' : 'Open every folder'">
+                <i :class="all_expanded ? 'fas fa-down-left-and-up-right-to-center' : 'fas fa-up-right-and-down-left-from-center'"></i>
+                <span>{{ all_expanded ? 'Collapse all' : 'Expand all' }}</span>
             </button>
             <button
                 v-if="mode === 'read-plus' && selected_node && preview_content"

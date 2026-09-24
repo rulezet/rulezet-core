@@ -1,11 +1,17 @@
 {% extends 'base.html' %}
 {% block title %}Create Bundle — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-create.css') }}">
+{% endblock %}
 {% block content %}
-<div class="container my-5 p-4 rounded shadow">
+<div class="container py-5">
     <!-- Header -->
-    <div class="explorer-banner mb-5">
+    <div class="explorer-banner mb-4">
         <i class="fa-solid fa-folder-plus banner-watermark"></i>
-        <nav aria-label="breadcrumb" class="mb-3">
+        <nav aria-label="breadcrumb" class="mb-2">
             <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
@@ -26,68 +32,107 @@
         </p>
     </div>
 
-    <!-- Form -->
     <form action="" method="post" id="form">
         {{ form.hidden_tag() }}
 
-        <!-- Bundle Name -->
-        <div class="row mb-4 justify-content-center">
-            <div class="col-md-8">
-                <label class="form-label fw-semibold">
-                    {{ form.name.label.text }} <span class="text-danger">*</span>
-                </label>
-                {{ form.name(class_="form-control", placeholder="Enter bundle name") }}
-                {% if form.name.errors %}
-                <div class="invalid-feedback d-block">
-                    <i class="fa-solid fa-circle-exclamation me-1"></i> {{ form.name.errors[0] }}
-                </div>
-                {% endif %}
-            </div>
-        </div>
+        <div class="row g-4">
+            <!-- Left: name + description -->
+            <div class="col-lg-8">
+                <div class="card border-0 shadow-sm rounded-3 h-100">
+                    <div class="card-body p-4">
+                        <div class="bd-section-head">
+                            <div class="bd-section-title">
+                                <i class="fa-solid fa-box-archive"></i>
+                                <div>
+                                    <div class="bd-section-name">Bundle details</div>
+                                    <div class="bd-section-sub">A clear name and a good description help others find and trust your bundle</div>
+                                </div>
+                            </div>
+                        </div>
 
-        <!-- Description -->
-        <div class="row mb-4 justify-content-center">
-            <div class="col-md-8">
-                <label class="form-label fw-semibold">
-                    {{ form.description.label.text }} <span class="text-danger">*</span>
-                </label>
-                {{ form.description(class_="form-control", rows=4, placeholder="Describe the purpose or content of the bundle...") }}
-                {% if form.description.errors %}
-                <div class="invalid-feedback d-block">
-                    <i class="fa-solid fa-circle-exclamation me-1"></i> {{ form.description.errors[0] }}
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        <!-- Public/Private -->
-        <div class="row mb-4 justify-content-center">
-            <div class="col-md-8">
-                <div class="form-check form-switch">
-                    {{ form.public(class_="form-check-input", id="publicSwitch") }}
-                    <label class="form-check-label fw-semibold" for="publicSwitch">
-                        {{ form.public.label.text }}
-                    </label>
-                </div>
-                {% if form.public.errors %}
-                <div class="invalid-feedback d-block">
-                    <i class="fa-solid fa-circle-exclamation me-1"></i> {{ form.public.errors[0] }}
-                </div>
-                {% endif %}
-                <div class="form-text">
-                    Enable the toggle to make the bundle public.
-                </div>
-            </div>
-        </div>
+                        <div class="mb-4">
+                            <label class="bc-label" for="{{ form.name.id }}">
+                                {{ form.name.label.text }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.name(class_="form-control form-control-lg" + (" is-invalid" if form.name.errors else ""), placeholder="e.g. Ransomware Hunting Pack", maxlength=255) }}
+                            {% if form.name.errors %}
+                            <div class="invalid-feedback d-block">
+                                <i class="fa-solid fa-circle-exclamation me-1"></i> {{ form.name.errors[0] }}
+                            </div>
+                            {% endif %}
+                        </div>
 
+                        <div>
+                            <label class="bc-label">
+                                {{ form.description.label.text }} <span class="text-danger">*</span>
+                            </label>
+                            <div id="bundle-desc-editor">
+                                <smart-editor name="description" mode="markdown" :model-value="initialDescription"
+                                    placeholder="Describe the purpose or content of the bundle… Markdown is supported."
+                                    min-height="280px" max-height="560px"></smart-editor>
+                            </div>
+                            <div class="form-text"><i class="fa-brands fa-markdown me-1"></i>Markdown supported — headings, lists, links, code…</div>
+                            {% if form.description.errors %}
+                            <div class="invalid-feedback d-block">
+                                <i class="fa-solid fa-circle-exclamation me-1"></i> {{ form.description.errors[0] }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-        <!-- Submit Button -->
-        <div class="text-center">
-            <button type="submit" class="btn btn-success px-4 py-2">
-                <i class="fa-solid fa-plus me-2"></i> {{ form.submit.label.text }}
-            </button>
+            <!-- Right: visibility + next steps + submit -->
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm rounded-3 mb-4">
+                    <div class="card-body p-4">
+                        <div class="bc-side-title"><i class="fa-solid fa-eye me-2"></i>Visibility</div>
+                        <label class="bc-visibility" for="publicSwitch">
+                            <div class="form-check form-switch m-0">
+                                {{ form.public(class_="form-check-input", id="publicSwitch") }}
+                            </div>
+                            <div>
+                                <div class="fw-semibold">{{ form.public.label.text }}</div>
+                                <div class="bc-hint">Public bundles are visible to everyone. Turn it off to keep it private while you build it.</div>
+                            </div>
+                        </label>
+                        {% if form.public.errors %}
+                        <div class="invalid-feedback d-block">
+                            <i class="fa-solid fa-circle-exclamation me-1"></i> {{ form.public.errors[0] }}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm rounded-3 mb-4">
+                    <div class="card-body p-4">
+                        <div class="bc-side-title"><i class="fa-solid fa-route me-2"></i>What comes next</div>
+                        <ol class="bc-steps">
+                            <li><i class="fa-solid fa-shield-halved"></i><span><strong>Add rules</strong> from the library (drag &amp; drop)</span></li>
+                            <li><i class="fa-solid fa-folder-tree"></i><span><strong>Organize</strong> them into folders</span></li>
+                            <li><i class="fa-solid fa-file-lines"></i><span><strong>Add files</strong> — README, notes, IOCs, configs</span></li>
+                            <li><i class="fa-solid fa-tags"></i><span><strong>Tag</strong> it and link CVEs</span></li>
+                        </ol>
+                    </div>
+                </div>
+
+                <button type="submit" class="bd-btn bd-btn--primary bc-submit">
+                    <i class="fa-solid fa-plus"></i><span>{{ form.submit.label.text }}</span>
+                </button>
+            </div>
         </div>
     </form>
 </div>
+
+<script type="module">
+    import SmartEditor from '/static/js/components/smart-editor.js'
+    // Only the description field is a Vue app — the rest of the form stays plain HTML.
+    Vue.createApp({
+        delimiters: ['[[', ']]'],
+        components: { SmartEditor },
+        setup() {
+            return { initialDescription: {{ (form.description.data or '') | tojson }} }
+        },
+    }).mount('#bundle-desc-editor')
+</script>
 {% endblock %}
-
-

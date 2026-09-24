@@ -166,9 +166,6 @@ def create_bundle_misp_object(bundle_id: int) -> MISPObject | None:
     if bundle.download_count is not None:
         misp_object.add_attribute('download-count', value=bundle.download_count)
 
-    if bundle.view_count is not None:
-        misp_object.add_attribute('view-count', value=bundle.view_count)
-
     number_of_rules = len(bundle.rules_assoc.all())
     misp_object.add_attribute('number-of-rules', value=number_of_rules)
 

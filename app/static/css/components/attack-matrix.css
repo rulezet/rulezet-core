@@ -336,3 +336,44 @@
     .am-tech-badge { background: rgba(255,255,255,.15); }
 }
 [data-bs-theme="dark"] .am-tech-badge { background: rgba(255,255,255,.15); }
+
+/* ── Rule rows with actions (ruleActions prop — bundle detail page) ── */
+.am-rule-rows { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.am-rule-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px 6px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    min-width: 0;
+}
+.am-rule-row-icon { color: #0d6efd; font-size: .75rem; flex-shrink: 0; }
+.am-rule-row-name {
+    flex: 1;
+    min-width: 0;
+    font-size: .8rem;
+    font-weight: 500;
+    color: var(--text-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.am-rule-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.am-rule-act {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(13, 110, 253, .3);
+    background: var(--card-bg-color);
+    color: #0d6efd;
+    font-size: .7rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.am-rule-act:hover { background: rgba(13, 110, 253, .08); color: #0d6efd; text-decoration: none; }
+@media (max-width: 640px) { .am-rule-act span { display: none; } }

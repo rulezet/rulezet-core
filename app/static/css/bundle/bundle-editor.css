@@ -187,6 +187,9 @@
     border-color: rgba(13, 110, 253, .2);
 }
 
+/* Custom (non-rule) files — bold name; the per-extension icon marks them */
+.bse-node-row--doc .bse-node-name { font-weight: 800; }
+
 /* Drop zone highlight */
 .bse-node-row--drop-target {
     background: rgba(25, 135, 84, .12) !important;

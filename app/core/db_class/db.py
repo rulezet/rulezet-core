@@ -385,6 +385,7 @@ class Rule(db.Model):
         return {
             "id": self.id,
             "format": self.format,
+            "extension": self.get_extension(),
             "title": self.title,
             "license": self.license,
             "description": self.description,
@@ -421,6 +422,8 @@ class Rule(db.Model):
             'yara': 'yar',
             'sigma': 'yml',
             'suricata': 'rules',
+            'sagan': 'rules',
+            'snort': 'rules',
             'zeek': 'zeek',
             'wazuh': 'xml',
             'nse': 'nse',
@@ -428,7 +431,10 @@ class Rule(db.Model):
             'nova': 'nov',
             'splunk': 'yml',
             'elastic': 'toml',
-            'plum': 'yaml'
+            'kql': 'kql',
+            'kunai': 'kun',
+            'atr': 'yaml',
+            'plum': 'yaml',
         }
 
         return extensions.get(format_name, 'txt')
@@ -1269,6 +1275,13 @@ class Bundle(db.Model):
     # Set when this bundle was generated via a workspace's "Export as Bundle" action.
     source_workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='SET NULL'), nullable=True, index=True)
 
+    # Private share link: whoever holds /bundle/share/<share_token> (and is
+    # logged in) can view the bundle while it's private. NULL = no link.
+    # Regenerating replaces it, which cuts off every previous holder.
+    # Never serialised in to_json() — only the owner/admin endpoint returns it.
+    share_token = db.Column(db.String(64), nullable=True, unique=True, index=True)
+    share_token_created_at = db.Column(db.DateTime, nullable=True)
+
     user = db.relationship('User', backref=db.backref('user who create bundle', lazy='dynamic', cascade='all, delete-orphan'))
 
     def get_username_by_id(self):
@@ -1327,28 +1340,24 @@ class BundleNode(db.Model):
     
     rule = db.relationship("Rule") 
 
-    EXTENSION_MAP = {
-        'yara': '.yar',
-        'sigma': '.yaml',
-        'suricata': '.rules',
-        'zeek': '.zeek',
-        'wazuh': '.xml',
-        'nse': '.nse',
-        'nova': '.yaml',
-        'crs': '.conf',
-        'plum': '.yaml',
-        'no format': '.txt'
-    }
-
     def to_tree_json(self):
         """Recursively converts nodes to the JSON tree expected by Vue.js"""
+        if self.rule_id and self.rule and self.rule.is_deleted:
+            # Trashed rule: keep the slot visible but never expose its content
+            return {
+                "id": f"rule_{self.rule_id}_{self.id}",
+                "name": "(deleted rule)",
+                "type": "file",
+                "content": "",
+                "children": [],
+                "rule_id": self.rule_id,
+                "format": "",
+                "deleted": True,
+            }
         if self.rule_id and self.rule:
-            # Use lowercase format to match the mapping keys
-            rule_format = self.rule.format.lower() if self.rule.format else 'no format'
-            ext = self.EXTENSION_MAP.get(rule_format, '.txt')
-            
-            # Display name includes the extension in the tree explorer
-            current_name = f"{self.rule.title}{ext}"
+            # Display name includes the extension in the tree explorer.
+            # Trailing dots stripped so "Checksum changed." doesn't become "..xml".
+            current_name = f"{(self.rule.title or '').rstrip('.')}.{self.rule.get_extension()}"
             current_content = self.rule.to_string
             node_id = f"rule_{self.rule_id}_{self.id}"
         else:
@@ -1366,7 +1375,9 @@ class BundleNode(db.Model):
         
         if self.rule_id:
             node_data["rule_id"] = self.rule_id
-            
+            if self.rule:
+                node_data["format"] = self.rule.format or ''
+
         return node_data
     
 
@@ -1481,6 +1492,58 @@ class CommentBundle(db.Model):
             data["replies"] = [reply.to_json(include_replies=True) for reply in self.replies.all()]
         
         return data
+
+class BundleHistory(db.Model):
+    """One entry of a bundle's change history (bundle detail page → History).
+
+    Each row stores a compact before/after snapshot of the bundle (name,
+    description, visibility, tags, CVEs, rules, files, folders — see
+    bundle_history.snapshot_bundle) plus the precomputed human-readable
+    `changes` list rendered by the meta-change-list component. Structure
+    autosaves from the editor are coalesced into one row per user per
+    window, so the history isn't one row per keystroke.
+    """
+    __tablename__ = 'bundle_history'
+
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid         = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    bundle_id    = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    # 'created' | 'details' | 'visibility' | 'tags' | 'structure' | 'rules'
+    action       = db.Column(db.String(32), nullable=False, index=True)
+    summary      = db.Column(db.String(512), nullable=True)
+    changes      = db.Column(db.JSON, nullable=True)
+    old_snapshot = db.Column(db.JSON, nullable=True)
+    new_snapshot = db.Column(db.JSON, nullable=True)
+    created_at   = db.Column(db.DateTime, nullable=False,
+                             default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    updated_at   = db.Column(db.DateTime, nullable=False,
+                             default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    user = db.relationship('User')
+    bundle = db.relationship('Bundle', backref=db.backref('history', lazy='dynamic', cascade='all, delete-orphan', passive_deletes=True))
+
+    def to_json(self, include_descriptions=False):
+        data = {
+            "id": self.id,
+            "uuid": self.uuid,
+            "bundle_id": self.bundle_id,
+            "user_id": self.user_id,
+            "user_name": self.user.first_name if self.user else None,
+            "user_avatar": self.user.get_avatar_url() if self.user else None,
+            "action": self.action,
+            "summary": self.summary,
+            "changes": self.changes or [],
+            "created_at": self.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+            "updated_at": self.updated_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z' if self.updated_at else None,
+            "has_description_diff": bool(self.old_snapshot and self.new_snapshot
+                                         and (self.old_snapshot.get('description') or '') != (self.new_snapshot.get('description') or '')),
+        }
+        if include_descriptions:
+            data["old_description"] = (self.old_snapshot or {}).get('description') or ''
+            data["new_description"] = (self.new_snapshot or {}).get('description') or ''
+        return data
+
 
 class BundleReactionComment(db.Model):
     """ LIKE/DISLIKE/EMOJI reaction on comment in a Bundle """

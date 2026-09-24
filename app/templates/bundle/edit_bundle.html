@@ -111,7 +111,10 @@
                     </div>
                     <div class="mb-4">
                         <label class="form-label fw-bold text-muted small text-uppercase">Description</label>
-                        {{ form.description(class="form-control shadow-sm", rows="5", placeholder="Enter bundle description...") }}
+                        <smart-editor name="description" mode="markdown" :model-value="initialDescription"
+                            placeholder="Describe the purpose or content of the bundle… Markdown is supported."
+                            min-height="240px" max-height="560px"></smart-editor>
+                        <div class="form-text"><i class="fa-brands fa-markdown me-1"></i>Markdown supported — headings, lists, links, code…</div>
                         {% for e in form.description.errors %}
                         <div class="text-danger small mt-1">{{ e }}</div>
                         {% endfor %}
@@ -332,10 +335,12 @@ import BundleStructureEditor from '/static/js/bundle/BundleStructureEditor.js'
 import BundleRuleSelector    from '/static/js/bundle/BundleRuleSelector.js'
 import VulnerabilityInput    from '/static/js/vulnerability/vulnerabilityInput.js'
 import TagCreateModal        from '/static/js/tags/tagCreateModal.js'
+import SmartEditor           from '/static/js/components/smart-editor.js'
 
 const { createApp, ref, computed, onMounted } = Vue
 const _BUNDLE_ID = {{ bundle.id | tojson }}
 const _BUNDLE_NAME = {{ bundle.name | tojson }}
+const _BUNDLE_DESCRIPTION = {{ (form.description.data or '') | tojson }}
 
 createApp({
     delimiters: ['[[', ']]'],
@@ -344,6 +349,7 @@ createApp({
         'bundle-rule-selector':    BundleRuleSelector,
         'vulnerability-input':     VulnerabilityInput,
         'tag-create-modal':        TagCreateModal,
+        'smart-editor':            SmartEditor,
     },
 
     setup() {
@@ -574,7 +580,7 @@ createApp({
             selectedTags, allSelectedTagsObjects,
             fetchTags, initBundleTags, toggleSelection, clearSelection,
             getContrastYIQ, visiblePagesTags, saveTags, handleRefreshList,
-            detectedVulnerabilities,
+            detectedVulnerabilities, initialDescription: _BUNDLE_DESCRIPTION,
         }
     },
 }).mount('#page-app')
