@@ -432,6 +432,178 @@ def _mark_editable_items(health, bundle):
             i["can_edit"] = bool(manager and i.get("rule_id"))
 
 
+# ── Community notes / known issues ────────────────────────────────────────
+# Rules:
+#   read      anyone who can view the bundle (public, owner/admin, share link)
+#   create    logged-in + can view + the bundle is PUBLIC (owner/admin always)
+#   edit      the note's author (while they can still view the bundle) or owner/admin
+#   resolve   owner/admin
+#   delete    the note's author (while they can view the bundle) or owner/admin
+# So when a bundle goes private, a note's author loses access to their own
+# note — they get it back only through the bundle's share link.
+
+NOTE_SEVERITIES = ("info", "warning", "critical")
+
+
+def _note_guard(bundle_id, write=False):
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return None, ({"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404)
+    if not BundleModel.can_view_bundle(bundle):
+        return None, ({"success": False, "message": "Access denied", "toast_class": "danger"}, 403)
+    if write and not current_user.is_authenticated:
+        return None, ({"success": False, "message": "Log in to write a note", "toast_class": "danger"}, 401)
+    return bundle, None
+
+
+def _note_payload():
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    content = (data.get("content") or "").strip()
+    severity = (data.get("severity") or "warning").strip().lower()
+    if not (3 <= len(title) <= 200):
+        return None, "The title must be 3–200 characters"
+    if not (1 <= len(content) <= 20000):
+        return None, "The note must be 1–20,000 characters"
+    if severity not in NOTE_SEVERITIES:
+        return None, "Invalid severity"
+    return {"title": title, "content": content, "severity": severity}, None
+
+
+@bundle_blueprint.route("/<int:bundle_id>/notes", methods=['GET'])
+def list_bundle_notes(bundle_id):
+    from app.core.db_class.db import BundleNote
+    bundle, err = _note_guard(bundle_id)
+    if err:
+        return err
+    notes = (BundleNote.query.filter_by(bundle_id=bundle_id)
+             .order_by(db.case((BundleNote.status == 'open', 0), else_=1),
+                       db.case((BundleNote.severity == 'critical', 0), (BundleNote.severity == 'warning', 1), else_=2),
+                       BundleNote.created_at.desc()).all())
+    me = current_user.id if current_user.is_authenticated else None
+    manager = _is_bundle_manager(bundle)
+    out = []
+    for n in notes:
+        j = n.to_json()
+        j["can_edit"] = bool(me and (n.user_id == me or manager))
+        j["can_delete"] = j["can_edit"]
+        j["can_resolve"] = manager
+        out.append(j)
+    return jsonify({
+        "success": True, "notes": out,
+        "open": sum(1 for n in notes if n.status == "open"),
+        "can_create": bool(me and (bundle.access or manager)),
+        "create_blocked_reason": None if (bundle.access or manager) else "Notes can only be added while the bundle is public.",
+    }), 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/notes", methods=['POST'])
+@login_required
+def create_bundle_note(bundle_id):
+    import uuid as _uuid
+    from app.core.db_class.db import BundleNote
+    bundle, err = _note_guard(bundle_id, write=True)
+    if err:
+        return err
+    if not bundle.access and not _is_bundle_manager(bundle):
+        return {"success": False, "message": "Notes can only be added while the bundle is public", "toast_class": "danger-subtle"}, 403
+    payload, error = _note_payload()
+    if error:
+        return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
+    note = BundleNote(uuid=str(_uuid.uuid4()), bundle_id=bundle_id, user_id=current_user.id, **payload)
+    db.session.add(note)
+    db.session.commit()
+    log_activity("bundle.note_create", f"Added a note on bundle '{bundle.name}': {note.title}",
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=bool(bundle.access))
+    return {"success": True, "note": note.to_json(), "message": "Note published", "toast_class": "success-subtle"}, 201
+
+
+def _own_note_or_error(bundle, note_id, need="edit"):
+    from app.core.db_class.db import BundleNote
+    note = BundleNote.query.filter_by(bundle_id=bundle.id, id=note_id).first()
+    if not note:
+        return None, ({"success": False, "message": "Note not found", "toast_class": "danger"}, 404)
+    manager = _is_bundle_manager(bundle)
+    allowed = manager if need == "resolve" else (manager or note.user_id == current_user.id)
+    if not allowed:
+        return None, ({"success": False, "message": "You can't change this note", "toast_class": "danger"}, 403)
+    return note, None
+
+
+@bundle_blueprint.route("/<int:bundle_id>/notes/<int:note_id>", methods=['PUT'])
+@login_required
+def update_bundle_note(bundle_id, note_id):
+    import datetime as _dt
+    bundle, err = _note_guard(bundle_id, write=True)
+    if err:
+        return err
+    note, err = _own_note_or_error(bundle, note_id)
+    if err:
+        return err
+    payload, error = _note_payload()
+    if error:
+        return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
+    for k, v in payload.items():
+        setattr(note, k, v)
+    note.updated_at = _dt.datetime.now(_dt.timezone.utc)
+    db.session.commit()
+    return {"success": True, "note": note.to_json(), "message": "Note updated", "toast_class": "success-subtle"}, 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/notes/<int:note_id>/status", methods=['POST'])
+@login_required
+def set_bundle_note_status(bundle_id, note_id):
+    import datetime as _dt
+    bundle, err = _note_guard(bundle_id, write=True)
+    if err:
+        return err
+    note, err = _own_note_or_error(bundle, note_id, need="resolve")
+    if err:
+        return err
+    status = ((request.get_json(silent=True) or {}).get("status") or "").lower()
+    if status not in ("open", "resolved"):
+        return {"success": False, "message": "Invalid status", "toast_class": "danger-subtle"}, 400
+    note.status = status
+    note.resolved_by_id = current_user.id if status == "resolved" else None
+    note.resolved_at = _dt.datetime.now(_dt.timezone.utc) if status == "resolved" else None
+    db.session.commit()
+    return {"success": True, "note": note.to_json(),
+            "message": "Marked as resolved" if status == "resolved" else "Reopened", "toast_class": "success-subtle"}, 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/notes/<int:note_id>", methods=['DELETE'])
+@login_required
+def delete_bundle_note(bundle_id, note_id):
+    bundle, err = _note_guard(bundle_id, write=True)
+    if err:
+        return err
+    note, err = _own_note_or_error(bundle, note_id)
+    if err:
+        return err
+    db.session.delete(note)
+    db.session.commit()
+    return {"success": True, "message": "Note deleted", "toast_class": "success-subtle"}, 200
+
+
+@bundle_blueprint.route("/<int:bundle_id>/health/fix", methods=['POST'])
+@login_required
+def bundle_health_fix(bundle_id):
+    """Apply one "Fix it for me" action from the Health tab (owner / admin)."""
+    from .bundle_health_fix_core import apply_fix
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+    if not _is_bundle_manager(bundle):
+        return {"success": False, "message": "Only the owner or an admin can fix the bundle", "toast_class": "danger"}, 403
+    fix = (request.get_json(silent=True) or {}).get("fix")
+    ok, message = apply_fix(bundle_id, fix, current_user)
+    if ok:
+        log_activity("bundle.health_fix", f"Health fix on bundle '{bundle.name}': {message}",
+                     target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid,
+                     extra={"fix": fix}, is_public=False)
+    return {"success": ok, "message": message, "toast_class": "success-subtle" if ok else "danger-subtle"}, (200 if ok else 400)
+
+
 @bundle_blueprint.route("/<int:bundle_id>/health", methods=['GET'])
 def bundle_health_report(bundle_id):
     """Pre-deployment checks for the bundle (Health tab)."""
@@ -454,6 +626,9 @@ def bundle_health_report(bundle_id):
         return {"success": False, "message": "Only the owner or an admin can re-run the checks", "toast_class": "danger-subtle"}, 403
     health = bundle_health(bundle_id, refresh=refresh)
     _mark_editable_items(health, bundle)
+    if _is_bundle_manager(bundle):
+        from .bundle_health_fix_core import attach_fixes
+        attach_fixes(health, bundle_id)
     return jsonify({"success": True, "health": health,
                     "can_rerun": _is_bundle_manager(bundle)}), 200
 

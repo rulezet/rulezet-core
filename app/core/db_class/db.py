@@ -1595,6 +1595,54 @@ class BundleRelease(db.Model):
         }
 
 
+class BundleNote(db.Model):
+    """A community note / known issue on a bundle ("⚠ this bundle doesn't
+    work if…"), written in Markdown.
+
+    Can only be created while the bundle is public (or by its owner / an
+    admin). Reading — including for its own author — follows the bundle's
+    access: if the bundle goes private, the author gets it back only
+    through the bundle's share link.
+    """
+    __tablename__ = 'bundle_note'
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    bundle_id   = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    title       = db.Column(db.String(200), nullable=False)
+    content     = db.Column(db.Text, nullable=False)                 # markdown
+    severity    = db.Column(db.String(16), nullable=False, default='warning')   # info | warning | critical
+    status      = db.Column(db.String(16), nullable=False, default='open', index=True)  # open | resolved
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    created_at  = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    updated_at  = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    resolved_by = db.relationship('User', foreign_keys=[resolved_by_id])
+    bundle = db.relationship('Bundle', backref=db.backref('notes', lazy='dynamic', cascade='all, delete-orphan'))
+
+    def to_json(self):
+        iso = lambda d: d.strftime('%Y-%m-%dT%H:%M:%S') + 'Z' if d else None
+        return {
+            "id": self.id,
+            "uuid": self.uuid,
+            "bundle_id": self.bundle_id,
+            "user_id": self.user_id,
+            "user_name": self.user.first_name if self.user else None,
+            "user_avatar": self.user.get_avatar_url() if self.user else None,
+            "title": self.title,
+            "content": self.content,
+            "severity": self.severity,
+            "status": self.status,
+            "resolved_by": self.resolved_by.first_name if self.resolved_by else None,
+            "resolved_at": iso(self.resolved_at),
+            "created_at": iso(self.created_at),
+            "updated_at": iso(self.updated_at),
+        }
+
+
 class BundleReactionComment(db.Model):
     """ LIKE/DISLIKE/EMOJI reaction on comment in a Bundle """
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)

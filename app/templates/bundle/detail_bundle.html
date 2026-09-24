@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-health.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-releases.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-notes.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
@@ -158,6 +159,15 @@
                             [[ showFullDesc ? 'Show less' : 'Read more' ]]
                         </button>
                     </div>
+                </div>
+
+                <!-- Open known issues (community notes) -->
+                <div v-if="notesAlert" class="bn-banner" :class="{ 'bn-banner--critical': notesAlert.critical }"
+                     role="button" tabindex="0" @click="setTab('notes'); _scrollToZone()" @keydown.enter="setTab('notes'); _scrollToZone()">
+                    <i :class="notesAlert.critical ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-triangle-exclamation'"></i>
+                    <span><strong>[[ notesAlert.count ]] open known issue[[ notesAlert.count > 1 ? 's' : '' ]]</strong> reported on this bundle —
+                        <em>[[ notesAlert.first ]]</em><template v-if="notesAlert.count > 1"> and more</template>.</span>
+                    <span class="ms-auto small">Read the notes <i class="fa-solid fa-arrow-right"></i></span>
                 </div>
 
                 <!-- KPIs -->
@@ -431,7 +441,7 @@
                                 <i class="fa-solid fa-xmark"></i><span>Show all rules</span>
                             </button>
                         </div>
-                        <rule-list
+                        <rule-list :key="'rl-' + ruleListKey"
                             :ids="focusRule ? [focusRule.rule_id] : null"
                             :extra-row-actions="[{ key: 'structure', label: 'Show in structure', icon: 'fa-solid fa-folder-tree' }]"
                             @row-action="onRuleListAction"
@@ -558,11 +568,28 @@
                                     </div>
                                 </div>
                             </div>
-                            <bundle-health-panel :bundle-id="bundle_id" :active="activeTab === 'health'"
+                            <bundle-health-panel :bundle-id="bundle_id" :active="activeTab === 'health'" :csrf-token="csrfToken"
+                                @fixed="reloadAfterFix"
                                 :release="viewRelease ? viewRelease.version : ''"
                                 @loaded="h => healthSummary = h"
                                 @show-structure="showRuleInStructure"
                                 @show-list="e => showRuleInList(e.ruleId, e.name)"></bundle-health-panel>
+                        </div>
+
+                        <!-- Notes / known issues -->
+                        <div v-show="activeTab === 'notes'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-note-sticky"></i>
+                                    <div>
+                                        <div class="bd-section-name">Notes &amp; known issues <help-tip title="Notes" text="Community notes in Markdown: known issues, deployment caveats, false positives (&quot;this bundle doesn't work if…&quot;).&#10;Anyone logged in can add one while the bundle is public; authors edit or delete their own; the owner or an admin marks them resolved.&#10;If the bundle becomes private, notes are only visible to people who can still open it (owner, admins, share-link holders)."></help-tip></div>
+                                        <div class="bd-section-sub">What the community found when using this bundle — read before deploying</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <bundle-notes-panel :bundle-id="bundle_id" :csrf-token="csrfToken"
+                                :is-authenticated="{{ current_user.is_authenticated | tojson }}"
+                                @loaded="d => notesSummary = d"></bundle-notes-panel>
                         </div>
 
                         <!-- History -->
@@ -793,6 +820,7 @@
     import BundleReleasesPanel from '/static/js/bundle/BundleReleasesPanel.js';
     import BundleReleaseRules from '/static/js/bundle/BundleReleaseRules.js';
     import HelpTip from '/static/js/components/help-tip.js';
+    import BundleNotesPanel from '/static/js/bundle/BundleNotesPanel.js';
     import { flattenFiles, isRuleNode, docIcon, extOf, RULE_ICON, downloadFromUrl, downloadText, renderSafeMarkdown } from '/static/js/bundle/bundleFileTypes.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
     import { initBundleGraph } from '/static/js/bundle/bundleMispGraph.js';
@@ -818,6 +846,7 @@
             'bundle-releases-panel': BundleReleasesPanel,
             'bundle-release-rules': BundleReleaseRules,
             'help-tip': HelpTip,
+            'bundle-notes-panel': BundleNotesPanel,
             'code-viewer': CodeViewer,
             'tag-display': TagDisplay,
             'vulnerability-display': VulnerabilityDisplay,
@@ -1682,12 +1711,36 @@
                 }
             }
 
+            // After a health "Fix it for me": refresh the tree, lists and history
+            const ruleListKey = ref(0);
+            async function reloadAfterFix() {
+                try {
+                    const data = await fetch(`/bundle/get_bundle_json/${bundle_id}`).then(r => r.json());
+                    if (data.success && data.structure) {
+                        if (viewRelease.value) _liveTree = data.structure; else treeData.value = data.structure;
+                    }
+                } catch {}
+                ruleListKey.value++;
+                loadHistory(1);
+                fetchAttackCoverage();
+                fetchBundleTags && fetchBundleTags();
+            }
+
             // CONTENT TABS (rules / structure / files / ATT&CK / MISP)
             // --------------------------------------------
             // One panel at a time instead of five stacked sections. The
             // active tab is mirrored in the URL hash (#files…) so it can be
             // linked and survives a reload.
-            const TAB_KEYS = ['structure', 'rules', 'files', 'attack', 'releases', 'health', 'history', 'misp'];
+            const TAB_KEYS = ['structure', 'rules', 'files', 'attack', 'releases', 'health', 'notes', 'history', 'misp'];
+            const notesSummary = ref(null);
+            const notesAlert = computed(() => {
+                const open = (notesSummary.value?.notes || []).filter(n => n.status === 'open' && n.severity !== 'info');
+                if (!open.length) return null;
+                return { count: open.length, critical: open.some(n => n.severity === 'critical'), first: open[0].title };
+            });
+            function _scrollToZone() {
+                nextTick(() => document.querySelector('.bd-zone')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            }
             const healthSummary = ref(null);
             const releasesSummary = ref(null);
             const _hashTab = (location.hash || '').slice(1);
@@ -1706,6 +1759,8 @@
                             count: releasesSummary.value && releasesSummary.value.releases.length ? releasesSummary.value.releases.length : null });
                 tabs.push({ key: 'health', label: 'Health', icon: 'fa-solid fa-heart-pulse',
                             count: healthSummary.value ? ((healthSummary.value.counts.error + healthSummary.value.counts.warning) || '✓') : null });
+                tabs.push({ key: 'notes', label: 'Notes', icon: 'fa-solid fa-note-sticky',
+                            count: notesSummary.value && notesSummary.value.open ? notesSummary.value.open : null });
                 tabs.push({ key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left', count: historyTotal.value || null });
                 if (rules.value.length && !viewRelease.value)
                     tabs.push({ key: 'misp', label: 'MISP Event', icon: 'fa-solid fa-diagram-project', count: null });
@@ -1820,7 +1875,7 @@
                 treeData, fileTreeNodes, allFiles, docFiles,
                 openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
                 openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
-                handleFileTreeSelect, activeTab, contentTabs, setTab, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, _scrollToZone, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList,
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,

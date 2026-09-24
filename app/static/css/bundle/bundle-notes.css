@@ -1,0 +1,54 @@
+/*
+  bundle-notes.css — Notes tab (BundleNotesPanel, .bn-*) and the "open
+  known issues" banner on the bundle header. Reuses .br-* form fields,
+  .bfv-md markdown and .bd-btn buttons.
+*/
+.bn-new { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.bn-hint { font-size: .8rem; color: var(--subtle-text-color); }
+.bn-blocked {
+    display: flex; gap: 8px; align-items: center; margin-bottom: 14px;
+    padding: 10px 14px; border-radius: 12px; border: 1px dashed var(--border-color);
+    background: var(--light-bg-color); color: var(--subtle-text-color); font-size: .84rem;
+}
+.bn-form {
+    display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;
+    padding: 16px; border-radius: 14px; border: 1px solid rgba(13, 110, 253, .25); background: rgba(13, 110, 253, .04);
+}
+.bn-select {
+    padding: 7px 12px; border-radius: 10px; border: 1px solid var(--border-color);
+    background: var(--card-bg-color); color: var(--text-color); font-size: .88rem;
+}
+.bn-list { display: flex; flex-direction: column; gap: 10px; }
+.bn-note {
+    border-radius: 14px; border: 1px solid var(--border-color); background: var(--card-bg-color);
+    border-left: 4px solid var(--bn-c); --bn-c: #0d6efd;
+}
+.bn-note--warning  { --bn-c: #d4a700; }
+.bn-note--critical { --bn-c: #dc3545; }
+.bn-note--info     { --bn-c: #0d6efd; }
+.bn-note--resolved { opacity: .72; border-left-color: #198754; }
+.bn-head { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px 4px; }
+.bn-sev-icon { color: var(--bn-c); font-size: 1.05rem; margin-top: 3px; }
+.bn-note--resolved .bn-sev-icon { color: #198754; }
+.bn-head-main { flex: 1; min-width: 0; }
+.bn-title { font-weight: 700; color: var(--text-color); }
+.bn-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: .74rem; color: var(--subtle-text-color); margin-top: 2px; }
+.bn-sev { font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--bn-c); }
+.bn-resolved { color: #198754; font-weight: 700; display: inline-flex; gap: 4px; align-items: center; }
+.bn-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.bn-armed { background: #dc3545 !important; color: #fff !important; border-color: #dc3545 !important; }
+.bn-body { padding: 2px 14px 14px 44px; font-size: .9rem; }
+.bn-body > :last-child { margin-bottom: 0; }
+
+/* header banner: open warning / critical notes */
+.bn-banner {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 1rem; padding: 10px 14px; border-radius: 12px;
+    border: 1px solid rgba(212, 167, 0, .45); background: rgba(255, 193, 7, .09);
+    font-size: .85rem; color: var(--text-color); cursor: pointer;
+}
+.bn-banner--critical { border-color: rgba(220, 53, 69, .45); background: rgba(220, 53, 69, .07); }
+.bn-banner > i { color: #d4a700; font-size: 1rem; }
+.bn-banner--critical > i { color: #dc3545; }
+.bn-banner:hover { filter: brightness(.98); }
+@media (max-width: 640px) { .bn-body { padding-left: 14px; } }
