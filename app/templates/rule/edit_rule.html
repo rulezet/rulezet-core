@@ -48,6 +48,27 @@
             <li class="breadcrumb-item active text-muted" aria-current="page">Edit [[ currentRule.title || 'Rule' ]]</li>
         </ol>
     </nav>
+    {# Arrived from a bundle's Health tab: remind the user what to fix #}
+    {% set _from_bundle = (request.args.get('from_bundle') or 0)|int %}
+    {% if _from_bundle %}
+    <div class="rounded-3 border p-3 mb-4 d-flex gap-3 align-items-start flex-wrap"
+         style="background:rgba(255,193,7,.08);border-color:rgba(212,167,0,.45)!important;" v-pre>
+        <i class="fa-solid fa-heart-pulse mt-1" style="color:#d4a700;font-size:1.1rem;"></i>
+        <div class="flex-grow-1" style="min-width:220px;">
+            <div class="fw-bold" style="color:var(--text-color);">
+                Health check{% if request.args.get('check') %} — {{ request.args.get('check')[:60] }}{% endif %}
+            </div>
+            <div class="small" style="color:var(--text-color);white-space:pre-line;">{{ (request.args.get('issue') or 'This rule was flagged by the bundle health check.')[:600] }}</div>
+            {% if request.args.get('fix') %}
+            <div class="small mt-1" style="color:var(--subtle-text-color);"><i class="fa-solid fa-wrench me-1" style="color:#0d6efd;"></i>{{ request.args.get('fix')[:400] }}</div>
+            {% endif %}
+        </div>
+        <a href="/bundle/detail/{{ _from_bundle }}#health" class="btn btn-sm rounded-pill px-3"
+           style="border:1px solid rgba(13,110,253,.35);color:#0d6efd;">
+            <i class="fa-solid fa-arrow-left me-1"></i>Back to the bundle
+        </a>
+    </div>
+    {% endif %}
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-pen-to-square banner-watermark"></i>
         <div class="d-flex align-items-center gap-3 mb-3">

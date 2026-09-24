@@ -45,6 +45,29 @@
     </div>
 
     <!-- ── Tabs ── -->
+    {# Arrived from the bundle's Health tab ("Edit in the bundle") #}
+    {% set _focus_rule = (request.args.get('focus_rule') or 0)|int %}
+    {% if _focus_rule %}
+    <div class="rounded-3 border p-3 mb-3 d-flex gap-3 align-items-start flex-wrap"
+         style="background:rgba(255,193,7,.08);border-color:rgba(212,167,0,.45)!important;" v-pre>
+        <i class="fa-solid fa-heart-pulse mt-1" style="color:#d4a700;font-size:1.1rem;"></i>
+        <div class="flex-grow-1" style="min-width:220px;">
+            <div class="fw-bold" style="color:var(--text-color);">
+                Health check{% if request.args.get('check') %} — {{ request.args.get('check')[:60] }}{% endif %}
+                {% if request.args.get('rule') %}<span class="fw-normal" style="color:var(--subtle-text-color);"> · {{ request.args.get('rule')[:120] }}</span>{% endif %}
+            </div>
+            <div class="small" style="color:var(--text-color);white-space:pre-line;">{{ (request.args.get('issue') or 'This rule was flagged by the health check.')[:600] }}</div>
+            {% if request.args.get('fix') %}
+            <div class="small mt-1" style="color:var(--subtle-text-color);"><i class="fa-solid fa-wrench me-1" style="color:#0d6efd;"></i>{{ request.args.get('fix')[:400] }}</div>
+            {% endif %}
+            <div class="small mt-1" style="color:var(--subtle-text-color);"><i class="fa-solid fa-arrow-down me-1"></i>The rule is selected in the structure below.</div>
+        </div>
+        <a href="/bundle/detail/{{ bundle.id }}#health" class="btn btn-sm rounded-pill px-3"
+           style="border:1px solid rgba(13,110,253,.35);color:#0d6efd;">
+            <i class="fa-solid fa-arrow-left me-1"></i>Back to the health check
+        </a>
+    </div>
+    {% endif %}
     <nav class="dr-nav" id="editTabs" role="tablist">
         <a class="dr-nav__item active" data-bs-toggle="tab" href="#structure-pane" role="tab">
             <i class="fa-solid fa-sitemap"></i>
@@ -71,6 +94,8 @@
                 <!-- BundleStructureEditor with BundleRuleSelector in the rule-selector slot -->
                 <bundle-structure-editor
                     ref="structureEditor"
+                    :focus-rule-id="focusRuleId"
+                    :focus-note="focusNote"
                     :bundle-id="bundleId"
                     :csrf-token="csrfToken"
                     @tree-ready="onTreeReady"
@@ -341,6 +366,8 @@ const { createApp, ref, computed, onMounted } = Vue
 const _BUNDLE_ID = {{ bundle.id | tojson }}
 const _BUNDLE_NAME = {{ bundle.name | tojson }}
 const _BUNDLE_DESCRIPTION = {{ (form.description.data or '') | tojson }}
+const _FOCUS_RULE_ID = {{ ((request.args.get('focus_rule') or 0)|int) or 'null' }}
+const _FOCUS_NOTE = {{ (request.args.get('issue') or '')[:600] | tojson }}
 
 createApp({
     delimiters: ['[[', ']]'],
@@ -581,6 +608,7 @@ createApp({
             fetchTags, initBundleTags, toggleSelection, clearSelection,
             getContrastYIQ, visiblePagesTags, saveTags, handleRefreshList,
             detectedVulnerabilities, initialDescription: _BUNDLE_DESCRIPTION,
+            focusRuleId: _FOCUS_RULE_ID, focusNote: _FOCUS_NOTE,
         }
     },
 }).mount('#page-app')

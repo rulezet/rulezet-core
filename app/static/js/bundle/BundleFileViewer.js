@@ -107,7 +107,10 @@ export default {
                     </div>
 
                     <div class="bfv-body">
-                        <div v-if="markdown && mdView === 'rendered'" class="bfv-markdown">
+                        <div v-if="file.loading" class="bfv-empty">
+                            <i class="fas fa-spinner fa-spin me-1"></i> Loading…
+                        </div>
+                        <div v-else-if="markdown && mdView === 'rendered'" class="bfv-markdown">
                             <div v-if="!file.content" class="bfv-empty">
                                 <i class="fa-regular fa-file"></i> This file is empty.
                             </div>
@@ -136,7 +139,7 @@ export default {
             return props.file.isRule ? (props.file.format || 'auto') : languageForFile(props.file.name)
         })
         const icon = computed(() => props.file?.isRule ? RULE_ICON : docIcon(props.file?.name))
-        const size = computed(() => formatBytes(props.file?.content))
+        const size = computed(() => props.file?.loading ? '…' : formatBytes(props.file?.content))
 
         watch(() => props.file, async (f) => {
             document.body.classList.toggle('bfv-open', !!f)
@@ -148,7 +151,7 @@ export default {
         }, { immediate: true })
 
         function download() {
-            if (!props.file) return
+            if (!props.file || props.file.loading) return
             downloadText(props.file.name, props.file.content)
             create_message(`Downloaded ${props.file.name}`, 'success-subtle')
         }

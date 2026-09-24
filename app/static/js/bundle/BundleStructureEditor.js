@@ -8,8 +8,11 @@
  *   - Preview / Editor panel (full width below)
  *
  * Props:
- *   bundleId   String|Number  required
- *   csrfToken  String         default ''
+ *   bundleId     String|Number  required
+ *   csrfToken    String         default ''
+ *   focusRuleId  Number         select + reveal this rule once the tree is loaded
+ *                               (arriving from the bundle's Health tab)
+ *   focusNote    String         the issue to show above that rule's preview
  *
  * Emits:
  *   tree-saved — after a successful save
@@ -228,11 +231,13 @@ export default {
     props: {
         bundleId:  { type: [String, Number], required: true },
         csrfToken: { type: String, default: '' },
+        focusRuleId: { type: Number, default: null },
+        focusNote:   { type: String, default: '' },
     },
 
     emits: ['tree-saved', 'tree-ready'],
 
-    expose: ['addRules', 'setPreview'],
+    expose: ['addRules', 'setPreview', 'focusRule'],
 
     template: `
     <div class="bse-wrapper">
@@ -429,6 +434,12 @@ export default {
                         <i v-if="saveStatus === 'saved'" class="fas fa-check-circle bse-save-ok ms-1"></i>
                         <i v-else-if="saveStatus === 'error'" class="fas fa-times-circle bse-save-err ms-1"></i>
                     </button>
+                </div>
+
+                <!-- Issue from the Health tab, above the rule it concerns -->
+                <div v-if="focusNote && selectedNode && selectedNode.rule_id === focusRuleId" class="bse-focus-note">
+                    <i class="fa-solid fa-heart-pulse"></i>
+                    <span>{{ focusNote }}</span>
                 </div>
 
                 <!-- Read-only rule node -->
@@ -636,6 +647,34 @@ export default {
             await nextTick()
             treeLoaded.value = true
             emit('tree-ready', [...extractRuleIds(treeData.value)])
+            if (props.focusRuleId) focusRule(props.focusRuleId)
+        }
+
+        // Select a rule of the tree, open its preview and bring its row
+        // into view (Health tab → "Edit in the bundle").
+        async function focusRule(ruleId) {
+            const find = (nodes) => {
+                for (const n of nodes || []) {
+                    if (n.rule_id === ruleId) return n
+                    const hit = find(n.children)
+                    if (hit) return hit
+                }
+                return null
+            }
+            const node = find(treeData.value)
+            if (!node) {
+                create_message('This rule is not placed in the structure — drop it into a folder from the library', 'warning-subtle')
+                return
+            }
+            selectNode(node)
+            await nextTick()
+            const row = document.querySelector(`.bse-tree-item[data-id="${CSS.escape(String(node.id))}"] > .bse-node-row`)
+            if (row) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                row.classList.remove('bse-node-row--flash')
+                void row.offsetWidth
+                row.classList.add('bse-node-row--flash')
+            }
         }
 
         function _timeStr() {
@@ -718,6 +757,15 @@ export default {
             previewName.value    = ''
             selectedNode.value   = node
             if (node && node.type === 'folder') lastFolder.value = node
+            // Light tree: rule content is fetched on first selection
+            if (node && isRule(node) && node.lazy && node.rule_id) {
+                node.lazy = false
+                node.content = ''
+                fetch(`/bundle/${props.bundleId}/rule_content/${node.rule_id}`)
+                    .then(r => r.json())
+                    .then(d => { if (d.success) { node.content = d.content; node.format = node.format || d.format } })
+                    .catch(() => { node.lazy = true })
+            }
         }
 
         function clearDisplay() {
@@ -908,7 +956,7 @@ export default {
             confirmAddFolder, confirmAddFile, cancelCreation,
             beginRename, confirmRename, cancelRename,
             beginDelete, saveStructure, saveNow, onContentChange,
-            addRules, setPreview,
+            addRules, setPreview, focusRule,
             onExternalDropOnFolder, onRootDragOver, onRootDragLeave, onRootDrop, onTreeSortEnd,
             multiSelected, toggleMultiSelect, clearMultiSelect,
             bulkDeleteArmed, confirmBulkDelete,

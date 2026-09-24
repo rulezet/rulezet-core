@@ -172,6 +172,9 @@ export function flattenFiles(nodes, parents = []) {
                 folder: parents.join('/'),
                 path: [...parents, n.name].join('/'),
                 content: n.content || '',
+                // rule content isn't in the light tree — fetched when opened
+                lazy: !!n.lazy,
+                size: n.size ?? null,
                 isRule: isRuleNode(n),
                 format: n.format || '',
                 rule_id: n.rule_id ?? null,

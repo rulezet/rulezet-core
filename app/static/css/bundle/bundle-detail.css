@@ -501,3 +501,50 @@
 }
 .bd-share-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .bd-share-meta { font-size: .76rem; color: var(--subtle-text-color); margin-right: auto; }
+
+/* ── MISP event panel: summary + JSON / Graph switch ── */
+.bm-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+}
+.bm-summary-main { min-width: 0; flex: 1; }
+.bm-info { font-weight: 700; color: var(--text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 6px; }
+.bm-counts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.bm-uuid {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: .7rem; color: var(--subtle-text-color);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px;
+}
+.bm-toggle {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+}
+.bm-toggle button {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 0; border-radius: 999px; padding: 5px 14px;
+    background: transparent; color: var(--subtle-text-color);
+    font-size: .78rem; font-weight: 700;
+}
+.bm-toggle button.active { background: linear-gradient(135deg, #0d6efd, #0a58ca); color: #fff; box-shadow: 0 2px 8px rgba(13, 110, 253, .28); }
+.bm-graph-wrap { border-radius: 12px; border: 1px solid var(--border-color); overflow: hidden; background: var(--card-bg-color); }
+.bm-count {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 8px;
+    border: 1px solid var(--border-color); background: var(--card-bg-color);
+    color: var(--subtle-text-color); font-size: .74rem; white-space: nowrap;
+}
+.bm-count b { color: var(--text-color); }
+.bm-count--blue i { color: #0d6efd; }
+.bm-count--teal i { color: #0f9488; }

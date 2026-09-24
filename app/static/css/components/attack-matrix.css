@@ -377,3 +377,5 @@
 }
 .am-rule-act:hover { background: rgba(13, 110, 253, .08); color: #0d6efd; text-decoration: none; }
 @media (max-width: 640px) { .am-rule-act span { display: none; } }
+.am-rule-act--edit { border-color: rgba(25, 135, 84, .4); color: #198754; }
+.am-rule-act--edit:hover { background: rgba(25, 135, 84, .08); color: #198754; }
