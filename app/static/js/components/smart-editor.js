@@ -25,7 +25,7 @@
  *   <button type="submit">Save</button>
  */
 
-import { SANITIZE_CONFIG } from '/static/js/sanitize.js'
+import { SANITIZE_CONFIG, hardenUserHtml } from '/static/js/sanitize.js'
 
 // ── Module-level singletons ────────────────────────────────────────────────────
 
@@ -140,6 +140,10 @@ export default {
         minHeight:   { type: String,  default: '220px' },
         maxHeight:   { type: String,  default: '600px' },
         readonly:    { type: Boolean, default: false },
+        // Markdown preview of content other users will read (bundle files,
+        // descriptions): same hardening as where it's displayed — no images
+        // loaded, no same-origin links, no foreign classes / ids.
+        hardenedPreview: { type: Boolean, default: false },
     },
 
     emits: ['update:modelValue'],
@@ -385,7 +389,10 @@ export default {
 
         function render_md() {
             if (!window.marked) return
-            try { rendered_md.value = _sanitize_html(window.marked.parse(inner_value.value)) }
+            try {
+                const html = _sanitize_html(window.marked.parse(inner_value.value))
+                rendered_md.value = props.hardenedPreview ? hardenUserHtml(html) : html
+            }
             catch { rendered_md.value = '<p><em>Render error</em></p>' }
         }
 

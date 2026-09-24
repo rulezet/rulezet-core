@@ -7,53 +7,12 @@
  * BundleFilesPanel (detail page) so the three stay consistent.
  */
 
-import { renderMarkdown } from '/static/js/sanitize.js'
-
-// Bundle files and descriptions are user content shown to other users, so on
-// top of the shared DOMPurify config (renderMarkdown) we also:
-//  - never loads images: an <img src="/bundle/delete?id=…"> would fire a
-//    same-origin GET with the viewer's cookies (several bundle/rule actions
-//    are still GET endpoints), and remote images leak the viewer's IP.
-//    They become a non-loading "[image: alt — host]" placeholder.
-//  - keeps only absolute http(s) links to *other* hosts, opened in a new tab
-//    with noopener/noreferrer; same-origin and relative links become plain
-//    text so a "click here" can't trigger an action on Rulezet either.
-function hardenMarkdownHtml(html) {
-    const doc = new DOMParser().parseFromString(html, 'text/html')   // inert document
-    const here = window.location.origin
-
-    doc.querySelectorAll('img, picture, video, audio, source, iframe, object, embed').forEach(el => {
-        const src = el.getAttribute('src') || ''
-        let host = ''
-        try { host = new URL(src, here).host } catch {}
-        const ph = doc.createElement('span')
-        ph.className = 'bfv-img-ph'
-        ph.textContent = `[image${el.getAttribute('alt') ? ': ' + el.getAttribute('alt') : ''}${host ? ' — ' + host : ''}]`
-        ph.title = 'Images are not loaded from bundle files'
-        el.replaceWith(ph)
-    })
-
-    doc.querySelectorAll('a').forEach(a => {
-        const href = a.getAttribute('href') || ''
-        let url = null
-        try { url = new URL(href, here) } catch {}
-        const external = url && /^https?:$/.test(url.protocol) && url.origin !== here && /^https?:\/\//i.test(href)
-        if (!external) {
-            a.replaceWith(doc.createTextNode(a.textContent))
-            return
-        }
-        a.setAttribute('target', '_blank')
-        a.setAttribute('rel', 'noopener noreferrer nofollow')
-        a.setAttribute('title', url.href)
-        a.classList.add('bfv-ext-link')
-    })
-    return doc.body.innerHTML
-}
+import { renderMarkdown, hardenUserHtml } from '/static/js/sanitize.js'
 
 // Markdown -> sanitised + hardened HTML, safe for v-html.
 export async function renderSafeMarkdown(text) {
     if (!text) return ''
-    return hardenMarkdownHtml(await renderMarkdown(text))
+    return hardenUserHtml(await renderMarkdown(text))
 }
 
 export const isRuleNode = (node) =>

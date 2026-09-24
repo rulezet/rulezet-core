@@ -78,7 +78,7 @@ export default {
                     </div>
                     <div class="br-field">
                         <span>Release notes <em>(generated from the changes — edit freely)</em></span>
-                        <smart-editor :key="formKey" v-model="form.notes" mode="markdown" min-height="180px" max-height="420px"></smart-editor>
+                        <smart-editor :key="formKey" v-model="form.notes" mode="markdown" hardened-preview min-height="180px" max-height="420px"></smart-editor>
                     </div>
                     <div class="br-form-hint">
                         <i class="fa-solid fa-snowflake"></i>

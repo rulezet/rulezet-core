@@ -411,6 +411,7 @@ export default {
                 <!-- Editable custom file -->
                 <smart-editor
                     v-if="selectedNode && selectedNode.type === 'file' && !isRule(selectedNode)"
+                    hardened-preview
                     :key="selectedNode.id + '|' + selectedNode.name"
                     :model-value="selectedNode.content ?? ''"
                     @update:model-value="onContentChange"

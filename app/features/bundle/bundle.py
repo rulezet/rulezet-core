@@ -15,7 +15,7 @@ import io
 import re
 import zipfile
 import json
-from flask import send_file, request
+from flask import send_file
 
 #############
 #   Bundle  #
@@ -101,6 +101,8 @@ def delete() :
     """Delete a bundle"""     
     bundle_id = request.args.get('id', 1, type=int)
     bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 404
     if current_user.id == bundle.user_id or current_user.is_admin():
         bundle_name = bundle.name
         bundle_uuid = bundle.uuid
@@ -125,6 +127,8 @@ def delete() :
 def edit(bundle_id) :     
     """Edit a bundle"""     
     bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return render_template("404.html"), 404
     if current_user.id == bundle.user_id or current_user.is_admin():
         form = EditBundleForm(bundle_id=bundle_id)
         if form.validate_on_submit():
@@ -145,9 +149,9 @@ def edit(bundle_id) :
 
         return render_template("bundle/edit_bundle.html", form=form, bundle=bundle)
     else:
-        return render_template("access_denied.html")
+        return render_template("access_denied.html"), 403
     
-@bundle_blueprint.route("/detail/<int:bundle_id>", methods=['GET' , 'POST'])
+@bundle_blueprint.route("/detail/<int:bundle_id>", methods=['GET'])
 def detail(bundle_id) :     
     """Go to detail of a bundle"""    
     bundle = BundleModel.get_bundle_by_id(bundle_id)
@@ -156,14 +160,14 @@ def detail(bundle_id) :
         if resp is not None:
             return resp
         if _can_view_bundle(bundle):
-            return render_template("bundle/detail_bundle.html", bundle_id=bundle_id, bundle_name=bundle.name,
-                                   via_share_link=not bundle.access and not _is_bundle_manager(bundle))
+            return _no_referrer_leak(render_template("bundle/detail_bundle.html", bundle_id=bundle_id, bundle_name=bundle.name,
+                                   via_share_link=not bundle.access and not _is_bundle_manager(bundle)))
         else:
             return render_template("access_denied.html"),403
     else:
         return render_template("404.html"), 404
 
-@bundle_blueprint.route("/detail/<string:bundle_uuid>", methods=['GET' , 'POST'])
+@bundle_blueprint.route("/detail/<string:bundle_uuid>", methods=['GET'])
 def detail_uuid(bundle_uuid) :
     """Go to detail of a bundle"""
     bundle = BundleModel.get_bundle_by_uuid(bundle_uuid)
@@ -172,8 +176,8 @@ def detail_uuid(bundle_uuid) :
         if resp is not None:
             return resp
         if _can_view_bundle(bundle):
-            return render_template("bundle/detail_bundle.html", bundle_id=bundle.id, bundle_name=bundle.name,
-                                   via_share_link=not bundle.access and not _is_bundle_manager(bundle))
+            return _no_referrer_leak(render_template("bundle/detail_bundle.html", bundle_id=bundle.id, bundle_name=bundle.name,
+                                   via_share_link=not bundle.access and not _is_bundle_manager(bundle)))
         else:
             return render_template("access_denied.html"),403
     else:
@@ -262,8 +266,8 @@ def open_shared_bundle(token):
     if not bundle:
         flash("This share link is invalid or has been revoked.", "danger")
         return render_template("access_denied.html"), 403
-    log_activity("bundle.share_open", f"Opened bundle '{bundle.name}' via share link",
-                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
+    # (logged by _apply_share_param on the detail page — the activity log
+    # stores the request path, and this path contains the key)
     # Keep the key visible in the URL: the page itself shows it was reached
     # through a share link, and the URL keeps working on its own.
     return redirect(url_for("bundle.detail", bundle_id=bundle.id, share=token))
@@ -278,8 +282,20 @@ def _apply_share_param(bundle):
         return None
     if not current_user.is_authenticated:
         return redirect(url_for("account.login", next=request.full_path))
-    BundleModel.grant_share_access(token)   # unknown/revoked token → nothing granted
+    granted = BundleModel.grant_share_access(token)   # unknown/revoked token → nothing granted
+    if granted is not None and granted.id == bundle.id and not _is_bundle_manager(bundle):
+        # request path = /bundle/detail/<id> — the key (query string) is not logged
+        log_activity("bundle.share_open", f"Opened bundle '{bundle.name}' via share link",
+                     target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
     return None
+
+
+def _no_referrer_leak(resp):
+    """Bundle pages can carry ?share=<key> — never send it in a Referer."""
+    from flask import make_response
+    resp = make_response(resp)
+    resp.headers["Referrer-Policy"] = "same-origin"
+    return resp
 
 
 @bundle_blueprint.route("/<int:bundle_id>/share", methods=['GET'])
@@ -348,7 +364,8 @@ def bundle_history(bundle_id):
         return {"success": False, "message": "Access denied", "toast_class": "danger"}, 403
 
     page = max(request.args.get('page', 1, type=int), 1)
-    pagination = get_bundle_history_page(bundle_id, page=page, per_page=30)
+    per_page = min(max(request.args.get('per_page', 10, type=int), 5), 50)
+    pagination = get_bundle_history_page(bundle_id, page=page, per_page=per_page)
     entries = []
     for h in pagination.items:
         e = h.to_json()
@@ -463,6 +480,8 @@ NOTE_TAG_PREFIXES = (
     "ioc:",                             # artifact-state
 )
 NOTE_MAX_TAGS = 8
+NOTE_MAX_PER_HOUR = 10          # per user, per bundle
+NOTE_MAX_MENTIONS = 10          # users notified per note / edit
 _pylist = type([])     # the builtin — `list` is shadowed in this module by the /list route view
 
 
@@ -532,7 +551,7 @@ def _notify_note_mentions(bundle, note, previous_text=""):
     from app.features.notification.notification_core import notify_user_mentioned
     new_ids = _mentioned_ids(note.content) - _mentioned_ids(previous_text) - {current_user.id}
     skipped = []
-    for uid in new_ids:
+    for uid in sorted(new_ids)[:NOTE_MAX_MENTIONS]:
         u = db.session.get(User, uid)
         if not u:
             continue
@@ -609,6 +628,12 @@ def create_bundle_note(bundle_id):
         return err
     if not bundle.access and not _is_bundle_manager(bundle):
         return {"success": False, "message": "Notes can only be added while the bundle is public", "toast_class": "danger-subtle"}, 403
+    import datetime as _dt
+    recent = BundleNote.query.filter(BundleNote.bundle_id == bundle_id, BundleNote.user_id == current_user.id,
+                                     BundleNote.created_at >= _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=1)).count()
+    if recent >= NOTE_MAX_PER_HOUR and not _is_bundle_manager(bundle):
+        return {"success": False, "message": "Too many notes on this bundle in the last hour — try again later",
+                "toast_class": "warning-subtle"}, 429
     payload, error = _note_payload()
     if error:
         return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
@@ -719,7 +744,9 @@ def bundle_health_fix(bundle_id):
     if ok:
         log_activity("bundle.health_fix", f"Health fix on bundle '{bundle.name}': {message}",
                      target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid,
-                     extra={"fix": fix}, is_public=False)
+                     extra={"fix": {k: fix.get(k) for k in ("action", "rule_id", "near_rule_id", "node_id", "tag")
+                                    if isinstance(fix, dict) and fix.get(k) is not None}},
+                     is_public=False)
     return {"success": ok, "message": message, "toast_class": "success-subtle" if ok else "danger-subtle"}, (200 if ok else 400)
 
 
@@ -951,6 +978,8 @@ def add_rule_bundle() :
 
     bundle = BundleModel.get_bundle_by_id(bundle_id)
 
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 404
     if current_user.id == bundle.user_id or current_user.is_admin():
         if rule_id and bundle_id:
             success_ = BundleModel.add_rule_to_bundle(bundle_id , rule_id , description)
@@ -1009,6 +1038,8 @@ def remove() :
 
     bundle = BundleModel.get_bundle_by_id(bundle_id)
 
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 404
     if current_user.id == bundle.user_id or current_user.is_admin():
         if rule_id and bundle_id:
             success_ = BundleModel.remove_rule_from_bundle(bundle_id , rule_id)
@@ -1110,6 +1141,8 @@ def change_description():
         }, 404
     bundle = BundleModel.get_bundle_by_id(association.bundle_id)
 
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 404
     if bundle.user_id == current_user.id or current_user.is_admin():
         association.description = new_description
         return {
@@ -1125,6 +1158,7 @@ def change_description():
         }, 401
 
 @bundle_blueprint.route("/edit_access", methods=['POST'])  # state-changing: POST + CSRF (was GET)
+@login_required
 def edit_access():
     """Edit access to a bundle."""
     bundle_id = request.args.get('id', type=int)
@@ -1748,6 +1782,8 @@ def get_comments():
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if not bundle:
         return {"message": "Bundle not found", "toast_class": "danger-subtle"}, 404
+    if not BundleModel.can_view_bundle(bundle):          # was readable for private bundles
+        return {"message": "Access denied", "toast_class": "danger-subtle"}, 403
 
     comments = BundleModel.get_comments_for_bundle(bundle_id, page)
 
@@ -1837,6 +1873,9 @@ def add_reaction():
 @bundle_blueprint.route('/get_bundle_tag_ids/<int:bundle_id>')
 @login_required
 def get_bundle_tag_ids(bundle_id):
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle or not BundleModel.can_view_bundle(bundle):
+        return jsonify({"success": False, "message": "Access denied"}), 403
     tag_ids = BundleModel.get_tag_ids_for_bundle(bundle_id)
     return jsonify({"success": True, "tag_ids": tag_ids})
 
@@ -2252,7 +2291,6 @@ def bundle_attacks_usage():
         .all()
     )
     tech_ids = [r.technique_id for r in rows]
-    count_map = {r.technique_id: r.count for r in rows}
 
     techs = AttackTechnique.query.filter(AttackTechnique.technique_id.in_(tech_ids)).all()
     tech_map = {t.technique_id: t for t in techs}

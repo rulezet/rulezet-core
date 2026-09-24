@@ -67,7 +67,7 @@
                                 {{ form.description.label.text }} <span class="text-danger">*</span>
                             </label>
                             <div id="bundle-desc-editor">
-                                <smart-editor name="description" mode="markdown" :model-value="initialDescription"
+                                <smart-editor name="description" mode="markdown" hardened-preview :model-value="initialDescription"
                                     placeholder="Describe the purpose or content of the bundle… Markdown is supported."
                                     min-height="280px" max-height="560px"></smart-editor>
                             </div>

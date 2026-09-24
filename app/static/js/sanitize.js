@@ -50,3 +50,60 @@ export async function renderMarkdown(text) {
     const html = mk.parse ? mk.parse(text) : mk(text)
     return sanitizeHtml(html)
 }
+
+
+// hardenUserHtml — extra hardening for user content shown to OTHER users
+// (bundle files, descriptions, release notes, notes). Run it on HTML that
+// already went through DOMPurify (sanitizeHtml / renderMarkdown). It:
+//  - never load images / media: an <img src="/some/get/endpoint"> would fire
+//    a same-origin request with the viewer's cookies, and remote images leak
+//    the viewer's IP. They become a non-loading "[image: alt — host]" text.
+//  - keep only absolute http(s) links to *other* hosts, opened in a new tab
+//    with noopener/noreferrer; same-origin and relative links become text.
+//  - drop id / name attributes (DOM clobbering: a note could otherwise add an
+//    element the page looks up with getElementById, e.g. "bundle-info").
+//  - drop every class that isn't ours: DOMPurify keeps `class`, and the
+//    page's own CSS (e.g. .bfv-backdrop — position:fixed, z-index 1080)
+//    would let a note draw a fake full-page overlay.
+//  - drop svg / math (sizeable, hard to reason about, never needed here).
+const SAFE_CLASS = /^(bn-mention|bn-ref|bn-ref--rule|bn-ref--file|bfv-img-ph|bfv-ext-link|fa-solid|fa-shield-halved|fa-file-lines|language-[\w-]{1,30}|hljs[\w-]*)$/
+
+export function hardenUserHtml(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html')   // inert document
+    const here = window.location.origin
+
+    doc.querySelectorAll('svg, math').forEach(el => el.remove())
+    doc.querySelectorAll('[id], [name]').forEach(el => { el.removeAttribute('id'); el.removeAttribute('name') })
+    doc.querySelectorAll('[class]').forEach(el => {
+        const keep = [...el.classList].filter(c => SAFE_CLASS.test(c))
+        if (keep.length) el.setAttribute('class', keep.join(' '))
+        else el.removeAttribute('class')
+    })
+
+    doc.querySelectorAll('img, picture, video, audio, source, iframe, object, embed').forEach(el => {
+        const src = el.getAttribute('src') || ''
+        let host = ''
+        try { host = new URL(src, here).host } catch {}
+        const ph = doc.createElement('span')
+        ph.className = 'bfv-img-ph'
+        ph.textContent = `[image${el.getAttribute('alt') ? ': ' + el.getAttribute('alt') : ''}${host ? ' — ' + host : ''}]`
+        ph.title = 'Images are not loaded from bundle files'
+        el.replaceWith(ph)
+    })
+
+    doc.querySelectorAll('a').forEach(a => {
+        const href = a.getAttribute('href') || ''
+        let url = null
+        try { url = new URL(href, here) } catch {}
+        const external = url && /^https?:$/.test(url.protocol) && url.origin !== here && /^https?:\/\//i.test(href)
+        if (!external) {
+            a.replaceWith(doc.createTextNode(a.textContent))
+            return
+        }
+        a.setAttribute('target', '_blank')
+        a.setAttribute('rel', 'noopener noreferrer nofollow')
+        a.setAttribute('title', url.href)
+        a.classList.add('bfv-ext-link')
+    })
+    return doc.body.innerHTML
+}
