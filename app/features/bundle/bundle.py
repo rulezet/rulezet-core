@@ -444,6 +444,78 @@ def _mark_editable_items(health, bundle):
 # note — they get it back only through the bundle's share link.
 
 NOTE_SEVERITIES = ("info", "warning", "critical")
+
+# Only these taxonomies make sense on a note ("this rule false-positives on…",
+# "needs review", "low confidence"…) — every other tag is refused.
+NOTE_TAG_PREFIXES = (
+    "false-positive:",                  # risk / confirmed
+    "use-case-applicability:",          # bad IOC / rule pattern, rule config error, test alert…
+    "incident-disposition:",            # faulty indicator, duplicate…
+    "misp-workflow:analysis=",          # false-positive, highly-likely-positive…
+    "workflow:",                        # todo / state
+    "priority-level:",                  # how urgent the fix is
+    "detection-engineering:",
+    "hunt-ex:",                         # data-source / detection gaps, environment-specific
+    "cti-evaluation:",                  # accuracy, clarity…
+    "estimative-language:",             # confidence / likelihood
+    "admiralty-scale:",                 # source reliability
+    "information-origin:",              # AI-generated / human-generated
+    "ioc:",                             # artifact-state
+)
+NOTE_MAX_TAGS = 8
+_pylist = type([])     # the builtin — `list` is shadowed in this module by the /list route view
+
+
+def _note_tag_allowed(name):
+    return (name or "").lower().startswith(NOTE_TAG_PREFIXES)
+
+
+def _note_tags_from_request(data):
+    """Validated Tag objects for data['tag_ids'] — (tags, error)."""
+    from app.core.db_class.db import Tag
+    raw = data.get("tag_ids")
+    if raw is None:
+        return None, None                          # not sent → leave the note's tags alone
+    if not isinstance(raw, _pylist) or len(raw) > NOTE_MAX_TAGS:
+        return None, f"At most {NOTE_MAX_TAGS} tags per note"
+    try:
+        ids = {int(x) for x in raw}
+    except (TypeError, ValueError):
+        return None, "Invalid tag"
+    tags = Tag.query.filter(Tag.id.in_(ids), Tag.is_active == True).all() if ids else []
+    if len(tags) != len(ids) or not all(_note_tag_allowed(t.name) for t in tags):
+        return None, "This tag can't be used on a note — only false-positive / applicability / workflow / confidence-style taxonomies are allowed"
+    return tags, None
+
+
+def _set_note_tags(note, tags):
+    from app.core.db_class.db import BundleNoteTag
+    if tags is None:
+        return
+    wanted = {t.id for t in tags}
+    for a in _pylist(note.tag_assocs):
+        if a.tag_id not in wanted:
+            note.tag_assocs.remove(a)
+    have = {a.tag_id for a in note.tag_assocs}
+    for t in tags:
+        if t.id not in have:
+            note.tag_assocs.append(BundleNoteTag(tag_id=t.id))
+
+
+@bundle_blueprint.route("/note_tags", methods=['GET'])
+def search_note_tags():
+    """Tags usable on a bundle note (curated taxonomies only), searchable."""
+    from sqlalchemy import or_
+    from app.core.db_class.db import Tag
+    q = (request.args.get("q") or "").strip()
+    query = Tag.query.filter(Tag.is_active == True,
+                             or_(*[Tag.name.ilike(p + "%") for p in NOTE_TAG_PREFIXES]))
+    if q:
+        query = query.filter(Tag.name.ilike(f"%{q}%"))
+    order = db.case(*[(Tag.name.ilike(p + "%"), i) for i, p in enumerate(NOTE_TAG_PREFIXES)], else_=99)
+    tags = query.order_by(order, Tag.name).limit(40).all()
+    return jsonify({"success": True, "prefixes": [*NOTE_TAG_PREFIXES],
+                    "tags": [{"id": t.id, "name": t.name, "color": t.color, "description": t.description} for t in tags]}), 200
 _MENTION_RE = re.compile(r"@\[[^\]]+\]\((\d+)\)")
 
 
@@ -540,8 +612,12 @@ def create_bundle_note(bundle_id):
     payload, error = _note_payload()
     if error:
         return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
+    tags, error = _note_tags_from_request(request.get_json(silent=True) or {})
+    if error:
+        return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
     note = BundleNote(uuid=str(_uuid.uuid4()), bundle_id=bundle_id, user_id=current_user.id, **payload)
     db.session.add(note)
+    _set_note_tags(note, tags)
     db.session.commit()
     skipped = _notify_note_mentions(bundle, note)
     log_activity("bundle.note_create", f"Added a note on bundle '{bundle.name}': {note.title}",
@@ -578,7 +654,11 @@ def update_bundle_note(bundle_id, note_id):
     payload, error = _note_payload()
     if error:
         return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
+    tags, error = _note_tags_from_request(request.get_json(silent=True) or {})
+    if error:
+        return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
     previous = note.content
+    _set_note_tags(note, tags)
     for k, v in payload.items():
         setattr(note, k, v)
     note.updated_at = _dt.datetime.now(_dt.timezone.utc)

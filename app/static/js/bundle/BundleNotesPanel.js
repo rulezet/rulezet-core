@@ -84,6 +84,29 @@ export default {
                 </label>
             </div>
             <div class="br-field">
+                <span>Tags <em>(false positives, detection verdicts, priority, confidence… — curated taxonomies only)</em></span>
+                <div class="bn-tags-field">
+                    <span v-for="t in form.tags" :key="t.id" class="bn-tag" :title="t.description || t.name">
+                        {{ shortTag(t.name) }}
+                        <button type="button" @click="removeTag(t)" aria-label="Remove tag"><i class="fa-solid fa-xmark"></i></button>
+                    </span>
+                    <input type="text" v-model="tagQuery" class="bn-tag-input" placeholder="Search a tag…"
+                           @input="searchTags" @focus="searchTags" @blur="closeTagsSoon" @keydown.enter.prevent="addFirstTag"
+                           :disabled="form.tags.length >= 8">
+                    <ul v-if="tagOpen && tagResults.length" class="bn-picker bn-tag-picker">
+                        <li v-for="t in tagResults" :key="t.id" class="bn-picker-item" @mousedown.prevent="addTag(t)" :title="t.description || ''">
+                            <i class="fa-solid fa-tag"></i><span>{{ t.name }}</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="bn-quick-tags">
+                    <button v-for="t in quickTags" :key="t.id" type="button" class="bn-quick-tag"
+                            :class="{ active: form.tags.some(x => x.id === t.id) }" @click="toggleTag(t)" :title="t.description || t.name">
+                        <i class="fa-solid fa-bug-slash"></i>{{ shortTag(t.name) }}
+                    </button>
+                </div>
+            </div>
+            <div class="br-field">
                 <span>Note <em>(Markdown — type <b>@</b> to mention someone, <b>#</b> to reference a rule or file of the bundle)</em></span>
                 <div class="bn-composer">
                     <div class="bn-composer-tabs">
@@ -127,8 +150,13 @@ export default {
             <div><strong>No notes yet.</strong><span>Nobody reported a known issue on this bundle.</span></div>
         </div>
 
+        <div v-if="tagFilter" class="bd-focus-bar">
+            <i class="fa-solid fa-filter"></i>
+            <span>Notes tagged <strong>{{ tagFilter }}</strong></span>
+            <button type="button" class="bd-btn bd-btn--ghost ms-auto" @click="tagFilter = ''"><i class="fa-solid fa-xmark"></i><span>Show all</span></button>
+        </div>
         <div class="bn-list">
-            <article v-for="n in notes" :key="n.id" class="bn-note" :class="['bn-note--' + n.severity, { 'bn-note--resolved': n.status === 'resolved' }]">
+            <article v-for="n in shownNotes" :key="n.id" class="bn-note" :class="['bn-note--' + n.severity, { 'bn-note--resolved': n.status === 'resolved' }]">
                 <header class="bn-head">
                     <i :class="SEVERITY[n.severity].icon + ' bn-sev-icon'"></i>
                     <div class="bn-head-main">
@@ -148,6 +176,11 @@ export default {
                                 :title="armed === n.id ? 'Click again to delete' : 'Delete'" @click="remove(n)"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </header>
+                <div v-if="n.tags && n.tags.length" class="bn-note-tags">
+                    <button v-for="t in n.tags" :key="t.id" type="button" class="bn-tag bn-tag--view"
+                            :class="{ active: tagFilter === t.name }" :title="(t.description || t.name) + ' — click to filter'"
+                            @click="tagFilter = tagFilter === t.name ? '' : t.name">{{ shortTag(t.name) }}</button>
+                </div>
                 <div class="bfv-md bn-body" v-html="html[n.id] || ''" @click="onBodyClick" @keydown.enter="onBodyClick"></div>
             </article>
         </div>
@@ -164,7 +197,37 @@ export default {
         const blockedReason = ref('')
         const armed = ref(null)
         const loadError = ref('')
-        const form = reactive({ open: false, id: null, title: '', content: '', severity: 'warning', key: 0 })
+        // ── tags (curated taxonomies, see NOTE_TAG_PREFIXES server-side) ──
+        const tagQuery = ref('')
+        const tagResults = ref([])
+        const tagOpen = ref(false)
+        const quickTags = ref([])
+        const tagFilter = ref('')
+        let tagT = null, tagBlurT = null
+        const shortTag = (n) => String(n).replace(/^([a-z-]+):/i, '$1 ').replace(/"/g, '').replace(/=/, ': ')
+        const shownNotes = computed(() => tagFilter.value
+            ? notes.value.filter(n => (n.tags || []).some(t => t.name === tagFilter.value)) : notes.value)
+        async function fetchTags(q) {
+            const d = await fetch('/bundle/note_tags?' + new URLSearchParams({ q })).then(r => r.json()).catch(() => ({ tags: [] }))
+            return d.tags || []
+        }
+        function searchTags() {
+            clearTimeout(tagT)
+            tagOpen.value = true
+            tagT = setTimeout(async () => {
+                const picked = new Set(form.tags.map(t => t.id))
+                tagResults.value = (await fetchTags(tagQuery.value.trim())).filter(t => !picked.has(t.id)).slice(0, 12)
+            }, 180)
+        }
+        function closeTagsSoon() { clearTimeout(tagBlurT); tagBlurT = setTimeout(() => { tagOpen.value = false }, 150) }
+        function addTag(t) {
+            if (form.tags.length >= 8 || form.tags.some(x => x.id === t.id)) return
+            form.tags.push(t); tagQuery.value = ''; tagResults.value = tagResults.value.filter(x => x.id !== t.id)
+        }
+        function addFirstTag() { if (tagResults.value[0]) addTag(tagResults.value[0]) }
+        function removeTag(t) { form.tags = form.tags.filter(x => x.id !== t.id) }
+        function toggleTag(t) { form.tags.some(x => x.id === t.id) ? removeTag(t) : addTag(t) }
+        const form = reactive({ open: false, id: null, title: '', content: '', severity: 'warning', key: 0, tags: [] })
         let armT = null
 
         const fmt = (iso) => window.dayjs ? dayjs(iso).format('MMM D, YYYY HH:mm') : iso
@@ -287,8 +350,14 @@ export default {
 
         function openForm(n = null) {
             Object.assign(form, n
-                ? { open: true, id: n.id, title: n.title, content: n.content, severity: n.severity }
-                : { open: true, id: null, title: '', content: '', severity: 'warning' })
+                ? { open: true, id: n.id, title: n.title, content: n.content, severity: n.severity, tags: [...(n.tags || [])] }
+                : { open: true, id: null, title: '', content: '', severity: 'warning', tags: [] })
+            // One-click picks: false positives first, then the detection verdicts
+            if (!quickTags.value.length)
+                Promise.all([fetchTags('false-positive:'), fetchTags('use-case-applicability:')]).then(([fp, uc]) => {
+                    const verdicts = uc.filter(t => /rule-pattern|rule-configuration|test-alert/.test(t.name))
+                    quickTags.value = [...fp.slice(0, 6), ...verdicts.slice(0, 3)]
+                })
             form.key++
             preview.value = false
             closePicker()
@@ -300,7 +369,8 @@ export default {
                 const url = form.id ? `/bundle/${props.bundleId}/notes/${form.id}` : `/bundle/${props.bundleId}/notes`
                 const d = await json(await fetch(url, {
                     method: form.id ? 'PUT' : 'POST', headers: H(),
-                    body: JSON.stringify({ title: form.title, content: form.content, severity: form.severity }),
+                    body: JSON.stringify({ title: form.title, content: form.content, severity: form.severity,
+                                           tag_ids: form.tags.map(t => t.id) }),
                 }))
                 create_message(d.message, d.not_notified && d.not_notified.length ? 'warning-subtle' : 'success-subtle')
                 form.open = false
@@ -338,7 +408,9 @@ export default {
         }
 
         load()
-        return { ta, preview, previewHtml, picker, showPreview, closePickerSoon, onInput, onKeydown, choose, onBodyClick,
+        return { tagQuery, tagResults, tagOpen, quickTags, tagFilter, shownNotes, shortTag,
+                 searchTags, closeTagsSoon, addTag, addFirstTag, removeTag, toggleTag,
+                 ta, preview, previewHtml, picker, showPreview, closePickerSoon, onInput, onKeydown, choose, onBodyClick,
                  notes, html, loading, loaded, loadError, busy, canCreate, blockedReason, armed, form, fmt, openForm, save, setStatus, remove, SEVERITY }
     },
 }

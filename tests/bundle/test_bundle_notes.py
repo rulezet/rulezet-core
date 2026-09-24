@@ -140,3 +140,36 @@ def test_private_bundle_mention_of_outsider_is_reported(client, app):
         assert r.get_json()["not_notified"] == [other().id]
         assert _mention_count(other().id) == 0
         assert "not notified" in r.get_json()["message"]
+
+
+def test_note_tags_are_limited_to_curated_taxonomies(client, app):
+    from bundle_helpers import tag
+    with app.app_context():
+        fp = tag('false-positive:risk="high"')
+        wf = tag('workflow:todo="review-for-false-positive"')
+        tlp = tag("tlp:red")
+        b = make_bundle()
+        login(client, other())
+
+        r = _note(client, b.id, {**NOTE, "tag_ids": [fp.id, wf.id]})
+        assert r.status_code == 201
+        note = r.get_json()["note"]
+        assert sorted(t["name"] for t in note["tags"]) == sorted([fp.name, wf.name])
+
+        # a tag outside the curated families is refused
+        assert _note(client, b.id, {**NOTE, "tag_ids": [tlp.id]}).status_code == 400
+        # unknown / too many
+        assert _note(client, b.id, {**NOTE, "tag_ids": [999999]}).status_code == 400
+        many = [tag(f'false-positive:risk="x{i}"').id for i in range(9)]
+        assert _note(client, b.id, {**NOTE, "tag_ids": many}).status_code == 400
+
+        # edit replaces the set; omitting tag_ids keeps it
+        client.put(f"/bundle/{b.id}/notes/{note['id']}", json={**NOTE, "tag_ids": [wf.id]})
+        client.put(f"/bundle/{b.id}/notes/{note['id']}", json=NOTE)
+        n = client.get(f"/bundle/{b.id}/notes").get_json()["notes"][0]
+        assert [t["name"] for t in n["tags"]] == [wf.name]
+
+        # the search endpoint never offers other taxonomies
+        names = [t["name"] for t in client.get("/bundle/note_tags?q=red").get_json()["tags"]]
+        assert "tlp:red" not in names
+        assert fp.name in [t["name"] for t in client.get("/bundle/note_tags?q=false").get_json()["tags"]]

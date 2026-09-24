@@ -1640,7 +1640,24 @@ class BundleNote(db.Model):
             "resolved_at": iso(self.resolved_at),
             "created_at": iso(self.created_at),
             "updated_at": iso(self.updated_at),
+            "tags": [{"id": t.id, "name": t.name, "color": t.color, "description": t.description}
+                     for t in sorted((a.tag for a in self.tag_assocs if a.tag), key=lambda t: t.name)],
         }
+
+
+class BundleNoteTag(db.Model):
+    """A tag on a bundle note — restricted to a curated set of taxonomies
+    (false-positive, workflow, detection-engineering…), see
+    bundle.NOTE_TAG_PREFIXES."""
+    __tablename__ = 'bundle_note_tag'
+    __table_args__ = (db.UniqueConstraint('note_id', 'tag_id', name='uq_bundle_note_tag'),)
+
+    id      = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    note_id = db.Column(db.Integer, db.ForeignKey('bundle_note.id', ondelete='CASCADE'), nullable=False, index=True)
+    tag_id  = db.Column(db.Integer, db.ForeignKey('tag.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    note = db.relationship('BundleNote', backref=db.backref('tag_assocs', cascade='all, delete-orphan'))
+    tag  = db.relationship('Tag')
 
 
 class BundleReactionComment(db.Model):
