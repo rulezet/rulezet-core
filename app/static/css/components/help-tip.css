@@ -1,0 +1,26 @@
+/* help-tip.css — "?" explanation bubble (HelpTip component) */
+.ht-wrap { display: inline-flex; align-items: center; margin-left: 5px; cursor: help; vertical-align: 1px; outline: none; }
+.ht-icon { font-size: .78em; color: var(--subtle-text-color); opacity: .55; transition: opacity .12s, color .12s; }
+.ht-wrap:hover .ht-icon, .ht-wrap:focus-visible .ht-icon { opacity: 1; color: #0d6efd; }
+
+.ht-bubble {
+    position: fixed;
+    z-index: 2100;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    border: 1px solid rgba(13, 110, 253, .3);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+    font-size: .8rem;
+    font-weight: 400;
+    line-height: 1.5;
+    text-transform: none;
+    letter-spacing: normal;
+    white-space: pre-line;
+    pointer-events: auto;
+}
+.ht-bubble strong { font-size: .82rem; color: #0d6efd; }
