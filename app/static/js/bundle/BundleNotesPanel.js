@@ -18,8 +18,9 @@
 
 import { create_message } from '/static/js/toaster.js'
 import { renderSafeMarkdown } from '/static/js/bundle/bundleFileTypes.js'
+import PaginationComponent from '/static/js/rule/paginationComponent.js'
 
-const { ref, reactive, computed, nextTick } = Vue
+const { ref, reactive, computed, nextTick, watch } = Vue
 
 const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
@@ -52,6 +53,7 @@ export default {
     },
 
     emits: ['loaded', 'open-ref'],
+    components: { PaginationComponent },
 
     template: `
     <div class="bn-root">
@@ -150,13 +152,30 @@ export default {
             <div><strong>No notes yet.</strong><span>Nobody reported a known issue on this bundle.</span></div>
         </div>
 
+        <!-- Search + status filter (built for bundles with many notes) -->
+        <div v-if="notes.length" class="bn-toolbar">
+            <div class="bfp-search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" v-model="query" placeholder="Search notes — title, text, author, tag…">
+                <button v-if="query" type="button" class="bfp-search-clear" @click="query = ''"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="bfp-chips mb-0">
+                <button v-for="f in statusFilters" :key="f.key" type="button" class="bfp-chip"
+                        :class="{ active: statusFilter === f.key }" @click="statusFilter = f.key">
+                    {{ f.label }} <span class="bfp-chip-count">{{ f.count }}</span>
+                </button>
+            </div>
+        </div>
         <div v-if="tagFilter" class="bd-focus-bar">
             <i class="fa-solid fa-filter"></i>
             <span>Notes tagged <strong>{{ tagFilter }}</strong></span>
             <button type="button" class="bd-btn bd-btn--ghost ms-auto" @click="tagFilter = ''"><i class="fa-solid fa-xmark"></i><span>Show all</span></button>
         </div>
         <div class="bn-list">
-            <article v-for="n in shownNotes" :key="n.id" class="bn-note" :class="['bn-note--' + n.severity, { 'bn-note--resolved': n.status === 'resolved' }]">
+            <div v-if="notes.length && !shownNotes.length" class="bfp-empty">
+                <i class="fa-regular fa-note-sticky"></i> No note matches.
+            </div>
+            <article v-for="n in pageNotes" :key="n.id" class="bn-note" :class="['bn-note--' + n.severity, { 'bn-note--resolved': n.status === 'resolved' }]">
                 <header class="bn-head">
                     <i :class="SEVERITY[n.severity].icon + ' bn-sev-icon'"></i>
                     <div class="bn-head-main">
@@ -184,6 +203,10 @@ export default {
                 <div class="bfv-md bn-body" v-html="html[n.id] || ''" @click="onBodyClick" @keydown.enter="onBodyClick"></div>
             </article>
         </div>
+        <div v-if="totalPages > 1" class="bfp-footer">
+            <pagination-component :current-page="page" :total-pages="totalPages" @change-page="p => page = p"></pagination-component>
+            <span class="bfp-range">{{ (page - 1) * PER_PAGE + 1 }}–{{ Math.min(page * PER_PAGE, shownNotes.length) }} of {{ shownNotes.length }}</span>
+        </div>
     </div>
     `,
 
@@ -205,8 +228,28 @@ export default {
         const tagFilter = ref('')
         let tagT = null, tagBlurT = null
         const shortTag = (n) => String(n).replace(/^([a-z-]+):/i, '$1 ').replace(/"/g, '').replace(/=/, ': ')
-        const shownNotes = computed(() => tagFilter.value
-            ? notes.value.filter(n => (n.tags || []).some(t => t.name === tagFilter.value)) : notes.value)
+        // ── search / status filter / pagination ──
+        const PER_PAGE = 10
+        const query = ref('')
+        const statusFilter = ref('all')
+        const page = ref(1)
+        const statusFilters = computed(() => [
+            { key: 'all',      label: 'All',      count: notes.value.length },
+            { key: 'open',     label: 'Open',     count: notes.value.filter(n => n.status === 'open').length },
+            { key: 'resolved', label: 'Resolved', count: notes.value.filter(n => n.status === 'resolved').length },
+        ])
+        const shownNotes = computed(() => {
+            const q = query.value.trim().toLowerCase()
+            return notes.value.filter(n =>
+                (statusFilter.value === 'all' || n.status === statusFilter.value) &&
+                (!tagFilter.value || (n.tags || []).some(t => t.name === tagFilter.value)) &&
+                (!q || [n.title, n.content, n.user_name, n.severity, ...(n.tags || []).map(t => t.name)]
+                        .some(v => String(v || '').toLowerCase().includes(q))))
+        })
+        const totalPages = computed(() => Math.max(1, Math.ceil(shownNotes.value.length / PER_PAGE)))
+        const pageNotes = computed(() => shownNotes.value.slice((page.value - 1) * PER_PAGE, page.value * PER_PAGE))
+        watch([query, statusFilter, tagFilter], () => { page.value = 1 })
+        watch(totalPages, (t) => { if (page.value > t) page.value = t })
         async function fetchTags(q) {
             const d = await fetch('/bundle/note_tags?' + new URLSearchParams({ q })).then(r => r.json()).catch(() => ({ tags: [] }))
             return d.tags || []
@@ -408,7 +451,8 @@ export default {
         }
 
         load()
-        return { tagQuery, tagResults, tagOpen, quickTags, tagFilter, shownNotes, shortTag,
+        return { query, statusFilter, statusFilters, page, totalPages, pageNotes, PER_PAGE,
+                 tagQuery, tagResults, tagOpen, quickTags, tagFilter, shownNotes, shortTag,
                  searchTags, closeTagsSoon, addTag, addFirstTag, removeTag, toggleTag,
                  ta, preview, previewHtml, picker, showPreview, closePickerSoon, onInput, onKeydown, choose, onBodyClick,
                  notes, html, loading, loaded, loadError, busy, canCreate, blockedReason, armed, form, fmt, openForm, save, setStatus, remove, SEVERITY }

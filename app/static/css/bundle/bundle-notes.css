@@ -121,3 +121,7 @@
 .bn-quick-tag.active { border-style: solid; color: #b02a37; background: rgba(220, 53, 69, .1); }
 .bn-note-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 14px 0 44px; }
 @media (max-width: 640px) { .bn-note-tags { padding-left: 14px; } }
+
+/* search + status filter */
+.bn-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.bn-toolbar .bfp-search { flex: 1; min-width: 220px; }
