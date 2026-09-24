@@ -261,3 +261,81 @@
     text-decoration: none;
 }
 .bl-md-more:hover { text-decoration: underline; }
+
+/* ── Card + table share one visual language (same as the bundle detail page) ── */
+.bl-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+.bl-chips--sm { justify-content: flex-start; gap: 4px; }
+.bl-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+    font-size: .66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    line-height: 1.4;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.bl-chips--sm .bl-chip { padding: 1px 8px; font-size: .6rem; }
+.bl-chip--blue    { background: rgba(13, 110, 253, .1); color: #0d6efd; border-color: rgba(13, 110, 253, .25); }
+.bl-chip--green   { background: rgba(25, 135, 84, .1);  color: #198754; border-color: rgba(25, 135, 84, .25); }
+.bl-chip--red     { background: rgba(220, 53, 69, .1);  color: #dc3545; border-color: rgba(220, 53, 69, .25); }
+.bl-chip--release {
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    color: #0d6efd;
+    background: rgba(13, 110, 253, .06);
+    border-color: rgba(13, 110, 253, .3);
+}
+.bl-chip--release:hover { background: rgba(13, 110, 253, .12); color: #0d6efd; text-decoration: none; }
+
+.bl-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.bl-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--subtle-text-color);
+    font-size: .74rem;
+    white-space: nowrap;
+}
+.bl-stat b { color: var(--text-color); font-weight: 700; }
+.bl-stat i { font-size: .72rem; }
+.bl-stat--blue  i { color: #0d6efd; }
+.bl-stat--teal  i { color: #0f9488; }
+.bl-stat--green i { color: #198754; }
+
+.bl-formats {
+    font-size: .72rem;
+    color: var(--subtle-text-color);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+/* Rule formats: a few small chips, the rest as "+N" */
+.bl-fmt-row { display: flex; flex-wrap: nowrap; gap: 4px; align-items: center; overflow: hidden; }
+.bl-fmt {
+    flex-shrink: 0;
+    padding: 0 7px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+    font-size: .66rem;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    line-height: 1.6;
+}
+.bl-fmt--more { color: #0d6efd; border-color: rgba(13, 110, 253, .3); background: rgba(13, 110, 253, .06); font-weight: 700; }

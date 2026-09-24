@@ -125,6 +125,8 @@ export default {
                     <option value="newest">Newest</option>
                     <option value="oldest">Oldest</option>
                     <option value="most_voted">Most voted</option>
+                    <option value="recently_updated">Recently updated</option>
+                    <option value="most_downloaded">Most downloaded</option>
                     <option value="name_asc">A → Z</option>
                 </select>
 
@@ -358,17 +360,19 @@ export default {
                     <i class="fa-solid fa-layer-group"></i>
                 </div>
 
-                <!-- Top-right badges -->
-                <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
-                    <span v-if="bundle.is_verified"
-                          class="badge bg-primary shadow-sm pt-1" title="Verified bundle">
-                        <i class="fas fa-circle-check me-1"></i>Verified
+                <!-- Top-right status chips (same language as the detail page) -->
+                <div class="position-absolute top-0 end-0 mt-3 me-3 bl-chips" style="z-index:2;">
+                    <a v-if="bundle.latest_release" class="bl-chip bl-chip--release"
+                       :href="'/bundle/detail/' + bundle.id + '?release=' + encodeURIComponent(bundle.latest_release.version) + '#structure'"
+                       :title="'Latest release (' + bundle.release_count + ' in total) — open it'">
+                        <i class="fa-solid fa-tag"></i>{{ bundle.latest_release.version }}
+                    </a>
+                    <span v-if="bundle.is_verified" class="bl-chip bl-chip--blue" title="Verified bundle">
+                        <i class="fa-solid fa-circle-check"></i>Verified
                     </span>
-                    <span class="badge shadow-sm pt-1"
-                          :class="bundle.access ? 'bg-success' : 'bg-secondary'"
+                    <span class="bl-chip" :class="bundle.access ? 'bl-chip--green' : 'bl-chip--red'"
                           :title="bundle.access ? 'Public bundle' : 'Private bundle'">
-                        <i :class="bundle.access ? 'fas fa-lock-open me-1' : 'fas fa-lock me-1'"></i>
-                        {{ bundle.access ? 'Public' : 'Private' }}
+                        <i :class="bundle.access ? 'fa-solid fa-lock-open' : 'fa-solid fa-lock'"></i>{{ bundle.access ? 'Public' : 'Private' }}
                     </span>
                 </div>
 
@@ -400,7 +404,9 @@ export default {
                             <user-chip :user-id="bundle.user_id" :username="bundle.user_name"
                                        :avatar="bundle.author_avatar" size="xs"></user-chip>
                             <span class="text-muted opacity-50">|</span>
-                            <small class="text-muted">{{ fromNow(bundle.created_at) }}</small>
+                            <small class="text-muted" :title="'Created ' + bundle.created_at + ' · updated ' + bundle.updated_at">
+                                <i class="fa-regular fa-clock me-1"></i>updated {{ fromNow(bundle.updated_at || bundle.created_at) }}
+                            </small>
                         </div>
                     </div>
 
@@ -409,15 +415,24 @@ export default {
                          v-html="descFor(bundle)"></div>
                     <p v-else class="rl-card-desc mb-3 fst-italic">No description.</p>
 
-                    <!-- Format badges + rule count -->
-                    <div class="d-flex flex-wrap gap-1 mb-2" @click.stop>
-                        <span class="badge rounded-pill bg-dark pt-1 shadow-sm"
-                              v-for="fmt in (bundle.list_of_format_of_rules || [])" :key="fmt">
-                            {{ fmt.toUpperCase() }}
+                    <!-- Key figures (same as the table columns) -->
+                    <div class="bl-stats mb-2">
+                        <span class="bl-stat bl-stat--blue" title="Rules">
+                            <i class="fa-solid fa-shield-halved"></i><b>{{ bundle.number_of_rules }}</b> rule{{ bundle.number_of_rules !== 1 ? 's' : '' }}
                         </span>
-                        <span class="badge rounded-pill bg-primary pt-1 shadow-sm">
-                            <i class="fas fa-file-code me-1"></i>{{ bundle.number_of_rules }} rule{{ bundle.number_of_rules !== 1 ? 's' : '' }}
+                        <span v-if="bundle.number_of_files != null" class="bl-stat bl-stat--teal" title="Files & documents (README, notes, IOCs…)">
+                            <i class="fa-solid fa-file-lines"></i><b>{{ bundle.number_of_files || 0 }}</b> file{{ bundle.number_of_files !== 1 ? 's' : '' }}
                         </span>
+                        <span v-if="bundle.number_of_folders != null" class="bl-stat" title="Folders">
+                            <i class="fa-solid fa-folder"></i><b>{{ bundle.number_of_folders || 0 }}</b>
+                        </span>
+                        <span class="bl-stat bl-stat--green" title="Downloads">
+                            <i class="fa-solid fa-download"></i><b>{{ bundle.download_count || 0 }}</b>
+                        </span>
+                    </div>
+                    <div v-if="formatsOf(bundle)" class="bl-fmt-row mb-2" :title="'Rule formats: ' + formatsShort(bundle, 3).all">
+                        <span v-for="f in formatsShort(bundle, 3).shown" :key="f" class="bl-fmt">{{ f }}</span>
+                        <span v-if="formatsShort(bundle, 3).more" class="bl-fmt bl-fmt--more">+{{ formatsShort(bundle, 3).more }}</span>
                     </div>
 
                     <!-- CVEs -->
@@ -444,13 +459,13 @@ export default {
 
                     <!-- Meta strip -->
                     <div class="rl-card-meta">
-                        <span class="rl-meta-item">
-                            <i class="fas fa-download"></i>
-                            <span>{{ bundle.download_count }} downloads</span>
-                        </span>
                         <span class="rl-meta-item rl-meta-item--uuid" :title="bundle.uuid">
                             <i class="fas fa-fingerprint"></i>
                             <span>{{ bundle.uuid }}</span>
+                        </span>
+                        <span v-if="bundle.release_count" class="rl-meta-item" :title="bundle.release_count + ' release(s)'">
+                            <i class="fa-solid fa-tags"></i>
+                            <span>{{ bundle.release_count }} release{{ bundle.release_count !== 1 ? 's' : '' }}</span>
                         </span>
                     </div>
 
@@ -646,6 +661,8 @@ export default {
                         <th v-show="colVisible.description" class="dt-th">Description</th>
                         <th v-show="colVisible.author" class="dt-th" style="width:140px;">Author</th>
                         <th v-show="colVisible.rules" class="dt-th" style="width:120px;">Rules</th>
+                        <th v-show="colVisible.files" class="dt-th" style="width:90px;">Files</th>
+                        <th v-show="colVisible.release" class="dt-th" style="width:110px;">Release</th>
                         <th v-show="colVisible.tags" class="dt-th" style="width:160px;">Tags</th>
                         <th v-show="colVisible.cves" class="dt-th" style="width:130px;">CVEs</th>
                         <th v-show="colVisible.attacks" class="dt-th" style="width:180px;">ATT&amp;CK</th>
@@ -655,6 +672,22 @@ export default {
                             @click="setSort('created_at')">
                             <div class="dt-th-inner">
                                 Created <i class="fas dt-sort-icon" :class="sortIcon('created_at')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.updated"
+                            class="dt-th dt-th--sortable" style="width:110px;"
+                            :class="{ 'dt-th--sorted': sortKey === 'updated_at' }"
+                            @click="setSort('updated_at')">
+                            <div class="dt-th-inner">
+                                Updated <i class="fas dt-sort-icon" :class="sortIcon('updated_at')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.downloads"
+                            class="dt-th dt-th--sortable" style="width:90px;"
+                            :class="{ 'dt-th--sorted': sortKey === 'download_count' }"
+                            @click="setSort('download_count')">
+                            <div class="dt-th-inner">
+                                <i class="fa-solid fa-download"></i> <i class="fas dt-sort-icon" :class="sortIcon('download_count')"></i>
                             </div>
                         </th>
                         <th v-show="colVisible.votes"
@@ -684,15 +717,13 @@ export default {
                             </td>
 
                             <td class="dt-td" style="max-width:200px;word-break:break-word;">
-                                <div class="d-flex align-items-center gap-1 mb-1 flex-wrap">
-                                    <span v-if="bundle.is_verified"
-                                          class="badge bg-primary pt-1" style="font-size:.62rem;">
-                                        <i class="fas fa-circle-check"></i>
+                                <div class="bl-chips bl-chips--sm mb-1">
+                                    <span v-if="bundle.is_verified" class="bl-chip bl-chip--blue" title="Verified bundle">
+                                        <i class="fa-solid fa-circle-check"></i>
                                     </span>
-                                    <span class="badge pt-1"
-                                          :class="bundle.access ? 'bg-success' : 'bg-secondary'"
-                                          style="font-size:.62rem;">
-                                        <i :class="bundle.access ? 'fas fa-lock-open' : 'fas fa-lock'"></i>
+                                    <span class="bl-chip" :class="bundle.access ? 'bl-chip--green' : 'bl-chip--red'"
+                                          :title="bundle.access ? 'Public bundle' : 'Private bundle'">
+                                        <i :class="bundle.access ? 'fa-solid fa-lock-open' : 'fa-solid fa-lock'"></i>{{ bundle.access ? 'Public' : 'Private' }}
                                     </span>
                                 </div>
                                 <a :href="'/bundle/detail/' + bundle.id" class="dt-rule-title"
@@ -710,17 +741,27 @@ export default {
                             </td>
 
                             <td v-show="colVisible.rules" class="dt-td">
-                                <div class="d-flex flex-wrap gap-1">
-                                    <span class="badge rounded-pill bg-primary pt-1"
-                                          style="font-size:.65rem;">
-                                        {{ bundle.number_of_rules }}
-                                        <i class="fas fa-file-code ms-1"></i>
-                                    </span>
-                                    <span v-for="fmt in (bundle.list_of_format_of_rules || [])" :key="fmt"
-                                          class="badge rounded-pill bg-dark pt-1" style="font-size:.62rem;">
-                                        {{ fmt.toUpperCase() }}
-                                    </span>
+                                <span class="bl-stat bl-stat--blue"><i class="fa-solid fa-shield-halved"></i><b>{{ bundle.number_of_rules }}</b></span>
+                                <div v-if="formatsOf(bundle)" class="bl-fmt-row mt-1" :title="'Rule formats: ' + formatsShort(bundle).all">
+                                    <span v-for="f in formatsShort(bundle).shown" :key="f" class="bl-fmt">{{ f }}</span>
+                                    <span v-if="formatsShort(bundle).more" class="bl-fmt bl-fmt--more">+{{ formatsShort(bundle).more }}</span>
                                 </div>
+                            </td>
+
+                            <td v-show="colVisible.files" class="dt-td">
+                                <span v-if="bundle.number_of_files != null" class="bl-stat bl-stat--teal" :title="(bundle.number_of_folders || 0) + ' folder(s)'">
+                                    <i class="fa-solid fa-file-lines"></i><b>{{ bundle.number_of_files }}</b>
+                                </span>
+                                <span v-else class="text-muted small">—</span>
+                            </td>
+
+                            <td v-show="colVisible.release" class="dt-td">
+                                <a v-if="bundle.latest_release" class="bl-chip bl-chip--release"
+                                   :href="'/bundle/detail/' + bundle.id + '?release=' + encodeURIComponent(bundle.latest_release.version) + '#structure'"
+                                   :title="'Latest of ' + bundle.release_count + ' release(s) — ' + bundle.latest_release.created_at">
+                                    <i class="fa-solid fa-tag"></i>{{ bundle.latest_release.version }}
+                                </a>
+                                <span v-else class="text-muted small">—</span>
                             </td>
 
                             <td v-show="colVisible.tags" class="dt-td" @click.stop>
@@ -748,6 +789,15 @@ export default {
                             <td v-show="colVisible.created" class="dt-td"
                                 style="white-space:nowrap;font-size:.78rem;">
                                 {{ formatDate(bundle.created_at) }}
+                            </td>
+
+                            <td v-show="colVisible.updated" class="dt-td" style="white-space:nowrap;font-size:.78rem;"
+                                :title="bundle.updated_at">
+                                {{ fromNow(bundle.updated_at || bundle.created_at) }}
+                            </td>
+
+                            <td v-show="colVisible.downloads" class="dt-td">
+                                <span class="bl-stat bl-stat--green"><i class="fa-solid fa-download"></i><b>{{ bundle.download_count || 0 }}</b></span>
                             </td>
 
                             <td v-show="colVisible.votes" class="dt-td">
@@ -1071,13 +1121,19 @@ export default {
             { key: 'description', label: 'Description' },
             { key: 'author',      label: 'Author'      },
             { key: 'rules',       label: 'Rules'       },
+            { key: 'files',       label: 'Files'       },
+            { key: 'release',     label: 'Release'     },
             { key: 'tags',        label: 'Tags'        },
             { key: 'cves',        label: 'CVEs'        },
             { key: 'attacks',     label: 'ATT&CK'      },
             { key: 'created',     label: 'Created'     },
+            { key: 'updated',     label: 'Updated'     },
+            { key: 'downloads',   label: 'Downloads'   },
             { key: 'votes',       label: 'Votes'       },
         ]
-        const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, true])))
+        // Hidden by default — available from the column picker
+        const HIDDEN_BY_DEFAULT = new Set(['release', 'updated', 'files'])
+        const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, !HIDDEN_BY_DEFAULT.has(c.key)])))
         function toggleColumn(key) { colVisible[key] = !colVisible[key] }
 
         // ── Selection ─────────────────────────────────────────────────────
@@ -1286,6 +1342,8 @@ export default {
                 newest:      { key: 'created_at', dir: 'desc' },
                 oldest:      { key: 'created_at', dir: 'asc'  },
                 most_voted:  { key: 'vote_up',    dir: 'desc' },
+                recently_updated: { key: 'updated_at', dir: 'desc' },
+                most_downloaded:  { key: 'download_count', dir: 'desc' },
                 name_asc:    { key: 'name',        dir: 'asc'  },
             }
             const s = map[cardSort.value]
@@ -1364,7 +1422,7 @@ export default {
         async function handleVote(type, bundle) {
             if (!props.canVote) return
             try {
-                const res  = await fetch(`/bundle/evaluate?bundleId=${bundle.id}&voteType=${type}`)
+                const res  = await fetch(`/bundle/evaluate?bundleId=${bundle.id}&voteType=${type}`, { method: 'POST', headers: { 'X-CSRFToken': props.csrfToken } })
                 const data = await res.json()
                 if (res.ok) {
                     bundle.vote_up   = data.vote_up
@@ -1404,6 +1462,17 @@ export default {
         })
 
         // ── Highlight ────────────────────────────────────────────────────
+        // "sigma · suricata · yara" — discreet, same in card and table
+        function _formats(b) {
+            return [...new Set((b.list_of_format_of_rules || []).filter(Boolean).map(f => f.toLowerCase()))].sort()
+        }
+        function formatsOf(b) { return _formats(b).join(' · ') }
+        // Compact list: the first `max` formats, the rest as "+N" (full list in the tooltip)
+        function formatsShort(b, max = 2) {
+            const f = _formats(b)
+            return { shown: f.slice(0, max), more: Math.max(0, f.length - max), all: f.join(' · ') }
+        }
+
         // Descriptions are markdown — list views show them as plain text
         function mdToText(md) {
             if (!md) return ''
@@ -1525,7 +1594,7 @@ export default {
             toggleRuleExpand, isRuleExpanded,
             fetchBundleRules,
             handleVote, emitBulkAction, emitSend,
-            fromNow, formatDate, highlight, mdToText, descFor,
+            fromNow, formatDate, highlight, mdToText, descFor, formatsOf, formatsShort,
         }
     },
 }
