@@ -9,7 +9,7 @@ from flask_restx import Resource, Namespace
 
 from app.api.utils.rule_validation import *
 
-from app import cache
+from app import cache, memory_cache
 from app.core.utils import utils
 from app.features.misp.rule.misp_object import get_rule_misp_object
 from ...features.rule import rule_core as RuleModel
@@ -474,7 +474,7 @@ class RulesByCVE(Resource):
     # re-running the underlying full-table ILIKE scan for a repeat/near-
     # simultaneous lookup of the same identifiers; a fresh scan still runs
     # for anything not seen in the last 60s.
-    @cache.cached(timeout=60, query_string=True)
+    @memory_cache.cached(timeout=60, query_string=True)
     def get(self):
         """ Search rules by vulnerability identifiers """
         raw_input = request.args.get('cve_ids', '') 
