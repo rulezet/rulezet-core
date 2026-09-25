@@ -8,9 +8,6 @@
   100% { box-shadow: 0 0 0 0 rgba(255,193,7,0); outline: 2px solid transparent; }
 }
 .comment-highlight { animation: comment-pulse 1.4s ease 3; background: rgba(255,193,7,.07) !important; border-radius: .5rem; }
-.vote-btn-active-up   { background: #198754 !important; color: #fff !important; }
-.vote-btn-active-down { background: #dc3545 !important; color: #fff !important; }
-.vote-btn-neutral     { background: transparent; color: var(--text-color); }
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
@@ -22,6 +19,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/attack-display.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/voter-popover.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/vote-pill.css') }}">
 
 <script>
 window.__rule_json   = {{ rule_to_json | tojson | safe }};
@@ -668,36 +666,28 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                             </div>
                             <div class="p-3 d-flex flex-wrap align-items-center gap-2">
 
-                                <!-- Votes -->
-                                <div class="btn-group rounded-pill overflow-hidden" style="border:1px solid var(--border-color);">
+                                <!-- Votes + favorite (same pill as the bundle detail page) -->
+                                <div class="vote-pill">
                                     <voter-popover :fetch-url="'/rule/voters/' + currentRule.id + '?type=up'" label="Liked by">
-                                        <button @click="vote('up', currentRule.id); animateClick($event)"
-                                                class="btn btn-sm px-3 border-0 border-end shadow-none btn-animate"
-                                                :class="userVote === 'up' ? 'vote-btn-active-up' : 'vote-btn-neutral'"
+                                        <button type="button" @click="vote('up', currentRule.id); animateClick($event)"
+                                                class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--up': userVote === 'up' }"
                                                 title="Vote up">
-                                            <i class="fas fa-thumbs-up me-1"></i>[[ currentRule.vote_up ]]
+                                            <i class="fa-solid fa-thumbs-up"></i>[[ currentRule.vote_up ]]
                                         </button>
                                     </voter-popover>
                                     <voter-popover :fetch-url="'/rule/voters/' + currentRule.id + '?type=down'" label="Disliked by">
-                                        <button @click="vote('down', currentRule.id); animateClick($event)"
-                                                class="btn btn-sm px-3 border-0 shadow-none btn-animate"
-                                                :class="userVote === 'down' ? 'vote-btn-active-down' : 'vote-btn-neutral'"
+                                        <button type="button" @click="vote('down', currentRule.id); animateClick($event)"
+                                                class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--down': userVote === 'down' }"
                                                 title="Vote down">
-                                            <i class="fas fa-thumbs-down me-1"></i>[[ currentRule.vote_down ]]
+                                            <i class="fa-solid fa-thumbs-down"></i>[[ currentRule.vote_down ]]
                                         </button>
                                     </voter-popover>
+                                    <button type="button" @click="favorite(currentRule.id); animateClick($event)"
+                                            class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--fav': currentRule.is_favorited }"
+                                            :title="currentRule.is_favorited ? 'Remove from favorites' : 'Add to favorites'">
+                                        <i :class="currentRule.is_favorited ? 'fa-solid fa-star' : 'fa-regular fa-star'"></i>
+                                    </button>
                                 </div>
-
-                                <!-- Favorite -->
-                                <button @click="favorite(currentRule.id)"
-                                        class="btn btn-sm rounded-pill px-3"
-                                        :style="currentRule.is_favorited
-                                            ? 'background:transparent; border:1px solid var(--border-color); color:var(--text-color);'
-                                            : 'background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);'"
-                                        :title="currentRule.is_favorited ? 'Remove from favorites' : 'Add to favorites'">
-                                    <i class="me-1" :class="currentRule.is_favorited ? 'fas fa-star text-warning' : 'far fa-star'"></i>
-                                    [[ currentRule.is_favorited ? 'Favorited' : 'Favorite' ]]
-                                </button>
 
                                 <!-- Download -->
                                 <div class="dropdown">
@@ -1765,6 +1755,13 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
             }
 
 
+            // Same small "pop" on the vote / favorite buttons as the bundle page.
+            function animateClick(event) {
+                const btn = event.currentTarget;
+                btn.classList.add('click-pop');
+                setTimeout(() => btn.classList.remove('click-pop'), 300);
+            }
+
             async function favorite() {
                 const res = await fetch(`/rule/favorite/${rule_id}`, {
                     method: 'POST',
@@ -1914,7 +1911,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 relatedHiddenFilters,
                 relatedRulesListUrl,
                 Ownership,
-                favorite,
+                favorite, animateClick,
                 githubBlobUrl,
                 githubSourceUrl,
                 current_user_is_admin,
