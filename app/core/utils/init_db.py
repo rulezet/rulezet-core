@@ -259,6 +259,11 @@ def insert_default_ai_agent_configs():
          "timeout_s": 180, "num_predict": 4096, "default_model": "qwen2.5-coder:7b"},
         {"agent_key": "rule_fixer", "enabled": True, "max_per_hour": 30,
          "timeout_s": 240, "num_predict": 2048, "default_model": "qwen2.5-coder:7b"},
+        # Long narrative report over a whole bundle, written section by
+        # section: num_predict is the per-SECTION cap, timeout_s the longest
+        # silence allowed (the first call reads the whole bundle material).
+        {"agent_key": "bundle_analysis", "enabled": True, "max_per_hour": None,
+         "timeout_s": 900, "num_predict": 800, "default_model": "qwen2.5-coder:7b"},
     ]
     for entry in defaults:
         if AIAgentConfig.query.filter_by(agent_key=entry["agent_key"]).first():

@@ -15,6 +15,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-releases.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-notes.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-ai-analysis.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
@@ -607,6 +609,22 @@
                                 @loaded="d => notesSummary = d"></bundle-notes-panel>
                         </div>
 
+                        <!-- AI Analysis (Rulezy's review of the whole bundle) -->
+                        <div v-if="showAiTab" v-show="activeTab === 'ai'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-robot"></i>
+                                    <div>
+                                        <div class="bd-section-name">AI Analysis <help-tip title="AI Analysis" text="A detailed review of the whole bundle written by a locally-hosted model: purpose, how it is built, coverage and blind spots, operational readiness, deployment guidance and a verdict.&#10;It reads every rule, the structure, documents, health checks, ATT&CK coverage and community notes. Nothing leaves the server.&#10;Only admins and AI Managers can launch or moderate it; public reports are visible to everyone who can see the bundle."></help-tip></div>
+                                        <div class="bd-section-sub">Rulezy's review of the whole bundle — AI-generated, read it with a critical eye</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <bundle-ai-analysis-panel :bundle-id="bundle_id" :csrf-token="csrfToken"
+                                :active="activeTab === 'ai'" :can-manage="CAN_MANAGE_AI"
+                                @loaded="d => aiSummary = d"></bundle-ai-analysis-panel>
+                        </div>
+
                         <!-- History -->
                         <div v-show="activeTab === 'history'" role="tabpanel">
                             <div class="bd-section-head">
@@ -838,6 +856,8 @@
     import HelpTip from '/static/js/components/help-tip.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
     import BundleNotesPanel from '/static/js/bundle/BundleNotesPanel.js';
+    import BundleAIAnalysisPanel from '/static/js/bundle/BundleAIAnalysisPanel.js';
+    const CAN_MANAGE_AI = {{ (current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.manage'))) | tojson }};
     import { flattenFiles, isRuleNode, docIcon, extOf, RULE_ICON, downloadFromUrl, downloadText, renderSafeMarkdown } from '/static/js/bundle/bundleFileTypes.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
     import { initBundleGraph } from '/static/js/bundle/bundleMispGraph.js';
@@ -865,6 +885,7 @@
             'help-tip': HelpTip,
             'pagination-component': PaginationComponent,
             'bundle-notes-panel': BundleNotesPanel,
+            'bundle-ai-analysis-panel': BundleAIAnalysisPanel,
             'code-viewer': CodeViewer,
             'tag-display': TagDisplay,
             'vulnerability-display': VulnerabilityDisplay,
@@ -1745,7 +1766,7 @@
             // One panel at a time instead of five stacked sections. The
             // active tab is mirrored in the URL hash (#files…) so it can be
             // linked and survives a reload.
-            const TAB_KEYS = ['structure', 'rules', 'files', 'attack', 'releases', 'health', 'notes', 'history', 'misp'];
+            const TAB_KEYS = ['structure', 'rules', 'files', 'attack', 'releases', 'health', 'notes', 'ai', 'history', 'misp'];
             const notesSummary = ref(null);
             const notesAlert = computed(() => {
                 const open = (notesSummary.value?.notes || []).filter(n => n.status === 'open' && n.severity !== 'info');
@@ -1785,6 +1806,13 @@
                 nextTick(() => document.querySelector('.bd-zone')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
             }
             const healthSummary = ref(null);
+            // AI Analysis tab: AI managers always see it (to launch one);
+            // everyone else only once a public report exists.
+            const aiSummary = ref(null);
+            const showAiTab = computed(() => CAN_MANAGE_AI || !!(aiSummary.value && aiSummary.value.count));
+            fetch(`/bundle/${bundle_id}/ai_analysis/list`).then(r => r.ok ? r.json() : null)
+                .then(d => { if (d) aiSummary.value = { count: (d.items || []).length, latest: (d.items || [])[0] || null }; })
+                .catch(() => {});
             const releasesSummary = ref(null);
             const _hashTab = (location.hash || '').slice(1);
             const activeTab = ref(TAB_KEYS.includes(_hashTab) ? _hashTab : 'structure');
@@ -1804,6 +1832,9 @@
                             count: healthSummary.value ? ((healthSummary.value.counts.error + healthSummary.value.counts.warning) || '✓') : null });
                 tabs.push({ key: 'notes', label: 'Notes', icon: 'fa-solid fa-note-sticky',
                             count: notesSummary.value && notesSummary.value.open ? notesSummary.value.open : null });
+                if (showAiTab.value)
+                    tabs.push({ key: 'ai', label: 'AI Analysis', icon: 'fa-solid fa-robot',
+                                count: aiSummary.value && aiSummary.value.count ? aiSummary.value.count : null });
                 tabs.push({ key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left', count: historyTotal.value || null });
                 if (rules.value.length && !viewRelease.value)
                     tabs.push({ key: 'misp', label: 'MISP Event', icon: 'fa-solid fa-diagram-project', count: null });
@@ -1940,7 +1971,7 @@
                 treeData, fileTreeNodes, allFiles, docFiles,
                 openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
                 openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
-                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList, structureLoaded,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList, structureLoaded, showAiTab, aiSummary, CAN_MANAGE_AI,
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,

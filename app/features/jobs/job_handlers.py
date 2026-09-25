@@ -4842,6 +4842,88 @@ def handle_rule_analysis(job, app):
             level='success', event='done')
 
 
+# ─── ai_bundle_analysis (bundle_analysis) ───────────────────────────────────
+# One long narrative review of a whole bundle (BundleAnalysisAgent). Runs in
+# the background lane like ai_generate — a detailed report on a 7B model can
+# take several minutes. Progress is logged with event="step:<stage>" so the
+# bundle page can replay it as Rulezy's thinking steps (ai-thinking-steps).
+
+def _bundle_step(job, stage, text, level='info'):
+    log_job(job, text, level=level, event=f'step:{stage}')
+
+
+@register_handler('ai_bundle_analysis')
+def handle_bundle_analysis(job, app):
+    from app.core.db_class.db import AIGeneration, Bundle
+    from app.features.ai.ai_core import get_agent
+    from app.features.bundle.bundle_ai_core import build_bundle_context
+
+    payload   = job.payload or {}
+    bundle_id = payload.get('bundle_id')
+    model     = payload.get('model') or None
+    is_public = bool(payload.get('default_public', True))
+
+    job.total, job.done = 3, 0
+    db.session.commit()
+
+    bundle = db.session.get(Bundle, bundle_id) if bundle_id else None
+    if not bundle:
+        _bundle_step(job, 'failed', 'This bundle no longer exists.', level='error')
+        job.status, job.error = 'failed', 'Bundle not found'
+        db.session.commit()
+        return
+
+    _bundle_step(job, 'reading', f'Reading “{bundle.name}” — rules, structure, documents…')
+    context, snapshot = build_bundle_context(bundle_id)
+    _bundle_step(job, 'searching',
+                 f'Cross-checking {snapshot["rule_count"]} rules against ATT&CK coverage, health checks, '
+                 f'community notes and releases…')
+    job.done = 1
+    db.session.commit()
+
+    if _is_cancelled(job):
+        log_job(job, 'Cancelled.', level='warning', event='cancelled')
+        return
+
+    _bundle_step(job, 'thinking', 'Reading all of that and thinking it through — on a CPU this first read takes a few minutes…')
+    agent = get_agent('bundle_analysis')
+    result = agent.run(
+        user=User.query.get(job.created_by),
+        input_summary=f"Bundle #{bundle.id}: {bundle.name}",
+        bundle_context=context, acquire_timeout=900, model=model,
+        progress=lambda stage, text: _bundle_step(job, stage, text),
+        should_stop=lambda: _is_cancelled(job),
+    )
+    job.done = 2
+    db.session.commit()
+
+    if not result.ok:
+        _bundle_step(job, 'failed', result.error or 'The analysis failed.', level='error')
+        job.status, job.error = 'failed', result.error
+        db.session.commit()
+        return
+
+    _bundle_step(job, 'validating', 'Checking the report and saving it…')
+    meta = dict(result.meta or {})
+    meta.pop('status', None)
+    meta['snapshot'] = snapshot
+    gen = AIGeneration(
+        uuid=str(uuid_mod.uuid4()), agent_key='bundle_analysis', bundle_id=bundle.id,
+        user_id=job.created_by, content=result.content, meta=meta,
+        model=result.model_used, is_public=is_public,
+    )
+    db.session.add(gen)
+    p = dict(job.payload or {})
+    job.done = 3
+    db.session.commit()
+    p['result'] = {'generation_id': gen.id, 'generation_uuid': gen.uuid}
+    job.payload = p
+    db.session.commit()
+
+    _bundle_step(job, 'done', f'Done — {len(result.content):,} characters of analysis with {result.model_used}.',
+                 level='success')
+
+
 # ─── Rule Git Mirror (see docs/design/rule_git_mirror.md) ───────────────────
 
 @register_handler('rule_git_mirror_sync')

@@ -133,7 +133,7 @@
     </div>
     <p class="text-muted mb-0" style="max-width:660px;font-size:.95rem;">
       A complete walkthrough of Rulezet's AI system — the shared architecture every feature is built on,
-      then exactly how each of the four agents works under the hood.
+      then exactly how each of the five agents works under the hood.
     </p>
   </div>
 
@@ -166,6 +166,7 @@
             <a class="hiw-toc-link" href="#guardrails">Security &amp; guardrails</a>
             <a class="hiw-toc-link" href="#chatbot">Chatbot</a>
             <a class="hiw-toc-link" href="#rule-analysis">Rule Analysis</a>
+            <a class="hiw-toc-link" href="#bundle-analysis">Bundle Analysis</a>
             <a class="hiw-toc-link" href="#rule-generator">Rule Generator</a>
             <a class="hiw-toc-link" href="#rule-fixer">Rule Fixer</a>
             <a class="hiw-toc-link" href="#admin-controls">Admin controls</a>
@@ -187,9 +188,10 @@
         </div>
         <p style="font-size:.92rem;color:var(--subtle-text-color);">
           Rulezet's AI features are all powered by a self-hosted <strong>Ollama</strong> instance — there's no
-          third-party API key, no per-token billing, and nothing leaves the instance. Four independent agents share
+          third-party API key, no per-token billing, and nothing leaves the instance. Five independent agents share
           one architecture: a <strong>Chatbot</strong> assistant, a <strong>Rule Analysis</strong> summarizer,
-          a <strong>Rule Generator</strong> (Beta, YARA-only), and a <strong>Rule Fixer</strong>. Each one is a
+          a <strong>Bundle Analysis</strong> reviewer, a <strong>Rule Generator</strong> (Beta, YARA-only),
+          and a <strong>Rule Fixer</strong>. Each one is a
           thin, single-purpose wrapper — a system prompt, a bit of parsing logic, and a call into existing
           rule/bundle code. None of them re-implement anything Rulezet already does; they just decide
           <em>when</em> to call it.
@@ -214,7 +216,7 @@
           <h4 class="fw-bold mb-0">The shared architecture</h4>
         </div>
         <p style="font-size:.92rem;color:var(--subtle-text-color);">
-          All four agents extend the same base class and go through the same pipeline before a single token
+          All five agents extend the same base class and go through the same pipeline before a single token
           is ever generated.
         </p>
 
@@ -328,7 +330,7 @@
             <div class="hiw-agent-card">
               <div class="fw-bold mb-2"><i class="fa-solid fa-power-off text-primary me-2"></i>Per-feature kill switch</div>
               <p class="text-muted mb-0" style="font-size:.84rem;">
-                Any of the four agents can be disabled instance-wide from the AI Overview page — instantly, no
+                Any of the five agents can be disabled instance-wide from the AI Overview page — instantly, no
                 restart needed — either one at a time or all at once.
               </p>
             </div>
@@ -485,6 +487,63 @@
       <hr style="border-color:var(--border-color);" class="mb-5">
 
       <!-- ═══════════════════════════════════════════════════════════
+           SECTION 5b — Bundle Analysis
+      ════════════════════════════════════════════════════════════ -->
+      <section id="bundle-analysis" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          {% if mascot_enabled %}
+          <div class="banner-icon banner-icon--mascot" style="width:42px;height:42px;"><img src="{{ url_for('static', filename='images/rulezy/analyseRule.png') }}" alt=""></div>
+          {% else %}
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-layer-group" style="font-size:1.1rem;"></i></div>
+          {% endif %}
+          <h4 class="fw-bold mb-0">Bundle Analysis</h4>
+        </div>
+
+        {% if mascot_enabled %}
+        <div class="hiw-rulezy-narrate">
+          <img src="{{ url_for('static', filename='images/rulezy/reflexion.png') }}" alt="Rulezy">
+          <div>
+            Give me a whole bundle and I'll read all of it — every rule, the folder layout, the README, the health
+            checks, the ATT&amp;CK coverage, what the community reported — then tell the team about to deploy it
+            what they're really getting. Not an inventory: a review, with a verdict and a rollout plan.
+          </div>
+        </div>
+        {% endif %}
+
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          Launched by an admin or an <strong>AI Manager</strong> from a bundle's <em>AI Analysis</em> tab, or from
+          the <a href="/ai/admin/bundle-analysis">Bundle Analysis</a> admin page. Rulezet first assembles a
+          size-bounded digest of the bundle: identity and description, composition (formats, licenses, authors,
+          quality scores, gaps like rules without ATT&amp;CK mapping), a per-rule digest, the folder structure,
+          shipped documents, ATT&amp;CK coverage per tactic, the automatic health checks, community notes,
+          releases and a few representative rule bodies. Only <strong>public</strong> tags are included, since the
+          report can be published.
+        </p>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          The model then writes a long Markdown review in fixed sections — executive summary, purpose and threat
+          focus, how the bundle is built, detection coverage and blind spots, operational readiness, deployment
+          guidance and verdict — plus an "at a glance" block (verdict, target audience, strengths, risks, next
+          steps). The prompt insists on <em>interpreting</em> the evidence rather than listing it, and on never
+          inventing actors, CVEs or products. The executive summary is written last, once the model has reasoned
+          through everything. A run where the model produced almost nothing, or where a section loops, is
+          rejected instead of stored.
+        </p>
+
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-2 text-primary"></i>
+          On CPU-only hardware a 7B model reads a few tokens per second, so the review is written <strong>section
+          by section</strong> as one conversation: the bundle material is read once (Ollama's prompt cache reuses
+          it for every later section), each section is streamed with an inactivity timeout rather than a total
+          one, and only the final "at a glance" block is structured JSON. Expect several minutes to tens of
+          minutes depending on the machine; it runs as a background job in the AI lane — you can close the page,
+          and every section shows up as one of Rulezy's thinking steps when you come back. Every report is kept in the bundle's history and can be made public, private or deleted.
+          Anyone who can see the bundle can read a public report; nobody else can launch one.
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
            SECTION 6 — Rule Generator
       ════════════════════════════════════════════════════════════ -->
       <section id="rule-generator" class="hiw-section mb-5">
@@ -607,7 +666,7 @@
             <div class="hiw-agent-card">
               <div class="fw-bold mb-2"><i class="fa-solid fa-toggle-on text-primary me-2"></i>Overview</div>
               <p class="text-muted mb-2" style="font-size:.84rem;">
-                Turn any of the four agents on or off instance-wide, or disable them all at once. Also has the
+                Turn any of the five agents on or off instance-wide, or disable them all at once. Also has the
                 switch for whether Rulezy's mascot shows up anywhere on the site — purely cosmetic, the
                 features above keep working the same either way.
               </p>

@@ -2331,3 +2331,237 @@ def attack_coverage(bundle_id):
         return err
     data = BundleModel.get_attack_coverage(bundle_id, snapshot_rules=(rel.snapshot.get("rules") or {}) if rel else None)
     return jsonify(data)
+
+###########################
+#   AI Bundle Analysis    #
+###########################
+# A long narrative review of the whole bundle by BundleAnalysisAgent
+# (app/features/ai/agents/bundle_analysis_agent.py), generated in the
+# background job lane (handler 'ai_bundle_analysis'). Launching, moderating
+# and following a run: admins and AI Managers (ai.manage) only. Reading a
+# PUBLIC report: anyone who can view the bundle — same model as the rule
+# AI Analysis tab.
+
+def _is_ai_manager():
+    return current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.manage'))
+
+
+def _viewable_bundle_or_error(bundle_id):
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return None, (jsonify({"success": False, "message": "Bundle not found"}), 404)
+    if not BundleModel.can_view_bundle(bundle):
+        return None, (jsonify({"success": False, "message": "Access denied"}), 403)
+    return bundle, None
+
+
+def _visible_bundle_analysis(bundle_id, analysis_id):
+    from app.core.db_class.db import AIGeneration
+    gen = AIGeneration.query.filter_by(id=analysis_id, bundle_id=bundle_id, agent_key='bundle_analysis').first()
+    if not gen or (not gen.is_public and not _is_ai_manager()):
+        return None
+    return gen
+
+
+def _analysis_json(gen):
+    row = gen.to_json()
+    # to_json() blanks content/meta of private entries; private entries only
+    # ever reach AI managers (list/visibility routes filter them), who must
+    # be able to read what they are about to publish.
+    if not gen.is_public and _is_ai_manager():
+        row['content'], row['meta'] = gen.content, gen.meta
+    row['username'] = (f"{gen.user.first_name} {gen.user.last_name}".strip() or gen.user.email) if gen.user else None
+    return row
+
+
+@bundle_blueprint.route("/<int:bundle_id>/ai_analysis/list", methods=['GET'])
+def bundle_ai_analysis_list(bundle_id):
+    from app.core.db_class.db import AIGeneration
+    bundle, err = _viewable_bundle_or_error(bundle_id)
+    if err:
+        return err
+    q = AIGeneration.query.filter_by(agent_key='bundle_analysis', bundle_id=bundle.id)
+    if not _is_ai_manager():
+        q = q.filter_by(is_public=True)
+    items = q.order_by(AIGeneration.created_at.desc()).limit(50).all()
+    return jsonify({"items": [_analysis_json(g) for g in items], "can_manage": _is_ai_manager()})
+
+
+@bundle_blueprint.route("/ai_analysis/models", methods=['GET'])
+@login_required
+def bundle_ai_analysis_models():
+    """Launch card: is the agent enabled + which models can be picked
+    (Ollama's list minus the ones disabled on the Models & Security page)."""
+    from flask import current_app
+    from app.core.db_class.db import AIAgentConfig, AIModelConfig
+    from app.features.ai.ai_core import AgentConnectionError, OllamaClient
+    if not _is_ai_manager():
+        return jsonify({"error": "Forbidden."}), 403
+    cfg = AIAgentConfig.query.filter_by(agent_key='bundle_analysis').first()
+    models = []
+    try:
+        models = OllamaClient(base_url=current_app.config.get('OLLAMA_URL') or 'http://localhost:11434',
+                              model='', timeout=5).list_models()
+    except AgentConnectionError:
+        pass
+    disabled = {m.model_name for m in AIModelConfig.query.filter_by(is_enabled=False).all()}
+    return jsonify({"enabled": cfg.enabled if cfg else True,
+                    "models": [m for m in models if m not in disabled],
+                    "default_model": cfg.default_model if cfg else None})
+
+
+def _running_bundle_analysis_job(bundle_id):
+    from app.core.db_class.db import BackgroundJob
+    for job in (BackgroundJob.query.filter(BackgroundJob.job_type == 'ai_bundle_analysis',
+                                           BackgroundJob.status.in_(('pending', 'running', 'paused')))
+                .order_by(BackgroundJob.id.desc()).limit(50).all()):
+        if (job.payload or {}).get('bundle_id') == bundle_id:
+            return job
+    return None
+
+
+@bundle_blueprint.route("/<int:bundle_id>/ai_analysis", methods=['POST'])
+@login_required
+def bundle_ai_analysis_launch(bundle_id):
+    from app.features.jobs import jobs_core as JobsModel
+    if not _is_ai_manager():
+        return jsonify({"success": False, "message": "Only admins and AI Managers can run a bundle analysis."}), 403
+    bundle, err = _viewable_bundle_or_error(bundle_id)
+    if err:
+        return err
+
+    running = _running_bundle_analysis_job(bundle.id)
+    if running:
+        return jsonify({"success": True, "job_uuid": running.uuid, "already_running": True})
+
+    data = request.get_json(silent=True) or {}
+    job = JobsModel.create_job(
+        job_type='ai_bundle_analysis',
+        payload={'bundle_id': bundle.id, 'model': (data.get('model') or None),
+                 'default_public': bool(data.get('default_public', True)), 'user_id': current_user.id},
+        label=f"AI Bundle Analysis — {bundle.name[:60]}",
+        created_by=current_user.id,
+    )
+    if not job:
+        return jsonify({"success": False, "message": "Failed to queue the analysis."}), 500
+    log_activity('bundle.ai_analysis_launch', f"Launched an AI analysis of bundle '{bundle.name}'",
+                 target_type='bundle', target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
+    return jsonify({"success": True, "job_uuid": job.uuid})
+
+
+@bundle_blueprint.route("/<int:bundle_id>/ai_analysis/job", methods=['GET'])
+@login_required
+def bundle_ai_analysis_job(bundle_id):
+    """Progress of a run as Rulezy thinking steps: the job's step:<stage>
+    log lines. ?job=<uuid> for a specific run, else the one in progress."""
+    from app.core.db_class.db import BackgroundJob, BackgroundJobLog
+    if not _is_ai_manager():
+        return jsonify({"error": "Forbidden."}), 403
+    bundle, err = _viewable_bundle_or_error(bundle_id)
+    if err:
+        return err
+    job_uuid = request.args.get('job')
+    job = (BackgroundJob.query.filter_by(uuid=job_uuid, job_type='ai_bundle_analysis').first()
+           if job_uuid else _running_bundle_analysis_job(bundle.id))
+    if not job or (job.payload or {}).get('bundle_id') != bundle.id:
+        return jsonify({"job": None})
+    logs = (BackgroundJobLog.query.filter(BackgroundJobLog.job_id == job.id,
+                                          BackgroundJobLog.event.like('step:%'))
+            .order_by(BackgroundJobLog.id.asc()).all())
+    return jsonify({"job": {
+        "uuid": job.uuid, "status": job.status, "error": job.error,
+        "result": (job.payload or {}).get('result'),
+        "steps": [{"stage": l.event.split(':', 1)[1], "text": l.message} for l in logs],
+    }})
+
+
+@bundle_blueprint.route("/<int:bundle_id>/ai_analysis/<int:analysis_id>/visibility", methods=['POST'])
+@login_required
+def bundle_ai_analysis_visibility(bundle_id, analysis_id):
+    from app.core.db_class.db import AIGeneration
+    if not _is_ai_manager():
+        return jsonify({"success": False, "message": "Forbidden."}), 403
+    gen = AIGeneration.query.filter_by(id=analysis_id, bundle_id=bundle_id, agent_key='bundle_analysis').first()
+    if not gen:
+        return jsonify({"success": False, "message": "Not found."}), 404
+    gen.is_public = bool((request.get_json(silent=True) or {}).get('is_public'))
+    db.session.commit()
+    log_activity('bundle.ai_analysis_visibility',
+                 f"Set bundle AI analysis to {'public' if gen.is_public else 'private'} on bundle #{bundle_id}",
+                 target_type='bundle', target_id=bundle_id, is_public=False)
+    return jsonify({"success": True, "analysis": _analysis_json(gen)})
+
+
+@bundle_blueprint.route("/<int:bundle_id>/ai_analysis/<int:analysis_id>", methods=['DELETE'])
+@login_required
+def bundle_ai_analysis_delete(bundle_id, analysis_id):
+    from app.core.db_class.db import AIGeneration
+    if not _is_ai_manager():
+        return jsonify({"success": False, "message": "Forbidden."}), 403
+    gen = AIGeneration.query.filter_by(id=analysis_id, bundle_id=bundle_id, agent_key='bundle_analysis').first()
+    if not gen:
+        return jsonify({"success": False, "message": "Not found."}), 404
+    db.session.delete(gen)
+    db.session.commit()
+    log_activity('bundle.ai_analysis_delete', f"Deleted an AI analysis of bundle #{bundle_id}",
+                 target_type='bundle', target_id=bundle_id, is_public=False)
+    return jsonify({"success": True})
+
+
+def _bundle_ai_filename(bundle, ext):
+    slug = re.sub(r'[^a-z0-9]+', '-', (bundle.name or 'bundle').lower()).strip('-')[:40]
+    return f'ai-bundle-analysis-{slug}-{bundle.id}.{ext}'
+
+
+@bundle_blueprint.route("/<int:bundle_id>/ai_analysis/<int:analysis_id>/download/<any(markdown, pdf):kind>", methods=['GET'])
+def bundle_ai_analysis_download(bundle_id, analysis_id, kind):
+    from datetime import datetime, timezone
+    from flask import current_app
+    bundle, err = _viewable_bundle_or_error(bundle_id)
+    if err:
+        return err
+    gen = _visible_bundle_analysis(bundle_id, analysis_id)
+    if not gen:
+        return jsonify({"success": False, "message": "Not found."}), 404
+
+    requester = (f"{gen.user.first_name} {gen.user.last_name}".strip()) if gen.user else None
+    source_url = f'{request.url_root.rstrip("/")}/bundle/detail/{bundle.id}#ai'
+    meta = gen.meta or {}
+
+    if kind == 'markdown':
+        lines = [
+            '---',
+            f'title: "AI Bundle Analysis — {bundle.name}"',
+            f'bundle: "{bundle.name}"',
+            f'verdict: "{meta.get("verdict_label", "")}"',
+            f'model: "{gen.model or "unknown"}"',
+            f'requested_by: "{requester or "unknown"}"',
+            f'generated_at: {gen.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")}',
+            f'source: "{source_url}"',
+            f'exported_at: {datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}',
+            '---', '',
+            gen.content or '',
+        ]
+        resp = current_app.response_class('\n'.join(lines), mimetype='text/markdown')
+    else:
+        import markdown as _md
+        from weasyprint import HTML as WeasyprintHTML
+        html_str = render_template(
+            'bundle/ai_analysis_print.html', bundle=bundle, analysis=gen, requester=requester,
+            content_html=_md.markdown(gen.content or '', extensions=['extra', 'toc', 'nl2br']),
+            source_url=source_url, generated_at=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'),
+        )
+        from weasyprint import default_url_fetcher
+
+        def _fonts_only(url, *a, **kw):
+            # The report is LLM output rendered as HTML — an injected <img>/<link>
+            # must not make the server fetch arbitrary URLs. Only the print
+            # template's Google Fonts are allowed.
+            if url.startswith(('https://fonts.googleapis.com/', 'https://fonts.gstatic.com/')):
+                return default_url_fetcher(url, *a, **kw)
+            raise ValueError(f'blocked resource: {url[:80]}')
+
+        pdf = WeasyprintHTML(string=html_str, base_url=request.url_root, url_fetcher=_fonts_only).write_pdf()
+        resp = current_app.response_class(pdf, mimetype='application/pdf')
+    resp.headers['Content-Disposition'] = f'attachment; filename="{_bundle_ai_filename(bundle, "md" if kind == "markdown" else "pdf")}"'
+    return resp

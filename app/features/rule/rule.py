@@ -1194,6 +1194,10 @@ def detail_rule_ai_analysis_list(rule_id):
     out = []
     for a in items:
         row = a.to_json()
+        if not a.is_public:
+            # to_json() blanks private entries — only AI managers get here
+            # with private rows (filtered above), and they need the text.
+            row['content'], row['meta'] = a.content, a.meta
         row['username'] = (f"{a.user.first_name} {a.user.last_name}".strip() or a.user.email) if a.user else None
         out.append(row)
     return jsonify({'items': out})

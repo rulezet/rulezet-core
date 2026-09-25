@@ -19,12 +19,14 @@
     'rule_analysis': 'analyseRule.png',
     'rule_generator': 'rule-generator.png',
     'rule_fixer': 'rule-fixer.png',
+    'bundle_analysis': 'analyseRule.png',
   } %}
   {% set agent_icon = {
     'chatbot': 'fa-comment-dots',
     'rule_analysis': 'fa-magnifying-glass-chart',
     'rule_generator': 'fa-wand-magic-sparkles',
     'rule_fixer': 'fa-wrench',
+    'bundle_analysis': 'fa-layer-group',
   } %}
   <div class="explorer-banner mb-4">
     <i class="fa-solid fa-magnifying-glass-chart banner-watermark"></i>
@@ -59,6 +61,14 @@
             {{ 'Public' if gen.is_public else 'Private' }}
           </span>
         </div>
+        {% if gen.bundle_id %}
+        <div><span class="text-muted d-block" style="font-size:.72rem;text-transform:uppercase;">Bundle</span>
+          <a href="/bundle/detail/{{ gen.bundle_id }}#ai">{{ gen.bundle.name if gen.bundle else ('#' ~ gen.bundle_id) }}</a>
+        </div>
+        {% endif %}
+        {% if gen.meta and gen.meta.verdict_label %}
+        <div><span class="text-muted d-block" style="font-size:.72rem;text-transform:uppercase;">Verdict</span>{{ gen.meta.verdict_label }}</div>
+        {% endif %}
         {% if gen.rule_id %}
         <div><span class="text-muted d-block" style="font-size:.72rem;text-transform:uppercase;">Rule</span>
           <a href="/rule/detail_rule/{{ gen.rule_id }}">{{ gen.rule.title if gen.rule else ('#' ~ gen.rule_id) }}</a>

@@ -4632,6 +4632,9 @@ class AIGeneration(db.Model):
     # (not a Rule) until a human accepts it and it gets imported — there's no
     # rule_id yet at the time it's recorded.
     rule_id    = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=True, index=True)
+    # Set for bundle-scoped agents (bundle_analysis) — a report about a whole
+    # bundle, not one rule. Deleted with the bundle.
+    bundle_id  = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=True, index=True)
     user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     content    = db.Column(db.Text, nullable=False)
     # Structured extras alongside `content` (e.g. rule_analysis's severity/
@@ -4644,6 +4647,8 @@ class AIGeneration(db.Model):
 
     user = db.relationship('User', foreign_keys=[user_id])
     rule = db.relationship('Rule', foreign_keys=[rule_id])
+    bundle = db.relationship('Bundle', foreign_keys=[bundle_id],
+                             backref=db.backref('ai_generations', cascade='all, delete-orphan', passive_deletes=True))
 
     def to_json(self):
         return {
@@ -4651,6 +4656,7 @@ class AIGeneration(db.Model):
             'uuid':       self.uuid,
             'agent_key':  self.agent_key,
             'rule_id':    self.rule_id,
+            'bundle_id':  self.bundle_id,
             'user_id':    self.user_id,
             'content':    self.content if self.is_public else None,
             'meta':       self.meta if self.is_public else None,

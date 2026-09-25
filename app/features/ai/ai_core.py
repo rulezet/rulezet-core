@@ -214,6 +214,64 @@ class OllamaClient:
 
         return _call_with_governor(_do_call, acquire_timeout)
 
+    def chat_stream(self, messages, json_schema=None, acquire_timeout=10,
+                    idle_timeout=None, num_predict=None, should_stop=None):
+        """Streaming variant of chat() for long generations: `idle_timeout`
+        bounds the silence between two chunks (reading the prompt counts as
+        silence), not the whole generation — a slow CPU that keeps producing
+        text is never killed half-way. `json_schema=False` asks for free text
+        (no grammar), None for bare JSON, a dict for structured output.
+        `should_stop()` is polled between chunks (job cancellation) — closing
+        the connection makes Ollama abort the generation. Returns the text."""
+        import json as _json
+
+        def _do_call():
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": True,
+                "keep_alive": self.keep_alive,
+                "options": {
+                    "num_ctx": self.num_ctx,
+                    "num_predict": num_predict or self.num_predict,
+                    "temperature": self.temperature,
+                },
+            }
+            if json_schema is not False:
+                payload["format"] = json_schema if json_schema is not None else "json"
+            idle = idle_timeout or self.timeout
+            parts = []
+            last_check = time.monotonic()
+            try:
+                with http_requests.post(f"{self.base_url}/api/chat", json=payload,
+                                        timeout=(10, idle), stream=True) as resp:
+                    resp.raise_for_status()
+                    for line in resp.iter_lines():
+                        if not line:
+                            continue
+                        chunk = _json.loads(line)
+                        if chunk.get('error'):
+                            raise AgentInvalidResponse(f"Ollama error: {chunk['error']}")
+                        parts.append((chunk.get('message') or {}).get('content', ''))
+                        if chunk.get('done'):
+                            break
+                        if should_stop and time.monotonic() - last_check > 5:
+                            last_check = time.monotonic()
+                            if should_stop():
+                                raise AgentInvalidResponse("Stopped.")
+            except http_requests.Timeout:
+                raise AgentTimeout(f"Ollama produced nothing for {idle}s.")
+            except http_requests.RequestException as e:
+                raise AgentConnectionError(
+                    f"Could not reach Ollama at {self.base_url} (model {self.model}): {e}"
+                )
+            raw = ''.join(parts)
+            if not raw.strip():
+                raise AgentInvalidResponse("Empty response from model.")
+            return raw
+
+        return _call_with_governor(_do_call, acquire_timeout)
+
     def list_models(self):
         """GET /api/tags. Raises AgentConnectionError on failure."""
         try:
@@ -317,12 +375,20 @@ class AIAgent(ABC):
     @property
     @abstractmethod
     def key(self) -> str:
-        """'chatbot' | 'rule_analysis' | 'rule_generator' | 'rule_fixer'."""
+        """'chatbot' | 'rule_analysis' | 'rule_generator' | 'rule_fixer' | 'bundle_analysis'."""
 
     @property
     @abstractmethod
     def display_name(self) -> str:
         ...
+
+    @property
+    def num_ctx(self) -> int:
+        """Context window requested from Ollama. Override for agents that
+        feed a lot of material (e.g. a whole bundle) — the prompt, the data
+        and the requested output must all fit or Ollama silently truncates
+        the start of the prompt (the instructions)."""
+        return 8192
 
     @property
     def config_key(self) -> str:
@@ -343,6 +409,17 @@ class AIAgent(ABC):
     @abstractmethod
     def parse_response(self, raw: str) -> AgentResult:
         """Turns validated raw model output into an AgentResult."""
+
+    def execute(self, client, *, acquire_timeout=10, **kwargs) -> AgentResult:
+        """The model interaction itself, inside run()'s guard rails (enabled
+        check, rate limit, logging, exception mapping). Default: one call.
+        Agents that need several calls (e.g. a long report written section
+        by section) override this; they may raise the Agent* exceptions."""
+        kwargs.pop('progress', None)
+        kwargs.pop('should_stop', None)
+        messages = self.build_messages(**kwargs)
+        raw = client.chat(messages, json_schema=self.json_schema(), acquire_timeout=acquire_timeout)
+        return self.parse_response(raw)
 
     def run(self, *, user=None, acquire_timeout=10, rule_id=None,
             input_summary=None, model=None, **kwargs) -> AgentResult:
@@ -420,12 +497,11 @@ class AIAgent(ABC):
         num_predict = agent_config.num_predict if agent_config else 2048
 
         try:
-            messages = self.build_messages(**kwargs)
             client = OllamaClient(
                 base_url=base_url, model=model, timeout=timeout, num_predict=num_predict,
+                num_ctx=self.num_ctx,
             )
-            raw = client.chat(messages, json_schema=self.json_schema(), acquire_timeout=acquire_timeout)
-            result = self.parse_response(raw)
+            result = self.execute(client, acquire_timeout=acquire_timeout, **kwargs)
             result.model_used = result.model_used or model
             return _finish(result, 'success' if result.ok else 'failed', flagged_reason)
         except AgentBusy as e:

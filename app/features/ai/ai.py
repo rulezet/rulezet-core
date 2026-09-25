@@ -20,7 +20,7 @@ from app.core.utils.activity_log import log_activity
 
 ai_blueprint = Blueprint('ai', __name__, template_folder='templates')
 
-_KNOWN_AGENT_KEYS = {'chatbot', 'rule_analysis', 'rule_generator', 'rule_fixer'}
+_KNOWN_AGENT_KEYS = {'chatbot', 'rule_analysis', 'rule_generator', 'rule_fixer', 'bundle_analysis'}
 
 
 @ai_blueprint.before_request
@@ -44,6 +44,11 @@ def admin_chatbot():
 @ai_blueprint.route('/admin/rule-analysis', methods=['GET'])
 def admin_rule_analysis():
     return render_template('ai/admin_rule_analysis.html')
+
+
+@ai_blueprint.route('/admin/bundle-analysis', methods=['GET'])
+def admin_bundle_analysis():
+    return render_template('ai/admin_bundle_analysis.html')
 
 
 @ai_blueprint.route('/admin/rule-generator', methods=['GET'])
@@ -71,7 +76,7 @@ def admin_how_it_works():
     return render_template('ai/ai_how_it_works.html')
 
 
-@ai_blueprint.route('/admin/<any(rule_analysis, rule_generator, rule_fixer):agent_key>/history/<string:uuid>', methods=['GET'])
+@ai_blueprint.route('/admin/<any(rule_analysis, rule_generator, rule_fixer, bundle_analysis):agent_key>/history/<string:uuid>', methods=['GET'])
 def history_detail(agent_key, uuid):
     gen = AIGeneration.query.filter_by(agent_key=agent_key, uuid=uuid).first()
     if not gen:
@@ -294,6 +299,8 @@ def history_data(agent_key):
         row = gen.to_json()
         row['rule_id']    = gen.rule_id
         row['rule_title'] = gen.rule.title if gen.rule else None
+        row['bundle_title'] = gen.bundle.name if gen.bundle else None
+        row['verdict_label'] = (gen.meta or {}).get('verdict_label')
         row['username']   = (
             (f"{gen.user.first_name} {gen.user.last_name}".strip() or gen.user.email)
             if gen.user else None

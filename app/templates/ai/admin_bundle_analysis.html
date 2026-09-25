@@ -1,0 +1,316 @@
+{% extends 'base.html' %}
+{% import 'macros/ai_admin_nav.html' as ai_nav with context %}
+{% block title %}Bundle Analysis — AI Admin — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/table/data-table.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ai/admin_bundle_analysis.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4" id="ba-app" v-cloak>
+
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-layer-group banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/ai/admin/overview" class="text-decoration-none text-muted">AI</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Bundle Analysis</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      {% if mascot_enabled %}
+      <div class="banner-icon banner-icon--mascot"><img src="{{ url_for('static', filename='images/rulezy/analyseRule.png') }}" alt=""></div>
+      {% else %}
+      <div class="banner-icon"><i class="fa-solid fa-layer-group"></i></div>
+      {% endif %}
+      <div>
+        <h2 class="fw-bold mb-1">Bundle Analysis</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+      A detailed, narrative review of a whole bundle — purpose, construction, coverage and blind spots,
+      operational readiness, deployment guidance and a verdict — written for the teams who will deploy it.
+      Launch it here or from any bundle's <strong>AI Analysis</strong> tab.
+    </p>
+  </div>
+
+  {{ ai_nav.ai_admin_nav('bundle_analysis') }}
+
+  <agent-config-card agent-key="bundle_analysis" :csrf-token="csrfToken" @notify="onNotify"></agent-config-card>
+
+  <system-status-card compact :csrf-token="csrfToken" :poll-ms="6000"></system-status-card>
+
+  <!-- ── Run now ── -->
+  <div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <div style="width:3px;height:14px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
+        <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
+          <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Run now
+        </span>
+        <small style="color:var(--subtle-text-color);font-size:.78rem;">
+          — pick a bundle and a model. One run is one long generation (several minutes on CPU); it runs in the
+          background AI lane, behind any Rule Analysis batch already in progress.
+        </small>
+      </div>
+
+      <div class="row g-4">
+        <!-- Bundle picker -->
+        <div class="col-lg-7">
+          <div class="ba-search mb-2">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="search" v-model="picker.search" placeholder="Search bundles by name or description…">
+          </div>
+          <div v-if="picker.loading" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Loading bundles…</div>
+          <div v-else-if="!picker.items.length" class="text-center py-4 text-muted small">No bundle found.</div>
+          <div v-else class="d-flex flex-column gap-2">
+            <label v-for="b in picker.items" :key="b.id" class="ba-pick" :class="{ 'is-selected': picked && picked.id === b.id }">
+              <input type="radio" class="form-check-input mt-0" name="ba-bundle" :checked="picked && picked.id === b.id" @change="picked = b">
+              <div class="ba-pick__icon"><i class="fa-solid fa-layer-group"></i></div>
+              <div class="ba-pick__body">
+                <div class="d-flex align-items-center gap-2" style="min-width:0;">
+                  <span class="fw-semibold text-truncate">[[ b.name ]]</span>
+                  <i v-if="!b.access" class="fa-solid fa-lock small text-muted" title="Private"></i>
+                  <i v-if="b.is_verified" class="fa-solid fa-circle-check small text-primary" title="Verified"></i>
+                </div>
+                <div class="small text-muted text-truncate">[[ b.user_name || b.author ]] · [[ b.number_of_rules ]] rules</div>
+              </div>
+              <a :href="'/bundle/detail/' + b.id + '#ai'" class="small flex-shrink-0" target="_blank" @click.stop>Open</a>
+            </label>
+          </div>
+          <pagination-component v-if="picker.totalPages > 1" :current-page="picker.page" :total-pages="picker.totalPages"
+                                @change-page="p => picker.page = p"></pagination-component>
+        </div>
+
+        <!-- Launch + steps -->
+        <div class="col-lg-5">
+          <div class="ba-launch">
+            <div v-if="!picked" class="text-muted small"><i class="fa-solid fa-arrow-left me-1"></i>Pick a bundle to analyse.</div>
+            <template v-else>
+              <div class="ba-launch__target"><i class="fa-solid fa-layer-group me-1"></i>[[ picked.name ]]</div>
+              <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                <select class="form-select form-select-sm" v-model="selectedModel" style="width:auto;min-width:180px;">
+                  <option v-for="m in models" :key="m" :value="m">[[ m ]]</option>
+                </select>
+                <label class="form-check form-switch mb-0 small">
+                  <input class="form-check-input" type="checkbox" v-model="makePublic">
+                  <span class="form-check-label">Public immediately</span>
+                </label>
+              </div>
+              <div v-if="!featureEnabled" class="small text-muted mt-2"><i class="fa-solid fa-circle-info me-1"></i>The feature is disabled (toggle above).</div>
+              <button class="btn btn-sm btn-primary rounded-pill px-3 mt-3" :disabled="launching || running || !selectedModel || !featureEnabled" @click="launch">
+                <i class="fa-solid me-1" :class="launching ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'"></i>Analyze this bundle
+              </button>
+            </template>
+
+            <div v-if="job" class="mt-3">
+              <ai-thinking-steps :steps="jobSteps" :active="running"></ai-thinking-steps>
+              <div v-if="job.status === 'done' && job.bundleId" class="mt-2">
+                <a :href="'/bundle/detail/' + job.bundleId + '#ai'" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                  Read the report <i class="fa-solid fa-arrow-right ms-1"></i>
+                </a>
+              </div>
+              <div v-if="job.error" class="small text-danger mt-2">[[ job.error ]]</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── History ── -->
+  <data-table
+    ref="table_ref"
+    fetch-url="/ai/admin/history/bundle_analysis/data"
+    :columns="columns"
+    :can-delete="true"
+    :bulk-actions="bulkActions"
+    initial-sort="created_at"
+    initial-dir="desc"
+    @delete="handleDelete"
+    @bulk-action="handleBulkAction">
+    <template #cell-bundle_title="{ item }">
+      <a v-if="item.bundle_id" :href="'/bundle/detail/' + item.bundle_id + '#ai'" target="_blank">[[ item.bundle_title || ('Bundle #' + item.bundle_id) ]]</a>
+      <span v-else class="text-muted">—</span>
+    </template>
+    <template #cell-verdict_label="{ item }">
+      <span class="small">[[ item.verdict_label || '—' ]]</span>
+    </template>
+    <template #cell-username="{ item }">
+      <user-chip :user-id="item.user_id" :username="item.username || 'unknown'" size="sm"></user-chip>
+    </template>
+    <template #cell-is_public="{ item }">
+      <span class="badge rounded-pill" :class="item.is_public ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
+            style="cursor:pointer;" @click="toggleVisibility(item)">
+        [[ item.is_public ? 'Public' : 'Private' ]]
+      </span>
+    </template>
+    <template #cell-view="{ item }">
+      <a :href="'/ai/admin/bundle_analysis/history/' + item.uuid" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+        <i class="fa-solid fa-eye me-1"></i>View
+      </a>
+    </template>
+  </data-table>
+
+</div>
+
+<script type="module">
+import { create_message }   from '/static/js/toaster.js'
+import UserChip              from '/static/js/components/UserChip.js'
+import DataTable             from '/static/js/components/table/data-table.js'
+import AgentConfigCard       from '/static/js/ai/agentConfigCard.js'
+import SystemStatusCard      from '/static/js/ai/systemStatusCard.js'
+import AIThinkingSteps       from '/static/js/components/ai-thinking-steps.js'
+import PaginationComponent   from '/static/js/rule/paginationComponent.js'
+
+const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted } = Vue
+const csrf = () => document.querySelector('input[name="csrf_token"]')?.value || ''
+const TERMINAL = new Set(['done', 'failed', 'cancelled'])
+
+createApp({
+    delimiters: ['[[', ']]'],
+    components: {
+        'user-chip': UserChip, 'data-table': DataTable, 'agent-config-card': AgentConfigCard,
+        'system-status-card': SystemStatusCard, 'ai-thinking-steps': AIThinkingSteps,
+        'pagination-component': PaginationComponent,
+    },
+    setup() {
+        const csrfToken = csrf()
+        const table_ref = ref(null)
+
+        const columns = [
+            { key: 'bundle_title',  label: 'Bundle', sortable: false },
+            { key: 'verdict_label', label: 'Verdict', sortable: false },
+            { key: 'model',         label: 'Model', sortable: true },
+            { key: 'username',      label: 'Requested by', sortable: false },
+            { key: 'created_at',    label: 'Date', type: 'date', sortable: true },
+            { key: 'is_public',     label: 'Visibility', sortable: false },
+            { key: 'view',          label: '', sortable: false },
+        ]
+        const bulkActions = [{ key: 'delete', label: 'Delete', icon: 'fa-trash', variant: 'danger' }]
+        const onNotify = ({ message, level }) => create_message(message, level)
+
+        async function bulkDelete(ids) {
+            const res = await fetch('/ai/admin/history/bundle_analysis/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ action: 'delete', ids }),
+            })
+            const data = await res.json()
+            if (data.success) { create_message(`Deleted ${data.deleted}.`, 'success-subtle'); table_ref.value?.fetchData() }
+            else create_message(data.error || 'Failed to delete', 'danger-subtle')
+        }
+        function handleDelete(item) {
+            if (confirm('Delete this analysis? This cannot be undone.')) bulkDelete([item.id])
+        }
+        function handleBulkAction({ action, ids }) {
+            if (action === 'delete' && confirm(`Delete ${ids === 'ALL' ? 'ALL' : ids.length} analyses? This cannot be undone.`)) bulkDelete(ids)
+        }
+        async function toggleVisibility(item) {
+            const res = await fetch(`/ai/admin/history/bundle_analysis/toggle_visibility/${item.id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ is_public: !item.is_public }),
+            })
+            const data = await res.json()
+            if (data.success) { create_message('Visibility updated.', 'success-subtle'); table_ref.value?.fetchData() }
+            else create_message(data.error || 'Failed to update', 'danger-subtle')
+        }
+
+        // ── Bundle picker ──
+        const picker = reactive({ search: '', page: 1, totalPages: 1, items: [], loading: false })
+        const picked = ref(null)
+        let seq = 0, debounce = null
+        async function loadBundles() {
+            const my = ++seq
+            picker.loading = true
+            try {
+                const p = new URLSearchParams({ page: picker.page, per_page: 6, sort: 'updated_at', dir: 'desc' })
+                if (picker.search.trim()) p.set('search', picker.search.trim())
+                const data = await (await fetch(`/bundle/data_table?${p}`)).json()
+                if (my !== seq) return
+                picker.items = data.items || []
+                picker.totalPages = data.total_pages || 1
+            } catch { if (my === seq) picker.items = [] }
+            finally { if (my === seq) picker.loading = false }
+        }
+        watch(() => picker.search, () => {
+            clearTimeout(debounce)
+            debounce = setTimeout(() => { if (picker.page !== 1) picker.page = 1; else loadBundles() }, 250)
+        })
+        watch(() => picker.page, loadBundles)
+
+        // ── Launch + follow ──
+        const featureEnabled = ref(true)
+        const models = ref([])
+        const selectedModel = ref('')
+        const makePublic = ref(true)
+        const launching = ref(false)
+        const job = ref(null)
+        let timer = null
+        const running = computed(() => !!job.value && !TERMINAL.has(job.value.status))
+        const jobSteps = computed(() => {
+            if (!job.value) return []
+            const s = [...(job.value.steps || [])]
+            if (!s.length && job.value.status === 'pending') s.push({ stage: 'reading', text: 'Queued — waiting for the AI worker…' })
+            return s
+        })
+
+        async function fetchModels() {
+            try {
+                const data = await (await fetch('/bundle/ai_analysis/models')).json()
+                featureEnabled.value = data.enabled
+                models.value = data.models || []
+                selectedModel.value = (data.default_model && models.value.includes(data.default_model)) ? data.default_model : (models.value[0] || '')
+            } catch {}
+        }
+
+        async function poll() {
+            if (!job.value) return
+            try {
+                const data = await (await fetch(`/bundle/${job.value.bundleId}/ai_analysis/job?job=${job.value.uuid}`)).json()
+                if (!data.job) return
+                job.value = { ...job.value, ...data.job }
+                if (TERMINAL.has(data.job.status)) {
+                    clearInterval(timer); timer = null
+                    table_ref.value?.fetchData()
+                }
+            } catch {}
+        }
+
+        async function launch() {
+            if (!picked.value) return
+            launching.value = true
+            try {
+                const res = await fetch(`/bundle/${picked.value.id}/ai_analysis`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ model: selectedModel.value, default_public: makePublic.value }),
+                })
+                const data = await res.json()
+                if (!res.ok || !data.success) { create_message(data.message || 'Could not start the analysis', 'danger-subtle'); return }
+                job.value = { uuid: data.job_uuid, bundleId: picked.value.id, status: 'pending', steps: [] }
+                if (timer) clearInterval(timer)
+                timer = setInterval(poll, 2500)
+                poll()
+            } catch (e) { create_message('Network error: ' + e, 'danger-subtle') }
+            finally { launching.value = false }
+        }
+
+        onMounted(() => { loadBundles(); fetchModels() })
+        onUnmounted(() => { if (timer) clearInterval(timer) })
+
+        return {
+            csrfToken, table_ref, columns, bulkActions, onNotify, handleDelete, handleBulkAction, toggleVisibility,
+            picker, picked, featureEnabled, models, selectedModel, makePublic, launching, job, running, jobSteps, launch,
+        }
+    }
+}).mount('#ba-app')
+</script>
+{% endblock %}

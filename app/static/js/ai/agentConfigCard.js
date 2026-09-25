@@ -4,7 +4,7 @@
  * each page's own <script type="module">, never re-authored per page.
  *
  * Props:
- *   agentKey   String  (required) — 'chatbot' | 'rule_analysis' | 'rule_generator' | 'rule_fixer'
+ *   agentKey   String  (required) — 'chatbot' | 'rule_analysis' | 'rule_generator' | 'rule_fixer' | 'bundle_analysis'
  *   csrfToken  String  (required)
  *
  * Emits:
