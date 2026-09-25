@@ -430,7 +430,11 @@
                                     </button>
                                 </div>
                             </div>
-                        <bundle-release-rules v-if="viewRelease" :rules="releaseData.rules" :version="viewRelease.version"
+                        <div v-if="releaseSwitching" class="text-center py-5" style="color:var(--subtle-text-color);">
+                            <div class="spinner-border text-primary mb-2" role="status"></div>
+                            <div class="small">Loading release…</div>
+                        </div>
+                        <bundle-release-rules v-else-if="viewRelease" :rules="releaseData.rules" :version="viewRelease.version"
                             @open="openReleaseRule" @diff="openReleaseRuleDiff"
                             @show-structure="showRuleInStructure"></bundle-release-rules>
                         <template v-else>
@@ -481,7 +485,15 @@
                                     </button>
                                 </div>
                             </div>
-                            <file-tree v-if="allFiles.length" ref="fileTreeRef" :nodes="fileTreeNodes" mode="read" @select="handleFileTreeSelect"
+                            <!-- Big bundles can take a while to load — never show "no structure" before it's in -->
+                            <div v-if="!structureLoaded || releaseSwitching" class="text-center py-5" style="color:var(--subtle-text-color);">
+                                <div class="spinner-border text-primary mb-2" role="status"></div>
+                                <div class="small">
+                                    [[ releaseSwitching ? 'Loading release…' : 'Loading structure…' ]]
+                                    <span v-if="!releaseSwitching && bundle && bundle.number_of_rules > 200">([[ bundle.number_of_rules ]] rules — this can take a moment)</span>
+                                </div>
+                            </div>
+                            <file-tree v-else-if="allFiles.length" ref="fileTreeRef" :nodes="fileTreeNodes" mode="read" @select="handleFileTreeSelect"
                                 :row-actions="canEditStructure ? [{ key: 'edit', label: 'Edit', icon: 'fa-solid fa-pen' }] : []"
                                 @row-action="onTreeRowAction"></file-tree>
                             <div v-else class="text-center py-4 small" style="color:var(--subtle-text-color);">
@@ -1861,18 +1873,30 @@
             }
             function reloadMisp() { mispError.value = false; _mispParsed.value = null; _loadMisp(); }
 
+            // Structure JSON can be heavy on big bundles — start it alongside
+            // init() instead of after it, and always clear the spinner.
+            async function _loadStructure() {
+                try {
+                    const res = await fetch(`/bundle/get_bundle_json/${bundle_id}`);
+                    const data = await res.json();
+                    if (data.success && data.structure) {
+                        treeData.value = Array.isArray(data.structure) ? data.structure : [data.structure];
+                    }
+                } catch {
+                    create_message('Could not load the bundle structure', 'danger-subtle');
+                } finally {
+                    structureLoaded.value = true;
+                }
+            }
+
             onMounted(async () => {
+                const _structureP = _loadStructure();
                 await init();
 
                 const el = document.getElementById('bundle-info');
                 if (el) {
                     bundleId.value = el.dataset.bundleId;
-                    const res = await fetch(`/bundle/get_bundle_json/${bundleId.value}`);
-                    const data = await res.json();
-                    if (data.success && data.structure) {
-                        treeData.value = Array.isArray(data.structure) ? data.structure : [data.structure];
-                    }
-                    structureLoaded.value = true;
+                    await _structureP;
                     loadHistory(1);
                     const _rq = new URL(window.location.href).searchParams.get('release');
                     if (_rq) switchVersion(_rq);
@@ -1916,7 +1940,7 @@
                 treeData, fileTreeNodes, allFiles, docFiles,
                 openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
                 openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
-                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList, structureLoaded,
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,
