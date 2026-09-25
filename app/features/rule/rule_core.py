@@ -3439,7 +3439,16 @@ _DATA_TABLE_SORT_KEYS = {
 }
 
 
-def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
+def get_rules_data_table(page=1, per_page=10, **filters):
+    """Generic paginated / searchable / sortable rule listing consumed by the
+    rule-data-table component. Filtering is delegated to filter_rules() so the
+    advanced filter bar (tags, licenses, vulnerabilities, sources, exact
+    match…) works identically everywhere. Returns a pagination object."""
+    per_page = max(1, min(100, per_page))
+    return build_rules_data_table_query(**filters).paginate(page=page, per_page=per_page, error_out=False)
+
+
+def build_rules_data_table_query(search=None, sort=None,
                          direction='asc', source=None, user_id=None,
                          search_field='all', exact_match=False, rule_type=None,
                          author=None, vulnerabilities=None, licenses=None,
@@ -3447,10 +3456,9 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          status=None, workspace_uuid=None, exclude_workspace_uuid=None,
                          ids=None, has_cve=False, quality_score_min=None, quality_score_max=None,
                          has_ai_analysis=False, has_relations=False, branch=None):
-    """Generic paginated / searchable / sortable rule listing consumed by the
-    rule-data-table component. Filtering is delegated to filter_rules() so the
-    advanced filter bar (tags, licenses, vulnerabilities, sources, exact
-    match…) works identically everywhere. Returns a pagination object."""
+    """Unpaginated query behind get_rules_data_table — also used wherever the
+    exact RuleList filter set must be applied server-side (e.g. bundle from
+    filters), so both always agree on which rules "match"."""
     query = filter_rules(
         search=search,
         search_field=search_field or 'all',
@@ -3509,9 +3517,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         query = query.order_by(None).order_by(
             col.desc() if direction == 'desc' else col.asc()
         )
-
-    per_page = max(1, min(100, per_page))
-    return query.paginate(page=page, per_page=per_page, error_out=False)
+    return query
 
 
 def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:

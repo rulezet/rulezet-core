@@ -4152,6 +4152,8 @@ class Workspace(db.Model):
                                    cascade='all, delete-orphan', foreign_keys='WorkspaceTagAssociation.workspace_id')
     attack_assocs = db.relationship('WorkspaceAttackAssociation', backref='workspace',
                                      cascade='all, delete-orphan', foreign_keys='WorkspaceAttackAssociation.workspace_id')
+    bundles_assoc = db.relationship('WorkspaceBundle', backref='workspace', lazy='dynamic',
+                                     cascade='all, delete-orphan', foreign_keys='WorkspaceBundle.workspace_id')
 
     def rule_count(self):
         return self.rules_assoc.count()
@@ -4174,6 +4176,7 @@ class Workspace(db.Model):
             'user_id':     self.user_id,
             'owner_name':  self.owner.get_username() if self.owner else None,
             'rule_count':  self.rule_count(),
+            'bundle_count': self.bundles_assoc.count(),
             'created_at':  self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
             'updated_at':  self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
         }
@@ -4197,6 +4200,24 @@ class WorkspaceRule(db.Model):
             'note':         self.note,
             'added_at':     self.added_at.strftime('%Y-%m-%d %H:%M') if self.added_at else None,
         }
+
+
+class WorkspaceBundle(db.Model):
+    """Association table between Workspace and Bundle — a workspace can
+    collect any bundle its owner can see (own, public, or someone else's),
+    independently of the workspace's rules. Bundles exported from the
+    workspace also get a row here (and keep Bundle.source_workspace_id as
+    provenance)."""
+    __tablename__ = 'workspace_bundle'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False, index=True)
+    bundle_id    = db.Column(db.Integer, db.ForeignKey('bundle.id',    ondelete='CASCADE'), nullable=False, index=True)
+    added_at     = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    note         = db.Column(db.Text, nullable=True)
+    __table_args__ = (db.UniqueConstraint('workspace_id', 'bundle_id', name='uq_workspace_bundle'),)
+
+    bundle = db.relationship('Bundle', foreign_keys=[bundle_id],
+                             backref=db.backref('workspace_links', cascade='all, delete-orphan', passive_deletes=True))
 
 
 class WorkspaceDocument(db.Model):

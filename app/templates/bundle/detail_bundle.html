@@ -1876,6 +1876,18 @@
                     loadHistory(1);
                     const _rq = new URL(window.location.href).searchParams.get('release');
                     if (_rq) switchVersion(_rq);
+                    // ?focus_rule=<id> (e.g. "Open in bundle" from a rule's Bundles
+                    // tab): reveal the rule in the structure tree and open it.
+                    const _fr = parseInt(new URL(window.location.href).searchParams.get('focus_rule'), 10);
+                    if (_fr) {
+                        const node = allFiles.value.find(f => f.rule_id === _fr);
+                        if (node) {
+                            await revealInStructure(node.id);
+                            openFile(node, allFiles.value, 'structure');
+                        } else {
+                            showRuleInList(_fr);
+                        }
+                    }
                 }
 
                 // Load ATT&CK coverage and MISP data

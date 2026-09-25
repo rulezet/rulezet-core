@@ -586,6 +586,7 @@ export default {
                         :selected-tags="selectedTags"
                         :total-rules="exportTotalRules"
                         :rule-ids="exportRuleIds"
+                        :filter-query="exportFilterQuery"
                         :csrf-token="csrfToken"
                         :current-user-is-authenticated="currentUserIsAuthenticated ? 'True' : 'False'"
                         :start-view="exportActionView"
@@ -1966,46 +1967,57 @@ export default {
         // silently won, occasionally leaving the list empty even though
         // the "correct" response was actually already in and then overwritten.
         let fetchSeq = 0
+        // Every filter the list sends to its fetch endpoint — shared with the
+        // export / bundle-from-filters action so both scope to exactly the
+        // rules on screen (anything missing here used to make the bundle
+        // endpoint think no filter was active → 400).
+        function buildFilterParams() {
+            const params = new URLSearchParams()
+            if (search.value)                    params.set('search', search.value)
+            if (searchField.value !== 'all')     params.set('search_field', searchField.value)
+            if (exactMatch.value)                params.set('exact_match', 'true')
+            if (ruleType.value)                  params.set('rule_type', ruleType.value)
+            if (sortKey.value)                   params.set('sort', sortKey.value)
+            if (sortKey.value)                   params.set('dir', sortDir.value)
+            if (props.source)                    params.set('source', props.source)
+            if (props.branch)                    params.set('branch', props.branch)
+            if (props.ids)                        params.set('ids', Array.isArray(props.ids) ? props.ids.join(',') : props.ids)
+            if (numericUserId.value)             params.set('user_id', numericUserId.value)
+            else if (scopeMine.value && numericCurrentUserId.value) params.set('user_id', numericCurrentUserId.value)
+            if (selectedTags.value.length)       params.set('tags', selectedTags.value.join(','))
+            if (selectedSources.value.length)    params.set('sources', selectedSources.value.join(','))
+            if (selectedBranches.value.length)   params.set('branches', selectedBranches.value.join(','))
+            if (selectedLicenses.value.length)   params.set('licenses', selectedLicenses.value.join(','))
+            if (selectedVulns.value.length)      params.set('vulnerabilities', selectedVulns.value.join(','))
+            if (selectedAttacks.value.length)    params.set('attacks', selectedAttacks.value.join(','))
+            if (cveOnly.value)                    params.set('has_cve', 'true')
+            if (aiAnalysisOnly.value)             params.set('has_ai_analysis', 'true')
+            if (hasRelationsOnly.value)            params.set('has_relations', 'true')
+            if (qualityMin.value !== null)        params.set('quality_score_min', qualityMin.value)
+            if (qualityMax.value !== null)        params.set('quality_score_max', qualityMax.value)
+            if (personFilter.value.values.length) {
+                const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
+                params.set(pKey, personFilter.value.values.join(','))
+            }
+            if (props.showValidationFilters) {
+                if (riskFilter.value === 'mismatch') params.set('mismatch_only', 'true')
+                else if (riskFilter.value) params.set('risk_level', riskFilter.value)
+                for (const b of selectedBinaries.value) params.append('binary', b)
+                if (pendingOnly.value) params.set('pending_only', 'true')
+                if (resolvedOnly.value) params.set('resolved_only', 'true')
+            }
+            return params
+        }
+
+        const exportFilterQuery = computed(() => buildFilterParams().toString())
+
         async function fetchData() {
             const mySeq = ++fetchSeq
             loading.value = true
             try {
-                const params = new URLSearchParams()
+                const params = buildFilterParams()
                 params.set('page', page.value)
                 params.set('per_page', perPage.value)
-                if (search.value)                    params.set('search', search.value)
-                if (searchField.value !== 'all')     params.set('search_field', searchField.value)
-                if (exactMatch.value)                params.set('exact_match', 'true')
-                if (ruleType.value)                  params.set('rule_type', ruleType.value)
-                if (sortKey.value)                   params.set('sort', sortKey.value)
-                if (sortKey.value)                   params.set('dir', sortDir.value)
-                if (props.source)                    params.set('source', props.source)
-                if (props.branch)                    params.set('branch', props.branch)
-                if (props.ids)                        params.set('ids', Array.isArray(props.ids) ? props.ids.join(',') : props.ids)
-                if (numericUserId.value)             params.set('user_id', numericUserId.value)
-                else if (scopeMine.value && numericCurrentUserId.value) params.set('user_id', numericCurrentUserId.value)
-                if (selectedTags.value.length)       params.set('tags', selectedTags.value.join(','))
-                if (selectedSources.value.length)    params.set('sources', selectedSources.value.join(','))
-                if (selectedBranches.value.length)   params.set('branches', selectedBranches.value.join(','))
-                if (selectedLicenses.value.length)   params.set('licenses', selectedLicenses.value.join(','))
-                if (selectedVulns.value.length)      params.set('vulnerabilities', selectedVulns.value.join(','))
-                if (selectedAttacks.value.length)    params.set('attacks', selectedAttacks.value.join(','))
-                if (cveOnly.value)                    params.set('has_cve', 'true')
-                if (aiAnalysisOnly.value)             params.set('has_ai_analysis', 'true')
-                if (hasRelationsOnly.value)            params.set('has_relations', 'true')
-                if (qualityMin.value !== null)        params.set('quality_score_min', qualityMin.value)
-                if (qualityMax.value !== null)        params.set('quality_score_max', qualityMax.value)
-                if (personFilter.value.values.length) {
-                    const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
-                    params.set(pKey, personFilter.value.values.join(','))
-                }
-                if (props.showValidationFilters) {
-                    if (riskFilter.value === 'mismatch') params.set('mismatch_only', 'true')
-                    else if (riskFilter.value) params.set('risk_level', riskFilter.value)
-                    for (const b of selectedBinaries.value) params.append('binary', b)
-                    if (pendingOnly.value) params.set('pending_only', 'true')
-                    if (resolvedOnly.value) params.set('resolved_only', 'true')
-                }
 
                 const sep = props.fetchUrl.includes('?') ? '&' : '?'
                 const res = await fetch(`${props.fetchUrl}${sep}${params}`)
@@ -2519,7 +2531,9 @@ export default {
             selectedLicenses.value.length > 0 ||
             selectedVulns.value.length > 0 ||
             selectedAttacks.value.length > 0 ||
-            personFilter.value.values.length > 0
+            personFilter.value.values.length > 0 ||
+            cveOnly.value || aiAnalysisOnly.value || hasRelationsOnly.value ||
+            qualityMin.value !== null || qualityMax.value !== null
         )
 
         // IDs to pass to RuleExportAction:
@@ -2614,7 +2628,7 @@ export default {
             // Status
             statusIcon, statusLabel, canChangeStatus, cycleStatus,
             // Export
-            hasActiveFilters, exportRuleIds, showExportBar, exportTotalRules, facetContextParams,
+            hasActiveFilters, exportRuleIds, exportFilterQuery, showExportBar, exportTotalRules, facetContextParams,
             exportActionView,
         }
     },

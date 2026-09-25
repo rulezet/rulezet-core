@@ -986,8 +986,14 @@ def _rule_linked_rules_count(rule_id):
     return count_relations_for_rule(rule_id)
 
 
+def _rule_bundle_count(rule_id):
+    from app.features.bundle import bundle_core as _BundleModel
+    return len(_BundleModel.get_bundles_by_rule(rule_id))
+
+
 def _nav_counts(rule_id):
     return {
+        'bundle_count':        _rule_bundle_count(rule_id),
         'similarity_count':    _rule_similarity_count(rule_id),
         'history_count':       _rule_history_count(rule_id),
         'proposal_count':      _rule_proposal_count(rule_id),
@@ -1135,6 +1141,19 @@ def detail_rule_linked_rules(rule_id):
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
     return render_template("rule/detail_rule/detail_rule_linked_rules.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/bundles", methods=['GET'])
+def detail_rule_bundles(rule_id):
+    """Bundles sub-page for a rule — every bundle (the viewer can see) that
+    ships this rule, and where it sits in each bundle's structure."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_bundles.html", rule=rule,
                            **_nav_counts(rule.id))
 
 
@@ -5010,9 +5029,59 @@ def github_detail():
         url=url
     )
 
-def _csv_arg(name):
-    raw = request.args.get(name, '', type=str)
+def _csv_arg(name, args=None):
+    raw = (args if args is not None else request.args).get(name, '', type=str)
     return [v.strip() for v in raw.split(',') if v.strip()] if raw else None
+
+
+def _data_table_filter_kwargs(args):
+    """Parse the RuleList / rule-data-table filter params from a MultiDict
+    into build_rules_data_table_query() kwargs. Shared by /rule/data_table
+    and bundle-from-filters so both see exactly the same filter set."""
+    sources = _csv_arg('sources', args)
+    source  = args.get('source', None, type=str)
+    if source:
+        sources = (sources or []) + [source]
+
+    branches = _csv_arg('branches', args)
+    branch   = args.get('branch', None, type=str)
+    if branch:
+        branches = (branches or []) + [branch]
+
+    authors_list  = _csv_arg('authors', args)
+    single_author = args.get('author', None, type=str)
+    author_filter = authors_list or ([single_author] if single_author else None)
+
+    ids_csv = _csv_arg('ids', args)
+    ids = [int(i) for i in ids_csv if i.isdigit()] if ids_csv else None
+
+    return dict(
+        search=args.get('search', None, type=str),
+        sort=args.get('sort', None, type=str),
+        direction=args.get('dir', 'asc', type=str),
+        source=sources,
+        user_id=args.get('user_id', None, type=int),
+        search_field=args.get('search_field', 'all', type=str),
+        exact_match=args.get('exact_match', 'false', type=str) == 'true',
+        rule_type=args.get('rule_type', None, type=str),
+        author=author_filter,
+        vulnerabilities=_csv_arg('vulnerabilities', args),
+        licenses=_csv_arg('licenses', args),
+        tags=_csv_arg('tags', args),
+        editor_names=_csv_arg('editors', args),
+        bundle_id=args.get('bundle_id', None, type=int),
+        attacks=_csv_arg('attacks', args),
+        status=args.get('status', None, type=str),
+        workspace_uuid=args.get('workspace_uuid', None, type=str),
+        exclude_workspace_uuid=args.get('exclude_workspace_uuid', None, type=str),
+        ids=ids,
+        has_cve=args.get('has_cve', 'false', type=str) == 'true',
+        quality_score_min=args.get('quality_score_min', None, type=float),
+        quality_score_max=args.get('quality_score_max', None, type=float),
+        has_ai_analysis=args.get('has_ai_analysis', 'false', type=str) == 'true',
+        has_relations=args.get('has_relations', 'false', type=str) == 'true',
+        branch=branches,
+    )
 
 
 @rule_blueprint.route("/data_table", methods=['GET'])
@@ -5022,51 +5091,10 @@ def rules_data_table():
     rule_type, author, sources, vulnerabilities, licenses, tags) on top of
     page / per_page / search / sort / dir.
     Response shape: { items, total, total_pages }."""
-    sources = _csv_arg('sources')
-    source  = request.args.get('source', None, type=str)
-    if source:
-        sources = (sources or []) + [source]
-
-    branches = _csv_arg('branches')
-    branch   = request.args.get('branch', None, type=str)
-    if branch:
-        branches = (branches or []) + [branch]
-
-    authors_list  = _csv_arg('authors')
-    single_author = request.args.get('author', None, type=str)
-    author_filter = authors_list or ([single_author] if single_author else None)
-
-    ids_csv = _csv_arg('ids')
-    ids = [int(i) for i in ids_csv if i.isdigit()] if ids_csv else None
-
     pagination = RuleModel.get_rules_data_table(
         page=request.args.get('page', 1, type=int),
         per_page=request.args.get('per_page', 10, type=int),
-        search=request.args.get('search', None, type=str),
-        sort=request.args.get('sort', None, type=str),
-        direction=request.args.get('dir', 'asc', type=str),
-        source=sources,
-        user_id=request.args.get('user_id', None, type=int),
-        search_field=request.args.get('search_field', 'all', type=str),
-        exact_match=request.args.get('exact_match', 'false', type=str) == 'true',
-        rule_type=request.args.get('rule_type', None, type=str),
-        author=author_filter,
-        vulnerabilities=_csv_arg('vulnerabilities'),
-        licenses=_csv_arg('licenses'),
-        tags=_csv_arg('tags'),
-        editor_names=_csv_arg('editors'),
-        bundle_id=request.args.get('bundle_id', None, type=int),
-        attacks=_csv_arg('attacks'),
-        status=request.args.get('status', None, type=str),
-        workspace_uuid=request.args.get('workspace_uuid', None, type=str),
-        exclude_workspace_uuid=request.args.get('exclude_workspace_uuid', None, type=str),
-        ids=ids,
-        has_cve=request.args.get('has_cve', 'false', type=str) == 'true',
-        quality_score_min=request.args.get('quality_score_min', None, type=float),
-        quality_score_max=request.args.get('quality_score_max', None, type=float),
-        has_ai_analysis=request.args.get('has_ai_analysis', 'false', type=str) == 'true',
-        has_relations=request.args.get('has_relations', 'false', type=str) == 'true',
-        branch=branches,
+        **_data_table_filter_kwargs(request.args),
     )
 
     items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)
@@ -5686,6 +5714,10 @@ def download_rules_export():
     if ids:
         filters["ids"] = ids
         rules = RuleModel.get_active_rules_by_ids(ids)
+    elif request.args.get("data_table_filters") == "1":
+        # RuleList sends its full /rule/data_table filter set (ATT&CK,
+        # branches, editors, CVE-only…) — apply it verbatim.
+        rules = RuleModel.build_rules_data_table_query(**_data_table_filter_kwargs(request.args)).all()
     else:
         query = RuleModel.filter_rules(
             search=filters["search"],
@@ -5764,7 +5796,23 @@ def bundle_from_filters():
         if len(explicit_ids) > MAX_BUNDLE_RULES:
             return jsonify({"message": f"Selection too large — maximum {MAX_BUNDLE_RULES} rules per bundle."}), 400
         rules_objects = RuleModel.get_active_rules_by_ids(explicit_ids)
+    elif data.get('filter_query') is not None:
+        # Same query string RuleList sends to /rule/data_table — so every
+        # filter the list supports (ATT&CK, branches, editors, CVE-only,
+        # quality range…) scopes the bundle exactly like what's on screen.
+        from werkzeug.datastructures import MultiDict
+        from urllib.parse import parse_qsl
+        args = MultiDict(parse_qsl(str(data.get('filter_query') or '')))
+        for k in ('page', 'per_page'):
+            args.pop(k, None)
+        if not any(v for k, v in args.items(multi=True) if k not in ('sort', 'dir', 'search_field', 'exact_match')):
+            return jsonify({"message": "At least one filter must be active to create a bundle."}), 400
+        query = RuleModel.build_rules_data_table_query(**_data_table_filter_kwargs(args))
+        rules_objects = query.limit(MAX_BUNDLE_RULES + 1).all()
+        if len(rules_objects) > MAX_BUNDLE_RULES:
+            return jsonify({"message": f"Too many rules match these filters — maximum {MAX_BUNDLE_RULES}. Please refine your filters."}), 400
     else:
+        # Legacy dict filters (older callers)
         filters = data.get('filters') or {}
         if not any([
             filters.get("search"), filters.get("rule_type"), filters.get("author"),

@@ -351,12 +351,20 @@ def link_bundle(ws_uuid):
         return jsonify({'success': False, 'message': "You don't have permission to edit this bundle"}), 403
 
     bundle.source_workspace_id = ws.id
+    WsModel.add_bundle_to_workspace(ws, bundle.id, commit=False)
     db.session.commit()
 
     log_activity('bundle.create', f"Associated bundle '{bundle.name}' with workspace '{ws.name}'",
                  target_type='bundle', target_id=bundle.id, target_uuid=bundle.uuid)
 
     return jsonify({'success': True, 'bundle': bundle.to_json()}), 201
+
+
+def _can_collect_bundle(bundle):
+    """Bundles a workspace may hold/show: public ones, the user's own
+    private ones, or any bundle for an admin. Deliberately stricter than
+    can_view_bundle — a private share link does not count."""
+    return bool(bundle) and (bundle.access or bundle.user_id == current_user.id or current_user.is_admin())
 
 
 @workspace_blueprint.route('/<ws_uuid>/bundles', methods=['GET'])
@@ -366,15 +374,29 @@ def list_workspace_bundles(ws_uuid):
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify([])
     from app.features.bundle import bundle_core as BundleModel
-    bundles = BundleModel.get_bundles_by_workspace(ws.id)
-    return jsonify([b.to_json() for b in bundles])
+    out = []
+    for link, bundle in WsModel.get_workspace_bundle_links(ws):
+        # A collected bundle may have gone private since — keep the link
+        # (the owner can still remove it) but don't leak its contents.
+        if not _can_collect_bundle(bundle):
+            out.append({'id': bundle.id, 'restricted': True,
+                        'added_at': link.added_at.strftime('%Y-%m-%d %H:%M') if link.added_at else None})
+            continue
+        j = bundle.to_json()
+        j['added_at'] = link.added_at.strftime('%Y-%m-%d %H:%M') if link.added_at else None
+        j['exported_from_here'] = bundle.source_workspace_id == ws.id
+        j['is_own'] = bundle.user_id == current_user.id
+        j['tags'] = BundleModel.get_tags_for_bundle_json(bundle.id)
+        out.append(j)
+    return jsonify(out)
 
 
-@workspace_blueprint.route('/<ws_uuid>/bundles/<int:bundle_id>', methods=['DELETE'])
+@workspace_blueprint.route('/<ws_uuid>/bundles', methods=['POST'])
 @login_required
-def unlink_bundle(ws_uuid, bundle_id):
-    """Remove the association between a bundle and this workspace — the
-    bundle itself (and its rules) is left untouched."""
+def add_workspace_bundles(ws_uuid):
+    """Collect existing bundles into this workspace — any bundle the user
+    can view, independently of the workspace's rules. Never modifies the
+    bundles themselves."""
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws:
         return jsonify({'success': False}), 404
@@ -384,12 +406,38 @@ def unlink_bundle(ws_uuid, bundle_id):
     from app.features.bundle import bundle_core as BundleModel
     from app import db
 
-    bundle = BundleModel.get_bundle_by_id(bundle_id)
-    if not bundle or bundle.source_workspace_id != ws.id:
-        return jsonify({'success': False}), 404
+    data = request.get_json(force=True) or {}
+    raw_ids = data.get('bundle_ids') or ([data['bundle_id']] if data.get('bundle_id') else [])
+    bundle_ids = [int(b) for b in raw_ids if str(b).isdigit()][:100]
+    if not bundle_ids:
+        return jsonify({'success': False, 'message': 'bundle_ids is required'}), 400
 
-    bundle.source_workspace_id = None
+    added = 0
+    for bid in bundle_ids:
+        bundle = BundleModel.get_bundle_by_id(bid)
+        if not _can_collect_bundle(bundle):
+            continue
+        if WsModel.add_bundle_to_workspace(ws, bid, commit=False):
+            added += 1
     db.session.commit()
+    if added:
+        log_activity('workspace.add_bundles', f"Added {added} bundle(s) to workspace '{ws.name}'",
+                     target_type='workspace', target_id=ws.id, target_uuid=ws.uuid)
+    return jsonify({'success': True, 'added': added})
+
+
+@workspace_blueprint.route('/<ws_uuid>/bundles/<int:bundle_id>', methods=['DELETE'])
+@login_required
+def unlink_bundle(ws_uuid, bundle_id):
+    """Remove a bundle from this workspace — the bundle itself (and its
+    rules) is left untouched."""
+    ws = WsModel.get_workspace_by_uuid(ws_uuid)
+    if not ws:
+        return jsonify({'success': False}), 404
+    if ws.user_id != current_user.id and not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    if not WsModel.remove_bundle_from_workspace(ws, bundle_id):
+        return jsonify({'success': False}), 404
     return jsonify({'success': True})
 
 

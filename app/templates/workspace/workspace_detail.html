@@ -499,13 +499,38 @@
         <div class="card border-0 card_detail border-top shadow-lg mb-4 wd-section-card" style="border-radius:12px;">
             <div class="card-watermark-detail"><i class="fa-solid fa-boxes-stacked"></i></div>
             <div class="card-body p-4">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.04em;">
-                        <i class="fa-solid fa-boxes-stacked me-1"></i>Bundles exported from this workspace ([[ associatedBundles.length ]])
-                    </span>
-                    <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" @click="openExportBundleModal">
-                        <i class="fa-solid fa-plus me-1"></i>Export as Bundle
-                    </button>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <div>
+                        <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.04em;">
+                            <i class="fa-solid fa-boxes-stacked me-1"></i>Bundle collection ([[ associatedBundles.length ]])
+                        </span>
+                        <div class="small" style="color:var(--subtle-text-color);font-size:.78rem;">
+                            Any bundle you can see — yours or the community's — independent of this workspace's rules.
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="openExportBundleModal"
+                                :disabled="kpiCounts.total === 0"
+                                :title="kpiCounts.total === 0 ? 'Add rules to this workspace first' : 'Bundle this workspace\'s rules'">
+                            <i class="fa-solid fa-layer-group me-1"></i>Export rules as Bundle
+                        </button>
+                        <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" @click="openAddBundles">
+                            <i class="fa-solid fa-plus me-1"></i>Add Bundles
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="associatedBundles.length" class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <div class="wd-bundle-filter">
+                        <button v-for="f in bundleFilterOptions" :key="f.key" type="button"
+                                :class="{ active: bundleFilter === f.key }" @click="bundleFilter = f.key">
+                            [[ f.label ]] <span class="wd-bundle-filter__count">[[ bundleFilterCount(f.key) ]]</span>
+                        </button>
+                    </div>
+                    <div class="wd-bundle-search ms-auto">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="search" v-model="bundleSearch" placeholder="Filter bundles…">
+                    </div>
                 </div>
 
                 <div v-if="bundlesLoading" class="text-center py-4 text-muted">
@@ -513,50 +538,59 @@
                 </div>
                 <div v-else-if="associatedBundles.length === 0" class="wd-empty-state">
                     <i class="fa-solid fa-boxes-stacked"></i>
-                    <p>No bundles yet. Export this workspace's rules into a bundle to share or deploy them as a ruleset.</p>
+                    <p>No bundles yet. Collect existing bundles here, or export this workspace's rules into a new one.</p>
+                </div>
+                <div v-else-if="filteredBundles.length === 0" class="wd-empty-state">
+                    <i class="fa-solid fa-filter-circle-xmark"></i>
+                    <p>No bundle matches this filter.</p>
                 </div>
                 <div v-else class="row g-3">
-                    <div class="col-md-6" v-for="bundle in associatedBundles" :key="bundle.id">
-                        <div class="card h-100 border shadow-none hover-shadow transition-all rounded-3 overflow-hidden position-relative">
-                            <button type="button" class="btn btn-sm btn-outline-danger rounded-circle position-absolute"
-                                    style="top:8px; right:8px; width:26px; height:26px; padding:0; z-index:2; font-size:.7rem;"
-                                    title="Remove this bundle from the workspace (the bundle itself is kept)"
-                                    @click.prevent.stop="unlinkBundle(bundle)">
-                                <i class="fa-solid fa-link-slash"></i>
+                    <div class="col-md-6 col-xl-4" v-for="bundle in filteredBundles" :key="bundle.id">
+                        <div v-if="bundle.restricted" class="wd-bundle-card wd-bundle-card--restricted">
+                            <div class="wd-bundle-card__head">
+                                <div class="wd-bundle-card__icon"><i class="fa-solid fa-lock"></i></div>
+                                <div class="flex-grow-1" style="min-width:0;">
+                                    <div class="wd-bundle-card__title">Private bundle</div>
+                                    <div class="wd-bundle-card__meta">No longer visible to you · added [[ bundle.added_at ]]</div>
+                                </div>
+                            </div>
+                            <button type="button" class="wd-bundle-card__remove" title="Remove from workspace" @click.stop="unlinkBundle(bundle)">
+                                <i class="fa-solid fa-xmark"></i>
                             </button>
-                            <a :href="`/bundle/detail/${bundle.id}`" class="text-decoration-none h-100 d-block">
-                                <div class="card-body p-3">
-                                    <div class="d-flex align-items-start gap-3">
-                                        <div class="avatar-circle-sm bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center rounded-circle shadow-sm"
-                                            style="min-width: 42px; height: 42px;">
-                                            <i class="fas fa-layer-group"></i>
-                                        </div>
-                                        <div class="flex-grow-1 min-w-0" style="padding-right:1.75rem;">
-                                            <div class="d-flex justify-content-between align-items-start gap-2">
-                                                <h6 class="fw-bold mb-1" style="word-break: break-word; color:var(--text-color);">
-                                                    [[ bundle.name ]]
-                                                </h6>
-                                                <span class="badge bg-dark rounded-pill flex-shrink-0" style="font-size: 0.65rem;">
-                                                    [[ bundle.number_of_rules ]] Rules
-                                                </span>
-                                            </div>
-                                            <p class="text-muted small mb-2" style="font-size: 0.8rem;
-                                                line-height: 1.4;
-                                                display: -webkit-box;
-                                                -webkit-line-clamp: 3;
-                                                -webkit-box-orient: vertical;
-                                                overflow: hidden;
-                                                word-break: break-word;">
-                                                [[ bundle.description ]]
-                                            </p>
-                                            <div class="d-flex align-items-center justify-content-between mt-2">
-                                                <span v-if="!bundle.access" class="badge rounded-pill" style="background:var(--light-bg-color); color:var(--subtle-text-color); border:1px solid var(--border-color); font-size:.65rem;">
-                                                    <i class="fa-solid fa-lock me-1"></i>Private
-                                                </span>
-                                                <small class="text-muted ms-auto" style="font-size:.7rem;">[[ bundle.created_at ]]</small>
-                                            </div>
+                        </div>
+                        <div v-else class="wd-bundle-card card-security-premium">
+                            <button type="button" class="wd-bundle-card__remove"
+                                    title="Remove from this workspace (the bundle itself is kept)"
+                                    @click.stop="unlinkBundle(bundle)">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                            <a :href="`/bundle/detail/${bundle.id}`" class="wd-bundle-card__link">
+                                <div class="wd-bundle-card__head">
+                                    <div class="wd-bundle-card__icon"><i class="fa-solid fa-layer-group"></i></div>
+                                    <div class="flex-grow-1" style="min-width:0;">
+                                        <div class="wd-bundle-card__title" :title="bundle.name">[[ bundle.name ]]</div>
+                                        <div class="wd-bundle-card__meta">
+                                            <img v-if="bundle.author_avatar" :src="bundle.author_avatar" class="wd-bundle-card__avatar" alt="">
+                                            <span>[[ bundle.is_own ? 'You' : (bundle.user_name || bundle.author) ]]</span>
                                         </div>
                                     </div>
+                                </div>
+                                <p class="wd-bundle-card__desc" v-if="bundle.description">[[ bundle.description ]]</p>
+                                <p class="wd-bundle-card__desc fst-italic" v-else>No description.</p>
+                                <div class="wd-bundle-card__chips">
+                                    <span class="wd-bundle-chip"><i class="fa-solid fa-shield-halved"></i>[[ bundle.number_of_rules ]] rule[[ bundle.number_of_rules !== 1 ? 's' : '' ]]</span>
+                                    <span v-for="fmt in (bundle.list_of_format_of_rules || []).filter(Boolean).slice(0, 3)" :key="fmt" class="wd-bundle-chip wd-bundle-chip--fmt">[[ fmt ]]</span>
+                                    <span v-if="(bundle.list_of_format_of_rules || []).filter(Boolean).length > 3" class="wd-bundle-chip">+[[ bundle.list_of_format_of_rules.filter(Boolean).length - 3 ]]</span>
+                                </div>
+                                <div class="wd-bundle-card__foot">
+                                    <span v-if="bundle.exported_from_here" class="wd-bundle-chip wd-bundle-chip--export" title="Created from this workspace's rules">
+                                        <i class="fa-solid fa-arrow-up-from-bracket"></i>Exported here
+                                    </span>
+                                    <span v-if="!bundle.access" class="wd-bundle-chip"><i class="fa-solid fa-lock"></i>Private</span>
+                                    <span v-if="bundle.is_verified" class="wd-bundle-chip wd-bundle-chip--verified"><i class="fa-solid fa-circle-check"></i>Verified</span>
+                                    <span class="ms-auto" title="Added to this workspace">
+                                        <i class="fa-regular fa-clock me-1"></i>[[ (bundle.added_at || '').slice(0, 10) ]]
+                                    </span>
                                 </div>
                             </a>
                         </div>
@@ -683,6 +717,88 @@
                     <span class="text-muted" style="font-size:.82rem;">
                         Have an idea for this space? Let us know — this roadmap will keep growing.
                     </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── ADD BUNDLES MODAL ────────────────────────────── -->
+    <!-- Collect existing bundles (own or community) into the workspace —
+         independent of the workspace's rules. -->
+    <div class="modal fade" id="addBundlesModal" tabindex="-1" aria-hidden="true" style="z-index:2000;">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg" style="border-radius:20px;">
+                <div class="modal-header border-0 pb-0 pt-4 px-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center shadow-sm bg-primary"
+                             style="width:52px;height:52px;color:white;flex-shrink:0;">
+                            <i class="fa-solid fa-boxes-stacked" style="font-size:1.3rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0">Add Bundles</h5>
+                            <p class="text-muted small mb-0">Collect bundles into “[[ wsNameShort ]]”</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <div class="wd-bundle-search flex-grow-1">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="search" v-model="bundlePicker.search" placeholder="Search bundles by name or description…">
+                        </div>
+                        <div class="wd-bundle-filter">
+                            <button type="button" :class="{ active: bundlePicker.scope === 'all' }" @click="bundlePicker.scope = 'all'">All</button>
+                            <button type="button" :class="{ active: bundlePicker.scope === 'mine' }" @click="bundlePicker.scope = 'mine'">Mine</button>
+                        </div>
+                    </div>
+
+                    <div v-if="bundlePicker.loading" class="text-center py-5 text-muted">
+                        <i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading bundles…
+                    </div>
+                    <div v-else-if="bundlePicker.items.length === 0" class="wd-empty-state">
+                        <i class="fa-solid fa-box-open"></i>
+                        <p>No bundle found.</p>
+                    </div>
+                    <div v-else class="d-flex flex-column gap-2">
+                        <label v-for="b in bundlePicker.items" :key="b.id" class="wd-bundle-pick"
+                               :class="{ 'is-selected': bundlePicker.selected.has(b.id), 'is-added': associatedBundleIds.has(b.id) }">
+                            <input type="checkbox" class="form-check-input mt-0"
+                                   :disabled="associatedBundleIds.has(b.id)"
+                                   :checked="associatedBundleIds.has(b.id) || bundlePicker.selected.has(b.id)"
+                                   @change="toggleBundlePick(b.id)">
+                            <div class="wd-bundle-card__icon wd-bundle-card__icon--sm"><i class="fa-solid fa-layer-group"></i></div>
+                            <div class="wd-bundle-pick__body">
+                                <div class="d-flex align-items-center gap-2" style="min-width:0;">
+                                    <span class="fw-semibold text-truncate" style="color:var(--text-color);">[[ b.name ]]</span>
+                                    <i v-if="!b.access" class="fa-solid fa-lock small" style="color:var(--subtle-text-color);" title="Private"></i>
+                                    <i v-if="b.is_verified" class="fa-solid fa-circle-check small text-primary" title="Verified"></i>
+                                </div>
+                                <div class="small text-truncate" style="color:var(--subtle-text-color);">
+                                    [[ b.user_id === currentUserId ? 'You' : (b.user_name || b.author) ]] · [[ b.number_of_rules ]] rules
+                                </div>
+                                <div v-if="b.description" class="wd-bundle-pick__desc" :title="b.description">[[ b.description ]]</div>
+                            </div>
+                            <span v-if="associatedBundleIds.has(b.id)" class="wd-bundle-chip wd-bundle-chip--export flex-shrink-0">
+                                <i class="fa-solid fa-check"></i>In workspace
+                            </span>
+                        </label>
+                    </div>
+
+                    <pagination-component v-if="bundlePicker.totalPages > 1"
+                        :current-page="bundlePicker.page"
+                        :total-pages="bundlePicker.totalPages"
+                        @change-page="p => bundlePicker.page = p">
+                    </pagination-component>
+                </div>
+                <div class="modal-footer border-0 px-4 pb-4 pt-0">
+                    <span class="small text-muted me-auto">[[ bundlePicker.selected.size ]] selected</span>
+                    <button class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary rounded-pill px-4"
+                            :disabled="bundlePicker.selected.size === 0 || bundlePicker.saving" @click="submitAddBundles">
+                        <span v-if="bundlePicker.saving" class="spinner-border spinner-border-sm me-2"></span>
+                        <i v-else class="fa-solid fa-plus me-1"></i>Add [[ bundlePicker.selected.size || '' ]] bundle[[ bundlePicker.selected.size !== 1 ? 's' : '' ]]
+                    </button>
                 </div>
             </div>
         </div>
@@ -1010,6 +1126,7 @@
     import VulnerabilityDisplay   from '/static/js/vulnerability/vulnerabilityDisplay.js'
     import AttackDisplay          from '/static/js/attack/attackDisplay.js'
     import RuleBundleManager      from '/static/js/rule/ruleBundleManager.js'
+    import PaginationComponent    from '/static/js/rule/paginationComponent.js'
     import BundleRuleSelector     from '/static/js/bundle/BundleRuleSelector.js'
     import { create_message } from '/static/js/toaster.js'
 
@@ -1061,7 +1178,7 @@
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { RuleList, SmartEditor, IconPicker, TagInput, AttackInput, TagDisplay, UserChip, VulnerabilityInput, VulnerabilityDisplay, AttackDisplay, RuleBundleManager, BundleRuleSelector, BundleStructureEditor },
+        components: { RuleList, SmartEditor, IconPicker, TagInput, AttackInput, TagDisplay, UserChip, VulnerabilityInput, VulnerabilityDisplay, AttackDisplay, RuleBundleManager, BundleRuleSelector, BundleStructureEditor, PaginationComponent },
         setup() {
             const wsColorRef = ref(wsColor)
             const wsIconRef  = ref(wsIcon)
@@ -1727,7 +1844,7 @@
             }
 
             async function unlinkBundle(bundle) {
-                if (!confirm(`Remove "${bundle.name}" from this workspace? The bundle itself won't be deleted.`)) return
+                if (!confirm(`Remove "${bundle.name || 'this bundle'}" from this workspace? The bundle itself won't be deleted.`)) return
                 try {
                     const csrf = document.getElementById('csrf_token')?.value || csrfToken
                     const r = await fetch(`/workspace/${wsUuid}/bundles/${bundle.id}`, {
@@ -1739,6 +1856,104 @@
                         create_message('Bundle removed from workspace', 'success')
                     }
                 } catch { create_message('Failed to remove bundle', 'danger') }
+            }
+
+            // ── Bundle collection: filter/search within the tab ────────────
+            const bundleFilter = ref('all')
+            const bundleSearch = ref('')
+            const bundleFilterOptions = [
+                { key: 'all',       label: 'All' },
+                { key: 'mine',      label: 'Mine' },
+                { key: 'community', label: 'Community' },
+                { key: 'exported',  label: 'Exported here' },
+            ]
+            function _bundleMatchesFilter(b, key) {
+                if (key === 'mine')      return !b.restricted && b.is_own
+                if (key === 'community') return b.restricted || !b.is_own
+                if (key === 'exported')  return !b.restricted && b.exported_from_here
+                return true
+            }
+            function bundleFilterCount(key) {
+                return associatedBundles.value.filter(b => _bundleMatchesFilter(b, key)).length
+            }
+            const filteredBundles = computed(() => {
+                const q = bundleSearch.value.trim().toLowerCase()
+                return associatedBundles.value.filter(b =>
+                    _bundleMatchesFilter(b, bundleFilter.value) &&
+                    (!q || (!b.restricted && ((b.name || '').toLowerCase().includes(q) ||
+                                              (b.description || '').toLowerCase().includes(q))))
+                )
+            })
+            const associatedBundleIds = computed(() => new Set(associatedBundles.value.map(b => b.id)))
+
+            // ── Add existing bundles (picker modal) ────────────────────────
+            let _addBundlesModal = null
+            const bundlePicker = Vue.reactive({
+                search: '', scope: 'all', page: 1, totalPages: 1,
+                items: [], loading: false, saving: false, selected: new Set(),
+            })
+            let _pickerSeq = 0, _pickerDebounce = null
+            async function loadBundlePicker() {
+                const mySeq = ++_pickerSeq
+                bundlePicker.loading = true
+                try {
+                    const p = new URLSearchParams({ page: bundlePicker.page, per_page: 8, sort: 'updated_at', dir: 'desc' })
+                    if (bundlePicker.search.trim()) p.set('search', bundlePicker.search.trim())
+                    if (bundlePicker.scope === 'mine' && currentUserId) p.set('user_id', currentUserId)
+                    const r = await fetch(`/bundle/data_table?${p}`)
+                    const data = await r.json()
+                    if (mySeq !== _pickerSeq) return
+                    bundlePicker.items = data.items || []
+                    bundlePicker.totalPages = data.total_pages || 1
+                } catch {
+                    if (mySeq === _pickerSeq) bundlePicker.items = []
+                } finally {
+                    if (mySeq === _pickerSeq) bundlePicker.loading = false
+                }
+            }
+            watch(() => [bundlePicker.search, bundlePicker.scope], () => {
+                clearTimeout(_pickerDebounce)
+                _pickerDebounce = setTimeout(() => {
+                    if (bundlePicker.page !== 1) bundlePicker.page = 1   // page watcher reloads
+                    else loadBundlePicker()
+                }, 250)
+            })
+            watch(() => bundlePicker.page, loadBundlePicker)
+
+            function openAddBundles() {
+                bundlePicker.selected = new Set()
+                bundlePicker.search = ''
+                bundlePicker.scope = 'all'
+                bundlePicker.page = 1
+                loadBundlePicker()
+                _addBundlesModal.show()
+            }
+            function toggleBundlePick(id) {
+                const next = new Set(bundlePicker.selected)
+                next.has(id) ? next.delete(id) : next.add(id)
+                bundlePicker.selected = next
+            }
+            async function submitAddBundles() {
+                if (!bundlePicker.selected.size) return
+                bundlePicker.saving = true
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}/bundles`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                        body: JSON.stringify({ bundle_ids: [...bundlePicker.selected] }),
+                    })
+                    const data = await r.json()
+                    if (r.ok && data.success) {
+                        create_message(`${data.added} bundle${data.added !== 1 ? 's' : ''} added to workspace`, 'success')
+                        _addBundlesModal.hide()
+                        fetchAssociatedBundles()
+                    } else {
+                        create_message(data.message || 'Failed to add bundles', 'danger')
+                    }
+                } catch { create_message('Failed to add bundles', 'danger') } finally {
+                    bundlePicker.saving = false
+                }
             }
 
             function resetExportView() {
@@ -1769,8 +1984,7 @@
                     })
                     const data = await r.json()
                     if (data.success) {
-                        associatedBundles.value = associatedBundles.value.filter(b => b.id !== data.bundle.id)
-                        associatedBundles.value.unshift(data.bundle)
+                        fetchAssociatedBundles()
                         exportView.value = 'structure'
                     } else {
                         create_message(data.message || 'Failed to export bundle', 'danger')
@@ -1889,6 +2103,7 @@
                 const exportBundleEl = document.getElementById('exportBundleModal')
                 _exportBundleModal  = new bootstrap.Modal(exportBundleEl)
                 exportBundleEl.addEventListener('hidden.bs.modal', resetExportView)
+                _addBundlesModal    = new bootstrap.Modal(document.getElementById('addBundlesModal'))
                 const addRulesEl    = document.getElementById('addRulesModal')
                 _addRulesModal      = new bootstrap.Modal(addRulesEl)
                 addRulesEl.addEventListener('hidden.bs.modal', () => { showAddRules.value = false })
@@ -1921,6 +2136,8 @@
                 associatedBundles, bundlesLoading, workspaceRuleIds,
                 exportView, pendingBundleId, linkingBundle,
                 fetchAssociatedBundles, openExportBundleModal, onBundleManagerCompleted, unlinkBundle,
+                bundleFilter, bundleSearch, bundleFilterOptions, bundleFilterCount, filteredBundles, associatedBundleIds,
+                bundlePicker, openAddBundles, toggleBundlePick, submitAddBundles,
                 exportStructureEditor, exportBundleRuleIds, exportStructureReady,
                 onExportTreeReady, onExportTreeSaved, onExportAddRules, onExportPreviewRule,
                 exportWin, startExportDrag, startExportResize,

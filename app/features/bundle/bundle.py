@@ -1670,17 +1670,26 @@ def download_bundle_misp():
 ################################
 
 @bundle_blueprint.route("/get_bundle_list_rule_part_of", methods=['GET'])
-def get_bundle_list_rule_part_of() :     
-    """get all bundles where the rule is part of"""     
-    rule_id = request.args.get('rule_id',  type=int)
+def get_bundle_list_rule_part_of():
+    """Bundles containing a rule (visibility-aware), each enriched with where
+    the rule sits in that bundle's folder structure, its tags and whether the
+    viewer owns it — feeds the rule detail Overview strip and Bundles tab."""
+    rule_id = request.args.get('rule_id', type=int)
     if not rule_id:
         return {"message": "No rule id provided"}, 400
 
     bundles = BundleModel.get_bundles_by_rule(rule_id)
-    if bundles:
-        return {"bundles": [b.to_json() for b in bundles]}, 200
-
-    return {"message": "No bundles found for this rule"}, 200
+    paths = BundleModel.get_rule_paths_in_bundles(rule_id, [b.id for b in bundles])
+    my_id = current_user.id if current_user.is_authenticated else None
+    out = []
+    for b in bundles:
+        j = b.to_json()
+        j.pop('view_count', None)
+        j['rule_paths'] = paths.get(b.id, [])
+        j['is_own'] = my_id is not None and b.user_id == my_id
+        j['tags'] = BundleModel.get_tags_for_bundle_json(b.id)
+        out.append(j)
+    return {"bundles": out, "total": len(out)}, 200
 
 
 ###############################

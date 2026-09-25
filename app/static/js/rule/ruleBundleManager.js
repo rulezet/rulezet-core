@@ -4,6 +4,8 @@ const RuleBundleManager = {
         isOverLimit: Boolean,
         maxLimit: Number,
         filters: Object,
+        // Raw RuleList query string — preferred over `filters` when present
+        filterQuery: { type: String, default: null },
         csrf: String,
         // Mode "single rule" — si ruleId est fourni, on ignore les filtres
         ruleId: { type: Number, default: null },
@@ -61,8 +63,12 @@ const RuleBundleManager = {
                 // explicit multi-selection mode — send IDs, not filters
                 payload  = { ...base, ids: props.ruleIds };
                 endpoint = '/rule/bundle/create-from-filters';
+            } else if (props.filterQuery) {
+                // filter-based mode — exact RuleList query string
+                payload  = { ...base, filter_query: props.filterQuery };
+                endpoint = '/rule/bundle/create-from-filters';
             } else {
-                // filter-based mode
+                // filter-based mode (legacy filter dict)
                 payload  = { ...base, filters: props.filters };
                 endpoint = '/rule/bundle/create-from-filters';
             }

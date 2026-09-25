@@ -67,6 +67,9 @@
                             <span class="wsgc-count mt-1 d-inline-flex">
                                 <i class="fa-solid fa-shield-halved"></i>[[ ws.rule_count ]] rule[[ ws.rule_count !== 1 ? 's' : '' ]]
                             </span>
+                            <span v-if="ws.bundle_count" class="wsgc-count mt-1 ms-1 d-inline-flex">
+                                <i class="fa-solid fa-layer-group"></i>[[ ws.bundle_count ]] bundle[[ ws.bundle_count !== 1 ? 's' : '' ]]
+                            </span>
                         </div>
                     </div>
                     <p v-if="showAll" class="text-muted mb-1" style="font-size:.75rem;">

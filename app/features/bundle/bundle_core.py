@@ -685,31 +685,53 @@ def get_rules_from_bundle(bundle_id: int) -> List[Rule]:
     )
 
 def get_bundles_by_rule(rule_id: int) -> List[Bundle]:
-    """
-    Retrieve all bundles that contain a specific rule and are publicly accessible.
-
-    :param rule_id: ID of the rule to search for.
-    :return: List of Bundle instances containing the specified rule and with access=True.
-    """
-    return (
+    """Bundles containing a rule that the current user may see: public ones,
+    plus (when logged in) their own private bundles — all of them for an
+    admin. Most recently updated first."""
+    from sqlalchemy import or_
+    q = (
         db.session.query(Bundle)
         .join(BundleRuleAssociation, BundleRuleAssociation.bundle_id == Bundle.id)
-        .filter(
-            BundleRuleAssociation.rule_id == rule_id,
-            Bundle.access.is_(True)
-        )
-        .all()
+        .filter(BundleRuleAssociation.rule_id == rule_id)
     )
+    if not current_user.is_authenticated:
+        q = q.filter(Bundle.access.is_(True))
+    elif not current_user.is_admin():
+        q = q.filter(or_(Bundle.access.is_(True), Bundle.user_id == current_user.id))
+    return q.distinct().order_by(Bundle.updated_at.desc()).all()
 
 
-def get_bundles_by_workspace(workspace_id: int) -> List[Bundle]:
-    """Bundles generated via a workspace's "Export as Bundle" action."""
-    return (
-        Bundle.query
-        .filter(Bundle.source_workspace_id == workspace_id)
-        .order_by(Bundle.created_at.desc())
-        .all()
-    )
+def get_rule_paths_in_bundles(rule_id: int, bundle_ids: list) -> dict:
+    """{bundle_id: ["folder/sub/file.yar", ...]} — where a rule sits in each
+    bundle's folder structure. Walks up from the rule's nodes one level per
+    query (depth-bounded) instead of loading every bundle's whole tree.
+    A bundle holding the rule without placing it in the tree maps to []."""
+    from app.core.db_class.db import BundleNode
+    if not bundle_ids:
+        return {}
+    leaves = (db.session.query(BundleNode.id, BundleNode.bundle_id, BundleNode.parent_id, BundleNode.name)
+              .filter(BundleNode.rule_id == rule_id, BundleNode.bundle_id.in_(bundle_ids)).all())
+    nodes = {n.id: n for n in leaves}
+    pending = {n.parent_id for n in leaves if n.parent_id}
+    for _ in range(32):
+        pending -= nodes.keys()
+        if not pending:
+            break
+        rows = (db.session.query(BundleNode.id, BundleNode.bundle_id, BundleNode.parent_id, BundleNode.name)
+                .filter(BundleNode.id.in_(pending)).all())
+        for r in rows:
+            nodes[r.id] = r
+        pending = {r.parent_id for r in rows if r.parent_id}
+
+    out = {bid: [] for bid in bundle_ids}
+    for leaf in leaves:
+        parts, cur, seen = [], leaf, set()
+        while cur is not None and cur.id not in seen:
+            seen.add(cur.id)
+            parts.append(cur.name)
+            cur = nodes.get(cur.parent_id) if cur.parent_id else None
+        out.setdefault(leaf.bundle_id, []).append('/'.join(reversed(parts)))
+    return out
 
 
 @tracked("visibility")
