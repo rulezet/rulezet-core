@@ -77,7 +77,10 @@ def home() -> render_template:
     # (not via @cache.cached on the whole route) because show_import_hint
     # and the CSRF token below are per-user/per-session and must never be
     # served from a shared cache.
-    platform_stats = cache.get('home_platform_stats')
+    try:
+        platform_stats = cache.get('home_platform_stats')
+    except Exception:            # cache backend down (e.g. Redis restarting)
+        platform_stats = None
     if platform_stats is None:
         platform_stats = {
             'total_rules':   Rule.query.filter_by(is_deleted=False).count(),
@@ -85,7 +88,10 @@ def home() -> render_template:
             'total_attacks': AttackTechnique.query.count(),
             'rule_formats':  RuleModel.get_all_rule_format(),
         }
-        cache.set('home_platform_stats', platform_stats, timeout=60 * 60 * 6)
+        try:
+            cache.set('home_platform_stats', platform_stats, timeout=60 * 60 * 6)
+        except Exception:
+            pass
     total_rules   = platform_stats['total_rules']
     total_bundles = platform_stats['total_bundles']
     total_attacks = platform_stats['total_attacks']

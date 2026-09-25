@@ -33,6 +33,22 @@ cache = Cache()
 # wiped on a worker recycle is irrelevant for a 60-second entry.
 memory_cache = Cache()
 
+def _fallback_if_redis_unavailable(app):
+    """CACHE_TYPE=RedisCache is opt-in (.env). If the redis package is
+    missing or the server doesn't answer at startup, fall back to the
+    default FileSystemCache instead of failing every cached request — a
+    cache is an optimisation, it must never take the site down."""
+    if app.config.get('CACHE_TYPE') != 'RedisCache':
+        return
+    try:
+        import redis
+        redis.Redis.from_url(app.config.get('CACHE_REDIS_URL') or 'redis://localhost:6379/0',
+                             socket_connect_timeout=2, socket_timeout=2).ping()
+    except Exception as e:
+        print(f"[cache] Redis unavailable ({e.__class__.__name__}: {e}) — falling back to FileSystemCache")
+        app.config['CACHE_TYPE'] = 'FileSystemCache'
+
+
 def create_app(start_worker=True):
     load_dotenv()
 
@@ -69,6 +85,7 @@ def create_app(start_worker=True):
     sess.init_app(app)
 
     mail.init_app(app)
+    _fallback_if_redis_unavailable(app)
     cache.init_app(app)
     memory_cache.init_app(app, config={
         'CACHE_TYPE':            app.config.get('MEMORY_CACHE_TYPE', 'SimpleCache'),
