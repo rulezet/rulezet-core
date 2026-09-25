@@ -55,3 +55,4 @@ app/modules/misp-taxonomies
 app/modules/cti
 app/modules/misp-galaxy
 app/modules/misp-taxonomies
+data/flask_cache/*
