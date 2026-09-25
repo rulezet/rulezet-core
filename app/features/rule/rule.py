@@ -210,7 +210,10 @@ def ai_generate_rule():
         for event in RuleGeneratorModel.run_ai_generate_streaming(fresh_user, description, sample=sample):
             yield json.dumps(event) + "\n"
 
-    return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
+    # X-Accel-Buffering: no — behind nginx the step events must reach the
+    # browser as they are produced, not all at once when the stream ends.
+    return Response(stream_with_context(generate()), mimetype='application/x-ndjson',
+                    headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache'})
 
 
 @rule_blueprint.route("/rules_list", methods=['GET'])
@@ -3071,7 +3074,10 @@ def bad_rule_ai_fix(rule_id):
         for event in BadRuleModel.run_ai_fix_streaming(fresh_bad_rule, fresh_user):
             yield json.dumps(event) + "\n"
 
-    return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
+    # X-Accel-Buffering: no — behind nginx the step events must reach the
+    # browser as they are produced, not all at once when the stream ends.
+    return Response(stream_with_context(generate()), mimetype='application/x-ndjson',
+                    headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache'})
 
 @rule_blueprint.route('/bad_rule/<int:rule_id>/delete', methods=['GET', 'POST'])
 @login_required

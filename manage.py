@@ -352,6 +352,54 @@ def cmd_init() -> None:
     ok("Ready. Run:  python3 manage.py start")
 
 
+# Launch settings manage.py itself reads — taken from .env too (the shell
+# environment still wins), so the deploy scripts can just edit .env. Only
+# these keys: everything else in .env is loaded by the app, as before.
+_LAUNCH_ENV_KEYS = ("PORT", "GUNICORN_BIND_HOST", "GUNICORN_THREADS",
+                    "API_PORT", "API_GUNICORN_THREADS", "LOG_DIR")
+
+
+def _load_launch_env() -> None:
+    env_file = ROOT / ".env"
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if key in _LAUNCH_ENV_KEYS:
+            os.environ.setdefault(key, value.strip().strip('"').strip("'"))
+
+
+def _gunicorn_cmd(bind: str, threads: str, log_name: str) -> list:
+    """One gunicorn serving wsgi:app. Logs go to stdout (the screen) unless
+    LOG_DIR is set, then to LOG_DIR/<log_name>-access.log / -error.log."""
+    log_dir = os.environ.get("LOG_DIR", "").strip()
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+        access_log = os.path.join(log_dir, f"{log_name}-access.log")
+        error_log = os.path.join(log_dir, f"{log_name}-error.log")
+    else:
+        access_log = error_log = "-"
+    return [
+        GUNICORN,
+        "wsgi:app",
+        "--bind", bind,
+        "--worker-class", "gthread",
+        "--workers", "1",
+        "--threads", threads,
+        "--timeout", "120",
+        "--max-requests", "1000",
+        "--max-requests-jitter", "100",
+        "--access-logfile", access_log,
+        "--error-logfile", error_log,
+        # [site] / [api] prefix so both streams stay readable when they share stdout
+        "--access-logformat", f'[{log_name}] %(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s %(L)ss "%(f)s" "%(a)s"',
+    ]
+
+
 def _run_gunicorn_with_worker(flaskenv: str, port: str) -> None:
     """Starts worker.py (background job worker, telemetry loop, update-
     checker, both schedulers — its own process, never inside a gunicorn
@@ -362,36 +410,47 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str) -> None:
     Werkzeug dev server. That means no code-reload-on-save in dev anymore,
     traded for catching gunicorn/worker-split issues here instead of only
     in prod.
+
+    Optional (.env), all off by default — nothing changes unless set:
+      GUNICORN_BIND_HOST  address to listen on (default 0.0.0.0). Behind
+                          nginx (deploy/nginx/), set 127.0.0.1.
+      API_PORT            also start a SECOND gunicorn, dedicated to the
+                          REST API (/api/…), on this port. nginx routes
+                          /api/ to it: an API flood then saturates that
+                          process only — the website keeps its own.
+                          Only meaningful behind nginx.
+      API_GUNICORN_THREADS  threads of the API process (default 8).
+      LOG_DIR             write access/error logs to files there
+                          (site-*.log, api-*.log) instead of stdout.
     """
     worker_proc = subprocess.Popen(
         [PYTHON, "worker.py"], cwd=ROOT,
         env={**_venv_env(), "FLASKENV": flaskenv},
     )
+    _load_launch_env()
+    host = os.environ.get("GUNICORN_BIND_HOST", "0.0.0.0").strip() or "0.0.0.0"
+    api_port = os.environ.get("API_PORT", "").strip()
+    api_proc = None
     try:
+        if api_port:
+            info(f"API process on {host}:{api_port} (route /api/ to it in nginx)")
+            api_proc = subprocess.Popen(
+                _gunicorn_cmd(f"{host}:{api_port}", os.environ.get("API_GUNICORN_THREADS", "8"), "api"),
+                cwd=ROOT, env={**_venv_env(), "FLASKENV": flaskenv},
+            )
         threads = os.environ.get("GUNICORN_THREADS", "8")
-        run([
-            GUNICORN,
-            "wsgi:app",
-            "--bind", f"0.0.0.0:{port}",
-            "--worker-class", "gthread",
-            "--workers", "1",
-            "--threads", threads,
-            "--timeout", "120",
-            "--max-requests", "1000",
-            "--max-requests-jitter", "100",
-            "--access-logfile", "-",
-            "--error-logfile", "-",
-        ], extra_env={"FLASKENV": flaskenv})
+        run(_gunicorn_cmd(f"{host}:{port}", threads, "site"), extra_env={"FLASKENV": flaskenv})
     except KeyboardInterrupt:
         print("\n\033[0;37m  · Server stopped.\033[0m")
     finally:
-        if worker_proc.poll() is None:
-            info("Stopping background worker process…")
-            worker_proc.terminate()
-            try:
-                worker_proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                worker_proc.kill()
+        for name, proc in (("API process", api_proc), ("background worker process", worker_proc)):
+            if proc is not None and proc.poll() is None:
+                info(f"Stopping {name}…")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
 
 
 def cmd_start() -> None:
@@ -437,6 +496,7 @@ def cmd_start_prod() -> None:
     # 3. Start — same gunicorn+worker.py launch as `start`, see
     # _run_gunicorn_with_worker's docstring for why this isn't `flask run`
     # or an in-process worker.
+    _load_launch_env()
     port = os.environ.get("PORT", "80")
     public_url = os.environ.get("INSTANCE_PUBLIC_URL") or f"http://0.0.0.0:{port}"
     header(f"Starting Rulezet v{app_version()} (production)")
@@ -452,6 +512,7 @@ def cmd_restart_prod() -> None:
     killing and relaunching) and a full start-prod's backup+update pass
     would be redundant/slow."""
     _check_venv()
+    _load_launch_env()
     port = os.environ.get("PORT", "80")
     public_url = os.environ.get("INSTANCE_PUBLIC_URL") or f"http://0.0.0.0:{port}"
     header(f"Starting Rulezet v{app_version()} (production, no update)")

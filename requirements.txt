@@ -5,6 +5,7 @@ flask-session
 flask-sqlalchemy
 Flask-Migrate
 Flask-Caching
+redis
 Flask-WTF
 Flask-Mail
 WTForms
