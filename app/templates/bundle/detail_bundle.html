@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/meta-change-list.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/vote-pill.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-health.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-releases.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
@@ -188,19 +189,24 @@
 
                 <!-- Action bar -->
                 <div class="bd-actionbar">
-                    <div class="bd-votes">
+                    <div class="vote-pill">
                         <voter-popover :fetch-url="'/bundle/voters?bundleId=' + bundle.id + '&voteType=up'" label="Liked by">
                             <button type="button" @click="vote('up', bundle.id); animateClick($event)"
-                                class="bd-vote btn-animate" :class="{ 'bd-vote--up': bundleUserVote === 'up' }" title="Vote up">
+                                class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--up': bundleUserVote === 'up' }" title="Vote up">
                                 <i class="fa-solid fa-thumbs-up"></i>[[ bundle.vote_up ]]
                             </button>
                         </voter-popover>
                         <voter-popover :fetch-url="'/bundle/voters?bundleId=' + bundle.id + '&voteType=down'" label="Disliked by">
                             <button type="button" @click="vote('down', bundle.id); animateClick($event)"
-                                class="bd-vote btn-animate" :class="{ 'bd-vote--down': bundleUserVote === 'down' }" title="Vote down">
+                                class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--down': bundleUserVote === 'down' }" title="Vote down">
                                 <i class="fa-solid fa-thumbs-down"></i>[[ bundle.vote_down ]]
                             </button>
                         </voter-popover>
+                        <button type="button" @click="toggleFavorite(); animateClick($event)"
+                            class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--fav': bundle.is_favorited }"
+                            :title="bundle.is_favorited ? 'Remove from favorites' : 'Add to favorites'">
+                            <i :class="bundle.is_favorited ? 'fa-solid fa-star' : 'fa-regular fa-star'"></i>
+                        </button>
                     </div>
 
                     <div class="bd-actions">
@@ -1260,6 +1266,25 @@
 
             }
 
+            async function toggleFavorite() {
+                if (current_user_is_connected.value != true) {
+                    window.location.href = `/account/login`;
+                    return;
+                }
+                try {
+                    const res = await fetch(`/bundle/favorite/${bundle_id}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        bundle.value.is_favorited = data.is_favorited;
+                        create_message(data.message, 'success-subtle');
+                    } else {
+                        create_message(data.message || 'Could not update favorites', 'danger-subtle');
+                    }
+                } catch {
+                    create_message('Network error', 'danger-subtle');
+                }
+            }
+
             /**
              *          #########################
              *          #   security section    #
@@ -1971,7 +1996,7 @@
                 treeData, fileTreeNodes, allFiles, docFiles,
                 openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
                 openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
-                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList, structureLoaded, showAiTab, aiSummary, CAN_MANAGE_AI,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList, structureLoaded, toggleFavorite, showAiTab, aiSummary, CAN_MANAGE_AI,
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,

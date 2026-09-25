@@ -86,6 +86,7 @@ export default {
         showFilters:        { type: Boolean,          default: true },
         showCreate:         { type: Boolean,          default: false },
         canVote:            { type: Boolean,          default: false },
+        canFavorite:        { type: Boolean,          default: false },
         bulkActions:        { type: Array,            default: () => [] },
         initialPerPage:     { type: Number,           default: 12 },
         hiddenFilters:      { type: Array,            default: () => [] },
@@ -95,7 +96,7 @@ export default {
         syncUrl:            { type: Boolean,          default: true },
     },
 
-    emits: ['create', 'delete', 'vote', 'bulk-action', 'send'],
+    emits: ['create', 'delete', 'vote', 'favorite', 'bulk-action', 'send'],
 
     expose: ['fetchData'],
 
@@ -503,6 +504,15 @@ export default {
                                    style="font-size:.72rem;"></i>
                             </button>
 
+                            <!-- Favorite -->
+                            <button v-if="canFavorite"
+                                    @click="handleFavorite(bundle)"
+                                    class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
+                                    style="width:32px;height:32px;border:1px solid #eee;"
+                                    :title="bundle.is_favorited ? 'Remove from favorites' : 'Add to favorites'">
+                                <i class="fa-star" :class="bundle.is_favorited ? 'fas text-warning' : 'far'"></i>
+                            </button>
+
                             <!-- More dropdown -->
                             <div class="dropup">
                                 <button class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
@@ -823,6 +833,13 @@ export default {
 
                             <td class="dt-td dt-td--actions">
                                 <div class="dt-actions">
+                                    <button v-if="canFavorite"
+                                            class="dt-action-btn"
+                                            :class="{ 'rl-fav-active': bundle.is_favorited }"
+                                            :title="bundle.is_favorited ? 'Remove from favorites' : 'Add to favorites'"
+                                            @click.stop="handleFavorite(bundle)">
+                                        <i class="fa-star" :class="bundle.is_favorited ? 'fas' : 'far'"></i>
+                                    </button>
                                     <div class="rl-action-dropdown" @click.stop>
                                         <button class="dt-action-btn rl-action-dropdown-toggle" title="More actions">
                                             <i class="fas fa-ellipsis-v" style="font-size:.7rem;"></i>
@@ -1433,6 +1450,19 @@ export default {
             } catch {}
         }
 
+        // ── Favorite ──────────────────────────────────────────────────────
+        async function handleFavorite(bundle) {
+            if (!props.canFavorite) return
+            try {
+                const res  = await fetch(`/bundle/favorite/${bundle.id}`, { method: 'POST', headers: { 'X-CSRFToken': props.csrfToken || _csrf() } })
+                const data = await res.json()
+                if (res.ok && data.success) {
+                    bundle.is_favorited = data.is_favorited
+                    emit('favorite', { bundleId: bundle.id, isFavorited: data.is_favorited })
+                }
+            } catch {}
+        }
+
         // ── Bulk ──────────────────────────────────────────────────────────
         function emitBulkAction(action) {
             const ids   = allPagesSelected.value ? 'ALL' : Array.from(selectedIds)
@@ -1593,7 +1623,7 @@ export default {
             toggleExpand, expandAll, collapseAll,
             toggleRuleExpand, isRuleExpanded,
             fetchBundleRules,
-            handleVote, emitBulkAction, emitSend,
+            handleVote, handleFavorite, emitBulkAction, emitSend,
             fromNow, formatDate, highlight, mdToText, descFor, formatsOf, formatsShort,
         }
     },

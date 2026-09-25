@@ -1685,6 +1685,21 @@ class BundleReactionComment(db.Model):
             "comment_id": self.comment_id
         }
 
+class BundleFavoriteUser(db.Model):
+    """A user's favorite bundles (same idea as RuleFavoriteUser)."""
+    __tablename__ = 'bundle_favorite_user'
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    bundle_id  = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    __table_args__ = (db.UniqueConstraint('user_id', 'bundle_id', name='uq_bundle_favorite_user'),)
+
+    user   = db.relationship('User', backref=db.backref('favorite_bundles_assocs', lazy='dynamic',
+                                                        cascade='all, delete-orphan', passive_deletes=True))
+    bundle = db.relationship('Bundle', backref=db.backref('favorited_by_users_assocs', lazy='dynamic',
+                                                          cascade='all, delete-orphan', passive_deletes=True))
+
+
 class BundleVote(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)

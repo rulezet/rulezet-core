@@ -34,12 +34,27 @@
         </p>
     </div>
 
+    {% if current_user.is_authenticated %}
+    <!-- Tabs -->
+    <nav class="dr-nav mb-4">
+        <a href="#" class="dr-nav__item" :class="{ active: activeTab === 'all' }" @click.prevent="activeTab = 'all'">
+            <i class="fa-solid fa-boxes-stacked"></i><span>All bundles</span>
+        </a>
+        <a href="#" class="dr-nav__item" :class="{ active: activeTab === 'favorites' }"
+           @click.prevent="activeTab = 'favorites'; favOpened = true">
+            <i class="fa-solid fa-star"></i><span>My favorites</span>
+        </a>
+    </nav>
+    {% endif %}
+
     <!-- BundleList component -->
     <bundle-list
+        v-show="activeTab === 'all'"
         ref="bundleListRef"
         mode="read"
         default-view="card"
         :can-vote="isAuthenticated"
+        :can-favorite="isAuthenticated"
         :current-user-id="currentUserId"
         :current-user-is-admin="isAdmin"
         :current-user-is-authenticated="isAuthenticated"
@@ -47,7 +62,28 @@
         :show-create="isAuthenticated"
         :show-filters="true"
         @create="goToCreate"
-        @delete="onDeleteBundle">
+        @delete="onDeleteBundle"
+        @favorite="onFavoriteChanged">
+    </bundle-list>
+
+    <!-- My favorites — lazy: only mounted after the first click -->
+    <bundle-list
+        v-if="favOpened"
+        v-show="activeTab === 'favorites'"
+        ref="favListRef"
+        mode="read"
+        default-view="card"
+        fetch-url="/bundle/data_table?favorites=true"
+        :sync-url="false"
+        :can-vote="isAuthenticated"
+        :can-favorite="isAuthenticated"
+        :current-user-id="currentUserId"
+        :current-user-is-admin="isAdmin"
+        :current-user-is-authenticated="isAuthenticated"
+        :csrf-token="csrfToken"
+        :show-filters="true"
+        @delete="onDeleteBundle"
+        @favorite="onFavoriteChanged">
     </bundle-list>
 
     <!-- Delete confirmation modal -->
@@ -118,6 +154,16 @@
             const bundleToDelete  = ref(null)
             const isDeleting      = ref(false)
             const bundleListRef   = ref(null)
+            const favListRef      = ref(null)
+            const activeTab       = ref('all')
+            const favOpened       = ref(false)
+
+            // Keep both tabs in sync: (un)starring in one refreshes the other
+            // (and drops an un-starred bundle from "My favorites").
+            function onFavoriteChanged() {
+                favListRef.value?.fetchData()        // add / drop it in "My favorites"
+                if (activeTab.value === 'favorites') bundleListRef.value?.fetchData()   // update its star in "All"
+            }
             let   _deleteModal    = null
 
             function goToCreate() {
@@ -142,6 +188,7 @@
                         create_message(data.message || 'Bundle deleted.', data.toast_class || 'success-subtle')
                         _deleteModal?.hide()
                         bundleListRef.value?.fetchData()
+                        favListRef.value?.fetchData()
                     } else {
                         create_message(data.message || 'Failed to delete bundle.', data.toast_class || 'danger-subtle')
                     }
@@ -154,7 +201,8 @@
             }
 
             return { isAuthenticated, isAdmin, currentUserId, csrfToken,
-                     bundleListRef, bundleToDelete, isDeleting,
+                     bundleListRef, favListRef, activeTab, favOpened, onFavoriteChanged,
+                     bundleToDelete, isDeleting,
                      goToCreate, onDeleteBundle, confirmDelete }
         }
     }).mount('#main-container')

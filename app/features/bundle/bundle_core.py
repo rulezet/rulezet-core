@@ -1714,3 +1714,32 @@ def _get_attack_coverage_parsed(bundle_id: int, rule_map: dict, total_rules: int
             'source':            'parsed',   # hint for frontend
         },
     }
+
+# ── Favorites ────────────────────────────────────────────────────────────────
+
+def toggle_bundle_favorite(user_id: int, bundle_id: int) -> bool:
+    """Adds the bundle to the user's favorites, or removes it if already
+    there. Returns the new state (True = favorited)."""
+    from app.core.db_class.db import BundleFavoriteUser
+    fav = BundleFavoriteUser.query.filter_by(user_id=user_id, bundle_id=bundle_id).first()
+    if fav:
+        db.session.delete(fav)
+        db.session.commit()
+        return False
+    db.session.add(BundleFavoriteUser(user_id=user_id, bundle_id=bundle_id))
+    db.session.commit()
+    return True
+
+
+def is_bundle_favorited(user_id: int, bundle_id: int) -> bool:
+    from app.core.db_class.db import BundleFavoriteUser
+    return BundleFavoriteUser.query.filter_by(user_id=user_id, bundle_id=bundle_id).first() is not None
+
+
+def favorite_bundle_ids(user_id: int, bundle_ids: list) -> set:
+    """Which of these bundles the user has favorited — one query for a page."""
+    from app.core.db_class.db import BundleFavoriteUser
+    if not bundle_ids:
+        return set()
+    return {bid for (bid,) in db.session.query(BundleFavoriteUser.bundle_id)
+            .filter(BundleFavoriteUser.user_id == user_id, BundleFavoriteUser.bundle_id.in_(bundle_ids))}

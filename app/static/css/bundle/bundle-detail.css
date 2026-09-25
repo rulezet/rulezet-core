@@ -287,30 +287,6 @@
     border-top: 1px solid var(--border-color);
 }
 
-.bd-votes {
-    display: inline-flex;
-    padding: 3px;
-    gap: 2px;
-    border-radius: 999px;
-    border: 1px solid var(--border-color);
-    background: var(--light-bg-color);
-}
-.bd-vote {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 14px;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--subtle-text-color);
-    font-size: .85rem;
-    font-weight: 700;
-    transition: background .12s, color .12s;
-}
-.bd-vote:hover { background: var(--card-bg-color); color: var(--text-color); }
-.bd-vote--up   { background: rgba(25, 135, 84, .14) !important; color: #198754 !important; }
-.bd-vote--down { background: rgba(220, 53, 69, .14) !important; color: #dc3545 !important; }
 
 .bd-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 
@@ -358,7 +334,7 @@
 @media (max-width: 576px) {
     .bd-title { font-size: 1.35rem; }
     .bd-actionbar { flex-direction: column; align-items: stretch; }
-    .bd-votes { align-self: flex-start; }
+    .bd-actionbar .vote-pill { align-self: flex-start; }
     /* icon-only secondary buttons on phones */
     .bd-btn--icon span { display: none; }
     .bd-actions .dropdown { flex: 1; }

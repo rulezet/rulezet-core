@@ -1,0 +1,31 @@
+/* Vote pill — like / dislike / favorite group, shared by the bundle and rule
+   detail pages.
+   <div class="vote-pill">
+     <button class="vote-pill__btn vote-pill__btn--up">…</button>
+     <button class="vote-pill__btn vote-pill__btn--fav">…</button>
+   </div>                                                                    */
+.vote-pill {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+}
+.vote-pill__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--subtle-text-color);
+    font-size: .85rem;
+    font-weight: 700;
+    transition: background .12s, color .12s;
+}
+.vote-pill__btn:hover { background: var(--card-bg-color); color: var(--text-color); }
+.vote-pill__btn--up   { background: rgba(25, 135, 84, .14) !important; color: #198754 !important; }
+.vote-pill__btn--down { background: rgba(220, 53, 69, .14) !important; color: #dc3545 !important; }
+.vote-pill__btn--fav  { background: rgba(245, 158, 11, .16) !important; color: #f59e0b !important; }

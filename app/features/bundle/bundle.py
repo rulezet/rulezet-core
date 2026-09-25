@@ -2036,8 +2036,10 @@ def get_bundle_page():
         from app.core.db_class.db import BundleVote as _BV
         _bv = _BV.query.filter_by(bundle_id=bundle_id, user_id=current_user.id).first()
         bundle_data['user_vote'] = _bv.vote_type if _bv else None
+        bundle_data['is_favorited'] = BundleModel.is_bundle_favorited(current_user.id, bundle_id)
     else:
         bundle_data['user_vote'] = None
+        bundle_data['is_favorited'] = False
 
     return {
         "success": True,
@@ -2147,6 +2149,7 @@ def bundle_data_table():
     access       = request.args.get('access',      '',   type=str)  # 'public' | 'private' | ''
 
     ids_filter   = request.args.getlist('ids[]', type=int)
+    only_favorites = request.args.get('favorites', 'false', type=str) == 'true'
 
     tag_names    = [t.strip() for t in tags_raw.split(',')      if t.strip()]
     vuln_list    = [v.strip() for v in vulns_raw.split(',')     if v.strip()]
@@ -2157,6 +2160,14 @@ def bundle_data_table():
 
     if ids_filter:
         query = query.filter(Bundle.id.in_(ids_filter))
+
+    if only_favorites:
+        # the current user's favorite bundles (visibility rules below still apply)
+        if not current_user.is_authenticated:
+            return jsonify({'items': [], 'total': 0, 'total_pages': 0})
+        from app.core.db_class.db import BundleFavoriteUser
+        fav_ids = db.session.query(BundleFavoriteUser.bundle_id).filter(BundleFavoriteUser.user_id == current_user.id)
+        query = query.filter(Bundle.id.in_(fav_ids))
 
     if search:
         like = f'%{search}%'
@@ -2267,11 +2278,14 @@ def bundle_data_table():
             _BV.user_id == current_user.id
         ).all()
         bv_map = {v.bundle_id: v.vote_type for v in bv_rows}
+        fav_ids = BundleModel.favorite_bundle_ids(current_user.id, bundle_ids)
         for item in items:
             item['user_vote'] = bv_map.get(item['id'])
+            item['is_favorited'] = item['id'] in fav_ids
     else:
         for item in items:
             item['user_vote'] = None
+            item['is_favorited'] = False
 
     return jsonify({
         'items':       items,
@@ -2331,6 +2345,28 @@ def attack_coverage(bundle_id):
         return err
     data = BundleModel.get_attack_coverage(bundle_id, snapshot_rules=(rel.snapshot.get("rules") or {}) if rel else None)
     return jsonify(data)
+
+#################
+#   Favorites   #
+#################
+
+@bundle_blueprint.route("/favorite/<int:bundle_id>", methods=['POST'])
+@login_required
+def toggle_favorite_bundle(bundle_id):
+    """Add the bundle to the current user's favorites, or remove it."""
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
+        return jsonify({"success": False, "message": "Bundle not found"}), 404
+    if not BundleModel.can_view_bundle(bundle):
+        return jsonify({"success": False, "message": "Access denied"}), 403
+    is_fav = BundleModel.toggle_bundle_favorite(current_user.id, bundle.id)
+    log_activity("bundle.favorite" if is_fav else "bundle.unfavorite",
+                 f"{'Added' if is_fav else 'Removed'} bundle '{bundle.name}' {'to' if is_fav else 'from'} favorites",
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
+    return jsonify({"success": True, "is_favorited": is_fav,
+                    "message": "Added to favorites" if is_fav else "Removed from favorites",
+                    "toast_class": "success-subtle"}), 200
+
 
 ###########################
 #   AI Bundle Analysis    #
