@@ -19,7 +19,7 @@ from app.features.misp.misp_core import  convert_misp_to_stix
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_github_repo_live_info, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
-from app import db, cache
+from app import db, cache, memory_cache
 from . import rule_core as RuleModel
 from ..bundle import bundle_core as BundleModel
 from .rule_from_github.import_rule import session_class as SessionModel
@@ -314,7 +314,7 @@ def get_rules_page_with_user_id() -> jsonify:
 
 # get page with filter
 @rule_blueprint.route("/get_rules_page_filter", methods=['GET'])
-@cache.cached(timeout=60, query_string=True, unless=lambda: current_user.is_authenticated)
+@memory_cache.cached(timeout=60, query_string=True, unless=lambda: current_user.is_authenticated)
 def get_rules_page_filter() -> jsonify:
     """Get all the rules with filter"""
     page = int(request.args.get("page", 1))
@@ -5505,7 +5505,7 @@ def get_rules_page_filter_bundle() -> jsonify:
 
 
 @rule_blueprint.route("/get_all_rules_vulnerabilities_usage", methods=['GET'])
-@cache.cached(timeout=60, query_string=True)
+@memory_cache.cached(timeout=60, query_string=True)
 def get_all_rules_vulnerabilities_usage():
     try:
         filters = RuleModel.parse_facet_filters(request.args, exclude=['vulnerabilities'])
@@ -5553,7 +5553,7 @@ def test():
 # active filter) — two different filter states must never share a cached
 # result.
 @rule_blueprint.route('/get_rules_sources_usage')
-@cache.cached(timeout=60, query_string=True)
+@memory_cache.cached(timeout=60, query_string=True)
 def get_rules_sources_usage():
     """Returns the list of sources, scoped to rules matching every other active filter."""
     search_query = request.args.get('q', '').strip()
@@ -5564,7 +5564,7 @@ def get_rules_sources_usage():
     return jsonify([{"name": s.source, "count": s.count} for s in sources])
 
 @rule_blueprint.route('/get_rules_licenses_usage')
-@cache.cached(timeout=60, query_string=True)
+@memory_cache.cached(timeout=60, query_string=True)
 def get_rules_licenses_usage():
     """Returns the list of licenses, scoped to rules matching every other active filter."""
     search_query = request.args.get('q', '').strip()
@@ -5576,7 +5576,7 @@ def get_rules_licenses_usage():
 
 
 @rule_blueprint.route('/get_rules_branches_usage')
-@cache.cached(timeout=60, query_string=True)
+@memory_cache.cached(timeout=60, query_string=True)
 def get_rules_branches_usage():
     """Returns the list of git branches, scoped to rules matching every other active filter."""
     search_query = request.args.get('q', '').strip()
@@ -5588,7 +5588,7 @@ def get_rules_branches_usage():
 
 
 @rule_blueprint.route('/get_rules_authors_usage')
-@cache.cached(timeout=60, query_string=True)
+@memory_cache.cached(timeout=60, query_string=True)
 def get_rules_authors_usage():
     """Returns distinct rule authors with their rule count, scoped to rules
     matching every other active filter."""
@@ -5600,7 +5600,7 @@ def get_rules_authors_usage():
 
 
 @rule_blueprint.route('/get_rules_editors_usage')
-@cache.cached(timeout=60, query_string=True)
+@memory_cache.cached(timeout=60, query_string=True)
 def get_rules_editors_usage():
     """Returns distinct Rulezet editors (uploaders) with their rule count,
     scoped to rules matching every other active filter."""
@@ -5628,7 +5628,7 @@ def get_tags(rule_id):
         return jsonify({"success": False, "message": str(e)}), 500
     
 @rule_blueprint.route('/get_all_tags_usage')
-@cache.cached(timeout=60, query_string=True)
+@memory_cache.cached(timeout=60, query_string=True)
 def get_all_tags_usage():
     try:
         filters = RuleModel.parse_facet_filters(request.args, exclude=['tags'])

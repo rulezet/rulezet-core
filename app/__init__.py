@@ -24,6 +24,14 @@ mail = Mail()
 # @cache.cached(timeout=..., ...)/cache.get()/cache.set() anywhere. See
 # config.py's CACHE_TYPE for the backend (SimpleCache today, Redis-ready).
 cache = Cache()
+# In-process cache for SHORT-lived, high-cardinality entries (60 s, keyed by
+# query string: public CVE API, rule list facets…). These must NOT go to the
+# FileSystemCache above: every set() past its file threshold re-reads every
+# cache file (cachelib's _prune), and a flood of unique query strings kept
+# the directory permanently over the limit — each API call scanned the whole
+# directory and the single gunicorn worker spent its time in disk I/O. Being
+# wiped on a worker recycle is irrelevant for a 60-second entry.
+memory_cache = Cache()
 
 def create_app(start_worker=True):
     load_dotenv()
@@ -62,6 +70,11 @@ def create_app(start_worker=True):
 
     mail.init_app(app)
     cache.init_app(app)
+    memory_cache.init_app(app, config={
+        'CACHE_TYPE':            app.config.get('MEMORY_CACHE_TYPE', 'SimpleCache'),
+        'CACHE_THRESHOLD':       app.config.get('MEMORY_CACHE_THRESHOLD', 2000),
+        'CACHE_DEFAULT_TIMEOUT': 60,
+    })
 
     from .home import home_blueprint
 

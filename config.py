@@ -92,6 +92,13 @@ class Config:
     CACHE_TYPE = os.environ.get('CACHE_TYPE', 'FileSystemCache')
     CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', 300))
     CACHE_DIR = os.environ.get('CACHE_DIR', os.path.join(_BASE_DIR, 'data', 'flask_cache'))
+    # cachelib's default is 500 files; past it EVERY set() re-reads every
+    # file of the directory. Only long-lived entries live here now (short,
+    # per-query-string ones use memory_cache), so a high ceiling keeps that
+    # full scan a rare event instead of a per-request cost.
+    CACHE_THRESHOLD = int(os.environ.get('CACHE_THRESHOLD', 20000))
+    MEMORY_CACHE_TYPE = os.environ.get('MEMORY_CACHE_TYPE', 'SimpleCache')
+    MEMORY_CACHE_THRESHOLD = int(os.environ.get('MEMORY_CACHE_THRESHOLD', 2000))
     CACHE_REDIS_URL = os.environ.get('CACHE_REDIS_URL', '')
 
 
@@ -118,6 +125,7 @@ class TestingConfig(Config):
     # always see fresh data instead of a stale value left over from an
     # earlier test in the same run.
     CACHE_TYPE = 'NullCache'
+    MEMORY_CACHE_TYPE = 'NullCache'
 
     
     SESSION_TYPE = "filesystem" # else error with session

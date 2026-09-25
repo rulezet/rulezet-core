@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request, render_template, abort
 from flask_login import login_required, current_user
-from app import cache
+from app import cache, memory_cache
 from . import attack_core as AttackModel
 from ..jobs import jobs_core as JobModel
 
@@ -28,7 +28,7 @@ def stats():
 
 
 @attack_blueprint.route('/techniques/usage')
-@cache.cached(timeout=60, query_string=True)
+@memory_cache.cached(timeout=60, query_string=True)
 def techniques_usage():
     """Techniques associated with at least one rule matching every currently
     active RuleList filter (format, tags, sources, licenses, CVEs, author...),
