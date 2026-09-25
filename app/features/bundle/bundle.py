@@ -2360,9 +2360,14 @@ def toggle_favorite_bundle(bundle_id):
     if not BundleModel.can_view_bundle(bundle):
         return jsonify({"success": False, "message": "Access denied"}), 403
     is_fav = BundleModel.toggle_bundle_favorite(current_user.id, bundle.id)
+    # bundle.favorite is public by default (like rule.favorite, see
+    # log_action_defaults.PUBLIC_ACTIONS, admin-overridable) — but never for
+    # a private bundle: the explicit False wins over any override, so a
+    # private bundle's name never shows up in a public activity feed.
     log_activity("bundle.favorite" if is_fav else "bundle.unfavorite",
                  f"{'Added' if is_fav else 'Removed'} bundle '{bundle.name}' {'to' if is_fav else 'from'} favorites",
-                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid,
+                 is_public=None if bundle.access else False)
     return jsonify({"success": True, "is_favorited": is_fav,
                     "message": "Added to favorites" if is_fav else "Removed from favorites",
                     "toast_class": "success-subtle"}), 200

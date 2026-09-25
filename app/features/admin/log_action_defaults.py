@@ -87,6 +87,7 @@ PUBLIC_ACTIONS: frozenset[str] = frozenset({
     "rule.favorite",
     "rule.download",
     "bundle.create",
+    "bundle.favorite",
     "bundle.edit",
     "comment.add",
     "user.register",
