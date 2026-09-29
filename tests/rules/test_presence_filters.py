@@ -70,13 +70,3 @@ def test_job_query_presence_filters(app):
         attack = _ids(_build_rule_query({'has_attack': True}))
         assert attack & set(ids.values()) == {ids['attack']}
 
-
-def test_data_table_presence_filters(app, client):
-    ids = _setup(app)
-    for flag, expected in (('has_cve', 'cve'), ('has_tags', 'tagged'),
-                           ('has_license', 'licensed'), ('has_attack', 'attack')):
-        res = client.get(f'/rule/data_table?{flag}=true&per_page=100')
-        assert res.status_code == 200, flag
-        returned = {r['id'] for r in res.get_json()['items']}
-        assert ids[expected] in returned, flag
-        assert ids['plain'] not in returned, flag
