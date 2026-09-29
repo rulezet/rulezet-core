@@ -444,6 +444,23 @@ AI_STEP_STAGES = ('reading', 'thinking', 'writing', 'done', 'failed')
 MIN_FIX_LENGTH_RATIO = 0.5
 
 
+def _record_fix_attempt(bad_rule, user, *, content, model, status, error=None, explanation=None):
+    """One AIGeneration row per attempt — failed ones too, so the Rule Fixer
+    admin history shows what went wrong (and on which model) instead of
+    silently keeping only the successes."""
+    meta = {'status': status, 'bad_rule_id': bad_rule.id, 'rule_type': bad_rule.rule_type}
+    if error:
+        meta['error'] = error
+    if explanation:
+        meta['explanation'] = explanation
+    db.session.add(AIGeneration(
+        uuid=str(uuid_mod.uuid4()), agent_key='rule_fixer', rule_id=None,
+        user_id=getattr(user, 'id', None), content=content or '',
+        meta=meta, model=model, is_public=True,
+    ))
+    db.session.commit()
+
+
 def run_ai_fix_streaming(bad_rule: 'InvalidRuleModel', user):
     """Generator version of the fix flow — yields one {"type": "step", ...}
     event per stage so the route can stream them to the browser as they
@@ -476,6 +493,9 @@ def run_ai_fix_streaming(bad_rule: 'InvalidRuleModel', user):
         error_message=bad_rule.error_message or '',
     )
     if not result.ok:
+        _record_fix_attempt(bad_rule, user, content=None, model=result.model_used,
+                            status='failed', error=result.error,
+                            explanation=result.meta.get('explanation'))
         yield {"type": "step", "stage": "failed", "text": result.error}
         yield {"type": "result", "ok": False, "error": result.error}
         return
@@ -489,17 +509,15 @@ def run_ai_fix_streaming(bad_rule: 'InvalidRuleModel', user):
         # accept this as a candidate, it would corrupt the rule if saved.
         # No retry: the human can just click "Try AI fix" again if they want.
         message = "The model returned a partial fragment instead of the full rule content."
+        _record_fix_attempt(bad_rule, user, content=candidate, model=result.model_used,
+                            status='failed', error=message, explanation=explanation)
         yield {"type": "step", "stage": "failed", "text": message}
         yield {"type": "result", "ok": False, "error": message}
         return
 
     yield {"type": "step", "stage": "writing", "text": "Preparing the diff…"}
-    db.session.add(AIGeneration(
-        uuid=str(uuid_mod.uuid4()), agent_key='rule_fixer', rule_id=None,
-        user_id=getattr(user, 'id', None), content=candidate,
-        model=result.model_used, is_public=True,
-    ))
-    db.session.commit()
+    _record_fix_attempt(bad_rule, user, content=candidate, model=result.model_used,
+                        status='success', explanation=explanation)
     yield {"type": "step", "stage": "done", "text": "Fix ready — review the diff below."}
     yield {"type": "result", "ok": True, "fixed_content": candidate, "explanation": explanation}
 

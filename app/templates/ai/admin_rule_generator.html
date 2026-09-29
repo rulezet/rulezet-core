@@ -59,6 +59,16 @@
     :bulk-actions="bulkActions"
     @delete="handleDelete"
     @bulk-action="handleBulkAction">
+    <template #cell-view="{ item }">
+      <a :href="'/ai/admin/rule_generator/history/' + item.uuid" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+        <i class="fa-solid fa-eye me-1"></i>View
+      </a>
+    </template>
+    <template #cell-status="{ item }">
+      <span class="badge rounded-pill" :class="item.status === 'failed' ? 'bg-danger-subtle text-danger-emphasis' : 'bg-success-subtle text-success-emphasis'"
+            :title="item.error || ''">[[ item.status ]]</span>
+      <div v-if="item.error" class="small text-danger text-truncate mt-1" style="max-width:420px;" :title="item.error">[[ item.error ]]</div>
+    </template>
     <template #cell-username="{ item }">
       <user-chip :user-id="item.user_id" :username="item.username || 'unknown'" size="sm"></user-chip>
     </template>
@@ -81,9 +91,11 @@ createApp({
         const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || ''
         const table_ref = ref(null)
         const columns = [
+            { key: 'status',     label: 'Status', sortable: false },
             { key: 'model',      label: 'Model', sortable: true },
             { key: 'username',   label: 'Requested by', sortable: false },
             { key: 'created_at', label: 'Date', type: 'date', sortable: true },
+            { key: 'view',       label: '', sortable: false },
         ]
         const bulkActions = [{ key: 'delete', label: 'Delete', icon: 'fa-trash', variant: 'danger' }]
         function onNotify({ message, level }) { create_message(message, level) }

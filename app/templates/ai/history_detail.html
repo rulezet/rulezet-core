@@ -47,9 +47,14 @@
 
   {{ ai_nav.ai_admin_nav(agent_key) }}
 
+  {% set gen_meta = gen.meta or {} %}
+  {% set gen_status = gen_meta.get('status') or 'success' %}
   <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-4">
       <div class="d-flex flex-wrap gap-4 mb-4 pb-3" style="border-bottom:1px solid var(--border-color);font-size:.85rem;">
+        <div><span class="text-muted d-block" style="font-size:.72rem;text-transform:uppercase;">Status</span>
+          <span class="badge rounded-pill {{ 'bg-danger-subtle text-danger-emphasis' if gen_status == 'failed' else 'bg-success-subtle text-success-emphasis' }}">{{ gen_status }}</span>
+        </div>
         <div><span class="text-muted d-block" style="font-size:.72rem;text-transform:uppercase;">Model</span><code>{{ gen.model or 'unknown' }}</code></div>
         <div><span class="text-muted d-block" style="font-size:.72rem;text-transform:uppercase;">Requested by</span>
           {% if gen.user %}{{ gen.user.first_name }} {{ gen.user.last_name }}{% else %}—{% endif %}</div>
@@ -66,7 +71,25 @@
         {% endif %}
       </div>
 
+      {% if gen_meta.get('error') %}
+      <div class="alert alert-danger py-2 px-3 mb-3" style="font-size:.85rem;">
+        <i class="fa-solid fa-circle-xmark me-1"></i><strong>Error:</strong> {{ gen_meta.get('error') }}
+      </div>
+      {% endif %}
+      {% if gen_meta.get('validate_error') %}
+      <div class="alert alert-warning py-2 px-3 mb-3" style="font-size:.85rem;">
+        <i class="fa-solid fa-triangle-exclamation me-1"></i><strong>Syntax check failed:</strong> {{ gen_meta.get('validate_error') }}
+      </div>
+      {% endif %}
+      {% if gen.agent_key in ('rule_fixer', 'rule_generator') and gen_meta.get('explanation') %}
+      <div class="rounded-3 border p-3 mb-3" style="background:var(--light-bg-color);font-size:.85rem;">
+        <span class="text-muted d-block mb-1" style="font-size:.72rem;text-transform:uppercase;">Model explanation</span>
+        {{ gen_meta.get('explanation') }}
+      </div>
+      {% endif %}
+
       <div id="hd-content" class="ai-summary-content"></div>
+      {% if not gen.content %}<div class="text-muted small">No output — the model didn't produce a usable answer.</div>{% endif %}
     </div>
   </div>
 

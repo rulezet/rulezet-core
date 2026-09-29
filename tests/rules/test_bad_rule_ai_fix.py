@@ -262,7 +262,11 @@ def test_streaming_rejects_fragment_instead_of_full_rule(app, monkeypatch):
         failed_step = next(e for e in events if e["type"] == "step" and e["stage"] == "failed")
         assert "fragment" in failed_step["text"].lower()
 
-        assert AIGeneration.query.filter_by(agent_key='rule_fixer').count() == 0
+        # Kept in the admin history as a failed attempt, never as a usable fix.
+        gen = AIGeneration.query.filter_by(agent_key='rule_fixer').one()
+        assert gen.meta['status'] == 'failed'
+        assert "fragment" in gen.meta['error'].lower()
+        assert gen.model == "m"
 
 
 def test_streaming_stops_immediately_when_model_could_not_fix(app, monkeypatch):
@@ -272,7 +276,8 @@ def test_streaming_stops_immediately_when_model_could_not_fix(app, monkeypatch):
         bad_rule = BadRuleModel.get_invalid_rule_by_id(bad_rule_id)
 
         fake_agent = _FakeAgent([
-            AgentResult(ok=False, error="The model could not determine a targeted fix for this error."),
+            AgentResult(ok=False, error="The model could not determine a targeted fix for this error.",
+                        model_used="qwen3:27b"),
         ])
         monkeypatch.setattr("app.features.ai.ai_core.get_agent", lambda key: fake_agent)
 
@@ -285,6 +290,13 @@ def test_streaming_stops_immediately_when_model_could_not_fix(app, monkeypatch):
         assert len(fake_agent.calls) == 1
         # No candidate was ever produced, so there's nothing to show for review.
         assert result.get("fixed_content") is None
+
+        # ...but the failure itself shows up in the admin history, with its error and model.
+        gen = AIGeneration.query.filter_by(agent_key='rule_fixer').one()
+        assert gen.meta['status'] == 'failed'
+        assert gen.meta['error'] == "The model could not determine a targeted fix for this error."
+        assert gen.model == "qwen3:27b"
+        assert gen.content == ''
 
 
 def test_run_ai_fix_succeeds_end_to_end(app, monkeypatch):

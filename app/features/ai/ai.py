@@ -283,8 +283,22 @@ def models_list():
         except AgentConnectionError:
             pass
 
+    # Flag which allowlisted models the *current* Ollama server actually has —
+    # rows are never deleted on sync, so after switching servers the list
+    # still holds the old server's models. None = server unreachable, unknown.
+    from app.features.ai.ai_core import OllamaClient
+    try:
+        live = set(OllamaClient(base_url=get_ollama_url(), model='', timeout=5).list_models())
+    except AgentConnectionError:
+        live = None
+
     models = AIModelConfig.query.order_by(AIModelConfig.model_name).all()
-    return jsonify({'models': [m.to_json() for m in models]})
+    rows = []
+    for m in models:
+        row = m.to_json()
+        row['available'] = None if live is None else m.model_name in live
+        rows.append(row)
+    return jsonify({'models': rows, 'server_reachable': live is not None})
 
 
 @ai_blueprint.route('/admin/models/sync', methods=['POST'])
@@ -384,6 +398,10 @@ def history_data(agent_key):
         row = gen.to_json()
         row['rule_id']    = gen.rule_id
         row['rule_title'] = gen.rule.title if gen.rule else None
+        # Rows written before failures were recorded have no status — they
+        # were only ever kept on success.
+        row['status']     = (gen.meta or {}).get('status') or 'success'
+        row['error']      = (gen.meta or {}).get('error')
         row['username']   = (
             (f"{gen.user.first_name} {gen.user.last_name}".strip() or gen.user.email)
             if gen.user else None

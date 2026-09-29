@@ -66,7 +66,10 @@
         <thead class="dt-thead"><tr><th class="dt-th">Model</th><th class="dt-th" style="width:120px;">Enabled</th></tr></thead>
         <tbody>
           <tr v-for="m in models" :key="m.id" class="dt-row">
-            <td class="dt-td font-monospace">[[ m.model_name ]]</td>
+            <td class="dt-td font-monospace">
+              [[ m.model_name ]]
+              <span v-if="m.available === false" class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis ms-2" style="font-family:inherit;">not on current server</span>
+            </td>
             <td class="dt-td">
               <div class="form-check form-switch mb-0">
                 <input class="form-check-input" type="checkbox" role="switch" :checked="m.is_enabled" @change="toggleModel(m)">

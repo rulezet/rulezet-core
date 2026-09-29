@@ -192,7 +192,11 @@ def test_streaming_stops_when_model_fails(app, monkeypatch):
 
         result = events[-1]
         assert result["ok"] is False
-        assert AIGeneration.query.filter_by(agent_key='rule_generator').count() == 0
+        # Recorded as a failed attempt so the admin history shows the error.
+        gen = AIGeneration.query.filter_by(agent_key='rule_generator').one()
+        assert gen.meta['status'] == 'failed'
+        assert gen.meta['error'] == "Model did not return a usable rule draft."
+        assert gen.content == ''
 
 
 def test_streaming_passes_full_description_as_input_summary_past_200_chars(app, monkeypatch):

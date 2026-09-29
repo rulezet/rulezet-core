@@ -191,3 +191,83 @@ def test_run_falls_back_to_config_default_when_no_model_given(app):
 
     assert captured['model'] == app.config.get('OLLAMA_MODEL')
 
+
+
+# ── OllamaClient.chat: thinking models / empty answers ───────────────────────
+
+def _fake_response(status, body):
+    from unittest.mock import MagicMock
+    import json as _json
+    resp = MagicMock()
+    resp.status_code = status
+    resp.text = _json.dumps(body)
+    resp.json.return_value = body
+    if status >= 400:
+        import requests
+        resp.raise_for_status.side_effect = requests.HTTPError(f"{status} error")
+    else:
+        resp.raise_for_status.return_value = None
+    return resp
+
+
+def test_chat_disables_thinking(app):
+    from unittest.mock import patch
+
+    with app.app_context():
+        client = OllamaClient(base_url='http://localhost:11434', model='qwen3:27b', timeout=5)
+        ok = _fake_response(200, {"message": {"content": '{"a": 1}'}, "done_reason": "stop"})
+        with patch('app.features.ai.ai_core.http_requests.post', return_value=ok) as mock_post:
+            assert client.chat([{"role": "user", "content": "hi"}], acquire_timeout=1) == '{"a": 1}'
+    assert mock_post.call_args.kwargs['json']['think'] is False
+
+
+def test_chat_retries_without_think_on_old_ollama(app):
+    from unittest.mock import patch
+
+    with app.app_context():
+        client = OllamaClient(base_url='http://localhost:11434', model='m', timeout=5)
+        rejected = _fake_response(400, {"error": "invalid field: think"})
+        ok = _fake_response(200, {"message": {"content": '{"a": 1}'}})
+        with patch('app.features.ai.ai_core.http_requests.post', side_effect=[rejected, ok]) as mock_post:
+            assert client.chat([{"role": "user", "content": "hi"}], acquire_timeout=1) == '{"a": 1}'
+    assert mock_post.call_count == 2
+    assert 'think' not in mock_post.call_args.kwargs['json']
+
+
+def test_chat_empty_answer_explains_why(app):
+    from unittest.mock import patch
+    from app.features.ai.ai_core import AgentInvalidResponse
+
+    with app.app_context():
+        client = OllamaClient(base_url='http://localhost:11434', model='qwen3:27b', timeout=5, num_predict=2048)
+        empty = _fake_response(200, {
+            "message": {"content": "", "thinking": "x" * 500},
+            "done_reason": "length", "eval_count": 2048,
+        })
+        with patch('app.features.ai.ai_core.http_requests.post', return_value=empty):
+            with pytest.raises(AgentInvalidResponse) as exc:
+                client.chat([{"role": "user", "content": "hi"}], acquire_timeout=1)
+    msg = str(exc.value)
+    assert 'qwen3:27b' in msg
+    assert 'done_reason=length' in msg
+    assert '500 chars of thinking' in msg
+    assert 'num_predict=2048' in msg
+
+
+def test_run_failure_keeps_the_model_used(app):
+    from unittest.mock import patch
+    from app.features.ai.ai_core import AgentInvalidResponse
+
+    class _EmptyClient:
+        def __init__(self, base_url, model, timeout, **kw):
+            pass
+
+        def chat(self, messages, json_schema=None, acquire_timeout=10):
+            raise AgentInvalidResponse("Empty response from model.")
+
+    with app.app_context():
+        agent = get_agent('chatbot')
+        with patch('app.features.ai.ai_core.OllamaClient', _EmptyClient):
+            result = agent.run(user=None, history=[], message="hello", model='qwen3:27b')
+    assert result.ok is False
+    assert result.model_used == 'qwen3:27b'

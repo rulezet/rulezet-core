@@ -240,24 +240,11 @@ class OllamaClient:
         / AgentInvalidResponse; never lets a raw `requests` exception
         escape."""
 
-        def _do_call():
-            payload = {
-                "model": self.model,
-                "messages": messages,
-                "stream": False,
-                "format": json_schema if json_schema is not None else "json",
-                "keep_alive": self.keep_alive,
-                "options": {
-                    "num_ctx": self.num_ctx,
-                    "num_predict": self.num_predict,
-                    "temperature": self.temperature,
-                },
-            }
+        def _post(payload):
             try:
-                resp = http_requests.post(
+                return http_requests.post(
                     f"{self.base_url}/api/chat", json=payload, timeout=self.timeout,
                 )
-                resp.raise_for_status()
             except http_requests.Timeout:
                 raise AgentTimeout(f"Ollama did not respond within {self.timeout}s.")
             except http_requests.RequestException as e:
@@ -265,9 +252,53 @@ class OllamaClient:
                     f"Could not reach Ollama at {self.base_url} (model {self.model}): {e}"
                 )
 
-            raw = resp.json().get('message', {}).get('content', '')
+        def _do_call():
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "format": json_schema if json_schema is not None else "json",
+                "keep_alive": self.keep_alive,
+                # Reasoning models (qwen3, deepseek-r1...) otherwise spend the
+                # whole num_predict budget in message.thinking and return an
+                # empty content — every agent here wants the JSON answer only.
+                "think": False,
+                "options": {
+                    "num_ctx": self.num_ctx,
+                    "num_predict": self.num_predict,
+                    "temperature": self.temperature,
+                },
+            }
+            resp = _post(payload)
+            if resp.status_code == 400 and 'think' in resp.text.lower():
+                # Older Ollama builds reject the "think" field outright.
+                payload.pop("think")
+                resp = _post(payload)
+            try:
+                resp.raise_for_status()
+            except http_requests.RequestException as e:
+                detail = (resp.text or '').strip()[:300]
+                raise AgentConnectionError(
+                    f"Ollama at {self.base_url} returned an error for model {self.model}: "
+                    f"{e}{' — ' + detail if detail else ''}"
+                )
+
+            data = resp.json()
+            message = data.get('message') or {}
+            raw = message.get('content', '')
             if not raw or not raw.strip():
-                raise AgentInvalidResponse("Empty response from model.")
+                thinking = message.get('thinking') or ''
+                details = [f"done_reason={data.get('done_reason') or 'unknown'}"]
+                if data.get('eval_count') is not None:
+                    details.append(f"{data['eval_count']} tokens generated")
+                if thinking:
+                    details.append(f"{len(thinking)} chars of thinking, no answer")
+                hint = ''
+                if data.get('done_reason') == 'length':
+                    hint = f" — the output limit (num_predict={self.num_predict}) was reached, raise it in this agent's config"
+                raise AgentInvalidResponse(
+                    f"Empty response from model {self.model} ({', '.join(details)}){hint}."
+                )
             return raw
 
         return _call_with_governor(_do_call, acquire_timeout)
@@ -487,9 +518,9 @@ class AIAgent(ABC):
             result.model_used = result.model_used or model
             return _finish(result, 'success' if result.ok else 'failed', flagged_reason)
         except AgentBusy as e:
-            return _finish(AgentResult(ok=False, error=str(e)), 'busy', flagged_reason)
+            return _finish(AgentResult(ok=False, error=str(e), model_used=model), 'busy', flagged_reason)
         except (AgentTimeout, AgentConnectionError, AgentInvalidResponse) as e:
-            return _finish(AgentResult(ok=False, error=str(e)), 'failed', flagged_reason)
+            return _finish(AgentResult(ok=False, error=str(e), model_used=model), 'failed', flagged_reason)
 
 
 # ─── Discovery — mirrors load_all_rule_formats() / RuleType.__subclasses__() ─

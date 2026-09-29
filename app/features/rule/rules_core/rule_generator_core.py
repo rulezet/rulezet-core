@@ -55,6 +55,14 @@ def run_ai_generate_streaming(user, description: str, sample: str = None):
         description=description, sample=sample,
     )
     if not result.ok:
+        # Kept in the admin history too, so a failure shows its error and model.
+        db.session.add(AIGeneration(
+            uuid=str(uuid_mod.uuid4()), agent_key='rule_generator', rule_id=None,
+            user_id=getattr(user, 'id', None), content='',
+            meta={'status': 'failed', 'error': result.error},
+            model=result.model_used, is_public=True,
+        ))
+        db.session.commit()
         yield {"type": "step", "stage": "failed", "text": result.error}
         yield {"type": "result", "ok": False, "error": result.error}
         return
@@ -69,6 +77,8 @@ def run_ai_generate_streaming(user, description: str, sample: str = None):
     db.session.add(AIGeneration(
         uuid=str(uuid_mod.uuid4()), agent_key='rule_generator', rule_id=None,
         user_id=getattr(user, 'id', None), content=content,
+        meta={'status': 'success', 'explanation': explanation, 'valid': is_valid,
+              'validate_error': None if is_valid else validate_error},
         model=result.model_used, is_public=True,
     ))
     db.session.commit()
