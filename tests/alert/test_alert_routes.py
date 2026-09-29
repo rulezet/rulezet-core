@@ -134,3 +134,15 @@ def test_unsubscribe_link_works_without_login(app, owner_client):
 def test_preview_endpoint(owner_client):
     res = owner_client.post('/alert/preview', json={'criteria': {'keywords': ['netscaler']}, 'targets': ['rule']})
     assert res.status_code == 200 and res.get_json()['preview']['days'] == 30
+
+
+def test_user_actions_are_logged(app, owner_client):
+    from app.core.db_class.db import ActivityLog
+    alert_uuid = _create(owner_client)
+    owner_client.post(f'/alert/{alert_uuid}/update', json={**PAYLOAD, 'name': 'Renamed'})
+    owner_client.post(f'/alert/{alert_uuid}/toggle', json={'is_active': False})
+    owner_client.post(f'/alert/{alert_uuid}/delete')
+    with app.app_context():
+        actions = [l.action for l in ActivityLog.query.filter(ActivityLog.action.like('alert.%'))
+                                                      .order_by(ActivityLog.id).all()]
+    assert actions == ['alert.create', 'alert.update', 'alert.toggle', 'alert.delete']

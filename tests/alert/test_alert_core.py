@@ -359,3 +359,47 @@ def test_unsubscribe_token_roundtrip(ctx):
     alert = _alert(me, {'keywords': ['netscaler']}, email_mode='daily')
     assert A.read_unsubscribe_token(A.make_unsubscribe_token(alert)) == alert.uuid
     assert A.read_unsubscribe_token('forged') is None
+
+
+# ── activity logs ────────────────────────────────────────────────────────────
+
+def _actions():
+    from app.core.db_class.db import ActivityLog
+    return [l.action for l in ActivityLog.query.filter(ActivityLog.action.like('alert.%')).all()]
+
+
+def test_idle_pass_logs_nothing(ctx):
+    me, _ = _users()
+    _alert(me, {'keywords': ['netscaler']})
+    A.run_sweep()
+    A.run_sweep()
+    assert _actions() == []
+
+
+def test_pass_with_matches_and_email_is_logged(ctx):
+    from app.core.db_class.db import ActivityLog
+    me, other = _users()
+    alert = _alert(me, {'keywords': ['netscaler']}, email_mode='instant')
+    A.run_sweep()
+    _rule(other, 'netscaler')
+    A.run_sweep()
+    actions = _actions()
+    assert actions.count('alert.triggered') == 1
+    assert actions.count('alert.email_sent') == 1
+    assert actions.count('alert.sweep') == 1
+    triggered = ActivityLog.query.filter_by(action='alert.triggered').one()
+    assert triggered.user_id == me.id and triggered.target_id == alert.id and triggered.is_public is False
+    assert ActivityLog.query.filter_by(action='alert.email_sent').one().user_id == me.id
+
+
+def test_smtp_failure_is_logged_as_error(ctx, monkeypatch):
+    from app.core.db_class.db import ActivityLog
+    me, other = _users()
+    _alert(me, {'keywords': ['netscaler']}, email_mode='instant')
+    A.run_sweep()
+    _rule(other, 'netscaler')
+    monkeypatch.setattr(mail, 'send', lambda msg: (_ for _ in ()).throw(ConnectionError('SMTP down')))
+    A.run_sweep()
+    failed = ActivityLog.query.filter_by(action='alert.email_failed').one()
+    assert failed.level == 'error'
+    assert ActivityLog.query.filter_by(action='alert.sweep').one().level == 'warning'

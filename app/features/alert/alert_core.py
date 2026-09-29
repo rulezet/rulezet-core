@@ -51,6 +51,7 @@ from flask import current_app
 from sqlalchemy import and_, func, or_
 
 from app import db
+from app.core.utils.activity_log import log_activity
 from app.core.db_class.db import (
     Alert, AlertMatch, AlertSweepState, Bundle, BundleTagAssociation, Notification,
     Rule, RuleAttackAssociation, RuleTagAssociation, Tag, User,
@@ -727,14 +728,48 @@ def run_sweep(now=None) -> dict:
     db.session.commit()
 
     _notify_in_app(fired.values())
-    emails_sent = send_due_emails(now)
+    for alert, matches, overflow in fired.values():
+        log_activity('alert.triggered',
+                     f'Alert "{alert.name}" matched {len(matches)}{"+" if overflow else ""} new item(s)',
+                     target_type='alert', target_id=alert.id, target_uuid=alert.uuid,
+                     actor_id=alert.user_id, is_public=False,
+                     extra={'matches': len(matches), 'overflow': overflow})
+
+    emails = send_due_emails(now)
     pruned = prune_old_matches(state, now)
-    return {
+    summary = {
         'alerts_triggered': len(fired),
         'matches': sum(len(m) + o for _, m, o in fired.values()),
-        'emails_sent': emails_sent,
+        'emails_sent': emails['sent'],
+        'emails_held_by_user_quota': emails['held_by_user_quota'],
+        'email_budget_exhausted': emails['budget_exhausted'],
         'pruned': pruned,
     }
+    _log_sweep(summary, emails)
+    return summary
+
+
+def _log_sweep(summary, emails):
+    """One activity-log line per pass — only when something happened, so
+    the log isn't flooded by the idle passes every few minutes."""
+    if not (summary['alerts_triggered'] or summary['emails_sent'] or summary['pruned']
+            or summary['emails_held_by_user_quota'] or emails['failed']
+            or (summary['email_budget_exhausted'] and emails['pending_users'])):
+        return
+    parts = [f"{summary['alerts_triggered']} alert(s) fired", f"{summary['matches']} match(es)",
+             f"{summary['emails_sent']} email(s) sent"]
+    if summary['emails_held_by_user_quota']:
+        parts.append(f"{summary['emails_held_by_user_quota']} held by the per-user daily quota")
+    if summary['email_budget_exhausted'] and emails['pending_users']:
+        parts.append('instance email budget exhausted')
+    if emails['failed']:
+        parts.append('SMTP failure, sending stopped')
+    if summary['pruned']:
+        parts.append(f"{summary['pruned']} old match(es) purged")
+    warning = emails['failed'] or (summary['email_budget_exhausted'] and emails['pending_users'])
+    log_activity('alert.sweep', 'Alert pass: ' + ', '.join(parts) + '.',
+                 is_public=False, level='warning' if warning else 'info',
+                 extra={**summary, 'budget': emails['budget']})
 
 
 def prune_old_matches(state, now) -> int:
@@ -874,18 +909,21 @@ def email_budget(now=None) -> dict:
             'remaining': max(0, min(per_hour - sent_hour, per_day - sent_day))}
 
 
-def send_due_emails(now=None) -> int:
+def send_due_emails(now=None) -> dict:
     """Sends due alert emails, one message per user, within every quota
-    (anti-spam layers 4-6). Returns the number of emails sent. No-op when
-    email isn't available."""
+    (anti-spam layers 4-6). Returns a report: sent, held_by_user_quota,
+    budget_exhausted, failed, pending_users, budget. No-op when email isn't
+    available."""
     from app.core.utils.mail_status import is_email_available
 
+    report = {'sent': 0, 'held_by_user_quota': 0, 'budget_exhausted': False, 'failed': False,
+              'pending_users': 0, 'budget': None}
     if not is_email_available():
-        return 0
+        return report
     now = now or datetime.datetime.utcnow()
-    remaining = email_budget(now)['remaining']
-    if remaining <= 0:
-        return 0
+    budget = email_budget(now)
+    report['budget'] = budget
+    remaining = budget['remaining']
 
     # Oldest pending match first, so a busy instance can't starve anyone.
     pending = (db.session.query(Alert, func.min(AlertMatch.created_at))
@@ -897,13 +935,15 @@ def send_due_emails(now=None) -> int:
         by_user.setdefault(alert.user_id, []).append(alert)
         oldest[alert.user_id] = min(oldest.get(alert.user_id, first_pending), first_pending)
 
+    report['pending_users'] = len(by_user)
     per_user_day = _setting('ALERT_EMAILS_PER_USER_PER_DAY', 8)
-    sent = 0
     for user_id in sorted(by_user, key=lambda u: oldest[u]):
-        if sent >= remaining:
+        if report['sent'] >= remaining:
+            report['budget_exhausted'] = True
             break
         if _emails_sent_since(now - datetime.timedelta(days=1), user_id) >= per_user_day:
-            continue   # held for tomorrow — nothing lost
+            report['held_by_user_quota'] += 1   # held for tomorrow — nothing lost
+            continue
         last_user_email = (db.session.query(func.max(Alert.last_emailed_at))
                            .filter(Alert.user_id == user_id).scalar())
         due = [a for a in by_user[user_id] if _email_is_due(a, now, last_user_email)]
@@ -914,10 +954,11 @@ def send_due_emails(now=None) -> int:
             continue
         result = _send_alert_email(user, due, now)
         if result is None:
+            report['failed'] = True
             break      # SMTP failure: circuit breaker, retry next pass
         if result:
-            sent += 1
-    return sent
+            report['sent'] += 1
+    return report
 
 
 def _send_alert_email(user, alerts, now):
@@ -973,6 +1014,11 @@ def _send_alert_email(user, alerts, now):
         mail.send(msg)
     except Exception as e:
         print(f'[alert_core] alert email to user {user.id} failed, stopping this pass: {e}')
+        log_activity('alert.email_failed',
+                     f'Alert email to {user.get_username()} failed — sending stopped for this pass, '
+                     f'retried on the next one: {type(e).__name__}: {str(e)[:200]}',
+                     target_type='user', target_id=user.id, actor_id=user.id, is_public=False,
+                     level='error', extra={'alerts': len(emailed_alerts), 'matches': total})
         return None
 
     # Everything summarised in this email counts as delivered, listed or not.
@@ -983,6 +1029,10 @@ def _send_alert_email(user, alerts, now):
         alert.last_emailed_at = now
     db.session.add(AlertEmailLog(user_id=user.id, sent_at=now, alert_count=len(emailed_alerts), match_count=total))
     db.session.commit()
+    log_activity('alert.email_sent',
+                 f'Alert email sent to {user.get_username()}: {total} match(es) across {len(emailed_alerts)} alert(s)',
+                 target_type='user', target_id=user.id, actor_id=user.id, is_public=False,
+                 extra={'alerts': [a.uuid for a in emailed_alerts], 'matches': total, 'subject': subject})
     return True
 
 

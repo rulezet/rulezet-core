@@ -49,6 +49,8 @@ def _default_icon(action: str) -> str:
         return "fa-solid fa-plug"
     if action.startswith("chatbot."):
         return "fa-solid fa-robot"
+    if action.startswith("alert."):
+        return "fa-solid fa-bell"
     return "fa-solid fa-circle-dot"
 
 

@@ -76,6 +76,16 @@ ICONS: dict[str, str] = {
     "chatbot.conversation": "fa-solid fa-robot",
     "proposal.message_edited": "fa-solid fa-pen",
     "proposal.revised": "fa-solid fa-code-branch",
+    "alert.create":            "fa-solid fa-bell",
+    "alert.update":            "fa-solid fa-pen",
+    "alert.toggle":            "fa-solid fa-toggle-on",
+    "alert.delete":            "fa-solid fa-bell-slash",
+    "alert.triggered":         "fa-solid fa-bolt",
+    "alert.email_sent":        "fa-solid fa-envelope",
+    "alert.email_failed":      "fa-solid fa-envelope-circle-check",
+    "alert.email_unsubscribe": "fa-solid fa-envelope-open",
+    "alert.sweep":             "fa-solid fa-satellite-dish",
+    "admin.email_toggle":      "fa-solid fa-envelope",
 }
 
 # Actions that are public by default
@@ -190,12 +200,22 @@ TITLES: dict[str, str] = {
     "chatbot.conversation":     "Chatbot Conversation Started",
     "proposal.message_edited":  "Proposal Justification Edited",
     "proposal.revised":         "Proposal Revised",
+    "alert.create":             "Alert Created",
+    "alert.update":             "Alert Updated",
+    "alert.toggle":             "Alert Paused / Resumed",
+    "alert.delete":             "Alert Deleted",
+    "alert.triggered":          "Alert Triggered",
+    "alert.email_sent":         "Alert Email Sent",
+    "alert.email_failed":       "Alert Email Failed",
+    "alert.email_unsubscribe":  "Alert Emails Stopped (email link)",
+    "alert.sweep":              "Alert Pass",
+    "admin.email_toggle":       "Email Features Toggled",
 }
 
 # Known category prefixes (first segment of action)
 KNOWN_CATEGORIES = frozenset({
     'rule', 'bundle', 'bundle_comment', 'user', 'tag', 'job',
-    'github', 'admin', 'comment', 'connector', 'api', 'chatbot', 'blog', 'proposal',
+    'github', 'admin', 'comment', 'connector', 'api', 'chatbot', 'blog', 'proposal', 'alert',
 })
 
 # Prefix to display category mapping
