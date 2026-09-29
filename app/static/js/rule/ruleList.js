@@ -235,6 +235,9 @@ export default {
         // report) the same way ruleType already works for the format filter.
         'riskFilter', 'selectedBinaries', 'pendingOnly', 'resolvedOnly',
         'setPendingOnly', 'setResolvedOnly', 'resetFilters',
+        // "Act on everything matching the current filters" from the parent
+        // (e.g. the AI Rule Analysis page's "Analyse all matching rules").
+        'selectableTotal', 'selectAllPages', 'emitSend',
     ],
 
     template: `
