@@ -51,6 +51,9 @@ export default {
                 <div v-if="!ollamaReachable" class="alert alert-danger py-2 px-3 mb-2" style="font-size:.82rem;">
                     <i class="fa-solid fa-triangle-exclamation me-1"></i>Ollama isn't reachable right now.
                 </div>
+                <div v-else-if="ollamaRemote" class="small text-muted mb-2">
+                    <i class="fa-solid fa-globe me-1"></i>Ollama runs on a remote server — the CPU/RAM below are this machine's, not the model host's.
+                </div>
 
                 <div class="row g-3">
                     <div class="col-6" :class="compact ? 'col-md-3' : 'col-md-3'">
@@ -116,6 +119,7 @@ export default {
         const memory         = ref({ total_gb: 0, used_gb: 0, available_gb: 0, percent: 0 })
         const swap           = ref({ total_gb: 0, used_gb: 0, percent: 0 })
         const ollamaReachable = ref(true)
+        const ollamaRemote   = ref(false)
         const loadedModels   = ref([])
         let pollTimer = null
 
@@ -139,6 +143,7 @@ export default {
                 memory.value = data.memory
                 swap.value = data.swap
                 ollamaReachable.value = data.ollama_reachable
+                ollamaRemote.value    = !!data.ollama_remote
                 loadedModels.value = data.loaded_models || []
             } catch { /* keep last known values, don't flicker to an error state on one hiccup */ }
         }
@@ -160,7 +165,7 @@ export default {
 
         return {
             level, levelLabel: Vue.computed(levelLabel), cpuPercent, cpuCount, loadAvg,
-            memory, swap, ollamaReachable, loadedModels,
+            memory, swap, ollamaReachable, ollamaRemote, loadedModels,
             barClass, fetchStatus, unload,
         }
     },

@@ -121,13 +121,13 @@ def _chatbot_model_name() -> str:
     pick a model, so a chatbot-created rule's Source reflects reality
     regardless of whether this particular call went through a deterministic
     shortcut (no model consulted) or the real agent."""
-    from flask import current_app
     from app.core.db_class.db import AIAgentConfig
+    from app.features.ai.ai_core import get_default_ollama_model
 
     cfg = AIAgentConfig.query.filter_by(agent_key='chatbot').first()
     if cfg and cfg.default_model:
         return cfg.default_model
-    return current_app.config.get('OLLAMA_MODEL') or 'unknown model'
+    return get_default_ollama_model() or 'unknown model'
 
 
 def _looks_like_rule_content(content: str) -> bool:

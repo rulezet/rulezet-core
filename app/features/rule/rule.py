@@ -1191,7 +1191,7 @@ def ai_analysis_models():
     depth: the launch card itself is only shown to admins/ai.use holders in
     the template."""
     from app.core.db_class.db import AIAgentConfig
-    from app.features.ai.ai_core import AgentConnectionError, OllamaClient
+    from app.features.ai.ai_core import AgentConnectionError, OllamaClient, get_ollama_url
 
     if not (current_user.is_admin() or current_user.has_permission('ai.use')):
         return jsonify({"error": "Forbidden."}), 403
@@ -1203,7 +1203,7 @@ def ai_analysis_models():
     models = []
     try:
         client = OllamaClient(
-            base_url=current_app.config.get('OLLAMA_URL') or 'http://localhost:11434',
+            base_url=get_ollama_url(),
             model='', timeout=5,
         )
         models = client.list_models()

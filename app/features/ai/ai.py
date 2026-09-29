@@ -17,6 +17,7 @@ from flask_login import current_user, login_required
 from app import db
 from app.core.db_class.db import AIAgentConfig, AIExecutionLog, AIGeneration, AIModelConfig, InstanceConfig
 from app.core.utils.activity_log import log_activity
+from app.features.ai.ai_core import get_default_ollama_model, get_ollama_url, is_local_ollama_url
 
 ai_blueprint = Blueprint('ai', __name__, template_folder='templates')
 
@@ -92,7 +93,7 @@ def list_configs():
     by_key = {c.agent_key: c.to_json() for c in configs}
     return jsonify({
         'configs': [by_key.get(k) for k in sorted(_KNOWN_AGENT_KEYS) if by_key.get(k)],
-        'global_default_model': current_app.config.get('OLLAMA_MODEL'),
+        'global_default_model': get_default_ollama_model(),
     })
 
 
@@ -156,6 +157,95 @@ def mascot_toggle():
     return jsonify({'success': True, 'mascot_enabled': cfg.mascot_enabled})
 
 
+# ─── Ollama server (Models & Security page) ──────────────────────────────────
+# Which Ollama every agent talks to. Stored on InstanceConfig; an empty field
+# falls back to config.py's OLLAMA_URL / OLLAMA_MODEL. Pointing at a remote
+# host (e.g. a shared GPU box) needs the explicit remote_allowed opt-in —
+# otherwise ai_core's locality guard keeps refusing it.
+
+def _validate_ollama_url(raw):
+    from urllib.parse import urlparse
+
+    url = (raw or '').strip().rstrip('/')
+    if not url:
+        return None, None
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        return None, "Ollama URL must look like http://host:11434."
+    return url, None
+
+
+def _ollama_settings_json():
+    from app.features.ai.ai_core import get_ollama_settings
+
+    cfg = InstanceConfig.query.first()
+    effective = get_ollama_settings()
+    return {
+        'ollama_url':            cfg.ollama_url if cfg else None,
+        'ollama_default_model':  cfg.ollama_default_model if cfg else None,
+        'ollama_remote_allowed': bool(cfg.ollama_remote_allowed) if cfg else False,
+        'effective':             effective,
+        'config_fallback': {
+            'url':           current_app.config.get('OLLAMA_URL'),
+            'default_model': current_app.config.get('OLLAMA_MODEL'),
+        },
+    }
+
+
+@ai_blueprint.route('/admin/ollama_settings', methods=['GET'])
+def get_ollama_server_settings():
+    return jsonify(_ollama_settings_json())
+
+
+@ai_blueprint.route('/admin/ollama_settings', methods=['POST'])
+def save_ollama_server_settings():
+    cfg = InstanceConfig.query.first()
+    if not cfg:
+        return jsonify({"error": "Instance not configured yet."}), 404
+
+    data = request.get_json(force=True) or {}
+    url, err = _validate_ollama_url(data.get('ollama_url'))
+    if err:
+        return jsonify({"error": err}), 400
+    remote_allowed = bool(data.get('ollama_remote_allowed'))
+    if url and not is_local_ollama_url(url) and not remote_allowed:
+        return jsonify({"error": "This is a remote server — tick \"Allow remote server\" to confirm "
+                                 "rule/user content may be sent to it."}), 400
+
+    cfg.ollama_url            = url
+    cfg.ollama_default_model  = (data.get('ollama_default_model') or '').strip() or None
+    cfg.ollama_remote_allowed = remote_allowed
+    db.session.commit()
+    log_activity('ai.ollama_settings_update',
+                 f'Ollama server set to {url or "config default"}'
+                 f'{" (remote allowed)" if remote_allowed else ""}',
+                 target_type='instance_config', target_id=cfg.id, is_public=False)
+    return jsonify({'success': True, **_ollama_settings_json()})
+
+
+@ai_blueprint.route('/admin/ollama_settings/test', methods=['POST'])
+def test_ollama_server_settings():
+    """Reach a candidate URL's /api/tags before saving it. Same rule as the
+    save: a remote host is only contacted when remote is explicitly allowed."""
+    import requests as http_requests
+
+    data = request.get_json(force=True) or {}
+    url, err = _validate_ollama_url(data.get('ollama_url'))
+    if err:
+        return jsonify({"error": err}), 400
+    url = url or get_ollama_url()
+    if not is_local_ollama_url(url) and not data.get('ollama_remote_allowed'):
+        return jsonify({"error": "Remote server — tick \"Allow remote server\" first."}), 400
+
+    try:
+        resp = http_requests.get(f"{url}/api/tags", timeout=5)
+        resp.raise_for_status()
+        models = [m.get('name') for m in resp.json().get('models', []) if m.get('name')]
+    except (http_requests.RequestException, ValueError) as e:
+        return jsonify({"success": False, "error": f"Could not reach Ollama at {url}: {e}"}), 502
+    return jsonify({'success': True, 'url': url, 'models': sorted(models)})
+
+
 # ─── Shared model allowlist (Models & Security page) ─────────────────────────
 
 def _sync_models_from_ollama():
@@ -167,7 +257,7 @@ def _sync_models_from_ollama():
     from flask import current_app
 
     client = OllamaClient(
-        base_url=current_app.config.get('OLLAMA_URL') or 'http://localhost:11434',
+        base_url=get_ollama_url(),
         model='', timeout=5,
     )
     names = client.list_models()
@@ -348,7 +438,7 @@ def _get_ollama_loaded_models():
     how big, and when they'll auto-unload. Returns (reachable, models)."""
     import requests as http_requests
 
-    base = (current_app.config.get('OLLAMA_URL') or 'http://localhost:11434').rstrip('/')
+    base = get_ollama_url()
     try:
         resp = http_requests.get(f"{base}/api/ps", timeout=3)
         resp.raise_for_status()
@@ -378,8 +468,13 @@ def system_status():
     ollama_reachable, loaded_models = _get_ollama_loaded_models()
 
     available_gb = round(vmem.available / (1024 ** 3), 2)
+    # A remote Ollama loads models into its own RAM, not this box's — local
+    # memory pressure says nothing about whether a model will fit there.
+    ollama_remote = not is_local_ollama_url(get_ollama_url())
     if not ollama_reachable:
         level = 'critical'
+    elif ollama_remote:
+        level = 'ok'
     elif available_gb < 2:
         level = 'critical'
     elif available_gb < 6 or swap.percent > 60:
@@ -409,6 +504,7 @@ def system_status():
             'percent':  swap.percent,
         },
         'ollama_reachable': ollama_reachable,
+        'ollama_remote': ollama_remote,
         'loaded_models': loaded_models,
     })
 
@@ -426,7 +522,7 @@ def system_status_unload():
     if not model_name:
         return jsonify({"error": "model is required."}), 400
 
-    base = (current_app.config.get('OLLAMA_URL') or 'http://localhost:11434').rstrip('/')
+    base = get_ollama_url()
     try:
         resp = http_requests.post(
             f"{base}/api/generate",
