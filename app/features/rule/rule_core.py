@@ -3439,6 +3439,41 @@ _DATA_TABLE_SORT_KEYS = {
 }
 
 
+# License values that mean "no license given" rather than an actual license.
+_PLACEHOLDER_LICENSES = ('', 'unknown', 'none', 'n/a', 'na', 'noassertion', 'null')
+
+
+def apply_presence_filters(query, has_cve=False, has_tags=False, has_license=False, has_attack=False):
+    """"Has at least one ..." filters, shared by the rule listing and the
+    background jobs (_build_rule_query) so a "select all matching" run
+    covers exactly the rules the admin saw on screen.
+
+    has_tags ignores the tlp:/pap: marking tags — every rule gets
+    tlp:clear + pap:clear by default, so counting them would match the
+    whole catalog."""
+    if has_cve:
+        query = query.filter(
+            Rule.cve_id.isnot(None),
+            ~Rule.cve_id.in_(['', '[]', 'null', '[""]']),
+        )
+    if has_tags:
+        tagged_rule_ids = (
+            db.session.query(RuleTagAssociation.rule_id)
+            .join(Tag, Tag.id == RuleTagAssociation.tag_id)
+            .filter(~db.func.lower(Tag.name).like('tlp:%'),
+                    ~db.func.lower(Tag.name).like('pap:%'))
+        )
+        query = query.filter(Rule.id.in_(tagged_rule_ids))
+    if has_license:
+        query = query.filter(
+            Rule.license.isnot(None),
+            ~db.func.lower(db.func.trim(Rule.license)).in_(_PLACEHOLDER_LICENSES),
+        )
+    if has_attack:
+        query = query.filter(Rule.id.in_(db.session.query(RuleAttackAssociation.rule_id)))
+    return query
+
+
 def get_rules_data_table(page=1, per_page=10, **filters):
     """Generic paginated / searchable / sortable rule listing consumed by the
     rule-data-table component. Filtering is delegated to filter_rules() so the
@@ -3455,7 +3490,8 @@ def build_rules_data_table_query(search=None, sort=None,
                          tags=None, editor_names=None, bundle_id=None, attacks=None,
                          status=None, workspace_uuid=None, exclude_workspace_uuid=None,
                          ids=None, has_cve=False, quality_score_min=None, quality_score_max=None,
-                         has_ai_analysis=False, has_relations=False, branch=None):
+                         has_ai_analysis=False, has_relations=False, branch=None,
+                         has_tags=False, has_license=False, has_attack=False):
     """Unpaginated query behind get_rules_data_table — also used wherever the
     exact RuleList filter set must be applied server-side (e.g. bundle from
     filters), so both always agree on which rules "match"."""
@@ -3485,11 +3521,8 @@ def build_rules_data_table_query(search=None, sort=None,
         from app.core.db_class.db import Rule as _Rule
         query = query.filter(_Rule.id.in_(ids))
 
-    if has_cve:
-        query = query.filter(
-            Rule.cve_id.isnot(None),
-            ~Rule.cve_id.in_(['', '[]', 'null', '[""]']),
-        )
+    query = apply_presence_filters(query, has_cve=has_cve, has_tags=has_tags,
+                                   has_license=has_license, has_attack=has_attack)
 
     if quality_score_min is not None:
         query = query.filter(Rule.quality_score.isnot(None), Rule.quality_score >= quality_score_min)

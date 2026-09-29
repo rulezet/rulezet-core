@@ -71,6 +71,63 @@ def is_local_ollama_url(url):
     return False
 
 
+# ─── Ollama server settings (AI admin → Models & Security) ───────────────────
+
+DEFAULT_OLLAMA_URL   = 'http://localhost:11434'
+DEFAULT_OLLAMA_MODEL = 'qwen2.5:1.5b'
+
+
+def get_ollama_settings():
+    """The Ollama server every agent talks to. InstanceConfig (set from the
+    AI admin) wins; each empty field falls back to config.py's OLLAMA_URL /
+    OLLAMA_MODEL, so an instance that never touched the admin setting
+    behaves exactly as before. Needs an app context."""
+    from app.core.db_class.db import InstanceConfig
+
+    cfg = None
+    try:
+        cfg = InstanceConfig.query.first()
+    except Exception:
+        # Table/columns not migrated yet — keep the config.py behaviour.
+        from app import db
+        db.session.rollback()
+
+    url = (cfg.ollama_url if cfg else None) or current_app.config.get('OLLAMA_URL') or DEFAULT_OLLAMA_URL
+    model = (cfg.ollama_default_model if cfg else None) or current_app.config.get('OLLAMA_MODEL') or DEFAULT_OLLAMA_MODEL
+    return {
+        'url':            url.rstrip('/'),
+        'default_model':  model,
+        'remote_allowed': bool(cfg.ollama_remote_allowed) if cfg else False,
+        'is_local':       is_local_ollama_url(url),
+    }
+
+
+def get_ollama_url():
+    return get_ollama_settings()['url']
+
+
+def get_default_ollama_model():
+    return get_ollama_settings()['default_model']
+
+
+def is_allowed_ollama_url(url):
+    """Locality guard + the one admin-granted exception: a non-local URL is
+    accepted only if it's the exact host an admin configured AND explicitly
+    allowed as remote in the AI admin. Anything else stays refused."""
+    if is_local_ollama_url(url):
+        return True
+    try:
+        settings = get_ollama_settings()
+    except RuntimeError:  # no app context
+        return False
+    host = (urlparse(url).hostname or '').lower()
+    return bool(
+        settings['remote_allowed']
+        and host
+        and host == (urlparse(settings['url']).hostname or '').lower()
+    )
+
+
 # ─── Untrusted-content framing ───────────────────────────────────────────────
 
 UNTRUSTED_DATA_PREAMBLE = (
@@ -159,10 +216,11 @@ class OllamaClient:
     def __init__(self, base_url, model, timeout,
                  num_ctx=8192, num_predict=2048,
                  temperature=0.3, keep_alive="10m"):
-        if not is_local_ollama_url(base_url):
+        if not is_allowed_ollama_url(base_url):
             raise AgentConnectionError(
                 f"Refusing to use a non-local Ollama URL ({base_url!r}) — rule/user "
-                "content must never leave this server. Check OLLAMA_URL."
+                "content must never leave this server unless an admin explicitly "
+                "allows this remote server in AI admin → Models & Security."
             )
         self.base_url     = base_url.rstrip('/')
         self.model        = model
@@ -182,24 +240,11 @@ class OllamaClient:
         / AgentInvalidResponse; never lets a raw `requests` exception
         escape."""
 
-        def _do_call():
-            payload = {
-                "model": self.model,
-                "messages": messages,
-                "stream": False,
-                "format": json_schema if json_schema is not None else "json",
-                "keep_alive": self.keep_alive,
-                "options": {
-                    "num_ctx": self.num_ctx,
-                    "num_predict": self.num_predict,
-                    "temperature": self.temperature,
-                },
-            }
+        def _post(payload):
             try:
-                resp = http_requests.post(
+                return http_requests.post(
                     f"{self.base_url}/api/chat", json=payload, timeout=self.timeout,
                 )
-                resp.raise_for_status()
             except http_requests.Timeout:
                 raise AgentTimeout(f"Ollama did not respond within {self.timeout}s.")
             except http_requests.RequestException as e:
@@ -207,9 +252,53 @@ class OllamaClient:
                     f"Could not reach Ollama at {self.base_url} (model {self.model}): {e}"
                 )
 
-            raw = resp.json().get('message', {}).get('content', '')
+        def _do_call():
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "format": json_schema if json_schema is not None else "json",
+                "keep_alive": self.keep_alive,
+                # Reasoning models (qwen3, deepseek-r1...) otherwise spend the
+                # whole num_predict budget in message.thinking and return an
+                # empty content — every agent here wants the JSON answer only.
+                "think": False,
+                "options": {
+                    "num_ctx": self.num_ctx,
+                    "num_predict": self.num_predict,
+                    "temperature": self.temperature,
+                },
+            }
+            resp = _post(payload)
+            if resp.status_code == 400 and 'think' in resp.text.lower():
+                # Older Ollama builds reject the "think" field outright.
+                payload.pop("think")
+                resp = _post(payload)
+            try:
+                resp.raise_for_status()
+            except http_requests.RequestException as e:
+                detail = (resp.text or '').strip()[:300]
+                raise AgentConnectionError(
+                    f"Ollama at {self.base_url} returned an error for model {self.model}: "
+                    f"{e}{' — ' + detail if detail else ''}"
+                )
+
+            data = resp.json()
+            message = data.get('message') or {}
+            raw = message.get('content', '')
             if not raw or not raw.strip():
-                raise AgentInvalidResponse("Empty response from model.")
+                thinking = message.get('thinking') or ''
+                details = [f"done_reason={data.get('done_reason') or 'unknown'}"]
+                if data.get('eval_count') is not None:
+                    details.append(f"{data['eval_count']} tokens generated")
+                if thinking:
+                    details.append(f"{len(thinking)} chars of thinking, no answer")
+                hint = ''
+                if data.get('done_reason') == 'length':
+                    hint = f" — the output limit (num_predict={self.num_predict}) was reached, raise it in this agent's config"
+                raise AgentInvalidResponse(
+                    f"Empty response from model {self.model} ({', '.join(details)}){hint}."
+                )
             return raw
 
         return _call_with_governor(_do_call, acquire_timeout)
@@ -486,12 +575,12 @@ class AIAgent(ABC):
 
         flagged_reason = looks_like_injection(input_summary) if input_summary else None
 
-        base_url = current_app.config.get('OLLAMA_URL') or 'http://localhost:11434'
+        ollama = get_ollama_settings()
+        base_url = ollama['url']
         model = (
             model
             or (agent_config.default_model if agent_config else None)
-            or current_app.config.get('OLLAMA_MODEL')
-            or 'qwen2.5:1.5b'
+            or ollama['default_model']
         )
         timeout     = agent_config.timeout_s if agent_config else 120
         num_predict = agent_config.num_predict if agent_config else 2048
@@ -505,9 +594,9 @@ class AIAgent(ABC):
             result.model_used = result.model_used or model
             return _finish(result, 'success' if result.ok else 'failed', flagged_reason)
         except AgentBusy as e:
-            return _finish(AgentResult(ok=False, error=str(e)), 'busy', flagged_reason)
+            return _finish(AgentResult(ok=False, error=str(e), model_used=model), 'busy', flagged_reason)
         except (AgentTimeout, AgentConnectionError, AgentInvalidResponse) as e:
-            return _finish(AgentResult(ok=False, error=str(e)), 'failed', flagged_reason)
+            return _finish(AgentResult(ok=False, error=str(e), model_used=model), 'failed', flagged_reason)
 
 
 # ─── Discovery — mirrors load_all_rule_formats() / RuleType.__subclasses__() ─

@@ -27,13 +27,15 @@
       </div>
     </div>
     <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
-      One shared model allowlist for every AI feature, and every AI call on this
+      The Ollama server behind every AI feature, one shared model allowlist, and every AI call on this
       instance in one place — success, failure, and anything that looked like a
       prompt-injection attempt.
     </p>
   </div>
 
   {{ ai_nav.ai_admin_nav('models') }}
+
+  <ollama-server-card :csrf-token="csrfToken" @saved="syncModels"></ollama-server-card>
 
   <system-status-card :csrf-token="csrfToken"></system-status-card>
 
@@ -64,7 +66,10 @@
         <thead class="dt-thead"><tr><th class="dt-th">Model</th><th class="dt-th" style="width:120px;">Enabled</th></tr></thead>
         <tbody>
           <tr v-for="m in models" :key="m.id" class="dt-row">
-            <td class="dt-td font-monospace">[[ m.model_name ]]</td>
+            <td class="dt-td font-monospace">
+              [[ m.model_name ]]
+              <span v-if="m.available === false" class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis ms-2" style="font-family:inherit;">not on current server</span>
+            </td>
             <td class="dt-td">
               <div class="form-check form-switch mb-0">
                 <input class="form-check-input" type="checkbox" role="switch" :checked="m.is_enabled" @change="toggleModel(m)">
@@ -131,13 +136,14 @@
 import UserChip          from '/static/js/components/UserChip.js'
 import DataTable          from '/static/js/components/table/data-table.js'
 import SystemStatusCard  from '/static/js/ai/systemStatusCard.js'
+import OllamaServerCard  from '/static/js/ai/ollamaServerCard.js'
 import { create_message } from '/static/js/toaster.js'
 
 const { createApp, ref, computed } = Vue
 
 createApp({
     delimiters: ['[[', ']]'],
-    components: { 'user-chip': UserChip, 'data-table': DataTable, 'system-status-card': SystemStatusCard },
+    components: { 'user-chip': UserChip, 'data-table': DataTable, 'system-status-card': SystemStatusCard, 'ollama-server-card': OllamaServerCard },
     setup() {
         const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || ''
         const models = ref([])

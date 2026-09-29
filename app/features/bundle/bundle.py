@@ -2435,14 +2435,13 @@ def bundle_ai_analysis_models():
     (Ollama's list minus the ones disabled on the Models & Security page)."""
     from flask import current_app
     from app.core.db_class.db import AIAgentConfig, AIModelConfig
-    from app.features.ai.ai_core import AgentConnectionError, OllamaClient
+    from app.features.ai.ai_core import AgentConnectionError, OllamaClient, get_ollama_url
     if not _is_ai_manager():
         return jsonify({"error": "Forbidden."}), 403
     cfg = AIAgentConfig.query.filter_by(agent_key='bundle_analysis').first()
     models = []
     try:
-        models = OllamaClient(base_url=current_app.config.get('OLLAMA_URL') or 'http://localhost:11434',
-                              model='', timeout=5).list_models()
+        models = OllamaClient(base_url=get_ollama_url(), model='', timeout=5).list_models()
     except AgentConnectionError:
         pass
     disabled = {m.model_name for m in AIModelConfig.query.filter_by(is_enabled=False).all()}

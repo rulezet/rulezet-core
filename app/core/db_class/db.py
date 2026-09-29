@@ -3353,6 +3353,13 @@ class InstanceConfig(db.Model):
     telemetry_enabled = db.Column(db.Boolean, default=True, nullable=False)
     chatbot_enabled   = db.Column(db.Boolean, default=True, nullable=False)
     mascot_enabled    = db.Column(db.Boolean, default=True, nullable=False)
+    # Ollama server the AI agents talk to — set from the AI admin (Models &
+    # Security). NULL falls back to config.py's OLLAMA_URL / OLLAMA_MODEL.
+    # A non-local URL is refused by ai_core's locality guard unless
+    # ollama_remote_allowed is explicitly turned on by an admin.
+    ollama_url            = db.Column(db.String(512), nullable=True)
+    ollama_default_model  = db.Column(db.String(128), nullable=True)
+    ollama_remote_allowed = db.Column(db.Boolean, default=False, nullable=False)
     public_url        = db.Column(db.String(512), nullable=True)
     version           = db.Column(db.String(64), nullable=True)
     last_started_at   = db.Column(db.DateTime, nullable=True)

@@ -183,8 +183,14 @@ def create_app(start_worker=True):
 
     if start_worker and config_name != 'testing':
         try:
+            from app.features.ai.ai_core import get_ollama_settings
             from app.features.ai.chatbot.ollama_launcher import ensure_ollama_running
-            ensure_ollama_running(app.config.get('OLLAMA_URL', 'http://localhost:11434'))
+            with app.app_context():
+                ollama = get_ollama_settings()
+            # Only ever auto-start a local `ollama serve` for a local URL —
+            # a remote server configured in the AI admin is not ours to start.
+            if ollama['is_local']:
+                ensure_ollama_running(ollama['url'])
         except Exception as e:
             print(f"[chatbot] Ollama auto-start check failed: {e}")
 

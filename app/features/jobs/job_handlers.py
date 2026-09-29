@@ -220,6 +220,17 @@ def _build_rule_query(payload):
                              .filter(RuleTagAssociation.tag_id.in_(tag_ids))\
                              .distinct()
 
+    # "has at least one CVE / tag / license / ATT&CK technique" — same
+    # semantics as the rule listing's toggles (rule_core.apply_presence_filters).
+    from app.features.rule.rule_core import apply_presence_filters
+    query = apply_presence_filters(
+        query,
+        has_cve=bool(payload.get('has_cve')),
+        has_tags=bool(payload.get('has_tags')),
+        has_license=bool(payload.get('has_license')),
+        has_attack=bool(payload.get('has_attack')),
+    )
+
     # sort
     sort_by = payload.get('sort_by', 'newest')
     if sort_by == 'oldest':
@@ -4674,6 +4685,8 @@ def handle_rule_validation_run(job, app):
 # shrink as they run).
 
 AI_GENERATE_LOG_EVERY = 5  # rules, not batches — a single rule can take tens of seconds
+AI_GENERATE_LOG_EVERY_BULK = 50  # progress line cadence on a catalog-wide run
+AI_GENERATE_CHUNK = 200  # rules loaded per query — keeps a 600k-rule run's memory flat
 
 
 @register_handler('ai_generate')
@@ -4699,25 +4712,39 @@ def handle_rule_analysis(job, app):
     regenerate     = bool(payload.get('regenerate_existing'))
     default_public = payload.get('default_public', True)
     model          = payload.get('model')
+    # Both caps can be lifted from the AI admin ("No limit") for a one-off
+    # run over the whole catalog — rules are then streamed in chunks of
+    # AI_GENERATE_CHUNK so memory stays flat whatever the backlog size.
+    unlimited_batch = bool(payload.get('unlimited_batch'))
+    unlimited_time  = bool(payload.get('unlimited_time'))
     batch_size_raw  = payload.get('batch_size')
     max_seconds_raw = payload.get('max_seconds')
-    batch_size      = int(batch_size_raw) if batch_size_raw is not None else 50
-    max_seconds     = int(max_seconds_raw) if max_seconds_raw is not None else 900
+    batch_size      = None if unlimited_batch else (int(batch_size_raw) if batch_size_raw is not None else 50)
+    max_seconds     = None if unlimited_time else (int(max_seconds_raw) if max_seconds_raw is not None else 900)
 
     q = Rule.query.filter(Rule.is_deleted == False)
     if rule_ids != 'ALL':
         q = q.filter(Rule.id.in_(rule_ids))
-    elif format_filter:
-        q = q.filter(Rule.format.ilike(f"%{format_filter}%"))
+    else:
+        # "Select all matching" sends the RuleList's full filter set (search,
+        # tags, sources, licenses, CVEs, authors...) — scope to exactly the
+        # rules the admin saw on screen, not just their format. Only the ids
+        # are taken from _build_rule_query so its sort/distinct don't leak
+        # into the keyset pagination below.
+        scope = {k: v for k, v in filters.items() if k != 'rule_ids'}
+        if format_filter and not (scope.get('format') or scope.get('rule_type')):
+            scope['format'] = format_filter
+        if any(v for v in scope.values()):
+            matching_ids = _build_rule_query(scope).with_entities(Rule.id).order_by(None)
+            q = q.filter(Rule.id.in_(matching_ids))
 
     if not regenerate:
         already = db.session.query(AIGeneration.rule_id).filter(AIGeneration.agent_key == 'rule_analysis')
         q = q.filter(~Rule.id.in_(already))
 
-    q = q.order_by(Rule.id.asc())
     remaining = q.count()
 
-    job.total = min(remaining, batch_size)
+    job.total = remaining if batch_size is None else min(remaining, batch_size)
     job.done  = 0
     db.session.commit()
 
@@ -4727,116 +4754,139 @@ def handle_rule_analysis(job, app):
         return
 
     log_job(job,
-            f'Starting — up to {job.total} rule(s) this run ({remaining} left in the '
-            f'backlog), model "{model}", max {max_seconds}s …',
+            f'Starting — {"all " if batch_size is None else "up to "}{job.total} rule(s) this run '
+            f'({remaining} left in the backlog), model "{model}", '
+            f'{"no time limit" if max_seconds is None else f"max {max_seconds}s"} …',
             level='info', event='start')
 
-    rows = (
-        q.with_entities(Rule.id, Rule.title, Rule.format, Rule.description,
-                         Rule.to_string, Rule.cve_id)
-        .limit(batch_size)
-        .all()
-    )
-    batch_ids = [r[0] for r in rows]
-
-    tags_by_rule = {}
-    for rid, tag_name in (
-        db.session.query(RuleTagAssociation.rule_id, Tag.name)
-        .join(Tag, RuleTagAssociation.tag_id == Tag.id)
-        .filter(RuleTagAssociation.rule_id.in_(batch_ids)).all()
-    ):
-        tags_by_rule.setdefault(rid, []).append(tag_name)
-
-    attack_by_rule = {}
-    for rid, technique_id, technique_name in (
-        db.session.query(RuleAttackAssociation.rule_id, RuleAttackAssociation.technique_id,
-                          AttackTechnique.name)
-        .join(AttackTechnique, RuleAttackAssociation.technique_id == AttackTechnique.technique_id)
-        .filter(RuleAttackAssociation.rule_id.in_(batch_ids)).all()
-    ):
-        attack_by_rule.setdefault(rid, []).append(f"{technique_id} ({technique_name})")
+    # A per-rule "Generating…" line only helps a small ad-hoc batch look
+    # alive; on a catalog-wide run it would double the log volume for nothing.
+    log_each_rule = job.total <= AI_GENERATE_CHUNK
 
     agent          = get_agent('rule_analysis')
     admin_user     = User.query.get(job.created_by)
     started        = _time.monotonic()
     generated      = 0
     failed         = 0
+    processed      = 0
     rules_since_log = 0
+    last_id        = 0
+    acquire_timeout = max_seconds if max_seconds is not None else 600
 
-    for i, row in enumerate(rows):
-        if _is_cancelled(job):
-            log_job(job, 'Cancelled.', level='warning', event='cancelled')
-            return
-        while _should_pause(job):
-            _time.sleep(2)
-
-        if _time.monotonic() - started > max_seconds:
-            log_job(job,
-                    f'Time budget ({max_seconds}s) reached — stopping early, '
-                    f'{len(rows) - i} rule(s) in this batch left for the next scheduled run.',
-                    level='info', event='progress')
+    while processed < job.total:
+        chunk_limit = min(AI_GENERATE_CHUNK, job.total - processed)
+        # Keyset pagination on Rule.id: rules analysed in earlier chunks are
+        # past last_id, so the "already analysed" filter never shifts pages.
+        rows = (
+            q.filter(Rule.id > last_id)
+            .order_by(Rule.id.asc())
+            .with_entities(Rule.id, Rule.title, Rule.format, Rule.description,
+                             Rule.to_string, Rule.cve_id)
+            .limit(chunk_limit)
+            .all()
+        )
+        if not rows:
             break
+        last_id = rows[-1][0]
+        batch_ids = [r[0] for r in rows]
 
-        rule_id, title, fmt, description, to_string, cve_id_raw = row
-        try:
-            cve_ids = json.loads(cve_id_raw) if cve_id_raw else []
-            if not isinstance(cve_ids, list):
-                cve_ids = []
-        except (ValueError, TypeError):
-            cve_ids = []
+        tags_by_rule = {}
+        for rid, tag_name in (
+            db.session.query(RuleTagAssociation.rule_id, Tag.name)
+            .join(Tag, RuleTagAssociation.tag_id == Tag.id)
+            .filter(RuleTagAssociation.rule_id.in_(batch_ids)).all()
+        ):
+            tags_by_rule.setdefault(rid, []).append(tag_name)
 
-        stub = SimpleNamespace(
-            id=rule_id, title=title, format=fmt, description=description, to_string=to_string,
-            tags=tags_by_rule.get(rule_id, []),
-            attack_techniques=attack_by_rule.get(rule_id, []),
-            cve_ids=cve_ids,
-        )
+        attack_by_rule = {}
+        for rid, technique_id, technique_name in (
+            db.session.query(RuleAttackAssociation.rule_id, RuleAttackAssociation.technique_id,
+                              AttackTechnique.name)
+            .join(AttackTechnique, RuleAttackAssociation.technique_id == AttackTechnique.technique_id)
+            .filter(RuleAttackAssociation.rule_id.in_(batch_ids)).all()
+        ):
+            attack_by_rule.setdefault(rid, []).append(f"{technique_id} ({technique_name})")
 
-        # Unlike the thousands-of-rows-per-second bulk jobs elsewhere in this
-        # file, a single rule here can take tens of seconds to minutes — log
-        # before starting, not just after finishing, or a small batch (the
-        # common case for an ad-hoc admin trigger) shows no progress at all
-        # until the very first rule completes, which reads as hung.
-        log_job(job, f'Generating rule #{rule_id} ({i + 1}/{len(rows)})…', level='info', event='progress')
-
-        result = agent.run(
-            user=admin_user, rule_id=rule_id,
-            input_summary=f"Rule #{rule_id}: {title or '(untitled)'}",
-            rule_stub=stub, acquire_timeout=max_seconds, model=model or None,
-        )
-
-        if result.ok:
-            db.session.add(AIGeneration(
-                uuid=str(uuid_mod.uuid4()), agent_key='rule_analysis', rule_id=rule_id,
-                user_id=job.created_by, content=result.content, meta=result.meta or None,
-                model=result.model_used, is_public=bool(default_public),
-            ))
-            db.session.commit()
-            generated += 1
-            log_job(job, f'Rule #{rule_id}: generated ({len(result.content or "")} chars, model {result.model_used}).',
-                    level='info', event='progress')
-        else:
-            status = result.meta.get('status')
-            if status in ('disabled', 'busy'):
-                # Systemic, not per-rule — every remaining rule would fail
-                # identically this run. Stop entirely; nothing to resume,
-                # the next scheduled run just tries again.
-                log_job(job, f'Stopping: {result.error}', level='error', event='error')
-                job.status = 'failed'
-                job.error  = result.error
-                db.session.commit()
+        for row in rows:
+            if _is_cancelled(job):
+                log_job(job, 'Cancelled.', level='warning', event='cancelled')
                 return
-            failed += 1
-            log_job(job, f'Rule #{rule_id}: {result.error}', level='warning', event='rule_failed')
+            while _should_pause(job):
+                _time.sleep(2)
 
-        job.done = i + 1
-        db.session.commit()
+            if max_seconds is not None and _time.monotonic() - started > max_seconds:
+                log_job(job,
+                        f'Time budget ({max_seconds}s) reached — stopping early, '
+                        f'{job.total - processed} rule(s) left for the next scheduled run.',
+                        level='info', event='progress')
+                log_job(job, f'Done — {generated} generated, {failed} failed this run.',
+                        level='success', event='done')
+                return
 
-        rules_since_log += 1
-        if rules_since_log >= AI_GENERATE_LOG_EVERY:
-            rules_since_log = 0
-            log_job(job, f'{i + 1}/{job.total} rule(s) processed — {generated} generated, {failed} failed.',
-                    level='info', event='progress')
+            rule_id, title, fmt, description, to_string, cve_id_raw = row
+            try:
+                cve_ids = json.loads(cve_id_raw) if cve_id_raw else []
+                if not isinstance(cve_ids, list):
+                    cve_ids = []
+            except (ValueError, TypeError):
+                cve_ids = []
+
+            stub = SimpleNamespace(
+                id=rule_id, title=title, format=fmt, description=description, to_string=to_string,
+                tags=tags_by_rule.get(rule_id, []),
+                attack_techniques=attack_by_rule.get(rule_id, []),
+                cve_ids=cve_ids,
+            )
+
+            # Unlike the thousands-of-rows-per-second bulk jobs elsewhere in this
+            # file, a single rule here can take tens of seconds to minutes — log
+            # before starting, not just after finishing, or a small batch (the
+            # common case for an ad-hoc admin trigger) shows no progress at all
+            # until the very first rule completes, which reads as hung.
+            if log_each_rule:
+                log_job(job, f'Generating rule #{rule_id} ({processed + 1}/{job.total})…',
+                        level='info', event='progress')
+
+            result = agent.run(
+                user=admin_user, rule_id=rule_id,
+                input_summary=f"Rule #{rule_id}: {title or '(untitled)'}",
+                rule_stub=stub, acquire_timeout=acquire_timeout, model=model or None,
+            )
+
+            if result.ok:
+                db.session.add(AIGeneration(
+                    uuid=str(uuid_mod.uuid4()), agent_key='rule_analysis', rule_id=rule_id,
+                    user_id=job.created_by, content=result.content, meta=result.meta or None,
+                    model=result.model_used, is_public=bool(default_public),
+                ))
+                db.session.commit()
+                generated += 1
+                if log_each_rule:
+                    log_job(job, f'Rule #{rule_id}: generated ({len(result.content or "")} chars, model {result.model_used}).',
+                            level='info', event='progress')
+            else:
+                status = result.meta.get('status')
+                if status in ('disabled', 'busy'):
+                    # Systemic, not per-rule — every remaining rule would fail
+                    # identically this run. Stop entirely; nothing to resume,
+                    # the next scheduled run just tries again.
+                    log_job(job, f'Stopping: {result.error}', level='error', event='error')
+                    job.status = 'failed'
+                    job.error  = result.error
+                    db.session.commit()
+                    return
+                failed += 1
+                log_job(job, f'Rule #{rule_id}: {result.error}', level='warning', event='rule_failed')
+
+            processed += 1
+            job.done = processed
+            db.session.commit()
+
+            rules_since_log += 1
+            if rules_since_log >= (AI_GENERATE_LOG_EVERY if log_each_rule else AI_GENERATE_LOG_EVERY_BULK):
+                rules_since_log = 0
+                log_job(job, f'{processed}/{job.total} rule(s) processed — {generated} generated, {failed} failed.',
+                        level='info', event='progress')
 
     log_job(job, f'Done — {generated} generated, {failed} failed this run.',
             level='success', event='done')

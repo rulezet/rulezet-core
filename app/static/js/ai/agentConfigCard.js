@@ -53,7 +53,13 @@ export default {
                         <select class="form-select form-select-sm" v-model="config.default_model" @change="saveConfig">
                             <option value="">(use global default)</option>
                             <option v-for="m in enabledModels" :key="m" :value="m">[[ m ]]</option>
+                            <option v-if="config.default_model && !enabledModels.includes(config.default_model)" :value="config.default_model">
+                                [[ config.default_model ]] (not on current server)
+                            </option>
                         </select>
+                        <div v-if="config.default_model && !enabledModels.includes(config.default_model)" class="form-text text-danger" style="font-size:.72rem;">
+                            This model isn't installed on the current Ollama server — calls will fail.
+                        </div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small mb-1">Timeout (seconds)</label>
@@ -104,7 +110,10 @@ export default {
                 const res = await fetch('/ai/admin/models/list')
                 if (res.ok) {
                     const data = await res.json()
-                    enabledModels.value = (data.models || []).filter(m => m.is_enabled).map(m => m.model_name)
+                    // available === false: allowlisted but not on the current server.
+                    enabledModels.value = (data.models || [])
+                        .filter(m => m.is_enabled && m.available !== false)
+                        .map(m => m.model_name)
                 }
             } catch { /* dropdown just stays limited to '(use global default)' */ }
         }
