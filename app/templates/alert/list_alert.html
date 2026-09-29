@@ -25,7 +25,7 @@
         <div class="banner-accent"></div>
       </div>
       <a href="/alert/new" class="btn btn-primary rounded-pill px-4 shadow-sm"
-         :class="{ disabled: items.length >= limit }">
+         :class="{ disabled: kpis.total >= limit }">
         <i class="fa-solid fa-plus me-1"></i>New alert
       </a>
     </div>
@@ -73,15 +73,15 @@
         <div class="ud-kpi-card ud-kpi-card--purple">
           <div class="ud-kpi-icon"><i class="fa-solid fa-paper-plane"></i></div>
           <div class="ud-kpi-body">
-            <div class="ud-kpi-value" style="font-size:1.05rem;">[[ emailAvailable ? emailAlertCount + ' by email' : 'In-app only' ]]</div>
+            <div class="ud-kpi-value" style="font-size:1.05rem;">[[ emailAvailable ? kpis.emailed + ' by email' : 'In-app only' ]]</div>
             <div class="ud-kpi-label">[[ emailAvailable ? 'Email alerts' : 'Email disabled on this instance' ]]</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Empty state -->
-    <div v-if="!items.length" class="card border-0 shadow-sm rounded-4 mb-4">
+    <!-- Empty state (no alert at all) -->
+    <div v-if="!kpis.total" class="card border-0 shadow-sm rounded-4 mb-4">
       <div class="card-body p-4">
         <div class="al-empty">
           <div class="al-empty-icon"><i class="fa-solid fa-bell"></i></div>
@@ -108,7 +108,51 @@
         <div class="ud-section-icon"><i class="fa-solid fa-list-check"></i></div>
         <div>
           <div class="ud-section-title">Your alerts</div>
-          <div class="ud-section-sub">[[ items.length ]] of [[ limit ]] · checked every few minutes</div>
+          <div class="ud-section-sub">[[ kpis.total ]] of [[ limit ]] · checked every few minutes</div>
+        </div>
+      </div>
+
+      <!-- Search / filters -->
+      <div class="al-toolbar mb-4">
+        <div class="al-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" v-model="q" @input="onSearch" placeholder="Search by name, CVE, tag, keyword, repo…">
+        </div>
+        <select class="form-select form-select-sm al-filter" v-model="status" @change="reload">
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="paused">Paused</option>
+        </select>
+        <select class="form-select form-select-sm al-filter" v-model="target" @change="reload">
+          <option value="">Rules &amp; bundles</option>
+          <option value="rule">Watching rules</option>
+          <option value="bundle">Watching bundles</option>
+        </select>
+        <select v-if="emailAvailable" class="form-select form-select-sm al-filter" v-model="email" @change="reload">
+          <option value="">Any email mode</option>
+          <option value="on">Email on</option>
+          <option value="off">Email off</option>
+          <option value="instant">Instant</option>
+          <option value="daily">Daily digest</option>
+          <option value="weekly">Weekly digest</option>
+        </select>
+        <label class="al-toggle">
+          <input type="checkbox" class="form-check-input" v-model="unseenOnly" @change="reload">
+          Unread only
+        </label>
+        <select class="form-select form-select-sm al-filter ms-lg-auto" v-model="sort" @change="reload">
+          <option value="recent">Newest first</option>
+          <option value="triggered">Last triggered</option>
+          <option value="matches">Most matches</option>
+          <option value="name">Name A→Z</option>
+        </select>
+      </div>
+
+      <div v-if="!items.length" class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4 text-center text-muted">
+          <i class="fa-solid fa-filter-circle-xmark fa-2x mb-2 opacity-50"></i>
+          <div class="fw-semibold">No alert matches these filters</div>
+          <button class="btn btn-sm btn-link" @click="clearFilters">Clear filters</button>
         </div>
       </div>
 
@@ -157,6 +201,11 @@
           </div>
         </div>
       </div>
+
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-4" v-if="totalPages > 1 || total > 12">
+        <span class="small text-muted">[[ total ]] alert[[ total === 1 ? '' : 's' ]][[ hasFilters ? ' matching' : '' ]]</span>
+        <pagination-component v-if="totalPages > 1" :current-page="page" :total-pages="totalPages" @change-page="goTo"></pagination-component>
+      </div>
     </template>
   </template>
 </div>
@@ -166,22 +215,36 @@
 <script type="module">
 import { create_message } from '/static/js/toaster.js'
 import AlertCriteriaChips from '/static/js/alert/alertCriteriaChips.js'
+import PaginationComponent from '/static/js/rule/paginationComponent.js'
 
 const { createApp, ref, computed, onMounted } = Vue
 
 createApp({
     delimiters: ['[[', ']]'],
-    components: { 'alert-criteria-chips': AlertCriteriaChips },
+    components: { 'alert-criteria-chips': AlertCriteriaChips, 'pagination-component': PaginationComponent },
     setup() {
         const csrfToken = document.getElementById('csrf_token')?.value || ''
         const loading = ref(true)
         const items = ref([])
         const users = ref([])
-        const kpis = ref({ total: 0, active: 0, unseen: 0, matches_7d: 0 })
-        const limit = ref(50)
+        const kpis = ref({ total: 0, active: 0, unseen: 0, matches_7d: 0, emailed: 0 })
+        const limit = ref(100)
         const emailAvailable = ref(false)
 
-        const emailAlertCount = computed(() => items.value.filter(a => a.email_mode !== 'off').length)
+        // Search / filters / pagination — applied server-side, mirrored in the
+        // URL (?q=&status=&target=&email=&unseen=&sort=&page=) so a filtered
+        // view survives a reload and can be bookmarked or shared.
+        const url = new URLSearchParams(window.location.search)
+        const q = ref(url.get('q') || '')
+        const status = ref(['active', 'paused'].includes(url.get('status')) ? url.get('status') : '')
+        const target = ref(['rule', 'bundle'].includes(url.get('target')) ? url.get('target') : '')
+        const email = ref(url.get('email') || '')
+        const unseenOnly = ref(url.get('unseen') === 'true')
+        const sort = ref(['recent', 'triggered', 'matches', 'name'].includes(url.get('sort')) ? url.get('sort') : 'recent')
+        const page = ref(Math.max(1, parseInt(url.get('page')) || 1))
+        const total = ref(0)
+        const totalPages = ref(1)
+        const hasFilters = computed(() => !!(q.value.trim() || status.value || target.value || email.value || unseenOnly.value))
 
         const quickStarts = [
             { title: 'Any new CVE coverage', sub: 'Every rule published for a vulnerability — or pick specific CVEs', icon: 'fa-solid fa-shield-virus',
@@ -207,20 +270,72 @@ createApp({
             return `${Math.floor(diff / 86400)} d ago`
         }
 
-        async function load() {
-            loading.value = true
+        // Only non-default values go in the URL, so a plain /alert/ stays clean.
+        function filterParams() {
+            const p = new URLSearchParams()
+            if (q.value.trim()) p.set('q', q.value.trim())
+            if (status.value) p.set('status', status.value)
+            if (target.value) p.set('target', target.value)
+            if (email.value) p.set('email', email.value)
+            if (unseenOnly.value) p.set('unseen', 'true')
+            if (sort.value !== 'recent') p.set('sort', sort.value)
+            if (page.value > 1) p.set('page', page.value)
+            return p
+        }
+
+        function syncUrl(push) {
+            const qs = filterParams().toString()
+            const next = qs ? `?${qs}` : window.location.pathname
+            if (next === window.location.search || (!qs && !window.location.search)) return
+            history[push ? 'pushState' : 'replaceState'](null, '', next)
+        }
+
+        let firstLoad = true
+        async function load({ push = false } = {}) {
+            if (firstLoad) loading.value = true
+            syncUrl(push)
             try {
-                const data = await fetch('/alert/data').then(r => r.json())
+                const params = filterParams()
+                params.set('per_page', 12)
+                if (!params.has('sort')) params.set('sort', sort.value)
+                const data = await fetch(`/alert/data?${params}`).then(r => r.json())
                 items.value = data.items || []
                 users.value = data.users || []
                 kpis.value = data.kpis || kpis.value
-                limit.value = data.limit || 50
+                total.value = data.total || 0
+                totalPages.value = data.total_pages || 1
+                // A page number past the end (e.g. from an old link) snaps back.
+                if (page.value > totalPages.value) { page.value = totalPages.value; syncUrl(false) }
+                limit.value = data.limit || 100
                 emailAvailable.value = !!data.email_available
             } catch (e) {
                 create_message('Could not load your alerts.', 'danger-subtle')
             } finally {
                 loading.value = false
+                firstLoad = false
             }
+        }
+
+        function reload() { page.value = 1; load({ push: true }) }
+        function goTo(p) { page.value = p; load({ push: true }); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+
+        // Back / forward between filtered views.
+        window.addEventListener('popstate', () => {
+            const u = new URLSearchParams(window.location.search)
+            q.value = u.get('q') || ''
+            status.value = u.get('status') || ''
+            target.value = u.get('target') || ''
+            email.value = u.get('email') || ''
+            unseenOnly.value = u.get('unseen') === 'true'
+            sort.value = u.get('sort') || 'recent'
+            page.value = Math.max(1, parseInt(u.get('page')) || 1)
+            load()
+        })
+        let searchTimer = null
+        function onSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(reload, 300) }
+        function clearFilters() {
+            q.value = ''; status.value = ''; target.value = ''; email.value = ''; unseenOnly.value = false
+            reload()
         }
 
         async function post(url, body) {
@@ -237,6 +352,7 @@ createApp({
             if (data.success) {
                 a.is_active = data.is_active
                 kpis.value.active += a.is_active ? 1 : -1
+                if (status.value) load()   // it may no longer match the status filter
                 create_message(`Alert ${a.is_active ? 'resumed' : 'paused'}.`, 'success-subtle')
             } else {
                 create_message(data.message || 'Failed.', 'danger-subtle')
@@ -256,8 +372,9 @@ createApp({
 
         onMounted(load)
 
-        return { loading, items, users, kpis, limit, emailAvailable, emailAlertCount, quickStarts,
-                 targetLabel, relative, toggle, remove }
+        return { loading, items, users, kpis, limit, emailAvailable, quickStarts,
+                 q, status, target, email, unseenOnly, sort, page, total, totalPages, hasFilters,
+                 reload, goTo, onSearch, clearFilters, targetLabel, relative, toggle, remove }
     },
 }).mount('#alert-list-app')
 </script>

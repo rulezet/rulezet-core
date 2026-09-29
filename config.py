@@ -78,6 +78,7 @@ class Config:
     # Alerts anti-spam protocol (app/features/alert/alert_core.py) — every
     # limit is a ceiling that defers, never drops: held matches go out later.
     ALERT_SWEEP_INTERVAL          = int(os.environ.get('ALERT_SWEEP_INTERVAL', 300))    # seconds between passes
+    ALERT_MAX_PER_USER            = int(os.environ.get('ALERT_MAX_PER_USER', 100))
     ALERT_MAX_MATCHES_PER_PASS    = int(os.environ.get('ALERT_MAX_MATCHES_PER_PASS', 500))  # recorded per alert per pass
     ALERT_NOTIF_COLLAPSE          = int(os.environ.get('ALERT_NOTIF_COLLAPSE', 3))      # > N alerts firing → 1 notification
     ALERT_EMAILS_PER_USER_PER_DAY = int(os.environ.get('ALERT_EMAILS_PER_USER_PER_DAY', 8))

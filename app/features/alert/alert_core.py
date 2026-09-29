@@ -58,7 +58,6 @@ from app.core.db_class.db import (
 
 # ─── Limits ──────────────────────────────────────────────────────────────────
 
-MAX_ALERTS_PER_USER   = 50
 MAX_VALUES_PER_FIELD  = 20
 KEYWORD_MIN_LEN       = 3
 KEYWORD_MAX_LEN       = 60
@@ -243,9 +242,67 @@ def matches_since(user_id, days=7) -> int:
     ) or 0
 
 
+def max_alerts_per_user() -> int:
+    return int(current_app.config.get('ALERT_MAX_PER_USER', 100))
+
+
+def _criteria_search_values(criteria) -> list:
+    """Lower-cased criterion values a search can hit, plus a label for each
+    "any ..." switch (so searching "any cve" finds those alerts too)."""
+    criteria = criteria or {}
+    values = [str(v).lower() for field in CRITERIA_LIST_FIELDS if field != 'users'
+              for v in criteria.get(field) or []]
+    labels = {'cve_any': 'any cve', 'tag_any': 'any tag', 'attack_any': 'any att&ck technique',
+              'github_any': 'any github import'}
+    values += [label for flag, label in labels.items() if criteria.get(flag)]
+    return values
+
+
+def search_user_alerts(user_id, q=None, status=None, email=None, target=None, unseen_only=False,
+                       sort='recent', page=1, per_page=12):
+    """Server-side search / filters / sort / pagination for "My alerts", so
+    the page stays fast however many alerts a user has. `q` matches the
+    name and any criterion value (CVE, tag, keyword, repo...)."""
+    from sqlalchemy import String, cast
+
+    query = Alert.query.filter(Alert.user_id == user_id)
+    if q:
+        # Matched in Python against the name and the criteria *values* — a
+        # SQL ilike on the JSON text would also hit its keys ("cves",
+        # "cve_any"...), so "cve" matched every alert. A user's alerts are
+        # bounded (ALERT_MAX_PER_USER), so this stays cheap.
+        needle = q.strip().lower()
+        matching_ids = [
+            a.id for a in Alert.query.filter(Alert.user_id == user_id)
+                                     .with_entities(Alert.id, Alert.name, Alert.criteria).all()
+            if needle in (a.name or '').lower() or any(needle in v for v in _criteria_search_values(a.criteria))
+        ]
+        query = query.filter(Alert.id.in_(matching_ids))
+    if status in ('active', 'paused'):
+        query = query.filter(Alert.is_active == (status == 'active'))
+    if email == 'on':
+        query = query.filter(Alert.email_mode != 'off')
+    elif email in Alert.EMAIL_MODES:
+        query = query.filter(Alert.email_mode == email)
+    if target in Alert.TARGETS:
+        query = query.filter(cast(Alert.targets, String).ilike(f'%"{target}"%'))
+    if unseen_only:
+        unseen_ids = (db.session.query(AlertMatch.alert_id)
+                      .filter(AlertMatch.seen_at.is_(None)).distinct())
+        query = query.filter(Alert.id.in_(unseen_ids))
+
+    order = {
+        'name':      Alert.name.asc(),
+        'matches':   Alert.match_count.desc(),
+        'triggered': Alert.last_triggered_at.desc().nullslast(),
+    }.get(sort, Alert.created_at.desc())
+    return query.order_by(order, Alert.id.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
+
 def create_alert(user_id, fields: dict) -> Alert:
-    if Alert.query.filter_by(user_id=user_id).count() >= MAX_ALERTS_PER_USER:
-        raise AlertError(f'You can have at most {MAX_ALERTS_PER_USER} alerts.')
+    limit = max_alerts_per_user()
+    if Alert.query.filter_by(user_id=user_id).count() >= limit:
+        raise AlertError(f'You can have at most {limit} alerts.')
     alert = Alert(uuid=str(uuid_mod.uuid4()), user_id=user_id, **fields)
     db.session.add(alert)
     db.session.commit()

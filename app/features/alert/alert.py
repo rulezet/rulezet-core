@@ -11,7 +11,7 @@ from flask import Blueprint, abort, jsonify, render_template, request
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
-from app.core.db_class.db import AttackTechnique, Tag, User
+from app.core.db_class.db import Alert, AttackTechnique, Tag, User
 from app.core.utils.activity_log import log_activity
 from app.core.utils.mail_status import is_email_available
 
@@ -144,21 +144,37 @@ def unsubscribe(token):
 @alert_blueprint.route('/data', methods=['GET'])
 @login_required
 def alerts_data():
-    alerts = AlertModel.get_user_alerts(current_user.id)
+    """One page of the user's alerts (search / filters / sort) plus the
+    KPIs, which always cover every alert regardless of the filters."""
+    args = request.args
+    pagination = AlertModel.search_user_alerts(
+        current_user.id,
+        q=(args.get('q') or '').strip() or None,
+        status=args.get('status'), email=args.get('email'), target=args.get('target'),
+        unseen_only=args.get('unseen') == 'true',
+        sort=args.get('sort', 'recent'),
+        page=args.get('page', 1, type=int),
+        per_page=min(max(args.get('per_page', 12, type=int), 1), 60),
+    )
     unseen = AlertModel.unseen_counts(current_user.id)
-    items = [a.to_json(unseen_count=unseen.get(a.id, 0)) for a in alerts]
+    alerts = pagination.items
     watched_user_ids = {int(u) for a in alerts for u in (a.criteria or {}).get('users') or []}
     watched_users = User.query.filter(User.id.in_(watched_user_ids)).all() if watched_user_ids else []
+    total = Alert.query.filter_by(user_id=current_user.id).count()
     return jsonify({
-        'items': items,
+        'items': [a.to_json(unseen_count=unseen.get(a.id, 0)) for a in alerts],
+        'total': pagination.total,
+        'total_pages': pagination.pages or 1,
+        'page': pagination.page,
         'users': [{'id': u.id, 'username': u.get_username()} for u in watched_users],
         'kpis': {
-            'total': len(alerts),
-            'active': sum(1 for a in alerts if a.is_active),
+            'total': total,
+            'active': Alert.query.filter_by(user_id=current_user.id, is_active=True).count(),
             'unseen': sum(unseen.values()),
             'matches_7d': AlertModel.matches_since(current_user.id, days=7),
+            'emailed': Alert.query.filter(Alert.user_id == current_user.id, Alert.email_mode != 'off').count(),
         },
-        'limit': AlertModel.MAX_ALERTS_PER_USER,
+        'limit': AlertModel.max_alerts_per_user(),
         'email_available': is_email_available(),
     })
 
