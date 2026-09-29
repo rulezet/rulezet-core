@@ -63,6 +63,15 @@
 }
 
 /* Export / Bundle row inside the filter panel */
+.rl-alert-row {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem;
+    margin: 0 0 .75rem; padding: .6rem .85rem;
+    border: 1px dashed rgba(13,110,253,.35);
+    border-radius: 12px;
+    background: rgba(13,110,253,.04);
+}
+.rl-alert-hint { font-size: .8rem; color: var(--subtle-text-color); }
+
 .rl-fp-export-row {
     margin-top: .6rem;
     padding-top: .6rem;

@@ -59,7 +59,7 @@ def _criteria_display(criteria: dict) -> dict:
 
 def _prefill_from_args(args) -> dict:
     """/alert/new?cves=...&tags=...&attacks=...&keywords=...&formats=...
-    &users=...&github_repos=...&target=bundle — what the "Watch" buttons and
+    &users=...&github_repos=...&cve_any=true...&target=rule|bundle|both — what the "Watch" buttons and
     "Alert me for this search" link to. Values are only a starting point:
     everything is validated again on save."""
     def csv(key):
@@ -79,9 +79,10 @@ def _prefill_from_args(args) -> dict:
         'github_any': args.get('github_any') == 'true',
     }
     target = args.get('target')
+    targets = {'rule': ['rule'], 'bundle': ['bundle'], 'both': ['rule', 'bundle']}.get(target, ['rule'])
     return {
         'name': (args.get('name') or '')[:AlertModel.NAME_MAX_LEN],
-        'targets': [target] if target in ('rule', 'bundle') else ['rule'],
+        'targets': targets,
         'events': ['created'],
         'match_mode': 'any',
         'criteria': criteria,

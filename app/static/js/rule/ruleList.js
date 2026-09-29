@@ -135,6 +135,8 @@ export default {
         initialFilters:     { type: Object,           default: () => ({}) },
         csrfToken:          { type: String,           default: '' },
         currentUserIsAuthenticated: { type: Boolean,  default: false },
+        // "Alert me for this search" link under the filters (read mode, logged in).
+        showAlertButton:    { type: Boolean,          default: true },
         showExport:         { type: Boolean,          default: true },
         syncUrl:            { type: Boolean,          default: true },
         confirmDisabled:    { type: Boolean,          default: false },
@@ -616,8 +618,20 @@ export default {
                     </rule-export-action>
                 </div>
 
+
             </div>
         </template>
+
+        <!-- ── "Alert me" — turn the current filters into a saved alert ── -->
+        <div v-if="showAlertButton && currentUserIsAuthenticated && mode === 'read' && alertUrl"
+             class="rl-alert-row">
+            <span class="rl-alert-hint">
+                <i class="fa-solid fa-satellite-dish me-1"></i>Want to hear about new rules like these?
+            </span>
+            <a :href="alertUrl" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                <i class="fa-solid fa-bell me-1"></i>Alert me for this search
+            </a>
+        </div>
 
         <!-- ── Select-all-pages banner ── -->
         <div v-if="showSelectBanner" class="rl-select-banner">
@@ -2581,6 +2595,30 @@ export default {
             qualityMin.value !== null || qualityMax.value !== null
         )
 
+        // /alert/new prefill built from the active filters — only the filters
+        // an alert can watch are carried over; null when none of them is set.
+        const alertUrl = computed(() => {
+            const p = new URLSearchParams()
+            const q = search.value.trim()
+            if (q.length >= 3 && q.length <= 60 && searchField.value !== 'uuid') p.set('keywords', q)
+            if (ruleType.value) p.set('formats', ruleType.value)
+            if (selectedTags.value.length) p.set('tags', selectedTags.value.join(','))
+            if (selectedVulns.value.length) p.set('cves', selectedVulns.value.join(','))
+            if (selectedAttacks.value.length) p.set('attacks', selectedAttacks.value.join(','))
+            const repos = selectedSources.value
+                .map(s => (s.match(/github\.com\/([^/\s]+\/[^/\s#?]+)/i) || [])[1])
+                .filter(Boolean).map(r => r.replace(/\.git$/, '').toLowerCase())
+            if (repos.length) p.set('github_repos', repos.join(','))
+            if (cveOnly.value && !props.hasCveOnly) p.set('cve_any', 'true')
+            if (hasTagsOnly.value) p.set('tag_any', 'true')
+            if (hasAttackOnly.value) p.set('attack_any', 'true')
+            if (![...p.keys()].length) return null
+            const name = [q, ...selectedVulns.value, ...selectedTags.value, ...selectedAttacks.value, ruleType.value]
+                .filter(Boolean).slice(0, 3).join(', ')
+            p.set('name', (name || 'My search').slice(0, 120))
+            return `/alert/new?${p.toString()}`
+        })
+
         // IDs to pass to RuleExportAction:
         //   - null → filter-based export (all pages selected, or filters active but no manual pick)
         //   - array → export exactly those IDs
@@ -2673,7 +2711,7 @@ export default {
             // Status
             statusIcon, statusLabel, canChangeStatus, cycleStatus,
             // Export
-            hasActiveFilters, exportRuleIds, exportFilterQuery, showExportBar, exportTotalRules, facetContextParams,
+            hasActiveFilters, alertUrl, exportRuleIds, exportFilterQuery, showExportBar, exportTotalRules, facetContextParams,
             exportActionView,
         }
     },

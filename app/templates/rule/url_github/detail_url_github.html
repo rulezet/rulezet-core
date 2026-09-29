@@ -164,10 +164,18 @@
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon"><i class="fa-brands fa-github"></i></div>
-            <div class="min-width-0">
+            <div class="min-width-0 flex-grow-1">
                 <h2 class="fw-bold mb-1">[[ repoDisplay ]]</h2>
                 <div class="banner-accent"></div>
             </div>
+            {% set repo_path = url.split('github.com/')[-1] if 'github.com/' in url else '' %}
+            {% if repo_path %}
+            <a href="/alert/new?github_repos={{ repo_path | urlencode }}&name={{ ('New from ' ~ repo_path) | urlencode }}"
+               class="btn btn-sm btn-outline-primary rounded-pill px-3 flex-shrink-0"
+               title="Get an alert when new rules are imported from this repository">
+                <i class="fa-solid fa-bell me-1"></i>Watch this repo
+            </a>
+            {% endif %}
         </div>
         <p class="text-muted mb-3" style="max-width: 700px; font-size: 0.95rem;">
             All detection rules imported from
