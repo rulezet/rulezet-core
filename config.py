@@ -75,6 +75,16 @@ class Config:
     # SMTP password — on every email sent in development. Opt in explicitly.
     MAIL_DEBUG    = os.environ.get('MAIL_DEBUG', 'false').lower() == 'true'
 
+    # Alerts anti-spam protocol (app/features/alert/alert_core.py) — every
+    # limit is a ceiling that defers, never drops: held matches go out later.
+    ALERT_SWEEP_INTERVAL          = int(os.environ.get('ALERT_SWEEP_INTERVAL', 300))    # seconds between passes
+    ALERT_MAX_MATCHES_PER_PASS    = int(os.environ.get('ALERT_MAX_MATCHES_PER_PASS', 500))  # recorded per alert per pass
+    ALERT_NOTIF_COLLAPSE          = int(os.environ.get('ALERT_NOTIF_COLLAPSE', 3))      # > N alerts firing → 1 notification
+    ALERT_EMAILS_PER_USER_PER_DAY = int(os.environ.get('ALERT_EMAILS_PER_USER_PER_DAY', 8))
+    ALERT_EMAILS_PER_HOUR         = int(os.environ.get('ALERT_EMAILS_PER_HOUR', 60))    # whole instance
+    ALERT_EMAILS_PER_DAY          = int(os.environ.get('ALERT_EMAILS_PER_DAY', 400))    # whole instance (Gmail caps at 500)
+    ALERT_MATCH_RETENTION_DAYS    = int(os.environ.get('ALERT_MATCH_RETENTION_DAYS', 90))
+
     YARA_ADDITIONAL_EXTERNAL = empty_split(os.environ.get('YARA_ADDITIONAL_EXTERNAL', ''), ',')
 
     # Flask-Caching. FileSystemCache (was SimpleCache — an in-process dict)

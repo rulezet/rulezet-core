@@ -22,6 +22,25 @@ ever go out when app/core/utils/mail_status.py says email is available.
 
 Visibility: rules are public unless soft-deleted; bundles only when
 Bundle.access is true. A user is never alerted about their own content.
+
+Anti-spam protocol — built for the worst case (a 600k-rule import with
+thousands of active alerts). Every limit defers, never drops: matches that
+can't be notified/emailed now stay pending and go out later. All knobs are
+ALERT_* settings in config.py.
+  1. Grouping — one in-app notification per alert per pass, one email per
+     user per send listing at most 10 items and 10 alerts in total, the rest
+     summed up as counts + links.
+  2. Collapse — a user with more than ALERT_NOTIF_COLLAPSE alerts firing in
+     one pass gets a single notification for all of them.
+  3. Per-pass cap — at most ALERT_MAX_MATCHES_PER_PASS matches recorded per
+     alert per pass; the rest only bumps match_count ("500+"), which keeps
+     the alert_match table bounded during mass imports.
+  4. User quota — instant emails at most every 15 minutes, and at most
+     ALERT_EMAILS_PER_USER_PER_DAY alert emails per user per day.
+  5. Instance budget — ALERT_EMAILS_PER_HOUR / ALERT_EMAILS_PER_DAY for the
+     whole instance; users whose pending matches are oldest go first.
+  6. Circuit breaker — the first SMTP failure ends the pass's sending.
+  7. Retention — matches older than ALERT_MATCH_RETENTION_DAYS are purged daily.
 """
 
 import datetime
@@ -49,6 +68,8 @@ SWEEP_WINDOW          = 5000   # objects looked at per pass and per kind; the re
 # never-edited rule still has last_modif a hair after creation_date.
 EDIT_GRACE            = datetime.timedelta(seconds=2)
 INSTANT_EMAIL_COOLDOWN = datetime.timedelta(minutes=15)
+EMAIL_MAX_ITEMS       = 10   # items listed in one email, all alerts together
+EMAIL_MAX_SECTIONS    = 10   # alert sections in one email; the rest is summed up in one line
 DIGEST_PERIODS = {'daily': datetime.timedelta(days=1), 'weekly': datetime.timedelta(days=7)}
 
 CRITERIA_LIST_FIELDS = ('cves', 'tags', 'attacks', 'keywords', 'formats', 'users', 'github_repos')
@@ -566,30 +587,34 @@ def _version(ts):
     return ts.isoformat() if ts else ''
 
 
-def _evaluate(alert, object_type, event, rows, now):
-    """New AlertMatch rows for one alert over one slice of the window."""
+def _setting(name, default):
+    return int(current_app.config.get(name, default))
+
+
+def _evaluate(alert, object_type, event, rows, now, budget):
+    """New AlertMatch rows for one alert over one slice of the window.
+    Returns (matches, overflow): at most `budget` rows are built, the
+    overflow is only counted (anti-spam layer 3)."""
     if object_type not in (alert.targets or []) or event not in (alert.events or []):
-        return []
+        return [], 0
     # Never alert someone about their own content.
     candidates = {oid: (owner, ts) for oid, owner, ts in rows if owner != alert.user_id}
     if not candidates:
-        return []
+        return [], 0
 
     ids = list(candidates)
     if object_type == 'rule':
         q = rule_match_query(alert.criteria or {}, alert.match_mode)
         if q is None:
-            return []
+            return [], 0
         matched = [r[0] for r in q.filter(Rule.id.in_(ids)).with_entities(Rule.id).all()]
-        reasons = _matched_on_rules(alert.criteria or {}, matched)
     else:
         q = bundle_match_query(alert.criteria or {}, alert.match_mode)
         if q is None:
-            return []
+            return [], 0
         matched = [b[0] for b in q.filter(Bundle.id.in_(ids)).with_entities(Bundle.id).all()]
-        reasons = _matched_on_bundles(alert.criteria or {}, matched)
     if not matched:
-        return []
+        return [], 0
 
     versions = {oid: (_version(candidates[oid][1]) if event == 'updated' else '') for oid in matched}
     existing = {
@@ -599,33 +624,43 @@ def _evaluate(alert, object_type, event, rows, now):
             AlertMatch.event == event, AlertMatch.object_id.in_(matched),
         ).with_entities(AlertMatch.object_id, AlertMatch.object_version).all()
     }
+    fresh = [oid for oid in matched if (oid, versions[oid]) not in existing]
+    kept, overflow = fresh[:max(budget, 0)], max(len(fresh) - max(budget, 0), 0)
+    if not kept:
+        return [], overflow
+
+    reasons = (_matched_on_rules if object_type == 'rule' else _matched_on_bundles)(alert.criteria or {}, kept)
     return [
         AlertMatch(alert_id=alert.id, object_type=object_type, object_id=oid,
                    object_version=versions[oid], event=event,
                    matched_on=reasons.get(oid) or [], created_at=now)
-        for oid in matched if (oid, versions[oid]) not in existing
-    ]
+        for oid in kept
+    ], overflow
 
 
 def run_sweep(now=None) -> dict:
     """One pass: evaluate every active alert against what changed since the
-    previous pass, record matches, notify. Returns a small summary."""
+    previous pass, record matches, notify, send due emails, purge old
+    matches once a day. Returns a small summary."""
     now = now or datetime.datetime.utcnow()
     state = _get_state()
     slices, marks = _window(state)
+    per_pass = _setting('ALERT_MAX_MATCHES_PER_PASS', 500)
 
-    new_matches_by_alert = {}
+    fired = {}   # alert.id -> (alert, matches, overflow)
     if any(rows for _, _, rows in slices):
         for alert in Alert.query.filter_by(is_active=True).all():
-            found = []
+            found, overflow = [], 0
             for object_type, event, rows in slices:
                 if rows:
-                    found += _evaluate(alert, object_type, event, rows, now)
-            if found:
+                    kept, extra = _evaluate(alert, object_type, event, rows, now, per_pass - len(found))
+                    found += kept
+                    overflow += extra
+            if found or overflow:
                 db.session.add_all(found)
-                alert.match_count = (alert.match_count or 0) + len(found)
+                alert.match_count = (alert.match_count or 0) + len(found) + overflow
                 alert.last_triggered_at = now
-                new_matches_by_alert[alert.id] = (alert, found)
+                fired[alert.id] = (alert, found, overflow)
         db.session.flush()
 
     # Advance the watermark to what this pass actually covered.
@@ -634,15 +669,27 @@ def run_sweep(now=None) -> dict:
     state.last_run_at = now
     db.session.commit()
 
-    for alert, matches in new_matches_by_alert.values():
-        _notify_in_app(alert, matches)
-
+    _notify_in_app(fired.values())
     emails_sent = send_due_emails(now)
+    pruned = prune_old_matches(state, now)
     return {
-        'alerts_triggered': len(new_matches_by_alert),
-        'matches': sum(len(m) for _, m in new_matches_by_alert.values()),
+        'alerts_triggered': len(fired),
+        'matches': sum(len(m) + o for _, m, o in fired.values()),
         'emails_sent': emails_sent,
+        'pruned': pruned,
     }
+
+
+def prune_old_matches(state, now) -> int:
+    """Retention (anti-spam layer 7): at most once a day, delete matches
+    older than ALERT_MATCH_RETENTION_DAYS. match_count keeps the history total."""
+    if state.last_pruned_at and now - state.last_pruned_at < datetime.timedelta(days=1):
+        return 0
+    cutoff = now - datetime.timedelta(days=_setting('ALERT_MATCH_RETENTION_DAYS', 90))
+    deleted = AlertMatch.query.filter(AlertMatch.created_at < cutoff).delete(synchronize_session=False)
+    state.last_pruned_at = now
+    db.session.commit()
+    return deleted
 
 
 # ─── In-app notification ─────────────────────────────────────────────────────
@@ -655,42 +702,65 @@ def _object_label(object_type, object_id):
     return (bundle.name if bundle else f'Bundle #{object_id}'), f'/bundle/detail/{object_id}'
 
 
-def _count_label(matches):
+def _count_label(matches, overflow=0):
     rules = sum(1 for m in matches if m.object_type == 'rule')
     bundles = len(matches) - rules
+    more = '+' if overflow else ''
     parts = []
-    if rules:
-        parts.append(f'{rules} rule{"s" if rules > 1 else ""}')
+    if rules or (overflow and not bundles):
+        n = rules + (overflow if not bundles else 0)
+        parts.append(f'{n}{more} rule{"s" if n > 1 else ""}')
     if bundles:
-        parts.append(f'{bundles} bundle{"s" if bundles > 1 else ""}')
+        parts.append(f'{bundles}{more if not rules else ""} bundle{"s" if bundles > 1 else ""}')
     return ' and '.join(parts)
 
 
-def _notify_in_app(alert, matches):
-    """One grouped notification per alert per pass."""
+def _notify_in_app(fired):
+    """Anti-spam layers 1-2: one notification per alert per pass, and a
+    single one per user once more than ALERT_NOTIF_COLLAPSE alerts fire."""
     from app.features.notification.notification_core import _get_pref
 
-    if not alert.notify_in_app or not _get_pref(alert.user_id).pref_alerts:
-        return
-    try:
-        if len(matches) == 1:
-            m = matches[0]
-            label, link = _object_label(m.object_type, m.object_id)
-            verb = 'updated' if m.event == 'updated' else 'new'
-            title = f'{alert.name}: {verb} {m.object_type} match'
-            body = label
-        else:
-            title = f'{alert.name}: {_count_label(matches)} match'
-            body = 'Open the alert to see everything that matched.'
-            link = f'/alert/{alert.uuid}'
-        db.session.add(Notification(
-            user_id=alert.user_id, notif_type='alert_match', title=title[:255], body=(body or '')[:500],
-            link=link, icon='fa-solid fa-bell', is_read=False, created_at=datetime.datetime.utcnow(),
-        ))
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        print(f'[alert_core] in-app notification failed for alert {alert.id}: {e}')
+    collapse_at = _setting('ALERT_NOTIF_COLLAPSE', 3)
+    by_user = {}
+    for alert, matches, overflow in fired:
+        if alert.notify_in_app:
+            by_user.setdefault(alert.user_id, []).append((alert, matches, overflow))
+
+    now = datetime.datetime.utcnow()
+    for user_id, entries in by_user.items():
+        try:
+            if not _get_pref(user_id).pref_alerts:
+                continue
+            if len(entries) > collapse_at:
+                total = sum(len(m) for _, m, _ in entries)
+                more = '+' if any(o for _, _, o in entries) else ''
+                notifs = [dict(
+                    title=f'{len(entries)} of your alerts matched {total}{more} item{"s" if total > 1 else ""}',
+                    body=', '.join(a.name for a, _, _ in entries[:4]) + ('…' if len(entries) > 4 else ''),
+                    link='/alert/')]
+            else:
+                notifs = []
+                for alert, matches, overflow in entries:
+                    if len(matches) == 1 and not overflow:
+                        m = matches[0]
+                        label, link = _object_label(m.object_type, m.object_id)
+                        verb = 'updated' if m.event == 'updated' else 'new'
+                        notifs.append(dict(title=f'{alert.name}: {verb} {m.object_type} match',
+                                           body=label, link=link))
+                    else:
+                        notifs.append(dict(title=f'{alert.name}: {_count_label(matches, overflow)} match',
+                                           body='Open the alert to see everything that matched.',
+                                           link=f'/alert/{alert.uuid}'))
+            db.session.add_all([
+                Notification(user_id=user_id, notif_type='alert_match', title=n['title'][:255],
+                             body=(n['body'] or '')[:500], link=n['link'], icon='fa-solid fa-bell',
+                             is_read=False, created_at=now)
+                for n in notifs
+            ])
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f'[alert_core] in-app notification failed for user {user_id}: {e}')
 
 
 # ─── Emails ──────────────────────────────────────────────────────────────────
@@ -729,69 +799,112 @@ def _email_is_due(alert, now, last_user_email):
     return alert.last_emailed_at is None or now - alert.last_emailed_at >= period
 
 
+def _emails_sent_since(since, user_id=None) -> int:
+    from app.core.db_class.db import AlertEmailLog
+    q = db.session.query(func.count(AlertEmailLog.id)).filter(AlertEmailLog.sent_at >= since)
+    if user_id is not None:
+        q = q.filter(AlertEmailLog.user_id == user_id)
+    return q.scalar() or 0
+
+
+def email_budget(now=None) -> dict:
+    """What the instance may still send right now (anti-spam layer 5)."""
+    now = now or datetime.datetime.utcnow()
+    per_hour, per_day = _setting('ALERT_EMAILS_PER_HOUR', 60), _setting('ALERT_EMAILS_PER_DAY', 400)
+    sent_hour = _emails_sent_since(now - datetime.timedelta(hours=1))
+    sent_day = _emails_sent_since(now - datetime.timedelta(days=1))
+    return {'per_hour': per_hour, 'per_day': per_day, 'sent_hour': sent_hour, 'sent_day': sent_day,
+            'remaining': max(0, min(per_hour - sent_hour, per_day - sent_day))}
+
+
 def send_due_emails(now=None) -> int:
-    """Sends every due alert email, grouped into one message per user.
-    Returns the number of emails sent. No-op when email isn't available."""
+    """Sends due alert emails, one message per user, within every quota
+    (anti-spam layers 4-6). Returns the number of emails sent. No-op when
+    email isn't available."""
     from app.core.utils.mail_status import is_email_available
 
     if not is_email_available():
         return 0
     now = now or datetime.datetime.utcnow()
+    remaining = email_budget(now)['remaining']
+    if remaining <= 0:
+        return 0
 
-    pending = (db.session.query(Alert, func.count(AlertMatch.id))
+    # Oldest pending match first, so a busy instance can't starve anyone.
+    pending = (db.session.query(Alert, func.min(AlertMatch.created_at))
                .join(AlertMatch, AlertMatch.alert_id == Alert.id)
                .filter(Alert.is_active == True, Alert.email_mode != 'off', AlertMatch.emailed_at.is_(None))
                .group_by(Alert.id).all())
-    by_user = {}
-    for alert, _count in pending:
+    by_user, oldest = {}, {}
+    for alert, first_pending in pending:
         by_user.setdefault(alert.user_id, []).append(alert)
+        oldest[alert.user_id] = min(oldest.get(alert.user_id, first_pending), first_pending)
 
+    per_user_day = _setting('ALERT_EMAILS_PER_USER_PER_DAY', 8)
     sent = 0
-    for user_id, alerts in by_user.items():
-        last_user_email = max((a.last_emailed_at for a in get_user_alerts(user_id) if a.last_emailed_at),
-                              default=None)
-        due = [a for a in alerts if _email_is_due(a, now, last_user_email)]
+    for user_id in sorted(by_user, key=lambda u: oldest[u]):
+        if sent >= remaining:
+            break
+        if _emails_sent_since(now - datetime.timedelta(days=1), user_id) >= per_user_day:
+            continue   # held for tomorrow — nothing lost
+        last_user_email = (db.session.query(func.max(Alert.last_emailed_at))
+                           .filter(Alert.user_id == user_id).scalar())
+        due = [a for a in by_user[user_id] if _email_is_due(a, now, last_user_email)]
         if not due:
             continue
         user = User.query.get(user_id)
         if not user or not user.email:
             continue
-        if _send_alert_email(user, due, now):
+        result = _send_alert_email(user, due, now)
+        if result is None:
+            break      # SMTP failure: circuit breaker, retry next pass
+        if result:
             sent += 1
     return sent
 
 
-def _send_alert_email(user, alerts, now) -> bool:
+def _send_alert_email(user, alerts, now):
+    """True when sent, False when there was nothing to send, None on SMTP failure."""
     from flask_mail import Message
     from app import mail
+    from app.core.db_class.db import AlertEmailLog
 
     base = _public_base_url()
-    sections = []
-    match_ids = []
+    # Keep the email short: EMAIL_MAX_ITEMS items across every alert, filled
+    # alert by alert; later sections show only their count + a link, and
+    # alerts past EMAIL_MAX_SECTIONS are summed up in a single line.
+    sections, emailed_alerts = [], []
+    items_left = EMAIL_MAX_ITEMS
+    hidden_alerts = hidden_matches = 0
     for alert in alerts:
-        matches = (AlertMatch.query.filter_by(alert_id=alert.id, emailed_at=None)
-                   .order_by(AlertMatch.created_at.desc()).all())
-        if not matches:
+        pending = AlertMatch.query.filter_by(alert_id=alert.id, emailed_at=None)
+        total = pending.count()
+        if not total:
+            continue
+        emailed_alerts.append(alert)
+        if len(sections) >= EMAIL_MAX_SECTIONS:
+            hidden_alerts += 1
+            hidden_matches += total
             continue
         items = []
-        for m in matches[:25]:
+        for m in pending.order_by(AlertMatch.created_at.desc()).limit(items_left).all():
             label, link = _object_label(m.object_type, m.object_id)
             items.append({'type': m.object_type, 'event': m.event, 'label': label,
                           'url': base + link, 'matched_on': m.matched_on or []})
+        items_left -= len(items)
         sections.append({
-            'alert': alert, 'items': items, 'total': len(matches),
+            'alert': alert, 'items': items, 'total': total,
             'alert_url': f'{base}/alert/{alert.uuid}',
             'unsubscribe_url': f'{base}/alert/unsubscribe/{make_unsubscribe_token(alert)}',
         })
-        match_ids += [m.id for m in matches]
     if not sections:
         return False
 
-    total = sum(s['total'] for s in sections)
+    total = sum(s['total'] for s in sections) + hidden_matches
     subject = (f'Rulezet — {sections[0]["alert"].name}: {total} new match{"es" if total > 1 else ""}'
-               if len(sections) == 1 else f'Rulezet — {total} new matches across {len(sections)} alerts')
-    ctx = dict(user=user, sections=sections, total=total, base_url=base,
-               manage_url=f'{base}/alert/', year=now.year)
+               if len(emailed_alerts) == 1 else f'Rulezet — {total} new matches across {len(emailed_alerts)} alerts')
+    ctx = dict(user=user, sections=sections, total=total, base_url=base, hidden_alerts=hidden_alerts,
+               hidden_matches=hidden_matches, manage_url=f'{base}/alert/', year=now.year)
     try:
         msg = Message(subject=subject, recipients=[user.email])
         # Rendered straight from the Jinja env: this runs in the sweeper
@@ -802,12 +915,16 @@ def _send_alert_email(user, alerts, now) -> bool:
         msg.html = env.get_template('alert/email/alert_email.html').render(**ctx)
         mail.send(msg)
     except Exception as e:
-        print(f'[alert_core] alert email to user {user.id} failed: {e}')
-        return False
+        print(f'[alert_core] alert email to user {user.id} failed, stopping this pass: {e}')
+        return None
 
-    AlertMatch.query.filter(AlertMatch.id.in_(match_ids)).update({'emailed_at': now}, synchronize_session=False)
-    for section in sections:
-        section['alert'].last_emailed_at = now
+    # Everything summarised in this email counts as delivered, listed or not.
+    alert_ids = [a.id for a in emailed_alerts]
+    AlertMatch.query.filter(AlertMatch.alert_id.in_(alert_ids), AlertMatch.emailed_at.is_(None)) \
+        .update({'emailed_at': now}, synchronize_session=False)
+    for alert in emailed_alerts:
+        alert.last_emailed_at = now
+    db.session.add(AlertEmailLog(user_id=user.id, sent_at=now, alert_count=len(emailed_alerts), match_count=total))
     db.session.commit()
     return True
 

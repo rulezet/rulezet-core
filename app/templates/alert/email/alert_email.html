@@ -40,9 +40,9 @@
         </div>
         {% endfor %}
         {% if section.total > section['items']|length %}
-        <div style="padding:10px 16px;background:#fbfcfe;border-top:1px solid #f0f2f6;font-size:13px;">
+        <div style="padding:10px 16px;background:#fbfcfe;{% if section['items'] %}border-top:1px solid #f0f2f6;{% endif %}font-size:13px;">
           <a href="{{ section.alert_url }}" style="color:#0d6efd;text-decoration:none;">
-            + {{ section.total - section['items']|length }} more — see them all on Rulezet &rarr;
+            {% if section['items'] %}+ {{ section.total - section['items']|length }} more — see them all{% else %}See the {{ section.total }} match{{ 'es' if section.total > 1 else '' }}{% endif %} on Rulezet &rarr;
           </a>
         </div>
         {% endif %}
@@ -51,6 +51,12 @@
         </div>
       </div>
       {% endfor %}
+
+      {% if hidden_alerts %}
+      <p style="margin:0 0 8px;font-size:14px;color:#495057;text-align:center;">
+        …and {{ hidden_matches }} more match{{ 'es' if hidden_matches > 1 else '' }} across {{ hidden_alerts }} other alert{{ 's' if hidden_alerts > 1 else '' }}.
+      </p>
+      {% endif %}
 
       <div style="text-align:center;margin-top:24px;">
         <a href="{{ manage_url }}" style="display:inline-block;background:#0d6efd;color:#ffffff;font-weight:600;font-size:14px;padding:11px 26px;border-radius:999px;text-decoration:none;">

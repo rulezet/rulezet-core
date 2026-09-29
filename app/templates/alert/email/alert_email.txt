@@ -6,9 +6,11 @@ Hi {{ user.first_name or user.get_username() }},
 {% for item in section['items'] %}- [{{ 'updated ' if item.event == 'updated' else '' }}{{ item.type }}] {{ item.label }}
   {{ item.url }}{% if item.matched_on %}
   matched on: {{ item.matched_on[:6] | join(', ') }}{% endif %}
-{% endfor %}{% if section.total > section['items']|length %}+ {{ section.total - section['items']|length }} more: {{ section.alert_url }}
+{% endfor %}{% if section.total > section['items']|length %}{{ ('+ ' ~ (section.total - section['items']|length) ~ ' more') if section['items'] else ('See the ' ~ section.total ~ ' matches') }}: {{ section.alert_url }}
 {% endif %}Stop emails for this alert: {{ section.unsubscribe_url }}
-{% endfor %}
+{% endfor %}{% if hidden_alerts %}
+...and {{ hidden_matches }} more matches across {{ hidden_alerts }} other alerts.
+{% endif %}
 Manage your alerts: {{ manage_url }}
 
 — Rulezet ({{ base_url }})

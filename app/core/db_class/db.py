@@ -3970,6 +3970,21 @@ class AlertSweepState(db.Model):
     rules_modified_at  = db.Column(db.DateTime, nullable=True)
     bundles_updated_at = db.Column(db.DateTime, nullable=True)
     last_run_at        = db.Column(db.DateTime, nullable=True)
+    last_pruned_at     = db.Column(db.DateTime, nullable=True)   # AlertMatch retention purge
+
+
+class AlertEmailLog(db.Model):
+    """One row per alert email actually sent. It is what the anti-spam
+    quotas count (per user per day, per instance per hour / day — see
+    alert_core.send_due_emails) and an audit trail of what went out."""
+    __tablename__ = 'alert_email_log'
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'),
+                            nullable=False, index=True)
+    sent_at     = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow, index=True)
+    alert_count = db.Column(db.Integer, nullable=False, default=0)
+    match_count = db.Column(db.Integer, nullable=False, default=0)
 
 
 class CustomTheme(db.Model):

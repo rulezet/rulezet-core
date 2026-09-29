@@ -416,7 +416,7 @@ def _start_alert_sweeper(app):
     import time
 
     STARTUP_DELAY = int(os.environ.get('ALERT_SWEEP_STARTUP_DELAY', 60))
-    INTERVAL      = int(os.environ.get('ALERT_SWEEP_INTERVAL', 300))
+    INTERVAL      = int(app.config.get('ALERT_SWEEP_INTERVAL', 300))
 
     def _loop():
         time.sleep(STARTUP_DELAY)
