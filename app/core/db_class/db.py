@@ -3353,6 +3353,10 @@ class InstanceConfig(db.Model):
     telemetry_enabled = db.Column(db.Boolean, default=True, nullable=False)
     chatbot_enabled   = db.Column(db.Boolean, default=True, nullable=False)
     mascot_enabled    = db.Column(db.Boolean, default=True, nullable=False)
+    # Instance-wide switch for every user-facing email feature (alert emails,
+    # digests...). Even when on, emails only go out if SMTP is actually
+    # configured — see app/core/utils/mail_status.py.
+    email_enabled     = db.Column(db.Boolean, default=True, nullable=False)
     # Ollama server the AI agents talk to — set from the AI admin (Models &
     # Security). NULL falls back to config.py's OLLAMA_URL / OLLAMA_MODEL.
     # A non-local URL is refused by ai_core's locality guard unless
@@ -3371,6 +3375,7 @@ class InstanceConfig(db.Model):
             'telemetry_enabled': self.telemetry_enabled,
             'chatbot_enabled':   self.chatbot_enabled,
             'mascot_enabled':    self.mascot_enabled,
+            'email_enabled':     self.email_enabled,
             'public_url':        self.public_url,
             'version':           self.version,
             'last_started_at':   self.last_started_at.strftime('%Y-%m-%d %H:%M') if self.last_started_at else None,

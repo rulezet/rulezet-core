@@ -614,6 +614,24 @@
                                 <span class="ms-auto badge bg-primary-subtle text-primary" style="font-size:.65rem;">Flask-Mail</span>
                             </div>
 
+                            <!-- Email features switch -->
+                            <div class="config-row">
+                                <div class="config-row__key">Email features</div>
+                                <div class="config-row__value d-flex align-items-center gap-2 flex-wrap">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="email-features-switch"
+                                               :checked="config.mail.features_enabled" :disabled="emailToggleSaving"
+                                               @change="toggleEmailFeatures($event.target.checked)">
+                                    </div>
+                                    <span v-if="config.mail.available" class="badge bg-success-subtle text-success-emphasis">Active</span>
+                                    <span v-else-if="!config.mail.features_enabled" class="badge bg-secondary-subtle text-secondary-emphasis">Disabled</span>
+                                    <span v-else class="badge bg-warning-subtle text-warning-emphasis" title="Set a SMTP server and a sender (username or default sender)">SMTP not configured</span>
+                                </div>
+                            </div>
+                            <div class="small mb-2" style="color:var(--subtle-text-color);font-size:.75rem;">
+                                Alert emails and digests. When off — or while SMTP isn't configured — their settings are hidden from users.
+                            </div>
+
                             <!-- SMTP Server -->
                             <div class="config-row">
                                 <div class="config-row__key">SMTP Server</div>
@@ -1317,6 +1335,24 @@ createApp({
             create_message(data.message || (data.success ? 'Saved.' : 'Failed.'), data.success ? 'success-subtle' : 'danger-subtle')
         }
 
+        const emailToggleSaving = ref(false)
+        async function toggleEmailFeatures(enabled) {
+            emailToggleSaving.value = true
+            try {
+                const data = await post('/admin/settings/email_toggle', { enabled })
+                const { create_message } = await import('/static/js/toaster.js')
+                if (data.success) {
+                    config.value.mail.features_enabled = data.enabled
+                    config.value.mail.available = data.available
+                    create_message(`Email features ${data.enabled ? 'enabled' : 'disabled'}.`, 'success-subtle')
+                } else {
+                    create_message(data.error || 'Failed.', 'danger-subtle')
+                }
+            } finally {
+                emailToggleSaving.value = false
+            }
+        }
+
         async function sendTestEmail() {
             testEmailSending.value = true
             testEmailResult.value = null
@@ -1386,6 +1422,7 @@ createApp({
         loadSubmodules()
 
         return {
+            emailToggleSaving, toggleEmailFeatures,
             system, systemLoading,
             packages, packagesLoading, pkgSearch, filteredPackages, loadPackages,
             createPkgJob, confirmPkgUninstall, pkgToUninstall, doPkgUninstall,

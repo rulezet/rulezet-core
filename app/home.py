@@ -1464,6 +1464,32 @@ def admin_settings_instance_init():
     })
 
 
+@home_blueprint.route('/admin/settings/email_toggle', methods=['POST'])
+@login_required
+def admin_settings_email_toggle():
+    """Enable/disable every user-facing email feature (alert emails and
+    digests) instance-wide. Their UI disappears and their routes refuse
+    server-side while off — see app/core/utils/mail_status.py."""
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from app import db
+    from .core.db_class.db import InstanceConfig
+    from .core.utils.activity_log import log_activity
+    from .core.utils.mail_status import email_status
+
+    data = request.get_json(silent=True) or {}
+    cfg = InstanceConfig.query.first()
+    if not cfg:
+        return jsonify({'error': 'Instance not configured yet'}), 400
+
+    cfg.email_enabled = bool(data.get('enabled', True))
+    db.session.commit()
+    log_activity('admin.email_toggle',
+                 f"{'Enabled' if cfg.email_enabled else 'Disabled'} email features instance-wide",
+                 target_type='instance_config', target_id=cfg.id, is_public=False)
+    return jsonify({'success': True, **email_status()})
+
+
 @home_blueprint.route('/admin/settings/chatbot_toggle', methods=['POST'])
 @login_required
 def admin_settings_chatbot_toggle():

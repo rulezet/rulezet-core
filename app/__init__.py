@@ -242,17 +242,20 @@ def create_app(start_worker=True):
         except Exception:
             pass  # table may not exist yet (fresh install before migrations run)
         mascot_enabled = True
+        instance_cfg = None
         try:
             instance_cfg = InstanceConfig.query.first()
             if instance_cfg is not None:
                 mascot_enabled = instance_cfg.mascot_enabled
         except Exception:
             pass  # table may not exist yet (fresh install before migrations run)
+        from app.core.utils.mail_status import is_email_available
         return {
             'app_version': current_app.config.get('APP_VERSION', 'unknown'),
             'is_official': current_app.config.get('IS_OFFICIAL_INSTANCE', False),
             'chatbot_enabled': chatbot_enabled,
             'mascot_enabled': mascot_enabled,
+            'email_available': is_email_available(instance_cfg),
         }
 
     def admin_jobs_running_count():

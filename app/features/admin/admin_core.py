@@ -208,9 +208,12 @@ def update_submodule(path: str) -> dict:
 
 def get_app_config() -> dict:
     """Return current application configuration (sensitive values masked)."""
+    from app.core.utils.mail_status import email_status
+
     cfg = current_app.config
     secret = cfg.get('SECRET_KEY') or ''
     mail_pwd = cfg.get('MAIL_PASSWORD') or ''
+    mail_state = email_status()
     github_token = os.environ.get('GITHUB_TOKEN') or ''
     github_host = os.environ.get('GITHUB_HOST') or 'github.com'
     return {
@@ -223,6 +226,9 @@ def get_app_config() -> dict:
             'default_sender': cfg.get('MAIL_DEFAULT_SENDER', ''),
             'password_set': bool(mail_pwd),
             'password_preview': (mail_pwd[:2] + '••••' + mail_pwd[-2:]) if len(mail_pwd) >= 4 else '••••',
+            'features_enabled': mail_state['enabled'],
+            'configured': mail_state['configured'],
+            'available': mail_state['available'],
         },
         'app': {
             'flask_url': cfg.get('FLASK_URL', '127.0.0.1'),
