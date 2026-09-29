@@ -70,7 +70,11 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', os.environ.get('MAIL_USERNAME', ''))
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
-   
+    # Flask-Mail defaults MAIL_DEBUG to app.debug, which dumps the whole SMTP
+    # dialogue to stdout — including the base64 "AUTH PLAIN" line, i.e. the
+    # SMTP password — on every email sent in development. Opt in explicitly.
+    MAIL_DEBUG    = os.environ.get('MAIL_DEBUG', 'false').lower() == 'true'
+
     YARA_ADDITIONAL_EXTERNAL = empty_split(os.environ.get('YARA_ADDITIONAL_EXTERNAL', ''), ',')
 
     # Flask-Caching. FileSystemCache (was SimpleCache — an in-process dict)
