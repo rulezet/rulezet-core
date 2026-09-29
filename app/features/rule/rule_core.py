@@ -3443,35 +3443,41 @@ _DATA_TABLE_SORT_KEYS = {
 _PLACEHOLDER_LICENSES = ('', 'unknown', 'none', 'n/a', 'na', 'noassertion', 'null')
 
 
-def apply_presence_filters(query, has_cve=False, has_tags=False, has_license=False, has_attack=False):
-    """"Has at least one ..." filters, shared by the rule listing and the
-    background jobs (_build_rule_query) so a "select all matching" run
-    covers exactly the rules the admin saw on screen.
+# Marking tags every rule gets by default (_attach_default_tags) — they say
+# nothing about the rule's content, so "has tags" ignores them.
+_MARKING_TAG_PREFIXES = ('tlp:', 'pap:')
 
-    has_tags ignores the tlp:/pap: marking tags — every rule gets
-    tlp:clear + pap:clear by default, so counting them would match the
-    whole catalog."""
+
+def presence_conditions(has_cve=False, has_tags=False, has_license=False, has_attack=False) -> list:
+    """SQL conditions for the "has at least one CVE / tag / license / ATT&CK
+    technique" filters. Shared by the rule listing, the background jobs
+    (_build_rule_query) and the alerts engine, so all three agree on what
+    "has a CVE" means."""
+    conds = []
     if has_cve:
-        query = query.filter(
-            Rule.cve_id.isnot(None),
-            ~Rule.cve_id.in_(['', '[]', 'null', '[""]']),
-        )
+        conds.append(and_(Rule.cve_id.isnot(None), ~Rule.cve_id.in_(['', '[]', 'null', '[""]'])))
     if has_tags:
         tagged_rule_ids = (
             db.session.query(RuleTagAssociation.rule_id)
             .join(Tag, Tag.id == RuleTagAssociation.tag_id)
-            .filter(~db.func.lower(Tag.name).like('tlp:%'),
-                    ~db.func.lower(Tag.name).like('pap:%'))
+            .filter(*[~db.func.lower(Tag.name).like(f'{p}%') for p in _MARKING_TAG_PREFIXES])
         )
-        query = query.filter(Rule.id.in_(tagged_rule_ids))
+        conds.append(Rule.id.in_(tagged_rule_ids))
     if has_license:
-        query = query.filter(
+        conds.append(and_(
             Rule.license.isnot(None),
             ~db.func.lower(db.func.trim(Rule.license)).in_(_PLACEHOLDER_LICENSES),
-        )
+        ))
     if has_attack:
-        query = query.filter(Rule.id.in_(db.session.query(RuleAttackAssociation.rule_id)))
-    return query
+        conds.append(Rule.id.in_(db.session.query(RuleAttackAssociation.rule_id)))
+    return conds
+
+
+def apply_presence_filters(query, has_cve=False, has_tags=False, has_license=False, has_attack=False):
+    """Applies presence_conditions() to a Rule query (every flag is ANDed)."""
+    conds = presence_conditions(has_cve=has_cve, has_tags=has_tags,
+                                has_license=has_license, has_attack=has_attack)
+    return query.filter(*conds) if conds else query
 
 
 def get_rules_data_table(page=1, per_page=10, **filters):

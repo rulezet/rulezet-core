@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Alert emails — Rulezet{% endblock %}
+
+{% block content %}
+<div class="container my-5" style="max-width:640px;">
+  <div class="card border-0 card_detail shadow-lg position-relative" style="border-radius:12px;">
+    <div class="premium-accent-line"></div>
+    <div class="card-body p-5 text-center">
+      {% if alert %}
+      <div class="mb-3" style="font-size:2.5rem;color:#0d6efd;"><i class="fa-solid fa-envelope-circle-check"></i></div>
+      <h3 class="fw-bold mb-2">Emails stopped</h3>
+      <p class="text-muted mb-4">
+        You won't receive emails for the alert <strong>{{ alert.name }}</strong> anymore.
+        It keeps notifying you on Rulezet.
+      </p>
+      <a href="/alert/{{ alert.uuid }}" class="btn btn-primary rounded-pill px-4">Open this alert</a>
+      {% else %}
+      <div class="mb-3" style="font-size:2.5rem;color:#dc3545;"><i class="fa-solid fa-link-slash"></i></div>
+      <h3 class="fw-bold mb-2">This link is no longer valid</h3>
+      <p class="text-muted mb-4">The alert may have been deleted. You can manage your alerts from your account.</p>
+      <a href="/alert/" class="btn btn-primary rounded-pill px-4">My alerts</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

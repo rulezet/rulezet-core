@@ -52,8 +52,14 @@ INSTANT_EMAIL_COOLDOWN = datetime.timedelta(minutes=15)
 DIGEST_PERIODS = {'daily': datetime.timedelta(days=1), 'weekly': datetime.timedelta(days=7)}
 
 CRITERIA_LIST_FIELDS = ('cves', 'tags', 'attacks', 'keywords', 'formats', 'users', 'github_repos')
+# "Any ..." switches: any vulnerability id / non-marking tag / ATT&CK technique
+# at all, or any GitHub import. Each one supersedes its specific list.
+CRITERIA_ANY_FLAGS   = ('cve_any', 'tag_any', 'attack_any', 'github_any')
 
-_CVE_RE    = re.compile(r'^[A-Z][A-Z0-9]*-[A-Z0-9][A-Z0-9-]*$')   # CVE-2026-1234, GHSA-xxxx-xxxx-xxxx, ...
+# Any vulnerability id VulnerabilityInput accepts: CVE-, GHSA-, RHSA-2024:1234, MSRC_CVE-...
+_MARKING_TAG_PREFIXES = ('tlp:', 'pap:')   # default markings, never "content" tags
+
+_CVE_RE    = re.compile(r'^[A-Z][A-Z0-9_]*-[A-Z0-9][A-Z0-9:_.-]*$')
 _ATTACK_RE = re.compile(r'^T\d{4}(\.\d{3})?$')
 
 
@@ -106,8 +112,15 @@ def normalize_criteria(raw) -> dict:
         'users':        [],
         'github_repos': _clean_list(raw.get('github_repos'), _clean_repo,
                                     lambda v: re.match(r'^[a-z0-9_.-]+/[a-z0-9_.-]+$', v)),
-        'github_any':   bool(raw.get('github_any')),
     }
+    for flag in CRITERIA_ANY_FLAGS:
+        criteria[flag] = bool(raw.get(flag))
+    # An "any" switch makes its specific list redundant — drop it so what's
+    # stored is exactly what gets matched.
+    for flag, field in (('cve_any', 'cves'), ('tag_any', 'tags'), ('attack_any', 'attacks'),
+                        ('github_any', 'github_repos')):
+        if criteria[flag]:
+            criteria[field] = []
     user_ids = _clean_list(raw.get('users'), lambda v: v if v.isdigit() else v, lambda v: v.isdigit())
     if user_ids:
         ids = [int(u) for u in user_ids]
@@ -120,12 +133,16 @@ def normalize_criteria(raw) -> dict:
 
 
 def has_any_criterion(criteria) -> bool:
-    return any(criteria.get(f) for f in CRITERIA_LIST_FIELDS) or bool(criteria.get('github_any'))
+    return any(criteria.get(f) for f in CRITERIA_LIST_FIELDS + CRITERIA_ANY_FLAGS)
 
 
-def validate_alert_payload(data: dict, email_available: bool) -> dict:
+def validate_alert_payload(data: dict, email_available: bool, current_email_mode=None) -> dict:
     """Turns a create/update request body into clean Alert fields.
-    Raises AlertError with a user-facing message."""
+    Raises AlertError with a user-facing message.
+
+    While email is unavailable the form doesn't show the email section, so
+    an edit keeps the alert's stored email_mode (current_email_mode) instead
+    of silently resetting it — it simply stays dormant until email is back."""
     name = (data.get('name') or '').strip()
     if not name:
         raise AlertError('Give this alert a name.')
@@ -146,15 +163,17 @@ def validate_alert_payload(data: dict, email_available: bool) -> dict:
     if not has_any_criterion(criteria):
         raise AlertError('Add at least one criterion (CVE, tag, technique, keyword, user...).')
 
-    email_mode = data.get('email_mode') or 'off'
-    if email_mode not in Alert.EMAIL_MODES:
-        raise AlertError('Unknown email mode.')
-    if email_mode != 'off' and not email_available:
-        raise AlertError('Email alerts are not available on this instance.')
+    if email_available:
+        email_mode = data.get('email_mode') or 'off'
+        if email_mode not in Alert.EMAIL_MODES:
+            raise AlertError('Unknown email mode.')
+    else:
+        email_mode = current_email_mode or 'off'
 
     notify_in_app = bool(data.get('notify_in_app', True))
-    if not notify_in_app and email_mode == 'off':
-        raise AlertError('This alert would never tell you anything — enable in-app or email notifications.')
+    if not notify_in_app and (email_mode == 'off' or not email_available):
+        raise AlertError('This alert would never tell you anything — enable in-app notifications'
+                         + (' or email.' if email_available else '.'))
 
     return {
         'name': name, 'targets': targets, 'events': events, 'match_mode': match_mode,
@@ -189,6 +208,16 @@ def total_unseen(user_id) -> int:
         db.session.query(func.count(AlertMatch.id))
         .join(Alert, Alert.id == AlertMatch.alert_id)
         .filter(Alert.user_id == user_id, AlertMatch.seen_at.is_(None))
+        .scalar()
+    ) or 0
+
+
+def matches_since(user_id, days=7) -> int:
+    since = datetime.datetime.utcnow() - datetime.timedelta(days=days)
+    return (
+        db.session.query(func.count(AlertMatch.id))
+        .join(Alert, Alert.id == AlertMatch.alert_id)
+        .filter(Alert.user_id == user_id, AlertMatch.created_at >= since)
         .scalar()
     ) or 0
 
@@ -247,15 +276,23 @@ def _attack_condition(techniques):
 
 def _rule_conditions(criteria) -> list:
     """One SQL condition per non-empty criterion, for the Rule table."""
+    from app.features.rule.rule_core import presence_conditions
+
     conds = []
-    if criteria.get('cves'):
+    if criteria.get('cve_any'):
+        conds += presence_conditions(has_cve=True)
+    elif criteria.get('cves'):
         conds.append(or_(*[Rule.cve_id.ilike(f'%"{c}"%') for c in criteria['cves']]))
-    if criteria.get('tags'):
+    if criteria.get('tag_any'):
+        conds += presence_conditions(has_tags=True)
+    elif criteria.get('tags'):
         tagged = (db.session.query(RuleTagAssociation.rule_id)
                   .join(Tag, Tag.id == RuleTagAssociation.tag_id)
                   .filter(func.lower(Tag.name).in_(criteria['tags'])))
         conds.append(Rule.id.in_(tagged))
-    if criteria.get('attacks'):
+    if criteria.get('attack_any'):
+        conds += presence_conditions(has_attack=True)
+    elif criteria.get('attacks'):
         mapped = db.session.query(RuleAttackAssociation.rule_id).filter(_attack_condition(criteria['attacks']))
         conds.append(Rule.id.in_(mapped))
     if criteria.get('keywords'):
@@ -278,14 +315,19 @@ def _bundle_conditions(criteria):
     """Same for bundles. Returns None when the alert can't match a bundle:
     ATT&CK / format / GitHub criteria only exist on rules, so in 'all' mode
     any of them rules bundles out; in 'any' mode they're just skipped."""
-    rule_only = any(criteria.get(f) for f in ('attacks', 'formats', 'github_repos')) or criteria.get('github_any')
+    rule_only = any(criteria.get(f) for f in ('attacks', 'formats', 'github_repos', 'attack_any', 'github_any'))
     conds = []
-    if criteria.get('cves'):
+    if criteria.get('cve_any'):
+        conds.append(and_(Bundle.vulnerability_identifiers.isnot(None),
+                          ~Bundle.vulnerability_identifiers.in_(['', '[]', 'null', '[""]'])))
+    elif criteria.get('cves'):
         conds.append(or_(*[Bundle.vulnerability_identifiers.ilike(f'%"{c}"%') for c in criteria['cves']]))
-    if criteria.get('tags'):
+    if criteria.get('tag_any') or criteria.get('tags'):
+        tag_filter = (and_(*[~func.lower(Tag.name).like(f'{p}%') for p in _MARKING_TAG_PREFIXES])
+                      if criteria.get('tag_any') else func.lower(Tag.name).in_(criteria['tags']))
         tagged = (db.session.query(BundleTagAssociation.bundle_id)
                   .join(Tag, Tag.id == BundleTagAssociation.tag_id)
-                  .filter(func.lower(Tag.name).in_(criteria['tags'])))
+                  .filter(tag_filter))
         conds.append(Bundle.id.in_(tagged))
     if criteria.get('keywords'):
         conds.append(or_(*[
@@ -319,6 +361,25 @@ def bundle_match_query(criteria, match_mode, base_query=None):
     return query.filter(Bundle.access == True, _combine(conds, match_mode))
 
 
+def _json_ids(raw) -> list:
+    """Vulnerability ids stored as a JSON list string ('["CVE-..."]')."""
+    import json
+    try:
+        values = json.loads(raw) if raw else []
+    except (ValueError, TypeError):
+        return []
+    return [str(v) for v in values if v] if isinstance(values, list) else []
+
+
+def _is_marking_tag(name):
+    return (name or '').lower().startswith(_MARKING_TAG_PREFIXES)
+
+
+# At most this many values per "any ..." reason, so a rule with 40 CVEs
+# doesn't turn one match into a wall of chips.
+_ANY_REASON_LIMIT = 3
+
+
 def _matched_on_rules(criteria, rule_ids) -> dict:
     """{rule_id: ["cve:...", "tag:...", ...]} — why each rule matched, for display."""
     if not rule_ids:
@@ -327,26 +388,36 @@ def _matched_on_rules(criteria, rule_ids) -> dict:
     rows = Rule.query.filter(Rule.id.in_(rule_ids)).with_entities(
         Rule.id, Rule.cve_id, Rule.title, Rule.description, Rule.format, Rule.user_id,
         Rule.source, Rule.github_path).all()
-    wanted_tags = set(criteria.get('tags') or [])
+
     tags_by_rule = {}
-    if wanted_tags:
+    if criteria.get('tag_any') or criteria.get('tags'):
+        wanted = set(criteria.get('tags') or [])
         for rid, name in (db.session.query(RuleTagAssociation.rule_id, Tag.name)
                           .join(Tag, Tag.id == RuleTagAssociation.tag_id)
                           .filter(RuleTagAssociation.rule_id.in_(rule_ids)).all()):
-            if name and name.lower() in wanted_tags:
-                tags_by_rule.setdefault(rid, []).append(name.lower())
+            name = (name or '').lower()
+            if (criteria.get('tag_any') and name and not _is_marking_tag(name)) or name in wanted:
+                tags_by_rule.setdefault(rid, set()).add(name)
+
     attacks_by_rule = {}
-    if criteria.get('attacks'):
-        for rid, tid in (db.session.query(RuleAttackAssociation.rule_id, RuleAttackAssociation.technique_id)
-                         .filter(RuleAttackAssociation.rule_id.in_(rule_ids),
-                                 _attack_condition(criteria['attacks'])).all()):
-            attacks_by_rule.setdefault(rid, []).append(tid)
+    if criteria.get('attack_any') or criteria.get('attacks'):
+        q = db.session.query(RuleAttackAssociation.rule_id, RuleAttackAssociation.technique_id) \
+            .filter(RuleAttackAssociation.rule_id.in_(rule_ids))
+        if not criteria.get('attack_any'):
+            q = q.filter(_attack_condition(criteria['attacks']))
+        for rid, tid in q.all():
+            attacks_by_rule.setdefault(rid, set()).add(tid)
 
     for rid, cve_raw, title, description, fmt, owner, source, github_path in rows:
         r = reasons[rid]
-        r += [f'cve:{c}' for c in criteria.get('cves') or [] if f'"{c}"'.lower() in (cve_raw or '').lower()]
-        r += [f'tag:{t}' for t in sorted(set(tags_by_rule.get(rid, [])))]
-        r += [f'attack:{t}' for t in sorted(set(attacks_by_rule.get(rid, [])))]
+        if criteria.get('cve_any'):
+            r += [f'cve:{c}' for c in _json_ids(cve_raw)[:_ANY_REASON_LIMIT]]
+        else:
+            r += [f'cve:{c}' for c in criteria.get('cves') or [] if f'"{c}"'.lower() in (cve_raw or '').lower()]
+        limit = _ANY_REASON_LIMIT if criteria.get('tag_any') else None
+        r += [f'tag:{t}' for t in sorted(tags_by_rule.get(rid, set()))[:limit]]
+        limit = _ANY_REASON_LIMIT if criteria.get('attack_any') else None
+        r += [f'attack:{t}' for t in sorted(attacks_by_rule.get(rid, set()))[:limit]]
         haystack = f'{title or ""} {description or ""}'.lower()
         r += [f'keyword:{k}' for k in criteria.get('keywords') or [] if k in haystack]
         if fmt and fmt.lower() in (criteria.get('formats') or []):
@@ -363,20 +434,25 @@ def _matched_on_bundles(criteria, bundle_ids) -> dict:
     if not bundle_ids:
         return {}
     reasons = {bid: [] for bid in bundle_ids}
-    wanted_tags = set(criteria.get('tags') or [])
     tags_by_bundle = {}
-    if wanted_tags:
+    if criteria.get('tag_any') or criteria.get('tags'):
+        wanted = set(criteria.get('tags') or [])
         for bid, name in (db.session.query(BundleTagAssociation.bundle_id, Tag.name)
                           .join(Tag, Tag.id == BundleTagAssociation.tag_id)
                           .filter(BundleTagAssociation.bundle_id.in_(bundle_ids)).all()):
-            if name and name.lower() in wanted_tags:
-                tags_by_bundle.setdefault(bid, []).append(name.lower())
+            name = (name or '').lower()
+            if (criteria.get('tag_any') and name and not _is_marking_tag(name)) or name in wanted:
+                tags_by_bundle.setdefault(bid, set()).add(name)
     for bid, vulns, name, description, owner in (Bundle.query.filter(Bundle.id.in_(bundle_ids))
             .with_entities(Bundle.id, Bundle.vulnerability_identifiers, Bundle.name,
                            Bundle.description, Bundle.user_id).all()):
         r = reasons[bid]
-        r += [f'cve:{c}' for c in criteria.get('cves') or [] if f'"{c}"'.lower() in (vulns or '').lower()]
-        r += [f'tag:{t}' for t in sorted(set(tags_by_bundle.get(bid, [])))]
+        if criteria.get('cve_any'):
+            r += [f'cve:{c}' for c in _json_ids(vulns)[:_ANY_REASON_LIMIT]]
+        else:
+            r += [f'cve:{c}' for c in criteria.get('cves') or [] if f'"{c}"'.lower() in (vulns or '').lower()]
+        limit = _ANY_REASON_LIMIT if criteria.get('tag_any') else None
+        r += [f'tag:{t}' for t in sorted(tags_by_bundle.get(bid, set()))[:limit]]
         haystack = f'{name or ""} {description or ""}'.lower()
         r += [f'keyword:{k}' for k in criteria.get('keywords') or [] if k in haystack]
         if owner in (criteria.get('users') or []):

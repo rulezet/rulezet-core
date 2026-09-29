@@ -121,6 +121,7 @@ def create_app(start_worker=True):
     from app.features.roles.roles import roles_blueprint
     from app.features.admin.task_scheduler.task_scheduler_routes import task_scheduler_blueprint
     from app.features.admin.rule_mirror.rule_mirror_routes import rule_mirror_blueprint
+    from app.features.alert.alert import alert_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
     app.register_blueprint(account_blueprint, url_prefix="/account")
@@ -149,6 +150,7 @@ def create_app(start_worker=True):
     app.register_blueprint(roles_blueprint, url_prefix='/admin/roles')
     app.register_blueprint(task_scheduler_blueprint, url_prefix='/admin/tasks')
     app.register_blueprint(rule_mirror_blueprint)
+    app.register_blueprint(alert_blueprint, url_prefix='/alert')
 
     from app.api.api import api_blueprint
 

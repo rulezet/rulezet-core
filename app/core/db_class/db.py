@@ -3879,8 +3879,12 @@ class Alert(db.Model):
         "formats":      ["yara", "sigma", ...],
         "users":        [12, 34],                     # rule/bundle owner user ids
         "github_repos": ["elastic/detection-rules"],  # rule source contains this
-        "github_any":   false                         # any rule imported from GitHub
+        "cve_any":      false,   # any vulnerability id at all
+        "tag_any":      false,   # any tag except the tlp:/pap: markings
+        "attack_any":   false,   # any ATT&CK technique
+        "github_any":   false    # any rule imported from GitHub
     }
+    Each "*_any" switch supersedes its specific list.
     Within one criterion any value matches (OR). match_mode says how the
     non-empty criteria combine: 'any' (OR) or 'all' (AND)."""
     __tablename__ = 'alert'
