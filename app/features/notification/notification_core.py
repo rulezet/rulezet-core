@@ -70,6 +70,7 @@ _TYPE_ICON = {
     'workflow_run_started':     'fa-solid fa-code-branch',
     'workflow_run_finished':    'fa-solid fa-code-branch',
     'workflow_run_failed':      'fa-solid fa-circle-xmark',
+    'alert_match':              'fa-solid fa-bell',
 }
 
 

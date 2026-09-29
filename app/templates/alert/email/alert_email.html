@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:24px 12px;background:#f4f6fb;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;color:#212529;">
+  <div style="max-width:620px;margin:0 auto;">
+
+    <div style="background:linear-gradient(135deg,#0d6efd,#0a58ca);padding:26px 32px;border-radius:12px 12px 0 0;">
+      <div style="color:rgba(255,255,255,.75);font-size:12px;letter-spacing:.08em;text-transform:uppercase;">Rulezet alerts</div>
+      <h1 style="color:#ffffff;margin:6px 0 0;font-size:22px;font-weight:700;">
+        {{ total }} new match{{ 'es' if total > 1 else '' }} for you
+      </h1>
+    </div>
+
+    <div style="background:#ffffff;border:1px solid #e3e8f0;border-top:0;padding:28px 32px;border-radius:0 0 12px 12px;">
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
+        Hi {{ user.first_name or user.get_username() }}, here's what matched your alerts on Rulezet.
+      </p>
+
+      {% for section in sections %}
+      <div style="border:1px solid #e3e8f0;border-radius:10px;margin-bottom:18px;overflow:hidden;">
+        <div style="background:#f7f9fc;padding:12px 16px;border-bottom:1px solid #e3e8f0;">
+          <a href="{{ section.alert_url }}" style="color:#0d6efd;font-weight:700;font-size:15px;text-decoration:none;">
+            &#128276; {{ section.alert.name }}
+          </a>
+          <span style="float:right;color:#6c757d;font-size:13px;">{{ section.total }} match{{ 'es' if section.total > 1 else '' }}</span>
+        </div>
+        {% for item in section['items'] %}
+        <div style="padding:12px 16px;{% if not loop.last %}border-bottom:1px solid #f0f2f6;{% endif %}">
+          <span style="display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;background:{{ '#e7f1ff' if item.type == 'rule' else '#e8f7f0' }};color:{{ '#0a58ca' if item.type == 'rule' else '#146c43' }};">
+            {{ 'Updated ' if item.event == 'updated' else '' }}{{ item.type }}
+          </span>
+          <a href="{{ item.url }}" style="color:#212529;font-weight:600;font-size:14px;text-decoration:none;margin-left:6px;">{{ item.label }}</a>
+          {% if item.matched_on %}
+          <div style="margin-top:6px;">
+            {% for reason in item.matched_on[:6] %}
+            <span style="display:inline-block;font-size:11px;color:#495057;background:#f1f3f5;border-radius:6px;padding:1px 7px;margin:2px 4px 0 0;font-family:Consolas,Menlo,monospace;">{{ reason }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% if section.total > section['items']|length %}
+        <div style="padding:10px 16px;background:#fbfcfe;border-top:1px solid #f0f2f6;font-size:13px;">
+          <a href="{{ section.alert_url }}" style="color:#0d6efd;text-decoration:none;">
+            + {{ section.total - section['items']|length }} more — see them all on Rulezet &rarr;
+          </a>
+        </div>
+        {% endif %}
+        <div style="padding:8px 16px;border-top:1px solid #f0f2f6;font-size:11px;">
+          <a href="{{ section.unsubscribe_url }}" style="color:#6c757d;">Stop emails for this alert</a>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div style="text-align:center;margin-top:24px;">
+        <a href="{{ manage_url }}" style="display:inline-block;background:#0d6efd;color:#ffffff;font-weight:600;font-size:14px;padding:11px 26px;border-radius:999px;text-decoration:none;">
+          Manage my alerts
+        </a>
+      </div>
+    </div>
+
+    <p style="text-align:center;color:#8a94a6;font-size:11px;margin:16px 0 0;">
+      Sent by Rulezet because you set up these alerts — {{ base_url }} · {{ year }}
+    </p>
+  </div>
+</body>
+</html>

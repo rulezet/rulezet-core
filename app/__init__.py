@@ -308,6 +308,7 @@ def create_app(start_worker=True):
     if start_worker:
         _start_telemetry(app)
         _start_update_checker(app)
+        _start_alert_sweeper(app)
         from app.features.rule.rule_from_github.sync_schedule.scheduler_engine import start_scheduler
         start_scheduler(app)
         from app.features.admin.task_scheduler.scheduler_engine import start_scheduler as start_task_scheduler
@@ -401,6 +402,40 @@ def _start_telemetry(app):
             time.sleep(INTERVAL)
 
     t = threading.Thread(target=_loop, daemon=True, name='rulezet-telemetry')
+    t.start()
+
+
+def _start_alert_sweeper(app):
+    """Daemon thread: evaluate every active alert against what changed since
+    the previous pass and send due alert emails (app/features/alert/
+    alert_core.py::run_sweep). Lives in the worker process with the other
+    loops; a failed pass is logged and simply retried next interval."""
+    import threading
+    import time
+
+    STARTUP_DELAY = int(os.environ.get('ALERT_SWEEP_STARTUP_DELAY', 60))
+    INTERVAL      = int(os.environ.get('ALERT_SWEEP_INTERVAL', 300))
+
+    def _loop():
+        time.sleep(STARTUP_DELAY)
+        while True:
+            try:
+                with app.app_context():
+                    from app.features.alert.alert_core import run_sweep
+                    summary = run_sweep()
+                    if summary['matches'] or summary['emails_sent']:
+                        print(f"[alerts] {summary['matches']} match(es) for {summary['alerts_triggered']} "
+                              f"alert(s), {summary['emails_sent']} email(s) sent", flush=True)
+            except Exception as e:
+                try:
+                    with app.app_context():
+                        db.session.rollback()
+                except Exception:
+                    pass
+                print(f"[alerts] sweep failed: {e}", flush=True)
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name='rulezet-alert-sweeper')
     t.start()
 
 

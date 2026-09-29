@@ -610,6 +610,30 @@ mark.notif-search-hit {
                     </div>
                 </div>
 
+                <!-- Section: Alerts -->
+                <div class="notif-prefs-section">
+                    <div class="notif-prefs-section-header">
+                        <i class="fa-solid fa-bell me-2" style="color:#0d6efd;"></i>
+                        Alerts
+                    </div>
+                    <div class="notif-prefs-item" style="border-bottom:none;">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label">
+                                <i class="fa-solid fa-bell me-1" style="color:#0d6efd;"></i>
+                                Alert matches
+                            </div>
+                            <div class="notif-prefs-item-sub">
+                                Notified when a new rule or bundle matches one of your
+                                <a href="/alert/" class="text-decoration-none">alerts</a> — email is set per alert
+                            </div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" v-model="prefs.alerts"
+                                   @change="savePrefs" style="cursor:pointer;">
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Section: System -->
                 <div class="notif-prefs-section">
                     <div class="notif-prefs-section-header">
@@ -737,6 +761,7 @@ const TYPE_OPTIONS = [
     { key: 'ownership',           label: 'Ownership',              icon: 'fa-solid fa-user-shield',       types: ['ownership_requested', 'ownership_approved', 'ownership_rejected'] },
     { key: 'roles',               label: 'Roles',                  icon: 'fa-solid fa-user-tag',          types: ['role_granted', 'role_removed'] },
     { key: 'blog_published',      label: 'Blog',                   icon: 'fa-solid fa-newspaper',         types: ['blog_published'] },
+    { key: 'alerts',              label: 'Alerts',                 icon: 'fa-solid fa-bell',              types: ['alert_match'] },
     { key: 'workflows',           label: 'Workflows',              icon: 'fa-solid fa-diagram-project',   types: ['workflow_run_started', 'workflow_run_finished', 'workflow_run_failed'] },
     { key: 'report_submitted',    label: 'Reports',                icon: 'fa-solid fa-triangle-exclamation', types: ['report_submitted'] },
 ]
@@ -747,7 +772,7 @@ const DEFAULT_PREFS = {
     job_done: true, proposal: true,
     proposal_comment: true, proposal_accepted: true,
     blog_published: true, sync_run_finished: true, background_jobs: true,
-    workflow_runs: true,
+    workflow_runs: true, alerts: true,
 }
 
 createApp({
