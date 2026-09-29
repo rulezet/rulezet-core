@@ -444,6 +444,13 @@ def create_job():
     if not current_user.is_admin() and not is_tag_manager_job and not is_ai_job:
         return jsonify({"error": "Forbidden."}), 403
 
+    # Lifting the Rule Analysis run caps (a catalog-wide, possibly days-long
+    # run) is an AI admin decision — an ai.use operator always gets the
+    # default batch/time budget whatever the payload asks for.
+    if job_type == 'ai_generate' and not (current_user.is_admin() or current_user.has_permission('ai.manage')):
+        for key in ('unlimited_batch', 'unlimited_time', 'batch_size', 'max_seconds'):
+            payload.pop(key, None)
+
     payload['user_id'] = current_user.id
 
     job = JobsModel.create_job(

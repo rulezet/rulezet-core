@@ -56,16 +56,16 @@
         </span>
         <small style="color:var(--subtle-text-color);font-size:.78rem;">
           — pick rules, click <strong>Select</strong> to queue an <code>ai_generate</code> job. For the whole catalog,
-          use a recurring <a href="/admin/tasks/">Task Scheduler</a> entry instead of "select all" here — see
-          the plan's performance notes on why a one-shot run over everything doesn't scale.
+          either turn on "No limit" below and select all, or use a recurring <a href="/admin/tasks/">Task Scheduler</a>
+          entry that works through the backlog a batch at a time.
         </small>
       </div>
 
       <div class="row g-2 align-items-end mb-3">
         <div class="col-auto">
-          <label class="form-label small mb-1">Regenerate rules that already have an analysis</label>
+          <label class="form-label small mb-1">Skip rules that already have an analysis</label>
           <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" v-model="regenerateExisting">
+            <input class="form-check-input" type="checkbox" v-model="skipAnalysed">
           </div>
         </div>
         <div class="col-auto">
@@ -76,7 +76,54 @@
         </div>
       </div>
 
+      <div class="rounded-3 border p-3 mb-3" style="background:var(--light-bg-color);">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-4">
+            <label class="form-label small fw-semibold mb-1">Max rules this run</label>
+            <div class="d-flex align-items-center gap-2">
+              <input type="number" min="1" class="form-control form-control-sm" style="max-width:130px;"
+                     v-model.number="batchSize" :disabled="unlimitedBatch">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="ra-unlimited-batch" v-model="unlimitedBatch">
+                <label class="form-check-label small" for="ra-unlimited-batch">No limit</label>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-lg-4">
+            <label class="form-label small fw-semibold mb-1">Time budget (seconds)</label>
+            <div class="d-flex align-items-center gap-2">
+              <input type="number" min="1" class="form-control form-control-sm" style="max-width:130px;"
+                     v-model.number="maxSeconds" :disabled="unlimitedTime">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="ra-unlimited-time" v-model="unlimitedTime">
+                <label class="form-check-label small" for="ra-unlimited-time">No limit</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="unlimitedBatch || unlimitedTime" class="small mt-2" style="color:var(--subtle-text-color);">
+          <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>
+          The job keeps running until every selected rule is analysed<span v-if="!unlimitedTime"> or the time budget runs out</span>.
+          Rules are processed in chunks of 200 so memory stays flat; with "Skip rules that already have an
+          analysis" on, a cancelled or interrupted run can simply be started again.
+          Pause or cancel it from the job page.
+        </div>
+      </div>
+
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <small style="color:var(--subtle-text-color);">
+          Set the filters below (format, "Has CVE", tags, sources…), then either pick rules and click
+          <strong>Select</strong>, or analyse everything that matches in one go.
+        </small>
+        <button class="btn btn-sm btn-primary rounded-pill px-3" :disabled="running || !matchingTotal"
+                @click="analyseAllMatching">
+          <i class="fa-solid fa-wand-magic-sparkles me-1"></i>
+          Analyse all matching rules ([[ matchingTotal.toLocaleString() ]])
+        </button>
+      </div>
+
       <rule-list
+        ref="ruleListRef"
         mode="select"
         default-view="table"
         :show-filters="true"
@@ -214,8 +261,16 @@ createApp({
         }
 
         // ── Trigger ──────────────────────────────────────────────────────
-        const regenerateExisting = ref(false)
+        const skipAnalysed       = ref(true)
+        const ruleListRef        = ref(null)
+        // RuleList exposes its setup state on the component instance —
+        // selectableTotal is the count of rules matching the current filters.
+        const matchingTotal      = computed(() => ruleListRef.value?.selectableTotal || 0)
         const defaultPublic      = ref(true)
+        const batchSize          = ref(50)
+        const maxSeconds         = ref(900)
+        const unlimitedBatch     = ref(false)
+        const unlimitedTime      = ref(false)
         const running   = ref(false)
         const jobUuid   = ref(null)
         const jobStatus = ref(null)
@@ -229,11 +284,27 @@ createApp({
             ts: l.created_at, level: l.level, msg: l.message,
         })))
 
+        // "Select all pages" + send, without having to tick anything in the
+        // list — the job gets the full filter set (see ruleList.js emitSend).
+        function analyseAllMatching() {
+            const rl = ruleListRef.value
+            if (!rl || !matchingTotal.value) return
+            const skipNote = skipAnalysed.value ? ', skipping those already analysed' : ', re-analysing those already done'
+            const capNote = unlimitedBatch.value ? '' : ` (capped at ${batchSize.value} this run — turn on "No limit" for all)`
+            if (!confirm(`Analyse ${matchingTotal.value.toLocaleString()} matching rule(s)${skipNote}${capNote}?`)) return
+            rl.selectAllPages()
+            rl.emitSend()
+        }
+
         function onSend(ids, filters) {
             const payload = {
                 agent_key: 'rule_analysis',
-                regenerate_existing: regenerateExisting.value,
+                regenerate_existing: !skipAnalysed.value,
                 default_public: defaultPublic.value,
+                unlimited_batch: unlimitedBatch.value,
+                unlimited_time: unlimitedTime.value,
+                batch_size: Math.max(1, parseInt(batchSize.value) || 50),
+                max_seconds: Math.max(1, parseInt(maxSeconds.value) || 900),
             }
             if (ids === 'ALL') {
                 payload.filters = filters || {}
@@ -311,7 +382,7 @@ createApp({
         return {
             csrfToken, onNotify, table_ref, columns, bulkActions,
             handleDelete, handleBulkAction, toggleVisibility,
-            regenerateExisting, defaultPublic, running, jobUuid, jobStatus, jobDone, jobTotal,
+            skipAnalysed, ruleListRef, matchingTotal, analyseAllMatching, defaultPublic, batchSize, maxSeconds, unlimitedBatch, unlimitedTime, running, jobUuid, jobStatus, jobDone, jobTotal,
             jobTerminalEntries, onSend,
         }
     }

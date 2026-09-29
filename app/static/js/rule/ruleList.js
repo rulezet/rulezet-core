@@ -409,6 +409,25 @@ export default {
                         <span><i class="fa-solid fa-diagram-project me-1"></i>Linked rules</span>
                     </label>
 
+                    <template v-if="!isFilterHidden('presence')">
+                        <label v-if="!hasCveOnly" class="rl-fp-switch" title="Only rules with at least one CVE / vulnerability id">
+                            <input type="checkbox" v-model="cveOnly" @change="onFilterChange" />
+                            <span><i class="fa-solid fa-shield-virus me-1"></i>Has CVE</span>
+                        </label>
+                        <label class="rl-fp-switch" title="Only rules with at least one tag (tlp:/pap: markings don't count)">
+                            <input type="checkbox" v-model="hasTagsOnly" @change="onFilterChange" />
+                            <span><i class="fa-solid fa-tags me-1"></i>Has tags</span>
+                        </label>
+                        <label class="rl-fp-switch" title="Only rules with a real license (not empty / Unknown)">
+                            <input type="checkbox" v-model="hasLicenseOnly" @change="onFilterChange" />
+                            <span><i class="fa-solid fa-scale-balanced me-1"></i>Has license</span>
+                        </label>
+                        <label class="rl-fp-switch" title="Only rules mapped to at least one ATT&amp;CK technique">
+                            <input type="checkbox" v-model="hasAttackOnly" @change="onFilterChange" />
+                            <span><i class="fa-solid fa-crosshairs me-1"></i>Has ATT&amp;CK</span>
+                        </label>
+                    </template>
+
                     <div class="rl-quality-range" v-if="!isFilterHidden('quality')" title="Filter by quality score">
                         <i class="fa-solid fa-gauge-high rl-quality-range__icon"></i>
                         <input type="number" min="0" max="100" step="1"
@@ -1668,6 +1687,9 @@ export default {
         const cveOnly           = ref(props.hasCveOnly || _p('has_cve') === 'true')
         const aiAnalysisOnly    = ref(_p('has_ai_analysis') === 'true')
         const hasRelationsOnly  = ref(_p('has_relations') === 'true')
+        const hasTagsOnly       = ref(_p('has_tags') === 'true')
+        const hasLicenseOnly    = ref(_p('has_license') === 'true')
+        const hasAttackOnly     = ref(_p('has_attack') === 'true')
         const _numOrNull = (key) => {
             const raw = _p(key)
             const n = raw !== '' ? Number(raw) : NaN
@@ -1870,6 +1892,10 @@ export default {
             (!isFilterHidden('format') && ruleType.value ? 1 : 0) +
             (!isFilterHidden('exact_match') && exactMatch.value ? 1 : 0) +
             (!isFilterHidden('has_relations') && hasRelationsOnly.value ? 1 : 0) +
+            (!isFilterHidden('presence') && !props.hasCveOnly && cveOnly.value ? 1 : 0) +
+            (!isFilterHidden('presence') && hasTagsOnly.value ? 1 : 0) +
+            (!isFilterHidden('presence') && hasLicenseOnly.value ? 1 : 0) +
+            (!isFilterHidden('presence') && hasAttackOnly.value ? 1 : 0) +
             (!isFilterHidden('search_field') && searchField.value !== 'all' ? 1 : 0) +
             (scopeMine.value ? 1 : 0) +
             (isFilterHidden('tags') ? 0 : selectedTags.value.length) +
@@ -1920,6 +1946,11 @@ export default {
             _upd('scope', scopeMine.value ? 'mine' : null)
             _upd('has_ai_analysis', aiAnalysisOnly.value ? 'true' : null)
             _upd('has_relations', hasRelationsOnly.value ? 'true' : null)
+            // A parent-pinned CVE listing (hasCveOnly) never writes it — it's not a user choice.
+            _upd('has_cve',     !props.hasCveOnly && cveOnly.value ? 'true' : null)
+            _upd('has_tags',    hasTagsOnly.value ? 'true' : null)
+            _upd('has_license', hasLicenseOnly.value ? 'true' : null)
+            _upd('has_attack',  hasAttackOnly.value ? 'true' : null)
             if (props.showValidationFilters) {
                 _upd('mismatch_only', riskFilter.value === 'mismatch' ? 'true' : null)
                 _upd('risk_level',    riskFilter.value !== 'mismatch' ? riskFilter.value || null : null)
@@ -1977,6 +2008,9 @@ export default {
                 if (cveOnly.value)                    params.set('has_cve', 'true')
                 if (aiAnalysisOnly.value)             params.set('has_ai_analysis', 'true')
                 if (hasRelationsOnly.value)            params.set('has_relations', 'true')
+                if (hasTagsOnly.value)                 params.set('has_tags', 'true')
+                if (hasLicenseOnly.value)              params.set('has_license', 'true')
+                if (hasAttackOnly.value)               params.set('has_attack', 'true')
                 if (qualityMin.value !== null)        params.set('quality_score_min', qualityMin.value)
                 if (qualityMax.value !== null)        params.set('quality_score_max', qualityMax.value)
                 if (personFilter.value.values.length) {
@@ -2042,6 +2076,10 @@ export default {
             if (!isFilterHidden('search_field'))    searchField.value    = 'all'
             if (!isFilterHidden('exact_match'))     exactMatch.value     = false
             if (!isFilterHidden('has_relations'))   hasRelationsOnly.value = false
+            if (!isFilterHidden('presence')) {
+                if (!props.hasCveOnly) cveOnly.value = false
+                hasTagsOnly.value = false; hasLicenseOnly.value = false; hasAttackOnly.value = false
+            }
             scopeMine.value      = false
             if (!isFilterHidden('tags'))            selectedTags.value   = []
             if (!isFilterHidden('sources'))         selectedSources.value = []
@@ -2327,6 +2365,10 @@ export default {
                                      ? personFilter.value.values.join(',') : null,
                 authors:         personFilter.value.mode === 'author' && personFilter.value.values.length
                                      ? personFilter.value.values.join(',') : null,
+                has_cve:         cveOnly.value || null,
+                has_tags:        hasTagsOnly.value || null,
+                has_license:     hasLicenseOnly.value || null,
+                has_attack:      hasAttackOnly.value || null,
             }
             emit('send', ids, filters)
         }
@@ -2567,7 +2609,7 @@ export default {
             filtersOpen, ruleType, searchField, exactMatch, cardSort, qualityMin, qualityMax, onQualityRangeChange,
             selectedTags, selectedSources, selectedBranches, selectedLicenses, selectedVulns, selectedAttacks,
             personFilter, onPersonFilterChange,
-            scopeMine, aiAnalysisOnly, hasRelationsOnly, MASCOT_ENABLED,
+            scopeMine, aiAnalysisOnly, hasRelationsOnly, cveOnly, hasTagsOnly, hasLicenseOnly, hasAttackOnly, MASCOT_ENABLED,
             rulesFormats, activeFilterCount,
             // UI
             viewMode, expandedIds,

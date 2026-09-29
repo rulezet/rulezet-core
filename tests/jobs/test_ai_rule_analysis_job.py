@@ -248,3 +248,94 @@ def test_uses_tags_and_attack_context_in_prompt(app):
                 assert "tlp:clear" in user_content
             if technique:
                 assert technique.technique_id in user_content
+
+
+def test_unlimited_batch_processes_every_rule_across_chunks(app, monkeypatch):
+    import app.features.jobs.job_handlers as handlers
+
+    monkeypatch.setattr(handlers, 'AI_GENERATE_CHUNK', 2)
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        rules = [_make_rule(f"Rule {i}", admin.id) for i in range(5)]
+        job = _make_job({'rule_ids': [r.id for r in rules], 'batch_size': 2, 'unlimited_batch': True}, admin.id)
+
+        with patch(CHAT, return_value=_envelope("summary")) as mock_chat:
+            handle_rule_analysis(job, app)
+
+        assert job.total == 5
+        assert job.done == 5
+        assert mock_chat.call_count == 5
+        assert AIGeneration.query.filter(AIGeneration.rule_id.in_([r.id for r in rules])).count() == 5
+
+
+def test_unlimited_time_ignores_the_time_budget(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        rules = [_make_rule(f"Rule {i}", admin.id) for i in range(2)]
+        job = _make_job({'rule_ids': [r.id for r in rules], 'max_seconds': 0, 'unlimited_time': True}, admin.id)
+
+        with patch(CHAT, return_value=_envelope("summary")):
+            handle_rule_analysis(job, app)
+
+        assert AIGeneration.query.filter(AIGeneration.rule_id.in_([r.id for r in rules])).count() == 2
+
+
+def test_ai_use_operator_cannot_lift_the_caps(app, client):
+    """/jobs/create strips the cap overrides for a non-admin without ai.manage."""
+    from unittest.mock import patch as _patch
+
+    with app.app_context():
+        user = User.query.filter_by(email="neo@admin.admin").first()
+        user_id = user.id
+    with client.session_transaction() as sess:
+        sess["_user_id"] = str(user_id)
+        sess["_fresh"] = True
+
+    def _has_permission(self, perm):
+        return perm == 'ai.use'
+
+    with _patch.object(User, 'has_permission', _has_permission):
+        res = client.post('/jobs/create', json={
+            'job_type': 'ai_generate',
+            'payload': {'agent_key': 'rule_analysis', 'rule_ids': [1],
+                        'unlimited_batch': True, 'unlimited_time': True, 'batch_size': 999999},
+        })
+    assert res.status_code in (200, 201)
+    with app.app_context():
+        job = BackgroundJob.query.filter_by(job_type='ai_generate').order_by(BackgroundJob.id.desc()).first()
+        assert 'unlimited_batch' not in job.payload
+        assert 'unlimited_time' not in job.payload
+        assert 'batch_size' not in job.payload
+
+
+def test_select_all_respects_the_full_filter_set(app):
+    """RuleList's "select all matching" sends search/tags/sources/...; the job
+    must only analyse the rules that matched on screen, not the whole catalog."""
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        wanted = _make_rule("NetScaler exploit", admin.id)
+        other = _make_rule("Unrelated rule", admin.id)
+        job = _make_job({'filters': {'format': None, 'search': 'netscaler', 'tags': None}}, admin.id)
+
+        with patch(CHAT, return_value=_envelope("summary")):
+            handle_rule_analysis(job, app)
+
+        assert AIGeneration.query.filter_by(rule_id=wanted.id).count() == 1
+        assert AIGeneration.query.filter_by(rule_id=other.id).count() == 0
+
+
+def test_select_all_has_cve_only_analyses_rules_with_a_cve(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        with_cve = _make_rule("With CVE", admin.id)
+        with_cve.cve_id = '["CVE-2026-19490"]'
+        without = _make_rule("Without CVE", admin.id)
+        without.cve_id = '[]'
+        db.session.commit()
+        job = _make_job({'filters': {'has_cve': True}}, admin.id)
+
+        with patch(CHAT, return_value=_envelope("summary")):
+            handle_rule_analysis(job, app)
+
+        assert AIGeneration.query.filter_by(rule_id=with_cve.id).count() == 1
+        assert AIGeneration.query.filter_by(rule_id=without.id).count() == 0

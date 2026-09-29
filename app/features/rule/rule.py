@@ -1280,7 +1280,6 @@ def detail_rule_ai_analysis_download_pdf(rule_id, analysis_id):
     """Generate a PDF of a single AI analysis — same WeasyPrint pipeline as
     blog post PDF downloads (see blog.download_post_pdf)."""
     import markdown as _md
-    from weasyprint import HTML as WeasyprintHTML
 
     rule = RuleModel.get_rule(rule_id)
     if not rule or rule.is_deleted:
@@ -1292,15 +1291,28 @@ def detail_rule_ai_analysis_download_pdf(rule_id, analysis_id):
 
     requester = (f"{analysis.user.first_name} {analysis.user.last_name}".strip()) if analysis.user else None
     base_url = request.url_root.rstrip('/')
-    content_html = _md.markdown(analysis.content or '', extensions=['extra', 'codehilite', 'toc', 'nl2br'])
 
-    html_str = render_template(
-        'rule/detail_rule/ai_analysis_print.html',
-        rule=rule, analysis=analysis, requester=requester, content_html=content_html,
-        source_url=f'{base_url}/rule/detail_rule/{rule.id}/ai_analysis',
-        generated_at=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'),
-    )
-    pdf_bytes = WeasyprintHTML(string=html_str, base_url=base_url).write_pdf()
+    # WeasyPrint depends on system libraries (Pango/Cairo) that can be missing
+    # or mismatched on a server even when the Python package installs fine —
+    # log the real cause and say it, instead of a bare "Internal error".
+    try:
+        from weasyprint import HTML as WeasyprintHTML
+
+        content_html = _md.markdown(analysis.content or '', extensions=['extra', 'codehilite', 'toc', 'nl2br'])
+        html_str = render_template(
+            'rule/detail_rule/ai_analysis_print.html',
+            rule=rule, analysis=analysis, requester=requester, content_html=content_html,
+            source_url=f'{base_url}/rule/detail_rule/{rule.id}/ai_analysis',
+            generated_at=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'),
+        )
+        pdf_bytes = WeasyprintHTML(string=html_str, base_url=base_url).write_pdf()
+    except Exception as e:
+        current_app.logger.exception(f'AI analysis PDF export failed (rule {rule_id}, analysis {analysis_id})')
+        return current_app.response_class(
+            f'PDF export failed: {type(e).__name__}: {e}\n'
+            'The Markdown download still works. Server log has the full traceback.',
+            status=500, mimetype='text/plain',
+        )
 
     response = current_app.response_class(pdf_bytes, mimetype='application/pdf')
     response.headers['Content-Disposition'] = (
@@ -5073,6 +5085,9 @@ def rules_data_table():
         has_ai_analysis=request.args.get('has_ai_analysis', 'false', type=str) == 'true',
         has_relations=request.args.get('has_relations', 'false', type=str) == 'true',
         branch=branches,
+        has_tags=request.args.get('has_tags', 'false', type=str) == 'true',
+        has_license=request.args.get('has_license', 'false', type=str) == 'true',
+        has_attack=request.args.get('has_attack', 'false', type=str) == 'true',
     )
 
     items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)

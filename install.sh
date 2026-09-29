@@ -8,6 +8,10 @@ RESET="\033[0m"
 echo -e "${CYAN}🚀 Starting the installation process...${RESET}"
 
 sudo apt install -y python3.12-venv
+# System libraries WeasyPrint needs for the PDF exports (blog posts, AI
+# analyses) — pip installs the Python package fine without them, and the
+# failure only shows up as an "Internal error" on the first PDF download.
+sudo apt install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
 python3 -m venv env
 . env/bin/activate
 
