@@ -98,6 +98,11 @@ _BRANCH_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/+-]{0,199}$')
 _UNSAFE_PATH_CHARS = re.compile(r'[^A-Za-z0-9._-]+')
 
 
+# owner/repo as GitHub allows them — anything else would be pasted into a
+# GitHub API path sent with our token.
+_GITHUB_NAME_RE = re.compile(r'^(?!\.\.?/)[A-Za-z0-9_.-]{1,100}/(?!\.\.?$)[A-Za-z0-9_.-]{1,100}$')
+
+
 def is_valid_branch_name(branch) -> bool:
     return bool(branch) and bool(_BRANCH_RE.match(branch)) and '..' not in branch and not branch.endswith(('/', '.lock'))
 
@@ -321,7 +326,7 @@ def get_github_branches(repo_url: str) -> tuple[list[str], str | None]:
     if clean.endswith('.git'):
         clean = clean[:-4]
     repo_name = get_repo_name_from_url(clean)
-    if not repo_name:
+    if not repo_name or not _GITHUB_NAME_RE.match(repo_name):
         return [], "Could not parse repository name from URL."
     api_url = f"{get_github_api_base()}/repos/{repo_name}/branches?per_page=100"
     headers = {}

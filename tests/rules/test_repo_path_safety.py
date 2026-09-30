@@ -44,3 +44,11 @@ def test_delete_refuses_anything_outside_the_cache(tmp_path):
     assert U.delete_existing_repo_folder(str(victim)) is False
     assert victim.exists()
     assert U.delete_existing_repo_folder(os.path.join(U.RULES_GITHUB_DIR, "..", "..", "features")) is False
+
+
+@pytest.mark.parametrize("url", ["https://github.com/../x", "https://github.com/x/..", "https://github.com/a/b?c"])
+def test_branch_lookup_refuses_odd_repository_names(url, monkeypatch):
+    """owner/repo is pasted into a GitHub API path sent with our token."""
+    monkeypatch.setattr(U.requests, "get", lambda *_a, **_k: pytest.fail("must not call GitHub"))
+    branches, error = U.get_github_branches(url)
+    assert branches == [] and error
