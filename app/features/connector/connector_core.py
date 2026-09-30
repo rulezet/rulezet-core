@@ -1051,6 +1051,188 @@ def _sync_bundle_rules(bundle: Bundle, rule_uuids: list) -> int:
     return added
 
 
+UNSORTED_FOLDER = "Unsorted"
+
+
+def bundle_structure_to_sync_json(bundle_id: int) -> list:
+    """Portable folder tree of a bundle, as sent in /api/sync/bundles
+    (`structure`) and compared on the pulling side: rules are referenced by
+    uuid (never by local id), custom files carry their content, trashed
+    rules are left out. Two queries for the whole tree."""
+    from app.core.db_class.db import BundleNode
+    nodes = BundleNode.query.filter_by(bundle_id=bundle_id).order_by(BundleNode.id).all()
+    if not nodes:
+        return []
+    rule_ids = {n.rule_id for n in nodes if n.rule_id}
+    uuid_by_id = {}
+    if rule_ids:
+        for rid, r_uuid, remote_uuid in (db.session.query(Rule.id, Rule.uuid, Rule.remote_rule_uuid)
+                                         .filter(Rule.id.in_(rule_ids), Rule.is_deleted == False)):
+            uuid_by_id[rid] = remote_uuid or r_uuid
+
+    children = {}
+    for n in nodes:
+        children.setdefault(n.parent_id, []).append(n)
+
+    def to_json(n):
+        if n.rule_id:
+            r_uuid = uuid_by_id.get(n.rule_id)
+            return {'type': 'file', 'name': n.name, 'rule_uuid': r_uuid} if r_uuid else None
+        if n.node_type == 'folder':
+            return {'type': 'folder', 'name': n.name,
+                    'children': [c for c in (to_json(x) for x in children.get(n.id, [])) if c]}
+        return {'type': 'file', 'name': n.name, 'content': n.custom_content or ''}
+
+    return [c for c in (to_json(n) for n in children.get(None, [])) if c]
+
+
+def structure_rule_uuids(structure) -> set:
+    """Every rule uuid referenced anywhere in a sync `structure` tree."""
+    found, stack = set(), list(structure or [])
+    while stack:
+        node = stack.pop()
+        if not isinstance(node, dict):
+            continue
+        if node.get('rule_uuid'):
+            found.add(str(node['rule_uuid']))
+        stack.extend(node.get('children') or [])
+    return found
+
+
+def _resolve_remote_structure(structure: list) -> list | None:
+    """Turn a remote sync tree into the editor's shape (local rule ids),
+    dropping rules that don't exist locally, then run it through the same
+    validation as the bundle editor (depth, size, names). None if invalid."""
+    from app.features.bundle.bundle_core import validate_structure
+    uuids = structure_rule_uuids(structure)
+    local_ids = {}
+    if uuids:
+        # Non-deleted first so a live copy wins over a trashed one
+        for r in (Rule.query.filter(Rule.is_deleted == False,
+                                    or_(Rule.remote_rule_uuid.in_(uuids), Rule.uuid.in_(uuids)))):
+            if r.remote_rule_uuid:
+                local_ids.setdefault(r.remote_rule_uuid, r.id)
+            local_ids.setdefault(r.uuid, r.id)
+
+    def convert(nodes):
+        out = []
+        for node in nodes or []:
+            if not isinstance(node, dict):
+                continue
+            if node.get('rule_uuid'):
+                rid = local_ids.get(str(node['rule_uuid']))
+                if rid:
+                    out.append({'type': 'file', 'name': node.get('name') or 'rule', 'rule_id': rid})
+            elif node.get('type') == 'folder':
+                out.append({'type': 'folder', 'name': node.get('name'),
+                            'children': convert(node.get('children'))})
+            else:
+                out.append({'type': 'file', 'name': node.get('name'), 'content': node.get('content') or ''})
+        return out
+
+    resolved = convert(structure)
+    if validate_structure(resolved):
+        return None
+    return resolved
+
+
+def _local_structure_for_compare(bundle_id: int) -> list:
+    """Local tree in the editor's shape (rule_id) — same shape as
+    _resolve_remote_structure's output, so both compare with ==."""
+    from app.core.db_class.db import BundleNode
+    nodes = BundleNode.query.filter_by(bundle_id=bundle_id).order_by(BundleNode.id).all()
+    live = {rid for (rid,) in db.session.query(Rule.id).filter(
+        Rule.id.in_({n.rule_id for n in nodes if n.rule_id} or {-1}), Rule.is_deleted == False)}
+    children = {}
+    for n in nodes:
+        children.setdefault(n.parent_id, []).append(n)
+
+    def to_json(n):
+        if n.rule_id:
+            return {'type': 'file', 'name': n.name, 'rule_id': n.rule_id} if n.rule_id in live else None
+        if n.node_type == 'folder':
+            return {'type': 'folder', 'name': n.name,
+                    'children': [c for c in (to_json(x) for x in children.get(n.id, [])) if c]}
+        return {'type': 'file', 'name': n.name, 'content': n.custom_content or ''}
+
+    return [c for c in (to_json(n) for n in children.get(None, [])) if c]
+
+
+def _write_structure(bundle_id: int, structure: list) -> None:
+    """Replace a bundle's tree (no commit — the pull job commits per batch)."""
+    from app.core.db_class.db import BundleNode
+    for old in BundleNode.query.filter_by(bundle_id=bundle_id).all():
+        db.session.delete(old)
+    db.session.flush()
+
+    def save(nodes, parent_id=None):
+        for node in nodes:
+            new_node = BundleNode(
+                bundle_id=bundle_id, parent_id=parent_id,
+                name=node['name'], node_type=node['type'],
+                rule_id=node.get('rule_id'),
+                custom_content=None if node.get('rule_id') else node.get('content'),
+            )
+            db.session.add(new_node)
+            db.session.flush()
+            if node.get('children'):
+                save(node['children'], new_node.id)
+
+    save(structure)
+
+
+def _ensure_rules_in_structure(bundle: Bundle) -> bool:
+    """Every rule attached to the bundle gets a node: the ones missing from
+    the tree go into an "Unsorted" root folder (existing nodes untouched).
+    Covers remotes that don't send a `structure` (older Rulezet) and rules a
+    local user added. No commit. Returns True if nodes were added."""
+    from app.core.db_class.db import BundleNode
+    placed = {rid for (rid,) in db.session.query(BundleNode.rule_id)
+              .filter(BundleNode.bundle_id == bundle.id, BundleNode.rule_id.isnot(None))}
+    missing = (db.session.query(Rule.id, Rule.title)
+               .join(BundleRuleAssociation, BundleRuleAssociation.rule_id == Rule.id)
+               .filter(BundleRuleAssociation.bundle_id == bundle.id, Rule.is_deleted == False)
+               .all())
+    missing = [(rid, title) for rid, title in missing if rid not in placed]
+    if not missing:
+        return False
+    unsorted = BundleNode.query.filter_by(bundle_id=bundle.id, parent_id=None,
+                                          node_type='folder', name=UNSORTED_FOLDER).first()
+    if not unsorted:
+        unsorted = BundleNode(bundle_id=bundle.id, parent_id=None, name=UNSORTED_FOLDER, node_type='folder')
+        db.session.add(unsorted)
+        db.session.flush()
+    for rid, title in missing:
+        db.session.add(BundleNode(bundle_id=bundle.id, parent_id=unsorted.id,
+                                  name=(title or 'rule')[:255], node_type='file', rule_id=rid))
+    db.session.flush()
+    return True
+
+
+def _sync_bundle_structure(bundle: Bundle, remote_structure) -> bool:
+    """Mirror the remote folder tree when the remote sends one (Rulezet with
+    sync_api_version >= 2), then make sure every attached rule has a node.
+    The remote is the source of truth for the tree of a synced bundle; an
+    "Unsorted" folder holding rules only attached locally is not counted as
+    a difference, so it doesn't trigger a rewrite on every pull.
+    Returns True if the local tree changed."""
+    changed = False
+    if isinstance(remote_structure, list):
+        resolved = _resolve_remote_structure(remote_structure)
+        if resolved is not None:
+            local = _local_structure_for_compare(bundle.id)
+            remote_has_unsorted = any(n.get('type') == 'folder' and n.get('name') == UNSORTED_FOLDER
+                                      for n in resolved)
+            if not remote_has_unsorted:
+                local = [n for n in local if not (n.get('type') == 'folder' and n.get('name') == UNSORTED_FOLDER)]
+            if local != resolved:
+                _write_structure(bundle.id, resolved)
+                changed = True
+    if _ensure_rules_in_structure(bundle):
+        changed = True
+    return changed
+
+
 def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
                    triggered_by_id: int = None, tag_cache: dict = None) -> str:
     """Create or update a Bundle from a remote payload dict, then attach the
@@ -1071,8 +1253,16 @@ def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
 
     now = datetime.datetime.now(datetime.timezone.utc)
 
+    # Rules placed in the remote tree are part of the bundle too (older
+    # remotes send no `structure` — then it's just remote['rules']).
+    remote_structure = remote.get('structure')
+    rule_uuids = list(remote.get('rules') or [])
+    rule_uuids += sorted(structure_rule_uuids(remote_structure) - set(rule_uuids))
+
     if existing:
-        added = _sync_bundle_rules(existing, remote.get('rules', []))
+        added = _sync_bundle_rules(existing, rule_uuids)
+        db.session.flush()
+        tree_changed = _sync_bundle_structure(existing, remote_structure)
         _sync_bundle_tags(existing, remote.get('tags', []), owner_id, tag_cache=tag_cache)
         _sync_cve_ids(existing, remote.get('vulnerability_identifiers', []), field='vulnerability_identifiers')
         remote_ts = remote.get('updated_at')
@@ -1088,7 +1278,9 @@ def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
                     changed = True
             except ValueError:
                 pass
-        return 'updated' if (added or changed) else 'skipped'
+        if tree_changed and not changed:
+            existing.updated_at = now
+        return 'updated' if (added or changed or tree_changed) else 'skipped'
 
     bundle = Bundle(
         uuid=str(uuid_mod.uuid4()),
@@ -1106,7 +1298,9 @@ def _upsert_bundle(connector: Connector, shadow_user_id: int, remote: dict,
     )
     db.session.add(bundle)
     db.session.flush()
-    _sync_bundle_rules(bundle, remote.get('rules', []))
+    _sync_bundle_rules(bundle, rule_uuids)
+    db.session.flush()
+    _sync_bundle_structure(bundle, remote_structure)
     _sync_bundle_tags(bundle, remote.get('tags', []), owner_id, tag_cache=tag_cache)
     _sync_cve_ids(bundle, remote.get('vulnerability_identifiers', []), field='vulnerability_identifiers')
     return 'created'

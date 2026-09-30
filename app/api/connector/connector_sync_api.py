@@ -16,6 +16,7 @@ from flask_restx import Namespace, Resource
 from sqlalchemy import or_, func
 
 from app.core.db_class.db import Rule, Bundle, Tag, RuleTagAssociation, BundleTagAssociation, RuleUpdateHistory, RuleAttackAssociation
+from app.features.connector.connector_core import bundle_structure_to_sync_json
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,25 @@ sync_ns = Namespace(
 )
 
 PER_PAGE_MAX = 2000
+
+# Sync protocol version + what this instance supports, advertised in the
+# manifest so a pulling instance never sends a parameter we'd silently
+# ignore (an ignored filter = the whole corpus comes back).
+#   1 — Rulezet 1.6.0+: rules (filters, uuids, count_only, attacks), bundles
+#       as a flat rule list. Remotes without `sync_api_version` are v1.
+#   2 — bundles also carry `structure` (folders, files, rule placement).
+# Payloads only ever GAIN fields: never rename or drop one, older pullers
+# read them with .get().
+SYNC_API_VERSION = 2
+SYNC_CAPABILITIES = {
+    'sync_rules':       True,
+    'sync_bundles':     True,
+    'rule_filters':     True,   # cve, formats, author, license, tags, dates
+    'rule_attacks':     True,   # attacks=T1059,...
+    'rule_uuids':       True,   # uuids=... (bundle-referenced rules)
+    'count_only':       True,
+    'bundle_structure': True,
+}
 
 
 def _since_dt(since_str: str | None) -> datetime.datetime:
@@ -180,6 +200,7 @@ def _bundle_to_sync_json(bundle: Bundle) -> dict:
         'vulnerability_identifiers': vuln_ids,
         'updated_at':              bundle.updated_at.isoformat() if bundle.updated_at else None,
         'created_at':              bundle.created_at.isoformat() if bundle.created_at else None,
+        'structure':               bundle_structure_to_sync_json(bundle.id),
     }
 
 
@@ -320,10 +341,8 @@ class SyncManifest(Resource):
                 'version': ver,
                 'url':     os.environ.get('FLASK_URL', ''),
             },
-            'capabilities': {
-                'sync_rules':   True,
-                'sync_bundles': True,
-            },
+            'sync_api_version': SYNC_API_VERSION,
+            'capabilities': dict(SYNC_CAPABILITIES),
         }, 200
 
 

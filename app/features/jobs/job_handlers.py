@@ -1191,6 +1191,7 @@ def handle_connector_pull(job, app):
         _get_or_create_shadow_user, _upsert_rule, _upsert_bundle,
         _extract_tag_family, build_tag_cache,
         _prepare_new_rule, _import_rule_history_new, _sync_tags, _sync_cve_ids, _sync_attacks,
+        structure_rule_uuids,
     )
     from app.core.utils.activity_log import log_activity
     from sqlalchemy import or_
@@ -1330,6 +1331,13 @@ def handle_connector_pull(job, app):
             log_job(job, f"Filters active: {' · '.join(parts)}", level='info', event='progress')
 
         # ── Manifest preflight: verify remote supports sync API ────────────────
+        # Capabilities of a remote that predates `sync_api_version` (Rulezet
+        # 1.6.0 → 1.7.x): everything but the bundle folder tree. Also the
+        # fallback when the manifest can't be read.
+        remote_caps = {
+            'sync_rules': True, 'sync_bundles': True, 'rule_filters': True, 'rule_attacks': True,
+            'rule_uuids': True, 'count_only': True, 'bundle_structure': False,
+        }
         try:
             mf_resp = http_requests.get(f"{base}/api/sync/manifest", headers=headers, timeout=8)
             if mf_resp.status_code == 404:
@@ -1351,20 +1359,50 @@ def handle_connector_pull(job, app):
                 return
             mf_data    = mf_resp.json()
             remote_ver = mf_data.get('instance', {}).get('version', 'unknown')
-            log_job(job, f"Remote version: {remote_ver}", level='info', event='progress')
-            caps = mf_data.get('capabilities', {})
-            if do_rules and not caps.get('sync_rules', True):
+            api_ver    = mf_data.get('sync_api_version')
+            caps = mf_data.get('capabilities', {}) or {}
+            if api_ver:
+                # A versioned remote lists everything it supports — absent = unsupported
+                remote_caps = {k: bool(caps.get(k, False)) for k in remote_caps}
+            else:
+                remote_caps.update({k: bool(v) for k, v in caps.items() if k in remote_caps})
+            log_job(job, f"Remote version: {remote_ver} (sync API v{api_ver or 1})", level='info', event='progress')
+            if do_rules and not remote_caps['sync_rules']:
                 log_job(job, "Remote reports sync_rules=false — no rules will be fetched.", level='warning', event='progress')
-            if do_bundles and not caps.get('sync_bundles', True):
+            if do_bundles and not remote_caps['sync_bundles']:
                 log_job(job, "Remote reports sync_bundles=false — no bundles will be fetched.", level='warning', event='progress')
+            if do_bundles and remote_caps['sync_bundles'] and not remote_caps['bundle_structure']:
+                log_job(job, "Remote does not send bundle folder trees (older Rulezet) — "
+                             "pulled bundles get their rules in an \"Unsorted\" folder.",
+                        level='info', event='progress')
         except Exception as mf_exc:
             log_job(job, f"Manifest preflight failed: {mf_exc}", level='warning', event='progress')
+
+        # A filter the remote doesn't understand would be silently ignored and
+        # the whole corpus pulled instead — refuse rather than over-import.
+        unsupported = []
+        if do_rules and not remote_caps['rule_filters'] and any(
+                [cve_qs, formats_qs, authors_qs, license_qs, tags_qs, date_from_qs, date_to_qs]):
+            unsupported.append('rule filters')
+        if do_rules and attacks_qs and not remote_caps['rule_attacks']:
+            unsupported.append('ATT&CK filter')
+        if unsupported:
+            msg = (f"Remote Rulezet does not support: {', '.join(unsupported)}. "
+                   "Remove these filters or ask the remote admin to upgrade.")
+            log_job(job, msg, level='error', event='done')
+            job.status = 'failed'
+            job.error  = msg
+            connector.last_error = msg
+            db.session.commit()
+            return
+        do_rules   = do_rules and remote_caps['sync_rules']
+        do_bundles = do_bundles and remote_caps['sync_bundles']
 
         # ── Pre-flight: fetch totals for progress bar ─────────────────────────
         total_rules_remote   = 0
         total_bundles_remote = 0
         try:
-            if do_rules:
+            if do_rules and remote_caps['count_only']:
                 r = http_requests.get(_build_preflight_url(), headers=headers, timeout=10)
                 if r.status_code == 200:
                     d = r.json()
@@ -1623,6 +1661,7 @@ def handle_connector_pull(job, app):
                     all_bundle_items.extend(items)
                     for item in items:
                         bundle_rule_uuids.update(item.get('rules', []))
+                        bundle_rule_uuids.update(structure_rule_uuids(item.get('structure')))
                     if not data.get('has_more', False):
                         break
                     page += 1
@@ -1633,7 +1672,11 @@ def handle_connector_pull(job, app):
 
             # Phase 2 — when not already pulling all rules, import only the rules
             # referenced by the bundles that don't exist locally yet.
-            if bundle_rule_uuids and not do_rules:
+            if bundle_rule_uuids and not do_rules and not remote_caps['rule_uuids']:
+                log_job(job, "Remote cannot serve rules by uuid — bundles will only link rules "
+                             "that already exist locally. Enable \"sync rules\" to import them.",
+                        level='warning', event='progress')
+            elif bundle_rule_uuids and not do_rules:
                 existing_local = set(
                     r[0] for r in Rule.query.filter(
                         or_(Rule.uuid.in_(bundle_rule_uuids),
@@ -1703,6 +1746,13 @@ def handle_connector_pull(job, app):
                                                         tag_cache=tag_cache)
                                     all_missing_tags.update(missed)
                                     _sync_cve_ids(rule, item.get('cve_ids', []))
+                                    unknown_atk = _sync_attacks(rule, item.get('attack_ids', []),
+                                                                effective_user_id,
+                                                                atk_assoc_set=atk_assoc_set)
+                                    if '__empty__' in unknown_atk and not attack_install_triggered:
+                                        attack_install_triggered = True
+                                        log_job(job, "ATT&CK data missing — install job already queued.",
+                                                level='warning', event='progress')
                                     _import_rule_history_new(rule, item.get('update_history', []),
                                                              effective_user_id)
                                 # Not wrapped in its own try/except — same
