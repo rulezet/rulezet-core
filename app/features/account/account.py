@@ -888,9 +888,16 @@ def bulk_parse_fields_page():
         from flask import abort
         abort(403)
     from app.features.rule.field_parser_core import FIELD_META, PARSEABLE_FIELD_KEYS
+    imported_tag_formats = []
+    if is_admin:
+        from app.features.tags.imported_tags_core import FORMAT_TAG_SOURCES, format_rule_counts
+        counts = format_rule_counts()
+        imported_tag_formats = [{'format': fmt, 'where': where, 'rules': counts.get(fmt, 0)}
+                                for fmt, where in FORMAT_TAG_SOURCES.items()]
     return render_template('admin/bulk_parse_fields.html',
                            field_meta=FIELD_META,
                            parseable_fields=PARSEABLE_FIELD_KEYS,
+                           imported_tag_formats=imported_tag_formats,
                            is_admin=is_admin)
 
 
@@ -1007,6 +1014,61 @@ def bulk_parse_fields_trigger_platform_tags():
     log_activity('admin.bulk_tag_platforms', f'Triggered platform-tag detection ({scope_desc}) using config "{cfg_name}"',
                  target_type='job', target_id=job.id, target_uuid=job.uuid)
     return jsonify({'success': True, 'job': job.to_json(), 'message': 'Platform tagging job queued!'})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/imported_tags/preview', methods=['POST'])
+@login_required
+def bulk_parse_fields_imported_tags_preview():
+    """Live preview for the Imported Tags tab: the exact extraction the job
+    (and every new rule) uses, on pasted rule content."""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'Admin only'}), 403
+    from app.features.tags.imported_tags_core import extract_native_tags, FORMAT_TAG_SOURCES
+    data = request.get_json(silent=True) or {}
+    fmt = (data.get('format') or '').strip().lower()
+    if fmt not in FORMAT_TAG_SOURCES:
+        return jsonify({'success': False, 'message': f'Unsupported format: {fmt or "none"}'}), 400
+    content = data.get('content') or ''
+    if not isinstance(content, str) or len(content) > 1_000_000:
+        return jsonify({'success': False, 'message': 'Content must be text (max 1 MB)'}), 400
+    return jsonify({'success': True, 'format': fmt, 'tags': extract_native_tags(fmt, content)})
+
+
+@account_blueprint.route('/admin/bulk_parse_fields/trigger_imported_tags', methods=['POST'])
+@login_required
+def bulk_parse_fields_trigger_imported_tags():
+    """Queue the `import_native_tags` job: re-parse existing rules of the
+    selected formats and attach their author's tags as public Imported tags
+    owned by the admin launching it (GitHub #70)."""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'Admin only'}), 403
+    from app.features.jobs.jobs_core import create_job
+    from app.features.tags.imported_tags_core import FORMAT_TAG_SOURCES
+
+    data     = request.get_json(silent=True) or {}
+    formats  = data.get('formats') or []
+    rule_ids = data.get('rule_ids', 'ALL')
+    if not isinstance(formats, list) or not formats:
+        return jsonify({'success': False, 'message': 'Select at least one format.'}), 400
+    unknown = [f for f in formats if f not in FORMAT_TAG_SOURCES]
+    if unknown:
+        return jsonify({'success': False, 'message': f'Unsupported format(s): {", ".join(map(str, unknown))}'}), 400
+    if rule_ids != 'ALL' and not (isinstance(rule_ids, list) and all(isinstance(i, int) for i in rule_ids)):
+        return jsonify({'success': False, 'message': 'rule_ids must be "ALL" or a list of rule ids.'}), 400
+
+    scope_desc = f'{len(rule_ids)} selected rule(s)' if rule_ids != 'ALL' else 'all rules'
+    job = create_job(
+        job_type='import_native_tags',
+        label=f'Import native tags ({", ".join(formats)}) — {scope_desc}',
+        payload={'formats': formats, 'rule_ids': rule_ids},
+        created_by=current_user.id,
+    )
+    if not job:
+        return jsonify({'success': False, 'message': 'Failed to create job'}), 500
+    log_activity('admin.import_native_tags',
+                 f'Triggered native tag import for {", ".join(formats)} ({scope_desc})',
+                 target_type='job', target_id=job.id, target_uuid=job.uuid)
+    return jsonify({'success': True, 'job': job.to_json(), 'message': 'Imported tags job queued!'})
 
 
 @account_blueprint.route('/admin/bulk_parse_fields/configs', methods=['GET'])

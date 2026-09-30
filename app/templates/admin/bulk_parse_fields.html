@@ -62,6 +62,9 @@
             <i class="fas fa-display"></i><span>Platform Tags</span>
         </a>
         {% if is_admin %}
+        <a class="dr-nav__item" data-bs-toggle="tab" href="#pane-imported-tags" role="tab">
+            <i class="fas fa-user-tag"></i><span>Imported Tags</span>
+        </a>
         <span class="dr-nav__sep"></span>
         {{ anav.admin_nav_toggle() }}
         {% endif %}
@@ -247,6 +250,19 @@
             </transition>
         </div>
 
+        {% if is_admin %}
+        <!-- TAB 3 — Imported Tags (admin only): the rule author's own tags
+             (YARA rule tags, Sigma tags:, Kunai meta.tags…) attached as
+             public "Imported" tags — GitHub issue #70. -->
+        <div class="tab-pane fade" id="pane-imported-tags" role="tabpanel">
+            <imported-tags-extractor
+                :csrf-token="csrfToken"
+                :formats="importedTagFormats"
+                @notify="notify">
+            </imported-tags-extractor>
+        </div>
+        {% endif %}
+
     </div>
 
 </div>
@@ -258,6 +274,7 @@ const { createApp, ref, computed, onMounted } = Vue;
 import FieldParserUpdater from '/static/js/admin/bulkParseFields.js'
 import BulkImportRunner from '/static/js/tags/manage/BulkImportRunner.js'
 import PlatformTagConfigEditor from '/static/js/admin/platformTagConfigEditor.js'
+import ImportedTagsExtractor from '/static/js/admin/importedTagsExtractor.js'
 import RuleList from '/static/js/rule/ruleList.js'
 import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js'
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
@@ -265,6 +282,7 @@ import { create_message } from '/static/js/toaster.js'
 
 const fieldMeta       = {{ field_meta | tojson | safe }};
 const parseableFields = {{ parseable_fields | tojson | safe }};
+const importedTagFormats = {{ imported_tag_formats | tojson | safe }};
 const csrfToken       = '{{ csrf_token() }}';
 
 createApp({
@@ -273,6 +291,7 @@ createApp({
         'field-parser-updater': FieldParserUpdater,
         'bulk-import-runner': BulkImportRunner,
         'platform-tag-config-editor': PlatformTagConfigEditor,
+        'imported-tags-extractor': ImportedTagsExtractor,
         'rule-list': RuleList,
         'tags-displays-list': TagsDisplaysList,
         'vulnerability-displays-list': VulnerabilityDisplaysList,
@@ -425,7 +444,7 @@ createApp({
         });
 
         return {
-            fieldMeta, parseableFields, csrfToken, notify,
+            fieldMeta, parseableFields, importedTagFormats, csrfToken, notify,
             selectedPlatformConfigId, selectedPlatformConfigName, onPlatformConfigSelected,
             platformReadyToRun, platformRunnerDescription,
             platformSelectionMode, platformSelectedIds, platformFormatFilter, platformPickerCollapsed,

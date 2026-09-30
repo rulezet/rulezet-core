@@ -781,6 +781,16 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
 
         _attach_default_tags(new_rule, user_id)
 
+        # The author's own tags written in the rule (YARA `rule X : a b`,
+        # Sigma `tags:`…) as "Imported" tags — GitHub #70. In a savepoint:
+        # a problem there must never cost the rule itself.
+        try:
+            from app.features.tags.imported_tags_core import attach_imported_tags
+            with db.session.begin_nested():
+                attach_imported_tags(new_rule, user_id)
+        except Exception:
+            pass
+
         db.session.commit()
 
         try:

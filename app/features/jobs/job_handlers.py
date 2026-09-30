@@ -3423,6 +3423,122 @@ def handle_bulk_tag_platforms(job, app):
                  f'{total_associations} new platform tag(s).', level='success', event='done')
 
 
+@register_handler('import_native_tags')
+def handle_import_native_tags(job, app):
+    """Re-parse existing rules and attach their author's own tags (YARA
+    `rule X : a b` + meta tags, Sigma `tags:`, Kunai `meta.tags`, CRS
+    `tag:'…'`… — see imported_tags_core.FORMAT_TAG_SOURCES) as public
+    "Imported" tags owned by the admin who launched the job (GitHub #70).
+
+    Idempotent — safe to re-run, and re-running repairs past imports: a
+    rule's Imported tags its content no longer yields (older parser, tag
+    removed by the author) are detached, and Imported tags left unused
+    anywhere are deleted at the end. Taxonomy/galaxy/Manual tags are never
+    touched.
+
+    Payload:
+        formats  : list[str] — rule formats to scan (required)
+        rule_ids : 'ALL' | list[int] — optional restriction to some rules
+    """
+    from collections import defaultdict
+    from sqlalchemy import func
+    from app.features.tags.imported_tags_core import (
+        FORMAT_TAG_SOURCES, attach_imported_tags, delete_orphan_imported_tags,
+    )
+
+    payload  = job.payload or {}
+    formats  = [f for f in (payload.get('formats') or []) if f in FORMAT_TAG_SOURCES]
+    rule_ids = payload.get('rule_ids', 'ALL')
+    offset   = payload.get('_resume_offset', 0)
+    user_id  = job.created_by
+
+    if not formats:
+        log_job(job, 'No supported format selected — nothing to do.', level='error', event='error')
+        job.status = 'failed'
+        job.error  = 'No format selected'
+        db.session.commit()
+        return
+
+    q = (Rule.query.filter(Rule.is_deleted == False, func.lower(Rule.format).in_(formats))
+         .order_by(Rule.id.asc()))
+    if rule_ids != 'ALL':
+        q = q.filter(Rule.id.in_(rule_ids or [-1]))
+
+    if job.total == 0:
+        job.total = q.count()
+        db.session.commit()
+        log_job(job, f'Starting — scanning {job.total} rule(s) ({", ".join(formats)}) for their native tags.',
+                level='info', event='start')
+    else:
+        log_job(job, f'Resuming from offset {offset}.', level='info', event='resume')
+
+    tag_cache     = {}     # normalized name -> Tag | None, shared across batches
+    rules_tagged  = 0
+    tags_added    = 0
+    tags_removed  = 0
+    refused       = set()
+    batch_num     = 0
+
+    while True:
+        if _is_cancelled(job):
+            log_job(job, 'Cancelled.', level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+
+        rules = q.offset(offset).limit(FIELD_PARSE_BATCH).all()
+        if not rules:
+            break
+
+        existing = defaultdict(set)
+        for rid, tid in (db.session.query(RuleTagAssociation.rule_id, RuleTagAssociation.tag_id)
+                         .filter(RuleTagAssociation.rule_id.in_([r.id for r in rules]))):
+            existing[rid].add(tid)
+
+        touched = []
+        for rule in rules:
+            try:
+                with db.session.begin_nested():
+                    stats = attach_imported_tags(rule, user_id, cache=tag_cache,
+                                                 existing_tag_ids=existing[rule.id], prune=True)
+            except Exception as exc:
+                # A tag created concurrently (same name) — drop the cache for
+                # this rule's names and move on; the next run picks it up.
+                tag_cache.clear()
+                log_job(job, f'Rule #{rule.id}: skipped ({exc.__class__.__name__}).', level='warning', event='progress')
+                continue
+            refused.update(stats['skipped'])
+            tags_removed += stats['removed']
+            if stats['added'] or stats['removed']:
+                touched.append(rule.id)
+            if stats['added']:
+                rules_tagged += 1
+                tags_added   += stats['added']
+
+        db.session.commit()
+        _refresh_quality_scores(touched)
+        offset  += len(rules)
+        job.done = offset
+        _save_offset(job, offset)
+        db.session.commit()
+
+        batch_num += 1
+        if batch_num % FIELD_PARSE_LOG_EVERY == 0:
+            log_job(job, f'{offset}/{job.total} rules scanned — {rules_tagged} rule(s) tagged, '
+                         f'{tags_added} tag association(s) added.', level='info', event='progress')
+
+    distinct_tags = sum(1 for t in tag_cache.values() if t is not None)
+    orphans = delete_orphan_imported_tags()
+    db.session.commit()
+    if refused:
+        sample = ', '.join(sorted(refused)[:10])
+        log_job(job, f'{len(refused)} tag name(s) left out because a private or disabled tag already '
+                     f'uses that name: {sample}{"…" if len(refused) > 10 else ""}', level='warning', event='progress')
+    log_job(job, f'Done — {offset} rule(s) scanned, {rules_tagged} rule(s) tagged with {tags_added} '
+                 f'tag association(s), {distinct_tags} distinct tag(s) seen; {tags_removed} outdated '
+                 f'association(s) removed, {orphans} unused imported tag(s) deleted.', level='success', event='done')
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # blog_from_cve — auto-generate a blog post from vulnerability data
 # ─────────────────────────────────────────────────────────────────────────────

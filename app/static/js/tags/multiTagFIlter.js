@@ -25,6 +25,8 @@ const MultiTagFilter = {
             { value: 'Taxonomy', label: 'Taxonomy', icon: 'fa-list', color: '#0d6efd' },
             { value: 'Galaxy', label: 'Galaxy', icon: 'fa-atom', color: '#9b7ede' },
             { value: 'Manual', label: 'Manual', icon: 'fa-tag', color: '#198754' },
+            // The rule author's own tags extracted from the rule (GitHub #70)
+            { value: 'Imported', label: 'Imported', icon: 'fa-user-tag', color: '#fd7e14' },
         ];
 
         function namespaceOf(name) {

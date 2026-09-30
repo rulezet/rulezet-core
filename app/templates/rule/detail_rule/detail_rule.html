@@ -265,7 +265,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                         <div class="mt-2">
                             <!-- Tags Component -->
                             <tag-display :tags="displayTags" :loading="loadingDisplayTags"
-                                section-title="Workspace Tags"
+                                section-title="Workspace Tags" :group-by-source="true"
                                 css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
                             </tag-display>
                         </div>
