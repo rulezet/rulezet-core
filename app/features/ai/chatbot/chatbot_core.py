@@ -553,10 +553,24 @@ def _create_bundle(user, params: dict) -> dict:
 # ({"reply": "short confirmation message"}) as if it were a real answer,
 # 100% reproducible across several phrasings. A name is the only thing
 # create_bundle actually needs, so skip the model for this shape entirely.
+# The name runs to the end of the message (its last line); quotes and one
+# final . ! ? are trimmed in Python — the former lazy `.+?` followed by
+# optional quote/punctuation/`\s*$` backtracked quadratically on long input.
 _BUNDLE_NAME_RE = re.compile(
-    r'\bbundle\b\s*(?:called|named|titled)\s+["\']?(?P<name>.+?)["\']?[.!?]?\s*$',
+    r'\bbundle\b\s*(?:called|named|titled)\s+(?P<name>[^\n]+)\n?\Z',
     re.IGNORECASE,
 )
+
+
+def _clean_bundle_name(raw: str) -> str:
+    name = raw.strip()
+    if name[-1:] in ('.', '!', '?'):
+        name = name[:-1]
+    if name[-1:] in ('"', "'"):
+        name = name[:-1]
+    if name[:1] in ('"', "'"):
+        name = name[1:]
+    return name.strip()
 
 
 def _maybe_create_bundle_shortcut(message: str, user):
@@ -565,7 +579,7 @@ def _maybe_create_bundle_shortcut(message: str, user):
     m = _BUNDLE_NAME_RE.search(message)
     if not m:
         return None
-    name = m.group('name').strip()
+    name = _clean_bundle_name(m.group('name'))
     if not name:
         return None
     outcome = _create_bundle(user, {'name': name})

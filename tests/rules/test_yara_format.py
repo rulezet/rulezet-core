@@ -49,3 +49,15 @@ def test_a6_private_rule_without_global_is_not_flagged():
     """'private' alone (no 'global') has no cross-namespace suppression risk — not flagged."""
     risk = detect_global_rule_risk('private rule test { condition: false }')
     assert risk['flagged'] is False
+
+
+def test_meta_parsing_is_linear_on_crafted_content():
+    """parse_metadata runs on every YARA rule created or imported — 2,000
+    newlines after "meta:" used to take 44 s."""
+    import time
+    from app.features.rule.rule_format.available_format.yara_format import yara_meta_entries
+    start = time.time()
+    yara_meta_entries("rule a { meta:\n" + "\n" * 200_000)
+    yara_meta_entries("meta:\n" + "0" * 200_000 + "\ncondition: true")
+    assert time.time() - start < 2
+    assert yara_meta_entries('rule A {\n meta:\n  author = "x"\n  id = "1"\n condition:\n  true\n}') == {"author": "x", "id": "1"}

@@ -268,6 +268,26 @@ def _prune_stale_yara_links(rule, dependencies) -> int:
     return len(stale)
 
 
+# meta{} parsing, linear on any input: the former single regex
+# (meta\s*:\s*(.*?)\n\s*(?:strings|…)) backtracked cubically on runs of
+# newlines — 2,000 of them took 44 s on every YARA rule created or imported.
+_META_START_RE = re.compile(r'meta\s*:', re.IGNORECASE)
+_META_END_RE = re.compile(r'^[ \t\r]*(?:strings|condition|private|global)[ \t\r]*:', re.IGNORECASE | re.MULTILINE)
+_META_ENTRY_RE = re.compile(r'\b(\w+)\s*=\s*"([^"]*)"')
+
+
+def yara_meta_entries(content: str) -> dict:
+    """{key: value} of the first meta: block — from "meta:" to the first line
+    starting with strings: / condition: / private / global."""
+    start = _META_START_RE.search(content or '')
+    if not start:
+        return {}
+    end = _META_END_RE.search(content, start.end())
+    if not end:
+        return {}
+    return {k: v for k, v in _META_ENTRY_RE.findall(content[start.end():end.start()])}
+
+
 def allowed_externals() -> set:
     """YaraRule.ALLOWED_EXTERNALS plus any admin-configured
     YARA_ADDITIONAL_EXTERNAL identifiers (see .env_default) — read lazily,
@@ -418,13 +438,7 @@ class YaraRule(RuleType):
 
             source_content = validation_result.normalized_content if validation_result.normalized_content else content
             
-            meta_block = re.search(r'meta\s*:\s*(.*?)\n\s*(?:strings|condition|private|global)\s*:', source_content, re.DOTALL | re.IGNORECASE)
-            
-            if meta_block:
-                meta_content = meta_block.group(1)
-                entries = re.findall(r'(\w+)\s*=\s*"(.*?)"', meta_content, re.DOTALL)
-                for key, val in entries:
-                    meta[key] = val
+            meta.update(yara_meta_entries(source_content))
             
             # --- 3. Detect CVE in description ---
             description = meta.get("description") or f"Rule {rule_name} (No description metadata provided)."
@@ -462,12 +476,7 @@ class YaraRule(RuleType):
     def documentation_signals(self, content: str) -> Dict[str, bool]:
         """YARA-specific documentation checklist, read from the meta{} block —
         same regex approach as parse_metadata() above."""
-        meta = {}
-        meta_block = re.search(r'meta\s*:\s*(.*?)\n\s*(?:strings|condition|private|global)\s*:', content, re.DOTALL | re.IGNORECASE)
-        if meta_block:
-            entries = re.findall(r'(\w+)\s*=\s*"(.*?)"', meta_block.group(1), re.DOTALL)
-            for key, val in entries:
-                meta[key] = val
+        meta = yara_meta_entries(content)
         return {
             "has_date": bool(meta.get("date")),
             "has_reference": bool(meta.get("reference") or meta.get("reference_url")),

@@ -28,7 +28,8 @@ def _clean_notify_emails(raw):
     on that alone."""
     if not raw:
         return []
-    return [e.strip() for e in raw if isinstance(e, str) and _EMAIL_RE.match(e.strip())]
+    # 254: the longest valid address (RFC 5321) — also bounds the regex's work
+    return [e.strip() for e in raw if isinstance(e, str) and len(e.strip()) <= 254 and _EMAIL_RE.match(e.strip())]
 
 
 # ─── Workflows — the container an admin creates first, then assigns tasks into ──

@@ -325,7 +325,7 @@ class CommentList(Resource):
 
             # ── @mentions — any object type, "@[Display Name](id)" tokens ──
             if link:
-                mentioned_ids = {int(uid) for uid in re.findall(r'@\[[^\]]+\]\((\d+)\)', content)}
+                mentioned_ids = {int(uid) for uid in re.findall(r'@\[[^\]\n]{1,200}\]\((\d{1,12})\)', content)}
                 for uid in mentioned_ids:
                     if uid != current_user.id:
                         notify_user_mentioned(uid, current_user.id, title, link)
