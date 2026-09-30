@@ -2,7 +2,7 @@ from flask import Blueprint, abort, flash, jsonify, redirect, render_template , 
 from flask_login import current_user, login_required
 
 from app.features.bundle.bundle_form import AddNewBundleForm, EditBundleForm
-from app.core.utils.utils import form_to_dict, safe_referrer
+from app.core.utils.utils import form_to_dict, safe_referrer, internal_error
 from app.features.misp.bundle.misp_object import get_bundle_misp_event
 from . import bundle_core as BundleModel
 from .bundle_history_core import track_bundle_change, get_bundle_history_page, get_bundle_history_entry, diff_snapshots as diff_bundle_snapshots
@@ -2002,7 +2002,7 @@ def get_bundle_tags_display(bundle_id):
 
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 @bundle_blueprint.route('/get_bundle_vulnerabilities_display/<int:bundle_id>')
 def get_bundle_vulnerabilities_display(bundle_id):
@@ -2019,7 +2019,7 @@ def get_bundle_vulnerabilities_display(bundle_id):
             "total_vulnerabilities": len(v_list)
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
 
 @bundle_blueprint.route('/get_all_tags_usage')
 def get_all_tags_usage():
@@ -2035,7 +2035,7 @@ def get_all_tags_usage():
             "tags": tags
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 @bundle_blueprint.route('/get_all_vulnerabilities_usage')
 def get_all_vulnerabilities_usage():
@@ -2046,7 +2046,7 @@ def get_all_vulnerabilities_usage():
             "vulnerabilities": vulnerabilities
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 @bundle_blueprint.route('/get_bundle_creators_usage')
 def get_bundle_creators_usage():
@@ -2073,7 +2073,7 @@ def get_bundle_tags(bundle_id):
         
         return jsonify({"tags": tags_data}), 200
     except Exception as e:
-        return jsonify({"tags": [], "error": str(e)}), 500
+        return jsonify({"tags": [], "error": internal_error(e)}), 500
     
 
 @bundle_blueprint.route('/vulnerabilities/<string:target_type>/<int:target_id>')

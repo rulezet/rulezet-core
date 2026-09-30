@@ -65,6 +65,18 @@ def verif_api_key(headers):
     return user is not None
 
 
+def internal_error(exc, message="An internal error occurred — please try again later."):
+    """Log an unexpected exception with its traceback and return a message
+    safe to show a client: the raw exception text (SQL, paths, internals)
+    stays in the server log."""
+    try:
+        from flask import current_app
+        current_app.logger.error("Unhandled error: %s", exc, exc_info=exc)
+    except Exception:
+        pass
+    return message
+
+
 def safe_referrer(default='/'):
     """The referrer as a local path ("/…?…") when it points to this host —
     else `default`. Never a full URL, never "//host" or "/\\host" (which

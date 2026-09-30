@@ -12,7 +12,7 @@ from datetime import datetime,  timezone
 
 from app.features.misp.rule.misp_object import content_convert_to_misp_object, get_rule_misp_event, get_rule_misp_event, get_rule_misp_object
 from .rule_form import AddNewRuleForm, CreateFormatRuleForm, EditRuleForm
-from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_side_diff_html, safe_referrer
+from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_side_diff_html, safe_referrer, internal_error
 
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
@@ -1332,7 +1332,7 @@ def detail_rule_ai_analysis_download_pdf(rule_id, analysis_id):
     except Exception as e:
         current_app.logger.exception(f'AI analysis PDF export failed (rule {rule_id}, analysis {analysis_id})')
         return current_app.response_class(
-            f'PDF export failed: {type(e).__name__}: {e}\n'
+            'PDF export failed.\n'
             'The Markdown download still works. Server log has the full traceback.',
             status=500, mimetype='text/plain',
         )
@@ -1571,7 +1571,7 @@ def get_sigma_convert(rule_id):
         content = convert_sigma_rule(rule, target)
         return jsonify({"success": True, "content": content})
     except Exception as e:
-        return jsonify({"success": False, "content": None, "error": str(e)})
+        return jsonify({"success": False, "content": None, "error": internal_error(e, "Conversion failed for this rule.")})
 
 @rule_blueprint.route("/download_rule", methods=['GET'])
 def download_rule_unified() -> Response:
@@ -1701,7 +1701,7 @@ def download_rule_unified() -> Response:
             error_mesg = f"Unknown format: {fmt}"
 
     except Exception as e:
-        error_mesg = f"Failed to prepare download: {str(e)}"
+        error_mesg = internal_error(e, "Failed to prepare the download.")
 
     if error_mesg:
         return jsonify({
@@ -2329,7 +2329,7 @@ def post_rule_edit_comment() -> jsonify:
             print(f"[rule] notify_proposal_comment error: {_e}")
         return jsonify(new_comment.to_json()), 201
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': internal_error(e)}), 500
 
 @rule_blueprint.route('/delete_comment', methods=['GET'])
 @login_required
@@ -2827,7 +2827,7 @@ def get_all_sources_owner():
         return jsonify(simplified_sources)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': internal_error(e)}), 500
 
 
 @rule_blueprint.route("/update_to_check", methods=['GET'])
@@ -3161,7 +3161,7 @@ def delete_all_bad_rule() -> jsonify:
         return jsonify({ 
             "success": False,
             "toast_class": 'danger',
-            "message": f"System error during deletion: {str(e)}"
+            "message": internal_error(e, "System error during deletion.")
         }), 500
 
 
@@ -3270,7 +3270,7 @@ def report_rule():
         return jsonify({'success': True, 'message': 'Report submitted.',
                         'toast_class': 'success-subtle'}), 200
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e),
+        return jsonify({'success': False, 'message': internal_error(e),
                         'toast_class': 'danger-subtle'}), 500
 
 @rule_blueprint.route('/admin/rules_reported', methods=['GET'])
@@ -4944,7 +4944,7 @@ def bulk_action_github():
         try:
             return RuleModel.export_rules_by_urls_as_zip(target_urls)
         except Exception as e:
-            return jsonify({"message": f"Export failed: {str(e)}", "toast_class": "danger-subtle"}), 500
+            return jsonify({"message": internal_error(e, "Export failed."), "toast_class": "danger-subtle"}), 500
 
     return jsonify({"message": "Action not supported"}), 400
 
@@ -5569,7 +5569,7 @@ def get_all_rules_vulnerabilities_usage():
         })
     except Exception as e:
 
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 
 
@@ -5585,7 +5585,7 @@ def get_rule_vulnerabilities_display(rule_id):
             "total_vulnerabilities": len(v_list)
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
 
 
 
@@ -5678,7 +5678,7 @@ def get_tags(rule_id):
 
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 @rule_blueprint.route('/get_all_tags_usage')
 # Only anonymous responses are cached: what's returned depends on who asks
@@ -5701,7 +5701,7 @@ def get_all_tags_usage():
             "tags": tags
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 @rule_blueprint.route('/get_rule_tags_display/<int:rule_id>')
 def get_rule_tags_display(rule_id):
@@ -5716,7 +5716,7 @@ def get_rule_tags_display(rule_id):
 
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 
 
@@ -5912,7 +5912,7 @@ def bundle_from_filters():
         }), 200
 
     except Exception as e:
-        return jsonify({"message": str(e)}), 500
+        return jsonify({"message": internal_error(e)}), 500
     
 
 #####################
