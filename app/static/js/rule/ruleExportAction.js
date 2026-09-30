@@ -367,7 +367,10 @@ const RuleExportAction = {
 
         <teleport to="body">
             <div class="modal fade" :id="modalId" tabindex="-1" aria-hidden="true" style="z-index: 2000;">
-                <div :class="currentView === 'structure' ? 'modal-dialog' : 'modal-dialog modal-dialog-centered'"
+                <div :class="currentView === 'structure' ? 'modal-dialog'
+                              : (currentView === 'bundle'
+                                  ? 'modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl'   // room for the Markdown description editor
+                                  : 'modal-dialog modal-dialog-centered')"
                      :style="currentView === 'structure'
                         ? ('position:fixed;margin:0;max-width:none;top:' + win.top + 'px;left:' + win.left + 'px;width:' + win.width + 'px;height:' + win.height + 'px;')
                         : ''">

@@ -1,4 +1,18 @@
+import SmartEditor from '/static/js/components/smart-editor.js';
+
+// The bundle description is Markdown (same editor as the bundle create /
+// edit pages) — load the editor's stylesheet once, whoever embeds this.
+for (const href of ['/static/css/components/theme-bridge.css', '/static/css/components/smart-editor.css']) {
+    if (!document.querySelector(`link[href="${href}"]`)) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        document.head.appendChild(link);
+    }
+}
+
 const RuleBundleManager = {
+    components: { SmartEditor },
     props: {
         totalRules: Number,
         isOverLimit: Boolean,
@@ -226,10 +240,10 @@ const RuleBundleManager = {
                     </div>
 
                     <div class="mb-3">
-                        <textarea class="form-control rounded-4 border-2 shadow-none p-3 small"
-                                rows="3"
-                                v-model="bundleForm.description"
-                                placeholder="What is this collection about? (Optional)"></textarea>
+                        <smart-editor v-model="bundleForm.description" mode="markdown" hardened-preview
+                            placeholder="What is this collection about? Markdown is supported. (Optional)"
+                            min-height="160px" max-height="360px"></smart-editor>
+                        <div class="form-text"><i class="fa-brands fa-markdown me-1"></i>Markdown supported — headings, lists, links, code…</div>
                     </div>
 
                     <div class="d-flex align-items-center justify-content-between p-3 rounded-4 transition-all"
