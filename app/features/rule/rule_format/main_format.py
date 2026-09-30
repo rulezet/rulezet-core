@@ -195,10 +195,14 @@ async def extract_rule_from_repo(repo_dir: str, info: dict, user: User):
     return bad_rules, imported, skipped
 
 
-def verify_syntax_rule_by_format(rule_dict: dict) -> tuple[bool, str]:
+def verify_syntax_rule_by_format(rule_dict: dict, rule=None) -> tuple[bool, str]:
     """
     Verify the syntax of the rule based on its format to accept or reject its creation.
     Returns (True, "") if the syntax is valid, (False, error_message) otherwise.
+
+    `rule`: the existing rule being edited / proposed an edit for — its
+    source, owner and links make the rules it references trusted YARA
+    dependencies (an admin or a proposer isn't the author).
     """
 
     rule_format = rule_dict.get("format", "").lower()
@@ -225,7 +229,15 @@ def verify_syntax_rule_by_format(rule_dict: dict) -> tuple[bool, str]:
         return False, "Rule content ('to_string') is empty."
 
     try:
-        result: ValidationResult = rule_instance.validate(content)
+        context = {}
+        if rule is not None:
+            from flask_login import current_user
+            owners = [rule.user_id]
+            if current_user and current_user.is_authenticated:
+                owners.append(current_user.id)
+            context = {"rule_id": rule.id, "source": rule.source, "github_path": rule.github_path,
+                       "owner_ids": tuple(owners)}
+        result: ValidationResult = rule_instance.validate(content, **context)
 
         if result.ok:
             return True, ""

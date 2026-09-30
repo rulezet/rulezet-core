@@ -261,3 +261,20 @@ def test_dependency_download_logged_once_per_downloader(client, app, monkeypatch
             assert client.get(f"/rule_relation/rule/{b.id}/dependencies/download").status_code == 200
         n = ActivityLog.query.filter_by(action="rule.download", target_id=b.id).count()
         assert n == 1
+
+
+def test_editing_or_proposing_on_someone_elses_rule_keeps_its_dependencies(app):
+    """The author's own rules stay trusted dependencies when an admin edits
+    the rule or another user proposes an edit."""
+    from flask_login import login_user
+    with app.app_context():
+        _rule("Base_C", C)                                                  # author: t@t.t
+        b = _rule("Mid_B", B)
+        edited = B.replace("condition: Base_C", "condition: Base_C and filesize < 5MB")
+        for email in ("admin@admin.admin", "neo@admin.admin"):
+            with app.test_request_context():
+                login_user(User.query.filter_by(email=email).first())
+                ok, error = verify_syntax_rule_by_format({"format": "yara", "to_string": edited}, rule=b)
+                assert ok, (email, error)
+                ok, _ = verify_syntax_rule_by_format({"format": "yara", "to_string": edited})
+                assert not ok                                                 # without the rule's context

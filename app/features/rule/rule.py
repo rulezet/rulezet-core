@@ -580,7 +580,7 @@ def edit_rule(rule_id) -> render_template:
             rule_dict = fill_all_void_field(form_dict)
            
             
-            valide , error = verify_syntax_rule_by_format(rule_dict)
+            valide , error = verify_syntax_rule_by_format(rule_dict, rule=rule)
             if not valide:
                 form.to_string.errors.append(f"Syntax Error: {error}")
                 from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
@@ -1956,7 +1956,7 @@ def propose_edit(rule_id) -> redirect:
 
     rule_dict = rule.to_json()
     rule_dict['to_string'] = proposed_content
-    valide, error = verify_syntax_rule_by_format(rule_dict)
+    valide, error = verify_syntax_rule_by_format(rule_dict, rule=rule)
     if not valide:
         return _err(f"Syntax error in proposed content: {error}")
 
@@ -2047,7 +2047,7 @@ def propose_revision(proposal_id) -> redirect:
 
     rule_dict = rule.to_json()
     rule_dict['to_string'] = proposed_content
-    valide, error = verify_syntax_rule_by_format(rule_dict)
+    valide, error = verify_syntax_rule_by_format(rule_dict, rule=rule)
     if not valide:
         return _err(f"Syntax error in proposed content: {error}")
 
