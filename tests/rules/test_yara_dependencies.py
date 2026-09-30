@@ -30,6 +30,10 @@ def _rule(title, content, fmt="yara"):
     return r
 
 
+def _owner():
+    return (User.query.filter_by(email="t@t.t").first().id,)
+
+
 def _links():
     db.session.expire_all()
     return {(Rule.query.get(r.source_rule_id).title, Rule.query.get(r.target_rule_id).title)
@@ -47,7 +51,7 @@ def test_a_rule_alone_is_unchanged(app):
 def test_resolves_the_whole_chain_recursively_in_declaration_order(app):
     with app.app_context():
         c, b = _rule("Base_C", C), _rule("Mid_B", B)
-        res = YaraRule().validate(A)
+        res = YaraRule().validate(A, owner_ids=_owner())
         assert res.ok, res.errors
         assert [d.title for d in res.dependencies] == ["Base_C", "Mid_B"]    # C declared before B
         assert res.normalized_content == A                                   # own text only
@@ -57,23 +61,23 @@ def test_resolves_the_whole_chain_recursively_in_declaration_order(app):
 def test_missing_link_in_the_chain_still_fails(app):
     with app.app_context():
         _rule("Mid_B", B)                                                    # Base_C doesn't exist
-        res = YaraRule().validate(A)
+        res = YaraRule().validate(A, owner_ids=_owner())
         assert not res.ok and 'undefined identifier "Base_C"' in res.errors[0]
 
 
 def test_a_rule_is_never_its_own_dependency(app):
     with app.app_context():
         r = _rule("Self_Ref", "rule Self_Ref { condition: true }")
-        res = YaraRule().validate("rule Other { condition: Self_Ref }", rule_id=r.id)
+        res = YaraRule().validate("rule Other { condition: Self_Ref }", rule_id=r.id, owner_ids=_owner())
         assert not res.ok
-        assert YaraRule().validate("rule Other { condition: Self_Ref }").ok
+        assert YaraRule().validate("rule Other { condition: Self_Ref }", owner_ids=_owner()).ok
 
 
 def test_module_needed_only_by_a_dependency_is_not_added_to_the_rule(app):
     with app.app_context():
         _rule("Is_PE", 'import "pe"\nrule Is_PE { condition: pe.is_pe }')
         own = "rule Uses_PE { condition: Is_PE }"
-        res = YaraRule().validate(own)
+        res = YaraRule().validate(own, owner_ids=_owner())
         assert res.ok, res.errors
         assert res.normalized_content == own
 
@@ -83,7 +87,10 @@ def test_edit_and_create_syntax_check_accept_the_chain(app):
     with app.app_context():
         _rule("Base_C", C)
         _rule("Mid_B", B)
-        ok, error = verify_syntax_rule_by_format({"format": "yara", "to_string": A})
+        from flask_login import login_user
+        with app.test_request_context():
+            login_user(User.query.filter_by(email="t@t.t").first())     # the author creating / editing
+            ok, error = verify_syntax_rule_by_format({"format": "yara", "to_string": A})
         assert ok, error
 
 
@@ -182,3 +189,46 @@ def test_public_validate_endpoint_never_resolves_dependencies(client, app):
         resp = client.post("/api/rule/public/validate",
                            json={"format": "yara", "content": "x" * (512 * 1024 + 1)})
         assert resp.status_code == 413
+
+
+# ── only trusted rules are ever pulled in ────────────────────────────────────
+
+def _rule_of(email, title, content, source="test"):
+    r = _rule(title, content)
+    r.user_id = User.query.filter_by(email=email).first().id
+    r.source = source
+    db.session.commit()
+    return r
+
+
+def test_a_rule_from_someone_else_elsewhere_is_never_pulled_in(app):
+    """Anyone can publish a rule named like a common identifier — it must
+    not end up compiled into other people's rules."""
+    with app.app_context():
+        _rule_of("neo@admin.admin", "Base_C", C, source="https://github.com/attacker/repo")
+        res = YaraRule().validate(B, owner_ids=_owner(), source="https://github.com/victim/repo")
+        assert not res.ok and res.dependencies == []
+
+
+def test_trusted_candidates_same_source_owner_or_existing_link(app):
+    with app.app_context():
+        mine = _rule_of("t@t.t", "Base_C", C)
+        _rule_of("neo@admin.admin", "Base_C", C, source="https://github.com/attacker/repo")
+        assert [d.id for d in YaraRule().validate(B, owner_ids=_owner()).dependencies] == [mine.id]
+
+        theirs = _rule_of("neo@admin.admin", "Lib_X", 'rule Lib_X { strings: $x = "x" condition: $x }',
+                          source="https://github.com/shared/lib")
+        use = "rule Uses_X { condition: Lib_X }"
+        assert YaraRule().validate(use, source="https://github.com/shared/lib").ok       # same source
+        assert not YaraRule().validate(use, owner_ids=_owner()).ok                       # stranger's rule
+        me = _rule_of("t@t.t", "Uses_X", use)
+        from app.features.rule_relation.rule_relation_core import add_relation
+        add_relation(me.id, theirs.id, "depends_on", user_id=me.user_id)                 # linked by hand
+        assert YaraRule().validate(use, rule_id=me.id, owner_ids=_owner()).ok
+
+
+def test_a_global_rule_is_never_a_dependency(app):
+    with app.app_context():
+        _rule_of("t@t.t", "Base_C", 'global rule Base_C { condition: filesize < 1MB }')
+        res = YaraRule().validate(B, owner_ids=_owner())
+        assert not res.ok and res.dependencies == []

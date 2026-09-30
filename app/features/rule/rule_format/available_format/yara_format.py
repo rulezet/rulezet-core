@@ -114,6 +114,50 @@ def find_missing_dependency_rule(var_name: str, bad_rule=None, source: str = Non
     return candidates[0]
 
 
+def find_trusted_dependency_rule(var_name: str, rule_id: int = None, source: str = None,
+                                 github_path: str = None, owner_ids=()) -> Optional[Rule]:
+    """The rule an undefined identifier should be compiled with — only if
+    it can be trusted to be the intended sibling, never just "some rule with
+    that name": anyone can publish a rule named like a common identifier, and
+    whatever gets picked here ends up compiled into other people's rules and
+    in their "download with dependencies" files.
+
+    Trusted, in this order: same GitHub path, same source (repository), an
+    existing link from `rule_id` (e.g. a hand-made "depends on"), then a
+    rule owned by one of `owner_ids` (the author / the person editing).
+    A candidate declaring a `global` rule is never used — it would silently
+    apply to every rule it is compiled with."""
+    if var_name in YaraRule.YARA_MODULES or var_name in allowed_externals():
+        return None
+    candidates = _active().filter(Rule.format == 'yara', Rule.title == var_name).all() \
+        or _active().filter(Rule.format == 'yara', Rule.title.ilike(var_name)).all()
+    candidates = [c for c in candidates if c.id != rule_id and not detect_global_rule_risk(c.to_string or '')['flagged']]
+    if not candidates:
+        return None
+
+    if github_path:
+        hit = next((c for c in candidates if c.github_path == github_path), None)
+        if hit:
+            return hit
+    if source:
+        hit = next((c for c in candidates if c.source == source), None)
+        if hit:
+            return hit
+    if rule_id:
+        from app.core.db_class.db import RuleRelation
+        linked = {tid for (tid,) in RuleRelation.query.filter_by(source_rule_id=rule_id)
+                  .with_entities(RuleRelation.target_rule_id)}
+        hit = next((c for c in candidates if c.id in linked), None)
+        if hit:
+            return hit
+    owners = {o for o in owner_ids if o}
+    if owners:
+        hit = next((c for c in candidates if c.user_id in owners), None)
+        if hit:
+            return hit
+    return None
+
+
 def try_resolve_yara_missing_dependency(rule_instance, rule_text: str, metadata: dict,
                                          validation_result: ValidationResult, user,
                                          source_repo_url: str = None, github_path: str = None):
@@ -140,7 +184,8 @@ def try_resolve_yara_missing_dependency(rule_instance, rule_text: str, metadata:
     if not var_name:
         return 'no_match', None
 
-    target_rule = find_missing_dependency_rule(var_name, source=source_repo_url, github_path=github_path)
+    target_rule = find_trusted_dependency_rule(var_name, source=source_repo_url, github_path=github_path,
+                                               owner_ids=(getattr(user, 'id', None),))
     if not target_rule:
         return 'no_match', None
 
@@ -188,7 +233,8 @@ def sync_yara_dependency_relations(rule) -> int:
         return 0
     result = YaraRule().validate(rule.to_string, rule_id=rule.id,
                                  source=getattr(rule, 'source', None),
-                                 github_path=getattr(rule, 'github_path', None))
+                                 github_path=getattr(rule, 'github_path', None),
+                                 owner_ids=(rule.user_id,))
     if not result.dependencies:
         return 0
     from app.features.rule_relation.rule_relation_core import add_relation
@@ -258,10 +304,19 @@ class YaraRule(RuleType):
             resolve_dependencies (bool, default True)
             rule_id (int)  — the rule being validated, never its own dependency
             source, github_path — to pick the right sibling among same-named rules
+            owner_ids — rules of these users count as trusted dependencies
+                        (default: the logged-in user) — see find_trusted_dependency_rule
         """
         ALLOWED_EXTERNALS = allowed_externals()
         resolve = kwargs.get('resolve_dependencies', True)
         self_id = kwargs.get('rule_id')
+        owner_ids = kwargs.get('owner_ids')
+        if owner_ids is None:
+            try:
+                from flask_login import current_user
+                owner_ids = (current_user.id,) if current_user.is_authenticated else ()
+            except Exception:
+                owner_ids = ()
 
         externals = {}
         header_imports = []          # modules a dependency needs, declared first
@@ -314,8 +369,9 @@ class YaraRule(RuleType):
                         deps.insert(0, known)
                         continue
                     if known is None and len(deps) < self.MAX_DEPENDENCIES:
-                        dep = find_missing_dependency_rule(var_name, source=kwargs.get('source'),
-                                                           github_path=kwargs.get('github_path'))
+                        dep = find_trusted_dependency_rule(var_name, rule_id=self_id, source=kwargs.get('source'),
+                                                           github_path=kwargs.get('github_path'),
+                                                           owner_ids=owner_ids)
                         if dep is not None and dep.id != self_id and dep not in deps:
                             deps.insert(0, dep)
                             continue
