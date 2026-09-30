@@ -1534,7 +1534,8 @@ export default {
         function _highlightHtml(html) {
             const q = search.value.trim()
             if (!html || !q || q.length < 2) return html
-            const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+            const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            const re = new RegExp(pattern, 'gi')
             const doc = new DOMParser().parseFromString(html, 'text/html')
             const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
             const nodes = []
@@ -1543,7 +1544,9 @@ export default {
                 if (!re.test(n.nodeValue)) continue
                 re.lastIndex = 0
                 const span = doc.createElement('span')
-                span.innerHTML = _esc(n.nodeValue).replace(re, m => `<mark class="rl-highlight">${m}</mark>`)
+                span.innerHTML = n.nodeValue.split(new RegExp(`(${pattern})`, 'gi'))
+                    .map((part, i) => i % 2 ? `<mark class="rl-highlight">${_esc(part)}</mark>` : _esc(part))
+                    .join('')
                 n.replaceWith(...span.childNodes)
             }
             return doc.body.innerHTML
@@ -1560,10 +1563,11 @@ export default {
             const q = search.value.trim()
             if (!q || q.length < 2) return _esc(text)
             const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-            return _esc(text).replace(
-                new RegExp(escaped, 'gi'),
-                m => `<mark class="rl-highlight">${m}</mark>`
-            )
+            // Match on the raw text, then escape each piece — matching on the
+            // escaped text would break entities ("amp" inside "&amp;").
+            return String(text).split(new RegExp(`(${escaped})`, 'gi'))
+                .map((part, i) => i % 2 ? `<mark class="rl-highlight">${_esc(part)}</mark>` : _esc(part))
+                .join('')
         }
         function _esc(s) {
             return String(s)
