@@ -938,6 +938,7 @@ def download_bundle_release(bundle_id, release_id):
     if not rel:
         return {"success": False, "message": "Release not found", "toast_class": "danger"}, 404
     BundleModel.increment_download_count(bundle_id)
+    _log_bundle_download(bundle, "release", rel)
     safe_name = "".join(c for c in bundle.name if c.isalnum() or c in (' ', '_')).strip().replace(' ', '_') or "bundle"
     safe_ver = "".join(c for c in rel.version if c.isalnum() or c in ".-_+")
     return send_file(release_zip(rel), as_attachment=True,
@@ -1319,6 +1320,16 @@ def bundle_voters():
 #   Download section    #
 #########################
 
+def _log_bundle_download(bundle, kind, release=None):
+    """Activity log for every bundle download — author is the requesting
+    user (current_user via log_activity), anonymous visitors stay unattributed."""
+    label = f" (release {release.version})" if release is not None else ""
+    log_activity("bundle.download", f"Downloaded bundle '{bundle.name}' — {kind}{label}",
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid,
+                 extra={"format": kind, **({"release": release.version} if release is not None else {})},
+                 is_public=False)
+
+
 def _release_download(bundle_id, part):
     """Frozen version of a per-section download (?release=<id|version>)."""
     from .bundle_release_core import release_zip, release_zip_part
@@ -1329,6 +1340,7 @@ def _release_download(bundle_id, part):
     if err:
         return err
     BundleModel.increment_download_count(bundle_id)
+    _log_bundle_download(bundle, part, rel)
     safe_name = "".join(c for c in bundle.name if c.isalnum() or c in (' ', '_')).strip().replace(' ', '_') or "bundle"
     safe_ver = "".join(c for c in rel.version if c.isalnum() or c in ".-_+")
     buf = release_zip(rel) if part == "full" else release_zip_part(rel, part)
@@ -1376,6 +1388,7 @@ def download_bundle():
 
     # add 1 to download count
     BundleModel.increment_download_count(bundle_id)
+    _log_bundle_download(bundle, "rules")
 
     zip_buffer.seek(0)
     return send_file(
@@ -1456,7 +1469,8 @@ def download_bundle_structure():
             add_node_to_zip(zip_file, root)
 
     zip_buffer.seek(0)
-    
+    _log_bundle_download(bundle, "structure")
+
     safe_bundle_name = "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
     
     return send_file(
@@ -1508,6 +1522,7 @@ def download_bundle_files():
         for root in root_nodes:
             _add_custom_files_to_zip(zip_file, root)
     zip_buffer.seek(0)
+    _log_bundle_download(bundle, "files")
 
     safe_bundle_name = "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
     return send_file(
@@ -1621,6 +1636,7 @@ def download_bundle_full():
             pass
 
     BundleModel.increment_download_count(bundle_id)
+    _log_bundle_download(bundle, "full")
     zip_buffer.seek(0)
     safe_bundle_name = "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_') or "bundle"
     return send_file(
@@ -1647,6 +1663,7 @@ def download_bundle_misp():
     if not event_json:
         return {"success": False, "message": "Failed to generate MISP event", "toast_class": "danger-subtle"}, 500
 
+    _log_bundle_download(bundle, "misp_event")
     safe_name = "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
 
     # # return a json 
@@ -2604,4 +2621,7 @@ def bundle_ai_analysis_download(bundle_id, analysis_id, kind):
         pdf = WeasyprintHTML(string=html_str, base_url=request.url_root, url_fetcher=_fonts_only).write_pdf()
         resp = current_app.response_class(pdf, mimetype='application/pdf')
     resp.headers['Content-Disposition'] = f'attachment; filename="{_bundle_ai_filename(bundle, "md" if kind == "markdown" else "pdf")}"'
+    log_activity('bundle.ai_analysis_download',
+                 f"Downloaded AI analysis ({'Markdown' if kind == 'markdown' else 'PDF'}) for bundle '{bundle.name[:80]}'",
+                 target_type='bundle', target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
     return resp

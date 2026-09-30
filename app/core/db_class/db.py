@@ -2838,7 +2838,9 @@ class ActivityLog(db.Model):
     user = db.relationship('User', backref=db.backref('activity_logs', lazy='dynamic'))
 
     def to_json(self):
-        username = "System"
+        # No user + a request IP = an anonymous visitor (view, download…);
+        # no user and no request at all = a genuine system action (cron, job).
+        username = "Anonymous" if self.ip_address else "System"
         try:
             if self.user:
                 username = self.user.get_username()

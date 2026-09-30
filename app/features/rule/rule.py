@@ -5800,6 +5800,8 @@ def download_rules_export():
                 zf.writestr(f"rules_export/{rtype}/{rtype}_merged.{sample_ext}", "".join(contents))
 
     memory_file.seek(0)
+    log_activity("rule.export", f"Exported {len(rules)} rule(s) (format={filters['export_format']})",
+                 extra={"format": filters["export_format"], "count": len(rules)}, is_public=False)
     return send_file(
         memory_file,
         mimetype='application/zip',
