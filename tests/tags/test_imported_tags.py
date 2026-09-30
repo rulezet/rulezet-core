@@ -270,3 +270,13 @@ def test_at_most_25_imported_tags_per_rule(app):
         r = _rule(f'rule Many : {many} {{ condition: true }}')
         _run_job({"formats": ["yara"], "rule_ids": [r.id]}, _user("admin@admin.admin"))
         assert len(_rule_tags(r.id)) == 25
+
+
+def test_extraction_stays_linear_on_crafted_content():
+    """Runs on every new rule: a long run of whitespace after a tag list with
+    no "{" used to backtrack quadratically (33 s for 200k spaces)."""
+    import time
+    for content in ("rule a : b" + " " * 200_000, "rule a : b" + "\t \n" * 100_000):
+        start = time.time()
+        extract_native_tags("yara", content)
+        assert time.time() - start < 2

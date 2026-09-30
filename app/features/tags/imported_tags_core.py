@@ -113,8 +113,12 @@ def _as_str_list(value) -> list[str]:
 # Strings kept as-is, /* */ and // comments blanked — so a commented-out
 # `rule X : a b` or `tags = "…"` is never picked up.
 _C_TOKENS_RE = re.compile(r'"(?:\\.|[^"\\\n])*"|/\*.*?\*/|//[^\n]*', re.S)
+# The tag list is "identifier (whitespace identifier)*" — no class overlapping
+# the whitespace around it, or a long run of spaces with no "{" backtracks
+# quadratically (200k spaces took 33 s).
 _YARA_HEADER_RE = re.compile(
-    r"(?:^|[\s}])(?:(?:private|global)\s+)*rule\s+[A-Za-z_]\w*\s*(?::\s*([A-Za-z_][\w \t\r\n]*?))?\s*\{")
+    r"(?:^|[\s}])(?:(?:private|global)\s+)*rule\s+[A-Za-z_]\w*\s*"
+    r"(?::\s*([A-Za-z_]\w*(?:\s+[A-Za-z_]\w*)*))?\s*\{")
 _YARA_META_RE = re.compile(r"\bmeta\s*:(.*?)(?=\b(?:strings|condition|keywords|semantics|llm)\s*:|\Z)", re.S)
 _META_TAG_RE = re.compile(r"\btags?\s*=\s*\"((?:\\.|[^\"\\])*)\"", re.I)
 
@@ -238,12 +242,16 @@ _EXTRACTORS = {
 }
 
 
+MAX_EXTRACT_CHARS = 1_000_000     # runs on every new rule: bound the work
+
+
 def extract_native_tags(rule_format: str | None, content: str | None) -> list[str]:
     """The author's tags written in the rule itself, normalized and
     deduplicated in order of appearance. [] for formats without tags."""
     extractor = _EXTRACTORS.get((rule_format or "").strip().lower())
     if not extractor or not content:
         return []
+    content = content[:MAX_EXTRACT_CHARS]
     try:
         return _dedup(extractor(content))
     except Exception:
