@@ -1,6 +1,7 @@
 #---------------------------------------------------------------------------------------For_all_rules_types----------------------------------------------------------------------------------------------------------#
 
 import os
+import re
 import shutil
 import subprocess
 from urllib.parse import urlparse
@@ -90,6 +91,28 @@ def get_repo_name_from_url(repo_url):
     return f"{owner}/{repo}"
   
 
+RULES_GITHUB_DIR = "app/rule_from_github/Rules_Github"
+# A git branch name as a user may type it: no ".." (path escape), no leading
+# "-" (read as an option by `git checkout <branch>`) or "/".
+_BRANCH_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/+-]{0,199}$')
+_UNSAFE_PATH_CHARS = re.compile(r'[^A-Za-z0-9._-]+')
+
+
+def is_valid_branch_name(branch) -> bool:
+    return bool(branch) and bool(_BRANCH_RE.match(branch)) and '..' not in branch and not branch.endswith(('/', '.lock'))
+
+
+def _safe_path_part(value) -> str:
+    """One directory name from user input (repo owner, repo name, branch)."""
+    part = _UNSAFE_PATH_CHARS.sub('_', str(value or '')).strip('.')
+    return part[:120] or '_'
+
+
+def _inside(base_dir, path) -> bool:
+    base = os.path.realpath(base_dir)
+    return os.path.realpath(path).startswith(base + os.sep)
+
+
 def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
     """Clone or access the repository from a git URL.
 
@@ -103,13 +126,23 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
     API) already reports a clear error via its own except block below if the
     repo genuinely isn't reachable.
     """
-    base_dir = "app/rule_from_github/Rules_Github"
+    base_dir = RULES_GITHUB_DIR
     os.makedirs(base_dir, exist_ok=True)
 
+    if branch and not is_valid_branch_name(branch):
+        raise Exception(f"Invalid branch name: '{str(branch)[:80]}'.")
+
     repo_name = get_repo_name_from_url(repo_url)
-    # Use a branch-specific subfolder so different branches don't overwrite each other
-    dir_suffix = f"--{branch}" if branch else ""
-    repo_dir = os.path.join(base_dir, repo_name + dir_suffix)
+    if not repo_name:
+        raise Exception("Invalid repository URL.")
+    owner, _, name = repo_name.partition('/')
+    # Use a branch-specific subfolder so different branches don't overwrite each other.
+    # Every part comes from user input: sanitised, and the result must stay
+    # under base_dir (a URL ending in "/../.." must not escape it).
+    dir_suffix = f"--{_safe_path_part(branch)}" if branch else ""
+    repo_dir = os.path.join(base_dir, _safe_path_part(owner), _safe_path_part(name) + dir_suffix)
+    if not _inside(base_dir, repo_dir):
+        raise Exception("Invalid repository path.")
 
     existe = os.path.exists(repo_dir)
     if not existe:
@@ -264,7 +297,10 @@ def get_github_repo_live_info(repo_url: str) -> dict:
             'branches': branches, 'contributors': contributors}
 
 def delete_existing_repo_folder(local_dir):
-    """Delete the existing folder if it exists."""
+    """Delete the existing folder if it exists — only ever a clone under
+    RULES_GITHUB_DIR, never anything else on disk."""
+    if not _inside(RULES_GITHUB_DIR, local_dir):
+        return False
     if os.path.exists(local_dir):
         shutil.rmtree(local_dir)
         return True
