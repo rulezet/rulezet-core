@@ -168,3 +168,17 @@ def test_download_zip_holds_the_chain_in_one_folder(client, app):
             f"/rule_relation/rule/{a.id}/dependencies/download?include=all").data))
         assert any("Uses_A" in n for n in z.namelist())
         assert client.get("/rule_relation/rule/999999/dependencies/download").status_code == 404
+
+
+def test_public_validate_endpoint_never_resolves_dependencies(client, app):
+    """Public and unauthenticated: resolving references costs lookups and
+    compiles per call, so the content is checked on its own."""
+    with app.app_context():
+        _rule("Base_C", C)
+        resp = client.post("/api/rule/public/validate", json={"format": "yara", "content": B})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["valid"] is False and any("Base_C" in e for e in data["errors"])
+        resp = client.post("/api/rule/public/validate",
+                           json={"format": "yara", "content": "x" * (512 * 1024 + 1)})
+        assert resp.status_code == 413

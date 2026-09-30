@@ -4651,7 +4651,8 @@ def verify_rule_syntaxe(rule: Any , new_content) -> Optional[ValidationResult]:
     return None
 
 
-def validate_rule_syntax(rule_format: str, content: str) -> Optional[ValidationResult]:
+def validate_rule_syntax(rule_format: str, content: str,
+                         resolve_dependencies: bool = False) -> Optional[ValidationResult]:
     """Run the same per-format syntax check a rule goes through at creation
     time (verify_rule_syntaxe above), without a DB Rule object and without
     ever persisting anything — for a dry-run "would this rule be accepted"
@@ -4669,7 +4670,10 @@ def validate_rule_syntax(rule_format: str, content: str) -> Optional[ValidationR
         try:
             instance = RuleClass()
             if instance.format.lower() == wanted:
-                return instance.validate(content)
+                # No dependency resolution by default: this backs a public,
+                # unauthenticated endpoint — resolving YARA references means
+                # database lookups + one compile per referenced rule, per call.
+                return instance.validate(content, resolve_dependencies=resolve_dependencies)
         except Exception:
             continue
     return None
