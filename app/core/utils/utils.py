@@ -66,17 +66,24 @@ def verif_api_key(headers):
 
 
 def safe_referrer(default='/'):
-    """Return request.referrer only when it points to the same host."""
+    """The referrer as a local path ("/…?…") when it points to this host —
+    else `default`. Never a full URL, never "//host" or "/\\host" (which
+    browsers follow to another site), never a non-http(s) scheme."""
     ref = request.referrer
     if not ref:
         return default
     try:
         parsed = urlparse(ref)
+        if parsed.scheme and parsed.scheme.lower() not in ('http', 'https'):
+            return default
         if parsed.netloc and parsed.netloc.lower() != request.host.lower():
+            return default
+        path = parsed.path or '/'
+        if not path.startswith('/') or path.startswith('//') or path.startswith('/\\'):
             return default
     except Exception:
         return default
-    return ref
+    return path + (f'?{parsed.query}' if parsed.query else '')
 
 
 def create_specific_dir(specific_dir):
