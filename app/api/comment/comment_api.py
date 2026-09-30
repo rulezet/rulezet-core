@@ -34,9 +34,48 @@ _PER_PAGE_MAX = 50
 _GITHUB_ISSUE_REPO = 'rulezet/rulezet-core'
 
 
+def _can_read_object(object_type, object_id) -> bool:
+    """Whether the current user may see the object a comment thread hangs on
+    — its comments are exactly as visible as the object itself (a private
+    bundle's discussion is not public just because comments are a separate
+    table)."""
+    from app.core.db_class.db import Rule, Bundle, BlogPost, RuleEditProposal
+    try:
+        object_id = int(object_id)
+    except (TypeError, ValueError):
+        return False
+    is_admin = current_user.is_authenticated and current_user.is_admin()
+
+    if object_type == 'rule':
+        rule = db.session.get(Rule, object_id)
+        return bool(rule) and not rule.is_deleted
+    if object_type == 'bundle':
+        from app.features.bundle.bundle_core import can_view_bundle
+        return can_view_bundle(db.session.get(Bundle, object_id))
+    if object_type == 'blog_post':
+        post = db.session.get(BlogPost, object_id)
+        if not post:
+            return False
+        if post.is_public and not post.is_draft:
+            return True
+        return is_admin or (current_user.is_authenticated and post.user_id == current_user.id)
+    if object_type == 'proposal':
+        proposal = db.session.get(RuleEditProposal, object_id)
+        return bool(proposal) and _can_read_object('rule', proposal.rule_id)
+    return False
+
+
 def _get_or_404(uuid):
     c = UnifiedComment.query.filter_by(uuid=uuid).first()
     if not c:
+        comment_ns.abort(404, 'Comment not found')
+    return c
+
+
+def _get_readable_or_404(uuid):
+    """A comment the current user may see (its object is visible to them)."""
+    c = _get_or_404(uuid)
+    if not _can_read_object(c.object_type, c.object_id):
         comment_ns.abort(404, 'Comment not found')
     return c
 
@@ -131,6 +170,8 @@ class CommentList(Resource):
 
         if object_type not in _VALID_OBJECT_TYPES or not object_id:
             return {'message': 'object_type and object_id are required'}, 400
+        if not _can_read_object(object_type, object_id):
+            return {'message': 'Not found'}, 404
 
         uid = current_user.id if current_user.is_authenticated else None
 
@@ -170,6 +211,8 @@ class CommentList(Resource):
             return {'message': 'content is required'}, 400
         if len(content) > 10000:
             return {'message': 'comment too long (max 10 000 chars)'}, 400
+        if not _can_read_object(object_type, object_id):
+            return {'message': 'Not found'}, 404
 
         depth   = 0
         root_id = None
@@ -469,7 +512,7 @@ class CommentResolve(Resource):
     def get(self, comment_id):
         """Return a comment's root_id and ordered ancestor chain for deep-link navigation."""
         c = UnifiedComment.query.get(comment_id)
-        if not c or not c.is_active:
+        if not c or not c.is_active or not _can_read_object(c.object_type, c.object_id):
             return {'message': 'Comment not found'}, 404
 
         ancestors = []
@@ -498,7 +541,7 @@ class CommentReact(Resource):
         if not current_user.is_authenticated:
             return {'message': 'Login required'}, 401
 
-        comment = _get_or_404(uuid)
+        comment = _get_readable_or_404(uuid)
         if not comment.is_active:
             return {'message': 'Cannot react to a deleted comment'}, 400
 
@@ -550,7 +593,7 @@ class CommentReactors(Resource):
         if reaction not in ('like', 'dislike'):
             return {'message': 'type must be "like" or "dislike"'}, 400
 
-        comment = _get_or_404(uuid)
+        comment = _get_readable_or_404(uuid)
 
         q = (UnifiedCommentReaction.query
              .filter_by(comment_id=comment.id, reaction=reaction)

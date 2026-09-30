@@ -1860,7 +1860,7 @@ def add_comment():
         return {"message": "Missing bundle_id or content", "toast_class": "danger-subtle"}, 400
 
     bundle = BundleModel.get_bundle_by_id(bundle_id)
-    if not bundle:
+    if not bundle or not BundleModel.can_view_bundle(bundle):
         return {"message": "Bundle not found", "toast_class": "danger-subtle"}, 404
 
     message, success = BundleModel.add_comment_to_bundle(bundle_id, current_user, content, parent_comment_id)
@@ -1965,7 +1965,7 @@ def add_reaction():
         return {"message": "Missing comment_id or reaction_type", "toast_class": "danger-subtle"}, 400
 
     comment = BundleModel.get_comment_bundle_by_id(comment_id)
-    if not comment:
+    if not comment or not BundleModel.can_view_bundle(BundleModel.get_bundle_by_id(comment.bundle_id)):
         return {"message": "Comment not found", "toast_class": "danger-subtle"}, 404
 
     success, message = BundleModel.add_reaction_to_comment(comment_id, current_user.id, reaction_type, bundle_id)
