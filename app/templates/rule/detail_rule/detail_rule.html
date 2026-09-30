@@ -133,8 +133,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                               title="Perfect quality score (100/100) — this rule is extremely well documented, traceable and valid.">
                             <i class="fa-solid fa-medal me-1"></i> 100
                         </span>
-                        <span class="badge rounded-pill bg-dark pt-1 shadow-sm">[[ currentRule.format.toUpperCase()
-                            ]]</span>
+                        <format-chip :format="currentRule.format"></format-chip>
                     </div>
 
                     <div class="card-body d-flex flex-column p-4 z-index-1">
@@ -1262,6 +1261,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
 
     import VulnerabilityDisplay from '/static/js/vulnerability/vulnerabilityDisplay.js';
     import TagDisplay from '/static/js/tags/tagDisplay.js';
+    import FormatChip from '/static/js/rule/formatChip.js';
     import UserChip from '/static/js/components/UserChip.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
     import CommentThread from '/static/js/components/comments/comment-thread.js';
@@ -1277,6 +1277,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
         components: {
             'vulnerability-display': VulnerabilityDisplay,
             'tag-display': TagDisplay,
+            'format-chip': FormatChip,
             'user-chip': UserChip,
             'code-viewer': CodeViewer,
             'comment-thread': CommentThread,

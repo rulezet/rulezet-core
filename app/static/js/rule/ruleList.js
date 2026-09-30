@@ -66,6 +66,7 @@ import ReportModal              from '/static/js/components/ReportModal.js'
 import MultiAttackFilter        from '/static/js/attack/multiAttackFilter.js'
 import AttackDisplayList        from '/static/js/attack/attackDisplayList.js'
 import YaraMatchDetail           from '/static/js/rule_tester/YaraMatchDetail.js'
+import FormatChip                from '/static/js/rule/formatChip.js'
 import { MASCOT_ENABLED }       from '/static/js/components/mascot.js'
 
 const { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue
@@ -91,6 +92,7 @@ export default {
         MultiAttackFilter,
         AttackDisplayList,
         YaraMatchDetail,
+        FormatChip,
     },
 
     props: {
@@ -744,9 +746,8 @@ export default {
                           title="Executable code, not a declarative detection rule">
                         <i class="fa-solid fa-code me-1"></i>CODE
                     </span>
-                    <span class="badge rounded-pill bg-dark pt-1 shadow-sm">
-                        {{ rule.format ? rule.format.toUpperCase() : '?' }}
-                    </span>
+                    <format-chip :format="rule.format" :can-filter="!isFilterHidden('format')"
+                                 :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
                     <span v-if="showRelationType && relationLabels[rule.id]" class="badge rounded-pill shadow-sm pt-1"
                           style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25);">
                         <i class="fa-solid fa-diagram-project me-1"></i>{{ relationLabels[rule.id] }}
@@ -1248,10 +1249,8 @@ export default {
                                       title="Executable code, not a declarative detection rule">
                                     <i class="fa-solid fa-code me-1"></i>CODE
                                 </span>
-                                <span v-if="rule.format"
-                                      class="badge rounded-pill bg-dark pt-1 shadow-sm">
-                                    {{ rule.format.toUpperCase() }}
-                                </span>
+                                <format-chip v-if="rule.format" :format="rule.format" :can-filter="!isFilterHidden('format')"
+                                             :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
                             </td>
 
                             <td v-show="colVisible.editor" class="dt-td" style="max-width:140px;"
@@ -1481,9 +1480,8 @@ export default {
                                                       title="Executable code, not a declarative detection rule">
                                                     <i class="fa-solid fa-code me-1"></i>CODE
                                                 </span>
-                                                <span v-if="rule.format" class="badge rounded-pill bg-dark">
-                                                    {{ rule.format.toUpperCase() }}
-                                                </span>
+                                                <format-chip v-if="rule.format" :format="rule.format" :can-filter="!isFilterHidden('format')"
+                                                             :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
                                                 <span v-else>—</span>
                                             </span>
                                         </div>
@@ -2108,6 +2106,13 @@ export default {
         }
 
         // ── Filter change handlers ────────────────────────────────────────
+        // Format chip "Add to filter" (formatChip.js): filter this list on it.
+        function filterByFormat(fmt) {
+            if (!fmt || ruleType.value === fmt) return
+            ruleType.value = fmt
+            onFilterChange()
+        }
+
         function onFilterChange() {
             page.value = 1
             // only reset "select all pages" — individual picks survive the filter change
@@ -2699,7 +2704,7 @@ export default {
             // Methods
             isOwner, isFilterHidden, rlRiskTextColor, rlRiskTitle, binaryBadgeStyle, isResolved,
             riskFilter, selectedBinaries, toggleBinary, pendingOnly, resolvedOnly, setPendingOnly, setResolvedOnly,
-            fetchData, onFilterChange, resetFilters,
+            fetchData, onFilterChange, filterByFormat, resetFilters,
             onSearchInput, clearSearch,
             setSort, sortIcon, onCardSortChange,
             goToPage,
