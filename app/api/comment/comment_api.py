@@ -313,7 +313,9 @@ class CommentList(Resource):
                              f"Added comment on blog post id={object_id}",
                              target_type="blog_comment", target_id=comment.id,
                              extra={"post_id": object_id})
-                if blog_post and blog_post.is_public:
+                # Followers only hear about a published post — not a draft
+                # that merely has is_public set.
+                if blog_post and blog_post.is_public and not blog_post.is_draft:
                     link  = f'/blog/post/{blog_post.uuid}?comment={comment.id}'
                     notify_followers_new_comment(current_user.id, blog_post.title, link, is_public=True)
                     if parent_id:
