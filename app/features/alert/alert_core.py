@@ -353,7 +353,23 @@ def _attack_condition(techniques):
     return or_(*conds)
 
 
-def _rule_conditions(criteria) -> list:
+def _visible_tag_condition(viewer_id):
+    """Tags an alert owner may match on / be shown: active public tags and
+    their own private ones (every active tag for an admin). Without this an
+    alert on the name of someone else's private tag tells which rules carry
+    it, and "any tag" reasons list private tag names."""
+    if viewer_id is None:
+        return Tag.is_active.is_(True)
+    viewer = db.session.get(User, viewer_id)
+    if viewer and viewer.is_admin():
+        return Tag.is_active.is_(True)
+    return and_(Tag.is_active.is_(True), or_(
+        func.lower(Tag.visibility) == 'public',
+        and_(func.lower(Tag.visibility) == 'private', Tag.created_by == viewer_id),
+    ))
+
+
+def _rule_conditions(criteria, viewer_id=None) -> list:
     """One SQL condition per non-empty criterion, for the Rule table."""
     from app.features.rule.rule_core import presence_conditions
 
@@ -362,12 +378,12 @@ def _rule_conditions(criteria) -> list:
         conds += presence_conditions(has_cve=True)
     elif criteria.get('cves'):
         conds.append(or_(*[Rule.cve_id.ilike(f'%"{c}"%') for c in criteria['cves']]))
-    if criteria.get('tag_any'):
-        conds += presence_conditions(has_tags=True)
-    elif criteria.get('tags'):
+    if criteria.get('tag_any') or criteria.get('tags'):
+        tag_filter = (and_(*[~func.lower(Tag.name).like(f'{p}%') for p in _MARKING_TAG_PREFIXES])
+                      if criteria.get('tag_any') else func.lower(Tag.name).in_(criteria['tags']))
         tagged = (db.session.query(RuleTagAssociation.rule_id)
                   .join(Tag, Tag.id == RuleTagAssociation.tag_id)
-                  .filter(func.lower(Tag.name).in_(criteria['tags'])))
+                  .filter(tag_filter, _visible_tag_condition(viewer_id)))
         conds.append(Rule.id.in_(tagged))
     if criteria.get('attack_any'):
         conds += presence_conditions(has_attack=True)
@@ -390,7 +406,7 @@ def _rule_conditions(criteria) -> list:
     return conds
 
 
-def _bundle_conditions(criteria):
+def _bundle_conditions(criteria, viewer_id=None):
     """Same for bundles. Returns None when the alert can't match a bundle:
     ATT&CK / format / GitHub criteria only exist on rules, so in 'all' mode
     any of them rules bundles out; in 'any' mode they're just skipped."""
@@ -406,7 +422,7 @@ def _bundle_conditions(criteria):
                       if criteria.get('tag_any') else func.lower(Tag.name).in_(criteria['tags']))
         tagged = (db.session.query(BundleTagAssociation.bundle_id)
                   .join(Tag, Tag.id == BundleTagAssociation.tag_id)
-                  .filter(tag_filter))
+                  .filter(tag_filter, _visible_tag_condition(viewer_id)))
         conds.append(Bundle.id.in_(tagged))
     if criteria.get('keywords'):
         conds.append(or_(*[
@@ -422,18 +438,19 @@ def _combine(conds, match_mode):
     return and_(*conds) if match_mode == 'all' else or_(*conds)
 
 
-def rule_match_query(criteria, match_mode, base_query=None):
-    """Rules matching the criteria (active only), or None if nothing to match on."""
-    conds = _rule_conditions(criteria)
+def rule_match_query(criteria, match_mode, base_query=None, viewer_id=None):
+    """Rules matching the criteria (active only), or None if nothing to match on.
+    viewer_id: the alert owner — only tags they can see count."""
+    conds = _rule_conditions(criteria, viewer_id)
     if not conds:
         return None
     query = base_query if base_query is not None else Rule.query
     return query.filter(Rule.is_deleted == False, _combine(conds, match_mode))
 
 
-def bundle_match_query(criteria, match_mode, base_query=None):
+def bundle_match_query(criteria, match_mode, base_query=None, viewer_id=None):
     """Public bundles matching the criteria, or None if the alert can't match bundles."""
-    conds, rule_only = _bundle_conditions(criteria)
+    conds, rule_only = _bundle_conditions(criteria, viewer_id)
     if not conds or (match_mode == 'all' and rule_only):
         return None
     query = base_query if base_query is not None else Bundle.query
@@ -459,7 +476,7 @@ def _is_marking_tag(name):
 _ANY_REASON_LIMIT = 3
 
 
-def _matched_on_rules(criteria, rule_ids) -> dict:
+def _matched_on_rules(criteria, rule_ids, viewer_id=None) -> dict:
     """{rule_id: ["cve:...", "tag:...", ...]} — why each rule matched, for display."""
     if not rule_ids:
         return {}
@@ -473,7 +490,8 @@ def _matched_on_rules(criteria, rule_ids) -> dict:
         wanted = set(criteria.get('tags') or [])
         for rid, name in (db.session.query(RuleTagAssociation.rule_id, Tag.name)
                           .join(Tag, Tag.id == RuleTagAssociation.tag_id)
-                          .filter(RuleTagAssociation.rule_id.in_(rule_ids)).all()):
+                          .filter(RuleTagAssociation.rule_id.in_(rule_ids),
+                                  _visible_tag_condition(viewer_id)).all()):
             name = (name or '').lower()
             if (criteria.get('tag_any') and name and not _is_marking_tag(name)) or name in wanted:
                 tags_by_rule.setdefault(rid, set()).add(name)
@@ -509,7 +527,7 @@ def _matched_on_rules(criteria, rule_ids) -> dict:
     return reasons
 
 
-def _matched_on_bundles(criteria, bundle_ids) -> dict:
+def _matched_on_bundles(criteria, bundle_ids, viewer_id=None) -> dict:
     if not bundle_ids:
         return {}
     reasons = {bid: [] for bid in bundle_ids}
@@ -518,7 +536,8 @@ def _matched_on_bundles(criteria, bundle_ids) -> dict:
         wanted = set(criteria.get('tags') or [])
         for bid, name in (db.session.query(BundleTagAssociation.bundle_id, Tag.name)
                           .join(Tag, Tag.id == BundleTagAssociation.tag_id)
-                          .filter(BundleTagAssociation.bundle_id.in_(bundle_ids)).all()):
+                          .filter(BundleTagAssociation.bundle_id.in_(bundle_ids),
+                                  _visible_tag_condition(viewer_id)).all()):
             name = (name or '').lower()
             if (criteria.get('tag_any') and name and not _is_marking_tag(name)) or name in wanted:
                 tags_by_bundle.setdefault(bid, set()).add(name)
@@ -547,7 +566,7 @@ def preview(criteria, match_mode, targets, user_id=None, days=30, sample_size=5)
     since = datetime.datetime.utcnow() - datetime.timedelta(days=days)
     out = {'days': days, 'rules': 0, 'bundles': 0, 'sample': []}
     if 'rule' in targets:
-        q = rule_match_query(criteria, match_mode)
+        q = rule_match_query(criteria, match_mode, viewer_id=user_id)
         if q is not None:
             q = q.filter(Rule.creation_date >= since)
             if user_id is not None:
@@ -559,7 +578,7 @@ def preview(criteria, match_mode, targets, user_id=None, days=30, sample_size=5)
                 for r in q.order_by(Rule.creation_date.desc()).limit(sample_size).all()
             ]
     if 'bundle' in targets:
-        q = bundle_match_query(criteria, match_mode)
+        q = bundle_match_query(criteria, match_mode, viewer_id=user_id)
         if q is not None:
             q = q.filter(Bundle.created_at >= since)
             if user_id is not None:
@@ -662,12 +681,12 @@ def _evaluate(alert, object_type, event, rows, now, budget):
 
     ids = list(candidates)
     if object_type == 'rule':
-        q = rule_match_query(alert.criteria or {}, alert.match_mode)
+        q = rule_match_query(alert.criteria or {}, alert.match_mode, viewer_id=alert.user_id)
         if q is None:
             return [], 0
         matched = [r[0] for r in q.filter(Rule.id.in_(ids)).with_entities(Rule.id).all()]
     else:
-        q = bundle_match_query(alert.criteria or {}, alert.match_mode)
+        q = bundle_match_query(alert.criteria or {}, alert.match_mode, viewer_id=alert.user_id)
         if q is None:
             return [], 0
         matched = [b[0] for b in q.filter(Bundle.id.in_(ids)).with_entities(Bundle.id).all()]
@@ -687,7 +706,8 @@ def _evaluate(alert, object_type, event, rows, now, budget):
     if not kept:
         return [], overflow
 
-    reasons = (_matched_on_rules if object_type == 'rule' else _matched_on_bundles)(alert.criteria or {}, kept)
+    reasons = (_matched_on_rules if object_type == 'rule' else _matched_on_bundles)(
+        alert.criteria or {}, kept, viewer_id=alert.user_id)
     return [
         AlertMatch(alert_id=alert.id, object_type=object_type, object_id=oid,
                    object_version=versions[oid], event=event,

@@ -63,7 +63,7 @@ def _bundle(owner, name='Bundle', public=True, vulns='[]'):
 def _tag(rule, name, user):
     tag = Tag.query.filter_by(name=name).first()
     if not tag:
-        tag = Tag(uuid=str(uuid.uuid4()), name=name, created_by=user.id)
+        tag = Tag(uuid=str(uuid.uuid4()), name=name, created_by=user.id, is_active=True, visibility='public')
         db.session.add(tag)
         db.session.commit()
     db.session.add(RuleTagAssociation(uuid=str(uuid.uuid4()), rule_id=rule.id, tag_id=tag.id, user_id=user.id))
@@ -356,3 +356,26 @@ def test_past_matches_hide_what_is_no_longer_visible(ctx):
     assert 'Netscaler pack' not in labels and 'netscaler rule' not in labels
     assert {'Bundle no longer available', 'Rule no longer available', 'My netscaler pack'} <= labels
     assert all(i['link'] is None for i in items if 'no longer' in i['label'])
+
+
+def test_alerts_only_see_tags_their_owner_can_see(ctx):
+    """An alert on the name of someone else's private tag must not reveal
+    which rules carry it, and "any tag" reasons never list private tags."""
+    admin, me = _users()
+    other = User.query.filter_by(email="neo@admin.admin").first()
+    secret = Tag(uuid=str(uuid.uuid4()), name='secret-op', visibility='private', is_active=True,
+                 created_by=other.id, source='Manual')
+    db.session.add(secret)
+    db.session.flush()
+    rule = _rule(other, 'tagged rule')
+    db.session.add(RuleTagAssociation(uuid=str(uuid.uuid4()), rule_id=rule.id, tag_id=secret.id, user_id=other.id))
+    db.session.commit()
+
+    assert A.preview({'tags': ['secret-op']}, 'any', ['rule'], user_id=me.id)['rules'] == 0
+    assert A.rule_match_query({'tags': ['secret-op']}, 'any', viewer_id=me.id).count() == 0
+    reasons = A._matched_on_rules({'tag_any': True}, [rule.id], viewer_id=me.id)
+    assert not any('secret-op' in r for r in reasons[rule.id])
+
+    # the tag's owner, and an admin, do match on it
+    assert A.rule_match_query({'tags': ['secret-op']}, 'any', viewer_id=other.id).count() == 1
+    assert A.rule_match_query({'tags': ['secret-op']}, 'any', viewer_id=admin.id).count() == 1
