@@ -236,3 +236,37 @@ def test_rerunning_the_job_repairs_a_previous_bad_import(app):
         assert "curated" in tags                                   # a Manual tag is never detached
         assert Tag.query.filter_by(name="exploit:").first() is None    # orphan deleted
         assert "cve-2017-11882" in _rule_tags(keep.id)                 # still used elsewhere: kept
+
+
+# ── what a rule author can and cannot mint ───────────────────────────────────
+
+def test_tags_created_by_a_user_are_not_admin_approved(client, app):
+    with app.app_context():
+        resp = client.post("/api/rule/private/create", headers={"X-API-KEY": "api_key_user_rule"}, json={
+            "title": "User tags", "format": "yara", "version": "1.0", "license": "MIT",
+            "to_string": 'rule User_Tags : usertagone { condition: true }'})
+        assert resp.status_code == 200, resp.get_json()
+        t = Tag.query.filter_by(name="usertagone").first()
+        assert t.source == IMPORTED_SOURCE and t.is_approved_by_admin is False
+
+        admin = _user("admin@admin.admin")
+        r = _rule('rule Admin_Tags : admintagone { condition: true }')
+        _run_job({"formats": ["yara"], "rule_ids": [r.id]}, admin)
+        assert Tag.query.filter_by(name="admintagone").first().is_approved_by_admin is True
+
+
+def test_never_mints_a_tag_in_a_taxonomy_or_galaxy_namespace(app):
+    with app.app_context():
+        r = _rule('rule Squat { meta: tags = "tlp:red, misp-galaxy:tool=\\"x\\", mine:ok" condition: true }')
+        _run_job({"formats": ["yara"], "rule_ids": [r.id]}, _user("admin@admin.admin"))
+        assert Tag.query.filter_by(name="tlp:red").first() is None
+        assert Tag.query.filter(Tag.name.like("misp-galaxy:%")).count() == 0
+        assert "mine:ok" in _rule_tags(r.id)
+
+
+def test_at_most_25_imported_tags_per_rule(app):
+    with app.app_context():
+        many = " ".join(f"t{i}" for i in range(60))
+        r = _rule(f'rule Many : {many} {{ condition: true }}')
+        _run_job({"formats": ["yara"], "rule_ids": [r.id]}, _user("admin@admin.admin"))
+        assert len(_rule_tags(r.id)) == 25

@@ -30,6 +30,8 @@ IMPORTED_SOURCE = "Imported"
 IMPORTED_TAG_ICON = "fa-user-tag"
 IMPORTED_TAG_COLOR = "#fd7e14"   # orange — Taxonomy blue, Galaxy purple, Manual green
 MAX_TAG_LENGTH = 100
+MAX_TAGS_PER_RULE = 25          # an author's tag list, not a way to mint tags in bulk
+MISP_TAXONOMIES_DIR = "app/modules/misp-taxonomies"
 
 # Where each format keeps its author tags — also shown on the admin page.
 FORMAT_TAG_SOURCES: dict[str, str] = {
@@ -254,6 +256,33 @@ def _now():
     return datetime.datetime.now(tz=datetime.timezone.utc)
 
 
+_reserved_cache = {"names": None}
+
+
+def reserved_namespaces() -> set:
+    """Namespaces an imported tag may never be *created* in: every MISP
+    taxonomy (installed or not — a squatted "tlp:red" would block the
+    taxonomy's later import, tag names being unique) and the galaxies."""
+    if _reserved_cache["names"] is None:
+        import os
+        names = {"misp-galaxy"}
+        try:
+            names |= {d.lower() for d in os.listdir(MISP_TAXONOMIES_DIR)
+                      if os.path.isdir(os.path.join(MISP_TAXONOMIES_DIR, d))}
+        except OSError:
+            pass
+        names |= {(ns or "").lower() for (ns,) in db.session.query(Tag.namespace)
+                  .filter(Tag.source == "Taxonomy").distinct() if ns}
+        _reserved_cache["names"] = names
+    return _reserved_cache["names"]
+
+
+def _is_admin(user_id) -> bool:
+    from app.core.db_class.db import User
+    user = db.session.get(User, user_id) if user_id else None
+    return bool(user and user.is_admin())
+
+
 def get_or_create_imported_tag(name: str, user_id: int | None, cache: dict | None = None):
     """The tag to attach for an imported name: an existing public, active tag
     with that name (any source — no duplicate 'malware' next to a Manual
@@ -266,6 +295,8 @@ def get_or_create_imported_tag(name: str, user_id: int | None, cache: dict | Non
     if tag is not None:
         usable = bool(tag.is_active) and (tag.visibility or "").lower() == "public"
         result = tag if usable else None
+    elif user_id and name.split(":", 1)[0] in reserved_namespaces() and ":" in name:
+        result = None                     # never mint a tag in a taxonomy / galaxy namespace
     elif user_id:
         now = _now()
         tag = Tag(
@@ -280,7 +311,7 @@ def get_or_create_imported_tag(name: str, user_id: int | None, cache: dict | Non
             color=IMPORTED_TAG_COLOR,
             source=IMPORTED_SOURCE,
             created_by=user_id,
-            is_approved_by_admin=True,
+            is_approved_by_admin=_is_admin(user_id),
         )
         db.session.add(tag)
         db.session.flush()
@@ -303,7 +334,7 @@ def attach_imported_tags(rule: Rule, user_id: int | None, cache: dict | None = N
     repairs past imports. Only source="Imported" tags are ever detached,
     never a taxonomy/galaxy/Manual tag.
     Returns {'found': n, 'added': n, 'removed': n, 'skipped': [names refused]}."""
-    names = extract_native_tags(rule.format, rule.to_string)
+    names = extract_native_tags(rule.format, rule.to_string)[:MAX_TAGS_PER_RULE]
     stats = {"found": len(names), "added": 0, "removed": 0, "skipped": []}
     if prune:
         stale = (RuleTagAssociation.query.join(Tag, Tag.id == RuleTagAssociation.tag_id)
