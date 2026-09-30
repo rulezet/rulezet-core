@@ -519,3 +519,16 @@ def test_private_bundle_never_leaks_through_search_or_public_logs(client, app):
         # even the owner's key doesn't make search list private bundles (my_bundles does)
         names = [b["name"] for b in client.get("/api/bundle/public/search", headers=H_OWNER).get_json()["bundle_list"]]
         assert names == ["Open"]
+
+
+def test_share_key_in_a_header(client, app):
+    """X-Share-Key header — kept out of URLs (proxy logs, Referer)."""
+    with app.app_context():
+        b = make_bundle("Hidden", public=False)
+        b.share_token = "hdr-share-token"
+        db.session.commit()
+        url = f"/api/bundle/public/detail/{b.id}"
+        assert client.get(url, headers={**H_OTHER, "X-Share-Key": "hdr-share-token"}).status_code == 200
+        assert client.get(url, headers={**H_OTHER, "X-Share-Key": "wrong"}).status_code == 403
+        as_anonymous()
+        assert client.get(url, headers={"X-Share-Key": "hdr-share-token"}).status_code == 403

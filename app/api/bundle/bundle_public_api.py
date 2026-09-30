@@ -15,7 +15,7 @@ bundle_public_ns = Namespace(
 # ── Shared helpers (also used by bundle_private_api) ─────────────────────────
 
 MAX_PER_PAGE = 200
-_SHARE_KEY_DOC = "Optional. Share key of a private bundle (needs your X-API-KEY too)"
+_SHARE_KEY_DOC = "Optional. Share key of a private bundle (needs your X-API-KEY too) — prefer the X-Share-Key header"
 
 
 def _holds_share_key(bundle):
@@ -23,7 +23,9 @@ def _holds_share_key(bundle):
     — same rule as the web share link: only for an identified user (valid
     X-API-KEY), and regenerating / revoking the link invalidates it."""
     import hmac
-    key = (request.args.get("share_key") or "").strip()
+    # Header preferred — a query string ends up in proxy logs and Referer
+    # headers; ?share_key= is still accepted.
+    key = (request.headers.get("X-Share-Key") or request.args.get("share_key") or "").strip()
     if not key or not bundle.share_token or len(key) > 64:
         return False
     if not current_user.is_authenticated:
@@ -186,7 +188,8 @@ Get everything about a bundle: metadata, tags, vulnerabilities, rules and folder
 `bundle_ref` is the bundle **id** or **uuid**. Public bundles are readable by anyone.
 A **private** bundle is only returned to its owner or an admin — send your `X-API-KEY` header —
 or to a user holding the bundle's **share key** (the `share=` value of its share link): send your
-`X-API-KEY` **and** `share_key`. Regenerating or revoking the share link invalidates the key.
+`X-API-KEY` **and** the key in the `X-Share-Key` header (or `?share_key=`, which ends up in proxy logs).
+Regenerating or revoking the share link invalidates the key.
 
 ### Path / Query Parameters
 
@@ -235,7 +238,7 @@ class BundleDetail(Resource):
     description="""
 List the rules of a bundle, paginated, with their full content and metadata.
 
-`bundle_ref` is the bundle **id** or **uuid**. Private bundle: owner / admin (`X-API-KEY`), or anyone holding its share key (`X-API-KEY` + `share_key`).
+`bundle_ref` is the bundle **id** or **uuid**. Private bundle: owner / admin (`X-API-KEY`), or anyone holding its share key (`X-API-KEY` + `X-Share-Key` header).
 
 ### Query Parameters
 
@@ -295,7 +298,7 @@ class BundleRules(Resource):
     description="""
 Get the folder tree of a bundle, as organised in the bundle editor.
 
-`bundle_ref` is the bundle **id** or **uuid**. Private bundle: owner / admin (`X-API-KEY`), or anyone holding its share key (`X-API-KEY` + `share_key`).
+`bundle_ref` is the bundle **id** or **uuid**. Private bundle: owner / admin (`X-API-KEY`), or anyone holding its share key (`X-API-KEY` + `X-Share-Key` header).
 
 ### Node format
 
@@ -337,7 +340,7 @@ class BundleStructure(Resource):
     description="""
 Download a bundle as a file — the same exports as the **Download** menu of the bundle page.
 
-`bundle_ref` is the bundle **id** or **uuid**. Private bundle: owner / admin (`X-API-KEY`), or anyone holding its share key (`X-API-KEY` + `share_key`).
+`bundle_ref` is the bundle **id** or **uuid**. Private bundle: owner / admin (`X-API-KEY`), or anyone holding its share key (`X-API-KEY` + `X-Share-Key` header).
 
 ### Query Parameters
 
@@ -395,7 +398,7 @@ class BundleDownload(Resource):
     description="""
 List the published releases (frozen versions) of a bundle, newest first.
 
-`bundle_ref` is the bundle **id** or **uuid**. Private bundle: owner / admin (`X-API-KEY`), or anyone holding its share key (`X-API-KEY` + `share_key`).
+`bundle_ref` is the bundle **id** or **uuid**. Private bundle: owner / admin (`X-API-KEY`), or anyone holding its share key (`X-API-KEY` + `X-Share-Key` header).
 Download one with `GET /api/bundle/public/<bundle_ref>/download?release=<version>`.
 
 ### Response
