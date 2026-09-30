@@ -333,27 +333,34 @@ def update_bundle(bundle_id: int, form_dict: dict ) -> Bundle | None:
     bundle = Bundle.query.get(bundle_id)
     if not bundle:
         return None
-    
-    v_raw = form_dict.get("vulnerabilities") 
-    
-   
-    if isinstance(v_raw, list):
-        vulnerabilities_json = json.dumps(v_raw)
-    elif isinstance(v_raw, str) and v_raw.strip():
-        try:
-            json.loads(v_raw) 
-            vulnerabilities_json = v_raw
-        except:
-            vulnerabilities_json = "[]"
-    else:
-        vulnerabilities_json = "[]"
+    if not form_dict:
+        return bundle
 
-    if form_dict is not None:
-        bundle.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
-        bundle.name = form_dict["name"]
-        bundle.description = form_dict["description"]
-        bundle.access = form_dict["public"]
+    # Partial update: a key that isn't sent leaves the field untouched (the
+    # API documents "name and/or description" — reading every key blindly
+    # used to 500 on a partial body and wipe the CVEs when "vulnerabilities"
+    # wasn't sent). The web edit form always sends every key.
+    if "vulnerabilities" in form_dict:
+        v_raw = form_dict.get("vulnerabilities")
+        if isinstance(v_raw, list):
+            vulnerabilities_json = json.dumps(v_raw)
+        elif isinstance(v_raw, str) and v_raw.strip():
+            try:
+                json.loads(v_raw)
+                vulnerabilities_json = v_raw
+            except (TypeError, ValueError):
+                vulnerabilities_json = "[]"
+        else:
+            vulnerabilities_json = "[]"
         bundle.vulnerability_identifiers = vulnerabilities_json
+
+    if "name" in form_dict:
+        bundle.name = form_dict["name"]
+    if "description" in form_dict:
+        bundle.description = form_dict["description"]
+    if "public" in form_dict:
+        bundle.access = form_dict["public"]
+    bundle.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
     db.session.commit()
     return bundle
 
@@ -407,10 +414,47 @@ def add_rule_to_bundle(bundle_id: int, rule_id: int , description: str) -> bool:
         added_at=datetime.datetime.now(tz=datetime.timezone.utc)
     )
     db.session.add(assoc)
+    db.session.flush()
+    # Give the rule a place in the folder tree too — without a node it was
+    # attached but invisible in the Structure tab, the ZIPs and releases.
+    place_rules_in_structure(bundle_id, [rule_id])
     db.session.commit()
-    if assoc:
-        return True
-    return False 
+    return True
+
+
+def place_rules_in_structure(bundle_id: int, rule_ids, folder_path: str | None = None) -> int:
+    """Give each rule (already attached to the bundle) a node in the folder
+    tree, if it has none yet. Nodes go into `folder_path` ("a/b", folders
+    created on demand) or, by default, the "Unsorted" root folder. Existing
+    nodes are left alone. No commit. Returns the number of nodes added."""
+    rule_ids = [rid for rid in dict.fromkeys(rule_ids or []) if rid]
+    if not rule_ids:
+        return 0
+    placed = {rid for (rid,) in db.session.query(BundleNode.rule_id)
+              .filter(BundleNode.bundle_id == bundle_id, BundleNode.rule_id.in_(rule_ids))}
+    todo = [rid for rid in rule_ids if rid not in placed]
+    if not todo:
+        return 0
+
+    parts = [p.strip() for p in (folder_path or "").split("/") if p.strip()] or ["Unsorted"]
+    parent = None
+    for name in parts:
+        q = BundleNode.query.filter_by(bundle_id=bundle_id, node_type="folder", name=name[:255],
+                                       parent_id=parent.id if parent else None)
+        folder = q.first()
+        if not folder:
+            folder = BundleNode(bundle_id=bundle_id, parent_id=parent.id if parent else None,
+                                name=name[:255], node_type="folder")
+            db.session.add(folder)
+            db.session.flush()
+        parent = folder
+
+    titles = dict(db.session.query(Rule.id, Rule.title).filter(Rule.id.in_(todo)))
+    for rid in todo:
+        db.session.add(BundleNode(bundle_id=bundle_id, parent_id=parent.id, name=(titles.get(rid) or "rule")[:255],
+                                  node_type="file", rule_id=rid))
+    db.session.flush()
+    return len(todo)
 
 @tracked("tags", user_arg=2)
 def update_bundle_tags(bundle_id: int, tags: List[int], user: User) -> bool:
@@ -602,8 +646,22 @@ def remove_rule_from_bundle(bundle_id: int, rule_id: int) -> bool:
         return False  # No association found
 
     db.session.delete(existing)
+    # …and its place(s) in the folder tree, or it stays in the Structure tab
+    # and the ZIPs as a ghost of a rule that's no longer in the bundle.
+    for node in BundleNode.query.filter_by(bundle_id=bundle_id, rule_id=rule_id).all():
+        db.session.delete(node)
     db.session.commit()
     return True
+
+
+def get_bundle_by_ref(ref) -> Bundle | None:
+    """Bundle by numeric id or by uuid (API routes accept either)."""
+    if ref is None:
+        return None
+    ref = str(ref).strip()
+    if ref.isdigit():
+        return Bundle.query.get(int(ref))
+    return Bundle.query.filter_by(uuid=ref).first() if ref else None
 
 def get_full_rule_bundle_info(rule_id: int) -> Union[Dict[str, Any], Dict[str, str]]:
     """

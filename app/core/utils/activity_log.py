@@ -114,7 +114,8 @@ def log_activity(
             with suppress(Exception):
                 if current_user.is_authenticated:
                     user_id = current_user.id
-                    actor_source = 'session'
+                    from flask import g as _g
+                    actor_source = 'api_key' if _g.get('_api_key_user') else 'session'
 
         ip = method = url = user_agent = referrer = endpoint = None
         remote_addr = xff = None
@@ -157,6 +158,7 @@ def log_activity(
             if referrer:
                 base['referrer'] = referrer
             # How the author was determined — 'session' (the logged-in caller),
+            # 'api_key' (the owner of the X-API-KEY of an API call),
             # 'explicit' (actor_id override, e.g. job owner or new registrant),
             # or omitted entirely when nobody was attributable (a genuine
             # system/automatic action, e.g. a cron-triggered sync).

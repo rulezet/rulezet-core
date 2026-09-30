@@ -1370,6 +1370,23 @@ def download_bundle():
             "toast_class": "danger"
         }, 401
 
+    zip_buffer = _zip_rules(bundle, rules)
+
+    # add 1 to download count
+    BundleModel.increment_download_count(bundle_id)
+    _log_bundle_download(bundle, "rules")
+
+    return send_file(
+        zip_buffer,
+        as_attachment=True,
+        download_name=f"{bundle.name}.zip",
+        mimetype='application/zip'
+    ), 200
+
+
+
+def _zip_rules(bundle, rules):
+    """ZIP of the bundle's rules: each rule's content + its JSON metadata."""
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
         bundle_info_json = json.dumps(bundle.to_json(), indent=2)
@@ -1385,19 +1402,88 @@ def download_bundle():
             json_filename = f"{base_filename}.json"
             rule_json = json.dumps(rule.to_json(), indent=2)
             zip_file.writestr(json_filename, rule_json)
-
-    # add 1 to download count
-    BundleModel.increment_download_count(bundle_id)
-    _log_bundle_download(bundle, "rules")
-
     zip_buffer.seek(0)
-    return send_file(
-        zip_buffer,
-        as_attachment=True,
-        download_name=f"{bundle.name}.zip",
-        mimetype='application/zip'
-    ), 200
+    return zip_buffer
 
+
+def _zip_structure(bundle):
+    """ZIP of the folder tree exactly as organised (rules + custom files)."""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        bundle_metadata = bundle.to_json()
+        zip_file.writestr("bundle_metadata.json", json.dumps(bundle_metadata, indent=4))
+
+        root_nodes = BundleModel.get_only_root_nodes(bundle.id)
+        for root in root_nodes:
+            add_node_to_zip(zip_file, root)
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+def _zip_files(root_nodes):
+    """ZIP of the non-rule files only, folder layout kept."""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for root in root_nodes:
+            _add_custom_files_to_zip(zip_file, root)
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+def _safe_bundle_filename(bundle):
+    return "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_') or "bundle"
+
+
+def build_bundle_download(bundle, part, release_ref=None):
+    """One download of a bundle the caller may already view — shared by the
+    web routes' logic and the REST API (/api/bundle/public/<ref>/download).
+    part: full | rules | structure | files | misp. release_ref: optional
+    release id or version (frozen content; not available for 'misp').
+    Returns (payload, download_name, mimetype, None) or (None, None, None,
+    (message, status)). Counts the download and logs it like the web."""
+    from .bundle_release_core import get_release, release_zip, release_zip_part
+    if part not in ("full", "rules", "structure", "files", "misp"):
+        return None, None, None, (f"Unknown part '{part}' (full, rules, structure, files, misp)", 400)
+    safe_name = _safe_bundle_filename(bundle)
+
+    if release_ref:
+        if part == "misp":
+            return None, None, None, ("A release can't be downloaded as a MISP event", 400)
+        rel = get_release(bundle.id, str(release_ref))
+        if rel is None:
+            return None, None, None, (f"Release '{release_ref}' not found", 404)
+        BundleModel.increment_download_count(bundle.id)
+        _log_bundle_download(bundle, part, rel)
+        safe_ver = "".join(c for c in rel.version if c.isalnum() or c in ".-_+")
+        buf = release_zip(rel) if part == "full" else release_zip_part(rel, part)
+        suffix = {"full": "", "structure": "_structure", "rules": "_rules", "files": "_files"}[part]
+        return buf, f"{safe_name}_{safe_ver}{suffix}.zip", "application/zip", None
+
+    if part == "rules":
+        rules = BundleModel.get_rules_from_bundle(bundle.id)
+        if not rules:
+            return None, None, None, ("No rules on this bundle to download", 400)
+        buf, name = _zip_rules(bundle, rules), f"{safe_name}.zip"
+        BundleModel.increment_download_count(bundle.id)
+    elif part == "structure":
+        buf, name = _zip_structure(bundle), f"{safe_name}_structure.zip"
+    elif part == "files":
+        root_nodes = BundleModel.get_only_root_nodes(bundle.id)
+        if not sum(_count_custom_files(r) for r in root_nodes):
+            return None, None, None, ("This bundle has no files besides rules", 404)
+        buf, name = _zip_files(root_nodes), f"{safe_name}_files.zip"
+    elif part == "full":
+        buf, name = _zip_full(bundle), f"{safe_name}_full.zip"
+        BundleModel.increment_download_count(bundle.id)
+    else:
+        event_json = get_bundle_misp_event(bundle.id)
+        if not event_json:
+            return None, None, None, ("Failed to generate MISP event", 500)
+        _log_bundle_download(bundle, "misp_event")
+        return (io.BytesIO(json.dumps(event_json, indent=4).encode('utf-8')),
+                f"{safe_name}_misp_event.json", "application/json", None)
+    _log_bundle_download(bundle, part)
+    return buf, name, "application/zip", None
 
 
 def _safe_zip_name(name, fallback="untitled"):
@@ -1458,17 +1544,7 @@ def download_bundle_structure():
             "toast_class": "danger"
         }, 401
 
-    zip_buffer = io.BytesIO()
-    
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        bundle_metadata = bundle.to_json()
-        zip_file.writestr("bundle_metadata.json", json.dumps(bundle_metadata, indent=4))
-
-        root_nodes = BundleModel.get_only_root_nodes(bundle_id)
-        for root in root_nodes:
-            add_node_to_zip(zip_file, root)
-
-    zip_buffer.seek(0)
+    zip_buffer = _zip_structure(bundle)
     _log_bundle_download(bundle, "structure")
 
     safe_bundle_name = "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
@@ -1517,11 +1593,7 @@ def download_bundle_files():
     if not sum(_count_custom_files(r) for r in root_nodes):
         return {"success": False, "message": "This bundle has no files besides rules", "toast_class": "warning-subtle"}, 404
 
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        for root in root_nodes:
-            _add_custom_files_to_zip(zip_file, root)
-    zip_buffer.seek(0)
+    zip_buffer = _zip_files(root_nodes)
     _log_bundle_download(bundle, "files")
 
     safe_bundle_name = "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
@@ -1579,21 +1651,9 @@ def _full_bundle_readme(bundle, meta, tags, vulns, rules, n_files):
     return "\n".join(lines)
 
 
-@bundle_blueprint.route('/download_full', methods=['GET'])
-def download_bundle_full():
-    """Everything about a bundle in one ZIP: README + description, metadata
-    (tags, CVEs, rules), the full structure with rules and files, per-rule
-    JSON, ATT&CK coverage and the MISP event."""
-    bundle_id = request.args.get("bundle_id", type=int)
-    if bundle_id and request.args.get("release"):
-        return _release_download(bundle_id, "full")
-    bundle = BundleModel.get_bundle_by_id(bundle_id) if bundle_id else None
-    if not bundle:
-        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
-
-    if not BundleModel.can_view_bundle(bundle):
-        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 401
-
+def _zip_full(bundle):
+    """Everything in one ZIP (README, metadata, structure, rules, ATT&CK, MISP)."""
+    bundle_id = bundle.id
     meta = bundle.to_json()
     meta.pop("view_count", None)
     tags = BundleModel.get_tags_for_bundle_json(bundle_id)
@@ -1635,9 +1695,29 @@ def download_bundle_full():
         except Exception:
             pass
 
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+@bundle_blueprint.route('/download_full', methods=['GET'])
+def download_bundle_full():
+    """Everything about a bundle in one ZIP: README + description, metadata
+    (tags, CVEs, rules), the full structure with rules and files, per-rule
+    JSON, ATT&CK coverage and the MISP event."""
+    bundle_id = request.args.get("bundle_id", type=int)
+    if bundle_id and request.args.get("release"):
+        return _release_download(bundle_id, "full")
+    bundle = BundleModel.get_bundle_by_id(bundle_id) if bundle_id else None
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
+
+    if not BundleModel.can_view_bundle(bundle):
+        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 401
+
+    zip_buffer = _zip_full(bundle)
+
     BundleModel.increment_download_count(bundle_id)
     _log_bundle_download(bundle, "full")
-    zip_buffer.seek(0)
     safe_bundle_name = "".join([c for c in bundle.name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_') or "bundle"
     return send_file(
         zip_buffer,
@@ -2133,7 +2213,7 @@ def add_single_rule_to_bundle():
         f"Created bundle '{new_bundle.name}'",
         target_type="bundle", target_id=new_bundle.id, target_uuid=new_bundle.uuid,
         extra={"bundle_name": new_bundle.name},
-        is_public=True,
+        is_public=bool(new_bundle.access),
     )
     return {
         "success": True,
