@@ -5681,10 +5681,20 @@ def get_tags(rule_id):
         return jsonify({"success": False, "message": str(e)}), 500
     
 @rule_blueprint.route('/get_all_tags_usage')
-@memory_cache.cached(timeout=60, query_string=True)
+# Only anonymous responses are cached: what's returned depends on who asks
+# (private tags for their owner, every tag for an admin) and the cache key is
+# the query string alone — cached for everyone, an admin's response could be
+# served to a visitor.
+@memory_cache.cached(timeout=60, query_string=True, unless=lambda: current_user.is_authenticated)
 def get_all_tags_usage():
     try:
         filters = RuleModel.parse_facet_filters(request.args, exclude=['tags'])
+        if request.args.get('view'):
+            # Lazy MultiTagFilter: folders, one folder / search page, or the
+            # selected chips — see tags_core.usage_view.
+            from app.features.tags.tags_core import usage_view
+            return jsonify({"success": True,
+                            **usage_view(RuleModel.tag_usage_snapshot(filters), request.args)})
         tags = RuleModel.get_all_used_tags_with_counts(filters=filters)
         return jsonify({
             "success": True,

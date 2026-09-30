@@ -13,11 +13,25 @@ const MultiTagFilter = {
     emits: ['update:modelValue', 'change'],
     delimiters: ['[[', ']]'],
     setup(props, { emit }) {
-        const listTags = Vue.ref([]);
+        // Everything is loaded lazily — the folder list when the panel opens,
+        // one folder (or one search) page at a time, and just the selected
+        // chips on mount — never every used tag (thousands of them after the
+        // MISP and imported-tags imports). See tags_core.usage_view().
+        const namespaces = Vue.ref(null);          // [{namespace, label, tag_count, usage}] for activeSource
+        const folderTags = Vue.ref([]);
+        const folderPage = Vue.ref(0);
+        const folderTotal = Vue.ref(0);
+        const folderHasMore = Vue.ref(false);
+        const searchResults = Vue.ref([]);
+        const isSearching = Vue.ref(false);
+        const knownTags = Vue.reactive({});        // lower-cased name -> tag, for the selected chips
+        const PAGE_SIZE = 50;
+        let requestId = 0;
+        let searchTimer = null;
         const tagSearchQuery = Vue.ref('');
         const selectedTagNames = Vue.ref([...props.modelValue]);
         const activeNamespace = Vue.ref(null);
-        const activeSource = Vue.ref('all');   // 'all' | 'Taxonomy' | 'Galaxy' | 'Manual'
+        const activeSource = Vue.ref('all');   // 'all' | 'Taxonomy' | 'Galaxy' | 'Manual' | 'Imported'
         const isLoading = Vue.ref(false);
 
         const sourceOptions = [
@@ -29,11 +43,6 @@ const MultiTagFilter = {
             { value: 'Imported', label: 'Imported', icon: 'fa-user-tag', color: '#fd7e14' },
         ];
 
-        function namespaceOf(name) {
-            if (!name || !name.includes(':')) return '';
-            if (name.startsWith('misp-galaxy:') && name.includes('=')) return name.split(':')[1].split('=')[0];
-            return name.split(':')[0];
-        }
         function valueOf(name) {
             if (!name) return '';
             const m = name.match(/="(.+)"$/);
@@ -41,10 +50,9 @@ const MultiTagFilter = {
             if (name.includes(':')) return name.split(':').slice(1).join(':');
             return name;
         }
-        // Full detail: parses the RAW name directly rather than via
-        // namespaceOf() above (which collapses "misp-galaxy:tool=..." down to
-        // just "tool" — kept as-is since that's still needed for the
-        // browse-folder grouping this component also does).
+        // Full detail: parses the RAW name directly rather than via the
+        // browse folder (tag.namespace, which collapses "misp-galaxy:tool=..."
+        // down to just "tool").
         function tagLabel(name) {
             if (!props.showNamespace) return valueOf(name);
             if (!name) return '';
@@ -71,57 +79,135 @@ const MultiTagFilter = {
             if (val && val.length > 0) selectedTagNames.value = [...val];
         });
 
-        async function fetchTags() {
+        function url(params) {
+            const qs = new URLSearchParams(params);
+            const ctx = props.filterContext ? props.filterContext + '&' : '';
+            return `${props.apiEndpoint}?${ctx}${qs}`;
+        }
+
+        function remember(tags) {
+            for (const t of tags || []) knownTags[t.name.toLowerCase()] = t;
+        }
+
+        async function getJson(params) {
+            const res = await fetch(url(params));
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        }
+
+        async function fetchNamespaces() {
+            const myId = ++requestId;
             isLoading.value = true;
             try {
-                const url = props.filterContext ? `${props.apiEndpoint}?${props.filterContext}` : props.apiEndpoint;
-                const res = await fetch(url);
-                if (res.ok) {
-                    const data = await res.json();
-                    listTags.value = data.tags || [];
-                    if (props.modelValue && props.modelValue.length > 0) {
-                        selectedTagNames.value = [...props.modelValue];
-                    }
-                }
+                const data = await getJson({ view: 'namespaces', tag_source: activeSource.value });
+                if (myId === requestId) namespaces.value = data.namespaces || [];
             } catch (e) {
                 console.error('MultiTagFilter fetch error:', e);
             } finally {
-                isLoading.value = false;
+                if (myId === requestId) isLoading.value = false;
             }
         }
 
-        // tags filtered by active source
-        const sourcedTags = Vue.computed(() => {
-            if (activeSource.value === 'all') return listTags.value;
-            return listTags.value.filter(t => t.source === activeSource.value);
-        });
+        async function loadFolderPage() {
+            if (activeNamespace.value === null) return;
+            const myId = ++requestId;
+            isLoading.value = true;
+            try {
+                const data = await getJson({
+                    view: 'tags', tag_source: activeSource.value, tag_ns: activeNamespace.value.namespace,
+                    tag_page: String(folderPage.value + 1), tag_per_page: String(PAGE_SIZE),
+                });
+                if (myId !== requestId) return;
+                remember(data.tags);
+                folderTags.value = [...folderTags.value, ...(data.tags || [])];
+                folderPage.value = data.page;
+                folderTotal.value = data.total;
+                folderHasMore.value = !!data.has_more;
+            } catch (e) {
+                console.error('MultiTagFilter folder error:', e);
+            } finally {
+                if (myId === requestId) isLoading.value = false;
+            }
+        }
 
-        const groupedTags = Vue.computed(() => {
-            const groups = {};
-            sourcedTags.value.forEach(tag => {
-                const ns = namespaceOf(tag.name)?.toUpperCase() || 'OTHER';
-                if (!groups[ns]) groups[ns] = [];
-                groups[ns].push(tag);
-            });
-            return groups;
-        });
+        async function runSearch(q) {
+            const myId = ++requestId;
+            isSearching.value = true;
+            try {
+                const data = await getJson({ view: 'tags', tag_source: activeSource.value, tag_q: q,
+                                             tag_per_page: String(PAGE_SIZE) });
+                if (myId !== requestId) return;
+                remember(data.tags);
+                searchResults.value = data.tags || [];
+            } catch (e) {
+                console.error('MultiTagFilter search error:', e);
+            } finally {
+                if (myId === requestId) isSearching.value = false;
+            }
+        }
 
-        const filteredTagsList = Vue.computed(() => {
-            if (!tagSearchQuery.value) return null;
-            const q = tagSearchQuery.value.toLowerCase();
-            return sourcedTags.value.filter(t =>
-                t.name.toLowerCase().includes(q)
-            );
+        // Chips of the current selection — resolved by name, only for the
+        // names not already seen in a loaded page.
+        async function resolveSelected() {
+            const missing = selectedTagNames.value.filter(n => !knownTags[n.toLowerCase()]);
+            if (!missing.length) return;
+            try {
+                const data = await getJson({ view: 'selected', names: missing.join(',') });
+                remember(data.tags);
+            } catch (e) {
+                console.error('MultiTagFilter selected error:', e);
+            }
+        }
+
+        // Called when the panel opens: the folder list, once per filter state.
+        function ensureLoaded() {
+            if (namespaces.value === null && !isLoading.value) fetchNamespaces();
+        }
+
+        function openFolder(folder) {
+            activeNamespace.value = folder;
+            folderTags.value = [];
+            folderPage.value = 0;
+            folderHasMore.value = false;
+            loadFolderPage();
+        }
+
+        function closeFolder() {
+            requestId++;
+            activeNamespace.value = null;
+            folderTags.value = [];
+            isLoading.value = false;
+        }
+
+        // Counts depend on every other active filter: drop what was loaded,
+        // reload lazily (now if the panel shows a folder list).
+        function resetLoaded() {
+            requestId++;
+            namespaces.value = null;
+            folderTags.value = [];
+            searchResults.value = [];
+            isLoading.value = false;
+            isSearching.value = false;
+            activeNamespace.value = null;
+        }
+
+        Vue.watch(tagSearchQuery, (val) => {
+            clearTimeout(searchTimer);
+            const q = val.trim();
+            if (!q) { requestId++; searchResults.value = []; isSearching.value = false; return; }
+            isSearching.value = true;
+            searchTimer = setTimeout(() => runSearch(q), 300);
         });
 
         const selectedTagsObjects = Vue.computed(() =>
-            listTags.value.filter(t => isNameSelected(t.name))
+            selectedTagNames.value.map(n => knownTags[n.toLowerCase()] || { name: n, icon: null, color: null })
         );
 
         function setSource(src) {
             activeSource.value = src;
-            activeNamespace.value = null;
             tagSearchQuery.value = '';
+            resetLoaded();
+            fetchNamespaces();
         }
 
         function toggleTag(tagName) {
@@ -132,13 +218,15 @@ const MultiTagFilter = {
             emit('change', [...selectedTagNames.value]);
         }
 
-        Vue.onMounted(fetchTags);
-        Vue.watch(() => props.filterContext, fetchTags);
+        Vue.onMounted(resolveSelected);
+        Vue.watch(() => props.filterContext, resetLoaded);
+        Vue.watch(selectedTagNames, resolveSelected, { deep: true });
 
         return {
-            listTags, tagSearchQuery, selectedTagNames, activeNamespace, activeSource, isLoading,
-            sourceOptions, sourcedTags, groupedTags, filteredTagsList, selectedTagsObjects,
+            tagSearchQuery, selectedTagNames, activeNamespace, activeSource, isLoading, isSearching,
+            sourceOptions, namespaces, folderTags, folderTotal, folderHasMore, searchResults, selectedTagsObjects,
             isNameSelected, toggleTag, tagLabel, setSource,
+            ensureLoaded, openFolder, closeFolder, loadFolderPage,
             getTextColor, mapIcon,
             clearAll: () => {
                 selectedTagNames.value = [];
@@ -152,12 +240,12 @@ const MultiTagFilter = {
 
             <!-- Trigger pill -->
             <div class="form-control d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle"
-                 data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                 data-bs-toggle="dropdown" data-bs-auto-close="outside" @click="ensureLoaded"
                  style="cursor:pointer; min-height:48px; border-radius:12px;">
                 <i class="fa-solid fa-tags text-primary opacity-75 ms-1 me-1"></i>
                 <span v-if="selectedTagsObjects.length === 0" class="text-muted small fw-bold">[[ placeholder ]]</span>
                 <span v-for="tag in selectedTagsObjects" :key="tag.name" class="tag-split shadow-sm m-0">
-                    <span class="tag-left" v-html="mapIcon(tag.icon)"></span>
+                    <span v-if="tag.icon" class="tag-left" v-html="mapIcon(tag.icon)"></span>
                     <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }">
                         <span :style="{ color: getTextColor(tag.color || '#6c757d') }" class="me-2" style="font-size:0.75rem">
                             [[ tagLabel(tag.name) ]]
@@ -176,7 +264,7 @@ const MultiTagFilter = {
                 <!-- Search -->
                 <div class="d-flex align-items-center mb-2">
                     <button v-if="activeNamespace && !tagSearchQuery"
-                            @click="activeNamespace = null"
+                            @click="closeFolder"
                             class="btn btn-sm btn-outline-primary border-0 me-2 rounded-circle d-flex align-items-center justify-content-center"
                             style="width:30px; height:30px;">
                         <i class="fa-solid fa-arrow-left"></i>
@@ -206,16 +294,16 @@ const MultiTagFilter = {
 
                 <div class="pe-1" style="max-height:380px; overflow-y:auto; overflow-x:hidden;">
 
-                    <!-- Empty state -->
-                    <div v-if="(!isLoading && sourcedTags.length === 0) || (tagSearchQuery && filteredTagsList && filteredTagsList.length === 0)"
-                         class="text-center py-4">
-                        <i class="fa-solid fa-tags fa-3x text-muted opacity-25 mb-2 d-block"></i>
-                        <h6 class="text-muted fw-bold">No tags found</h6>
-                    </div>
-
-                    <!-- Search results -->
-                    <div v-else-if="tagSearchQuery" class="d-flex flex-column gap-1">
-                        <div v-for="tag in filteredTagsList" :key="tag.name"
+                    <!-- Search results (server-side, 50 best) -->
+                    <div v-if="tagSearchQuery" class="d-flex flex-column gap-1">
+                        <div v-if="isSearching && !searchResults.length" class="text-center py-4">
+                            <div class="spinner-border spinner-border-sm text-primary"></div>
+                        </div>
+                        <div v-else-if="!searchResults.length" class="text-center py-4">
+                            <i class="fa-solid fa-tags fa-3x text-muted opacity-25 mb-2 d-block"></i>
+                            <h6 class="text-muted fw-bold">No tags found</h6>
+                        </div>
+                        <div v-for="tag in searchResults" :key="tag.name"
                              @click="toggleTag(tag.name)"
                              class="p-2 rounded border d-flex align-items-center justify-content-between"
                              :class="{ 'border-primary bg-primary-subtle': isNameSelected(tag.name) }"
@@ -236,29 +324,36 @@ const MultiTagFilter = {
 
                     <!-- Namespace list -->
                     <div v-else-if="!activeNamespace" class="d-flex flex-column gap-2">
-                        <div v-for="(tags, ns) in groupedTags" :key="ns"
-                             @click="activeNamespace = ns"
+                        <div v-if="isLoading || namespaces === null" class="text-center py-4">
+                            <div class="spinner-border spinner-border-sm text-primary"></div>
+                        </div>
+                        <div v-else-if="!namespaces.length" class="text-center py-4">
+                            <i class="fa-solid fa-tags fa-3x text-muted opacity-25 mb-2 d-block"></i>
+                            <h6 class="text-muted fw-bold">No tags found</h6>
+                        </div>
+                        <div v-for="folder in (isLoading ? [] : namespaces || [])" :key="folder.namespace"
+                             @click="openFolder(folder)"
                              class="p-2 px-3 rounded-3 border d-flex align-items-center justify-content-between"
                              style="cursor:pointer; min-height:50px;">
                             <div class="d-flex align-items-center">
                                 <i class="fa-solid fa-folder text-primary me-3 opacity-75"></i>
-                                <span class="fw-bold text-truncate" style="max-width:180px; color:var(--text-color)">[[ ns ]]</span>
+                                <span class="fw-bold text-truncate" style="max-width:180px; color:var(--text-color)">[[ folder.label ]]</span>
                             </div>
                             <div class="d-flex align-items-center gap-3">
-                                <span class="small fw-bold text-nowrap" style="color:var(--subtle-text-color)">[[ tags.length ]] tags</span>
+                                <span class="small fw-bold text-nowrap" style="color:var(--subtle-text-color)">[[ folder.tag_count ]] tags</span>
                                 <i class="fa-solid fa-chevron-right opacity-50 small"></i>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Tags in namespace -->
+                    <!-- Tags in namespace, one page at a time -->
                     <div v-else>
                         <div class="px-2 mb-2 d-flex justify-content-between align-items-center">
-                            <small class="fw-bold text-primary text-uppercase">[[ activeNamespace ]]</small>
-                            <small style="color:var(--subtle-text-color)">[[ groupedTags[activeNamespace]?.length ]] items</small>
+                            <small class="fw-bold text-primary text-uppercase">[[ activeNamespace.label ]]</small>
+                            <small style="color:var(--subtle-text-color)">[[ activeNamespace.tag_count ]] items</small>
                         </div>
                         <div class="d-flex flex-column gap-2">
-                            <div v-for="tag in groupedTags[activeNamespace]" :key="tag.name"
+                            <div v-for="tag in folderTags" :key="tag.name"
                                  @click="toggleTag(tag.name)"
                                  class="p-2 rounded-3 border d-flex align-items-center justify-content-between"
                                  :class="{ 'border-primary bg-primary-subtle': isNameSelected(tag.name) }"
@@ -278,6 +373,13 @@ const MultiTagFilter = {
                                     <i v-if="isNameSelected(tag.name)" class="fa-solid fa-check-circle text-primary"></i>
                                 </div>
                             </div>
+                            <div v-if="isLoading" class="text-center py-3">
+                                <div class="spinner-border spinner-border-sm text-primary"></div>
+                            </div>
+                            <button v-else-if="folderHasMore" type="button" @click.stop="loadFolderPage"
+                                    class="btn btn-sm btn-outline-primary rounded-pill fw-bold" style="font-size:.75rem;">
+                                Load more ([[ folderTotal - folderTags.length ]] left)
+                            </button>
                         </div>
                     </div>
                 </div>

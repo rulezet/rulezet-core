@@ -97,7 +97,29 @@ def get_tags_bundle():
 @login_required
 def get_all_tags():
     tags = tags_core.get_all_tags(request.args)
-    return {"status": "success", "tags": [t.to_json() for t in tags], "total_tags": len(tags)}, 200
+    # lean=1: the slim picker payload (TagInput's live search) instead of the
+    # full Tag.to_json() — default unchanged for every other caller.
+    serialize = tags_core.picker_tag_json if request.args.get('lean') == '1' else (lambda t: t.to_json())
+    return {"status": "success", "tags": [serialize(t) for t in tags], "total_tags": len(tags)}, 200
+
+
+@tags_blueprint.route('/picker/namespaces', methods=['GET'])
+@login_required
+def picker_namespaces():
+    """Folders of the tag picker (TagInput.js), with their tag counts —
+    loaded when the picker opens instead of every tag."""
+    return {"status": "success", "groups": tags_core.picker_namespaces(request.args)}, 200
+
+
+@tags_blueprint.route('/picker/tags', methods=['GET'])
+@login_required
+def picker_tags():
+    """One page of one picker folder (?type=Public|Private&namespace=…&page=)."""
+    try:
+        data = tags_core.picker_tags(request.args)
+    except ValueError:
+        return {"status": "error", "message": "page and per_page must be integers"}, 400
+    return {"status": "success", **data}, 200
 
 
 @tags_blueprint.route('/get_all_tags_by_type', methods=['GET'])

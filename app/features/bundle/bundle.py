@@ -2024,6 +2024,11 @@ def get_bundle_vulnerabilities_display(bundle_id):
 @bundle_blueprint.route('/get_all_tags_usage')
 def get_all_tags_usage():
     try:
+        if request.args.get('view'):
+            # Lazy MultiTagFilter — see tags_core.usage_view
+            from app.features.tags.tags_core import usage_view
+            return jsonify({"success": True,
+                            **usage_view(BundleModel.tag_usage_snapshot(), request.args)})
         tags = BundleModel.get_all_used_tags_with_counts()
         return jsonify({
             "success": True,

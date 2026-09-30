@@ -1400,6 +1400,11 @@ class Tag(db.Model):
     color = db.Column(db.String(50), nullable=True) # Hex color code, e.g., #FF5733
     icon = db.Column(db.String(50), nullable=True) # fontawesome icon name
     source = db.Column(db.String(255), nullable=True) # Taxonomy or Manuel or Other
+    # Browse folder of the tag pickers/filters ("tlp" for "tlp:clear", the
+    # galaxy type for 'misp-galaxy:tool="X"', '' for a plain name). Kept in
+    # sync with `name` by the listeners below, so the pickers can list and
+    # count folders in SQL instead of loading every tag to group them.
+    namespace = db.Column(db.String(255), nullable=True, index=True)
 
     # Metadata for galxie (galaxie -> tag with galaxie_meta not null)
     galaxy_meta = db.Column(db.JSON, nullable=True)
@@ -1435,6 +1440,23 @@ class Tag(db.Model):
             "bundle_count": getattr(self, '_bundle_count', 0),
         }
  
+
+
+def tag_namespace(name) -> str:
+    """Browse folder of a tag name — same rule as the JS pickers' namespaceOf():
+    'misp-galaxy:tool="X"' -> 'tool', 'tlp:clear' -> 'tlp', 'malware' -> ''."""
+    name = name or ''
+    if ':' not in name:
+        return ''
+    if name.startswith('misp-galaxy:') and '=' in name:
+        return name.split(':', 1)[1].split('=', 1)[0][:255]
+    return name.split(':', 1)[0][:255]
+
+
+@db.event.listens_for(Tag, 'before_insert')
+@db.event.listens_for(Tag, 'before_update')
+def _tag_sync_namespace(mapper, connection, target):
+    target.namespace = tag_namespace(target.name)
 
 
 class CommentBundle(db.Model):

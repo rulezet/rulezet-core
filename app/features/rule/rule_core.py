@@ -5123,6 +5123,39 @@ def get_tags_for_rules_batch(rule_ids: List[int]) -> dict:
     return result
 
 
+TAG_USAGE_CACHE_SECONDS = 60
+
+
+def tag_usage_snapshot(filters: dict = None) -> list:
+    """Every tag used by the rules matching `filters`, with its rule count —
+    the base of the lazy tag-filter views (tags_core.usage_view).
+
+    Computed once per filter state and cached briefly: every view of the
+    panel (folders, a folder's pages, a search) then reads the cache instead
+    of re-aggregating ~1M rule/tag links. Shared by every user — rule counts
+    don't depend on who asks; per-user tag visibility is applied afterwards.
+    count(*) not count(DISTINCT rule_id): a (rule, tag) pair is only ever
+    inserted once, and the DISTINCT made this 5x slower (1.2 s vs 0.25 s).
+    """
+    import json as _json
+    from app import memory_cache
+    from app.features.tags.tags_core import usage_snapshot
+    key = 'tag_usage_snapshot:' + _json.dumps(filters or {}, sort_keys=True, default=str)
+    cached = memory_cache.get(key)
+    if cached is not None:
+        return cached
+    base_ids = filter_rules(**(filters or {})).order_by(None).with_entities(Rule.id).subquery()
+    usage = dict(
+        db.session.query(RuleTagAssociation.tag_id, func.count(RuleTagAssociation.id))
+        .join(base_ids, base_ids.c.id == RuleTagAssociation.rule_id)
+        .group_by(RuleTagAssociation.tag_id)
+        .all()
+    )
+    snapshot = usage_snapshot(usage)
+    memory_cache.set(key, snapshot, timeout=TAG_USAGE_CACHE_SECONDS)
+    return snapshot
+
+
 def get_all_used_tags_with_counts(filters: dict = None):
     """
     Returns tags with their usage count, scoped to rules matching every OTHER

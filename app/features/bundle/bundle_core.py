@@ -1386,6 +1386,21 @@ def add_reaction_to_comment(comment_id: int, user_id: int, reaction_type: str, b
         return False, f"Error: {str(e)}"
 
 
+def tag_usage_snapshot() -> list:
+    """Every tag used by the bundles the current user can see, with its
+    bundle count — the base of the lazy tag-filter views (tags_core.usage_view).
+    Not cached: which bundles count depends on who asks, and it's small."""
+    from app.features.tags.tags_core import usage_snapshot
+    query = (db.session.query(BundleTagAssociation.tag_id, func.count(BundleTagAssociation.id))
+             .join(Bundle, Bundle.id == BundleTagAssociation.bundle_id))
+    if current_user.is_authenticated:
+        if not current_user.is_admin():
+            query = query.filter(or_(Bundle.access.is_(True), Bundle.user_id == current_user.id))
+    else:
+        query = query.filter(Bundle.access.is_(True))
+    return usage_snapshot(dict(query.group_by(BundleTagAssociation.tag_id).all()))
+
+
 def get_all_used_tags_with_counts():
     """
     Returns tags with their usage count.
