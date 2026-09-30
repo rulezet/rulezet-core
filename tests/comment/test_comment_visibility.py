@@ -91,3 +91,22 @@ def test_draft_blog_post_and_trashed_rule_threads(client, app):
         db.session.commit()
         assert _list(client, None, "rule", rule.id).status_code == 404
         assert _comment(client, other, "rule", rule.id).status_code == 404
+
+
+def test_hub_hides_unpublished_blog_post_threads(client, app):
+    with app.app_context():
+        author, other = _user("t@t.t"), _user("neo@admin.admin")
+        now = datetime.datetime.utcnow()
+        post = BlogPost(uuid=str(uuid.uuid4()), slug=f"draft-{uuid.uuid4().hex[:6]}", title="Unreleased research",
+                        content="x", is_public=False, is_draft=True, user_id=author.id, created_at=now, updated_at=now)
+        db.session.add(post)
+        db.session.commit()
+        assert _comment(client, author, "blog_post", post.id, "draft discussion").status_code == 201
+
+        def hub_types(user):
+            _login(client, user)
+            items = client.get("/api/comments/hub?scope=all").get_json()["items"]
+            return [(i["object_type"], i.get("object_id")) for i in items]
+
+        assert ("blog_post", post.id) not in hub_types(other)
+        assert any(t == "blog_post" for t, _ in hub_types(author))

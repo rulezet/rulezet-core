@@ -83,6 +83,18 @@ def _apply_hub_filters(query, user, scope, search, date_from, date_to):
             UnifiedComment.object_id.in_(hidden_bundle_ids),
         ))
 
+    # Unpublished / private blog posts: same rule as the post itself — only
+    # its author and admins see its discussion (and its title here).
+    if not (user.is_authenticated and user.is_admin()):
+        hidden_post_ids = db.session.query(BlogPost.id).filter(
+            or_(BlogPost.is_public == False, BlogPost.is_draft == True),
+            or_(BlogPost.user_id.is_(None), BlogPost.user_id != (user.id if user.is_authenticated else -1)),
+        )
+        query = query.filter(~and_(
+            UnifiedComment.object_type == 'blog_post',
+            UnifiedComment.object_id.in_(hidden_post_ids),
+        ))
+
     # Soft-deleted rules are hidden everywhere on the platform — their groups
     # would deep-link to 404s. This also hides proposal-comments for such a
     # rule, since those get folded into the rule's own subject below.
