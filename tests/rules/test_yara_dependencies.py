@@ -244,3 +244,20 @@ def test_an_edit_removing_a_reference_removes_the_link(app):
         db.session.commit()
         sync_yara_dependency_relations(b)
         assert _links() == set()
+
+
+def test_dependency_download_logged_once_per_downloader(client, app, monkeypatch):
+    """Public route: repeated downloads don't flood the activity log."""
+    from app import memory_cache
+    from app.core.db_class.db import ActivityLog
+    store = {}
+    monkeypatch.setattr(memory_cache, "get", lambda k: store.get(k))
+    monkeypatch.setattr(memory_cache, "set", lambda k, v, timeout=None: store.__setitem__(k, v))
+    with app.app_context():
+        _rule("Base_C", C)
+        b = _rule("Mid_B", B)
+        sync_yara_dependency_relations(b)
+        for _ in range(5):
+            assert client.get(f"/rule_relation/rule/{b.id}/dependencies/download").status_code == 200
+        n = ActivityLog.query.filter_by(action="rule.download", target_id=b.id).count()
+        assert n == 1

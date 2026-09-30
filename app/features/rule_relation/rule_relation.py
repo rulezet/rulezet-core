@@ -137,9 +137,16 @@ def download_rule_with_dependencies(rule_id):
         return jsonify({'error': 'Rule not found'}), 404
     include_all = request.args.get('include') == 'all'
     buf, filename, count = RelationModel.build_dependency_zip(rule_id, include_needed_by=include_all)
-    log_activity("rule.download", f"Downloaded rule '{rule.title}' with its dependencies ({count} rule(s))",
-                 target_type="rule", target_id=rule.id, target_uuid=rule.uuid,
-                 extra={"format": "dependencies_zip", "rules": count, "include_needed_by": include_all})
+    # Public route: one log line per rule and downloader (user, else IP) per
+    # 10 minutes — repeated downloads must not flood the activity log.
+    from app import memory_cache
+    who = f"u{current_user.id}" if current_user.is_authenticated else f"ip{request.remote_addr}"
+    seen_key = f"depzip-log:{rule.id}:{who}"
+    if not memory_cache.get(seen_key):
+        memory_cache.set(seen_key, 1, timeout=600)
+        log_activity("rule.download", f"Downloaded rule '{rule.title}' with its dependencies ({count} rule(s))",
+                     target_type="rule", target_id=rule.id, target_uuid=rule.uuid,
+                     extra={"format": "dependencies_zip", "rules": count, "include_needed_by": include_all})
     return send_file(buf, as_attachment=True, download_name=filename, mimetype='application/zip')
 
 
