@@ -228,13 +228,17 @@ def sync_yara_dependency_relations(rule) -> int:
     in the chain a YARA rule compiles with (validate()'s `dependencies`):
     the rule itself -> the rules its condition names, and each of those ->
     the ones *its* condition names. Idempotent (add_relation skips existing
-    links). Returns how many links the chain has."""
+    links). Once the rule compiles, its own auto links to rules it no longer
+    references (an edit removed the reference) are dropped. Returns how many
+    links the chain has."""
     if (getattr(rule, 'format', '') or '').lower() != 'yara' or not rule.to_string:
         return 0
     result = YaraRule().validate(rule.to_string, rule_id=rule.id,
                                  source=getattr(rule, 'source', None),
                                  github_path=getattr(rule, 'github_path', None),
                                  owner_ids=(rule.user_id,))
+    if result.ok:
+        _prune_stale_yara_links(rule, result.dependencies)
     if not result.dependencies:
         return 0
     from app.features.rule_relation.rule_relation_core import add_relation
@@ -247,6 +251,21 @@ def sync_yara_dependency_relations(rule) -> int:
                              note=f'Condition references rule "{dep.title}"', user_id=None, source='auto')
                 links += 1
     return links
+
+
+def _prune_stale_yara_links(rule, dependencies) -> int:
+    """Drop the rule's own auto `yara_condition_ref` links whose target it no
+    longer references. Only auto links of that type — never a hand-made one."""
+    from app import db
+    from app.core.db_class.db import RuleRelation
+    still = {d.id for d in dependencies if _condition_references(rule.to_string, d.title)}
+    stale = (RuleRelation.query.filter_by(source_rule_id=rule.id, relation_type='yara_condition_ref', source='auto')
+             .filter(RuleRelation.target_rule_id.notin_(still or {-1})).all())
+    for rel in stale:
+        db.session.delete(rel)
+    if stale:
+        db.session.commit()
+    return len(stale)
 
 
 def allowed_externals() -> set:

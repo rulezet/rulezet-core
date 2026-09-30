@@ -232,3 +232,15 @@ def test_a_global_rule_is_never_a_dependency(app):
         _rule_of("t@t.t", "Base_C", 'global rule Base_C { condition: filesize < 1MB }')
         res = YaraRule().validate(B, owner_ids=_owner())
         assert not res.ok and res.dependencies == []
+
+
+def test_an_edit_removing_a_reference_removes_the_link(app):
+    with app.app_context():
+        _rule("Base_C", C)
+        b = _rule("Mid_B", B)
+        sync_yara_dependency_relations(b)
+        assert _links() == {("Mid_B", "Base_C")}
+        b.to_string = 'rule Mid_B { condition: true }'
+        db.session.commit()
+        sync_yara_dependency_relations(b)
+        assert _links() == set()
