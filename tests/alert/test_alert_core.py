@@ -329,3 +329,30 @@ def test_pass_with_matches_is_logged(ctx):
     assert actions.count('alert.sweep') == 1
     triggered = ActivityLog.query.filter_by(action='alert.triggered').one()
     assert triggered.user_id == me.id and triggered.target_id == alert.id and triggered.is_public is False
+
+
+def test_past_matches_hide_what_is_no_longer_visible(ctx):
+    """A match is recorded while the bundle is public; if it goes private
+    later (not the alert owner's), or a matched rule is trashed, the list no
+    longer names it."""
+    admin, me = _users()                                          # the alert owner is a plain user
+    other = User.query.filter_by(email="neo@admin.admin").first()
+    alert = _alert(me, {'keywords': ['netscaler']}, targets=('rule', 'bundle'))
+    bundle = _bundle(other, 'Netscaler pack')
+    rule = _rule(other, 'netscaler rule')
+    mine = _bundle(me, 'My netscaler pack', public=False)
+    for obj_type, obj in (('bundle', bundle), ('rule', rule), ('bundle', mine)):
+        db.session.add(AlertMatch(alert_id=alert.id, object_type=obj_type, object_id=obj.id, event='created'))
+    db.session.commit()
+
+    labels = {i['label'] for i in A.get_alert_matches(alert)['items']}
+    assert {'Netscaler pack', 'netscaler rule', 'My netscaler pack'} <= labels
+
+    bundle.access = False
+    rule.is_deleted = True
+    db.session.commit()
+    items = A.get_alert_matches(alert)['items']
+    labels = {i['label'] for i in items}
+    assert 'Netscaler pack' not in labels and 'netscaler rule' not in labels
+    assert {'Bundle no longer available', 'Rule no longer available', 'My netscaler pack'} <= labels
+    assert all(i['link'] is None for i in items if 'no longer' in i['label'])

@@ -1038,13 +1038,29 @@ def _send_alert_email(user, alerts, now):
 
 # ─── Detail page data ────────────────────────────────────────────────────────
 
+def _visible_label(object_type, object_id, user):
+    """(label, link) of a past match — re-checked now, not at match time: a
+    bundle that has since gone private (and isn't the alert owner's) or a
+    trashed rule is no longer shown by name."""
+    if object_type == 'rule':
+        rule = db.session.get(Rule, object_id)
+        if rule and not rule.is_deleted:
+            return rule.title, f'/rule/detail_rule/{object_id}'
+        return 'Rule no longer available', None
+    bundle = db.session.get(Bundle, object_id)
+    if bundle and (bundle.access or (user and (bundle.user_id == user.id or user.is_admin()))):
+        return bundle.name, f'/bundle/detail/{object_id}'
+    return 'Bundle no longer available', None
+
+
 def get_alert_matches(alert, page=1, per_page=20):
     pagination = (AlertMatch.query.filter_by(alert_id=alert.id)
                   .order_by(AlertMatch.created_at.desc())
                   .paginate(page=page, per_page=per_page, error_out=False))
     items = []
+    owner = db.session.get(User, alert.user_id)
     for m in pagination.items:
-        label, link = _object_label(m.object_type, m.object_id)
+        label, link = _visible_label(m.object_type, m.object_id, owner)
         items.append({
             'id': m.id, 'object_type': m.object_type, 'object_id': m.object_id, 'event': m.event,
             'label': label, 'link': link, 'matched_on': m.matched_on or [],
