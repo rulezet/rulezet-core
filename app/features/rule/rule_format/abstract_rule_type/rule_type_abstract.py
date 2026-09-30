@@ -39,6 +39,10 @@ class ValidationResult:
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     normalized_content: Optional[str] = None
+    # Other rules this one only compiles together with (YARA: a condition
+    # referencing another rule by name, possibly through a chain) — in the
+    # order they have to be declared. Empty for every other format.
+    dependencies: List[Any] = field(default_factory=list)
 
 
 class RuleType(ABC):

@@ -164,6 +164,45 @@ def try_resolve_yara_missing_dependency(rule_instance, rule_text: str, metadata:
     return 'created', new_rule
 
 
+_CONDITION_RE = re.compile(r'\bcondition\s*:(.*?)(?=\n\s*}\s*(?:\n|$)|\Z)', re.S)
+_COMMENT_OR_STRING_RE = re.compile(r'"(?:\\.|[^"\\\n])*"|/\*.*?\*/|//[^\n]*', re.S)
+
+
+def _condition_references(text: str, rule_name: str) -> bool:
+    """Whether one of the conditions in `text` uses `rule_name` as an
+    identifier (strings and comments ignored)."""
+    pattern = re.compile(rf'(?<![\w$#@!.]){re.escape(rule_name)}\b')
+    for cond in _CONDITION_RE.findall(text or ''):
+        if pattern.search(_COMMENT_OR_STRING_RE.sub(' ', cond)):
+            return True
+    return False
+
+
+def sync_yara_dependency_relations(rule) -> int:
+    """Record, as auto `yara_condition_ref` relations, which rule needs which
+    in the chain a YARA rule compiles with (validate()'s `dependencies`):
+    the rule itself -> the rules its condition names, and each of those ->
+    the ones *its* condition names. Idempotent (add_relation skips existing
+    links). Returns how many links the chain has."""
+    if (getattr(rule, 'format', '') or '').lower() != 'yara' or not rule.to_string:
+        return 0
+    result = YaraRule().validate(rule.to_string, rule_id=rule.id,
+                                 source=getattr(rule, 'source', None),
+                                 github_path=getattr(rule, 'github_path', None))
+    if not result.dependencies:
+        return 0
+    from app.features.rule_relation.rule_relation_core import add_relation
+    chain = [rule] + list(result.dependencies)
+    links = 0
+    for src in chain:
+        for dep in result.dependencies:
+            if dep.id != src.id and _condition_references(src.to_string, dep.title):
+                add_relation(src.id, dep.id, 'yara_condition_ref',
+                             note=f'Condition references rule "{dep.title}"', user_id=None, source='auto')
+                links += 1
+    return links
+
+
 def allowed_externals() -> set:
     """YaraRule.ALLOWED_EXTERNALS plus any admin-configured
     YARA_ADDITIONAL_EXTERNAL identifiers (see .env_default) — read lazily,
@@ -202,55 +241,95 @@ class YaraRule(RuleType):
     # ---------------------#
     #   Abstract section  #
     # ---------------------#
+    # A rule referencing others by name (`condition: Macho and ...`) only
+    # compiles together with them — and they may reference others in turn.
+    MAX_DEPENDENCIES = 50
+
     def validate(self, content: str, **kwargs) -> ValidationResult:
-            ALLOWED_EXTERNALS = allowed_externals()
+        """Compile the rule. Missing modules get their import added,
+        allowed externals a dummy value, and an undefined identifier that is
+        another rule's name is resolved to that rule — recursively (the rule
+        it needs may need another one…) — and compiled together with it.
 
-            externals = {}
-            attempts = 0
-            max_attempts = 10
-            current_rule_text = content
+        Only the rule's own text is ever returned as normalized_content;
+        the rules it needs come back in `dependencies`, in declaration order.
 
-            while attempts < max_attempts:
-                try:
-                    temp_compile_text = current_rule_text
-                    
-                    # def escape_internal_quotes(match):
-                    #     prefix = match.group(1) 
-                    #     content = match.group(2) 
+        kwargs:
+            resolve_dependencies (bool, default True)
+            rule_id (int)  — the rule being validated, never its own dependency
+            source, github_path — to pick the right sibling among same-named rules
+        """
+        ALLOWED_EXTERNALS = allowed_externals()
+        resolve = kwargs.get('resolve_dependencies', True)
+        self_id = kwargs.get('rule_id')
 
-                    #     escaped_content = content.replace('"', '\\"')
-                    #     return f'{prefix}"{escaped_content}"'
-                    # temp_compile_text = re.sub(r'(\$\w+\s*=\s*)"(.*)"', escape_internal_quotes, temp_compile_text)
+        externals = {}
+        header_imports = []          # modules a dependency needs, declared first
+        deps = []                    # Rule objects, in declaration order
+        current_rule_text = content
+        max_attempts = 10 + 2 * self.MAX_DEPENDENCIES
 
-                    yara.compile(source=temp_compile_text, externals=externals)
+        for _attempt in range(max_attempts):
+            parts = [f'import "{m}"' for m in header_imports] + [d.to_string or '' for d in deps]
+            source_text = '\n\n'.join(parts + [current_rule_text])
+            try:
+                yara.compile(source=source_text, externals=externals)
+                risk = detect_global_rule_risk(current_rule_text)
+                warnings = list(risk['reasons'])
+                if deps:
+                    warnings.append("Compiles together with the rule(s) it references: "
+                                    + ", ".join(d.title for d in deps) + ".")
+                return ValidationResult(ok=True, errors=[], warnings=warnings,
+                                        normalized_content=current_rule_text, dependencies=deps)
 
-                    risk = detect_global_rule_risk(current_rule_text)
-                    return ValidationResult(ok=True, errors=[], warnings=risk['reasons'],
-                                             normalized_content=current_rule_text)
-
-                except yara.SyntaxError as e:
-                    error_msg = str(e)
-                    match_id = re.search(r'undefined identifier "(\w+)"', error_msg)
-                    
-                    if match_id:
-                        var_name = match_id.group(1)
-                        
-                        if var_name in self.YARA_MODULES:
-                            current_rule_text = insert_import_module(current_rule_text, var_name)
-                            attempts += 1
-                            continue
-                        
-                        elif var_name in ALLOWED_EXTERNALS:
-                            externals[var_name] = "dummy_value"
-                            attempts += 1
-                            continue
-                    
+            except yara.SyntaxError as e:
+                error_msg = str(e)
+                match_id = re.search(r'undefined identifier "(\w+)"', error_msg)
+                if not match_id:
                     return ValidationResult(ok=False, errors=[error_msg], normalized_content=current_rule_text)
+                var_name = match_id.group(1)
 
-                except Exception as e:
-                    return ValidationResult(ok=False, errors=[str(e)], normalized_content=current_rule_text)
+                if var_name in self.YARA_MODULES:
+                    own_uses = not deps or re.search(rf'\b{var_name}\.', current_rule_text)
+                    own_imports = re.search(rf'import\s+"{var_name}"', current_rule_text)
+                    if own_uses and not own_imports:
+                        # the rule's own fix — kept in its saved text, as before
+                        current_rule_text = insert_import_module(current_rule_text, var_name)
+                    elif var_name not in header_imports:
+                        # a rule it depends on needs the module: declared first
+                        header_imports.append(var_name)
+                    else:
+                        return ValidationResult(ok=False, errors=[error_msg], normalized_content=current_rule_text)
+                    continue
 
-            return ValidationResult(ok=False, errors=["Max validation attempts exceeded"], normalized_content=current_rule_text)
+                if var_name in ALLOWED_EXTERNALS:
+                    externals[var_name] = "dummy_value"
+                    continue
+
+                if resolve:
+                    known = next((d for d in deps if d.title == var_name), None)
+                    if known is not None and deps.index(known) != 0:
+                        # Declared, but after the rule that uses it: move it first.
+                        deps.remove(known)
+                        deps.insert(0, known)
+                        continue
+                    if known is None and len(deps) < self.MAX_DEPENDENCIES:
+                        dep = find_missing_dependency_rule(var_name, source=kwargs.get('source'),
+                                                           github_path=kwargs.get('github_path'))
+                        if dep is not None and dep.id != self_id and dep not in deps:
+                            deps.insert(0, dep)
+                            continue
+                    if known is None and len(deps) >= self.MAX_DEPENDENCIES:
+                        error_msg += f" (more than {self.MAX_DEPENDENCIES} referenced rules)"
+
+                return ValidationResult(ok=False, errors=[error_msg], normalized_content=current_rule_text,
+                                        dependencies=deps)
+
+            except Exception as e:
+                return ValidationResult(ok=False, errors=[str(e)], normalized_content=current_rule_text)
+
+        return ValidationResult(ok=False, errors=["Max validation attempts exceeded"],
+                                normalized_content=current_rule_text)
 
     def parse_metadata(self, content: str, info: Dict, validation_result: ValidationResult) -> Dict[str, Any]:
         """Extract metadata and normalize it into a rule dict."""

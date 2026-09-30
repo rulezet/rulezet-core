@@ -116,6 +116,33 @@ def remove_from_rule(rule_id, relation_uuid):
     return jsonify({'success': removed})
 
 
+@rule_relation_blueprint.route('/rule/<int:rule_id>/dependencies')
+def get_rule_dependency_graph(rule_id):
+    """Public read — the transitive "needs / needed by" chains of a rule, for
+    the Linked Rules page's Dependencies view (graph + list)."""
+    rule = _load_rule_or_none(rule_id)
+    if not rule:
+        return jsonify({'error': 'Rule not found'}), 404
+    return jsonify(RelationModel.get_dependency_graph(rule_id))
+
+
+@rule_relation_blueprint.route('/rule/<int:rule_id>/dependencies/download')
+def download_rule_with_dependencies(rule_id):
+    """ZIP of the rule + every rule it needs (transitively), same folder —
+    ?include=all also adds the rules that need it. Public, like the rule."""
+    from flask import send_file
+    from app.core.utils.activity_log import log_activity
+    rule = _load_rule_or_none(rule_id)
+    if not rule:
+        return jsonify({'error': 'Rule not found'}), 404
+    include_all = request.args.get('include') == 'all'
+    buf, filename, count = RelationModel.build_dependency_zip(rule_id, include_needed_by=include_all)
+    log_activity("rule.download", f"Downloaded rule '{rule.title}' with its dependencies ({count} rule(s))",
+                 target_type="rule", target_id=rule.id, target_uuid=rule.uuid,
+                 extra={"format": "dependencies_zip", "rules": count, "include_needed_by": include_all})
+    return send_file(buf, as_attachment=True, download_name=filename, mimetype='application/zip')
+
+
 @rule_relation_blueprint.route('/rule/<int:rule_id>/page')
 def get_rule_relations_page(rule_id):
     """Paginated one-direction feed for the dedicated Linked Rules page

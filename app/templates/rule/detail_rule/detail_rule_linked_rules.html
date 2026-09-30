@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_relation/dependencyFlow.css') }}">
 <style>[v-cloak] { display: none; }</style>
 {% endblock %}
 {% import 'macros/detail_rule_nav.html' as nav with context %}
@@ -59,16 +60,107 @@
             <i class="fa-solid fa-circle-question opacity-50" style="font-size:.7rem;"
                 title="Rules that point to this one — they depend on, reference, or otherwise cite this rule."></i>
         </button>
+        <button type="button" class="dr-nav__item" :class="{ active: direction === 'dependencies' }" @click="openDependencies">
+            <i class="fa-solid fa-sitemap"></i>
+            <span>Dependencies<template v-if="deps"> (<span>[[ deps.requires_count + deps.required_by_count ]]</span>)</template></span>
+            <i class="fa-solid fa-circle-question opacity-50" style="font-size:.7rem;"
+                title="Every rule this one needs to work — and what those need in turn — and every rule that needs this one. A YARA rule referencing another rule in its condition only compiles with it."></i>
+        </button>
     </nav>
 
+    <!-- ── Dependencies: transitive "needs / needed by" chains ── -->
+    <template v-if="direction === 'dependencies'">
+        <div v-if="depsLoading" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div>
+        </div>
+        <div v-else-if="!deps || deps.nodes.length <= 1" class="card border-0 shadow-sm rounded-4 p-5 text-center">
+            <i class="fa-solid fa-sitemap fa-2x mb-3 d-block opacity-25"></i>
+            <p class="mb-0" style="color: var(--subtle-text-color);">This rule needs no other rule, and no rule needs it.</p>
+        </div>
+        <template v-else>
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden dflow-card" :class="{ 'is-fullscreen': depsFullscreen }">
+                <!-- Toolbar: what the diagram shows (on/off chips in the
+                     diagram's own colours + depth) and the download. -->
+                <div class="dflow-toolbar">
+                    <div class="dflow-toolbar__group">
+                        <span class="dflow-toolbar__label">Show</span>
+                        <button type="button" class="dflow-chip dflow-chip--required_by"
+                                :class="{ 'is-on': showNeededBy }" :disabled="!deps.required_by_count"
+                                :aria-pressed="showNeededBy" @click="showNeededBy = !showNeededBy">
+                            <i :class="showNeededBy ? 'fa-solid fa-square-check' : 'fa-regular fa-square'"></i>
+                            Needed by <span class="dflow-chip__count">[[ deps.required_by_count ]]</span>
+                        </button>
+                        <button type="button" class="dflow-chip dflow-chip--requires"
+                                :class="{ 'is-on': showNeeds }" :disabled="!deps.requires_count"
+                                :aria-pressed="showNeeds" @click="showNeeds = !showNeeds">
+                            <i :class="showNeeds ? 'fa-solid fa-square-check' : 'fa-regular fa-square'"></i>
+                            Needs <span class="dflow-chip__count">[[ deps.requires_count ]]</span>
+                        </button>
+                    </div>
+                    <div v-if="maxDepth > 1" class="dflow-toolbar__group">
+                        <label class="dflow-toolbar__label" for="dflow-depth">Depth</label>
+                        <select id="dflow-depth" v-model.number="depsDepth" class="form-select form-select-sm dflow-toolbar__select">
+                            <option :value="0">All levels</option>
+                            <option :value="1">Direct only</option>
+                            <option v-for="d in maxDepth - 2" :key="d" :value="d + 1">Up to [[ d + 1 ]] levels</option>
+                        </select>
+                    </div>
+                    <div v-if="deps.nodes.length > 10" class="dflow-toolbar__group">
+                        <input type="search" v-model="depsSearch" class="form-control form-control-sm dflow-toolbar__search"
+                               placeholder="Find a rule…" aria-label="Find a rule in the graph">
+                    </div>
+                    <span v-if="deps.truncated" class="dflow-toolbar__note">Showing the first [[ deps.nodes.length ]] rules</span>
+
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 ms-auto"
+                            @click="depsFullscreen = !depsFullscreen"
+                            :title="depsFullscreen ? 'Exit full screen (Esc)' : 'Full screen'">
+                        <i :class="depsFullscreen ? 'fa-solid fa-compress' : 'fa-solid fa-expand'" class="me-1"></i>
+                        [[ depsFullscreen ? 'Exit full screen' : 'Full screen' ]]
+                    </button>
+                    <div class="btn-group">
+                        <a :href="'/rule_relation/rule/' + ruleId + '/dependencies/download'"
+                           class="btn btn-primary btn-sm rounded-start-pill px-3 fw-semibold"
+                           :class="{ 'rounded-end-pill': !deps.required_by_count }"
+                           title="ZIP: this rule and every rule it needs, in one folder">
+                            <i class="fa-solid fa-download me-2"></i>Download with its dependencies
+                            <span class="badge rounded-pill bg-light text-primary ms-1">[[ deps.requires_count + 1 ]]</span>
+                        </a>
+                        <template v-if="deps.required_by_count">
+                            <button type="button" class="btn btn-primary btn-sm dropdown-toggle dropdown-toggle-split rounded-end-pill"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="visually-hidden">More download options</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="font-size:.85rem;">
+                                <li>
+                                    <a class="dropdown-item" :href="'/rule_relation/rule/' + ruleId + '/dependencies/download'">
+                                        <i class="fa-solid fa-arrow-right me-2 text-primary"></i>This rule + what it needs
+                                        ([[ deps.requires_count + 1 ]])
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" :href="'/rule_relation/rule/' + ruleId + '/dependencies/download?include=all'">
+                                        <i class="fa-solid fa-arrows-left-right me-2" style="color:#fd7e14;"></i>Everything, incl. the rules that need it
+                                        ([[ deps.nodes.length ]])
+                                    </a>
+                                </li>
+                            </ul>
+                        </template>
+                    </div>
+                </div>
+                <dependency-flow :nodes="shownGraph.nodes" :edges="shownGraph.edges" :root-id="ruleId" :search="depsSearch"></dependency-flow>
+            </div>
+
+        </template>
+    </template>
+
     <!-- Loading -->
-    <div v-if="loading" class="text-center py-5">
+    <div v-if="loading && direction !== 'dependencies'" class="text-center py-5">
         <div class="spinner-border text-primary" role="status">
             <span class="visually-hidden">Loading…</span>
         </div>
     </div>
 
-    <template v-else>
+    <template v-else-if="direction !== 'dependencies'">
         <!-- Both card and table views (RuleList's own toolbar toggle switches
              between them) show a "Relation" badge/column per row — how this
              rule relates to the one being viewed (e.g. "depends on" /
@@ -111,6 +203,7 @@
     import RuleList from '/static/js/rule/ruleList.js';
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
+    import DependencyFlow from '/static/js/rule_relation/dependencyFlow.js';
 
     const rule_id = {{ rule.id }};
     const RULE_TITLE = {{ rule.title | tojson }};
@@ -136,6 +229,7 @@
         if_matched_sid:    { forward: 'requires (if_matched_sid)', reverse: 'used by (if_matched_sid)' },
         if_matched_group:  { forward: 'requires (if_matched_group)', reverse: 'used by (if_matched_group)' },
         rule_ref:          { forward: 'uses (rule composition)',  reverse: 'used by (rule composition)' },
+        yara_condition_ref: { forward: 'needs (YARA condition)',  reverse: 'needed by (YARA condition)' },
     };
 
     createApp({
@@ -144,6 +238,7 @@
             'rule-list':                   RuleList,
             'tags-displays-list':          TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
+            'dependency-flow':             DependencyFlow,
         },
         setup() {
             const direction = ref('outgoing');
@@ -182,9 +277,55 @@
                 }
             }
 
-            onMounted(fetchRelations);
+            onMounted(() => {
+                fetchRelations();
+                // ?tab=dependencies opens the Dependencies view directly (shareable link)
+                if (new URLSearchParams(window.location.search).get('tab') === 'dependencies') openDependencies();
+            });
+
+            // ── Dependencies (loaded the first time the tab is opened) ──
+            const deps        = ref(null);
+            const depsLoading = ref(false);
+
+            async function openDependencies() {
+                direction.value = 'dependencies';
+                if (deps.value || depsLoading.value) return;
+                depsLoading.value = true;
+                try {
+                    const res = await fetch(`/rule_relation/rule/${rule_id}/dependencies`);
+                    if (res.ok) deps.value = await res.json();
+                } finally {
+                    depsLoading.value = false;
+                }
+            }
+
+
+            // ── Filters: which sides of the chain, how many levels ──
+            const showNeeds    = ref(true);
+            const showNeededBy = ref(true);
+            const depsDepth    = ref(0);      // 0 = every level
+            const depsSearch   = ref('');
+            // Full screen: the card covers the viewport (Esc closes it); the
+            // diagram's own ResizeObserver redraws the arrows.
+            const depsFullscreen = ref(false);
+            Vue.watch(depsFullscreen, (on) => {
+                document.body.style.overflow = on ? 'hidden' : '';
+                Vue.nextTick(() => { const c = document.querySelector('.dflow__canvas'); if (c) c.scrollTop = 0; });
+            });
+            window.addEventListener('keydown', (e) => { if (e.key === 'Escape') depsFullscreen.value = false; });
+            const maxDepth  = computed(() => deps.value ? Math.max(0, ...deps.value.nodes.map(n => n.depth)) : 0);
+            const shownGraph = computed(() => {
+                if (!deps.value) return { nodes: [], edges: [] };
+                const nodes = deps.value.nodes.filter(n => n.role === 'self' || (
+                    (n.role === 'requires' ? showNeeds.value : showNeededBy.value) &&
+                    (!depsDepth.value || n.depth <= depsDepth.value)));
+                const ids = new Set(nodes.map(n => n.id));
+                return { nodes, edges: deps.value.edges.filter(e => ids.has(e.from) && ids.has(e.to)) };
+            });
 
             return {
+                showNeeds, showNeededBy, depsDepth, depsSearch, depsFullscreen, maxDepth, shownGraph,
+                deps, depsLoading, openDependencies, ruleId: rule_id,
                 RULE_TITLE_SHORT, direction, loading,
                 outgoingTotal, incomingTotal, currentIds, currentLabels,
                 isAuthenticated, isAdmin, currentUserId, csrfToken,

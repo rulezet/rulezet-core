@@ -1146,6 +1146,45 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                     </div>
                 </div>
 
+                <!-- Download of a rule that needs other rules to work -->
+                <div class="modal fade" id="dependencies_download_modal" tabindex="-1" aria-hidden="true" style="z-index: 2000;">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
+                            <div class="modal-header border-0 pb-0">
+                                <h5 class="modal-title fw-bold" style="color:var(--text-color);">
+                                    <i class="fa-solid fa-sitemap me-2 text-primary"></i>This rule needs other rules
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body py-3" v-if="dependencyInfo">
+                                <p class="mb-2" style="color:var(--text-color);">
+                                    <strong>[[ currentRule.title ]]</strong> only works together with
+                                    <strong>[[ dependencyInfo.requires_count ]] other rule(s)</strong> it references:
+                                </p>
+                                <ul class="small mb-3 ps-3" style="color:var(--subtle-text-color);">
+                                    <li v-for="n in dependencyInfo.nodes.filter(n => n.role === 'requires').slice(0, 6)" :key="n.id">
+                                        [[ n.title ]] <span class="opacity-75">([[ n.format ]])</span>
+                                    </li>
+                                    <li v-if="dependencyInfo.requires_count > 6">… and [[ dependencyInfo.requires_count - 6 ]] more</li>
+                                </ul>
+                                <p class="small mb-0" style="color:var(--subtle-text-color);">
+                                    Downloaded alone, it won't compile or run. The dependency view lets you download
+                                    it with everything it needs, in one folder.
+                                </p>
+                            </div>
+                            <div class="modal-footer border-0 pt-0 pb-4 justify-content-center gap-2">
+                                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" @click="downloadRuleOnly">
+                                    <i class="fa-solid fa-file me-2"></i>Just this rule
+                                </button>
+                                <a class="btn btn-primary rounded-pill px-4 shadow-sm"
+                                   :href="'/rule/detail_rule/' + currentRule.id + '/linked_rules?tab=dependencies'">
+                                    <i class="fa-solid fa-sitemap me-2"></i>See the dependencies &amp; download all
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="modal fade" :id="'delete_rule_modal_'+currentRule.id" tabindex="-1" aria-hidden="true"
                     style="z-index: 2000;">
                     <div class="modal-dialog modal-dialog-centered">
@@ -1667,7 +1706,38 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
              * */
 
 
-            async function download_rule(format) {
+            // A rule that needs other rules (YARA condition references, Wazuh
+            // if_sid parents…) is useless downloaded alone: ask first, and
+            // offer the dependency view where it downloads with all of them.
+            const dependencyInfo = ref(null);
+            const pendingDownloadFormat = ref(null);
+
+            async function loadDependencyInfo() {
+                if (dependencyInfo.value !== null) return dependencyInfo.value;
+                try {
+                    const res = await fetch(`/rule_relation/rule/${rule_id}/dependencies`);
+                    dependencyInfo.value = res.ok ? await res.json() : { requires_count: 0, nodes: [] };
+                } catch (e) {
+                    dependencyInfo.value = { requires_count: 0, nodes: [] };
+                }
+                return dependencyInfo.value;
+            }
+
+            function downloadRuleOnly() {
+                const el = document.getElementById('dependencies_download_modal');
+                if (el) bootstrap.Modal.getOrCreateInstance(el).hide();
+                download_rule(pendingDownloadFormat.value, true);
+            }
+
+            async function download_rule(format, skipDependencyCheck = false) {
+                if (!skipDependencyCheck) {
+                    const info = await loadDependencyInfo();
+                    if (info.requires_count > 0) {
+                        pendingDownloadFormat.value = format;
+                        bootstrap.Modal.getOrCreateInstance(document.getElementById('dependencies_download_modal')).show();
+                        return;
+                    }
+                }
                 const params = new URLSearchParams({
                     rule_id: rule_id,
                     format: format
@@ -1925,7 +1995,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 vote,
                 userVote,
                 contributor_list,
-                download_rule,
+                download_rule, dependencyInfo, downloadRuleOnly,
                 csrf_token,
                 dayjs,
                 init,

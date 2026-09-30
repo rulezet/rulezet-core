@@ -166,6 +166,147 @@ def get_relations_for_rule(rule_id: int) -> dict:
     }
 
 
+# Relation types meaning "the source rule NEEDS the target rule to work" —
+# YARA condition references, Wazuh if_* parents, Kunai rule() composition,
+# and the manual "depends on".
+DEPENDENCY_RELATION_TYPES = ('yara_condition_ref', 'depends_on', 'if_sid', 'if_matched_sid',
+                             'if_group', 'if_matched_group', 'rule_ref')
+DEPENDENCY_GRAPH_MAX_NODES = 300
+
+
+def get_dependency_graph(rule_id: int, max_nodes: int = DEPENDENCY_GRAPH_MAX_NODES) -> dict:
+    """Every rule this one needs (and what those need, transitively) and
+    every rule that needs it (transitively), as a graph:
+
+        nodes: [{id, uuid, title, format, role: self|requires|required_by, depth, via}]
+        edges: [{from, to, type}]   # from NEEDS to
+
+    `via` is the node through which a rule was first reached — enough to
+    draw the chains as an indented tree. Breadth-first in each direction,
+    stopped at max_nodes (truncated=True)."""
+    root = Rule.query.get(rule_id)
+    nodes = {rule_id: {"id": rule_id, "uuid": root.uuid, "title": root.title, "format": root.format,
+                       "role": "self", "depth": 0, "via": None}}
+    edges = {}
+    truncated = False
+
+    def walk(role, follow_outgoing):
+        nonlocal truncated
+        frontier, depth = [rule_id], 0
+        while frontier and not truncated:
+            depth += 1
+            col = RuleRelation.source_rule_id if follow_outgoing else RuleRelation.target_rule_id
+            rels = (RuleRelation.query
+                    .filter(col.in_(frontier), RuleRelation.relation_type.in_(DEPENDENCY_RELATION_TYPES))
+                    .all())
+            nxt = []
+            for rel in rels:
+                here, other = ((rel.source_rule_id, rel.target_rule_id) if follow_outgoing
+                               else (rel.target_rule_id, rel.source_rule_id))
+                other_rule = rel.target_rule if follow_outgoing else rel.source_rule
+                if other_rule is None or other_rule.is_deleted:
+                    continue
+                if other not in nodes:
+                    if len(nodes) >= max_nodes:
+                        truncated = True
+                        break
+                    nodes[other] = {"id": other, "uuid": other_rule.uuid, "title": other_rule.title,
+                                    "format": other_rule.format, "role": role, "depth": depth, "via": here}
+                    nxt.append(other)
+                edges[(rel.source_rule_id, rel.target_rule_id)] = rel.relation_type
+            frontier = nxt
+
+    walk("requires", True)
+    walk("required_by", False)
+    return {
+        "nodes": list(nodes.values()),
+        "edges": [{"from": a, "to": b, "type": t} for (a, b), t in edges.items() if a in nodes and b in nodes],
+        "requires_count": sum(1 for n in nodes.values() if n["role"] == "requires"),
+        "required_by_count": sum(1 for n in nodes.values() if n["role"] == "required_by"),
+        "truncated": truncated,
+    }
+
+
+def _safe_file_part(text: str, fallback: str = "rule") -> str:
+    import re
+    clean = re.sub(r"[^A-Za-z0-9._-]+", "_", (text or "").strip()).strip("._")
+    return clean[:80] or fallback
+
+
+def dependency_install_order(rule_ids: list, edges: list) -> list:
+    """rule_ids sorted so that every rule comes after the rules it needs
+    (edges: [{from, to}] — `from` needs `to`); what a YARA file declaring
+    them all has to follow. Rules caught in a cycle keep their given order
+    at the end."""
+    wanted = set(rule_ids)
+    needs = {rid: set() for rid in rule_ids}
+    for e in edges:
+        if e["from"] in wanted and e["to"] in wanted and e["from"] != e["to"]:
+            needs[e["from"]].add(e["to"])
+    order, done = [], set()
+    remaining = list(rule_ids)
+    while remaining:
+        ready = [rid for rid in remaining if needs[rid] <= done]
+        if not ready:
+            order += remaining
+            break
+        for rid in ready:
+            order.append(rid)
+            done.add(rid)
+        remaining = [rid for rid in remaining if rid not in done]
+    return order
+
+
+def build_dependency_zip(rule_id: int, include_needed_by: bool = False):
+    """(BytesIO, filename, rule_count) — the rule and every rule it needs
+    (transitively), one file each in the same folder, plus a README with
+    the chain and, when they're all YARA, one combined .yar declaring them
+    in the order they compile. include_needed_by adds the rules that need
+    this one."""
+    import io
+    import zipfile
+
+    graph = get_dependency_graph(rule_id)
+    roles = {"self", "requires"} | ({"required_by"} if include_needed_by else set())
+    picked = [n for n in graph["nodes"] if n["role"] in roles]
+    rules = {r.id: r for r in Rule.query.filter(Rule.id.in_([n["id"] for n in picked]),
+                                                Rule.is_deleted == False)}
+    order = dependency_install_order([n["id"] for n in picked if n["id"] in rules], graph["edges"])
+    root = rules[rule_id]
+    folder = f"{_safe_file_part(root.title)}_with_dependencies"
+    role_of = {n["id"]: n for n in picked}
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        used = set()
+        lines = [f"# {root.title} — with its dependencies", "",
+                 f"Rule {root.uuid} ({root.format}) and the {len(order) - 1} rule(s) it comes with, "
+                 "listed in the order they have to be loaded (a rule after the rules it needs).", "",
+                 "| # | Rule | Format | Role | File |", "|---|---|---|---|---|"]
+        for i, rid in enumerate(order, 1):
+            r = rules[rid]
+            name = f"{_safe_file_part(r.title)}_{r.id}.{r.get_extension()}"
+            while name in used:
+                name = f"{r.id}_{name}"
+            used.add(name)
+            zf.writestr(f"{folder}/{name}", r.to_string or "")
+            node = role_of[rid]
+            role = {"self": "this rule", "requires": f"needed (level {node['depth']})",
+                    "required_by": f"needs it (level {node['depth']})"}[node["role"]]
+            lines.append(f"| {i} | {r.title.replace('|', '/')} | {r.format} | {role} | `{name}` |")
+
+        if all((rules[rid].format or "").lower() == "yara" for rid in order) and len(order) > 1:
+            combined = "\n\n".join(f"// ── {rules[rid].title} (rule {rules[rid].uuid})\n{rules[rid].to_string or ''}"
+                                    for rid in order)
+            combined_name = f"{_safe_file_part(root.title)}_combined.yar"
+            zf.writestr(f"{folder}/{combined_name}", combined + "\n")
+            lines += ["", f"`{combined_name}` declares them all in that order — load it on its own."]
+
+        zf.writestr(f"{folder}/README.md", "\n".join(lines) + "\n")
+    buf.seek(0)
+    return buf, f"{folder}.zip", len(order)
+
+
 def count_relations_for_rule(rule_id: int) -> int:
     """outgoing + incoming, both directions — drives the detail page's
     'Linked Rules' nav tab (only shown when > 0, see

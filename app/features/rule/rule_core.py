@@ -844,6 +844,14 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         except Exception:
             pass
 
+        # YARA: record which rule(s) this one needs to compile (and what those
+        # need in turn) as auto "yara_condition_ref" links — Linked Rules page.
+        try:
+            from app.features.rule.rule_format.available_format.yara_format import sync_yara_dependency_relations
+            sync_yara_dependency_relations(new_rule)
+        except Exception:
+            db.session.rollback()
+
         # Quality score — computed last so it sees the tags/ATT&CK associations
         # attached just above, not a stale pre-attach snapshot.
         try:
@@ -996,6 +1004,14 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
         from app.features.rule.github_repo_core import sync_rule_edit
         new_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id, 'branch': rule.branch}
         sync_rule_edit(old_source, rule.source, old_snapshot, new_snapshot)
+    except Exception:
+        db.session.rollback()
+
+    # YARA: record which rule(s) this one needs to compile (and what those
+    # need in turn) as auto "yara_condition_ref" links — Linked Rules page.
+    try:
+        from app.features.rule.rule_format.available_format.yara_format import sync_yara_dependency_relations
+        sync_yara_dependency_relations(rule)
     except Exception:
         db.session.rollback()
 
