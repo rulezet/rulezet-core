@@ -5,6 +5,10 @@ on:
    branches:
       - '*'
 
+# The job only checks out the code and runs the tests — a read-only token.
+permissions:
+  contents: read
+
 jobs:
   build:
 
