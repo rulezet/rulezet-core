@@ -5,3 +5,7 @@ filterwarnings = [
     "ignore::UserWarning",
     "ignore::DeprecationWarning"
 ]
+
+[tool.alembic]
+# path to migration scripts
+script_location = "%(here)s/migrations"

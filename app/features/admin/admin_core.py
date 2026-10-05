@@ -234,7 +234,16 @@ def get_app_config() -> dict:
             'secret_key_length': len(secret),
             'github_token_set': bool(github_token),
             'github_token_preview': '••••••••••••' if github_token else 'not set',
-            'github_host': github_host,
+        },
+        'sso': {
+            # OIDC SSO
+            'oidc_enabled': current_app.config.get('OIDC_ENABLED', False),
+            'oidc_discovery_endpoint': current_app.config.get('OIDC_DISCOVERY_ENDPOINT', ''),
+            'oidc_client_id': current_app.config.get('OIDC_CLIENT_ID', ''),
+            'oidc_secret': current_app.config.get('OIDC_SECRET', ''),
+            'oidc_scope': current_app.config.get('OIDC_SCOPE', 'openid email profile'),
+            'oidc_group_admin': current_app.config.get('OIDC_GROUP_ADMIN', ''),
+            'oidc_group_editor': current_app.config.get('OIDC_GROUP_EDITOR', ''),
         },
     }
 

@@ -48,4 +48,5 @@ cryptography
 grpcio
 pyvelociraptor
 psutil
+authlib
 -e ./app/modules/rulezet-validation

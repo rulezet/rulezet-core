@@ -40,6 +40,8 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(165))
     api_key = db.Column(db.String(128), index=True)
     is_connected = db.Column(db.Boolean, default=False, index=True)
+    auth_provider = db.Column(db.String(32), default='local', nullable=False, server_default='local')
+    auth_data = db.Column(db.String(128), unique=True, index=True)
 
     is_verified = db.Column(db.Boolean, default=False)
     verification_code = db.Column(db.String(6), nullable=True)
@@ -155,6 +157,7 @@ class User(UserMixin, db.Model):
             "twitter_url": self.twitter_url,
             "created_at": self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
             "last_seen": self.last_seen.strftime('%Y-%m-%d %H:%M') if self.last_seen else None,
+            "auth_provider": self.auth_provider,
         }
 
 class AnonymousUser(AnonymousUserMixin):

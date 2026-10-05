@@ -53,10 +53,20 @@
         </button>
       </form>
 
+      {% if config.OIDC_ENABLED %}
+      <a href="{{ url_for('account.oidc_login') }}" class="btn-auth mb-3 d-block text-center text-decoration-none">
+        <i class="fa-solid fa-shield-halved me-1"></i> Sign in with OIDC
+      </a>
+      {% endif %}
+
+      {% if config.SIGN_UP_ENABLED %}
       <div class="auth-footer-row">
         Don't have an account?
         <a href="/account/register" class="auth-link fw-semibold ms-1">Create one</a>
       </div>
+      {% endif %}
+
+
     </div>
 
     <p class="text-center mt-3" style="font-size:.78rem;color:var(--subtle-text-color);">

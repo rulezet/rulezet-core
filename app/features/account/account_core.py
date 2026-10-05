@@ -56,6 +56,7 @@ def add_user_core(form_dict) -> tuple:
         verification_code=code,
         verification_expiration=expires,
         is_verified=False,
+        auth_provider="local",
         created_at=now,          # set on registration
     )
  
@@ -246,7 +247,7 @@ def update_last_seen(user_id) -> None:
 
 
 
-def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> tuple:
+def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=False) -> tuple:
     """Edit the user in the DB. Returns (success, pending_email_or_None).
     If the email changed, the new address is NOT applied immediately — caller must
     call request_email_change_core() to send the confirmation link."""
@@ -256,14 +257,16 @@ def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> tupl
 
     user.first_name = form_dict["first_name"]
     user.last_name  = form_dict["last_name"]
-
-    # Detect email change but don't apply it yet
-    new_email = form_dict["email"]
     pending_email = None
-    if new_email != user.email:
-        pending_email = new_email
-    else:
-        user.email = new_email
+
+    # SSO accounts have their identity managed externally; disallow email changes.
+    if not is_sso:
+        # Detect email change but don't apply it yet
+        new_email = form_dict["email"]
+        if new_email != user.email:
+            pending_email = new_email
+        else:
+            user.email = new_email
 
     if form_dict.get("password"):
         user.password = form_dict["password"]

@@ -10,6 +10,8 @@ from sqlalchemy.orm import sessionmaker
 from config import config as Config
 import os
 from flask_mail import Mail, Message
+from authlib.integrations.flask_client import OAuth
+
 
 load_dotenv()
 
@@ -24,6 +26,7 @@ mail = Mail()
 # @cache.cached(timeout=..., ...)/cache.get()/cache.set() anywhere. See
 # config.py's CACHE_TYPE for the backend (SimpleCache today, Redis-ready).
 cache = Cache()
+oauth = OAuth()
 # In-process cache for SHORT-lived, high-cardinality entries (60 s, keyed by
 # query string: public CVE API, rule list facets…). These must NOT go to the
 # FileSystemCache above: every set() past its file threshold re-reads every
@@ -85,6 +88,7 @@ def create_app(start_worker=True):
     sess.init_app(app)
 
     mail.init_app(app)
+    oauth.init_app(app)
     _fallback_if_redis_unavailable(app)
     cache.init_app(app)
     memory_cache.init_app(app, config={
@@ -166,6 +170,14 @@ def create_app(start_worker=True):
 
     from app.features.pivotick.pivotick import pivotick_blueprint
     app.register_blueprint(pivotick_blueprint, url_prefix='/')
+
+    if app.get('OIDC_ENABLED'):
+        oauth.register(
+            'oidc',
+            server_metadata_url=app.config.get('OIDC_DISCOVERY_ENDPOINT'),
+            client_kwargs={'scope': app.config.get('OIDC_SCOPE'),
+                           'code_challenge_method': 'S256'}
+        )
 
     @app.after_request
     def set_security_headers(response):

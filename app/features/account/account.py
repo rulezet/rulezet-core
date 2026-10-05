@@ -1,23 +1,86 @@
 from typing import Union
+import time
 import datetime
 from ...core.db_class.db import User, RegisteredInstance, InstanceConfig
 from ... import db
-from flask import Blueprint, jsonify, render_template, redirect, url_for, request, flash
+from ... import oauth
+from flask import Blueprint, jsonify, render_template, redirect, url_for, request, flash, session, current_app, abort
 from .form import LoginForm, EditUserForm, AddNewUserForm, ForgotPasswordForm, ResetPasswordForm
 from ..rule import rule_core as RuleModel
 from . import account_core as AccountModel
+from . import oidc_core as OIDCModel
 from ..bundle import bundle_core as BundleModel
 from ...core.utils.utils import form_to_dict, generate_api_key, safe_referrer
 from ...core.utils.activity_log import log_activity
 from flask_login import current_user, login_required, login_user, logout_user
 from datetime import datetime, timedelta, timezone
 from collections import Counter
+from urllib.parse import urlparse
+
+# Rate limiting
+RATE_LIMIT_WINDOW = 300  # 5 minutes
+TOKEN_EXPIRY_TIME = 300  # 5 minutes
+MAX_RESET_REQUESTS = 3   # Max requests per IP per window
+MAX_LOGIN_ATTEMPTS = 5   # Max login per IP per window
+URL_SAFE_TOKENS = 32     # Length of URL safe tokens
+
 account_blueprint = Blueprint(
     'account',
     __name__,
     template_folder='templates',
     static_folder='static'
 )
+
+
+def get_client_ip():
+    """Get client IP"""
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+    elif request.headers.get('X-Real-IP'):
+        return request.headers.get('X-Real-IP')
+    return request.remote_addr
+
+
+def is_safe_next_url(target):
+    """Return True if ``target`` is a safe local redirect target."""
+    if not target:
+        return False
+    parsed = urlparse(target)
+    if parsed.scheme or parsed.netloc:
+        return False
+    # Reject protocol-relative URLs like //evil and backslash variants.
+    return target.startswith('/') and not target.startswith('//') and not target.startswith('/\\')
+
+
+def _post_login_redirect(default='/'):
+    target = request.args.get('next')
+    if is_safe_next_url(target):
+        return redirect(target)
+    return redirect(default)
+
+
+def check_rate_limit(key_prefix, max_attempts, window):
+    """Check if the request exceeds rate limit"""
+    client_ip = get_client_ip()
+    session_key = f"{key_prefix}{client_ip}"
+    current_time = time.time()
+
+    if session_key not in session:
+        session[session_key] = {'attempts': 0, 'first_attempt': current_time}
+
+    attempt_data = session[session_key]
+    time_passed = current_time - attempt_data['first_attempt']
+
+    if time_passed > window:
+        session[session_key] = {'attempts': 1, 'first_attempt': current_time}
+        return True, 0
+
+    if attempt_data['attempts'] >= max_attempts:
+        remaining_time = int(window - time_passed)
+        return False, remaining_time
+
+    session[session_key]['attempts'] += 1
+    return True, 0
 
 ###############
 # User action #
@@ -397,17 +460,26 @@ def _update_last_seen():
 def edit_user():
     """Edit the user"""
     form = EditUserForm()
+    is_sso = current_user.auth_provider != 'local'
+
     if form.validate_on_submit():
         form_dict     = form_to_dict(form)
         avatar_file   = form.profile_picture.data
         remove_avatar = request.form.get("remove_avatar") == "1"
+        is_sso = is_sso
+        # Only include password if change_password is checked, and never for SSO accounts
+        if not form.change_password.data or is_sso:
+            form_dict.pop("password", None)
+            form_dict.pop("password2", None)
         success, pending_email = AccountModel.edit_user_core(
             form_dict,
             current_user.id,
             avatar_file=avatar_file,
-            remove_avatar=remove_avatar
+            remove_avatar=remove_avatar,
+            is_sso=is_sso,
         )
         if success:
+            current_app.logger.debug(f"User edited successfully {current_user.email} {current_user.id}")
             log_activity("user.edit_profile", "Updated profile",
                          target_type="user", target_id=current_user.id)
             if pending_email:
@@ -437,7 +509,7 @@ def edit_user():
         form.github_url.data  = current_user.github_url
         form.twitter_url.data = current_user.twitter_url
 
-    return render_template("account/edit_user.html", form=form)
+    return render_template("account/edit_user.html", form=form, is_sso=is_sso)
 
 
 @account_blueprint.route('/regenerate_api_key', methods=['POST'])
@@ -462,7 +534,7 @@ def confirm_email_change(token):
                      target_type="user", target_id=current_user.id)
         flash(message, 'success')
     else:
-        flash(message, 'danger')
+        flash(message, 'warning')
     return redirect('/account')
 
  
@@ -472,9 +544,22 @@ def confirm_email_change(token):
 @account_blueprint.route('/login', methods=['GET', 'POST'])
 def login() -> redirect:
     """Log in an existing user."""
+    if current_user.is_authenticated:
+        return _post_login_redirect()
+
     form = LoginForm()
     if form.validate_on_submit():
+        # Check rate limit for login attempts
+        is_allowed, remaining_time = check_rate_limit('login_attempts_', MAX_LOGIN_ATTEMPTS, RATE_LIMIT_WINDOW)
+
+        if not is_allowed:
+            current_app.logger.warning(f"Rate limit exceeded for login, IP={get_client_ip()}")
+            flash(f"Too many login attempts. Please try again in {remaining_time} seconds.", "error")
+            return render_template("account/login.html", form=form, show_reset_link=False)
+
+        email = (form.email.data or '').strip().lower()
         user = User.query.filter_by(email=form.email.data).first()
+
         if user is not None and user.password_hash is not None and user.verify_password(form.password.data):
             if not user.is_verified:
                 flash("Please verify your email first.", "warning")
@@ -484,19 +569,24 @@ def login() -> redirect:
             log_activity("user.login", f"User '{user.get_username()}' logged in",
                          target_type="user", target_id=user.id)
             flash('You are now logged in. Welcome back!', 'success')
-            return redirect( "/")
+            return _post_login_redirect()
         else:
-            flash('Invalid email or password.', 'danger')
+            flash("Invalid email or password.", "warning")
+            current_app.logger.error(f"Failed login attempt - Invalid credentials for {email}")
+
     return render_template('account/login.html', form=form)
 
 @account_blueprint.route('/logout')
 @login_required
 def logout() -> redirect:
-    "Log out an User"
+    """Log out a User"""
+    user_email = current_user.email
+    current_app.logger.info(f"User logged out: {user_email}")
     log_activity("user.logout", f"User '{current_user.get_username()}' logged out",
                  target_type="user", target_id=current_user.id)
     AccountModel.disconnected(current_user)
     logout_user()
+    session.clear()
 
     flash('You have been logged out.', 'info')
     # return redirect(url_for('home.home'))
@@ -506,6 +596,8 @@ def logout() -> redirect:
 @account_blueprint.route('/register', methods=['GET', 'POST'])
 def add_user() -> redirect:
     """Add a new user"""
+    if not current_app.config.get("SIGN_UP_ENABLED"):
+        abort(404)
     form = AddNewUserForm()
     if form.validate_on_submit():
         form_dict = form_to_dict(form)
@@ -553,7 +645,7 @@ def acces_denied() -> render_template:
 def verify(user_id):
     user = AccountModel.get_user(user_id)
     if not user:
-        flash("User not found.", "error")
+        flash("User not found.", "warning")
         return redirect("/account/login")
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -565,18 +657,18 @@ def verify(user_id):
     if not user.is_verified and user.verification_expiration and now > user.verification_expiration:
         # delete user
         AccountModel.delete_user_core(user_id)
-        flash("Code expired. Your account has been deleted. Please register again.", "error")
+        flash("Code expired. Your account has been deleted. Please register again.", "warning")
         return redirect("/account/register")
 
     if request.method == 'POST':
         input_code = request.form.get('verification_code')
         if not input_code:
-            flash("Please enter a code.", "error")
+            flash("Please enter a code.", "warning")
             return redirect(f"/account/verify/{user_id}")
         if input_code == user.verification_code:
             success = AccountModel.verify_user_core(user_id)
             if not success:
-                flash("Failed to verify account.", "error")
+                flash("Failed to verify account.", "warning")
                 return redirect("/account/login")
             log_activity(
                 "user.verified",
@@ -589,7 +681,7 @@ def verify(user_id):
             login_user(user, remember=True)
             return redirect("/")
         else:
-            flash("Invalid code.", "error")
+            flash("Invalid code.", "warning")
             
     return render_template("account/verify.html", user_id=user_id)
 
@@ -599,7 +691,7 @@ def verify(user_id):
 def resend_verification_code(user_id):
     user = AccountModel.get_user(user_id)
     if not user:
-        flash("User not found.", "error")
+        flash("User not found.", "warning")
         return redirect("/account/login")
 
     # Registration logs the user in immediately, pre-verification, so a
@@ -608,12 +700,12 @@ def resend_verification_code(user_id):
     # editing this URL. An anonymous caller (no session) is left alone since
     # that's how a stale, pre-login "verify" page can legitimately reach this.
     if current_user.is_authenticated and current_user.id != user_id and not current_user.is_admin():
-        flash("You can only resend a code for your own account.", "error")
+        flash("You can only resend a code for your own account.", "warning")
         return redirect("/account/login")
 
     success = AccountModel.resend_verification_code_core(user_id)
     if not success:
-        flash("Failed to resend verification code.", "error")
+        flash("Failed to resend verification code.", "warning")
         return redirect(f"/account/verify/{user_id}")
     flash("Verification code resent.", "success")
     return render_template("account/verify.html", user_id=user_id)
@@ -641,9 +733,44 @@ def reset_password(token):
         if success:
             flash('Password reset successfully. You can now log in.', 'success')
             return redirect('/account/login')
-        flash(message, 'danger')
+        flash(message, 'warning')
         return redirect(f'/account/reset-password/{token}')
     return render_template('account/reset_password.html', form=form, token=token)
+
+@account_blueprint.route('/oidc/login')
+def oidc_login():
+    """Redirect user to OIDC for authentication."""
+    if not current_app.config.get('OIDC_ENABLED'):
+        abort(404)
+
+    redirect_uri = url_for('account.oidc_callback', _external=True)
+    return oauth.oidc.authorize_redirect(redirect_uri)
+
+
+@account_blueprint.route('/oidc/authorize')
+def oidc_callback():
+    """Handle the OAuth2 redirect from OIDC Server."""
+    if not current_app.config.get('OIDC_ENABLED'):
+        abort(404)
+
+    token = oauth.oidc.authorize_access_token()
+    user_info = oauth.oidc.parse_id_token(token, nonce="")
+
+    user, error = OIDCModel.get_or_create_sso_user(user_info)
+
+    if not user:
+        flash(f'Access denied: {error}', 'warning')
+        current_app.logger.error(f"OIDC login denied: {error} for IP {get_client_ip()}")
+        return redirect(url_for('account.login'))
+
+    login_user(user)
+    AccountModel.connected(current_user)
+    current_app.logger.info(f"OIDC login successful for  {user.email}")
+    flash('Logged in via OIDC.', 'success')
+    next_url = request.args.get('next') or '/'
+    if urlparse(next_url).netloc or urlparse(next_url).scheme:
+        next_url = '/'
+    return redirect(next_url)
 
 
 ############
