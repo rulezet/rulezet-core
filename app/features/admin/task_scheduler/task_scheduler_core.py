@@ -88,8 +88,34 @@ def update_workflow(workflow_uuid, data):
     workflow.notify_on_success = bool(data.get('notify_on_success', workflow.notify_on_success))
     if 'notify_emails' in data:
         workflow.notify_emails = _clean_notify_emails(data.get('notify_emails'))
+
+    if data.get('launch'):
+        err = _set_workflow_launch(workflow, data['launch'])
+        if err:
+            db.session.rollback()
+            return None, err
+
     db.session.commit()
     return workflow, None
+
+
+def _set_workflow_launch(workflow, launch):
+    """'Launch date' from the Edit Workflow modal: the workflow starts when
+    its first task does, so this rewrites that task's time trigger (and
+    re-activates it — giving it a launch date means it should run)."""
+    from app.features.admin.task_scheduler.scheduler_engine import workflow_first_task
+    task = workflow_first_task(workflow)
+    if not task:
+        return "Add a task to this workflow first — the launch date is the date of its first task."
+    if launch.get('trigger_mode') not in ('once', 'daily', 'weekly', 'monthly', 'cron'):
+        return "The launch date must be a date or a recurrence."
+    ok, err = _validate_trigger(launch, schedule_id=task.id, workflow_id=workflow.id)
+    if not ok:
+        return err
+    _apply_trigger_fields(task, launch)
+    task.is_active = True
+    _register_live(task)
+    return None
 
 
 def delete_workflow(workflow_uuid):
@@ -179,7 +205,15 @@ def _apply_trigger_fields(schedule, data):
     schedule.depends_on_condition = 'success'
 
     if mode == 'once':
-        schedule.run_once_at = datetime.datetime.fromisoformat(data['run_once_at'])
+        run_at = datetime.datetime.fromisoformat(data['run_once_at'])
+        if run_at.tzinfo is not None:
+            # The picker sends an absolute instant (toISOString → 'Z') —
+            # store it as naive UTC, run_once_at being read in self.timezone.
+            schedule.run_once_at = run_at.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            schedule.timezone = 'UTC'
+        else:
+            schedule.run_once_at = run_at
+            schedule.timezone = data.get('timezone') or schedule.timezone or 'UTC'
         return
     if mode == 'after_task':
         schedule.depends_on_schedule_id = data.get('depends_on_schedule_id')
@@ -378,22 +412,31 @@ def run_schedule_now(schedule_uuid):
 
 
 def run_workflow_now(workflow_uuid, triggered_by=None):
-    """Fire every 'root' task in the workflow (one not triggered by another
-    task's completion) right now — the rest of the chain follows on its own
-    via on_job_finished() as each root's job completes. Lets an admin launch
-    the whole pipeline with one click instead of running its first task.
-    Records one AdminWorkflowRun for the launch-history table; the chain's
-    workflow_run_id is propagated to every task it triggers, directly or
-    through on_job_finished()."""
-    from app.core.db_class.db import AdminWorkflowRun
-    from app.features.admin.task_scheduler.scheduler_engine import _fire_schedule
+    """Fire every active first task of the workflow (see
+    workflow_root_tasks) right now — the rest of the chain follows on its
+    own via on_job_finished() as each root's job completes. Lets an admin
+    launch the whole pipeline with one click instead of running its first
+    task."""
+    from app.features.admin.task_scheduler.scheduler_engine import workflow_root_tasks
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
     if not workflow:
         return False, "Workflow not found."
 
-    roots = [t for t in workflow.tasks if t.trigger_mode != 'after_task' and t.is_active]
+    roots = [t for t in workflow_root_tasks(workflow) if t.is_active]
     if not roots:
         return False, "This workflow has no independently-triggered (non-paused) task to start from."
+
+    return launch_workflow(workflow, roots, triggered_by=triggered_by), None
+
+
+def launch_workflow(workflow, roots, triggered_by=None):
+    """Shared by the Run Workflow button and the scheduler (a first task's
+    time came — scheduler_engine.tick): records one AdminWorkflowRun for the
+    launch-history table and fires the given root tasks under it; the
+    chain's workflow_run_id is propagated to every task it triggers through
+    on_job_finished(). triggered_by is None for a scheduled launch."""
+    from app.core.db_class.db import AdminWorkflowRun
+    from app.features.admin.task_scheduler.scheduler_engine import _fire_schedule
 
     workflow_run = AdminWorkflowRun(
         uuid=str(_uuid_mod.uuid4()), workflow_id=workflow.id,
@@ -418,7 +461,7 @@ def run_workflow_now(workflow_uuid, triggered_by=None):
     except Exception as e:
         current_app.logger.warning(f"maybe_send_workflow_run_alert(started) failed: {e}")
 
-    return workflow_run, None
+    return workflow_run
 
 
 def stop_workflow_jobs(workflow_uuid):

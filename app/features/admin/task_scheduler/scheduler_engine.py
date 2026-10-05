@@ -1,33 +1,47 @@
 """
 scheduler_engine.py — the "when" half of the generalized Admin Task
-Scheduler (see docs/design/admin_task_scheduler.md). Modeled directly on
-app/features/rule/rule_from_github/sync_schedule/scheduler_engine.py: the
-`AdminTaskSchedule` rows in Postgres are the single source of truth,
-APScheduler only holds live triggers in memory, and firing a trigger does
-the minimum possible work synchronously (create one AdminTaskRun + one
-BackgroundJob row and commit) — job_worker.py's poll loop does the actual
-work. Runs its own independent BackgroundScheduler instance rather than
-sharing the GitHub Sync one, per the "coexistence" decision in §8 of the
-design doc: the two systems stay fully independent for now.
+Scheduler (see docs/design/admin_task_scheduler.md).
+
+`AdminTaskSchedule.next_run_at` in Postgres is the single source of truth
+for "when does this fire next": the CRUD routes (gunicorn web process)
+only ever compute and store it, and the worker process (worker.py — the
+only process started with start_worker=True in prod) polls the table every
+TICK_SECONDS and fires whatever is due. No trigger lives in memory any
+more: the previous design registered APScheduler jobs from the CRUD
+routes, i.e. inside the gunicorn process — which never loaded them at
+boot, gets recycled every ~1000 requests (--max-requests) and so silently
+dropped every task created/edited since the last worker restart, while the
+worker kept firing the stale pre-edit triggers.
+
+A workflow is launched by its *first task(s)* — the roots, i.e. every task
+not triggered by another task (see workflow_root_tasks()). When a root's
+time comes, the whole workflow is launched exactly like the "Run Workflow"
+button (one AdminWorkflowRun, the chain follows via on_job_finished()).
+APScheduler is still used, but only as a pure "next fire time" calculator
+for the cron/daily/weekly/monthly expressions.
 """
 import datetime
+import threading
+import time
 import uuid as _uuid_mod
 
-from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.date import DateTrigger
 
-_scheduler = None
+TICK_SECONDS = 20
+# Same tolerance the old APScheduler misfire_grace_time gave: a fire missed
+# by more than this (worker down for hours) is skipped, not run late.
+MISFIRE_GRACE_SECONDS = 3600
+
+_ticker_started = False
 
 
 def build_trigger(schedule):
-    """schedule: an AdminTaskSchedule row. Returns an APScheduler trigger, or
-    None for 'after_task' (fired by chaining, not by the scheduler)."""
+    """schedule: an AdminTaskSchedule row. Returns an APScheduler trigger for
+    a recurring mode, or None for 'once'/'after_task' (handled directly by
+    compute_next_run_at)."""
     tz = schedule.timezone or "UTC"
     mode = schedule.trigger_mode
-    if mode == 'once':
-        return DateTrigger(run_date=schedule.run_once_at, timezone=tz)
-    if mode == 'after_task':
+    if mode in ('once', 'after_task'):
         return None
     if mode == 'daily':
         return CronTrigger(hour=schedule.hour, minute=schedule.minute, timezone=tz)
@@ -44,12 +58,73 @@ def build_trigger(schedule):
     raise ValueError(f"Unknown trigger_mode: {mode}")
 
 
-def get_scheduler():
-    global _scheduler
-    if _scheduler is None:
-        _scheduler = BackgroundScheduler(daemon=True)
-        _scheduler.start()
-    return _scheduler
+def _once_run_at_utc(schedule):
+    """run_once_at is stored naive, in the task's own timezone."""
+    if not schedule.run_once_at:
+        return None
+    from zoneinfo import ZoneInfo
+    aware = schedule.run_once_at
+    if aware.tzinfo is None:
+        aware = aware.replace(tzinfo=ZoneInfo(schedule.timezone or "UTC"))
+    return aware.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+
+def compute_next_run_at(schedule, after=None):
+    """Next time this task fires on its own (naive UTC), or None if it never
+    will: paused, 'after_task' (fired by its parent), or a 'once' task that
+    already ran."""
+    if not schedule.is_active or schedule.trigger_mode == 'after_task':
+        return None
+    if schedule.trigger_mode == 'once':
+        run_at = _once_run_at_utc(schedule)
+        if run_at is None:
+            return None
+        if schedule.last_run_at and schedule.last_run_at >= run_at:
+            return None  # already fired
+        return run_at
+    now = (after or datetime.datetime.utcnow()).replace(tzinfo=datetime.timezone.utc)
+    nxt = build_trigger(schedule).get_next_fire_time(None, now)
+    return nxt.astimezone(datetime.timezone.utc).replace(tzinfo=None) if nxt else None
+
+
+def workflow_root_tasks(workflow):
+    """The workflow's first task(s): every task that isn't chained after
+    another one. An 'after_task' whose parent was deleted (depends_on
+    cleared by delete_schedule) has become a first task too — just one
+    with no launch date of its own."""
+    return [t for t in workflow.tasks
+            if t.trigger_mode != 'after_task' or t.depends_on_schedule_id is None]
+
+
+def workflow_first_task(workflow):
+    """The single task whose trigger the workflow's 'Launch date' (Edit
+    Workflow modal) reads and writes: the oldest first task."""
+    roots = workflow_root_tasks(workflow)
+    return roots[0] if roots else None
+
+
+def workflow_launch_status(workflow):
+    """Whether this workflow will ever start on its own, for the workflow
+    list's warning. Returns {"will_run", "warning", "next_run_at"}."""
+    if not workflow.tasks:
+        return {"will_run": False, "next_run_at": None,
+                "warning": "This workflow has no task — it will never run."}
+
+    roots = workflow_root_tasks(workflow)
+    scheduled = [t for t in roots if t.is_active and t.trigger_mode != 'after_task' and t.next_run_at]
+    if scheduled:
+        nxt = min(t.next_run_at for t in scheduled)
+        return {"will_run": True, "warning": None, "next_run_at": nxt.strftime('%Y-%m-%dT%H:%M:%SZ')}
+
+    titles = ', '.join(f'"{t.title}"' for t in roots[:3]) or '—'
+    if any(t.trigger_mode == 'after_task' for t in roots):
+        reason = f"its first task ({titles}) has no launch date — set one (Edit → time trigger)"
+    elif any(not t.is_active for t in roots):
+        reason = f"its first task ({titles}) is paused"
+    else:
+        reason = f"its first task ({titles}) has no upcoming run"
+    return {"will_run": False, "next_run_at": None,
+            "warning": f"This workflow will never run automatically: {reason}."}
 
 
 def _creates_cycle(schedule_id, depends_on_schedule_id):
@@ -131,47 +206,87 @@ def _fire_schedule(app, schedule_uuid, workflow_run_id=None, ignore_paused=False
 
 
 def register_schedule(app, schedule):
-    """(Re)register one schedule's trigger with the live scheduler and store
-    its computed next_run_at for display. Call at boot for every active
-    schedule, and again on create/update/toggle from the CRUD routes."""
-    if not schedule.is_active or schedule.trigger_mode == 'after_task':
-        unregister_schedule(schedule.uuid)
-        schedule.next_run_at = None
-        return
-
-    scheduler = get_scheduler()
-    trigger = build_trigger(schedule)
-    scheduler.add_job(
-        _fire_schedule,
-        trigger=trigger,
-        args=[app, schedule.uuid],
-        id=schedule.uuid,
-        replace_existing=True,
-        misfire_grace_time=3600,
-    )
-    job = scheduler.get_job(schedule.uuid)
-    if job and job.next_run_time:
-        schedule.next_run_at = job.next_run_time.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    """Recompute and store this task's next_run_at — the worker's ticker
+    picks it up from the DB, whichever process this runs in. Kept under its
+    old name/signature (app unused) so every CRUD call site stays as is."""
+    schedule.next_run_at = compute_next_run_at(schedule)
 
 
 def unregister_schedule(schedule_uuid):
-    scheduler = get_scheduler()
-    try:
-        scheduler.remove_job(schedule_uuid)
-    except Exception:
-        pass  # job was never registered (e.g. schedule is 'after_task' or was inactive) — fine
+    """Nothing to do: no trigger lives in memory any more — deleting or
+    pausing the row (next_run_at = None) is enough."""
+
+
+def _fire_due_root(app, schedule):
+    """A first task's time has come: launch its workflow (history entry,
+    chain, notifications — same as the Run Workflow button), unless the
+    whole workflow is paused. Advances next_run_at first, in its own
+    commit, so a crash mid-launch can never make it fire twice."""
+    from app import db
+    schedule.next_run_at = compute_next_run_at(schedule)
+    if schedule.trigger_mode == 'once':
+        schedule.next_run_at = None
+    db.session.commit()
+
+    workflow = schedule.workflow
+    if workflow is None or not workflow.is_active:
+        return
+    from app.features.admin.task_scheduler.task_scheduler_core import launch_workflow
+    launch_workflow(workflow, [schedule], triggered_by=None)
+
+
+def tick(app, now=None):
+    """Fire every due task once. Called by the worker's ticker thread every
+    TICK_SECONDS; also callable directly from tests."""
+    from app import db
+    from app.core.db_class.db import AdminTaskSchedule
+
+    now = now or datetime.datetime.utcnow()
+    due = (AdminTaskSchedule.query
+           .filter(AdminTaskSchedule.is_active.is_(True),
+                   AdminTaskSchedule.trigger_mode != 'after_task',
+                   AdminTaskSchedule.next_run_at.isnot(None),
+                   AdminTaskSchedule.next_run_at <= now)
+           .order_by(AdminTaskSchedule.next_run_at.asc())
+           .all())
+    for schedule in due:
+        try:
+            if (now - schedule.next_run_at).total_seconds() > MISFIRE_GRACE_SECONDS:
+                print(f"[task_scheduler] {schedule.uuid} missed its run at {schedule.next_run_at} "
+                      f"by more than {MISFIRE_GRACE_SECONDS}s — skipped, rescheduling.")
+                schedule.next_run_at = None if schedule.trigger_mode == 'once' else compute_next_run_at(schedule, now)
+                db.session.commit()
+                continue
+            _fire_due_root(app, schedule)
+        except Exception as e:
+            db.session.rollback()
+            print(f"[task_scheduler] failed to fire schedule {schedule.uuid}: {e}")
+
+
+def _ticker_loop(app):
+    from app import db
+    while True:
+        with app.app_context():
+            try:
+                tick(app)
+            except Exception as e:
+                print(f"[task_scheduler] tick error: {e}")
+            finally:
+                db.session.remove()
+        time.sleep(TICK_SECONDS)
 
 
 def start_scheduler(app):
-    """Boot-time loader — call once from create_app(), alongside the GitHub
-    Sync Schedule's own start_scheduler() and start_worker. Rebuilds the
-    exact trigger set from the DB."""
+    """Boot-time loader — called from create_app(start_worker=True), i.e. in
+    the worker process only. Fills in next_run_at for any active task that
+    lacks one (rows from before this engine), then starts the ticker."""
+    global _ticker_started
     from app import db
     from app.core.db_class.db import AdminTaskSchedule
 
     with app.app_context():
         try:
-            schedules = AdminTaskSchedule.query.filter_by(is_active=True).all()
+            schedules = AdminTaskSchedule.query.filter_by(is_active=True, next_run_at=None).all()
         except Exception:
             # Table doesn't exist yet — a brand-new install/test DB before
             # `flask db upgrade` / db.create_all() has run.
@@ -180,8 +295,12 @@ def start_scheduler(app):
             try:
                 register_schedule(app, schedule)
             except Exception as e:
-                print(f"[task_scheduler] failed to register schedule {schedule.uuid}: {e}")
+                print(f"[task_scheduler] failed to compute next run for {schedule.uuid}: {e}")
         db.session.commit()
+
+    if not _ticker_started:
+        _ticker_started = True
+        threading.Thread(target=_ticker_loop, args=(app,), daemon=True, name="task-scheduler-ticker").start()
 
 
 def on_job_finished(job):

@@ -27,6 +27,17 @@ function supportedTimezones() {
     return ['UTC', 'Europe/Paris', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo'];
 }
 
+// datetime-local wants local wall-clock 'YYYY-MM-DDTHH:MM'. An absolute
+// instant ('...Z' / '+02:00') is converted; a bare value is kept as is.
+function toLocalInputValue(value) {
+    if (!value) return '';
+    if (!/(Z|[+-]\d{2}:?\d{2})$/.test(value)) return value.slice(0, 16);
+    const d = new Date(value);
+    if (isNaN(d)) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const ScheduleRecurrencePicker = {
     props: {
         initial: { type: Object, default: () => ({}) },
@@ -38,7 +49,7 @@ const ScheduleRecurrencePicker = {
         const i = this.initial || {};
         return {
             mode: i.mode || 'recurring',
-            runOnceAt: i.run_once_at ? i.run_once_at.slice(0, 16) : '',
+            runOnceAt: toLocalInputValue(i.run_once_at),
             frequency: i.frequency || 'weekly',
             daysOfWeek: new Set(i.days_of_week && i.days_of_week.length ? i.days_of_week : [0]),
             dayOfMonth: i.day_of_month != null ? i.day_of_month : 1,

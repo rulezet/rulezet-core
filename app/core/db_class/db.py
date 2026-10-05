@@ -2222,7 +2222,18 @@ class AdminWorkflow(db.Model):
     def to_json(self):
         task_count = len(self.tasks)
         active_task_count = sum(1 for t in self.tasks if t.is_active)
+        from app.features.admin.task_scheduler.scheduler_engine import workflow_launch_status, workflow_first_task
+        first = workflow_first_task(self)
         return {
+            "launch_status": workflow_launch_status(self),
+            # Feeds the Edit Workflow modal's "Launch date" picker.
+            "first_task": {
+                "uuid": first.uuid, "title": first.title, "is_active": first.is_active,
+                "trigger_mode": first.trigger_mode, "run_once_at": first.to_json()["run_once_at"],
+                "days_of_week": first.days_of_week_list(), "day_of_month": first.day_of_month,
+                "hour": first.hour, "minute": first.minute, "cron_expr": first.cron_expr,
+                "timezone": first.timezone,
+            } if first else None,
             "id": self.id,
             "uuid": self.uuid,
             "title": self.title,
@@ -2302,6 +2313,11 @@ class AdminTaskSchedule(db.Model):
     runs        = db.relationship("AdminTaskRun", backref="schedule", cascade="all, delete-orphan", lazy=True,
                                    order_by="desc(AdminTaskRun.started_at)")
 
+    def _run_once_at_utc_iso(self):
+        from app.features.admin.task_scheduler.scheduler_engine import _once_run_at_utc
+        utc = _once_run_at_utc(self)
+        return utc.strftime('%Y-%m-%dT%H:%M:%SZ') if utc else None
+
     def days_of_week_list(self):
         if not self.days_of_week:
             return []
@@ -2324,7 +2340,8 @@ class AdminTaskSchedule(db.Model):
             "target_payload": self.target_payload,
             "is_active": self.is_active,
             "trigger_mode": self.trigger_mode,
-            "run_once_at": self.run_once_at.strftime('%Y-%m-%dT%H:%M') if self.run_once_at else None,
+            # Absolute UTC instant ('Z') — run_once_at itself is naive, in self.timezone.
+            "run_once_at": self._run_once_at_utc_iso(),
             "days_of_week": self.days_of_week_list(),
             "day_of_month": self.day_of_month,
             "hour": self.hour,

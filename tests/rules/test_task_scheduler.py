@@ -1197,3 +1197,175 @@ def test_notify_emails_filters_out_implausible_and_crlf_entries(app):
         }, admin)
         assert err is None
         assert workflow.notify_emails == ["teammate@example.com"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  The first task launches the workflow (DB-polled ticker, worker process)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _root_and_child(admin, workflow):
+    root, _ = TaskSchedulerModel.create_schedule({
+        "title": "Root", "task_type": "db_backup", "target_payload": {},
+        "trigger_mode": "daily", "hour": 3, "minute": 0,
+        "workflow_uuid": workflow.uuid,
+    }, admin)
+    child, _ = TaskSchedulerModel.create_schedule({
+        "title": "Child", "task_type": "attack_update_data", "target_payload": {},
+        "trigger_mode": "after_task",
+        "depends_on_schedule_id": root.id, "depends_on_condition": "success",
+        "workflow_uuid": workflow.uuid,
+    }, admin)
+    return root, child
+
+
+def test_due_first_task_launches_the_whole_workflow(app):
+    from app.core.db_class.db import AdminWorkflowRun
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        root, child = _root_and_child(admin, workflow)
+        root.next_run_at = datetime.datetime.utcnow() - datetime.timedelta(seconds=5)
+        db.session.commit()
+
+        scheduler_engine.tick(app)
+
+        launch = AdminWorkflowRun.query.filter_by(workflow_id=workflow.id).one()
+        assert launch.triggered_by_id is None  # the scheduler, not a user
+        run = AdminTaskRun.query.filter_by(schedule_id=root.id).one()
+        assert run.workflow_run_id == launch.id
+        db.session.refresh(root)
+        assert root.next_run_at > datetime.datetime.utcnow()  # advanced, won't refire
+
+        scheduler_engine.tick(app)
+        assert AdminTaskRun.query.filter_by(schedule_id=root.id).count() == 1
+
+
+def test_tick_skips_a_paused_workflow(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        root, _ = _root_and_child(admin, workflow)
+        workflow.is_active = False
+        root.next_run_at = datetime.datetime.utcnow() - datetime.timedelta(seconds=5)
+        db.session.commit()
+
+        scheduler_engine.tick(app)
+        assert AdminTaskRun.query.filter_by(schedule_id=root.id).count() == 0
+
+
+def test_tick_skips_a_run_missed_beyond_the_grace_period(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        root, _ = _root_and_child(admin, workflow)
+        root.next_run_at = datetime.datetime.utcnow() - datetime.timedelta(hours=5)
+        db.session.commit()
+
+        scheduler_engine.tick(app)
+        assert AdminTaskRun.query.filter_by(schedule_id=root.id).count() == 0
+        db.session.refresh(root)
+        assert root.next_run_at > datetime.datetime.utcnow()
+
+
+def test_once_task_fires_once_then_has_no_next_run(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        run_at = (datetime.datetime.utcnow() - datetime.timedelta(seconds=30)).strftime('%Y-%m-%dT%H:%M:%S')
+        task, err = TaskSchedulerModel.create_schedule({
+            "title": "Once", "task_type": "db_backup", "target_payload": {},
+            "trigger_mode": "once", "run_once_at": run_at, "timezone": "UTC",
+            "workflow_uuid": workflow.uuid,
+        }, admin)
+        assert err is None and task.next_run_at is not None
+
+        scheduler_engine.tick(app)
+        scheduler_engine.tick(app)
+        assert AdminTaskRun.query.filter_by(schedule_id=task.id).count() == 1
+        db.session.refresh(task)
+        assert task.next_run_at is None
+
+
+def test_launch_status_ok_with_a_scheduled_first_task(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        _root_and_child(admin, workflow)
+        status = workflow.to_json()["launch_status"]
+        assert status["will_run"] is True and status["warning"] is None
+
+
+def test_deleting_the_first_task_warns_the_workflow_will_never_run(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        root, child = _root_and_child(admin, workflow)
+
+        assert TaskSchedulerModel.delete_schedule(root.uuid)
+        db.session.refresh(workflow)
+        status = workflow.to_json()["launch_status"]
+        assert status["will_run"] is False
+        assert "never run" in status["warning"] and "Child" in status["warning"]
+
+        # Giving the new first task a launch date clears the warning.
+        TaskSchedulerModel.update_schedule(child.uuid, {
+            "title": "Child", "task_type": "attack_update_data", "is_active": True,
+            "trigger_mode": "daily", "hour": 4, "minute": 0,
+        })
+        db.session.refresh(workflow)
+        assert workflow.to_json()["launch_status"]["will_run"] is True
+
+
+def test_empty_workflow_warns_it_will_never_run(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        assert workflow.to_json()["launch_status"]["will_run"] is False
+
+
+def test_workflow_launch_date_rewrites_the_first_task_trigger(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        root, child = _root_and_child(admin, workflow)
+
+        wf, err = TaskSchedulerModel.update_workflow(workflow.uuid, {
+            "title": workflow.title,
+            "launch": {"trigger_mode": "weekly", "days_of_week": [2], "hour": 6, "minute": 15, "timezone": "UTC"},
+        })
+        assert err is None
+        db.session.refresh(root)
+        db.session.refresh(child)
+        assert root.trigger_mode == "weekly" and root.hour == 6 and root.minute == 15
+        assert root.next_run_at is not None
+        assert child.trigger_mode == "after_task"  # only the first task is touched
+        assert wf.to_json()["first_task"]["uuid"] == root.uuid
+
+
+def test_workflow_launch_date_revives_an_orphaned_first_task(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        root, child = _root_and_child(admin, workflow)
+        TaskSchedulerModel.delete_schedule(root.uuid)
+
+        run_at = (datetime.datetime.utcnow() + datetime.timedelta(days=2)).replace(microsecond=0)
+        wf, err = TaskSchedulerModel.update_workflow(workflow.uuid, {
+            "title": workflow.title,
+            "launch": {"trigger_mode": "once", "run_once_at": run_at.isoformat() + "Z"},
+        })
+        assert err is None
+        db.session.refresh(child)
+        assert child.is_active and child.trigger_mode == "once"
+        assert child.next_run_at == run_at
+        assert wf.to_json()["launch_status"]["will_run"] is True
+
+
+def test_workflow_launch_date_needs_a_task(app):
+    with app.app_context():
+        admin = User.query.filter_by(email="admin@admin.admin").first()
+        workflow = _make_workflow(admin)
+        _, err = TaskSchedulerModel.update_workflow(workflow.uuid, {
+            "title": workflow.title, "launch": {"trigger_mode": "daily", "hour": 3, "minute": 0},
+        })
+        assert err and "task" in err.lower()
