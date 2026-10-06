@@ -40,6 +40,8 @@ def get_or_create_sso_user(user_info):
     groups = user_info.get("groups") or []
     if isinstance(groups, str):
         groups = [groups]
+    elif not isinstance(groups, (list, tuple)):
+        groups = []   # a malformed claim matches no group
 
     cfg = current_app.config
     priority_list = [
