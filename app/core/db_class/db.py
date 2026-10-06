@@ -671,7 +671,7 @@ class RuleFavoriteUser(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     rule_id = db.Column(db.Integer, db.ForeignKey('rule.id'), index=True)
-    created_at = db.Column(db.DateTime, default=datetime.datetime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
 
     # Define the relationships with cascade option
     user = db.relationship('User', backref=db.backref('favorite_rules_assocs', lazy='dynamic', cascade='all, delete-orphan'))
