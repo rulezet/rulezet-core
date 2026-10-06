@@ -3,6 +3,7 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_threads.css') }}">
 {% endblock %}
 {% import 'macros/detail_rule_nav.html' as nav with context %}
@@ -62,6 +63,8 @@
             <div class="h-card__header">
                 <div class="h-card__accent"></div>
                 <span class="h-card__title"><i class="fa-solid fa-code-pull-request me-1"></i>Edit proposals</span>
+                <help-tip title="Edit proposals"
+                          text="Anyone with an account can suggest a change to this rule; the rule's owner or an admin accepts (merges) or rejects it.&#10;When a proposal is revised, the revision joins it in the same thread — so a thread is one change and all its versions: v1 is the first proposal, v2, v3… the revisions, by date."></help-tip>
 
                 <!-- Summary badges -->
                 <div class="d-flex gap-2 ms-2">
@@ -72,7 +75,9 @@
                 </div>
 
                 <!-- Status filter chips -->
-                <div class="d-flex flex-wrap gap-2 ms-auto">
+                <div class="d-flex flex-wrap align-items-center gap-2 ms-auto">
+                    <help-tip title="Thread status"
+                              text="Open — at least one version is still waiting for review.&#10;Merged — one version was accepted: it is the rule's content now.&#10;Closed — every version was rejected."></help-tip>
                     <span v-for="s in STATUS_FILTERS" :key="s.key"
                           class="h-filter-chip" :class="{ active: filters.status === s.key }"
                           role="button" tabindex="0"
@@ -87,42 +92,37 @@
             </div>
 
             <div class="h-card__body">
-                <!-- Search, type, sort -->
-                <div class="pt-filters">
+                <!-- Filters: one compact bar -->
+                <div class="pt-toolbar">
                     <div class="pt-search">
                         <i class="fa-solid fa-magnifying-glass"></i>
-                        <input type="search" class="form-control form-control-sm" v-model="filters.q"
-                               placeholder="Search justification, author, #id…" aria-label="Search proposals">
+                        <input type="search" v-model="filters.q" placeholder="Search…" aria-label="Search proposals">
                     </div>
-                    <select class="form-select form-select-sm" v-model="filters.edit_type" aria-label="Edit type">
+                    <select v-model="filters.edit_type" aria-label="Edit type" class="pt-select">
                         <option value="">All types</option>
                         <option v-for="(meta, key) in EDIT_TYPE_META" :key="key" :value="key">[[ meta.label ]]</option>
                     </select>
-                    <select class="form-select form-select-sm" v-model="filters.sort" aria-label="Sort threads">
+                    <select v-model="filters.sort" aria-label="Sort threads" class="pt-select">
                         <option value="recent">Latest activity</option>
                         <option value="oldest">Oldest first</option>
                         <option value="versions">Most versions</option>
                     </select>
-                </div>
+                    <help-tip title="Filters"
+                              text="Search looks in every version of a thread: its justification, its author's name or its number (#12).&#10;Type keeps the threads with at least one version of that kind of change.&#10;Sort: latest activity (newest version first), oldest thread first, or the threads with the most versions first."></help-tip>
 
-                <div class="pt-listbar">
-                    <div class="pt-legend">
-                        <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--pending position-static"></span>Pending</span>
-                        <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--accepted position-static"></span>Accepted</span>
-                        <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--rejected position-static"></span>Rejected</span>
-                        <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--superseded position-static"></span>Superseded by a revision</span>
-                        <span v-if="filtersActive" class="pt-legend__item">
-                            · [[ total_threads ]] matching
-                            <button type="button" class="btn btn-link btn-sm p-0 ms-1" @click="resetFilters">Clear filters</button>
-                        </span>
-                    </div>
-                    <span v-if="threads.length" class="text-nowrap">
-                        <button type="button" class="btn btn-link btn-sm p-0 me-3" @click="setAll(true)">
-                            <i class="fa-solid fa-angles-down me-1"></i>Expand all
+                    <button v-if="filtersActive" type="button" class="pt-tool-btn" @click="resetFilters" title="Clear filters">
+                        <i class="fa-solid fa-xmark"></i>[[ total_threads ]] match[[ total_threads === 1 ? '' : 'es' ]]
+                    </button>
+
+                    <span class="pt-toolbar__end">
+                        <button type="button" class="pt-tool-btn" @click="setAll(true)" title="Expand all threads" :disabled="!threads.length">
+                            <i class="fa-solid fa-angles-down"></i>
                         </button>
-                        <button type="button" class="btn btn-link btn-sm p-0" @click="setAll(false)">
-                            <i class="fa-solid fa-angles-up me-1"></i>Collapse all
+                        <button type="button" class="pt-tool-btn" @click="setAll(false)" title="Collapse all threads" :disabled="!threads.length">
+                            <i class="fa-solid fa-angles-up"></i>
                         </button>
+                        <help-tip title="How to read a thread" :width="340"
+                                  text="Threads are collapsed: click one to see its versions on a timeline, oldest first.&#10;Dot colours — yellow: pending, green: accepted (merged), red: rejected, purple: superseded (closed automatically because one of its revisions was accepted instead).&#10;An indented version is a revision of the version above it (“revised v1”), not of the latest one.&#10;diff % — how much the version changes the rule's content. The speech bubble counts the comments; click a version to read and discuss it."></help-tip>
                     </span>
                 </div>
 
@@ -240,6 +240,7 @@
 <script type="module">
     const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
     import { renderMarkdown } from '/static/js/sanitize.js';
+    import HelpTip from '/static/js/components/help-tip.js';
 
     const rule_id = {{ rule.id }};
     const RULE_TITLE = {{ rule.title | tojson }};
@@ -247,6 +248,7 @@
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { HelpTip },
         setup() {
             // [{ id, status: accepted|open|closed, last_activity,
             //    proposals: [{ ...proposal, version, depth }] }] — in reading order
