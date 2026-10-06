@@ -325,7 +325,7 @@ def admin_techniques():
         page, per_page = 1, 50
 
     count_subq = (
-        db.session.query(
+        AttackModel.active_assocs(
             RuleAttackAssociation.technique_id,
             func.count(RuleAttackAssociation.id).label('cnt'),
         )
