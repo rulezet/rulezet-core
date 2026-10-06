@@ -1,7 +1,8 @@
 # pyproject.toml
 [tool.pytest.ini_options]
-# The new suite (docs/design/test_restructure.md). The previous suite is kept in
-# tests_legacy/ and only runs when asked: `pytest tests_legacy`.
+# tests/ is the suite run on every commit (CI, ./launch.sh -t, manage.py test).
+# tests_new/ is the rework in progress (docs/design/test_restructure.md) —
+# run it explicitly: `FLASKENV=testing pytest tests_new`.
 testpaths = ["tests"]
 filterwarnings = [
     "error",
