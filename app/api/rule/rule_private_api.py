@@ -130,6 +130,13 @@ class CreateRule(Resource):
 
         title = data.get("title").strip()
 
+        # Same rule as the web form (and the API docs): a title used by an
+        # active rule is refused.
+        same_title = RuleModel._active().filter(Rule.title == title).first()
+        if same_title:
+            return {"message": f'A rule with this title already exists: "{same_title.title}".',
+                    "rule": same_title.to_json()}, 409
+
 
         cve_id = data.get("cve_id")
         matches = []
