@@ -285,8 +285,7 @@ def _apply_rule_filters(query, params: dict):
                     for tid in tag_ids:
                         sub = (RuleTagAssociation.query
                                .filter_by(tag_id=tid)
-                               .with_entities(RuleTagAssociation.rule_id)
-                               .subquery())
+                               .with_entities(RuleTagAssociation.rule_id))
                         if tag_exclude:
                             query = query.filter(Rule.id.notin_(sub))
                         else:
@@ -295,8 +294,7 @@ def _apply_rule_filters(query, params: dict):
                     sub = (RuleTagAssociation.query
                            .filter(RuleTagAssociation.tag_id.in_(tag_ids))
                            .with_entities(RuleTagAssociation.rule_id)
-                           .distinct()
-                           .subquery())
+                           .distinct())
                     if tag_exclude:
                         query = query.filter(Rule.id.notin_(sub))
                     else:
@@ -319,8 +317,7 @@ def _apply_rule_filters(query, params: dict):
             atk_sub = (RuleAttackAssociation.query
                        .filter(RuleAttackAssociation.technique_id.in_(atk_list))
                        .with_entities(RuleAttackAssociation.rule_id)
-                       .distinct()
-                       .subquery())
+                       .distinct())
             query = query.filter(Rule.id.in_(atk_sub))
 
     return query
