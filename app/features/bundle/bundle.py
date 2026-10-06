@@ -2,7 +2,7 @@ from flask import Blueprint, abort, flash, jsonify, redirect, render_template , 
 from flask_login import current_user, login_required
 
 from app.features.bundle.bundle_form import AddNewBundleForm, EditBundleForm
-from app.core.utils.utils import form_to_dict, safe_referrer, internal_error
+from app.core.utils.utils import as_db_id, form_to_dict, safe_referrer, internal_error
 from app.features.misp.bundle.misp_object import get_bundle_misp_event
 from . import bundle_core as BundleModel
 from .bundle_history_core import track_bundle_change, get_bundle_history_page, get_bundle_history_entry, diff_snapshots as diff_bundle_snapshots
@@ -975,7 +975,7 @@ def get_bundle_json(bundle_id):
 @login_required
 def add_rule_bundle() :     
     """Add a rule in a bundle"""     
-    rule_id = request.args.get('rule_id',  type=int)
+    rule_id = as_db_id(request.args.get('rule_id'))
     bundle_id = request.args.get('bundle_id', type=int)
     description = request.args.get('description', type=str)
 
@@ -1036,7 +1036,7 @@ def update_bundle_tags(bundle_id):
 @login_required
 def remove() :     
     """Remove a rule in a bundle"""     
-    rule_id = request.args.get('rule_id',  type=int)
+    rule_id = as_db_id(request.args.get('rule_id'))
     bundle_id = request.args.get('bundle_id', type=int)
 
     bundle = BundleModel.get_bundle_by_id(bundle_id)
@@ -1357,21 +1357,23 @@ def download_bundle():
     if request.args.get("release"):
         return _release_download(bundle_id, "rules")
     bundle = BundleModel.get_bundle_by_id(bundle_id)
-    rules = BundleModel.get_rules_from_bundle(bundle_id)  
+    if not bundle:
+        return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
 
-    if not rules or not bundle:
-        return {
-            "success": False,
-            "message": "No rules on this bundle to download",
-            "toast_class": "danger"
-        }, 400
-    
     if not BundleModel.can_view_bundle(bundle):
         return {
             "success": False,
             "message": "You don't have the permission to download this bundle",
             "toast_class": "danger"
         }, 403
+
+    rules = BundleModel.get_rules_from_bundle(bundle_id)
+    if not rules:
+        return {
+            "success": False,
+            "message": "No rules on this bundle to download",
+            "toast_class": "danger"
+        }, 400
 
     zip_buffer = _zip_rules(bundle, rules)
 
@@ -1774,7 +1776,7 @@ def get_bundle_list_rule_part_of():
     """Bundles containing a rule (visibility-aware), each enriched with where
     the rule sits in that bundle's folder structure, its tags and whether the
     viewer owns it — feeds the rule detail Overview strip and Bundles tab."""
-    rule_id = request.args.get('rule_id', type=int)
+    rule_id = as_db_id(request.args.get('rule_id'))
     if not rule_id:
         return {"message": "No rule id provided"}, 400
 
@@ -1799,7 +1801,7 @@ def get_bundle_list_rule_part_of():
 @bundle_blueprint.route("/get_bundles_page_filter_with_id", methods=['GET'])
 def get_bundles_page_filter_with_id():     
     """get all the bundles of a user for pages"""     
-    user_id = request.args.get('user_id', type=int)
+    user_id = as_db_id(request.args.get('user_id'))
     page = request.args.get('page', 1, type=int)
     search = request.args.get("searchBundle", None)
     sort_by = request.args.get("sortByBundle", "newest")
@@ -1834,6 +1836,8 @@ def update_bundle_from_structure():
         return {"message": "No bundle id provided", "toast_class": "danger-subtle"}, 400
     if not current_user.is_admin():
         return {"message": "You don't have the permission to do that !", "toast_class": "danger-subtle"}, 403
+    if not BundleModel.get_bundle_by_id(bundle_id):
+        return {"message": "Bundle not found", "toast_class": "danger-subtle"}, 404
    # take all the rule associate to ths bundle and create a structure with BundleNode (create one folder and put all the rule id in there)
     success, msg = BundleModel.update_bundle_from_rule_id_into_structure(bundle_id)
 
@@ -1983,7 +1987,9 @@ def add_reaction():
 @login_required
 def get_bundle_tag_ids(bundle_id):
     bundle = BundleModel.get_bundle_by_id(bundle_id)
-    if not bundle or not BundleModel.can_view_bundle(bundle):
+    if not bundle:
+        return jsonify({"success": False, "message": "Bundle not found"}), 404
+    if not BundleModel.can_view_bundle(bundle):
         return jsonify({"success": False, "message": "Access denied"}), 403
     tag_ids = BundleModel.get_tag_ids_for_bundle(bundle_id)
     return jsonify({"success": True, "tag_ids": tag_ids})
@@ -1993,7 +1999,9 @@ def get_bundle_tag_ids(bundle_id):
 def get_bundle_tags_display(bundle_id):
     """Returns full tag objects associated with a bundle for display purposes."""
     bundle = BundleModel.get_bundle_by_id(bundle_id)
-    if not bundle or not BundleModel.can_view_bundle(bundle):
+    if not bundle:
+        return jsonify({"success": False, "message": "Bundle not found"}), 404
+    if not BundleModel.can_view_bundle(bundle):
         return jsonify({"success": False, "message": "Access denied"}), 403
     try:
         tags = BundleModel.get_tags_for_bundle(bundle_id)
@@ -2011,7 +2019,9 @@ def get_bundle_tags_display(bundle_id):
 def get_bundle_vulnerabilities_display(bundle_id):
     """Returns the list of vulnerability identifier strings."""
     bundle = BundleModel.get_bundle_by_id(bundle_id)
-    if not bundle or not BundleModel.can_view_bundle(bundle):
+    if not bundle:
+        return jsonify({"success": False, "message": "Bundle not found"}), 404
+    if not BundleModel.can_view_bundle(bundle):
         return jsonify({"success": False, "message": "Access denied"}), 403
     try:
         v_list = BundleModel.get_vulnerabilities_for_bundle(bundle_id)
@@ -2074,7 +2084,9 @@ def get_bundle_creators_usage():
 @bundle_blueprint.route("/get_tags/<int:bundle_id>")
 def get_bundle_tags(bundle_id):
     bundle = BundleModel.get_bundle_by_id(bundle_id)
-    if not bundle or not BundleModel.can_view_bundle(bundle):
+    if not bundle:
+        return jsonify({"tags": [], "message": "Bundle not found"}), 404
+    if not BundleModel.can_view_bundle(bundle):
         return jsonify({"tags": [], "message": "Access denied"}), 403
     try:
         user_id = request.args.get('user_id', type=int)

@@ -176,9 +176,11 @@ def get_bundle_by_id(bundle_id: int) -> Bundle | None:
     """
     Retrieve a Bundle by its ID.
     :param bundle_id: ID of the bundle.
-    :return: Bundle instance or None if not found.
+    :return: Bundle instance or None if not found (or not a valid id).
     """
-    return Bundle.query.get(bundle_id)
+    from app.core.utils.utils import as_db_id
+    bundle_id = as_db_id(bundle_id)
+    return db.session.get(Bundle, bundle_id) if bundle_id else None
 def get_all_bundles_by_user(user_id: int):
      return Bundle.query.filter_by(user_id=user_id).all()
 
@@ -196,7 +198,9 @@ def  get_association_by_id(association_id: int) -> Bundle | None:
     :param bundle_id: ID of the bundle.
     :return: Bundle instance or None if not found.
     """
-    return BundleRuleAssociation.query.get(association_id)
+    from app.core.utils.utils import as_db_id
+    association_id = as_db_id(association_id)
+    return db.session.get(BundleRuleAssociation, association_id) if association_id else None
 def get_all_bundles_page(page: int, search: str | None, own: bool, tag_names: list[str] | None = None, vulnerabilities: list[str] | None = None):
     query = Bundle.query
 
@@ -661,7 +665,7 @@ def get_bundle_by_ref(ref) -> Bundle | None:
         return None
     ref = str(ref).strip()
     if ref.isdigit():
-        return Bundle.query.get(int(ref))
+        return get_bundle_by_id(ref)
     return Bundle.query.filter_by(uuid=ref).first() if ref else None
 
 def get_full_rule_bundle_info(rule_id: int) -> Union[Dict[str, Any], Dict[str, str]]:
