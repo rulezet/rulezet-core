@@ -99,7 +99,9 @@ def get_all_bundles():
 @login_required
 def delete() :     
     """Delete a bundle"""     
-    bundle_id = request.args.get('id', 1, type=int)
+    bundle_id = request.args.get('id', type=int)
+    if not bundle_id:
+        return {"success": False, "message": "Missing bundle id", "toast_class": "danger-subtle"}, 400
     bundle = BundleModel.get_bundle_by_id(bundle_id)
     if not bundle:
         return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 404
