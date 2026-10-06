@@ -82,7 +82,7 @@ class LookupTag(Resource):
         if err:
             return err
 
-        tag_id = request.args.get('id', type=int)
+        tag_id = as_db_id(request.args.get('id'))
         tag_uuid = request.args.get('uuid', type=str)
         name = request.args.get('name', type=str)
 

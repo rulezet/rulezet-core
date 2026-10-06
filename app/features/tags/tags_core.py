@@ -12,6 +12,21 @@ from app import db
 from app.core.db_class.db import Tag
 
 
+# ─── Untrusted query-string values ───────────────────────────────────────────
+
+PAGE_MAX = 100_000   # far past any real listing — keeps OFFSET a sane number
+
+
+def _int_arg(args, key, default, *, lo=1, hi=PAGE_MAX):
+    """`args[key]` as an int clamped to [lo, hi], or `default` when missing
+    or not a number."""
+    try:
+        value = int(args.get(key, default))
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, value))
+
+
 # ─── CRUD basics ─────────────────────────────────────────────────────────────
 
 def create_tag(form_data, created_by):
@@ -123,8 +138,8 @@ def get_tags(args):
     sort_dir = args.get('dir') or default_dir
     query = query.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())
 
-    page = int(args.get('page', 1))
-    per_page = min(int(args.get('per_page', 20)), 500)
+    page = _int_arg(args, 'page', 1)
+    per_page = _int_arg(args, 'per_page', 20, hi=500)
     pagination = query.paginate(page=page, per_page=per_page, max_per_page=500)
     _inject_usage_counts(pagination.items)
     return pagination
@@ -311,7 +326,7 @@ def get_tags_bundle(args):
         if current_user.is_admin():
             query = query.filter_by(is_active=True)
         elif args.get('user_id'):
-            if current_user.id == int(args.get('user_id')):
+            if str(current_user.id) == str(args.get('user_id')):
                 from sqlalchemy import or_
                 query = query.filter_by(is_active=True).filter(
                     or_(Tag.visibility == 'public', Tag.created_by == current_user.id)
@@ -329,7 +344,7 @@ def get_tags_bundle(args):
     sort_order = args.get('sort_order', 'desc')
     query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
 
-    page = int(args.get('page', 1))
+    page = _int_arg(args, 'page', 1)
     pagination = query.paginate(page=page, per_page=20, max_per_page=20)
     _inject_usage_counts(pagination.items)
     return pagination
@@ -359,8 +374,8 @@ def get_my_tags_paged(args):
     sort_order = args.get('sort_order', 'desc')
     query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
 
-    page     = int(args.get('page', 1))
-    per_page = min(int(args.get('per_page', 20)), 100)
+    page     = _int_arg(args, 'page', 1)
+    per_page = _int_arg(args, 'per_page', 20, hi=100)
     pagination = query.paginate(page=page, per_page=per_page, max_per_page=100)
     _inject_usage_counts(pagination.items)
     return pagination
@@ -403,8 +418,7 @@ def get_all_tags(args):
     (the user_id branch used to load every public tag into Python first —
     2 s per keystroke with ~75k tags).
     """
-    limit = args.get('limit')
-    limit = int(limit) if limit else None
+    limit = _int_arg(args, 'limit', None, hi=PAGE_MAX) if args.get('limit') else None
     search = args.get('search')
 
     query = _picker_scope(args, Tag.query.options(joinedload(Tag.user)))
@@ -456,7 +470,7 @@ def picker_namespaces(args) -> dict:
 def picker_tags(args) -> dict:
     """One page of one folder: type=Public|Private, namespace ('' = no
     namespace), page, per_page (max 200). Sorted by name."""
-    page = max(1, int(args.get('page') or 1))
+    page = min(PAGE_MAX, max(1, int(args.get('page') or 1)))
     per_page = min(PICKER_MAX_PER_PAGE, max(1, int(args.get('per_page') or 50)))
     query = _picker_scope(args)
     bucket = (args.get('type') or '').strip()
@@ -557,8 +571,8 @@ def usage_view(snapshot: list, args) -> dict:
         return {"namespaces": sorted(folders.values(), key=lambda f: (-f["usage"], f["namespace"]))}
 
     # view == 'tags'
-    page = max(1, int(args.get('tag_page') or 1))
-    per_page = min(PICKER_MAX_PER_PAGE, max(1, int(args.get('tag_per_page') or 50)))
+    page = _int_arg(args, 'tag_page', 1)
+    per_page = _int_arg(args, 'tag_per_page', 50, hi=PICKER_MAX_PER_PAGE)
     if 'tag_ns' in args:
         tags = [t for t in tags if t["namespace"] == (args.get('tag_ns') or '')]
     search = (args.get('tag_q') or '').strip().lower()
@@ -629,7 +643,7 @@ def list_all_misp_taxonomies_meta(args):
             or search_term in (t["namespace"] or "").lower()
         ]
 
-    page     = int(args.get("page", 1))
+    page     = _int_arg(args, "page", 1)
     per_page = 20
     total    = len(taxonomies)
     total_pages = math.ceil(total / per_page) or 1
@@ -787,7 +801,7 @@ def list_all_misp_galaxies_meta(args):
             or search_term in (g["type"] or "").lower()
         ]
 
-    page     = int(args.get("page", 1))
+    page     = _int_arg(args, "page", 1)
     per_page = 20
     total    = len(galaxies)
     total_pages = math.ceil(total / per_page) or 1
