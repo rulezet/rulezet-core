@@ -360,7 +360,8 @@ class DetailRule(Resource):
             "version": rule.version,
             "to_string": rule.to_string,
             "description": rule.description or "No description for the rule",
-            "source": rule.source or f"{rule.author.first_name}, {rule.author.last_name}",
+            # rule.author is the free-text author, not a User
+            "source": rule.source or rule.author or f"{author.first_name} {author.last_name}".strip(),
             "license": rule.license,
             "cve_id": rule.cve_id,
             "original_uuid": rule.original_uuid,
