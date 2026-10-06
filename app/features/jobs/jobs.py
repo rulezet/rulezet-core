@@ -284,22 +284,27 @@ def api_delete_job(job_uuid):
 
 
 def _resolve_job(ref):
-    """Resolve a job by integer ID or UUID string — the DataTable sends integer IDs."""
-    try:
-        return db.session.get(BackgroundJob, int(ref))
-    except (ValueError, TypeError):
-        return JobsModel.get_job_by_uuid(str(ref))
+    """Resolve a job by integer ID or UUID string — the DataTable sends integer IDs.
+    Anything else (a float, a boolean, a list…) resolves to nothing."""
+    job_id = as_db_id(ref)
+    if job_id:
+        return db.session.get(BackgroundJob, job_id)
+    if isinstance(ref, str):
+        return JobsModel.get_job_by_uuid(ref)
+    return None
 
 
 @jobs_blueprint.route('/api/bulk', methods=['POST'])
 @login_required
 def api_bulk_jobs():
-    data   = request.json or {}
+    data   = json_object()
     action = data.get('action')
     refs   = data.get('uuids', [])   # may be int IDs or UUID strings
 
-    if action not in ('cancel', 'delete'):
+    if not isinstance(action, str) or action not in ('cancel', 'delete'):
         return jsonify({"message": "Unknown action."}), 400
+    if not isinstance(refs, list):
+        return jsonify({"message": "uuids must be a list."}), 400
     if not refs:
         return jsonify({"message": "No jobs selected."}), 400
 
