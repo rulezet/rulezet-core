@@ -420,7 +420,7 @@ def delete_rule() -> jsonify:
                      extra={"rule_id": rule_id})
         return {"success": True, "message": "Rule moved to trash!" , "toast_class" : "success"}, 200
     
-    return render_template("access_denied.html")
+    return jsonify({"success": False, "message": "Access denied.", "toast_class": "danger"}), 403
 
 @rule_blueprint.route("/get_current_user", methods=['GET'])
 def get_current_user() -> jsonify:
@@ -693,7 +693,7 @@ def edit_rule(rule_id) -> render_template:
         return render_template("rule/edit_rule.html", form=form, rule=rule,
                                deep_validation_available=is_deep_validation_configured())
     else:
-        return render_template("access_denied.html")
+        return render_template("access_denied.html"), 403
     
 
 @rule_blueprint.route("/is_lock_for_update", methods=['GET'])
@@ -818,7 +818,7 @@ def delete_selected_rules() -> jsonify:
     for rule_id in rule_ids:
         user_id = RuleModel.get_rule_user_id(rule_id)
         if current_user.id != user_id and not current_user.is_admin():
-            return render_template("access_denied.html")
+            return jsonify({"success": False, "message": "Access denied.", "toast_class": "danger"}), 403
 
     import uuid as _uuid
     batch_uuid = str(_uuid.uuid4())
@@ -2215,7 +2215,7 @@ def validate_proposal() -> jsonify:
             resp["new_version"] = new_version
         return jsonify(resp), 200
     else:
-        return render_template("access_denied.html")
+        return jsonify({"success": False, "message": "Access denied.", "toast_class": "danger"}), 403
 
 # manage_proposals
 @rule_blueprint.route("/manage_proposals", methods=['POST'])
@@ -6181,7 +6181,7 @@ def bulk_tag():
     if current_user.is_admin() or current_user.has_permission('rule.tag_any'):
         return render_template('jobs/bulk_tag.html')
     else:
-        return render_template('access_denied.html')
+        return render_template('access_denied.html'), 403
 
 
 # ── Rule Scope (environment / "works for me") ─────────────────────────────────
@@ -6239,7 +6239,7 @@ def scope_delete(rule_id):
 @login_required
 def trash():
     if not current_user.is_admin():
-        return render_template('access_denied.html')
+        return render_template('access_denied.html'), 403
     return render_template('rule/trash.html')
 
 
