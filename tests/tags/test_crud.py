@@ -467,6 +467,19 @@ def test_import_all_taxonomies_job_imports_and_is_idempotent(app, users, tmp_pat
     assert count(Tag, source="Taxonomy") == 2
 
 
+def test_import_all_galaxies_job_imports_every_cluster(app, users, tmp_path, monkeypatch):
+    from app.features.jobs.job_handlers import handle_import_all_galaxies
+    fake_misp_data(tmp_path, monkeypatch)
+    job = BackgroundJob(uuid="job-galaxies", job_type="import_all_galaxies", status="running",
+                        created_by=users.admin.id)
+    db.session.add(job)
+    db.session.commit()
+
+    handle_import_all_galaxies(job, app)
+
+    assert count(Tag, source="Galaxy") == 2
+
+
 # ── Rule validation review ────────────────────────────────────────────────────
 
 def test_dismissing_quarantined_rules_is_recorded_on_the_run(clients, users):

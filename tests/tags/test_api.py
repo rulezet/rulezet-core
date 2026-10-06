@@ -10,7 +10,7 @@ bulk_add is two-step: a preview (no job), then the same body with
 import pytest
 
 from app import db
-from app.core.db_class.db import BackgroundJob, RuleTagAssociation, RuleUpdateHistory
+from app.core.db_class.db import BackgroundJob, RuleEditContribution, RuleTagAssociation, RuleUpdateHistory
 from app.features.jobs.job_handlers import handle_bulk_add_tag_to_rules
 from tests.helpers.db import count
 from tests.helpers.rules import make_rule
@@ -209,6 +209,15 @@ def test_bulk_add_job_tags_the_rules_and_records_history(app, users, tagger):
     for rule in rules:
         assert count(RuleTagAssociation, rule_id=rule.id, tag_id=tag.id) == 1
         assert count(RuleUpdateHistory, rule_id=rule.id, change_type="metadata") == 1
+
+
+def test_bulk_add_job_credits_the_tagger_as_a_contributor(app, users, tagger):
+    rule, tag = make_rule(users.owner), make_tag(users.admin)
+    _bulk_add(app, {"rule_ids": [rule.id], "tag_ids": [tag.id], "confirm": True}, tagger)
+
+    _run(BackgroundJob.query.one(), app)
+
+    assert count(RuleEditContribution, rule_id=rule.id, user_id=tagger.id) == 1
 
 
 def test_bulk_add_job_only_touches_existing_active_rules_and_tags(app, users):

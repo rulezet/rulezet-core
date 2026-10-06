@@ -17,8 +17,10 @@ import pytest
 from app.core.db_class.db import BackgroundJob, BundleTagAssociation, Tag
 from tests.helpers.access import FORBIDDEN, LOGIN, OK, assert_outcome, matrix
 from tests.helpers.db import count, reload
+from tests.helpers.rules import make_rule
 from tests.helpers.tags import (
-    GALAXY_UUID, TAXONOMY_UUID, fake_misp_data, make_bundle, make_tag, new_tag_payload, with_tagger,
+    GALAXY_UUID, TAXONOMY_UUID, fake_misp_data, make_bundle, make_tag, new_tag_payload, tag_bundle, tag_rule,
+    with_tagger,
 )
 
 LOGGED_IN = {"anonymous": LOGIN, "user": OK, "owner": OK, "admin": OK, "tagger": OK}
@@ -92,6 +94,34 @@ def test_list_pickable_tags_never_shows_someone_elses_private_tag(role, url, eve
     response = every[role].get(f"{url}?user_id={users.owner.id}")
 
     assert private.name not in {t["name"] for t in response.get_json()["tags"]}
+
+
+SEES_PRIVATE_TAG = {"anonymous": False, "user": False, "owner": True, "admin": True, "tagger": False}
+
+
+@pytest.mark.parametrize("view", ["", "?view=tags&tag_ns=pv", "?view=selected&names=pv:secret"])
+@pytest.mark.parametrize("role, sees", SEES_PRIVATE_TAG.items(), ids=SEES_PRIVATE_TAG)
+def test_rule_tag_filter_shows_a_private_tag_to_its_creator_and_admins_only(role, sees, view, every, users):
+    """The tag facet of the rule list (MultiTagFilter) — never a leak, even
+    after an admin's response was computed for the same query string."""
+    private = make_tag(users.owner, name="pv:secret", visibility="private")
+    tag_rule(make_rule(users.owner), private)
+    every["admin"].get(f"/rule/get_all_tags_usage{view}")
+
+    response = every[role].get(f"/rule/get_all_tags_usage{view}")
+
+    assert (private.name in {t["name"] for t in response.get_json()["tags"]}) is sees
+
+
+@pytest.mark.parametrize("role, visible_bundles", [("anonymous", 1), ("user", 1), ("owner", 2), ("admin", 2)])
+def test_bundle_tag_filter_counts_only_visible_bundles(role, visible_bundles, every, users):
+    tag = make_tag(users.admin, name="bf:one")
+    tag_bundle(make_bundle(users.owner, public=True), tag)
+    tag_bundle(make_bundle(users.owner, public=False), tag)
+
+    response = every[role].get("/bundle/get_all_tags_usage?view=tags&tag_ns=bf")
+
+    assert response.get_json()["tags"][0]["usage_count"] == visible_bundles
 
 
 @pytest.mark.parametrize("role, expected", matrix(TAG_MANAGERS))
