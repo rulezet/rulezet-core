@@ -443,11 +443,19 @@ class ImportRulesFromGithub(Resource):
             return {"success": False, "message": "Unauthorized"}, 403
 
         if not user.is_admin():
-            return {"success": False, "message": "You have to be an admin to import"}, 400
+            return {"success": False, "message": "You have to be an admin to import"}, 403
 
-        data = request.get_json(silent=True) or request.args.to_dict()
+        body = request.get_json(silent=True)
+        if body is None:
+            data = request.args.to_dict()
+        elif isinstance(body, dict):
+            data = body
+        else:
+            return {"success": False, "message": "The JSON body must be an object"}, 400
+        if not all(isinstance(data.get(k), (str, type(None))) for k in ('url', 'license', 'branch')):
+            return {"success": False, "message": "'url', 'license' and 'branch' must be text"}, 400
         repo_url = data.get('url')
-        selected_license = data.get('license', '').strip()
+        selected_license = (data.get('license') or '').strip()
         branch = (data.get('branch') or '').strip() or None
         is_generic_source = bool(data.get('is_generic_source'))
 
@@ -460,15 +468,18 @@ class ImportRulesFromGithub(Resource):
             return {"success": False, "message": "Invalid repository URL"}, 400
 
         # Clone or access repo
-        repo_dir, exists = clone_or_access_repo(repo_url, branch=branch, is_generic_source=is_generic_source)
+        # An unreachable repository or an unknown / invalid branch is the
+        # caller's input, not a server error.
+        try:
+            repo_dir, exists = clone_or_access_repo(repo_url, branch=branch, is_generic_source=is_generic_source)
+            if is_generic_source:
+                info = generic_repo_metadata(repo_url, selected_license, user)
+            else:
+                info = github_repo_metadata(repo_url, selected_license)
+        except Exception as e:
+            return {"success": False, "message": f"Could not access the repository: {str(e)[:300]}"}, 400
         if not repo_dir:
-            return {"success": False, "message": "Failed to clone or access the repository"}, 500
-
-        # Extract rules
-        if is_generic_source:
-            info = generic_repo_metadata(repo_url, selected_license, user)
-        else:
-            info = github_repo_metadata(repo_url, selected_license)
+            return {"success": False, "message": "Failed to clone or access the repository"}, 400
         if branch:
             info['branch'] = branch
         try:
