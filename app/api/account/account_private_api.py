@@ -1,9 +1,9 @@
 from flask_restx import Namespace, Resource
 from flask import jsonify, request, url_for
-from flask_login import  current_user, login_required
+from flask_login import current_user
 from wtforms.validators import Email, ValidationError
 
-from app.core.utils.utils import get_user_from_api
+from app.core.utils.decorators import api_required
 
 from app.core.db_class.db import User
 from app.features.account import account_core as AccountModel
@@ -16,15 +16,11 @@ account_private_ns = Namespace(
 
 @account_private_ns.route('/edit')
 class EditUser(Resource):
-    @login_required
+    @api_required
     def post(self):
         data = request.get_json(silent=True)
         if not data:
             data = request.args.to_dict()
-        user = get_user_from_api(request.headers)
-        if not user:
-            return {"message": "Access denied"}, 403
-        
         first_name = data.get("first_name")
         last_name = data.get("last_name")
         email = data.get("email")
@@ -82,7 +78,7 @@ class EditUser(Resource):
 
 @account_private_ns.route("/favorite/get_rules_page_favorite")
 class GetRulesPageFavorite(Resource):
-    @login_required
+    @api_required
     def get(self):
         page = request.args.get('page', 1, type=int)
         
@@ -97,7 +93,7 @@ class GetRulesPageFavorite(Resource):
     
 @account_private_ns.route("/favorite/delete_rule")
 class RemoveRuleFavorite(Resource):
-    @login_required 
+    @api_required
     def post(self):
         rule_id = request.args.get('id', 1, type=int)
         
