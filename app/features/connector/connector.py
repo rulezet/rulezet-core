@@ -195,10 +195,9 @@ def import_tag_families():
 
     Body: { "families": ["tlp", "pap", "misp-galaxy:threat-actor", ...] }
     """
-    data     = request.get_json(silent=True) or {}
-    families = data.get('families', [])
-    if not families or not isinstance(families, list):
-        return jsonify({'success': False, 'error': 'families must be a non-empty list.'}), 400
+    families = json_object().get('families')
+    if not families or not isinstance(families, list) or not all(isinstance(f, str) for f in families):
+        return jsonify({'success': False, 'error': 'families must be a non-empty list of names.'}), 400
 
     results = ConnectorModel.import_tag_families(families, current_user)
     all_ok  = all(r['ok'] for r in results)
