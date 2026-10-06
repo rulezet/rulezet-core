@@ -175,15 +175,11 @@ def _delete_tag_associations_bulk(int_ids):
     """Remove all FK references to a list of tags before deletion."""
     if not int_ids:
         return
-    id_tuple = tuple(int_ids)
-    db.session.execute(
-        db.text("DELETE FROM rule_tag_association WHERE tag_id IN :ids"),
-        {"ids": id_tuple}
-    )
-    db.session.execute(
-        db.text("DELETE FROM bundle_tag_association WHERE tag_id IN :ids"),
-        {"ids": id_tuple}
-    )
+    # A raw "IN :ids" with a tuple only works with psycopg2 — SQLAlchemy's
+    # in_() expands the list on every database.
+    from app.core.db_class.db import RuleTagAssociation, BundleTagAssociation
+    for model in (RuleTagAssociation, BundleTagAssociation):
+        model.query.filter(model.tag_id.in_(list(int_ids))).delete(synchronize_session=False)
 
 
 # ─── Deletions ───────────────────────────────────────────────────────────────
