@@ -276,7 +276,9 @@ def edit_tag(tag_id):
         return {"status": "success", "message": message, "toast_class": "success-subtle"}, 200
     if not message:
         return {"status": "error", "message": "Error while updating tag", "toast_class": "danger-subtle"}, 500
-    return {"status": "error", "message": message, "toast_class": "warning-subtle"}, 201
+    # "Tag not found." / a name or external id already used by another tag
+    status = 404 if message == "Tag not found." else 409
+    return {"status": "error", "message": message, "toast_class": "warning-subtle"}, status
 
 
 @tags_blueprint.route('/create_tag', methods=['POST'])
@@ -289,7 +291,7 @@ def create_tag():
         data['visibility'] = 'private'
     tag = tags_core.create_tag(data, current_user)
     if tag is False:
-        return {"status": "error", "message": "A tag with this name already exists.", "toast_class": "warning-subtle"}, 201
+        return {"status": "error", "message": "A tag with this name already exists.", "toast_class": "warning-subtle"}, 409
     if tag is None:
         return {"status": "error", "message": "Error while creating tag", "toast_class": "danger-subtle"}, 500
     log_activity("tag.create", f"Created tag '{tag.name}'",

@@ -250,7 +250,7 @@ const TagInput = {
             // else, or a name outside this picker's own search scope
             // (private tag owned by another user). Either way, resolve it
             // by name instead of failing the whole batch.
-            if (res.status === 201 && data.status === 'error') {
+            if (res.status === 409) {
                 return await findExistingTagByName(name);
             }
             throw new Error(data.message || 'Could not create tag.');
