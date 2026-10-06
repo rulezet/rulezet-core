@@ -1005,8 +1005,10 @@ def validate_structure(structure) -> str | None:
         stack.extend((c, depth + 1) for c in children)
 
     if rule_ids:
-        found = {r.id for r in Rule.query.filter(Rule.id.in_(rule_ids), Rule.is_deleted == False)
-                 .with_entities(Rule.id).all()}
+        from app.core.utils.utils import as_db_id
+        valid = {rid for rid in rule_ids if as_db_id(rid)}    # out-of-range ids match no rule
+        found = {r.id for r in Rule.query.filter(Rule.id.in_(valid), Rule.is_deleted == False)
+                 .with_entities(Rule.id).all()} if valid else set()
         missing = rule_ids - found
         if missing:
             # Drop nodes pointing at trashed / non-existent rules (in place)
