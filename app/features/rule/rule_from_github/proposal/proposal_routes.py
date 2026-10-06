@@ -19,6 +19,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
 from app.core.utils.activity_log import log_activity
+from app.core.utils.utils import json_object
 from app.features.rule.rule_from_github.proposal import proposal_core as ProposalModel
 
 github_proposal_blueprint = Blueprint(
@@ -37,7 +38,10 @@ def _admin_only():
 @github_proposal_blueprint.route('/create', methods=['POST'])
 @login_required
 def proposal_create():
-    data = request.get_json(silent=True) or {}
+    data = json_object()
+    if not all(isinstance(data.get(k), (str, type(None))) for k in ('repo_url', 'branch', 'license', 'message')):
+        return jsonify({"message": "repo_url, branch, license and message must be text.",
+                        "toast_class": "danger-subtle"}), 400
     proposal, err = ProposalModel.create_proposal(
         user=current_user,
         repo_url=data.get('repo_url'),
@@ -130,14 +134,18 @@ def proposal_bulk_decision():
     if guard:
         return guard
 
-    data = request.get_json(silent=True) or {}
+    data = json_object()
     uuids = data.get('uuids') or []
     decision = data.get('decision')
     ownership_mode = data.get('ownership_mode')
     note = data.get('note')
 
-    if not uuids or decision not in ('accept', 'reject'):
+    if (not isinstance(uuids, list) or not uuids or not all(isinstance(u, str) for u in uuids)
+            or decision not in ('accept', 'reject')):
         return jsonify({"message": "uuids and a valid decision are required.", "toast_class": "danger-subtle"}), 400
+    if note is not None and (not isinstance(note, str) or len(note) > 10_000):
+        return jsonify({"message": "The note must be text (10 000 characters at most).",
+                        "toast_class": "danger-subtle"}), 400
 
     proposals, job, err = ProposalModel.decide_proposals(
         uuids, decision, current_user, ownership_mode=ownership_mode, note=note

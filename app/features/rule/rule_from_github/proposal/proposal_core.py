@@ -15,7 +15,7 @@ from app import db
 from app.core.db_class.db import GithubProposal, Rule, User
 from app.features.jobs import jobs_core
 from app.features.rule import rule_core as RuleModel
-from app.features.rule.rule_format.utils_format.utils_import_update import valider_repo_github
+from app.features.rule.rule_format.utils_format.utils_import_update import is_valid_branch_name, valider_repo_github
 
 
 def _normalize_repo_url(repo_url):
@@ -50,7 +50,16 @@ def create_proposal(user, repo_url, branch, license, message, is_generic_source=
 
     branch = (branch or "").strip() or None
     license = (license or "").strip() or None
-    message = (message or "").strip() or None
+    message = (message or "").replace("\x00", "").strip() or None
+
+    # Column sizes (PostgreSQL refuses longer values) and a branch name the
+    # clone would accept — refused here rather than when the import job runs.
+    if len(repo_url) > 512:
+        return None, "The repository URL is too long."
+    if branch and (len(branch) > 255 or not is_valid_branch_name(branch)):
+        return None, "Invalid branch name."
+    if license and len(license) > 128:
+        return None, "The license name is too long."
 
     if count_existing_rules_for_source(repo_url) > 0:
         return None, "This repository is already in Rulezet. Request ownership of its existing rules instead of proposing it again."
