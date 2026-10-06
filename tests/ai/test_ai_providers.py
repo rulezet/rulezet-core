@@ -262,6 +262,7 @@ def test_active_provider_cannot_be_deleted(app, admin_client):
 # ── table (DataTable feed) and test status ───────────────────────────────────
 
 def test_added_providers_show_in_table_with_filters(admin_client):
+    admin_client.get('/ai/admin/providers')   # seeds the default Ollama provider, as on a real instance
     _create_claude(admin_client)
     admin_client.post('/ai/admin/providers', json={'name': 'GPU box', 'kind': 'ollama', 'base_url': REMOTE,
                                                    'remote_allowed': True})

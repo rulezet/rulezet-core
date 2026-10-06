@@ -614,3 +614,14 @@ def test_sso_settings_refuse_enabling_without_config_and_non_admins(client):
     with client.session_transaction() as sess:
         sess["_user_id"] = str(neo.id)
     assert client.post("/admin/settings/sso", json={"oidc_enabled": False}).status_code == 403
+
+
+def test_logout_also_ends_a_remember_me_login(client):
+    """Regression: session.clear() after logout_user() used to wipe Flask-Login's
+    "delete the remember cookie" flag, so a remembered user stayed logged in."""
+    client.post("/account/login", data={"email": "t@t.t", "password": "password1@A", "remember_me": "y"})
+    client.get("/account/logout")
+    with client.session_transaction() as sess:
+        assert sess.get("_user_id") is None
+    response = client.get("/account/edit", follow_redirects=False)
+    assert response.status_code in (302, 401)

@@ -590,8 +590,12 @@ def logout() -> redirect:
     log_activity("user.logout", f"User '{current_user.get_username()}' logged out",
                  target_type="user", target_id=current_user.id)
     AccountModel.disconnected(current_user)
-    logout_user()
+    # Clear the session BEFORE logout_user(): logout_user() leaves a flag in
+    # the session telling Flask-Login to delete the "remember me" cookie —
+    # clearing afterwards wiped that flag, so a remembered user stayed logged
+    # in (the cookie logged them straight back in on the next request).
     session.clear()
+    logout_user()
 
     flash('You have been logged out.', 'info')
     # return redirect(url_for('home.home'))
