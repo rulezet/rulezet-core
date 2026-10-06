@@ -148,14 +148,15 @@ def run_next_job(app, lane='default'):
     job_uuid = job.uuid
     handler = _HANDLERS.get(job.job_type)
     if handler is None:
-        # Put back to pending so it's retried after a server restart
-        # that loads the missing handler.
-        job.status = 'pending'
-        _log(job, db, BackgroundJobLog,
-             f"No handler for type '{job.job_type}' — requeueing (restart may be needed).",
-             level='warning', event='requeued')
+        # Every handler is registered at startup, so a type without one never
+        # gets one. Left pending, it would sit at the head of the queue and
+        # stall every job queued after it — fail it instead.
+        job.status      = 'failed'
+        job.error       = f"Unknown job type '{job.job_type}'."
+        job.finished_at = datetime.datetime.now(datetime.timezone.utc)
         db.session.commit()
-        time.sleep(5)
+        _log(job, db, BackgroundJobLog, job.error, level='error', event='failed')
+        _job_finished_hooks(job)
         return job_uuid
 
     job.status     = 'running'
