@@ -132,11 +132,7 @@ def delete_server(server_uuid):
     if not server:
         return jsonify({'success': False, 'error': 'Not found.'}), 404
 
-    name, sid = server.name, server.id
-    ok = MispModel.delete_server(server)
-    if ok:
-        log_activity('misp.server_delete', f"Deleted MISP server '{name}'",
-                     target_type='misp_server', target_id=sid, target_uuid=server_uuid)
+    ok = MispModel.delete_server(server)   # logs misp.server_delete itself
     return jsonify({'success': ok}), 200 if ok else 500
 
 
