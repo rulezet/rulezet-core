@@ -1146,6 +1146,7 @@ def change_description():
         return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 404
     if bundle.user_id == current_user.id or current_user.is_admin():
         association.description = new_description
+        db.session.commit()
         return {
             "success": True,
             "message": "Description modified with success",
