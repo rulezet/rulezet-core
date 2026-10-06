@@ -1,3 +1,4 @@
+import re
 import os
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
@@ -202,8 +203,12 @@ class WazuhRule(RuleType):
         """
         rules = []
         try:
-            tree = ET.parse(filepath)
-            root = tree.getroot()
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read()
+            # Wazuh rule files usually hold several top-level <group> elements —
+            # not a single-root XML document — so wrap them before parsing.
+            content = re.sub(r'^\s*<\?xml[^>]*\?>', '', content)
+            root = ET.fromstring(f"<wazuh_rules>{content}</wazuh_rules>")
             for rule in root.findall(".//rule"):
                 rules.append(ET.tostring(rule, encoding="unicode"))
         except Exception:
