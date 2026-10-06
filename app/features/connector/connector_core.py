@@ -209,6 +209,16 @@ def delete_connector(connector: Connector) -> bool:
 
 # ─── Connection test ──────────────────────────────────────────────────────────
 
+_DB_INT_MAX = 2**31 - 1
+
+
+def _remote_count(value):
+    """A count read from a remote's JSON, or None when it isn't a plausible one."""
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _DB_INT_MAX:
+        return None
+    return value
+
+
 def test_connector(connector: Connector) -> tuple[bool, str, dict]:
     """
     Ping the remote /api/sync/manifest then /api/sync/stats.
@@ -241,7 +251,9 @@ def test_connector(connector: Connector) -> tuple[bool, str, dict]:
             sr = http_requests.get(f"{base}/api/sync/stats", headers=headers, timeout=5)
             if sr.status_code == 200:
                 sd = sr.json()
-                stats = {'rules': sd.get('rules'), 'bundles': sd.get('bundles')}
+                stats = {'rules': _remote_count(sd.get('rules')), 'bundles': _remote_count(sd.get('bundles'))}
+                if stats['rules'] is None or stats['bundles'] is None:
+                    stats = {}
         except Exception:
             pass
 
