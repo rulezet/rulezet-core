@@ -25,7 +25,12 @@ class SigmaRule(RuleType):
     Concrete implementation of RuleType for Sigma rules.
     """
 
-    def __init__(self, schema_path: str = "app/features/rule/rule_format/schema_format/sigma_format.json"):
+    # Next to this module, not relative to the working directory — otherwise
+    # the schema check silently disappears when Rulezet isn't started from
+    # the repository root.
+    DEFAULT_SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "schema_format", "sigma_format.json")
+
+    def __init__(self, schema_path: str = DEFAULT_SCHEMA):
         self.schema = self._load_schema(schema_path)
         # Built once per instance and reused — jsonschema.validate(instance, schema)
         # recompiles the whole schema (incl. $ref resolution) on every call, which
