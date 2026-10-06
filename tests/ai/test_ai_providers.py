@@ -24,8 +24,8 @@ from app.features.ai.ai_core import (
     make_client,
 )
 
-REMOTE = 'http://aipitch1.circl.lu:11434'
-KEY = 'sk-ant-api03-THIS-IS-A-TEST-KEY-1234'
+REMOTE = 'http://gpu-box.example.org:11434'
+KEY = 'fake-provider-key-for-tests-0000'
 
 
 def _login(client, user):
@@ -125,7 +125,7 @@ def test_api_key_encrypted_at_rest_and_never_returned(app, admin_client):
         assert row.api_key_enc and KEY not in row.api_key_enc
         assert decrypt_secret(row.api_key_enc) == KEY
         assert row.to_json()['api_key_hint'] == 'Stored'
-        assert '1234' not in str(row.to_json())
+        assert '0000' not in str(row.to_json())
 
 
 def test_cloud_provider_needs_a_key(admin_client):
@@ -209,7 +209,7 @@ def test_remote_ollama_cannot_be_activated_without_opt_in(admin_client):
 
 
 def test_save_rejects_malformed_url(admin_client):
-    res = admin_client.post('/ai/admin/providers', json={'name': 'x', 'kind': 'ollama', 'base_url': 'aipitch1:11434'})
+    res = admin_client.post('/ai/admin/providers', json={'name': 'x', 'kind': 'ollama', 'base_url': 'gpu-box:11434'})
     assert res.status_code == 400
 
 
