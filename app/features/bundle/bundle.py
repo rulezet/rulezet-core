@@ -1196,7 +1196,7 @@ def edit_access():
     return {
         "success": True,
         "message": f"{message}",
-        "new_access": access,
+        "new_access": bool(bundle.access),
         "toast_class" : "success"
     }, 200
 
