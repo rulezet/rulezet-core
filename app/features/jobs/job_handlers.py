@@ -1445,15 +1445,9 @@ def handle_connector_pull(job, app):
                     "ATT&CK technique database is empty — queuing an install now. "
                     "Techniques will be available on the next pull.",
                     level='warning', event='progress')
-            from app.core.db_class.db import BackgroundJob as _BJ
-            atk_job = _BJ(
-                type='update_attack_data',
-                status='pending',
-                payload={},
-                created_by=job.created_by,
-            )
-            db.session.add(atk_job)
-            db.session.commit()
+            from app.features.jobs.jobs_core import create_job
+            create_job(job_type='update_attack_data', payload={},
+                       label='Update MITRE ATT&CK data', created_by=job.created_by, total=1)
             attack_install_triggered = True
 
         MAX_PAGES = 10_000  # safety guard against infinite pagination loops
