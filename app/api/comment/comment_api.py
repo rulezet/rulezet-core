@@ -387,11 +387,12 @@ class CommentMyCount(Resource):
 class CommentDetail(Resource):
 
     def put(self, uuid):
-        """Edit a comment's content. Requires authorship or moderation."""
+        """Edit a comment's content. Requires authorship or moderation, and
+        the object the thread hangs on must still be visible to the caller."""
         if not current_user.is_authenticated:
             return {'message': 'Login required'}, 401
 
-        comment = _get_or_404(uuid)
+        comment = _get_readable_or_404(uuid)
         if not _can_edit(comment):
             return {'message': 'Not allowed'}, 403
         if not comment.is_active:
@@ -417,7 +418,7 @@ class CommentDetail(Resource):
         if not current_user.is_authenticated:
             return {'message': 'Login required'}, 401
 
-        comment = _get_or_404(uuid)
+        comment = _get_readable_or_404(uuid)
         if not _can_edit(comment):
             return {'message': 'Not allowed'}, 403
         if not comment.is_active:
