@@ -815,23 +815,26 @@ def get_my_rules_page_filter_github() -> jsonify:
 @login_required
 def delete_selected_rules() -> jsonify:
     """Delete all the selected rule"""
-    data = request.get_json()
-    rule_ids = data.get('ids', [])
-    if not rule_ids:
+    data = request.get_json(silent=True)
+    rule_ids = data.get('ids') if isinstance(data, dict) else None
+    if not rule_ids or not isinstance(rule_ids, list):
         return jsonify({"success": False, "message": "No rules selected.", "toast_class": "danger"}), 400
 
-    # Permission check
+    # Permission check — and note each owner now: once trashed, a rule no
+    # longer resolves through the active-rule lookups below.
+    owner_ids = set()
     for rule_id in rule_ids:
         user_id = RuleModel.get_rule_user_id(rule_id)
         if current_user.id != user_id and not current_user.is_admin():
             return jsonify({"success": False, "message": "Access denied.", "toast_class": "danger"}), 403
+        if user_id:
+            owner_ids.add(user_id)
 
     import uuid as _uuid
     batch_uuid = str(_uuid.uuid4())
     count = RuleModel.soft_delete_rule_list(rule_ids, current_user.id, batch_uuid=batch_uuid)
 
-    for rule_id in rule_ids:
-        user_id = RuleModel.get_rule_user_id(rule_id)
+    for user_id in owner_ids:
         profil = AccountModel.get_or_create_gamification_profile(user_id)
         if profil:
             AccountModel.update_rules_owned_gamification(profil.id, user_id)
