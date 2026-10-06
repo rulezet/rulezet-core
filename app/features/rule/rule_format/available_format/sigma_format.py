@@ -1,3 +1,4 @@
+import re
 from typing import Dict, Any, List, Optional
 from app.features.rule.rule_core import get_rule
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult
@@ -219,6 +220,19 @@ class SigmaRule(RuleType):
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
+
+                # Several YAML documents ("---"): one rule per document —
+                # unless one of them carries an `action` (a Sigma rule
+                # collection: a global / reset part merged into the others),
+                # which only makes sense whole.
+                segments = [s for s in re.split(r'(?m)^---[ \t]*$', content) if s.strip()]
+                if len(segments) > 1:
+                    docs = [yaml.safe_load(s) for s in segments]
+                    if any(isinstance(d, dict) and 'action' in d for d in docs):
+                        return [content]
+                    return [s.strip() + "\n" for s, d in zip(segments, docs)
+                            if isinstance(d, dict) and self.detect(s)]
+
                 parsed = yaml.safe_load(content)
 
                 if parsed is None:
