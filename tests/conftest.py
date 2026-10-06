@@ -1,12 +1,15 @@
 """Shared fixtures — see docs/design/test_restructure.md.
 
-Every test gets a fresh SQLite database (FLASKENV=testing) and runs inside the
+The app and its tables are built once per run; every test then starts from an
+empty, freshly seeded database (FLASKENV=testing, SQLite) and runs inside the
 app context, so the objects it creates stay usable after requests (reload
 them with `reload(obj)` to see what a request changed).
 
 Fixtures:
-    app        the Flask app, DB created and seeded (roles/permissions)
-    users      SimpleNamespace(admin, owner, user) — see helpers/users.py
+    app        the Flask app, DB created and seeded like a real instance:
+               roles/permissions, default tags (tlp:clear, PAP:CLEAR)
+    users      SimpleNamespace(admin, owner, user) — see helpers/users.py;
+               also seeds the rule formats (they need an admin to exist)
     clients    {"anonymous", "user", "owner", "admin"} → logged-in test clients
     client_as  client_as(user) → a test client logged in as any user
 """
@@ -20,15 +23,16 @@ sys.path.append(os.getcwd())
 os.environ.setdefault("FLASKENV", "testing")
 
 from app import create_app, db  # noqa: E402
-from app.core.utils.init_db import create_default_user  # noqa: E402
+from app.core.utils.init_db import create_default_user, insert_default_formats  # noqa: E402
 from tests.helpers.users import make_user  # noqa: E402
 
 # The copy-me examples for a new feature live here, they are not tests.
 collect_ignore_glob = ["_template/*"]
 
 
-@pytest.fixture
-def app():
+@pytest.fixture(scope="session")
+def _app():
+    """The Flask app and its tables, built once per run."""
     app = create_app(start_worker=False)
     app.config.update({
         "TESTING": True,
@@ -37,24 +41,50 @@ def app():
     with app.app_context():
         db.drop_all()
         db.create_all()
+    return app
+
+
+def _empty_all_tables():
+    for table in reversed(db.metadata.sorted_tables):
+        db.session.execute(table.delete())
+    db.session.commit()
+
+
+@pytest.fixture
+def app(_app):
+    """The app with an empty database, seeded like a real instance."""
+    with _app.app_context():
+        _empty_all_tables()
         from app.features.roles.roles_core import seed_default_permissions_and_roles
         seed_default_permissions_and_roles()
-        create_default_user()   # author of rules imported without an owner
+        default_user = create_default_user()   # author of rules imported without an owner
+        _seed_default_tags(created_by=default_user)
 
         # The login brute-force guard is per process and keyed by IP — every
         # test client is 127.0.0.1, so each test starts with a clean slate.
         from app.features.account import account as _account
         _account._login_failures.clear()
 
-        yield app
+        yield _app
 
         db.session.remove()
 
 
+def _seed_default_tags(created_by):
+    """The tags auto-attached to every new rule (config/default_tags.json)."""
+    import uuid
+    from app.core.db_class.db import Tag
+    for name in ("tlp:clear", "PAP:CLEAR"):
+        db.session.add(Tag(uuid=str(uuid.uuid4()), name=name, is_active=True, created_by=created_by.id))
+    db.session.commit()
+
+
 @pytest.fixture
 def users(app):
+    admin = make_user("admin", admin=True)
+    insert_default_formats()
     return SimpleNamespace(
-        admin=make_user("admin", admin=True),
+        admin=admin,
         owner=make_user("owner"),
         user=make_user("user"),
     )

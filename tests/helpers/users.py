@@ -10,7 +10,10 @@ Roles used across the suite (see docs/design/test_restructure.md):
 plus users holding one special permission (e.g. "rule.tag_any"), created on
 demand with make_user_with_permission().
 """
+import functools
 import uuid
+
+from werkzeug.security import generate_password_hash
 
 from app import db
 from app.core.db_class.db import Permission, Role, RolePermission, User, UserRole
@@ -20,13 +23,19 @@ ROLES = ("anonymous", "user", "owner", "admin")
 PASSWORD = "Passw0rd-tests"
 
 
+@functools.lru_cache(maxsize=1)
+def _password_hash():
+    # Hashing is deliberately slow (scrypt): do it once per run, not per user.
+    return generate_password_hash(PASSWORD)
+
+
 def make_user(name, *, admin=False):
     """A verified local account with a known password and API key."""
     user = User(
         first_name=name.capitalize(),
         last_name="Tester",
         email=f"{name}@tests.rulezet",
-        password=PASSWORD,
+        password_hash=_password_hash(),
         admin=admin,
         api_key=f"api-key-{name}",
         is_verified=True,
