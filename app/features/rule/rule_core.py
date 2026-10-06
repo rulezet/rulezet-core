@@ -648,6 +648,21 @@ def check_bit_collision_risk(rule_format: str, content: str, exclude_rule_id: in
 
 
 # Create
+def _parse_vulnerabilities(value) -> list:
+    """Vulnerability ids from a form/API value: a list, a JSON list (the
+    vulnerability picker's hidden field), or the plain "CVE" text field
+    ("CVE-2024-1, CVE-2024-2" — comma / semicolon / space separated)."""
+    if isinstance(value, list):
+        return value
+    if not isinstance(value, str) or value.strip() in ('', 'None', 'null', '[]'):
+        return []
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return [v for v in re.split(r'[\s,;]+', value.strip()) if v]
+
+
 def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, str] | tuple[Rule, str]:
     """
     Add a rule safely with error handling.
@@ -718,20 +733,9 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         # - Python list (from format parsers)
         # - JSON string like '["CVE-2024-1234"]' (from Vue hidden input or detect_cve)
         # - "None" / None / "" (empty)
-        def _resolve_vuln(v):
-            if isinstance(v, list):
-                return v
-            if isinstance(v, str) and v.strip() not in ('', 'None', 'null', '[]'):
-                try:
-                    parsed = json.loads(v)
-                    return parsed if isinstance(parsed, list) else []
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            return []
-
         vuln_list = (
-            _resolve_vuln(form_dict.get("vulnerabilities"))
-            or _resolve_vuln(form_dict.get("cve_id"))
+            _parse_vulnerabilities(form_dict.get("vulnerabilities"))
+            or _parse_vulnerabilities(form_dict.get("cve_id"))
         )
         # strip empty/whitespace-only entries
         vuln_list = [v for v in vuln_list if isinstance(v, str) and v.strip()]
@@ -935,20 +939,9 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     rule.to_string = form_dict["to_string"]
     rule.author = form_dict["author"]
     rule.original_uuid = form_dict["original_uuid"]
-    def _resolve_vuln(v):
-        if isinstance(v, list):
-            return v
-        if isinstance(v, str) and v.strip() not in ('', 'None', 'null', '[]'):
-            try:
-                parsed = json.loads(v)
-                return parsed if isinstance(parsed, list) else []
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return []
-
     vuln_edit = (
-        _resolve_vuln(form_dict.get("vulnerabilities"))
-        or _resolve_vuln(form_dict.get("cve_id"))
+        _parse_vulnerabilities(form_dict.get("vulnerabilities"))
+        or _parse_vulnerabilities(form_dict.get("cve_id"))
     )
     vuln_edit = [v for v in vuln_edit if isinstance(v, str) and v.strip()]
     rule.cve_id = json.dumps(vuln_edit)
