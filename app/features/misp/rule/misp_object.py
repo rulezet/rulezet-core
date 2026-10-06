@@ -26,6 +26,18 @@ def misp_tag_kwargs(tag) -> dict:
         kwargs['colour'] = colour
     return kwargs
 
+def cve_list(raw) -> list:
+    """The CVE ids stored in rule.cve_id (a JSON list of strings), as a list
+    of non-empty strings — [] when the stored value is anything else."""
+    try:
+        values = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(values, list):
+        return []
+    return [v.strip() for v in values if isinstance(v, str) and v.strip()]
+
+
 def get_rule_misp_object(rule_id: int):
     event = get_rule_misp_object_base(rule_id)
     event = json.loads(event.to_json())
@@ -45,12 +57,9 @@ def get_rule_misp_event_object(rule_id: int):
 
     rule_object = event.objects[1]
 
-    if rule_.cve_id:
-        vuln_list = json.loads(rule_.cve_id)
-
-        for value in vuln_list:
-            attribute =  event.add_attribute('vulnerability', value)
-            rule_object.add_reference(attribute.uuid, 'related-to')
+    for value in cve_list(rule_.cve_id):
+        attribute = event.add_attribute('vulnerability', value)
+        rule_object.add_reference(attribute.uuid, 'related-to')
 
     tags = RuleModel.get_tags_for_rule(rule_id)
     if tags:
@@ -128,15 +137,8 @@ def create_rulezet_metadata_misp_object(rule_id: int) -> MISPObject:
         misp_object.add_attribute('github-path', value=rule.github_path)
 
     # cve_id stored as comma-separated string → multiple attributes
-    if rule.cve_id:
-        try:
-            cve_list = json.loads(rule.cve_id) if isinstance(rule.cve_id, str) else rule.cve_id
-            for cve in cve_list:
-                cve = cve.strip()
-                if cve:
-                    misp_object.add_attribute('cve-id', value=cve)
-        except (json.JSONDecodeError, AttributeError):
-            pass
+    for cve in cve_list(rule.cve_id):
+        misp_object.add_attribute('cve-id', value=cve)
 
     # ATT&CK techniques used by this rule → multiple attributes, same pattern as cve-id
     for technique in get_techniques_for_rule(rule_id):
