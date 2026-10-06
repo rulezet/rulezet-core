@@ -195,11 +195,13 @@ def remove_tag(tag_id):
         return True, "Tag deleted."
     except Exception as e:
         db.session.rollback()
-        return False, f"Error deleting tag: {e}"
+        from app.core.utils.utils import internal_error
+        return False, internal_error(e, "Error deleting tag.")
 
 
 def remove_tags_bulk(tag_ids):
-    """Delete a list of tags, cleaning up all associations first."""
+    """Delete a list of tags, cleaning up all associations first.
+    Returns (deleted count — None on error, message)."""
     if not tag_ids:
         return 0, "No tags provided."
     try:
@@ -210,11 +212,13 @@ def remove_tags_bulk(tag_ids):
         return deleted, f"Deleted {deleted} tag(s)."
     except Exception as e:
         db.session.rollback()
-        return 0, f"Error during bulk delete: {e}"
+        from app.core.utils.utils import internal_error
+        return None, internal_error(e, "Error during bulk delete.")
 
 
 def remove_family(family, source=None):
-    """Delete every tag in a given family, cleaning up all associations first."""
+    """Delete every tag in a given family, cleaning up all associations first.
+    Returns (deleted count — 0 when the family is empty, None on error, message)."""
     pattern = _family_like_pattern(family)
     if not pattern:
         return 0, "Invalid family."
@@ -231,7 +235,8 @@ def remove_family(family, source=None):
         return deleted, f"Deleted {deleted} tags from family '{family}'."
     except Exception as e:
         db.session.rollback()
-        return 0, f"Error deleting family: {e}"
+        from app.core.utils.utils import internal_error
+        return None, internal_error(e, "Error deleting family.")
 
 
 # ─── Visibility / status toggles ─────────────────────────────────────────────

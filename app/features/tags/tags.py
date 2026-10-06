@@ -2,6 +2,7 @@ from flask import Blueprint, flash, jsonify, render_template, request
 from flask_login import current_user, login_required
 import app.features.tags.tags_core as tags_core
 import app.features.rule.rule_core as RuleModel
+from app import db
 from app.core.utils.activity_log import log_activity
 
 
@@ -174,6 +175,10 @@ def delete_family():
     if not family:
         return {"status": "error", "message": "Family is required."}, 400
     deleted, msg = tags_core.remove_family(family, source)
+    if deleted is None:
+        return {"status": "error", "message": msg, "toast_class": "danger-subtle"}, 500
+    if not deleted:
+        return {"status": "error", "deleted": 0, "message": msg, "toast_class": "warning-subtle"}, 404
     log_activity(
         "tag.family_delete",
         f"Deleted tag family '{family}' (source={source or 'all'}): {deleted} tag(s) removed",
@@ -190,8 +195,14 @@ def delete_family():
 def remove_tag():
     err = _admin_only()
     if err: return err
-    tag_id = request.args.get("tag_id")
+    from app.core.db_class.db import Tag
+    from app.core.utils.utils import as_db_id
+    tag_id = as_db_id(request.args.get("tag_id"))
+    if not tag_id or not db.session.get(Tag, tag_id):
+        return {"status": "error", "message": "Tag not found.", "toast_class": "danger-subtle"}, 404
     success, message = tags_core.remove_tag(tag_id)
+    if success:
+        log_activity("tag.delete", f"Deleted tag id={tag_id}", target_type="tag", target_id=tag_id)
     cls = "success-subtle" if success else "danger-subtle"
     return {"status": "success" if success else "error", "message": message, "toast_class": cls}, (200 if success else 500)
 
@@ -218,7 +229,7 @@ def remove_tags_bulk():
             return {"status": "error", "message": "No eligible tags to delete.", "toast_class": "warning-subtle"}, 400
 
     deleted, msg = tags_core.remove_tags_bulk(ids)
-    if deleted > 0:
+    if deleted:
         log_activity(
             "tag.bulk_delete",
             f"Bulk deleted {deleted} tag(s) (ids={ids[:10]}{'...' if len(ids) > 10 else ''})",
@@ -226,6 +237,8 @@ def remove_tags_bulk():
             is_public=False,
         )
         return {"status": "success", "deleted": deleted, "message": msg, "toast_class": "success-subtle"}, 200
+    if deleted == 0:
+        return {"status": "error", "deleted": 0, "message": "No matching tags.", "toast_class": "warning-subtle"}, 404
     return {"status": "error", "deleted": 0, "message": msg, "toast_class": "danger-subtle"}, 500
 
 
@@ -238,6 +251,8 @@ def toggle_visibility():
     if not tag_uuid:
         return {"status": "error", "message": "Tag UUID is required."}, 400
     success, message = tags_core.toggle_tag_visibility(tag_uuid)
+    if message == "Tag not found.":
+        return {"status": "error", "message": message, "toast_class": "danger-subtle"}, 404
     if success:
         log_activity("tag.toggle_visibility", f"Toggled visibility of tag uuid={tag_uuid}",
                      target_type="tag", target_uuid=tag_uuid)
@@ -254,6 +269,8 @@ def toggle_status():
     if not tag_uuid:
         return {"status": "error", "message": "Tag UUID is required."}, 400
     success, message = tags_core.toggle_tag_status(tag_uuid)
+    if message == "Tag not found.":
+        return {"status": "error", "message": message, "toast_class": "danger-subtle"}, 404
     if success:
         log_activity("tag.toggle_status", f"Toggled status of tag uuid={tag_uuid}",
                      target_type="tag", target_uuid=tag_uuid)
@@ -345,7 +362,8 @@ def add_tag_misp():
         return {"success": False, "message": "UUID is required.", "toast_class": "danger-subtle"}, 400
     success, message = tags_core.add_tags_from_misp_taxonomy(uuid_param, created_by=current_user)
     cls = "success-subtle" if success else "danger-subtle"
-    return {"success": bool(success), "message": message, "toast_class": cls}, (200 if success else 500)
+    status = 200 if success else (404 if message == "Taxonomy not found" else 400)
+    return {"success": bool(success), "message": message, "toast_class": cls}, status
 
 
 # ─── MISP Galaxies ───────────────────────────────────────────────────────────
