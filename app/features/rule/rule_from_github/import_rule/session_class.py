@@ -308,7 +308,13 @@ class Session_class:
                 raw_text = work[3]
 
                 clean_text = raw_text.strip()
-                if not clean_text or clean_text.startswith('#'):
+                # Skip only comment-only text — a rule file that merely OPENS
+                # with a comment header (e.g. a YAML banner before a Sigma
+                # rule) must still be validated, not silently dropped.
+                if not clean_text or all(
+                    line.lstrip().startswith('#')
+                    for line in clean_text.splitlines() if line.strip()
+                ):
                     self.jobs.task_done()
                     continue
 
