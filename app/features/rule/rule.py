@@ -2656,7 +2656,7 @@ def delete_proposal_message(proposal_id) -> jsonify:
 @login_required
 def history_diff_json(history_id):
     """Return old_content / new_content for inline diff display."""
-    history = RuleModel.get_history_rule_by_id(history_id)
+    history = RuleModel.get_history_rule_by_id(history_id) if as_db_id(history_id) else None
     if not history:
         return {'message': 'Not found'}, 404
     return history.to_json(), 200
@@ -2704,11 +2704,12 @@ def accept_all_changes() -> jsonify:
 @login_required
 def changes_decision() -> jsonify:
     """Update a rule from github"""
-    history_id = request.args.get('history_id')
+    history_id = as_db_id(request.args.get('history_id'))
     decision = request.args.get('decision')
 
-
-    history = RuleModel.get_history_rule_by_id(history_id)
+    history = RuleModel.get_history_rule_by_id(history_id) if history_id else None
+    if not history:
+        return jsonify({"success": False, "message": "Update not found", "toast_class": "danger-subtle"}), 404
     rule_ = RuleModel.get_rule(history.rule_id)
     if not rule_:
         return jsonify({"success": False, "message": "Rule not found", "toast_class": "danger-subtle"}), 404
@@ -2757,11 +2758,12 @@ def changes_decision() -> jsonify:
 @login_required
 def update_github_rule() -> render_template:
     """Update a rule from github"""
-    history_id = request.args.get('rule_id')
+    history_id = as_db_id(request.args.get('rule_id'))
     decision = request.args.get('decision')
 
-
-    history = RuleModel.get_history_rule_by_id(history_id)
+    history = RuleModel.get_history_rule_by_id(history_id) if history_id else None
+    if not history:
+        return render_template("404.html"), 404
     rule_ = RuleModel.get_rule(history.rule_id)
     if not rule_:
         flash('Rule not found', 'danger')
@@ -2817,12 +2819,16 @@ def decision_rule() -> jsonify:
     if not updater:
         return {"message": "Session Not found", 'toast_class': "danger-subtle"}, 404
 
-    history = RuleModel.get_history_rule_by_id(history_id)
+    history_id = as_db_id(history_id)
+    history = RuleModel.get_history_rule_by_id(history_id) if history_id else None
     if not history:
         return {"message": "History Not found", 'toast_class': "danger-subtle"}, 404
     rule_ = RuleModel.get_rule(history.rule_id)
     if not rule_:
         return {"message": "Rule Not found", 'toast_class': "danger-subtle"}, 404
+    from app.core.db_class.db import RuleStatus
+    if not RuleStatus.query.filter_by(rule_id=str(rule_.id), update_result_id=updater.id).first():
+        return {"message": "This rule is not part of that update check", 'toast_class': "danger-subtle"}, 404
 
     if _is_github_manager() or rule_.user_id == current_user.id:
         if decision == 'accepted':
