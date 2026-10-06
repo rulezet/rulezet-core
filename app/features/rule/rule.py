@@ -4439,7 +4439,7 @@ def history_github_importer_delete():
 
     if success:
         return {"message": msg, "toast_class": "success-subtle"}, 200
-    return {"message": msg, "toast_class": "danger-subtle"}, 500
+    return {"message": msg, "toast_class": "danger-subtle"}, (404 if msg.endswith("not found") else 500)
 
 
 @rule_blueprint.route("/import_get_session_running", methods=['GET'])
@@ -4554,7 +4554,7 @@ def history_github_updater_delete():
 
     if success:
         return {"message": msg, "toast_class": "success-subtle"}, 200
-    return {"message": msg, "toast_class": "danger-subtle"}, 500
+    return {"message": msg, "toast_class": "danger-subtle"}, (404 if msg.endswith("not found") else 500)
 
 @rule_blueprint.route("/update_loading_status/<sid>/get_rules", methods=['GET'])
 @login_required
