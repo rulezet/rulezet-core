@@ -414,10 +414,12 @@ def trigger_update():
 def trigger_parse():
     if not current_user.is_admin():
         return jsonify({'error': 'Forbidden'}), 403
-    data = request.json or {}
+    fmt = json_object().get('format') or None
+    if fmt is not None and not isinstance(fmt, str):
+        return jsonify({'error': 'format must be a rule format name'}), 400
     job = JobModel.create_job(
         job_type='bulk_parse_attack_rules',
-        payload={'format': data.get('format')},
+        payload={'format': fmt},
         label='Auto-parse ATT&CK techniques from rules',
         created_by=current_user.id,
         total=0,
