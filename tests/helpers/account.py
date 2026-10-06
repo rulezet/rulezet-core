@@ -123,6 +123,20 @@ def login(client, email, password=PASSWORD, *, remember=False, next=None):
     return client.post(url, data=data)
 
 
+def _cookie_domain(client):
+    return client.application.config["SERVER_NAME"].split(":")[0]
+
+
+def cookie(client, name):
+    """The value of cookie `name` in `client`'s jar, or None."""
+    found = client.get_cookie(name, domain=_cookie_domain(client))
+    return found.value if found else None
+
+
+def drop_cookie(client, name):
+    client.delete_cookie(name, domain=_cookie_domain(client))
+
+
 def logged_in_user_id(client):
     """Who the session of `client` belongs to (None = nobody)."""
     with client.session_transaction() as session:
