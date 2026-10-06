@@ -802,7 +802,8 @@ def _release_or_current(bundle_id, ref):
     from app.core.db_class.db import BundleRelease
     if ref in (None, "", "current"):
         return "current", build_snapshot(bundle_id)
-    rel = BundleRelease.query.filter_by(bundle_id=bundle_id, id=int(ref)).first() if str(ref).isdigit() else None
+    rel_id = as_db_id(str(ref))
+    rel = BundleRelease.query.filter_by(bundle_id=bundle_id, id=rel_id).first() if rel_id else None
     return (rel.version, rel.snapshot) if rel else (None, None)
 
 
@@ -884,7 +885,7 @@ def delete_bundle_release(bundle_id, release_id):
     bundle, err = _release_guard(bundle_id, manage=True)
     if err:
         return err
-    rel = BundleRelease.query.filter_by(bundle_id=bundle_id, id=release_id).first()
+    rel = BundleRelease.query.filter_by(bundle_id=bundle_id, id=as_db_id(release_id)).first()
     if not rel:
         return {"success": False, "message": "Release not found", "toast_class": "danger"}, 404
     version = rel.version
@@ -937,7 +938,7 @@ def download_bundle_release(bundle_id, release_id):
     bundle, err = _release_guard(bundle_id)
     if err:
         return err
-    rel = BundleRelease.query.filter_by(bundle_id=bundle_id, id=release_id).first()
+    rel = BundleRelease.query.filter_by(bundle_id=bundle_id, id=as_db_id(release_id)).first()
     if not rel:
         return {"success": False, "message": "Release not found", "toast_class": "danger"}, 404
     BundleModel.increment_download_count(bundle_id)

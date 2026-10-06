@@ -326,7 +326,9 @@ def get_release(bundle_id: int, ref):
     if rel is None and len(ref) == 36:
         rel = q.filter_by(uuid=ref).first()
     if rel is None and ref.isdigit():
-        rel = q.filter_by(id=int(ref)).first()
+        from app.core.utils.utils import as_db_id
+        rel_id = as_db_id(ref)
+        rel = q.filter_by(id=rel_id).first() if rel_id else None
     return rel
 
 
