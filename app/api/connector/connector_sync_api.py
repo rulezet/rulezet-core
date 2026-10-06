@@ -45,6 +45,7 @@ sync_ns = Namespace(
 )
 
 PER_PAGE_MAX = 2000
+PAGE_MAX = 1_000_000   # keeps the SQL offset (page × per_page) within a 64-bit integer
 
 # Sync protocol version + what this instance supports, advertised in the
 # manifest so a pulling instance never sends a parameter we'd silently
@@ -407,7 +408,7 @@ class SyncRules(Resource):
 
         # ── Standard paginated fetch ──────────────────────────────────────────
         since    = _since_dt(request.args.get('since'))
-        page     = max(1, request.args.get('page', 1, type=int))
+        page     = min(PAGE_MAX, max(1, request.args.get('page', 1, type=int)))
         per_page = min(PER_PAGE_MAX, max(1, request.args.get('per_page', 50, type=int)))
 
         filter_params = {
@@ -474,7 +475,7 @@ class SyncBundles(Resource):
     )
     def get(self):
         since    = _since_dt(request.args.get('since'))
-        page     = max(1, request.args.get('page', 1, type=int))
+        page     = min(PAGE_MAX, max(1, request.args.get('page', 1, type=int)))
         per_page = min(PER_PAGE_MAX, max(1, request.args.get('per_page', 50, type=int)))
 
         since_dt = since.replace(tzinfo=None)
