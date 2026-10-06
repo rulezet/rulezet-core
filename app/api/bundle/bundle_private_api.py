@@ -15,6 +15,7 @@ from sqlalchemy import func, or_
 from app import db
 from app.features.bundle import bundle_core as BundleModel
 from app.core.utils.decorators import api_required
+from app.core.utils.utils import as_db_id, json_object
 from app.core.utils.activity_log import log_activity
 from app.core.db_class.db import Bundle, Rule, Tag
 from .bundle_public_api import bundle_structure_json, MAX_PER_PAGE
@@ -29,7 +30,9 @@ bundle_private_ns = Namespace(
 
 def _payload():
     """JSON body, else query string — every POST here accepts both."""
-    return request.get_json(silent=True) or request.args.to_dict()
+    if request.get_json(silent=True) is not None:
+        return json_object()          # a JSON list / string / number → {}
+    return request.args.to_dict()
 
 
 def _is_manager(bundle):
@@ -56,8 +59,9 @@ def _resolve_rules(rule_ids=None, rule_uuids=None):
         if not ref_s:
             continue
         if kind == "id":
-            rule = Rule.query.filter(Rule.id == int(ref_s), Rule.is_deleted == False).first() \
-                if ref_s.isdigit() else None
+            rule_id = as_db_id(ref_s)
+            rule = Rule.query.filter(Rule.id == rule_id, Rule.is_deleted == False).first() \
+                if rule_id else None
         else:
             rule = Rule.query.filter(Rule.uuid == ref_s, Rule.is_deleted == False).first()
         if rule is None:
@@ -75,7 +79,7 @@ def _resolve_tags(values):
         v_s = str(v).strip()
         if not v_s:
             continue
-        tag = Tag.query.get(int(v_s)) if v_s.isdigit() else \
+        tag = (db.session.get(Tag, as_db_id(v_s)) if as_db_id(v_s) else None) if v_s.isdigit() else \
             Tag.query.filter(func.lower(Tag.name) == v_s.lower()).first()
         if tag is None:
             unknown.append(v_s)
@@ -163,6 +167,8 @@ class CreateBundle(Resource):
         if not isinstance(name, str) or not name.strip():
             return {"message": "Invalid bundle", "error": "'name' must be a non-empty string"}, 400
         name = name.strip()
+        if len(name) > 255:
+            return {"message": "Invalid bundle", "error": "'name' must be at most 255 characters"}, 400
 
         # --- Validate public (strict boolean only) ---
         public = data.get("public", True)
@@ -545,7 +551,7 @@ class RemoveRuleFromBundle(Resource):
 
         # ---- Resolve the rule (a trashed rule can still be removed) ----
         if data.get("rule_id"):
-            rule_id = int(data["rule_id"]) if str(data["rule_id"]).isdigit() else None
+            rule_id = as_db_id(str(data["rule_id"]))
         else:
             rule = Rule.query.filter_by(uuid=str(data["rule_uuid"]).strip()).first()
             rule_id = rule.id if rule else None
@@ -628,8 +634,9 @@ class EditBundle(Resource):
 
         changes = {}
         if "name" in data:
-            if not isinstance(data["name"], str) or not data["name"].strip():
-                return {"success": False, "message": "'name' must be a non-empty string", "toast_class": "danger"}, 400
+            if not isinstance(data["name"], str) or not data["name"].strip() or len(data["name"].strip()) > 255:
+                return {"success": False, "message": "'name' must be a non-empty string of at most 255 characters",
+                        "toast_class": "danger"}, 400
             changes["name"] = data["name"].strip()
         if "description" in data:
             if data["description"] is not None and not isinstance(data["description"], str):
@@ -744,7 +751,7 @@ class EditBundleStructure(Resource):
         if not _is_manager(bundle):
             return {"success": False, "message": "You don't have the permission to do that!"}, 403
 
-        data = request.get_json(silent=True) or {}
+        data = json_object()
         structure = data.get("structure")
         if not isinstance(structure, list):
             return {"success": False, "message": "'structure' must be a list of nodes"}, 400
