@@ -64,7 +64,10 @@ def search_rules_lite(query: str, limit: int = 5) -> list[dict]:
 
     exact = None
     if is_numeric:
-        exact = _active().filter(Rule.id == int(query)).first()
+        # a number beyond the id column's range can't be an id (and overflows the query)
+        from app.core.utils.utils import as_db_id
+        rule_id = as_db_id(query)
+        exact = _active().filter(Rule.id == rule_id).first() if rule_id else None
     else:
         exact = (
             _active()
