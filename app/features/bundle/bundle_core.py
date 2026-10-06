@@ -567,7 +567,8 @@ def get_tags_for_bundle(bundle_id: int) -> List[Tag]:
         )
     )
 
-    if current_user.is_authenticated:
+    # No request (a background job, e.g. a MISP push): no user, public tags only.
+    if current_user and current_user.is_authenticated:
         if not current_user.is_admin():
             query = query.filter(
                 or_(
