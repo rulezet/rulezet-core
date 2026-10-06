@@ -84,6 +84,14 @@ class CRSRule(RuleType):
         normalized_content = normalize_crs_rule(content)
         try:
             mparser.parser.parse(normalized_content, debug=False)
+            # The parser only raises on an unexpected token: a rule cut short
+            # (end of content mid-rule, unclosed quote) parses to nothing
+            # without an error — real directives must yield parsed lines.
+            has_directives = any(line.strip() and not line.strip().startswith('#')
+                                 for line in normalized_content.splitlines())
+            if has_directives and not mparser.configlines:
+                return ValidationResult(ok=False, errors=["Incomplete rule: the content ends before the rule is complete."],
+                                        normalized_content=normalized_content)
             risk = detect_suppression_risk(content)
             return ValidationResult(
                 ok=True,
