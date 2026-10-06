@@ -321,8 +321,8 @@ def admin_techniques():
     from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
     from sqlalchemy import func, asc, desc, cast, Text
 
-    search          = request.args.get('search', '').strip()
-    tactic          = request.args.get('tactic', '').strip()
+    search          = request.args.get('search', '').strip()[:AttackModel.MAX_SEARCH_LENGTH + 1]
+    tactic          = request.args.get('tactic', '').strip()[:AttackModel.MAX_SEARCH_LENGTH + 1]
     show_deprecated = request.args.get('show_deprecated', 'false').lower() == 'true'
     sort_by         = request.args.get('sort_by', 'technique_id')
     sort_dir        = request.args.get('sort_dir', 'asc').lower()

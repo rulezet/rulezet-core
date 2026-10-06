@@ -91,9 +91,14 @@ def get_techniques_for_rule(rule_id: int) -> list:
     return [a.to_json() for a in assocs]
 
 
+# Longest text a technique id / name / tactic can match (name is 300 chars):
+# anything longer can't match, and isn't sent to the database as a pattern.
+MAX_SEARCH_LENGTH = 300
+
+
 def search_techniques(q: str, limit: int = 20) -> list:
     q = q.strip()
-    if not q:
+    if not q or len(q) > MAX_SEARCH_LENGTH:
         return []
     like = f"%{q}%"
     rows = (
@@ -113,6 +118,8 @@ def search_techniques(q: str, limit: int = 20) -> list:
 
 
 def get_all_techniques(tactic: str = None) -> list:
+    if tactic and len(tactic) > MAX_SEARCH_LENGTH:
+        return []
     q = AttackTechnique.query.filter(~AttackTechnique.deprecated)
     if tactic:
         # tactic_keys is a JSON list: match the quoted key in its text form
