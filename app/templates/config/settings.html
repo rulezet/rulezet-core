@@ -418,13 +418,13 @@
                 </div>
             </div>
 
-            <!-- PivoTick graph background -->
+            <!-- Pivotick graph background -->
             <div class="card mb-3" id="section-pivotick-bg">
                 <div class="card-body">
                     <div class="settings-card-header mb-3">
                         <div class="settings-card-icon"><i class="fas fa-diagram-project"></i></div>
                         <div>
-                            <h6 class="settings-section-title mb-0">PivoTick graph background</h6>
+                            <h6 class="settings-section-title mb-0">Pivotick graph background</h6>
                             <p class="text-muted small mb-0">Canvas style behind rule/bundle relationship graphs.</p>
                         </div>
                     </div>
@@ -1296,7 +1296,7 @@
                 create_message('Application font saved', 'success')
             }
 
-            // ── PivoTick graph background ───────────────────────────────────────
+            // ── Pivotick graph background ───────────────────────────────────────
             // dots/default/plain: pure CSS, attribute-driven (see pivotick-overrides.css).
             // color/image: same attribute PLUS an inline CSS var carrying the actual
             // value, since the value itself (a hex color / an image URL) can't live
@@ -1339,7 +1339,7 @@
                 localStorage.setItem('rz-pivotick-bg', value)
                 _applyPivotickBg(value)
                 if (value === 'image') fetchPivotickBackgrounds()
-                create_message('PivoTick background saved', 'success')
+                create_message('Pivotick background saved', 'success')
             }
 
             function onPivotickColorInput(evt) {
@@ -1374,7 +1374,7 @@
                 pivotick_bg.value = 'image'
                 localStorage.setItem('rz-pivotick-bg', 'image')
                 _applyPivotickBg('image')
-                create_message('PivoTick background saved', 'success')
+                create_message('Pivotick background saved', 'success')
             }
 
             async function onUploadPivotickImage(evt) {

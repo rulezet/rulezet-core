@@ -12,6 +12,7 @@
 [submodule "app/modules/pivotick"]
 	path = app/modules/pivotick
 	url = https://github.com/Pivotick/Pivotick.git
+	ignore = dirty
 [submodule "app/modules/cti"]
 	path = app/modules/cti
 	url = https://github.com/mitre/cti
@@ -19,3 +20,7 @@
 [submodule "app/modules/rulezet-validation"]
 	path = app/modules/rulezet-validation
 	url = https://github.com/rulezet/rulezet-validation.git
+[submodule "app/modules/pivotick-converters"]
+	path = app/modules/pivotick-converters
+	url = https://github.com/Pivotick/pivotick-converters.git
+	ignore = dirty

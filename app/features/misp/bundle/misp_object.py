@@ -1,7 +1,7 @@
 import json
 from pymisp import MISPEvent, MISPObject
 
-from app.features.misp.rule.misp_object import content_convert_to_misp_object, create_rulezet_metadata_misp_object
+from app.features.misp.rule.misp_object import content_convert_to_misp_object, create_rulezet_metadata_misp_object, misp_tag_kwargs
 from ...bundle import bundle_core as BundleModel
 from ..object_templates import load_object_template
 
@@ -85,10 +85,7 @@ def _add_bundle_tags_to_event(event: MISPEvent, bundle_id: int):
         if not tags:
             return
         for tag in tags:
-            if tag.external_id:
-                event.add_tag(**{'name': tag.name, 'uuid': tag.external_id})
-            else:
-                event.add_tag(tag.name)
+            event.add_tag(**misp_tag_kwargs(tag))
     except Exception:
         pass
 

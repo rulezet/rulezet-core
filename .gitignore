@@ -37,6 +37,8 @@ app/static/uploads/*
 app/modules/*
 !app/modules/cti
 !app/modules/rulezet-validation
+!app/modules/pivotick
+!app/modules/pivotick-converters
 
 # rulezet-validation mirror (regenerable build output, see job_handlers.py:rule_validation_run)
 data/rulezet_validation/

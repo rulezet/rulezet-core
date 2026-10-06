@@ -8,7 +8,7 @@ from ...core.db_class.db import PivotickGraphStyle
 # These are the fallback used when an admin hasn't customized a graph yet (or
 # used a "reset" action), AND the fallback baked into the front-end JS in case
 # the /pivotick/style/<type> fetch itself fails. Living in Python (not inside
-# app/modules/pivotick) they are never touched by a PivoTick submodule update.
+# app/modules/pivotick) they are never touched by a Pivotick submodule update.
 
 _TACTIC_PALETTE_LIGHT = [
     '#0ea5e9', '#14b8a6', '#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444',
@@ -149,3 +149,83 @@ def reset_style_config(graph_type):
     except Exception as e:
         db.session.rollback()
         return None, f'Error resetting style: {e}'
+
+
+# ── On/off switch per graph (admin) ───────────────────────────────────────────
+
+def is_graph_enabled(graph_type):
+    """True unless an admin switched this graph off. Never raises: a DB that
+    isn't migrated yet (no `enabled` column) keeps every graph on."""
+    if graph_type not in GRAPH_TYPES:
+        return False
+    try:
+        row = PivotickGraphStyle.query.filter_by(graph_type=graph_type).first()
+    except Exception:
+        db.session.rollback()
+        return True
+    return True if row is None else bool(row.enabled)
+
+
+def graphs_enabled():
+    return {gt: is_graph_enabled(gt) for gt in GRAPH_TYPES}
+
+
+def set_graph_enabled(graph_type, enabled, user_id):
+    if graph_type not in GRAPH_TYPES:
+        return False, 'Unknown graph type'
+    try:
+        row = PivotickGraphStyle.query.filter_by(graph_type=graph_type).first()
+        if not row:
+            row = PivotickGraphStyle(graph_type=graph_type)
+            db.session.add(row)
+        row.enabled = bool(enabled)
+        row.updated_by = user_id
+        db.session.commit()
+        return True, f'Graph {"enabled" if enabled else "disabled"}'
+    except Exception as e:
+        db.session.rollback()
+        return False, f'Error saving: {e}'
+
+
+# ── Which MISP → graph mapping draws the rule / bundle graphs (admin) ────────
+# 'converters': pivotick-converters' MispEventImporter (its own cards/colours)
+# 'rulezet':    Rulezet's own mapping, styled by the node/edge config above
+
+RENDERERS = ('converters', 'rulezet')
+DEFAULT_RENDERER = 'converters'
+MISP_GRAPH_TYPES = ('rule', 'bundle')
+
+
+def get_graph_renderer(graph_type):
+    if graph_type not in MISP_GRAPH_TYPES:
+        return None
+    try:
+        row = PivotickGraphStyle.query.filter_by(graph_type=graph_type).first()
+    except Exception:
+        db.session.rollback()
+        return DEFAULT_RENDERER
+    return row.renderer if row and row.renderer in RENDERERS else DEFAULT_RENDERER
+
+
+def graph_renderers():
+    return {gt: get_graph_renderer(gt) for gt in MISP_GRAPH_TYPES}
+
+
+def set_graph_renderer(graph_type, renderer, user_id):
+    if graph_type not in MISP_GRAPH_TYPES:
+        return False, 'Only the rule and bundle graphs have a renderer choice'
+    if renderer not in RENDERERS:
+        return False, 'Unknown renderer'
+    try:
+        row = PivotickGraphStyle.query.filter_by(graph_type=graph_type).first()
+        if not row:
+            row = PivotickGraphStyle(graph_type=graph_type)
+            db.session.add(row)
+        row.renderer = renderer
+        row.updated_by = user_id
+        db.session.commit()
+        return True, 'Renderer saved'
+    except Exception as e:
+        db.session.rollback()
+        return False, f'Error saving: {e}'
+

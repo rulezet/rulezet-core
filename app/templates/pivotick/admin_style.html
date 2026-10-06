@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% import 'macros/admin_nav.html' as anav %}
-{% block title %}PivoTick — Graph Rendering — Rulezet{% endblock %}
+{% block title %}Pivotick — Graph Rendering — Rulezet{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
@@ -17,22 +17,64 @@
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/admin/settings" class="text-decoration-none text-muted">Admin</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">PivoTick</li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Pivotick</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon"><i class="fa-solid fa-diagram-project"></i></div>
             <div>
-                <h2 class="fw-bold mb-1">PivoTick — Graph Rendering</h2>
+                <h2 class="fw-bold mb-1">Pivotick — Graph Rendering</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
         <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
-            Configure the shape, color and icon of every node and relation type for the site's 3 PivoTick graphs.
-            This setting is stored in the database and completely independent from the PivoTick module itself:
-            a PivoTick update will never overwrite it.
+            Turn each of the site's 3 Pivotick graphs on or off, choose how the rule and bundle MISP graphs are
+            drawn, and style their nodes and relations. Stored in the database, independent from the Pivotick
+            module itself: a Pivotick update never overwrites it.
         </p>
     </div>
+
+    <!-- Graphs on/off + renderer -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <div class="pvs-section-head">
+                <div class="pvs-section-icon"><i class="fa-solid fa-toggle-on"></i></div>
+                <div>
+                    <div class="pvs-section-title">Graphs</div>
+                    <div class="pvs-section-hint">Applied immediately, for every visitor.</div>
+                </div>
+            </div>
+            <div v-for="graph in graphs" :key="graph.key" class="pvs-graph-row">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" role="switch" :id="'pvs-on-' + graph.key"
+                           :checked="graph.enabled" :disabled="graph.busy" @change="toggleGraph(graph)">
+                </div>
+                <label class="pvs-graph-name" :for="'pvs-on-' + graph.key">
+                    <i :class="graph.icon"></i>[[ graph.label ]]
+                    <span class="pvs-graph-state" :class="graph.enabled ? 'pvs-graph-state--on' : 'pvs-graph-state--off'">
+                        [[ graph.enabled ? 'On' : 'Off' ]]
+                    </span>
+                </label>
+                <div class="pvs-graph-detail">
+                    <template v-if="!graph.enabled">
+                        <i class="fa-solid fa-circle-info me-1"></i>[[ graph.offText ]]
+                    </template>
+                    <div v-else-if="graph.renderer" class="d-flex gap-1 p-1 rounded-3 pvs-mode-toggle" style="background:var(--light-bg-color);"
+                         role="group" aria-label="Renderer">
+                        <button v-for="r in renderers" :key="r.id" type="button" :title="r.title"
+                                :disabled="graph.busy" @click="setRenderer(graph, r.id)"
+                                :style="graph.renderer === r.id ? 'background:rgba(13,110,253,.1);color:#0d6efd;' : 'background:transparent;color:var(--subtle-text-color);'"
+                                style="font-size:.78rem;font-weight:600;padding:.32rem .75rem;border-radius:7px;border:none;cursor:pointer;transition:background .13s,color .13s;">
+                            <i :class="r.icon" class="me-1"></i>[[ r.label ]]
+                        </button>
+                    </div>
+                    <span v-else class="text-muted">Styled with the settings below.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pvs-subhead mb-2" style="margin-top:0;">Node &amp; relation styles</div>
 
     <!-- Rule / Bundle / ATT&CK panel switcher, with admin navigation inline (like one more tab) -->
     <div class="dr-nav mb-3" role="tablist">
@@ -45,6 +87,7 @@
         {{ anav.admin_nav_toggle() }}
     </div>
     {{ anav.admin_nav_panel('pivotick') }}
+
 
     <div v-for="section in sections" v-show="activeTab === section.key" :key="section.key" class="card border-0 shadow-sm rounded-3 mb-4">
         <div class="card-body p-4">
@@ -290,9 +333,11 @@
 <script type="module">
     import { createPivotickAdminApp } from '/static/js/pivotick/adminStyleConfig.js'
 
-    const configs  = {{ configs | tojson }}
-    const defaults = {{ defaults | tojson }}
+    const configs   = {{ configs | tojson }}
+    const defaults  = {{ defaults | tojson }}
+    const enabled   = {{ enabled | tojson }}
+    const renderers = {{ renderers | tojson }}
 
-    createPivotickAdminApp(configs, defaults).mount('#pivotick-admin-app')
+    createPivotickAdminApp(configs, defaults, enabled, renderers).mount('#pivotick-admin-app')
 </script>
 {% endblock %}

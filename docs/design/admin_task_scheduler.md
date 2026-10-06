@@ -14,7 +14,7 @@
 >    `depends_on_schedule_id` is always scoped to another task in the same
 >    workflow. This adds a model (§1) and a UI level (§6) not in the
 >    original plan below — read those two sections with that in mind.
-> 2. **No PivoTick for the graph view (§7bis).** PivoTick is a
+> 2. **No Pivotick for the graph view (§7bis).** Pivotick is a
 >    force-directed layout engine, built for organic networks (rule/tag/
 >    attack graphs) — the wrong fit for a left-to-right pipeline where read
 >    order matters, like GitHub Actions' workflow graph. §7bis now
@@ -821,11 +821,11 @@ report page needed. A task's run history (its list of `AdminTaskRun` rows)
 shows in an expandable panel per row of the task list — the same
 `<job-tracker>` component reused for the most recent run if still active.
 
-## 7bis. Graph visualization — a custom lightweight DAG, not PivoTick (implemented, Phase 1)
+## 7bis. Graph visualization — a custom lightweight DAG, not Pivotick (implemented, Phase 1)
 
 **Superseded decision, kept here for the record:** the original plan below
-this note called for reusing PivoTick. Verified by inspecting the real
-code: PivoTick (`app/modules/pivotick/`, built into
+this note called for reusing Pivotick. Verified by inspecting the real
+code: Pivotick (`app/modules/pivotick/`, built into
 `/static/js/pivotick.iife.js`, global `window.Pivotick`) is a genuine
 **force-directed** graph engine — nodes repel/attract into an organic
 layout that settles differently every render, which is exactly right for
@@ -865,11 +865,11 @@ handling, no physics simulation, no settling time.
    so no dependency edge ever points outside what's loaded — the 100-row
    cap matches `get_schedule_list_page`'s existing `max_per_page`.
 
-PivoTick itself is untouched — no new `graph_type`, no new style rows, no
+Pivotick itself is untouched — no new `graph_type`, no new style rows, no
 dependency added to this feature. If a future phase's multi-parent AND/OR
 graph (§4bis) turns out to need general-graph layout (cycles are still
 forbidden, but a node could have many parents *and* many children, which
-starts to look less like a clean pipeline), revisit PivoTick then — the
+starts to look less like a clean pipeline), revisit Pivotick then — the
 custom renderer above was deliberately kept small enough to throw away.
 
 ## 8. Migrating the existing Sync Schedule
@@ -1174,7 +1174,7 @@ them later via §2ter.)
   there's only ever one parent). Cycle guard included.
 - §5, §6, §7: routes, the two-level Workflows → Workflow-detail UI (§6),
   `<job-tracker>` reuse.
-- §7bis: **built**, but as a custom lightweight DAG view, not PivoTick —
+- §7bis: **built**, but as a custom lightweight DAG view, not Pivotick —
   see the superseded-decision note at the top of this document and the
   rewritten §7bis for why.
 - §8: coexistence (option a) — `GithubSyncSchedule` untouched.
@@ -1197,7 +1197,7 @@ happened, not guesses.
   "auto-disabled" visual flag to the task list (§6).
 - §10: run verification steps 10-12.
 
-### Phase 3 — Multi-parent AND/OR + PivoTick graph view
+### Phase 3 — Multi-parent AND/OR + Pivotick graph view
 
 Only worth building once there are enough real chained schedules in use
 that a linear-only chain is visibly limiting (e.g. someone actually asks
@@ -1211,7 +1211,7 @@ for "wait for both A and B").
   parent check.
 - Extend the form's "After another task" mode to the full multi-select +
   AND/OR radio (§3).
-- Build §7bis (PivoTick graph view) — this is the phase where a graph
+- Build §7bis (Pivotick graph view) — this is the phase where a graph
   genuinely earns its place over a table, once branching exists.
 - §9ter (docs chapter 32): write this once the feature is stable enough
   that the walkthrough won't need rewriting a week later — realistically

@@ -305,8 +305,24 @@ export function initAttackGraph(containerId, coverage, opts = {}) {
                         subtitle: (node) => node.getData()?.sublabel ?? '',
                     },
                 },
+                // Read-only: Pivotick's editing affordances (Add Node Here,
+                // Connect to…, Delete, Edit, notes) are on by default.
+                editors: {
+                    nodeCreator: { enabled: false },
+                    edgeCreator: { enabled: false },
+                    nodeEditor:  { enabled: false },
+                    edgeEditor:  { enabled: false },
+                    deletion:    { enabled: false },
+                },
+                notes:   { enabled: false },
+                history: { enabled: false },
             },
             callbacks: {
+                onBeforeNodeCreate:     () => false,
+                onBeforeEdgeCreate:     () => false,
+                onBeforeDelete:         () => false,
+                onBeforeNodeEditCommit: () => false,
+                onBeforeEdgeEditCommit: () => false,
                 // Just report the selection — no navigation, no Pivotick UI changes.
                 onNodeClick: (_evt, node) => {
                     opts.onSelect?.(node.getData() ?? null, String(node.id))

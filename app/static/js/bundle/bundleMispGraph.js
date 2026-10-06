@@ -1,287 +1,155 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  bundleMispGraph.js — MISP event graph for Rulezet bundle/rule detail pages.
-//  Parses the Rulezet MISP JSON structure and renders it with Pivotick directly.
-//  Call initBundleGraph(containerId, jsonText, { graphType }) after the
-//  container is visible.
 //
-//  Node/edge look (shape, color, icon, size) is NOT hardcoded here — it's
-//  fetched from /pivotick/style/<graphType> ('rule' or 'bundle'), which an
-//  admin can customize at /admin/pivotick. See app/features/pivotick/.
+//  The MISP → graph conversion is pivotick-converters' MispEventImporter
+//  (submodule app/modules/pivotick-converters, compiled to
+//  /static/js/pivotick/pivotick-converters.js by `python3 manage.py pivotick`),
+//  rendered with Pivotick (/static/js/pivotick.iife.js) using the same setup
+//  as the converters' own demo — HTML cards, type/relationship legend,
+//  properties panel, expand/collapse — but strictly read-only: every Pivotick
+//  editing affordance (create/edit/delete nodes and edges, notes) is off.
+//
+//  Call initBundleGraph(containerId, jsonText, { renderer, graphType }) once the
+//  container is visible. renderer 'rulezet' (admin choice, /admin/pivotick)
+//  hands off to Rulezet's own mapping instead (mispGraphRulezet.js).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { fetchPivotickStyle, buildNodeStyleMap, edgeStyleFor, isDarkMode } from '../pivotick/pivotickStyle.js'
+import { isDarkMode } from '../pivotick/pivotickStyle.js'
 
-// Raw rule content: too large to display or add as nodes.
-const SKIP_CONTENT_RELATIONS = new Set(['yara', 'nse', 'suricata', 'snort', 'sigma', 'zeek'])
+const CONVERTERS_URL = '/static/js/pivotick/pivotick-converters.js'
+const PIVOTICK_URL   = '/static/js/pivotick.iife.js'
 
-// Name attributes already used as the rule node label — skip as property nodes.
-const SKIP_NAME_RELATIONS = new Set([
-    'yara-rule-name', 'nse-script-name',
-    'suricata-rule-name', 'snort-rule-name', 'zeek-script-name',
-])
+// Always the converter's simplified view: tags and attributes folded behind
+// expandable summary nodes (the user expands what they need).
+const VIEW_MODE = 'grouped'
 
-// Attributes to expand as leaf property nodes for each parent object type.
-const BUNDLE_PROP_ATTRS = ['author', 'description', 'date']
-const META_PROP_ATTRS   = ['format', 'author', 'version', 'license', 'source', 'description']
-
-export const GRAPH_CONFIG = {
-    maxNodes: 2000,
-    layout: { type: 'force' },
-    pivotickUI: { mode: 'full', sidebar: { collapsed: 'auto' } },
+const NODE_TYPE_LABELS = {
+    'misp-event': 'Event',
+    'misp-attribute': 'Attribute',
+    'misp-attribute-group': 'Attributes',
+    'misp-object': 'Object',
+    'misp-galaxy-group': 'Galaxy clusters',
+    'misp-galaxy': 'Galaxy',
+    'misp-galaxy-cluster': 'Galaxy cluster',
+    'misp-sighting-summary': 'Sightings',
+    'misp-sighting-type': 'Sighting type',
+    'misp-tag': 'Tag',
+    'misp-tag-group': 'Tags',
+    'misp-correlation': 'Correlated indicator',
 }
 
-// Track live Pivotick instances and the theme observer so we can clean up.
-const _instances = new Map()  // containerId → { pivotick, jsonText }
+// Pivotick editing is on by default (even in "viewer" mode the context menu
+// offers Delete Node / Connect to…): switch every write affordance off, and
+// veto at the hook level too in case a future Pivotick adds a new entry point.
+const READ_ONLY_UI = {
+    editors: {
+        nodeCreator: { enabled: false },
+        edgeCreator: { enabled: false },
+        nodeEditor:  { enabled: false },
+        edgeEditor:  { enabled: false },
+        deletion:    { enabled: false },
+    },
+    notes:   { enabled: false },
+    history: { enabled: false },
+}
+const READ_ONLY_CALLBACKS = {
+    onBeforeNodeCreate:     () => false,
+    onBeforeEdgeCreate:     () => false,
+    onBeforeDelete:         () => false,
+    onBeforeNodeEditCommit: () => false,
+    onBeforeEdgeEditCommit: () => false,
+}
+
+const _instances = new Map()   // containerId → Pivotick instance
 let _themeObserver = null
+let _convertersPromise = null
+let _pivotickPromise = null
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Parsing helpers
+//  Loading
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Prefer yara-rule-name / nse-script-name over the MISP template description
-// which is identical for every yara/nse object and causes all rule nodes to
-// collapse on top of each other in the graph.
-function _getRuleLabel(ruleObj) {
-    const attrs = ruleObj.Attribute || []
-    const nameAttr = attrs.find(a =>
-        a.object_relation.endsWith('-rule-name') ||
-        a.object_relation.endsWith('-script-name')
-    )
-    if (nameAttr?.value) return nameAttr.value
-    const contentAttr = attrs.find(a => ['suricata', 'snort'].includes(a.object_relation))
-    const sid = contentAttr?.value?.match(/sid:(\d+)/)?.[1]
-    if (sid) return `${ruleObj.name} sid:${sid}`
-    return ruleObj.name
-}
-
-function _attr(obj, relation) {
-    return (obj.Attribute || []).find(a => a.object_relation === relation)?.value ?? null
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Public: parseMispBundle
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Parse a Rulezet MISP event JSON into Pivotick { nodes, edges }.
- *
- * Graph hierarchy:
- *   Bundle ──contains──► Metadata ──contains──► Rule
- *          ──tagged────► Tag
- *          ──property──► (author / description / date)
- *          Metadata ───► (format / author / version / license / source / description)
- *          Rule ────────► (any non-content, non-name attribute)
- *
- * Every edge carries a `type` used purely for style lookup (contains / related-to
- * / tagged / property) — its `label` keeps the original, more descriptive text.
- */
-export function parseMispBundle(json) {
-    const nodes = [], edges = []
-    const ev = json?.Event ?? json
-
-    const objByUuid  = {}
-    const attrByUuid = {}
-    ;(ev.Attribute || []).forEach(a => { attrByUuid[a.uuid] = a })
-    ;(ev.Object    || []).forEach(o => { objByUuid[o.uuid]  = o })
-
-    const seen = new Set()
-    function addNode(n) { if (!seen.has(n.id)) { seen.add(n.id); nodes.push(n) } }
-
-    // Helper: create leaf property nodes attached to a parent node
-    function _addPropNodes(parentId, obj, attrKeys) {
-        for (const key of attrKeys) {
-            const val = _attr(obj, key)
-            if (!val) continue
-            const propId = `${parentId}_prop_${key}`
-            addNode({
-                id: propId,
-                data: {
-                    label: String(val).substring(0, 38),
-                    sublabel: key,
-                    type: 'property',
-                    raw: { key, value: val },
-                },
-            })
-            edges.push({ from: parentId, to: propId, data: { label: key, type: 'property' } })
-        }
-    }
-
-    // Helper: create ATT&CK technique leaf nodes attached to a parent node.
-    // Sourced from an object's "Attribute" array, same as any other MISP
-    // object attribute (object_relation "attack-id" — see
-    // create_rulezet_metadata_misp_object in app/features/misp/rule/misp_object.py,
-    // added the same way "cve-id" already is).
-    function _addAttackNodes(parentId, attributes) {
-        for (const attr of (attributes || [])) {
-            if (attr.object_relation !== 'attack-id' || !attr.value) continue
-            const techId = `${parentId}_attack_${attr.uuid}`
-            addNode({
-                id: techId,
-                data: { label: attr.value, sublabel: 'ATT&CK', type: 'attack', raw: attr },
-            })
-            edges.push({ from: parentId, to: techId, data: { label: 'uses', type: 'attack' } })
-        }
-    }
-
-    // Helper: create property nodes from a rule's Attribute array,
-    // skipping raw content and name attributes already used as the node label.
-    function _addRulePropNodes(ruleId, ruleObj) {
-        for (const attr of (ruleObj.Attribute || [])) {
-            if (SKIP_CONTENT_RELATIONS.has(attr.object_relation)) continue
-            if (SKIP_NAME_RELATIONS.has(attr.object_relation)) continue
-            if (!attr.value) continue
-            const propId = `${ruleId}_prop_${attr.object_relation}`
-            addNode({
-                id: propId,
-                data: {
-                    label: String(attr.value).substring(0, 38),
-                    sublabel: attr.object_relation,
-                    type: 'property',
-                    raw: attr,
-                },
-            })
-            edges.push({ from: ruleId, to: propId, data: { label: attr.object_relation, type: 'property' } })
-        }
-    }
-
-    const bundleObj = (ev.Object || []).find(o => o.name === 'rulezet-bundle')
-
-    if (bundleObj) {
-        const bName   = _attr(bundleObj, 'name')  || 'Bundle'
-        const bAuthor = _attr(bundleObj, 'author') || ''
-        addNode({
-            id: bundleObj.uuid,
-            data: { label: bName.substring(0, 38), sublabel: bAuthor || 'Bundle', type: 'bundle', raw: bundleObj },
-        })
-
-        // Bundle-level property nodes (author, description, date)
-        _addPropNodes(bundleObj.uuid, bundleObj, BUNDLE_PROP_ATTRS)
-
-        ;(bundleObj.ObjectReference || []).forEach(ref => {
-            const rel = ref.relationship_type
-            const tgt = ref.referenced_uuid
-
-            if (rel === 'contains' && objByUuid[tgt]) {
-                const meta   = objByUuid[tgt]
-                const title  = _attr(meta, 'title')  || meta.name
-                const format = _attr(meta, 'format') || ''
-                addNode({
-                    id: meta.uuid,
-                    data: { label: title.substring(0, 34), sublabel: format || 'metadata', type: 'metadata', raw: meta },
-                })
-                edges.push({ from: bundleObj.uuid, to: meta.uuid, data: { label: 'contains', type: 'contains' } })
-
-                // Metadata-level property nodes (format, author, version, license, source, description)
-                _addPropNodes(meta.uuid, meta, META_PROP_ATTRS)
-
-                ;(meta.ObjectReference || []).forEach(mref => {
-                    const ruleObj = objByUuid[mref.referenced_uuid]
-                    if (!ruleObj) return
-                    const ruleLabel = _getRuleLabel(ruleObj)
-                    addNode({
-                        id: ruleObj.uuid,
-                        data: { label: ruleLabel.substring(0, 38), sublabel: ruleObj.name, type: 'rule', raw: ruleObj },
-                    })
-                    edges.push({
-                        from: meta.uuid, to: ruleObj.uuid,
-                        data: { label: mref.relationship_type || 'related-to', type: 'contains' },
-                    })
-
-                    // Rule-level property nodes (any non-content, non-name attribute)
-                    _addRulePropNodes(ruleObj.uuid, ruleObj)
-
-                    // ATT&CK techniques used by this rule (stored as "attack-id"
-                    // attributes on the metadata object, same as "cve-id")
-                    _addAttackNodes(ruleObj.uuid, meta.Attribute)
-                })
-
-            } else if (rel === 'related-to' && attrByUuid[tgt]) {
-                const attr = attrByUuid[tgt]
-                addNode({
-                    id: attr.uuid,
-                    data: { label: String(attr.value || attr.type).substring(0, 28), sublabel: attr.type, type: 'vulnerability', raw: attr },
-                })
-                edges.push({ from: bundleObj.uuid, to: attr.uuid, data: { label: rel, type: 'related-to' } })
+function _loadConverters() {
+    if (!_convertersPromise) {
+        _convertersPromise = import(CONVERTERS_URL).then(mod => {
+            // Converter's own CSS fixes (collapsed "+" nodes, shadow edges) — once per page.
+            if (mod.PIVOTICK_STYLE_OVERRIDES && !document.getElementById('pivotick-converters-overrides')) {
+                const style = document.createElement('style')
+                style.id = 'pivotick-converters-overrides'
+                style.textContent = mod.PIVOTICK_STYLE_OVERRIDES
+                document.head.append(style)
             }
-        })
-
-        // Tags connected to the bundle
-        ;(ev.Tag || []).forEach((tag, i) => {
-            const id = 'tag_' + i
-            addNode({ id, data: { label: String(tag.name || 'tag').substring(0, 30), sublabel: 'tag', type: 'tag', raw: tag } })
-            edges.push({ from: bundleObj.uuid, to: id, data: { label: 'tagged', type: 'tagged' } })
-        })
-
-    } else {
-        // Fallback — no rulezet-bundle object, flat render of everything
-        const evId = 'ev'
-        addNode({ id: evId, data: { label: String(ev.info || 'Event').substring(0, 38), sublabel: 'event', type: 'bundle', raw: ev } })
-        ;(ev.Object || []).forEach((obj, i) => {
-            const objId = obj.uuid || ('o' + i)
-            addNode({ id: objId, data: { label: obj.name, sublabel: obj['meta-category'] || '', type: 'metadata', raw: obj } })
-            edges.push({ from: evId, to: objId, data: { label: '', type: 'contains' } })
-
-            // ATT&CK techniques used by this rule ("attack-id" attributes on the metadata object)
-            _addAttackNodes(objId, obj.Attribute)
-        })
-        ;(ev.Attribute || []).forEach((attr, i) => {
-            addNode({ id: attr.uuid || ('a' + i), data: { label: String(attr.value || '').substring(0, 26), sublabel: attr.type, type: 'vulnerability', raw: attr } })
-            edges.push({ from: evId, to: attr.uuid || ('a' + i), data: { label: '', type: 'related-to' } })
-        })
-        ;(ev.Tag || []).forEach((tag, i) => {
-            addNode({ id: 'tag_' + i, data: { label: String(tag.name || '').substring(0, 28), sublabel: 'tag', type: 'tag', raw: tag } })
-            edges.push({ from: evId, to: 'tag_' + i, data: { label: 'tagged', type: 'tagged' } })
+            return mod
         })
     }
+    return _convertersPromise
+}
 
-    return { nodes, edges }
+function _loadPivotick() {
+    if (typeof window.Pivotick === 'function') return Promise.resolve(window.Pivotick)
+    if (!_pivotickPromise) {
+        _pivotickPromise = new Promise((resolve, reject) => {
+            const s = document.createElement('script')
+            s.src = PIVOTICK_URL
+            s.dataset.pivotick = '1'
+            s.onload  = () => typeof window.Pivotick === 'function' ? resolve(window.Pivotick) : reject(new Error('Pivotick global missing'))
+            s.onerror = () => reject(new Error('Could not load Pivotick'))
+            document.head.appendChild(s)
+        })
+    }
+    return _pivotickPromise
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  UI helpers
+//  Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function _nodeProperties(node) {
-    const d   = node.getData()
-    const raw = d?.raw ?? {}
-    const props = []
-
-    if (raw.key !== undefined) {
-        // Property leaf node — show key + full value
-        props.push({ name: raw.key, value: String(raw.value ?? '') })
-    } else if (Array.isArray(raw.Attribute)) {
-        for (const attr of raw.Attribute) {
-            if (SKIP_CONTENT_RELATIONS.has(attr.object_relation)) continue
-            const val = attr.value
-            if (val === null || val === undefined || val === '') continue
-            props.push({ name: attr.object_relation || attr.type, value: String(val).substring(0, 200) })
-        }
-    } else {
-        if (raw.value !== undefined) props.push({ name: 'Value',    value: String(raw.value).substring(0, 200) })
-        if (raw.name)                props.push({ name: 'Name',     value: raw.name })
-        if (raw.type)                props.push({ name: 'Type',     value: raw.type })
-        if (raw.category)            props.push({ name: 'Category', value: raw.category })
-        if (raw.colour)              props.push({ name: 'Colour',   value: raw.colour })
+function _message(container, text, spinner = false) {
+    container.replaceChildren()
+    const box = document.createElement('div')
+    box.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;gap:.75rem;' +
+                        'color:var(--subtle-text-color,#6c757d);font-size:.875rem;padding:2rem;text-align:center;'
+    if (spinner) {
+        const sp = document.createElement('div')
+        sp.className = 'spinner-border spinner-border-sm text-primary'
+        sp.setAttribute('role', 'status')
+        box.append(sp)
     }
-
-    return props.filter(p => p.value !== '')
+    const span = document.createElement('span')
+    span.textContent = text
+    box.append(span)
+    container.append(box)
 }
 
-function _showSpinner(container, message) {
-    container.innerHTML =
-        `<div style="display:flex;align-items:center;justify-content:center;height:100%;gap:.75rem;
-                     color:var(--subtle-text-color,#6c757d);font-size:.875rem;">
-            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-            <span>${message}</span>
-        </div>`
+// Rulezet exports the MISP event without the {"Event": …} wrapper that MISP's
+// own API (and the converter) use — accept both.
+function _asMispInput(json) {
+    if (json && typeof json === 'object' && json.Event && typeof json.Event === 'object') return json
+    return { Event: json }
 }
 
-// Apply per-type edge styling (from the fetched config) onto parsed edges in place.
-function _applyEdgeStyles(edges, edgeConfig, dark) {
-    for (const edge of edges) {
-        const type = edge.data?.type
-        edge.style = edgeStyleFor(edgeConfig, type, dark)
+function _nodePropertiesMap(node) {
+    const data = typeof node.getData === 'function' ? node.getData() : (node.data ?? {})
+    return Object.entries(data)
+        .filter(([key, value]) => key && key !== 'label' && value !== undefined && value !== null && value !== '' && typeof value !== 'object')
+        .map(([name, value]) => ({ name, value: String(value) }))
+}
+
+function _legendEntries(NODE_DEFAULTS) {
+    const catalog = Object.entries(NODE_DEFAULTS)
+        .filter(([, style]) => style.accentColor)
+        .map(([type, style]) => ({ id: type, label: NODE_TYPE_LABELS[type] ?? type, color: style.accentColor }))
+        .concat({ id: 'misp-tag', label: NODE_TYPE_LABELS['misp-tag'], color: '#DB6A47' })
+    return (graph) => {
+        const present = new Set(graph.getNodes().map(n => n.getData()?.type))
+        return catalog.filter(entry => present.has(entry.id))
     }
+}
+
+function _destroy(containerId) {
+    const prev = _instances.get(containerId)
+    if (prev?.destroy) { try { prev.destroy() } catch {} }
+    _instances.delete(containerId)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,183 +157,104 @@ function _applyEdgeStyles(edges, edgeConfig, dark) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Render the MISP bundle graph inside `containerId`.
+ * Render a MISP event graph inside `containerId`.
  * Must be called when the container is visible (tab shown).
  *
  * @param {string} containerId  DOM id of the target div
- * @param {string} jsonText     Raw JSON string of the MISP event
- * @param {object} [opts]       Optional overrides: { sizeScale, graphType }
- *   graphType: 'bundle' (default) or 'rule' — selects which admin-configurable
- *   style (/pivotick/style/<graphType>) to render with.
+ * @param {string} jsonText     Raw JSON string of the MISP event (with or without the Event wrapper)
+ * @param {object} [opts]       { renderer: 'converters' (default) | 'rulezet', graphType: 'rule' | 'bundle' }
  */
 export function initBundleGraph(containerId, jsonText, opts = {}) {
+    if (opts.renderer === 'rulezet') {
+        import('./mispGraphRulezet.js').then(mod => mod.initRulezetMispGraph(containerId, jsonText, opts))
+        return
+    }
     const container = document.getElementById(containerId)
     if (!container) return
 
-    // Destroy any existing Pivotick instance for this container.
-    const prev = _instances.get(containerId)
-    if (prev?.destroy) { try { prev.destroy() } catch {} }
-    _instances.delete(containerId)
-
-    // Disconnect any running theme observer before setting a new one.
+    _destroy(containerId)
     if (_themeObserver) { _themeObserver.disconnect(); _themeObserver = null }
 
-    // Load pivotick.iife.js if not yet present, then poll until window.Pivotick is ready.
-    if (typeof window.Pivotick !== 'function') {
-        _showSpinner(container, 'Loading Pivotick…')
+    _message(container, 'Loading graph…', true)
 
-        if (!document.querySelector('script[data-pivotick]')) {
-            const s = document.createElement('script')
-            s.src = '/static/js/pivotick.iife.js'
-            s.dataset.pivotick = '1'
-            document.head.appendChild(s)
-        }
-
-        let attempts = 0
-        const poll = setInterval(() => {
-            attempts++
-            if (typeof window.Pivotick === 'function') {
-                clearInterval(poll)
-                initBundleGraph(containerId, jsonText, opts)
-            } else if (attempts > 50) {
-                clearInterval(poll)
-                container.innerHTML = '<p style="padding:2rem;text-align:center;color:#888">Could not load Pivotick.</p>'
-            }
-        }, 200)
+    let input
+    try {
+        input = _asMispInput(JSON.parse(jsonText))
+    } catch {
+        _message(container, 'Could not parse the MISP event.')
         return
     }
 
-    _showSpinner(container, 'Parsing MISP event…')
-
-    const graphType = opts.graphType === 'rule' ? 'rule' : 'bundle'
-
-    Promise.all([
-        Promise.resolve().then(() => {
-            try { return parseMispBundle(JSON.parse(jsonText)) } catch { return null }
-        }),
-        fetchPivotickStyle(graphType),
-    ]).then(([parsed, styleConfig]) => {
-        if (!parsed) {
-            container.innerHTML = '<p style="padding:2rem;text-align:center;color:#888">Could not parse MISP JSON.</p>'
+    Promise.all([_loadConverters(), _loadPivotick()]).then(([conv, Pivotick]) => {
+        const importer = conv.GraphRegistry.getImporter('misp')
+        if (!importer.detect(input)) {
+            _message(container, 'This is not a MISP event.')
             return
         }
 
-        if (!parsed.nodes.length) {
-            container.innerHTML = '<p style="padding:2rem;text-align:center;color:#888">No graph data found.</p>'
-            return
-        }
+        const theme = isDarkMode() ? 'dark' : 'light'
+        const data = importer.convert(input, { theme, viewMode: VIEW_MODE })
 
-        const { maxNodes, layout, pivotickUI } = GRAPH_CONFIG
-        const dark = isDarkMode()
-        const nodeStyles = buildNodeStyleMap(styleConfig.nodes, dark, opts.sizeScale ?? 1)
-        _applyEdgeStyles(parsed.edges, styleConfig.edges, dark)
-
-        if (parsed.nodes.length > maxNodes) {
-            const degree = {}
-            for (const e of parsed.edges) {
-                degree[e.from] = (degree[e.from] || 0) + 1
-                degree[e.to]   = (degree[e.to]   || 0) + 1
-            }
-            parsed.nodes.sort((a, b) => (degree[b.id] || 0) - (degree[a.id] || 0))
-            const kept = new Set(parsed.nodes.slice(0, maxNodes).map(n => n.id))
-            parsed.nodes = parsed.nodes.filter(n => kept.has(n.id))
-            parsed.edges = parsed.edges.filter(e => kept.has(e.from) && kept.has(e.to))
-        }
-
-        container.innerHTML = ''
-
-        const instance = new window.Pivotick(container, parsed, {
+        container.replaceChildren()
+        const instance = new Pivotick(container, data, {
             isDirected: true,
-            layout,
-            simulation: {
-                useWorker: false,
-                warmupTicks: parsed.nodes.length > 200 ? 0 : 'auto',
-            },
+            layout: { type: 'force' },
             render: {
-                nodeTypeAccessor: (node) => node.getData()?.type ?? '_default',
-                nodeStyleMap: nodeStyles,
-                defaultNodeStyle: nodeStyles['_default'],
-                defaultEdgeStyle: { markerEnd: 'arrow' },
-                nodeHeaderMap: {
-                    title:    (node) => node.getData()?.label    ?? '',
-                    subtitle: (node) => node.getData()?.sublabel ?? '',
-                },
+                type: 'svg',
+                enableFocusMode: true,
+                enableNodeExpansion: true,   // needed by the grouped view's expandable summaries
+                zoomEnabled: true,
+                zoomAnimation: true,
+                dragEnabled: true,
+                interactionEnabled: true,
+                selectionBox: { enabled: true },
             },
+            simulation: {
+                enabled: true,
+                useWorker: true,
+                ...conv.RECOMMENDED_PIVOTICK_SIMULATION_OPTIONS,
+            },
+            callbacks: READ_ONLY_CALLBACKS,
             UI: {
-                ...pivotickUI,
-                theme: dark ? 'dark' : 'light',
-                mainHeader: {
-                    nodeHeaderMap: {
-                        title:    (node) => node.getData()?.label    ?? String(node.id),
-                        subtitle: (node) => node.getData()?.sublabel ?? node.getData()?.type ?? '',
-                    },
-                    edgeHeaderMap: {
-                        title:    (edge) => edge.getData()?.label || 'Relationship',
-                        subtitle: (edge) => `${edge.from} → ${edge.to}`,
-                    },
-                },
-                propertiesPanel: {
-                    nodePropertiesMap: (node) => _nodeProperties(node),
-                    edgePropertiesMap: (edge) => [
-                        { name: 'Relationship', value: edge.getData()?.label || '—' },
-                        { name: 'From',         value: String(edge.from) },
-                        { name: 'To',           value: String(edge.to)   },
-                    ],
-                },
-                tooltip: {
-                    nodeHeaderMap: {
-                        title:    (node) => node.getData()?.label    ?? '',
-                        subtitle: (node) => node.getData()?.sublabel ?? '',
-                    },
-                },
+                theme,
+                mode: 'full',
+                sidebar: { collapsed: 'auto' },
+                tooltip: { enabled: true, allowPinning: true, nodePropertiesMap: _nodePropertiesMap },
+                propertiesPanel: { nodePropertiesMap: _nodePropertiesMap },
                 contextMenu: {
+                    enabled: true,
                     menuNode: {
                         topbar: [{
                             text: 'Copy label',
                             iconClass: 'fas fa-copy',
                             onclick: (_evt, node) => {
-                                navigator.clipboard.writeText(node.getData()?.label ?? '').catch(() => {})
-                            },
-                        }],
-                        menu: [{
-                            text: 'Open raw JSON',
-                            iconClass: 'fas fa-code',
-                            onclick: (_evt, node) => {
-                                const raw = node.getData()?.raw ?? {}
-                                const win = window.open('', '_blank')
-                                if (!win) return
-                                // Built via DOM APIs + textContent (never HTML-parsed) rather
-                                // than document.write(`...${JSON.stringify(raw)}...`) — raw
-                                // comes from attacker-controlled MISP bundle content, and
-                                // JSON.stringify does not escape '<'/'>', so a value like
-                                // "</pre><script>...</script>" previously broke out of the
-                                // <pre> tag and executed in this same-origin popup.
-                                win.document.title = 'Raw JSON'
-                                win.document.body.style.margin = '0'
-                                win.document.body.style.background = '#1e1e1e'
-                                win.document.body.style.color = '#d4d4d4'
-                                const pre = win.document.createElement('pre')
-                                pre.style.cssText = 'font-family:monospace;font-size:13px;padding:1.5rem;white-space:pre-wrap;word-break:break-all;margin:0'
-                                pre.textContent = JSON.stringify(raw, null, 2)
-                                win.document.body.appendChild(pre)
+                                navigator.clipboard?.writeText(String(node.getData()?.label ?? '')).catch(() => {})
                             },
                         }],
                     },
                 },
+                navigation: { enabled: true },
+                legend: {
+                    position: 'bottom-left',
+                    sections: [
+                        { key: 'type', title: 'Node type', entries: _legendEntries(conv.NODE_DEFAULTS) },
+                        { scope: 'edge', key: 'label', title: 'Relationship' },
+                    ],
+                },
+                ...READ_ONLY_UI,
             },
         })
-
         _instances.set(containerId, instance)
 
-        // Re-render with new colors whenever the user toggles dark/light mode.
+        // The converter's cards are pre-built DOM for one theme — re-convert on toggle.
         _themeObserver = new MutationObserver(() => {
             _themeObserver.disconnect()
             _themeObserver = null
-            initBundleGraph(containerId, jsonText, opts)
+            initBundleGraph(containerId, jsonText)
         })
-        _themeObserver.observe(document.documentElement, {
-            attributes: true,
-            attributeFilter: ['class'],
-        })
+        _themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    }).catch(err => {
+        console.error('[bundleMispGraph]', err)
+        _message(container, 'Could not load the graph.')
     })
 }

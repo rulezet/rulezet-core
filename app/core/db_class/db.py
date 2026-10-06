@@ -3100,6 +3100,14 @@ class PivotickGraphStyle(db.Model):
     id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
     graph_type = db.Column(db.String(20), unique=True, nullable=False, index=True)
     config     = db.Column(db.JSON, nullable=True)
+    # Admin switch (/admin/pivotick): when off, the graph isn't offered at all —
+    # rule/bundle pages show only the MISP event JSON, the ATT&CK page drops
+    # its Graph view. No row = enabled.
+    enabled    = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    # rule/bundle only: which MISP → graph mapping draws it — 'converters'
+    # (pivotick-converters, the default) or 'rulezet' (Rulezet's own mapping,
+    # styled by `config` above). NULL = default.
+    renderer   = db.Column(db.String(20), nullable=True)
     updated_at = db.Column(db.DateTime, nullable=True,
                            default=lambda: datetime.datetime.now(datetime.timezone.utc),
                            onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))

@@ -1,4 +1,4 @@
-/* PivoTick render-style admin page (/admin/pivotick) */
+/* Pivotick render-style admin page (/admin/pivotick) */
 
 .pvs-section-head {
     display: flex;
@@ -167,3 +167,34 @@
 
 .pvs-status--error { color: #dc3545; }
 .pvs-status--ok    { color: #198754; }
+
+/* ── Graphs on/off + renderer rows ── */
+.pvs-graph-row {
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+    flex-wrap: wrap;
+    padding: .75rem 0;
+    border-top: 1px solid var(--border-color);
+}
+.pvs-graph-row:first-of-type { border-top: none; }
+.pvs-graph-name {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    min-width: 200px;
+    font-weight: 600;
+    font-size: .9rem;
+    color: var(--text-color);
+    cursor: pointer;
+}
+.pvs-graph-name i { color: #0d6efd; width: 1rem; text-align: center; }
+.pvs-graph-state {
+    font-size: .66rem;
+    font-weight: 700;
+    padding: .1rem .5rem;
+    border-radius: 999px;
+}
+.pvs-graph-state--on  { background: rgba(25,135,84,.12); color: #198754; }
+.pvs-graph-state--off { background: var(--light-bg-color); color: var(--subtle-text-color); }
+.pvs-graph-detail { font-size: .8rem; color: var(--subtle-text-color); margin-left: auto; }

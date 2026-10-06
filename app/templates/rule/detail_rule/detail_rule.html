@@ -15,7 +15,6 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/pivotick-overrides.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/components/graph-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/attack-display.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/voter-popover.css') }}">
@@ -301,7 +300,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                             <div class="border rounded-3 overflow-hidden shadow-sm">
 
 
-                                <ul class="nav nav-tabs nav-fill border-bottom" id="ruleTabs" role="tablist">
+                                <ul class="nav nav-tabs nav-fill border-bottom rule-tabs" id="ruleTabs" role="tablist">
                                     <li class="nav-item" role="presentation">
                                         <button class="nav-link active small fw-bold py-2 border-0" id="normal-tab"
                                             data-bs-toggle="tab" data-bs-target="#normal" type="button" role="tab">
@@ -941,6 +940,8 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                             </div>
                         </div>
 
+                        {# Whole card hidden when the rule graph is switched off in /admin/pivotick #}
+                        {% if pivotick_graph_enabled('rule') %}
                         <!-- Visualization -->
                         <div class="mt-3 rounded-4 overflow-hidden border position-relative mb-2" style="background:var(--light-bg-color);">
                             <div class="contributor-watermark"><i class="fa-solid fa-diagram-project"></i></div>
@@ -953,24 +954,22 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                         </span>
                                     </div>
                                     
-                                    <div class="d-flex  px-2 pt-2" >
-                                        <button @click="refreshVizGraph()" class="btn btn-sm btn-outline-secondary" title="Refresh graph" style="font-size:.75rem;">
-                                            <i class="fa-solid fa-rotate-right me-1"></i>Refresh
-                                        </button>
-                                    </div>
+                                    <button @click="refreshVizGraph()" class="btn btn-sm btn-outline-secondary rounded-pill px-3" title="Redraw the graph" style="font-size:.75rem;">
+                                        <i class="fa-solid fa-rotate-right me-1"></i>Refresh
+                                    </button>
                                 </div>
 
                                 <div class="border rounded-3 overflow-hidden shadow-sm">
                                     
-                                    <ul class="nav nav-tabs nav-fill border-bottom" id="ruleTabs" role="tablist">
+                                    <ul class="nav nav-tabs nav-fill border-bottom rule-tabs" id="ruleVizTabs" role="tablist">
                                         <li class="nav-item" role="presentation">
-                                            <button class="nav-link active small fw-bold py-2 border-0" id="normal-tab"
+                                            <button class="nav-link active small fw-bold py-2 border-0" id="viz-graph-tab"
                                                 data-bs-toggle="tab" data-bs-target="#viz-graph" type="button" role="tab">
-                                                <i class="fas fa-file-code"></i> Graph
+                                                <i class="fas fa-diagram-project"></i> Graph
                                             </button>
                                         </li>
                                         <li class="nav-item" role="presentation">
-                                            <button class="nav-link small fw-bold py-2 border-0" id="json-tab"
+                                            <button class="nav-link small fw-bold py-2 border-0" id="viz-json-tab"
                                                 data-bs-toggle="tab" data-bs-target="#viz-json" type="button" role="tab">
                                                 <i class="fas fa-code"></i> JSON
                                             </button>
@@ -1006,6 +1005,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                 </div>
                             </div>
                         </div>
+                        {% endif %}
 
                         <!-- Quality Score -->
                         <div class="mt-3 rounded-4 overflow-hidden border position-relative mb-2" style="background:var(--light-bg-color);">
@@ -1456,7 +1456,8 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 const container = document.getElementById('rule-viz-graph-container');
                 if (!container) return;
                 _vizGraphInited = true;
-                initBundleGraph('rule-viz-graph-container', JSON.stringify(window.__misp_event), { sizeScale: 0.55, graphType: 'rule' });
+                initBundleGraph('rule-viz-graph-container', JSON.stringify(window.__misp_event),
+                    { renderer: {{ pivotick_graph_renderer('rule') | tojson }}, graphType: 'rule', sizeScale: 0.55 });
             }
 
             function refreshVizGraph() {

@@ -737,6 +737,7 @@
                                             <span v-if="mispStats.uuid" class="bm-uuid" :title="'Event UUID ' + mispStats.uuid"><i class="fa-solid fa-fingerprint"></i>[[ mispStats.uuid ]]</span>
                                         </div>
                                     </div>
+                                    {% if pivotick_graph_enabled('bundle') %}
                                     <div class="bm-toggle" role="group" aria-label="MISP view">
                                         <button type="button" :class="{ active: mispView === 'json' }" @click="showMispJson">
                                             <i class="fa-solid fa-code"></i>JSON
@@ -745,6 +746,7 @@
                                             <i class="fa-solid fa-diagram-project"></i>Graph
                                         </button>
                                     </div>
+                                    {% endif %}
                                 </div>
                                 <code-viewer v-if="mispView === 'json'"
                                     :code="mispJson"
@@ -1920,7 +1922,8 @@
                 requestAnimationFrame(() => {
                     try {
                         if (!document.getElementById('misp-graph-container') || !_mispParsed.value) return;
-                        initBundleGraph('misp-graph-container', JSON.stringify(_mispParsed.value), { graphType: 'bundle' });
+                        initBundleGraph('misp-graph-container', JSON.stringify(_mispParsed.value),
+                            { renderer: {{ pivotick_graph_renderer('bundle') | tojson }}, graphType: 'bundle' });
                     } catch (e) {
                         console.error('MISP graph', e);
                         mispGraphError.value = true;

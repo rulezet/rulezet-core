@@ -1,5 +1,6 @@
 # create a misp object for rule rulezet-metadata + relationship with rule-object
 import json
+import re
 from pymisp import MISPEvent, MISPObject
 from ...rule import rule_core as RuleModel
 from ...attack.attack_core import get_techniques_for_rule
@@ -8,6 +9,22 @@ from ..object_templates import load_object_template
 #############################################
 #   Get rule in MISP Object or MISP Event   #
 #############################################
+
+
+_HEX_COLOUR = re.compile(r'^#[0-9A-Fa-f]{6}$')
+
+
+def misp_tag_kwargs(tag) -> dict:
+    """MISP Tag fields for a Rulezet Tag: name, its uuid when it comes from a
+    taxonomy/galaxy, and its colour — MISP's own Tag `colour` (what MISP and
+    the Pivotick graph use to paint the tag chip)."""
+    kwargs = {'name': tag.name}
+    if getattr(tag, 'external_id', None):
+        kwargs['uuid'] = tag.external_id
+    colour = (getattr(tag, 'color', None) or '').strip()
+    if _HEX_COLOUR.match(colour):
+        kwargs['colour'] = colour
+    return kwargs
 
 def get_rule_misp_object(rule_id: int):
     event = get_rule_misp_object_base(rule_id)
@@ -38,10 +55,7 @@ def get_rule_misp_event_object(rule_id: int):
     tags = RuleModel.get_tags_for_rule(rule_id)
     if tags:
         for tag in tags:
-            if tag.external_id:
-                event.add_tag(**{'name': tag.name, 'uuid': tag.external_id})
-                continue
-            event.add_tag(tag.name)
+            event.add_tag(**misp_tag_kwargs(tag))
 
     return event
 

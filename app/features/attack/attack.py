@@ -157,8 +157,15 @@ def remove_from_rule(rule_id, technique_id):
 
 # ── Heatmap & technique detail ────────────────────────────────────────────────
 
+def _heatmap_cache_key():
+    # The page shows or hides its Graph view per the admin switch
+    # (/admin/pivotick) — a flip must not wait for this cache to expire.
+    from app.features.pivotick.pivotick_core import is_graph_enabled
+    return f"view/attack/heatmap/graph-{'on' if is_graph_enabled('attack') else 'off'}"
+
+
 @attack_blueprint.route('/heatmap')
-@cache.cached(timeout=60 * 60 * 6)
+@cache.cached(timeout=60 * 60 * 6, key_prefix=_heatmap_cache_key)
 def heatmap():
     return render_template('attack/heatmap.html')
 
