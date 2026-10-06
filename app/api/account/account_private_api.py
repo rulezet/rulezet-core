@@ -1,5 +1,5 @@
 from flask_restx import Namespace, Resource
-from flask import jsonify, request, url_for
+from flask import request, url_for
 from flask_login import current_user
 from wtforms.validators import Email, ValidationError
 
@@ -84,12 +84,10 @@ class GetRulesPageFavorite(Resource):
         
         rules = RuleModel.get_rules_page_favorite(page, current_user.id)
 
-        if rules:
-            return jsonify({
-                "rule": [rule.to_json() for rule in rules],
-                "total_pages": rules.pages
-            })
-        return jsonify({"message": "No Rule"}), 403
+        return {
+            "rule": [rule.to_json() for rule in rules],
+            "total_pages": rules.pages
+        }
     
 @account_private_ns.route("/favorite/delete_rule")
 class RemoveRuleFavorite(Resource):
@@ -100,6 +98,6 @@ class RemoveRuleFavorite(Resource):
         rep = AccountModel.remove_favorite(current_user.id, rule_id)
 
         if rep:
-            return jsonify({"success": True, "message": "Rule deleted!"})
-        return jsonify({"success": False, "message": "Access denied"}), 403
+            return {"success": True, "message": "Rule deleted!"}
+        return {"success": False, "message": "Access denied"}, 403
     
