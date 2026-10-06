@@ -2053,9 +2053,16 @@ def get_all_vulnerabilities_usage():
 def get_bundle_creators_usage():
     from app.core.db_class.db import Bundle, User
     from sqlalchemy import func
+    from sqlalchemy import or_
     from app import db
-    results = (db.session.query(User.first_name, func.count(Bundle.id).label('cnt'))
-               .join(Bundle, Bundle.user_id == User.id)
+    query = (db.session.query(User.first_name, func.count(Bundle.id).label('cnt'))
+             .join(Bundle, Bundle.user_id == User.id))
+    # count only the bundles this visitor can see (same rule as the list)
+    if not current_user.is_authenticated:
+        query = query.filter(Bundle.access.is_(True))
+    elif not current_user.is_admin():
+        query = query.filter(or_(Bundle.access.is_(True), Bundle.user_id == current_user.id))
+    results = (query
                .group_by(User.id, User.first_name)
                .order_by(func.count(Bundle.id).desc())
                .all())
