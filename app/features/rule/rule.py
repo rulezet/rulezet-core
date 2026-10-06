@@ -5019,7 +5019,7 @@ def bulk_action_github():
         if not target_urls:
             return jsonify({"message": "No URLs to delete", "status": "warning-subtle"}), 400
         
-        success, message, nb = RuleModel.delete_all_rule_by_url(target_urls)
+        success, message, nb = RuleModel.delete_all_rule_by_url(target_urls, current_user.id)
         if success:
             log_activity("github.source_deleted",
                          f"Bulk-deleted {nb} rule(s) from {len(target_urls)} GitHub source(s)",
