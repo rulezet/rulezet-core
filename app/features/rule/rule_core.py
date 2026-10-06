@@ -1254,7 +1254,7 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
     forbidden = ["none", "null", "unknown", "n/a", "undefined", ""]
 
     if original_uuid and clean_uuid not in forbidden:
-        rule = Rule.query.filter_by(original_uuid=original_uuid).first()
+        rule = _active().filter_by(original_uuid=original_uuid).first()
         if rule:
             return rule, "Rule found in Rulezet with this original_uuid"
 
@@ -1276,7 +1276,7 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
     if filepath_in_the_repo:
         # normalize: use only the filename as fallback
         normalized = os.path.basename(filepath_in_the_repo)
-        rule = Rule.query.filter(
+        rule = _active().filter(
             Rule.source.in_(source_variants)
         ).filter(
             db.or_(
@@ -1289,7 +1289,7 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
             return rule, "Rule found in Rulezet with this github_path"
 
     # check by title + source
-    query = Rule.query.filter(Rule.title == title, Rule.source.in_(source_variants))
+    query = _active().filter(Rule.title == title, Rule.source.in_(source_variants))
     count_title = query.count()
 
     if count_title == 0:
