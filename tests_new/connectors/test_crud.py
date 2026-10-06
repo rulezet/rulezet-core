@@ -9,7 +9,6 @@ skipped; a match that differs → updated in place, with a history entry.
 import json
 
 import pytest
-import requests
 
 from app import db
 from app.core.db_class.db import (
@@ -97,7 +96,7 @@ def test_list_shows_the_admins_connectors_and_the_system_ones(clients, users):
     assert data[0]["uuid"] == system.uuid
 
 
-def test_list_hides_the_connectors_of_another_admin(clients, client_as, users):
+def test_list_hides_the_connectors_of_another_admin(clients, users):
     """Current behaviour (product question in the report): another admin's
     connector is not listed, though any admin can still act on it by uuid."""
     from tests_new.helpers.users import make_user
