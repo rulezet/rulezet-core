@@ -207,6 +207,33 @@ def test_create_bundle_needs_a_valid_key(who, status, app, users):
     assert count(Bundle, name="API bundle") == (1 if status == 200 else 0)
 
 
+def test_create_bundle_with_a_name_you_already_use_is_a_conflict(app, users):
+    existing = make_bundle(users.owner)
+
+    response = app.test_client().post(f"{PRIVATE}/create", json={"name": existing.name},
+                                      headers=api_headers(users.owner))
+
+    assert response.status_code == 409 and count(Bundle, name=existing.name) == 1
+
+
+def test_create_bundle_with_a_name_another_user_uses_is_allowed(app, users):
+    existing = make_bundle(users.user)
+
+    response = app.test_client().post(f"{PRIVATE}/create", json={"name": existing.name},
+                                      headers=api_headers(users.owner))
+
+    assert response.status_code == 200 and count(Bundle, name=existing.name) == 2
+
+
+def test_rename_bundle_to_a_name_the_owner_already_uses_is_a_conflict(app, users):
+    taken, bundle = make_bundle(users.owner), make_bundle(users.owner)
+
+    response = app.test_client().post(f"{PRIVATE}/edit_bundle/{bundle.id}", json={"name": taken.name},
+                                      headers=api_headers(users.admin))
+
+    assert response.status_code == 409 and reload(bundle).name != taken.name
+
+
 def test_create_bundle_belongs_to_the_key_owner_with_its_rules_and_tags(app, users):
     rule, tag = make_rule(users.user), make_tag("workflow:todo", users.admin)
 

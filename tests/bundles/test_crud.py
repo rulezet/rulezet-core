@@ -73,13 +73,38 @@ def test_bundle_created_by_an_admin_is_verified(clients):
     assert Bundle.query.filter_by(name=by_user["name"]).one().is_verified is False
 
 
-def test_create_bundle_with_a_name_already_used_is_refused(clients, users):
-    existing = make_bundle(users.user)
+def test_create_bundle_with_a_name_you_already_use_is_refused(clients, users):
+    existing = make_bundle(users.owner)
 
     response = clients["owner"].post("/bundle/create", data=new_bundle_form(name=existing.name))
 
     assert response.status_code == 200
     assert count(Bundle, name=existing.name) == 1
+
+
+def test_create_bundle_with_a_name_another_user_uses_is_allowed(clients, users):
+    """Bundle names are unique per user, not per instance."""
+    existing = make_bundle(users.user)
+
+    clients["owner"].post("/bundle/create", data=new_bundle_form(name=existing.name))
+
+    assert count(Bundle, name=existing.name, user_id=users.owner.id) == 1
+
+
+def test_rename_bundle_to_a_name_the_owner_already_uses_is_refused(clients, users):
+    taken, bundle = make_bundle(users.owner), make_bundle(users.owner)
+
+    clients["admin"].post(f"/bundle/edit/{bundle.id}", data=edit_bundle_form(bundle, name=taken.name))
+
+    assert reload(bundle).name != taken.name
+
+
+def test_rename_bundle_to_a_name_another_user_uses_is_allowed(clients, users):
+    other, bundle = make_bundle(users.user), make_bundle(users.owner)
+
+    clients["owner"].post(f"/bundle/edit/{bundle.id}", data=edit_bundle_form(bundle, name=other.name))
+
+    assert reload(bundle).name == other.name
 
 
 def test_create_private_bundle_for_a_rule(clients, users):

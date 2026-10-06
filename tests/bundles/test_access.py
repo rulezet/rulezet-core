@@ -6,9 +6,10 @@ opened its current share link. Creating a bundle, voting, favoriting and
 adding a note need an account (and read access); notes on a private bundle
 are for its owner / admin only. Editing a bundle — details, visibility, tags,
 rules, structure, share link, health fixes, releases — is for the owner or an
-admin. A note can be edited / deleted by its author or the bundle's owner /
-admin, resolved by the owner / admin only. Rebuilding the structure from the
-attached rules is admin-only. A private bundle never shows up for anyone else
+admin, as is rebuilding the structure from the attached rules. A note can be
+edited / deleted / resolved by its author or the bundle's owner / admin; while
+the bundle is private its author can't reach it, and gets it back (still
+theirs) once the bundle is public again. A private bundle never shows up for anyone else
 in a list, a search, a filter facet or a count.
 """
 import pytest
@@ -306,7 +307,7 @@ def test_save_bundle_structure(role, expected, clients, users):
     assert (count(BundleNode, bundle_id=bundle.id, name="README.md") == 1) is (expected is OK)
 
 
-@pytest.mark.parametrize("role, expected", matrix(ADMIN_ONLY))
+@pytest.mark.parametrize("role, expected", matrix(OWNER_OR_ADMIN))
 def test_rebuild_structure_from_attached_rules(role, expected, clients, users):
     bundle, rule = make_bundle(users.owner), make_rule(users.owner)
     db.session.add(BundleRuleAssociation(bundle_id=bundle.id, rule_id=rule.id))
@@ -545,9 +546,8 @@ def test_author_can_edit_and_delete_their_own_note(clients, users):
 
 
 @pytest.mark.parametrize("role, expected", matrix(OWNER_OR_ADMIN))
-def test_resolve_note(role, expected, clients, users):
-    """Even the note's author ("user") can't resolve it — only the bundle's managers."""
-    note = make_note(make_bundle(users.owner), users.user)
+def test_resolve_someone_elses_note(role, expected, clients, users):
+    note = make_note(make_bundle(users.owner), users.admin)
 
     response = clients[role].post(f"/bundle/{note.bundle_id}/notes/{note.id}/status", json={"status": "resolved"})
 
@@ -565,6 +565,29 @@ def test_author_loses_their_note_when_the_bundle_goes_private(clients, users):
 
     assert_outcome(response, FORBIDDEN)
     assert reload(note).title != "Edited"
+
+
+def test_author_resolves_their_own_note(clients, users):
+    note = make_note(make_bundle(users.owner), users.user)
+
+    response = clients["user"].post(f"/bundle/{note.bundle_id}/notes/{note.id}/status", json={"status": "resolved"})
+
+    assert_outcome(response, OK)
+    assert reload(note).status == "resolved"
+
+
+def test_author_gets_their_note_back_when_the_bundle_is_public_again(clients, users):
+    bundle = make_bundle(users.owner)
+    note = make_note(bundle, users.user)
+    clients["owner"].post(f"/bundle/edit_access?id={bundle.id}")   # private
+    clients["owner"].post(f"/bundle/edit_access?id={bundle.id}")   # public again
+
+    edit = clients["user"].put(f"/bundle/{bundle.id}/notes/{note.id}", json={**NOTE, "title": "Edited again"})
+    resolve = clients["user"].post(f"/bundle/{bundle.id}/notes/{note.id}/status", json={"status": "resolved"})
+
+    assert_outcome(edit, OK)
+    assert_outcome(resolve, OK)
+    assert (reload(note).user_id, reload(note).title, reload(note).status) == (users.user.id, "Edited again", "resolved")
 
 
 # ── Releases ──────────────────────────────────────────────────────────────────
