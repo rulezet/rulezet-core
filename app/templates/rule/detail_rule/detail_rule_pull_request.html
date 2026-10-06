@@ -2,6 +2,7 @@
 {% block title %}{{ rule.title }} — Proposals — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_threads.css') }}">
 {% endblock %}
 {% import 'macros/detail_rule_nav.html' as nav with context %}
@@ -37,77 +38,85 @@
 
     {{ nav.detail_rule_nav(rule, 'pull_request', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count, test_count=test_count, ai_analysis_count=ai_analysis_count, linked_rules_count=linked_rules_count) }}
 
-    <div class="card border-0 shadow-sm rounded-4 p-4">
-
-        <div v-if="!loaded" class="text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading…</span>
-            </div>
+    <!-- Loading -->
+    <div v-if="!loaded" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading…</span>
         </div>
+    </div>
 
-        <template v-else>
-            <div v-if="total_proposals === 0 && !filtersActive" class="text-center py-5" style="color: var(--subtle-text-color);">
-                <i class="fa-solid fa-code-pull-request fa-2x mb-3 d-block opacity-25"></i>
-                <p class="mb-2">No edit proposals yet for this rule.</p>
-                <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-primary rounded-pill">
+    <template v-else>
+
+        <!-- No proposal at all -->
+        <div v-if="total_proposals === 0 && !filtersActive" class="card border-0 shadow-sm rounded-4 p-5 text-center">
+            <i class="fa-solid fa-code-pull-request fa-2x mb-3 d-block opacity-25"></i>
+            <p class="mb-2 pt-muted">No edit proposals yet for this rule.</p>
+            <div>
+                <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-primary rounded-pill mt-2">
                     <i class="fa-solid fa-pen-to-square me-1"></i>Be the first to suggest an edit
                 </a>
             </div>
+        </div>
 
-            <div v-else>
-                <div class="pt-toolbar">
-                    <div>
-                        <div class="pt-toolbar__count">
-                            [[ total_proposals ]] proposal[[ total_proposals === 1 ? '' : 's' ]]
-                            in [[ thread_count_label ]]
-                        </div>
-                        <div class="pt-legend mt-1">
-                            <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--pending position-static"></span>Pending</span>
-                            <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--accepted position-static"></span>Accepted</span>
-                            <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--rejected position-static"></span>Rejected</span>
-                            <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--superseded position-static"></span>Superseded by a revision</span>
-                        </div>
-                    </div>
-                    <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-outline-primary rounded-pill">
-                        <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
-                    </a>
+        <div v-else class="h-card">
+            <div class="h-card__header">
+                <div class="h-card__accent"></div>
+                <span class="h-card__title"><i class="fa-solid fa-code-pull-request me-1"></i>Edit proposals</span>
+
+                <!-- Summary badges -->
+                <div class="d-flex gap-2 ms-2">
+                    <span class="pt-count-badge">
+                        [[ total_proposals ]] proposal[[ total_proposals === 1 ? '' : 's' ]]
+                    </span>
+                    <span class="pt-count-badge pt-count-badge--purple">[[ thread_count_label ]]</span>
                 </div>
 
-                <!-- Filters -->
+                <!-- Status filter chips -->
+                <div class="d-flex flex-wrap gap-2 ms-auto">
+                    <span v-for="s in STATUS_FILTERS" :key="s.key"
+                          class="h-filter-chip" :class="{ active: filters.status === s.key }"
+                          role="button" tabindex="0"
+                          @click="setStatus(s.key)" @keydown.enter="setStatus(s.key)">
+                        <i class="fa-solid" :class="s.icon"></i>[[ s.label ]] · [[ statusCount(s.key) ]]
+                    </span>
+                </div>
+
+                <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-primary rounded-pill ms-2">
+                    <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
+                </a>
+            </div>
+
+            <div class="h-card__body">
+                <!-- Search, type, sort -->
                 <div class="pt-filters">
-                    <div class="pt-filters__status" role="group" aria-label="Thread status">
-                        <button v-for="s in STATUS_FILTERS" :key="s.key" type="button"
-                                class="pt-filter-btn" :class="{ 'pt-filter-btn--active': filters.status === s.key }"
-                                @click="setStatus(s.key)">
-                            <i class="fa-solid" :class="s.icon"></i>[[ s.label ]]
-                            <span class="pt-filter-btn__count">[[ statusCount(s.key) ]]</span>
-                        </button>
+                    <div class="pt-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="search" class="form-control form-control-sm" v-model="filters.q"
+                               placeholder="Search justification, author, #id…" aria-label="Search proposals">
                     </div>
-                    <div class="pt-filters__fields">
-                        <div class="pt-search">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            <input type="search" class="form-control form-control-sm" v-model="filters.q"
-                                   placeholder="Search justification, author, #id…" aria-label="Search proposals">
-                        </div>
-                        <select class="form-select form-select-sm" v-model="filters.edit_type" aria-label="Edit type">
-                            <option value="">All types</option>
-                            <option v-for="(meta, key) in EDIT_TYPE_META" :key="key" :value="key">[[ meta.label ]]</option>
-                        </select>
-                        <select class="form-select form-select-sm" v-model="filters.sort" aria-label="Sort threads">
-                            <option value="recent">Latest activity</option>
-                            <option value="oldest">Oldest first</option>
-                            <option value="versions">Most versions</option>
-                        </select>
-                    </div>
+                    <select class="form-select form-select-sm" v-model="filters.edit_type" aria-label="Edit type">
+                        <option value="">All types</option>
+                        <option v-for="(meta, key) in EDIT_TYPE_META" :key="key" :value="key">[[ meta.label ]]</option>
+                    </select>
+                    <select class="form-select form-select-sm" v-model="filters.sort" aria-label="Sort threads">
+                        <option value="recent">Latest activity</option>
+                        <option value="oldest">Oldest first</option>
+                        <option value="versions">Most versions</option>
+                    </select>
                 </div>
 
                 <div class="pt-listbar">
-                    <span v-if="filtersActive">
-                        [[ total_threads ]] matching thread[[ total_threads === 1 ? '' : 's' ]]
-                        <button type="button" class="btn btn-link btn-sm p-0 ms-2 align-baseline" @click="resetFilters">Clear filters</button>
-                    </span>
-                    <span v-else></span>
-                    <span v-if="threads.length">
+                    <div class="pt-legend">
+                        <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--pending position-static"></span>Pending</span>
+                        <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--accepted position-static"></span>Accepted</span>
+                        <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--rejected position-static"></span>Rejected</span>
+                        <span class="pt-legend__item"><span class="pt-step__dot pt-step__dot--superseded position-static"></span>Superseded by a revision</span>
+                        <span v-if="filtersActive" class="pt-legend__item">
+                            · [[ total_threads ]] matching
+                            <button type="button" class="btn btn-link btn-sm p-0 ms-1" @click="resetFilters">Clear filters</button>
+                        </span>
+                    </div>
+                    <span v-if="threads.length" class="text-nowrap">
                         <button type="button" class="btn btn-link btn-sm p-0 me-3" @click="setAll(true)">
                             <i class="fa-solid fa-angles-down me-1"></i>Expand all
                         </button>
@@ -220,9 +229,9 @@
                     </ul>
                 </nav>
             </div>
-        </template>
+        </div>
 
-    </div>
+    </template>
 
 </div>
 {% endblock %}
