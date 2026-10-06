@@ -119,7 +119,7 @@ def delete() :
     else:
         return {"success": False, 
                 "message": "You don't have the permission to do that !", 
-                "toast_class" : "danger-subtle"}, 401
+                "toast_class" : "danger-subtle"}, 403
     
 
 @bundle_blueprint.route("/edit/<int:bundle_id>", methods=['GET' , 'POST'])
@@ -212,7 +212,7 @@ def save_workspace(bundle_id):
     
     # Check if the user has permission to save the workspace
     if current_user.id != bundle.user_id and not current_user.is_admin():
-        return {"success": False, "toast_class": "danger", "message": "You don't have the permission to do that!"}, 401
+        return {"success": False, "toast_class": "danger", "message": "You don't have the permission to do that!"}, 403
 
     error = BundleModel.validate_structure(structure)
     if error:
@@ -993,7 +993,7 @@ def add_rule_bundle() :
                     "toast_class" : "danger"}, 500
     return {"success": False, 
             "message": "You don't have the permission to do that !", 
-            "toast_class" : "danger"}, 401
+            "toast_class" : "danger"}, 403
 
 
 
@@ -1053,7 +1053,7 @@ def remove() :
                     "toast_class" : "danger"}, 500
     return {"success": False, 
             "message": "You don't have the permission to do that !", 
-            "toast_class" : "danger"}, 401
+            "toast_class" : "danger"}, 403
 
 
 @bundle_blueprint.route("/get_rules_page_from_bundle", methods=['GET'])
@@ -1156,7 +1156,7 @@ def change_description():
             "success": False,
             "message": "Access denied",
             "toast_class" : "danger"
-        }, 401
+        }, 403
 
 @bundle_blueprint.route("/edit_access", methods=['POST'])  # state-changing: POST + CSRF (was GET)
 @login_required
@@ -1181,7 +1181,7 @@ def edit_access():
             "success": False,
             "message": "Access denied",
             "toast_class" : "danger"
-        }, 401  
+        }, 403
     access, message = BundleModel.toggle_bundle_accessibility(bundle_id)
     if access is None:
         return {
@@ -1221,7 +1221,7 @@ def evaluate():
             "success": False,
             "message": "You don't have the permission to evaluate this bundle",
             "toast_class" : "danger"
-        }, 401
+        }, 403
 
     vote_type = request.args.get('voteType', type=str)
     if vote_type not in ['up', 'down']:
@@ -1302,7 +1302,7 @@ def bundle_voters():
     if not bundle:
         return jsonify({"message": "Bundle not found"}), 404
     if not BundleModel.can_view_bundle(bundle):
-        return jsonify({"message": "You don't have the permission to view this bundle"}), 401
+        return jsonify({"message": "You don't have the permission to view this bundle"}), 403
 
     from app.core.db_class.db import BundleVote as _BV
     q = (_BV.query.filter_by(bundle_id=bundle_id, vote_type=vote_type)
@@ -1368,7 +1368,7 @@ def download_bundle():
             "success": False,
             "message": "You don't have the permission to download this bundle",
             "toast_class": "danger"
-        }, 401
+        }, 403
 
     zip_buffer = _zip_rules(bundle, rules)
 
@@ -1542,7 +1542,7 @@ def download_bundle_structure():
             "success": False,
             "message": "Unauthorized access",
             "toast_class": "danger"
-        }, 401
+        }, 403
 
     zip_buffer = _zip_structure(bundle)
     _log_bundle_download(bundle, "structure")
@@ -1587,7 +1587,7 @@ def download_bundle_files():
         return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
 
     if not BundleModel.can_view_bundle(bundle):
-        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 401
+        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 403
 
     root_nodes = BundleModel.get_only_root_nodes(bundle_id)
     if not sum(_count_custom_files(r) for r in root_nodes):
@@ -1712,7 +1712,7 @@ def download_bundle_full():
         return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
 
     if not BundleModel.can_view_bundle(bundle):
-        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 401
+        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 403
 
     zip_buffer = _zip_full(bundle)
 
@@ -1737,7 +1737,7 @@ def download_bundle_misp():
         return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 400
 
     if not BundleModel.can_view_bundle(bundle):
-        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 401
+        return {"success": False, "message": "Unauthorized access", "toast_class": "danger"}, 403
 
     event_json = get_bundle_misp_event(bundle_id)
     if not event_json:
@@ -1830,7 +1830,7 @@ def update_bundle_from_structure():
     if not bundle_id:
         return {"message": "No bundle id provided", "toast_class": "danger-subtle"}, 400
     if not current_user.is_admin():
-        return {"message": "You don't have the permission to do that !", "toast_class": "danger-subtle"}, 401
+        return {"message": "You don't have the permission to do that !", "toast_class": "danger-subtle"}, 403
    # take all the rule associate to ths bundle and create a structure with BundleNode (create one folder and put all the rule id in there)
     success, msg = BundleModel.update_bundle_from_rule_id_into_structure(bundle_id)
 
