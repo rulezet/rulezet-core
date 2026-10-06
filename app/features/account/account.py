@@ -178,6 +178,8 @@ def admin_instance_pulls(instance_uuid):
 @login_required
 def user_list() -> render_template:
     """Redirect to the user section"""
+    if not current_user.is_admin():
+        return render_template("access_denied.html"), 403
     return render_template("admin/user_list.html")
 
 @account_blueprint.route("/detail_user/<int:user_id>")
@@ -285,7 +287,7 @@ def promote_remove_admin() -> jsonify:
         else:
             return jsonify({"success": False})
     else:
-        return render_template("access_denied.html")
+        return jsonify({"success": False, "message": "Forbidden"}), 403
 
 @account_blueprint.route("/toggle_user_verified", methods=['POST'])
 @login_required
@@ -331,7 +333,7 @@ def delete_user() -> render_template:
                 "success": False,
                 "toast_class" : "danger-subtle"}, 500
     else:
-        return render_template("access_denied.html")
+        return {"message": "Forbidden", "success": False, "toast_class": "danger-subtle"}, 403
 
 @account_blueprint.route("/users_data_table")
 @login_required
@@ -453,7 +455,7 @@ def get_all_users() -> Union[render_template, dict]:
         return {"message": "No User",
                 "toast_class": "danger-subtle"}, 404
     else:
-        return render_template("access_denied.html")
+        return {"message": "Forbidden", "toast_class": "danger-subtle"}, 403
 
 @account_blueprint.before_app_request
 def _update_last_seen():
