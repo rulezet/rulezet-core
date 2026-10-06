@@ -151,9 +151,9 @@ def apply_fix(bundle_id: int, fix: dict, user) -> tuple[bool, str]:
         return (BundleRuleAssociation.query.filter_by(bundle_id=bundle_id, rule_id=rid).first() is not None
                 or BundleNode.query.filter_by(bundle_id=bundle_id, rule_id=rid).first() is not None)
 
-    try:
-        rid = int(fix["rule_id"]) if fix.get("rule_id") is not None else None
-    except (TypeError, ValueError):
+    from app.core.utils.utils import as_db_id
+    rid = as_db_id(fix["rule_id"]) if fix.get("rule_id") is not None else None
+    if fix.get("rule_id") is not None and rid is None:
         return False, "Invalid rule"
 
     if action == "remove_rule":
@@ -184,10 +184,8 @@ def apply_fix(bundle_id: int, fix: dict, user) -> tuple[bool, str]:
             return True, "Already in the bundle"
         near = None
         if fix.get("near_rule_id"):
-            try:
-                near_nodes = _bundle_rule_nodes(bundle_id, int(fix["near_rule_id"]))
-            except (TypeError, ValueError):
-                near_nodes = []
+            near_id = as_db_id(fix["near_rule_id"])
+            near_nodes = _bundle_rule_nodes(bundle_id, near_id) if near_id else []
             near = near_nodes[0] if near_nodes else None
         with track_bundle_change(bundle_id, "rules", user=user):
             parent_id = near.parent_id if near is not None else _root_folder(bundle_id).id
@@ -211,10 +209,8 @@ def apply_fix(bundle_id: int, fix: dict, user) -> tuple[bool, str]:
         return True, "Rule placed in the structure"
 
     if action == "remove_node":
-        try:
-            node = db.session.get(BundleNode, int(fix.get("node_id")))
-        except (TypeError, ValueError):
-            node = None
+        node_id = as_db_id(fix.get("node_id"))
+        node = db.session.get(BundleNode, node_id) if node_id else None
         if not node or node.bundle_id != bundle_id or node.rule_id:
             return False, "Not an item of this bundle"
         if node.node_type == "folder" and BundleNode.query.filter_by(parent_id=node.id).first():

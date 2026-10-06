@@ -209,6 +209,8 @@ def draft_release(bundle_id: int) -> dict:
 
 def create_release(bundle_id: int, user, version: str, title: str | None, notes: str | None):
     """Returns (release, error_message)."""
+    if not all(isinstance(v, str) for v in (version or "", title or "", notes or "")):
+        return None, "Version, title and notes must be text"
     version = (version or "").strip()
     if not VERSION_RE.match(version):
         return None, "Version must look like v1.2.0 (or 1.2, 2.0.0-beta…)"

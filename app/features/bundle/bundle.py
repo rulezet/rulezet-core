@@ -2,7 +2,7 @@ from flask import Blueprint, abort, flash, jsonify, redirect, render_template , 
 from flask_login import current_user, login_required
 
 from app.features.bundle.bundle_form import AddNewBundleForm, EditBundleForm
-from app.core.utils.utils import as_db_id, form_to_dict, safe_referrer, internal_error
+from app.core.utils.utils import as_db_id, form_to_dict, json_object, safe_referrer, internal_error
 from app.features.misp.bundle.misp_object import get_bundle_misp_event
 from . import bundle_core as BundleModel
 from .bundle_history_core import track_bundle_change, get_bundle_history_page, get_bundle_history_entry, diff_snapshots as diff_bundle_snapshots
@@ -201,7 +201,7 @@ def get_all_rule() :
 @bundle_blueprint.route("/save_workspace/<int:bundle_id>", methods=['POST'])
 @login_required
 def save_workspace(bundle_id):
-    data = request.json
+    data = json_object()
     structure = data.get('structure') # The tree from Vue.js
 
     if not bundle_id:
@@ -499,9 +499,8 @@ def _note_tags_from_request(data):
         return None, None                          # not sent → leave the note's tags alone
     if not isinstance(raw, _pylist) or len(raw) > NOTE_MAX_TAGS:
         return None, f"At most {NOTE_MAX_TAGS} tags per note"
-    try:
-        ids = {int(x) for x in raw}
-    except (TypeError, ValueError):
+    ids = {as_db_id(x) for x in raw}
+    if None in ids:
         return None, "Invalid tag"
     tags = Tag.query.filter(Tag.id.in_(ids), Tag.is_active == True).all() if ids else []
     if len(tags) != len(ids) or not all(_note_tag_allowed(t.name) for t in tags):
@@ -580,10 +579,11 @@ def _note_guard(bundle_id, write=False):
 
 
 def _note_payload():
-    data = request.get_json(silent=True) or {}
-    title = (data.get("title") or "").strip()
-    content = (data.get("content") or "").strip()
-    severity = (data.get("severity") or "warning").strip().lower()
+    data = json_object()
+    title, content, severity = data.get("title"), data.get("content"), data.get("severity") or "warning"
+    if not all(isinstance(v, str) for v in (title or "", content or "", severity)):
+        return None, "Title, note and severity must be text"
+    title, content, severity = (title or "").strip(), (content or "").strip(), severity.strip().lower()
     if not (3 <= len(title) <= 200):
         return None, "The title must be 3–200 characters"
     if not (1 <= len(content) <= 20000):
@@ -639,7 +639,7 @@ def create_bundle_note(bundle_id):
     payload, error = _note_payload()
     if error:
         return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
-    tags, error = _note_tags_from_request(request.get_json(silent=True) or {})
+    tags, error = _note_tags_from_request(json_object())
     if error:
         return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
     note = BundleNote(uuid=str(_uuid.uuid4()), bundle_id=bundle_id, user_id=current_user.id, **payload)
@@ -681,7 +681,7 @@ def update_bundle_note(bundle_id, note_id):
     payload, error = _note_payload()
     if error:
         return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
-    tags, error = _note_tags_from_request(request.get_json(silent=True) or {})
+    tags, error = _note_tags_from_request(json_object())
     if error:
         return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
     previous = note.content
@@ -706,7 +706,8 @@ def set_bundle_note_status(bundle_id, note_id):
     note, err = _own_note_or_error(bundle, note_id, need="resolve")
     if err:
         return err
-    status = ((request.get_json(silent=True) or {}).get("status") or "").lower()
+    status = json_object().get("status")
+    status = status.lower() if isinstance(status, str) else ""
     if status not in ("open", "resolved"):
         return {"success": False, "message": "Invalid status", "toast_class": "danger-subtle"}, 400
     note.status = status
@@ -741,7 +742,7 @@ def bundle_health_fix(bundle_id):
         return {"success": False, "message": "Bundle not found", "toast_class": "danger"}, 404
     if not _is_bundle_manager(bundle):
         return {"success": False, "message": "Only the owner or an admin can fix the bundle", "toast_class": "danger"}, 403
-    fix = (request.get_json(silent=True) or {}).get("fix")
+    fix = json_object().get("fix")
     ok, message = apply_fix(bundle_id, fix, current_user)
     if ok:
         log_activity("bundle.health_fix", f"Health fix on bundle '{bundle.name}': {message}",
@@ -866,7 +867,7 @@ def create_bundle_release(bundle_id):
     bundle, err = _release_guard(bundle_id, manage=True)
     if err:
         return err
-    data = request.get_json(silent=True) or {}
+    data = json_object()
     rel, error = create_release(bundle_id, current_user, data.get("version"), data.get("title"), data.get("notes"))
     if error:
         return {"success": False, "message": error, "toast_class": "danger-subtle"}, 400
@@ -1004,8 +1005,9 @@ def add_rule_bundle() :
 @bundle_blueprint.route("/update_bundle_tags/<int:bundle_id>", methods=['POST'])
 @login_required
 def update_bundle_tags(bundle_id):
-    data = request.json
-    tag_ids = data.get('tag_ids', [])
+    tag_ids = json_object().get('tag_ids', [])
+    if not isinstance(tag_ids, _pylist):
+        return {"success": False, "message": "tag_ids must be a list"}, 400
 
     if not bundle_id:
         return {"success": False, "message": "Missing bundle_id"}, 400
@@ -2186,18 +2188,23 @@ def get_bundle_page():
 @bundle_blueprint.route("/add-single-rule", methods=['POST'])
 @login_required
 def add_single_rule_to_bundle():
-    data = request.get_json()
+    data = json_object()
     if not data:
         return {"success": False, "message": "Missing JSON body", "toast_class": "danger-subtle"}, 400
 
-    rule_id = data.get("rule_id")
+    rule_id = as_db_id(data.get("rule_id"))
     existing_bundle_id = data.get("existing_bundle_id")
-    new_bundle_name = data.get("new_bundle_name", "").strip()
-    new_bundle_description = data.get("new_bundle_description", "").strip()
+    new_bundle_name = data.get("new_bundle_name") or ""
+    new_bundle_description = data.get("new_bundle_description") or ""
     is_public = data.get("is_public", True)
 
     if not rule_id:
-        return {"success": False, "message": "Missing rule_id", "toast_class": "danger-subtle"}, 400
+        return {"success": False, "message": "Missing or invalid rule_id", "toast_class": "danger-subtle"}, 400
+    if not isinstance(new_bundle_name, str) or not isinstance(new_bundle_description, str) \
+            or not isinstance(is_public, bool) or len(new_bundle_name.strip()) > 255:
+        return {"success": False, "message": "Invalid bundle name, description or visibility",
+                "toast_class": "danger-subtle"}, 400
+    new_bundle_name, new_bundle_description = new_bundle_name.strip(), new_bundle_description.strip()
 
     rule = RuleModel.get_rule(rule_id)
     if not rule:

@@ -462,6 +462,18 @@ def place_rules_in_structure(bundle_id: int, rule_ids, folder_path: str | None =
     db.session.flush()
     return len(todo)
 
+def _existing_tag_ids(raw) -> set:
+    """Ids of tags that exist, from untrusted input (ids or {"id": …}) —
+    anything else is ignored (an unknown id would break the foreign key)."""
+    from app.core.utils.utils import as_db_id
+    if not isinstance(raw, (list, tuple, set)):
+        return set()
+    wanted = {as_db_id(t.get("id") if isinstance(t, dict) else t) for t in raw} - {None}
+    if not wanted:
+        return set()
+    return {i for (i,) in db.session.query(Tag.id).filter(Tag.id.in_(wanted))}
+
+
 @tracked("tags", user_arg=2)
 def update_bundle_tags(bundle_id: int, tags: List[int], user: User) -> bool:
     """
@@ -476,7 +488,7 @@ def update_bundle_tags(bundle_id: int, tags: List[int], user: User) -> bool:
         current_associations = BundleTagAssociation.query.filter_by(bundle_id=bundle_id).all()
         
         current_tag_ids = {assoc.tag_id for assoc in current_associations}
-        new_tag_ids = set(tags)
+        new_tag_ids = _existing_tag_ids(tags)
 
         
 
