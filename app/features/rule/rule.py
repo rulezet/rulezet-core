@@ -6356,18 +6356,20 @@ def resolve_conflict():
         return jsonify({'success': ok}), 200
 
     if action == 'keep_trash':
-        # Soft-delete the active rule, then restore the trashed one
-        RuleModel.soft_delete_rule(active_id, current_user.id)
-        RuleModel.permanent_delete_rule(active_id)   # hard-delete the active duplicate
-        # Force restore ignoring content conflict
-        trashed = Rule.query.get(trash_id)
-        if trashed:
-            trashed.is_deleted = False
-            trashed.deleted_at = None
-            trashed.deleted_by_id = None
-            trashed.delete_batch_uuid = None
-            from app import db as _db
-            _db.session.commit()
+        # Check everything BEFORE deleting anything: the two ids must really be
+        # a trashed rule and the active rule holding the same content —
+        # otherwise a wrong id would permanently delete an unrelated rule.
+        trashed = RuleModel.get_rule(trash_id, include_deleted=True)
+        active = RuleModel.get_rule(active_id)
+        if not trashed or not trashed.is_deleted or not active:
+            return jsonify({'success': False, 'message': 'Rule not found'}), 404
+        if trashed.content_hash != active.content_hash:
+            return jsonify({'success': False, 'message': 'These two rules are not in conflict'}), 400
+        # Drop the active duplicate, then restore the trashed rule.
+        RuleModel.soft_delete_rule(active.id, current_user.id)
+        RuleModel.permanent_delete_rule(active.id)
+        if RuleModel.restore_rule(trashed.id) is not True:
+            return jsonify({'success': False, 'message': 'Could not restore the rule'}), 500
         log_activity('rule.conflict_resolved', f"Conflict resolved — restored trash id={trash_id}, removed active id={active_id}")
         return jsonify({'success': True}), 200
 
