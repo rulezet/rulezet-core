@@ -77,6 +77,33 @@ def internal_error(exc, message="An internal error occurred — please try again
     return message
 
 
+# Largest value of a PostgreSQL `integer` primary key — a bigger number sent by
+# a client would make the query itself fail (500) instead of finding nothing.
+DB_ID_MAX = 2**31 - 1
+
+
+def as_db_id(value):
+    """An integer id from untrusted input (JSON value or query string), or
+    None. Refuses booleans (JSON `true` would otherwise read as id 1),
+    floats, text that isn't a plain number, and out-of-range numbers."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        number = int(value.strip())
+    else:
+        return None
+    return number if 1 <= number <= DB_ID_MAX else None
+
+
+def json_object():
+    """The request's JSON body when it is an object, else {} — never raises
+    on a missing / malformed body or a JSON list/string/number."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
 def safe_referrer(default='/'):
     """The referrer as a local path ("/…?…") when it points to this host —
     else `default`. Never a full URL, never "//host" or "/\\host" (which

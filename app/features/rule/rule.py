@@ -12,7 +12,7 @@ from datetime import datetime,  timezone
 
 from app.features.misp.rule.misp_object import content_convert_to_misp_object, get_rule_misp_event, get_rule_misp_event, get_rule_misp_object
 from .rule_form import AddNewRuleForm, CreateFormatRuleForm, EditRuleForm
-from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_side_diff_html, safe_referrer, internal_error
+from app.core.utils.utils import  as_db_id, bump_version, form_to_dict, generate_side_by_side_diff_html, json_object, safe_referrer, internal_error
 
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
@@ -401,8 +401,9 @@ def get_rules_page_filter() -> jsonify:
 @login_required
 def delete_rule() -> jsonify:
     """Delete a rule"""
-    data = request.get_json() or {}
-    rule_id  = data.get("id")
+    rule_id = as_db_id(json_object().get("id"))
+    if not rule_id:
+        return jsonify({"success": False, "message": "A valid rule id is required.", "toast_class": "danger"}), 400
     user_id = RuleModel.get_rule_user_id(rule_id)
 
     if current_user.id == user_id or current_user.is_admin():
@@ -431,12 +432,14 @@ def get_current_user() -> jsonify:
 @login_required
 def vote_rule() -> jsonify:
     """Update the vote up or down"""
-    data = request.get_json() or {}
-    rule_id   = int(data.get('id', 0))
-    vote_type = str(data.get('vote_type', ''))
+    data = json_object()
+    rule_id   = as_db_id(data.get('id'))
+    vote_type = data.get('vote_type')
 
     if vote_type not in ('up', 'down'):
         return jsonify({"message": "Invalid vote type"}), 400
+    if not rule_id:
+        return jsonify({"message": "Rule not found"}), 404
 
     result = RuleModel.process_vote(rule_id, current_user.id, vote_type)
     if result is None:
@@ -820,10 +823,10 @@ def get_my_rules_page_filter_github() -> jsonify:
 @login_required
 def delete_selected_rules() -> jsonify:
     """Delete all the selected rule"""
-    data = request.get_json(silent=True)
-    rule_ids = data.get('ids') if isinstance(data, dict) else None
-    if not rule_ids or not isinstance(rule_ids, list):
-        return jsonify({"success": False, "message": "No rules selected.", "toast_class": "danger"}), 400
+    raw_ids = json_object().get('ids')
+    rule_ids = [as_db_id(i) for i in raw_ids] if isinstance(raw_ids, list) else []
+    if not rule_ids or None in rule_ids:
+        return jsonify({"success": False, "message": "No valid rules selected.", "toast_class": "danger"}), 400
 
     # Permission check — and note each owner now: once trashed, a rule no
     # longer resolves through the active-rule lookups below.
@@ -1590,9 +1593,9 @@ def get_sigma_convert(rule_id):
 
 @rule_blueprint.route("/download_rule", methods=['GET'])
 def download_rule_unified() -> Response:
-    rule_id = request.args.get('rule_id', type=int)
+    rule_id = as_db_id(request.args.get('rule_id'))
     fmt = request.args.get('format', default='txt')
-    rule = RuleModel.get_rule(rule_id)
+    rule = RuleModel.get_rule(rule_id) if rule_id else None
     if not rule:
         return jsonify({
             "message": f"No rule found with id={rule_id}",
@@ -5160,8 +5163,7 @@ def update_rule_status(rule_id):
         return jsonify({'success': False, 'message': 'Rule not found'}), 404
     if rule.user_id != current_user.id and not current_user.is_admin():
         return jsonify({'success': False}), 403
-    data = request.get_json(force=True)
-    status = data.get('status')
+    status = json_object().get('status')
     if status not in ('draft', 'testing', 'production', 'deprecated'):
         return jsonify({'success': False, 'message': 'Invalid status'}), 400
     rule.status = status
@@ -5179,7 +5181,12 @@ def quick_meta(rule_id):
     if not rule:
         return jsonify({'success': False}), 404
 
-    data = request.get_json(force=True)
+    data = json_object()
+    for key in ('tag_ids', 'cve_ids', 'technique_ids'):
+        if key in data and not isinstance(data[key], list):
+            return jsonify({'success': False, 'message': f'{key} must be a list'}), 400
+    if 'cve_ids' in data and not all(isinstance(c, str) for c in data['cve_ids']):
+        return jsonify({'success': False, 'message': 'cve_ids must be a list of strings'}), 400
 
     # Allow edit if owner, admin, or the rule is in one of the user's workspaces
     if rule.user_id != current_user.id and not current_user.is_admin():
@@ -5200,7 +5207,7 @@ def quick_meta(rule_id):
     # Tags
     if 'tag_ids' in data:
         import uuid as _uuid
-        tag_ids = [int(t) for t in data['tag_ids'] if str(t).isdigit()]
+        tag_ids = [i for i in (as_db_id(t) for t in data['tag_ids']) if i]
         current_tag_ids = {a.tag_id for a in RuleTagAssociation.query.filter_by(rule_id=rule.id).all()}
         for tid in tag_ids:
             if tid not in current_tag_ids:
@@ -6354,10 +6361,12 @@ def resolve_conflict():
     """Admin chooses which rule to keep when a restore conflict occurs."""
     if not current_user.is_admin():
         return jsonify({'success': False}), 403
-    data       = request.get_json() or {}
+    data       = json_object()
     action     = data.get('action')          # 'keep_active' | 'keep_trash'
-    trash_id   = data.get('trash_id')
-    active_id  = data.get('active_id')
+    trash_id   = as_db_id(data.get('trash_id'))
+    active_id  = as_db_id(data.get('active_id'))
+    if action in ('keep_active', 'keep_trash') and not (trash_id and active_id):
+        return jsonify({'success': False, 'message': 'trash_id and active_id are required'}), 400
 
     if action == 'keep_active':
         # Just permanently delete the trashed copy
@@ -6396,15 +6405,37 @@ def _create_trash_job(job_type: str, label: str, payload: dict):
                                 label=label, created_by=current_user.id)
 
 
+def _trash_selection(data, all_flag):
+    """What a bulk trash action targets: (ids, all, batch_uuid, error).
+    Exactly one explicit choice is required — a list of ids, a batch uuid,
+    or `<all_flag>: true` — so an empty or unreadable body never means
+    "the whole trash"."""
+    raw_ids = data.get('ids')
+    if raw_ids:
+        ids = [as_db_id(i) for i in raw_ids] if isinstance(raw_ids, list) else [None]
+        if None in ids:
+            return [], False, None, 'ids must be a list of rule ids'
+        return ids, False, None, None
+    batch_uuid = data.get('batch_uuid')
+    if batch_uuid:
+        if not isinstance(batch_uuid, str):
+            return [], False, None, 'batch_uuid must be a string'
+        return [], False, batch_uuid, None
+    if data.get(all_flag) is True:
+        return [], True, None, None
+    return [], False, None, f'Nothing selected: send ids, batch_uuid or {all_flag}: true'
+
+
 @rule_blueprint.route('/restore_bulk', methods=['POST'])
 @login_required
 def restore_rules_bulk():
     if not current_user.is_admin():
         return jsonify({'success': False}), 403
-    data        = request.get_json() or {}
-    rule_ids    = data.get('ids', [])
-    restore_all = data.get('restore_all', False)
-    batch_uuid  = data.get('batch_uuid')
+    rule_ids, restore_all, batch_uuid, error = _trash_selection(json_object(), 'restore_all')
+    if error:
+        return jsonify({'success': False, 'message': error}), 400
+    if batch_uuid:
+        return restore_batch(batch_uuid)
     count       = len(rule_ids) if rule_ids else RuleModel.count_deleted_rules()
 
     if count > TRASH_JOB_THRESHOLD:
@@ -6464,11 +6495,14 @@ def permanent_delete_rule(rule_id):
 def permanent_delete_bulk():
     if not current_user.is_admin():
         return jsonify({'success': False}), 403
-    data       = request.get_json() or {}
-    ids        = data.get('ids', [])
-    delete_all = data.get('delete_all', False)
-    batch_uuid = data.get('batch_uuid')
-    count      = len(ids) if ids else RuleModel.count_deleted_rules()
+    ids, delete_all, batch_uuid, error = _trash_selection(json_object(), 'delete_all')
+    if error:
+        return jsonify({'success': False, 'message': error}), 400
+    if batch_uuid:
+        from app.core.db_class.db import Rule as _Rule
+        ids = [r.id for r in _Rule.query.filter(_Rule.is_deleted == True,
+                                                _Rule.delete_batch_uuid == batch_uuid).all()]
+    count      = len(ids) if (ids or batch_uuid) else RuleModel.count_deleted_rules()
 
     if count > TRASH_JOB_THRESHOLD:
         payload = {'ids': ids, 'delete_all': delete_all, 'batch_uuid': batch_uuid}
