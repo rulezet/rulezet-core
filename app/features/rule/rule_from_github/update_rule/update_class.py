@@ -105,7 +105,14 @@ class Update_class:
         cp = 0
         if self.mode == "by_url":
             cp = 0
-            repo_dir, exists = clone_or_access_repo(self.repo_sources, branch=self.branch, is_generic_source=self.is_generic_source)
+            try:
+                repo_dir, exists = clone_or_access_repo(self.repo_sources, branch=self.branch, is_generic_source=self.is_generic_source)
+            except Exception as e:
+                # Unreachable repo, unknown branch… — report it as this
+                # check's result instead of raising out of the request (500)
+                # or out of a Sync Schedule run (aborting every later repo).
+                self._finalize_with_error(f"Could not access the repository: {e}")
+                return
 
             self.local_repo_path = repo_dir
 
