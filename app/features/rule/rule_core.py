@@ -4549,7 +4549,16 @@ def accept_all_update(rule_udpate_list, on_progress=None, should_stop=None):
             if not history:
                 return False
             if rule.rule_syntax_valid == True:
-                history.message = "accepted"
+                # Apply the new content to the live rule — re-validated, the
+                # same way a single accept (accept_update_history) does.
+                target = get_rule(history.rule_id)
+                validation = verify_rule_syntaxe(target, history.new_content) if target and history.new_content else None
+                if validation and validation.ok:
+                    target.to_string = history.new_content
+                    history.message = "accepted"
+                else:
+                    rule.message = "Rejected successfully because Invalide syntax"
+                    history.message = "rejected"
             else:
                 history.message = "rejected"
             history.success = True
