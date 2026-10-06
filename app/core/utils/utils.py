@@ -85,12 +85,13 @@ DB_ID_MAX = 2**31 - 1
 def as_db_id(value):
     """An integer id from untrusted input (JSON value or query string), or
     None. Refuses booleans (JSON `true` would otherwise read as id 1),
-    floats, text that isn't a plain number, and out-of-range numbers."""
+    floats, text that isn't a plain number ("²" passes str.isdigit() but
+    not int()), and out-of-range numbers."""
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
         number = value
-    elif isinstance(value, str) and value.strip().isdigit():
+    elif isinstance(value, str) and value.strip().isascii() and value.strip().isdigit():
         number = int(value.strip())
     else:
         return None
