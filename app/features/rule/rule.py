@@ -2800,7 +2800,7 @@ def update_github_rule() -> render_template:
         flash('No change for the rule !', 'success')
         return redirect('/rule/update_github/update_rules_from_github')
     else:
-        return render_template("access_denied.html")
+        return render_template("access_denied.html"), 403
 
 #########################################
 #    Choose change in updater UUID page #
@@ -2873,7 +2873,7 @@ def decision_rule() -> jsonify:
             "message": "Access denied !",
             "success": False,
             "toast_class": "danger-subtle"
-        })
+        }), 403
 
 @rule_blueprint.route("/github/update_github/update_rules_from_github", methods=['GET'])
 @login_required
