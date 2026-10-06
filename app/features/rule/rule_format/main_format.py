@@ -137,7 +137,9 @@ async def extract_rule_from_repo(repo_dir: str, info: dict, user: User):
     imported = 0
     skipped = 0
 
-    # Get all subclasses of RuleType
+    # Get all subclasses of RuleType — the format modules must be imported
+    # first, or (e.g. right after a restart) there are none and nothing is imported.
+    load_all_rule_formats()
     subclasses = RuleType.__subclasses__()
 
     # __subclasses__() :
