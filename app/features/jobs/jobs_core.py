@@ -9,6 +9,21 @@ from app import db
 from app.core.db_class.db import BackgroundJob, BackgroundJobLog
 
 
+# ─── Query-string helpers ─────────────────────────────────────────────────────
+
+MAX_PAGE = 100_000   # keeps OFFSET far inside a 64-bit integer
+
+
+def clamp_int_arg(args, name, default, low, high):
+    """An integer query-string value kept within [low, high] — `default` when
+    it is missing or not a number."""
+    try:
+        value = int(args.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return max(low, min(high, value))
+
+
 # ─── Internal log helper ──────────────────────────────────────────────────────
 
 def _log(job, message, level='info', event=None):
@@ -185,8 +200,8 @@ def get_jobs_for_user(user_id, args, is_admin=False):
         s = f"%{args['search']}%"
         query = query.filter(BackgroundJob.label.ilike(s) | BackgroundJob.job_type.ilike(s))
 
-    page     = int(args.get('page', 1))
-    per_page = int(args.get('per_page', 20))
+    page     = clamp_int_arg(args, 'page', 1, 1, MAX_PAGE)
+    per_page = clamp_int_arg(args, 'per_page', 20, 1, 100)
     total    = query.count()
     items    = query.order_by(BackgroundJob.created_at.desc())\
                     .offset((page - 1) * per_page).limit(per_page).all()
