@@ -2116,9 +2116,12 @@ def propose_revision(proposal_id) -> redirect:
 @login_required
 def validate_proposal() -> jsonify:
     """Validate a proposal on a rule"""
-    rule_id = request.args.get('ruleId', type=int) # id of the real rule 
+    rule_id = as_db_id(request.args.get('ruleId')) # id of the real rule
     decision = request.args.get('decision', type=str)
-    rule_proposal_id = request.args.get('ruleproposalId', type=int) #id of the rule request
+    rule_proposal_id = as_db_id(request.args.get('ruleproposalId')) #id of the rule request
+    if not (rule_id and rule_proposal_id) or decision not in ('accepted', 'rejected'):
+        return jsonify({"message": "ruleId, ruleproposalId and decision (accepted / rejected) are required.",
+                        "success": False, "toast_class": "danger"}), 400
     user_id = RuleModel.get_rule_user_id(rule_id)
     if user_id == current_user.id or current_user.is_admin():
         if rule_id and decision and rule_proposal_id:
@@ -2454,8 +2457,10 @@ def get_history_rule():
 @login_required
 def get_proposal() -> jsonify:
     """Get the detail porposal"""
-    proposalId = request.args.get('id', type=int)
-    proposal = RuleModel.get_rule_proposal(proposalId)
+    proposalId = as_db_id(request.args.get('id'))
+    proposal = RuleModel.get_rule_proposal(proposalId) if proposalId else None
+    if not proposal:
+        return jsonify({"success": False, "message": "Proposal not found"}), 404
 
     old_content = proposal.old_content or ""
     new_content = proposal.proposed_content or ""
