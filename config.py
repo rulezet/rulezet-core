@@ -16,6 +16,22 @@ except OSError:
 def empty_split(s, delim=None):
     return [x for x in s.split(delim) if x]
 
+def env_bool(name, default=False):
+    """
+    Parser to replace the obsoleted distutils strtobool parser:
+    - Interpret "1", "true", "yes", "on", "True", "Yes", "On" as True
+    - Interpret "0", "false", "no", "off", "False", "No", "Off" as False
+    """
+    val = os.getenv(name)
+    if val is None:
+        return default
+    val = val.strip().lower()
+    if val in {"1", "true", "yes", "on"}:
+        return True
+    if val in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"Invalid boolean value for {name}: {val}")
+
 class Config:
     load_dotenv()
 
@@ -122,6 +138,23 @@ class Config:
     MEMORY_CACHE_THRESHOLD = int(os.environ.get('MEMORY_CACHE_THRESHOLD', 2000))
     CACHE_REDIS_URL = os.environ.get('CACHE_REDIS_URL', '')
 
+    SIGN_UP_ENABLED = env_bool('SIGN_UP_ENABLED', True)
+
+    # =============================================================================
+    # OIDC
+    # =============================================================================
+    # OIDC SSO configuration
+    OIDC_ENABLED = env_bool('OIDC_ENABLED', default=False)
+    OIDC_DISCOVERY_ENDPOINT = os.getenv('OIDC_DISCOVERY_ENDPOINT', '')  # e.g. https://oidc.your-org-oidc.com/.well-known/openid-configuration
+    OIDC_CLIENT_ID = os.getenv('OIDC_CLIENT_ID', 'rulezet')
+    OIDC_CLIENT_SECRET = os.getenv('OIDC_CLIENT_SECRET', '')
+    OIDC_SCOPE = os.getenv('OIDC_SCOPE', 'openid email profile')
+
+    # OIDC group names that map to rulezet roles
+    # RulezetAdmin members → provisioned as Admins, RulezetEditor → provisioned as regular users
+    OIDC_GROUP_ADMIN = os.getenv('OIDC_GROUP_ADMIN', 'RulezetAdmin')
+    OIDC_GROUP_EDITOR = os.getenv('OIDC_GROUP_EDITOR', 'RulezetEditor')
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
@@ -157,7 +190,7 @@ class TestingConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
-    SQLALCHEMY_DATABASE_URI = "postgresql:///rulezet"
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "postgresql:///rulezet")
     SESSION_TYPE = "sqlalchemy"
     SESSION_SQLALCHEMY_TABLE = "flask_sessions"
     SESSION_COOKIE_SECURE   = True

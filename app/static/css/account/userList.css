@@ -163,6 +163,20 @@
 .ul-status-label--on  { color: #198754; background: rgba(25,135,84,.1); }
 .ul-status-label--off { color: #6c757d; background: rgba(108,117,125,.1); }
 
+/* ── Sign-in method badge (card + table) ── */
+.ul-auth-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .76rem;
+    font-weight: 600;
+    padding: .2rem .5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.ul-auth-badge--local { color: #0d6efd; background: rgba(13,110,253,.1); }
+.ul-auth-badge--sso   { color: #6f42c1; background: rgba(111,66,193,.12); }
+
 /* ── Card identity ── */
 .ul-card-identity { display: flex; flex-direction: column; gap: .12rem; }
 .ul-card-name {

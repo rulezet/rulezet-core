@@ -50,4 +50,5 @@ pyvelociraptor
 psutil
 anthropic
 openai
+authlib
 -e ./app/modules/rulezet-validation

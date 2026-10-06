@@ -143,6 +143,7 @@
 .ud-profile-badge--user     { background: rgba(13,110,253,.1);  color: #0d6efd; }
 .ud-profile-badge--online   { background: rgba(25,135,84,.12);  color: #198754; }
 .ud-profile-badge--offline  { background: rgba(108,117,125,.12);color: #6c757d; }
+.ud-profile-badge--sso      { background: rgba(111,66,193,.12); color: #6f42c1; }
 
 /* Follow area */
 .ud-profile-follow {

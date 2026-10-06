@@ -33,6 +33,10 @@ def app():
         create_rule_test()
         create_default_user() # for the rule with no author
 
+    # The login brute-force guard is per process, keyed by IP — every test
+    # client is 127.0.0.1, so start each test with a clean slate.
+    from app.features.account import account as _account
+    _account._login_failures.clear()
 
     yield app
 

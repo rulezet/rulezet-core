@@ -469,10 +469,7 @@
                             <div class="config-row">
                                 <div class="config-row__key">Secret Key</div>
                                 <div class="config-row__value">
-                                    <span class="config-secret">[[ showSecret ? secretKeyNew || config.app.secret_key_preview : config.app.secret_key_preview ]]</span>
-                                    <button class="mask-toggle ms-2" @click="showSecret = !showSecret" title="Toggle visibility">
-                                        <i :class="showSecret ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"></i>
-                                    </button>
+                                    <span class="config-secret">[[ config.app.secret_key_preview ]]</span>
                                     <button class="btn btn-sm btn-outline-secondary rounded-pill ms-2 px-2 py-0" @click="editingSecret = !editingSecret" style="font-size:.72rem;">
                                         <i class="fa-solid fa-pen-to-square"></i>
                                     </button>
@@ -500,10 +497,6 @@
                                     <i class="fa-solid fa-triangle-exclamation me-1"></i>
                                     Restart the server to apply. Changing the key invalidates all active sessions.
                                 </div>
-                            </div>
-                            <div class="config-row">
-                                <div class="config-row__key">Key Length</div>
-                                <div class="config-row__value">[[ config.app.secret_key_length ]] characters</div>
                             </div>
 
                             <!-- GitHub Token -->
@@ -600,6 +593,95 @@
                                     <code>https://&lt;host&gt;/api/v3</code> (GitHub Enterprise Server convention), and
                                     repo URLs must be <code>https://&lt;host&gt;/owner/repo</code>. Applies immediately,
                                     no restart needed.
+                                </div>
+                            </div>
+
+                            <!-- Single Sign-On (OIDC) + local sign-up -->
+                            <div class="config-row">
+                                <div class="config-row__key">Single Sign-On</div>
+                                <div class="config-row__value">
+                                    <span :class="config.sso && config.sso.oidc_enabled ? 'badge bg-success' : 'badge bg-secondary'">
+                                        [[ config.sso && config.sso.oidc_enabled ? 'Enabled (OIDC)' : 'Disabled' ]]
+                                    </span>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill ms-2 px-2 py-0" @click="toggleSsoEdit" style="font-size:.72rem;">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="config-row">
+                                <div class="config-row__key">Local sign-up</div>
+                                <div class="config-row__value">
+                                    <span :class="config.sso && config.sso.sign_up_enabled ? 'badge bg-success' : 'badge bg-secondary'">
+                                        [[ config.sso && config.sso.sign_up_enabled ? 'Open' : 'Closed' ]]
+                                    </span>
+                                </div>
+                            </div>
+                            <div v-if="editingSso" class="pb-2">
+                                <div class="rounded-3 border p-3" style="background:var(--light-bg-color);font-size:.8rem;">
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="sso-enabled" v-model="sso.oidc_enabled">
+                                        <label class="form-check-label fw-semibold" for="sso-enabled">Enable single sign-on (OIDC — Keycloak, Authentik, Entra ID…)</label>
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-12">
+                                            <label class="form-label small mb-1">Discovery URL</label>
+                                            <div class="d-flex gap-2">
+                                                <input type="text" v-model.trim="sso.oidc_discovery_endpoint" class="form-control form-control-sm"
+                                                       placeholder="https://sso.example.org/realms/<realm>/.well-known/openid-configuration">
+                                                <button class="btn btn-sm btn-outline-secondary rounded-pill px-3 text-nowrap" @click="testSso"
+                                                        :disabled="ssoTesting || !sso.oidc_discovery_endpoint">
+                                                    <span v-if="ssoTesting" class="spinner-border spinner-border-sm"></span>
+                                                    <i v-else class="fa-solid fa-plug me-1"></i>Test
+                                                </button>
+                                            </div>
+                                            <div v-if="ssoTestResult" class="small mt-1" :class="ssoTestResult.success ? 'text-success' : 'text-danger'">
+                                                <i class="fa-solid me-1" :class="ssoTestResult.success ? 'fa-circle-check' : 'fa-circle-xmark'"></i>[[ ssoTestResult.message ]]
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Client ID</label>
+                                            <input type="text" v-model.trim="sso.oidc_client_id" class="form-control form-control-sm" placeholder="rulezet">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Client secret</label>
+                                            <input type="password" v-model="ssoSecretNew" class="form-control form-control-sm" autocomplete="new-password"
+                                                   :placeholder="config.sso && config.sso.oidc_client_secret_set ? 'A secret is set — leave empty to keep it' : 'Paste the client secret'">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label small mb-1">Admin group</label>
+                                            <input type="text" v-model.trim="sso.oidc_group_admin" class="form-control form-control-sm" placeholder="RulezetAdmin">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label small mb-1">Editor group</label>
+                                            <input type="text" v-model.trim="sso.oidc_group_editor" class="form-control form-control-sm" placeholder="RulezetEditor">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label small mb-1">Scope</label>
+                                            <input type="text" v-model.trim="sso.oidc_scope" class="form-control form-control-sm" placeholder="openid email profile">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label small mb-1">Redirect URI to register in your identity provider</label>
+                                            <input type="text" class="form-control form-control-sm" :value="config.sso ? config.sso.callback_url : ''" readonly @focus="$event.target.select()">
+                                        </div>
+                                    </div>
+                                    <div class="text-muted mt-2">
+                                        <i class="fa-solid fa-circle-info me-1"></i>
+                                        Members of the admin group become Rulezet admins (re-checked at every login), members of the
+                                        editor group regular users; anyone in neither group is refused. An SSO user whose email already
+                                        belongs to a local account is refused too.
+                                    </div>
+                                    <hr class="my-2">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" id="sso-signup" v-model="sso.sign_up_enabled">
+                                        <label class="form-check-label" for="sso-signup">Allow local sign-up (the "Create one" link and /account/register)</label>
+                                    </div>
+                                    <div class="d-flex justify-content-end gap-2 mt-2">
+                                        <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="editingSso=false; ssoSecretNew=''">Cancel</button>
+                                        <button class="btn btn-sm btn-success rounded-pill px-3" @click="saveSso" :disabled="ssoSaving">
+                                            <span v-if="ssoSaving" class="spinner-border spinner-border-sm me-1"></span>
+                                            <i v-else class="fa-solid fa-check me-1"></i>Save
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1131,7 +1213,6 @@ createApp({
         const configLoaded  = ref(false)
 
         // Config editing
-        const showSecret        = ref(false)
         const editingSecret     = ref(false)
         const secretKeyNew      = ref('')
         const generatingKey     = ref(false)
@@ -1317,6 +1398,55 @@ createApp({
             }
         }
 
+        // ── Single Sign-On (OIDC) ──
+        const editingSso    = ref(false)
+        const ssoSaving     = ref(false)
+        const ssoTesting    = ref(false)
+        const ssoTestResult = ref(null)
+        const ssoSecretNew  = ref('')
+        const sso = ref({})
+
+        function toggleSsoEdit() {
+            editingSso.value = !editingSso.value
+            if (editingSso.value) {
+                const c = config.value.sso || {}
+                sso.value = {
+                    oidc_enabled: !!c.oidc_enabled, oidc_discovery_endpoint: c.oidc_discovery_endpoint || '',
+                    oidc_client_id: c.oidc_client_id || '', oidc_scope: c.oidc_scope || 'openid email profile',
+                    oidc_group_admin: c.oidc_group_admin || 'RulezetAdmin', oidc_group_editor: c.oidc_group_editor || 'RulezetEditor',
+                    sign_up_enabled: c.sign_up_enabled !== false,
+                }
+                ssoSecretNew.value = ''
+                ssoTestResult.value = null
+            }
+        }
+
+        async function testSso() {
+            ssoTesting.value = true
+            try {
+                ssoTestResult.value = await post('/admin/settings/sso/test', { oidc_discovery_endpoint: sso.value.oidc_discovery_endpoint })
+            } finally {
+                ssoTesting.value = false
+            }
+        }
+
+        async function saveSso() {
+            ssoSaving.value = true
+            try {
+                const data = await post('/admin/settings/sso', { ...sso.value, oidc_client_secret: ssoSecretNew.value })
+                const { create_message } = await import('/static/js/toaster.js')
+                create_message(data.message || (data.success ? 'Saved.' : 'Failed.'), data.success ? 'success-subtle' : 'danger-subtle')
+                if (data.success) {
+                    editingSso.value = false
+                    ssoSecretNew.value = ''
+                    configLoaded.value = false
+                    loadConfig()
+                }
+            } finally {
+                ssoSaving.value = false
+            }
+        }
+
         async function saveEnvKey(key, value) {
             if (!value) return
             const data = await post('/admin/settings/update_env', { key, value })
@@ -1431,13 +1561,14 @@ createApp({
             createSubJob, bulkUpdateSelected, bulkUpdateAllJobs,
             confirmSubRemove, subToRemove, doRemoveSub,
             config, configLoading, loadConfig,
-            showSecret, editingSecret, secretKeyNew, generatingKey, generateKey,
+            editingSecret, secretKeyNew, generatingKey, generateKey,
             editingMailPwd, mailPwdNew,
             editingMailServer, mailServerNew,
             editingMailUser, mailUserNew,
             editingMailPort, mailPortNew,
             editingGithubToken, githubTokenNew,
             editingGithubHost, githubHostNew,
+            editingSso, ssoSaving, ssoTesting, ssoTestResult, ssoSecretNew, sso, toggleSsoEdit, testSso, saveSso,
             saveEnvKey,
             testEmailRecipient, testEmailSending, testEmailResult, sendTestEmail,
             instance, instanceLoading, instanceInitSaving, loadInstance, initInstance, copyText,

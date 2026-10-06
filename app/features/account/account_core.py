@@ -56,6 +56,7 @@ def add_user_core(form_dict) -> tuple:
         verification_code=code,
         verification_expiration=expires,
         is_verified=False,
+        auth_provider="local",
         created_at=now,          # set on registration
     )
  
@@ -155,6 +156,11 @@ def request_password_reset_core(email: str) -> bool:
     user = User.query.filter_by(email=email).first()
     if not user or not user.is_verified:
         return True  # silent — prevent email enumeration
+    if (user.auth_provider or 'local') != 'local':
+        # SSO accounts have no Rulezet password: a reset would create one and
+        # let the account log in without the IdP (and keep access after being
+        # removed from the IdP groups). Silent, like the cases above.
+        return True
     raw_token = secrets.token_urlsafe(32)
     hashed    = hashlib.sha256(raw_token.encode()).hexdigest()
     user.password_reset_token      = hashed
@@ -170,6 +176,11 @@ def reset_password_core(raw_token: str, new_password: str) -> tuple:
     user = User.query.filter_by(password_reset_token=hashed).first()
     if not user:
         return False, "Invalid or expired link."
+    if (user.auth_provider or 'local') != 'local':
+        user.password_reset_token      = None
+        user.password_reset_expiration = None
+        db.session.commit()
+        return False, "This account signs in through single sign-on and has no password."
     now = datetime.datetime.now(timezone.utc).replace(tzinfo=None)
     if not user.password_reset_expiration or now > user.password_reset_expiration:
         user.password_reset_token      = None
@@ -246,7 +257,7 @@ def update_last_seen(user_id) -> None:
 
 
 
-def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> tuple:
+def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=False) -> tuple:
     """Edit the user in the DB. Returns (success, pending_email_or_None).
     If the email changed, the new address is NOT applied immediately — caller must
     call request_email_change_core() to send the confirmation link."""
@@ -256,16 +267,18 @@ def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> tupl
 
     user.first_name = form_dict["first_name"]
     user.last_name  = form_dict["last_name"]
-
-    # Detect email change but don't apply it yet
-    new_email = form_dict["email"]
     pending_email = None
-    if new_email != user.email:
-        pending_email = new_email
-    else:
-        user.email = new_email
 
-    if form_dict.get("password"):
+    # SSO accounts have their identity managed externally; disallow email changes.
+    if not is_sso:
+        # Detect email change but don't apply it yet
+        new_email = form_dict["email"]
+        if new_email != user.email:
+            pending_email = new_email
+        else:
+            user.email = new_email
+
+    if form_dict.get("password") and not is_sso:
         user.password = form_dict["password"]
 
     user.username    = form_dict.get("username") or None

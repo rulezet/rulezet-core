@@ -5,7 +5,7 @@ import subprocess
 import sys
 from datetime import datetime
 
-from flask import current_app
+from flask import current_app, url_for
 
 
 # ──────────────────────────────────────────────
@@ -236,11 +236,25 @@ def get_app_config() -> dict:
             'debug': cfg.get('DEBUG', False),
             'environment': os.environ.get('FLASKENV', 'unknown'),
             'secret_key_set': bool(secret),
-            'secret_key_preview': (secret[:4] + '••••••••') if secret else 'not set',
-            'secret_key_length': len(secret),
+            # Nothing derived from the key itself (no prefix, no length).
+            'secret_key_preview': '••••••••••••' if secret else 'not set',
             'github_token_set': bool(github_token),
             'github_token_preview': '••••••••••••' if github_token else 'not set',
             'github_host': github_host,
+        },
+        'sso': {
+            # OIDC SSO
+            'oidc_enabled': current_app.config.get('OIDC_ENABLED', False),
+            'oidc_discovery_endpoint': current_app.config.get('OIDC_DISCOVERY_ENDPOINT', ''),
+            'oidc_client_id': current_app.config.get('OIDC_CLIENT_ID', ''),
+            # Never the secret itself — only whether one is configured.
+            'oidc_client_secret_set': bool(current_app.config.get('OIDC_CLIENT_SECRET')),
+            'oidc_scope': current_app.config.get('OIDC_SCOPE', 'openid email profile'),
+            'oidc_group_admin': current_app.config.get('OIDC_GROUP_ADMIN', ''),
+            'oidc_group_editor': current_app.config.get('OIDC_GROUP_EDITOR', ''),
+            'sign_up_enabled': bool(current_app.config.get('SIGN_UP_ENABLED', True)),
+            # What to register as "Valid redirect URI" in the IdP (Keycloak).
+            'callback_url': url_for('account.oidc_callback', _external=True),
         },
     }
 
@@ -271,10 +285,21 @@ _ENV_ALLOWED = {
 }
 
 
+# Written only by the dedicated SSO settings route (home.py
+# admin_settings_sso), which validates and types each value — deliberately
+# not in _ENV_ALLOWED, whose generic route stores raw strings.
+_ENV_SSO_KEYS = {
+    'OIDC_ENABLED', 'OIDC_DISCOVERY_ENDPOINT', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET',
+    'OIDC_SCOPE', 'OIDC_GROUP_ADMIN', 'OIDC_GROUP_EDITOR', 'SIGN_UP_ENABLED',
+}
+
+
 def write_env_value(key: str, value: str) -> bool:
     """Update or append a single key in the .env file."""
-    if key not in _ENV_ALLOWED:
+    if key not in _ENV_ALLOWED and key not in _ENV_SSO_KEYS:
         return False
+    if any(c in value for c in "'\r\n"):
+        return False   # would break the quoting / inject another .env line
     env_path = os.path.join(os.getcwd(), '.env')
     lines = []
     found = False
