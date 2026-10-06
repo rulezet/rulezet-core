@@ -26,6 +26,10 @@ RATE_LIMIT_WINDOW  = 300  # seconds
 MAX_LOGIN_ATTEMPTS = 5    # failed attempts per IP per window
 
 _login_failures = {}
+
+# Longest text a user search looks for — nobody's name is longer, and an
+# unbounded LIKE pattern is a cheap way to make the database work hard.
+MAX_SEARCH_LENGTH = 100
 _login_failures_lock = threading.Lock()
 
 account_blueprint = Blueprint(
@@ -230,7 +234,7 @@ def user_mini(user_id):
 def search_mentionable_users():
     """Lightweight user search for the @mention picker in comments — any
     logged-in user, not admin-gated like /get_all_users."""
-    q = (request.args.get('q') or '').strip()
+    q = (request.args.get('q') or '').strip()[:MAX_SEARCH_LENGTH]
     if len(q) < 2:
         return jsonify({"users": []})
     return jsonify({"users": AccountModel.search_users_lite(q, limit=8, exclude_id=current_user.id)})
@@ -352,7 +356,7 @@ def users_data_table():
 
     page     = request.args.get('page',     1,        type=int)
     per_page = min(request.args.get('per_page', 20,   type=int), 100)
-    search   = (request.args.get('search',  '')  or '').strip()
+    search   = (request.args.get('search',  '')  or '').strip()[:MAX_SEARCH_LENGTH]
     f_admin  = request.args.get('admin',    '')
     f_conn   = request.args.get('connected','')
     f_verif  = request.args.get('verified', '')
@@ -445,7 +449,7 @@ def users_data_table():
 def get_all_users() -> Union[render_template, dict]:
     """Get all the users"""
     page = request.args.get('page', 1, type=int)
-    search = request.args.get("search", None)
+    search = (request.args.get("search") or "")[:MAX_SEARCH_LENGTH] or None
     connected = request.args.get("connected", None)
     admin = request.args.get("admin", None)
 
@@ -920,7 +924,7 @@ def get_global_leaderboard():
     per_page = request.args.get('per_page', 10, type=int)
     sort_by = request.args.get('sort_by', 'total_points', type=str)
     direction = request.args.get('dir', 'desc', type=str)
-    search = request.args.get('search', None, type=str)
+    search = (request.args.get('search', None, type=str) or '')[:MAX_SEARCH_LENGTH] or None
     active_since = request.args.get('active_since', None, type=str)
 
     if sort_by not in _VALID_LEADERBOARD_SORTS:
@@ -945,7 +949,7 @@ def get_category_leaderboard():
     per_page = request.args.get('per_page', 5, type=int)
     sort_by = request.args.get('sort_by', 'suggestions_accepted', type=str)
     direction = request.args.get('dir', 'desc', type=str)
-    search = request.args.get('search', None, type=str)
+    search = (request.args.get('search', None, type=str) or '')[:MAX_SEARCH_LENGTH] or None
     active_since = request.args.get('active_since', None, type=str)
 
     if sort_by not in _VALID_LEADERBOARD_SORTS:
