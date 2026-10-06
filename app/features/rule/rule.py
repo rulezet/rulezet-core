@@ -560,7 +560,7 @@ def edit_rule(rule_id) -> render_template:
                                deep_validation_available=is_deep_validation_configured())
 
     if is_owner_or_admin:
-        form = EditRuleForm()
+        form = EditRuleForm(rule_id=rule.id)
         licenses = get_licst_license()
         # Rules imported from GitHub (see rule_from_github/proposal_core.py)
         # can carry a free-text license that isn't in licenses.txt — without

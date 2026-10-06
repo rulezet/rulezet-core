@@ -105,10 +105,17 @@ class EditRuleForm(FlaskForm):
     cve_id = StringField('Vulnerability id')
     submit = SubmitField('Save')
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, rule_id=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.rule_id = rule_id   # the rule being edited — its own title is not a conflict
         formats_rules_list = RuleModel.get_all_rule_format()
         self.format.choices = [(f['name'], f['name']) for f in formats_rules_list]
+
+    def validate_title(self, field):
+        """Same rule as on create: a title used by another active rule is refused."""
+        clash = _active().filter(Rule.title == field.data, Rule.id != self.rule_id).first()
+        if clash:
+            raise ValidationError('Another rule already uses this title.')
 
 class CreateFormatRuleForm(FlaskForm):
     """Form to create a new rule format"""
