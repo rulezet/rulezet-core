@@ -480,11 +480,12 @@ def update_bundle_tags(bundle_id: int, tags: List[int], user: User) -> bool:
         ids_to_add = new_tag_ids - current_tag_ids
 
 
-        if ids_to_remove:
-            BundleTagAssociation.query.filter(
-                BundleTagAssociation.bundle_id == bundle_id,
-                BundleTagAssociation.tag_id.in_(ids_to_remove)
-            ).delete(synchronize_session=False)
+        # ORM delete (not a bulk query.delete()): the rows are already in the
+        # session — a stale copy would collide with a new row reusing its id.
+        for assoc in current_associations:
+            if assoc.tag_id in ids_to_remove:
+                db.session.delete(assoc)
+        db.session.flush()
 
 
         for tag_id in ids_to_add:
