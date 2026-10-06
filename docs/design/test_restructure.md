@@ -88,6 +88,10 @@ seen it. Every test follows the same conventions:
 - **Same layout everywhere.** `tests/<feature>/test_access.py`,
   `test_crud.py`, `test_api.py`, `test_robustness.py` — nothing else at the
   top of a feature folder. A new feature copies `tests/_template/`.
+  Logic that isn't about access / CRUD / API / robustness gets its own folder
+  named after what it tests, with files named after the behaviour — e.g.
+  `tests/rule_formats/test_syntax.py` and `test_parser.py` for every rule
+  format.
 - **Names say the expectation.** `test_<action>_<who>_<expected>`, e.g.
   `test_delete_rule_as_non_owner_is_forbidden` — the name alone tells what
   broke when it fails.
@@ -199,6 +203,81 @@ robustness, bundles access…):
 Nothing is pushed without an explicit go. The legacy suite is run at the end
 of a feature to check nothing it covered broke.
 
+## Briefing for a feature agent
+
+Features are rewritten in parallel, one agent per feature, each in its own
+git worktree (its own branch), then reviewed and merged into
+`tests-restructure`. Every agent gets this briefing plus the name of its
+feature.
+
+**Before writing anything**
+
+1. Read this whole document, then the reference implementation:
+   `tests/conftest.py`, `tests/helpers/` (users, access, db, inputs, rules)
+   and `tests/rules/` — the four files there are the model to follow.
+2. Map the feature: every web route of its blueprint
+   (`app/features/<feature>/`), every API endpoint (`app/api/<feature>/`),
+   the decorators and the ownership / admin / permission checks inside, the
+   payloads, and the DB effect of each write. Write the expected permission
+   model as one sentence per action — that becomes the access tables.
+
+**Writing the tests**
+
+3. `tests/<feature>/__init__.py` + the four layer files (copy
+   `tests/_template/`). Tables first (`matrix()` + `assert_outcome()`), then
+   CRUD checked in the DB (`reload()`, `count()`), then API with a key per
+   role (`api_headers()`), then robustness with `tests/helpers/inputs.py`.
+4. Factories for the feature's objects go in **`tests/helpers/<feature>.py`**
+   (like `helpers/rules.py`). Never edit the other shared helpers, the
+   conftest or another feature's tests — if one needs a change, say so in the
+   final report instead.
+5. Tests describe the **correct** behaviour (what Rulezet should do), not
+   whatever the code currently does.
+
+**Running and fixing**
+
+6. Run `FLASKENV=testing pytest -q -p no:cacheprovider tests/<feature>` (and
+   `tests/test_foundation.py`) after each file. Read the failure: a wrong
+   test is fixed in the test; **a Rulezet bug is fixed in Rulezet**, with the
+   smallest correct change, following CLAUDE.md (e.g. `_active()` for rules,
+   owner-or-admin checks, `log_activity`). Shared helpers already exist for
+   untrusted input: `as_db_id()` and `json_object()` in
+   `app/core/utils/utils.py`.
+7. Known patterns from the rules pass, to look for: a refused action
+   answering 200 + `access_denied.html` instead of 403 (JSON routes → JSON
+   403, pages → template + 403); `int()` / `.get()` / `.strip()` on
+   untrusted values → 500; soft-deleted rows leaking into lists; actions on
+   a missing id → 500; foreign keys SQLite doesn't enforce but PostgreSQL
+   does.
+8. A behaviour that is a **product decision**, not a bug (e.g. "should a
+   non-owner be allowed to…?"), is not changed: the test is written for the
+   current behaviour, and the question goes in the final report.
+
+**Committing** (never push, never `feat:`, never any AI attribution)
+
+9. Check the run is green **before** committing (don't trust a piped
+   command's exit code).
+10. Each Rulezet fix: its own commit with only the files of that fix —
+    `fix: [<feature>] <what was wrong, in user terms>`.
+11. Each layer of tests: one commit — `chg: [test <feature>] <layer and what
+    it covers>`.
+
+**Final report** (the agent's last message)
+
+- commits (hash + subject), bugs fixed (one line each: the failure, the fix);
+- product decisions to take, with the current behaviour;
+- anything left out of scope and why;
+- any file touched outside `tests/<feature>/`, `tests/helpers/<feature>.py`
+  and the feature's own code.
+
+**Feature batches** (at most 5 agents at a time)
+
+| Batch | Features |
+|---|---|
+| 1 | bundles, tags, ATT&CK (`attack`), comments (`api/comment`, rule & bundle comments), account |
+| 2 | connectors, MISP, jobs, workspace, roles |
+| 3 | AI, notifications, reports, blog, community, rule tester, rule relations, Velociraptor, admin / config |
+
 ## Order of work
 
 1. Infrastructure: backup of the old tests, new `conftest.py`, role fixtures,
@@ -227,5 +306,6 @@ of a feature to check nothing it covered broke.
 | Feature | Access | CRUD | API | Robustness | Legacy reviewed | Documented |
 |---|---|---|---|---|---|---|
 | infrastructure ✅ | – | – | – | – | – | |
-| rules | | | | | | |
+| rules | ✅ | ✅ | ✅ | ✅ | pending | |
+| rule formats (syntax, parser) | – | – | – | – | | |
 | bundles | | | | | | |
