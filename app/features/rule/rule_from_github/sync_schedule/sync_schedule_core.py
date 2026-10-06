@@ -16,6 +16,31 @@ from app.features.rule.rule_format.utils_format.utils_import_update import valid
 VALID_FREQUENCIES = ('daily', 'weekly', 'monthly', 'cron')
 
 
+def _is_list_of(value, kind):
+    return value is None or (isinstance(value, list) and all(isinstance(v, kind) for v in value))
+
+
+def _validate_fields(data):
+    """Types and sizes of everything a schedule form sends — a wrong type
+    is refused here instead of crashing further down (or being stored)."""
+    title = data.get('title')
+    if not isinstance(title, str) or not title.strip():
+        return False, "Title is required."
+    if len(title.strip()) > 150:
+        return False, "Title is too long (150 characters at most)."
+    if not isinstance(data.get('description'), (str, type(None))):
+        return False, "description must be text."
+    if not _is_list_of(data.get('selected_repo_urls'), str) or not _is_list_of(data.get('excluded_repo_urls'), str):
+        return False, "selected_repo_urls / excluded_repo_urls must be lists of URLs."
+    if not _is_list_of(data.get('repo_settings'), dict) or not all(
+            isinstance(r.get('repo_url'), str) for r in data.get('repo_settings') or []):
+        return False, "repo_settings must be a list of {repo_url, ...} objects."
+    for key in ('default_repo_settings', 'repo_filters'):
+        if not isinstance(data.get(key), (dict, type(None))):
+            return False, f"{key} must be an object."
+    return _validate_recurrence(data)
+
+
 def _validate_recurrence(data):
     freq = data.get('frequency')
     if freq not in VALID_FREQUENCIES:
@@ -28,12 +53,12 @@ def _validate_recurrence(data):
 
     if freq == 'monthly':
         dom = data.get('day_of_month')
-        if dom is None or not (dom == -1 or 1 <= dom <= 31):
+        if not isinstance(dom, int) or isinstance(dom, bool) or not (dom == -1 or 1 <= dom <= 31):
             return False, "day_of_month must be 1-31, or -1 for the last day of the month."
 
     if freq == 'cron':
         cron_expr = data.get('cron_expr')
-        if not cron_expr:
+        if not cron_expr or not isinstance(cron_expr, str):
             return False, "cron_expr is required when frequency is 'cron'."
         try:
             from apscheduler.triggers.cron import CronTrigger
@@ -43,10 +68,21 @@ def _validate_recurrence(data):
 
     hour = data.get('hour', 3)
     minute = data.get('minute', 0)
-    if not isinstance(hour, int) or not (0 <= hour <= 23):
+    if not isinstance(hour, int) or isinstance(hour, bool) or not (0 <= hour <= 23):
         return False, "hour must be an integer 0-23."
-    if not isinstance(minute, int) or not (0 <= minute <= 59):
+    if not isinstance(minute, int) or isinstance(minute, bool) or not (0 <= minute <= 59):
         return False, "minute must be an integer 0-59."
+
+    # An unknown timezone used to be found only when registering the live
+    # trigger, after the schedule was already saved (500 + a half-saved row).
+    timezone = data.get('timezone') or 'UTC'
+    if not isinstance(timezone, str):
+        return False, "timezone must be text."
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+        CronTrigger(hour=hour, minute=minute, timezone=timezone)
+    except Exception:
+        return False, f"Unknown timezone: {timezone[:60]!r}"
 
     return True, None
 
@@ -131,13 +167,11 @@ def get_schedule_list_page(page=1, per_page=20, search='', sort='created_at', di
 
 
 def create_schedule(data, editor):
-    ok, err = _validate_recurrence(data)
+    ok, err = _validate_fields(data)
     if not ok:
         return None, err
 
-    title = (data.get('title') or '').strip()
-    if not title:
-        return None, "Title is required."
+    title = data['title'].strip()
 
     repo_urls = resolve_repo_urls(data.get('repo_mode', 'partial'), data.get('repo_filters'),
                                    data.get('selected_repo_urls'), data.get('excluded_repo_urls'))
@@ -169,13 +203,11 @@ def update_schedule(schedule_uuid, data):
     if not schedule:
         return None, "Schedule not found."
 
-    ok, err = _validate_recurrence(data)
+    ok, err = _validate_fields(data)
     if not ok:
         return None, err
 
-    title = (data.get('title') or '').strip()
-    if not title:
-        return None, "Title is required."
+    title = data['title'].strip()
 
     schedule.title = title
     schedule.description = data.get('description')
@@ -217,6 +249,10 @@ def delete_schedule(schedule_uuid):
 
 
 def _resolve_bulk_targets(mode, filters, selected_uuids, excluded_uuids):
+    # Untrusted JSON: anything that isn't a list of uuids selects nothing.
+    filters = filters if isinstance(filters, dict) else {}
+    selected_uuids = [u for u in selected_uuids if isinstance(u, str)] if isinstance(selected_uuids, list) else []
+    excluded_uuids = [u for u in excluded_uuids if isinstance(u, str)] if isinstance(excluded_uuids, list) else []
     """Shared 'select all matching filter, minus excluded' resolution for
     bulk actions on the schedule list — same mode/filters/selected/excluded
     shape as the repo picker (§6 of the plan), never trusting a client-
