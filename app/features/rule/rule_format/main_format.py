@@ -47,7 +47,8 @@ def _safe_repo_files(repo_dir: str):
 ##############################################################################################
 
 
-def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, format_name: str , user: User) -> int:
+def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, format_name: str , user: User,
+                            repo_dir: str = None) -> int:
     imported = 0
     skipped = 0
     bad_rules = 0
@@ -65,6 +66,13 @@ def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, f
             validation_result  = format_rule.validate(rule_text)
             # Parse metadata
             metadata = format_rule.parse_metadata(rule_text , enriched_info , validation_result)
+            # Where the rule lives in the repository and which branch it came
+            # from — what an update check matches it with later (same as
+            # the interactive import, session_class.py).
+            if repo_dir:
+                metadata["github_path"] = os.path.relpath(filepath, repo_dir)
+            if info.get("branch"):
+                metadata["branch"] = info.get("branch")
 
             result_dict = {
                 "validation": {
@@ -187,7 +195,7 @@ async def extract_rule_from_repo(repo_dir: str, info: dict, user: User):
             continue
 
         bad, imported_count, skipped_count = Process_rules_by_format(
-            files, rule_instance, info, format_name, user
+            files, rule_instance, info, format_name, user, repo_dir=repo_dir
         )
 
         bad_rules += bad
