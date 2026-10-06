@@ -1294,29 +1294,23 @@ def handle_connector_pull(job, app):
         atk_list   = [a for a in (pull_filters.get('attacks') or []) if a]
         attacks_qs = ','.join(atk_list) if atk_list else ''
 
+        from urllib.parse import quote as _quote
+
+        def _filter_qs() -> str:
+            """The filters as query-string parameters, each value URL-encoded
+            (commas kept: they separate the values of one filter)."""
+            params = [('cve', cve_qs), ('formats', formats_qs), ('author', authors_qs),
+                      ('license', license_qs)]
+            if tags_qs:
+                params += [('tags', tags_qs), ('tag_mode', tag_mode_qs), ('tag_exclude', tag_excl_qs)]
+            params += [('date_from', date_from_qs), ('date_to', date_to_qs), ('attacks', attacks_qs)]
+            return ''.join(f"&{k}={_quote(v, safe=',:')}" for k, v in params if v)
+
         def _build_rule_url(p: int) -> str:
-            url = f"{base}/api/sync/rules?since={since}&page={p}&per_page={PER_PAGE}"
-            if cve_qs:       url += f"&cve={cve_qs}"
-            if formats_qs:   url += f"&formats={formats_qs}"
-            if authors_qs:   url += f"&author={authors_qs}"
-            if license_qs:   url += f"&license={license_qs}"
-            if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
-            if date_from_qs: url += f"&date_from={date_from_qs}"
-            if date_to_qs:   url += f"&date_to={date_to_qs}"
-            if attacks_qs:   url += f"&attacks={attacks_qs}"
-            return url
+            return f"{base}/api/sync/rules?since={since}&page={p}&per_page={PER_PAGE}{_filter_qs()}"
 
         def _build_preflight_url() -> str:
-            url = f"{base}/api/sync/rules?since={since}&count_only=true"
-            if cve_qs:       url += f"&cve={cve_qs}"
-            if formats_qs:   url += f"&formats={formats_qs}"
-            if authors_qs:   url += f"&author={authors_qs}"
-            if license_qs:   url += f"&license={license_qs}"
-            if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
-            if date_from_qs: url += f"&date_from={date_from_qs}"
-            if date_to_qs:   url += f"&date_to={date_to_qs}"
-            if attacks_qs:   url += f"&attacks={attacks_qs}"
-            return url
+            return f"{base}/api/sync/rules?since={since}&count_only=true{_filter_qs()}"
 
         active_filters = [k for k in [cve_qs, formats_qs, authors_qs, license_qs, tags_qs, date_from_qs, date_to_qs, attacks_qs] if k]
 
