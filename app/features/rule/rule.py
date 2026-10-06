@@ -4143,10 +4143,13 @@ def import_rules_from_github():
     if not _is_github_manager():
         return {"message": "Admin access required. Non-admins can submit a proposal instead.", "toast_class": "danger-subtle"}, 403
     try:
-        repo_url = request.json.get('url')
-        selected_license = request.json.get('license')
-        branch = (request.json.get('branch') or '').strip() or None
-        is_generic_source = bool(request.json.get('is_generic_source'))
+        data = json_object()
+        if not all(isinstance(data.get(k), (str, type(None))) for k in ('url', 'license', 'branch')):
+            return {"message": "url, license and branch must be text.", "toast_class": "danger-subtle"}, 400
+        repo_url = data.get('url')
+        selected_license = data.get('license')
+        branch = (data.get('branch') or '').strip() or None
+        is_generic_source = bool(data.get('is_generic_source'))
 
         verif = valider_repo_github(repo_url, is_generic_source=is_generic_source)
         if not verif:
@@ -4607,7 +4610,7 @@ def bulk_update_decision(sid):
         return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
     if not _can_manage_update_session(updater):
         return {"message": "Access denied", "toast_class": "danger-subtle"}, 403
-    data   = request.get_json() or {}
+    data   = json_object()
     action = data.get('action')
     if action not in ('accept', 'reject'):
         return {'message': 'Invalid action', 'toast_class': 'danger-subtle'}, 400
@@ -4644,7 +4647,7 @@ def bulk_new_rules_decision(sid):
     """Dispatch add-all or reject-all new rules as a background job."""
     if not _is_github_manager():
         return {"message": "Access denied", "toast_class": "danger-subtle"}, 403
-    data = request.get_json() or {}
+    data = json_object()
     action = data.get('action')
     if action not in ('add', 'reject'):
         return {'message': 'Invalid action', 'toast_class': 'danger-subtle'}, 400
@@ -4720,8 +4723,12 @@ def check_updates_by_url():
 
     # except Exception as e:
     #     return {"message": f"Error while checking updates: {str(e)}", "toast_class": "danger-subtle"}, 500
-    data = request.get_json()
+    data = json_object()
     urls = data.get("url", None)
+    # Each entry is {"url": ..., "branch": ...} — anything else is ignored.
+    if isinstance(urls, list):
+        urls = [u for u in urls if isinstance(u, dict) and isinstance(u.get("url"), str)
+                and isinstance(u.get("branch"), (str, type(None)))]
 
     if not urls or not isinstance(urls, list):
         return {
@@ -4804,8 +4811,10 @@ def check_updates_by_rule():
     #     return {"message": f"Error while checking rule updates: {str(e)}", "toast_class": "danger-subtle"}, 500
 
 
-    data = request.get_json()
+    data = json_object()
     rule_ids = data.get("rules", [])
+    if isinstance(rule_ids, list):
+        rule_ids = [rid for rid in (as_db_id(r) for r in rule_ids) if rid]
 
     if not rule_ids or not isinstance(rule_ids, list):
         return {
@@ -5001,10 +5010,16 @@ def bulk_action_github():
     if not _is_github_manager():
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
-    data = request.get_json()
+    data = json_object()
     action = data.get('action')
     mode = data.get('mode', 'partial')
     excluded_ids = data.get('excluded_ids') or []
+    selected_ids = data.get('selected_ids') or []
+    if not isinstance(excluded_ids, list) or not isinstance(selected_ids, list) or not all(
+            isinstance(e, str) or (isinstance(e, dict) and isinstance(e.get('url'), str))
+            for e in excluded_ids + selected_ids):
+        return jsonify({"message": "selected_ids / excluded_ids must be lists of URLs.",
+                        "toast_class": "danger-subtle"}), 400
     # mode='all' excludes are URL-level only — "select every GitHub source"
     # has no per-branch granularity there; a per-row exclude just drops that
     # repo's URL entirely from the global set.
