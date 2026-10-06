@@ -279,14 +279,14 @@ You may add a rule to a bundle **only if**:
 - You are the **owner** of the bundle, **or**
 - You are an **administrator**
 
-If you do not meet these conditions, the request will be rejected (401).
+If you do not meet these conditions, the request will be rejected (403).
 
 ### Errors
 
 | Status | Meaning |
 |--------|---------|
 | 400    | Missing parameter |
-| 401    | Not the owner / an admin |
+| 403    | Not the owner / an admin |
 | 403    | Missing or invalid API key |
 | 404    | Bundle not found, or rule not found / deleted |
 
@@ -349,7 +349,7 @@ class AddRuleToBundle(Resource):
                 "success": False,
                 "message": "You don't have the permission to do that!",
                 "toast_class": "danger"
-            }, 401
+            }, 403
 
         if data.get("rule_id"):
             rules, _ = _resolve_rules(rule_ids=[str(data["rule_id"])])
@@ -434,7 +434,7 @@ class AddRulesToBundle(Resource):
         if not bundle:
             return {"success": False, "message": "Bundle not found"}, 404
         if not _is_manager(bundle):
-            return {"success": False, "message": "You don't have the permission to do that!"}, 401
+            return {"success": False, "message": "You don't have the permission to do that!"}, 403
         folder = data.get("folder")
         if folder is not None and not isinstance(folder, str):
             return {"success": False, "message": "'folder' must be a string"}, 400
@@ -484,7 +484,7 @@ bundle's folder tree. Only the bundle owner or an administrator is allowed to pe
 | Status | Meaning |
 |--------|---------|
 | 400    | Missing parameter |
-| 401    | Not the owner / an admin |
+| 403    | Not the owner / an admin |
 | 403    | Missing or invalid API key |
 | 404    | Bundle not found, or the rule is not in this bundle |
 
@@ -541,7 +541,7 @@ class RemoveRuleFromBundle(Resource):
                 "success": False,
                 "message": "You don't have the permission to do that!",
                 "toast_class": "danger"
-            }, 401
+            }, 403
 
         # ---- Resolve the rule (a trashed rule can still be removed) ----
         if data.get("rule_id"):
@@ -590,14 +590,14 @@ Update a bundle. **Only the fields you send are changed** — anything left out 
 | vulnerabilities | list[string]  | No       | Replaces the vulnerability identifiers (`[]` clears them)            |
 | tags            | list          | No       | Replaces the tags — tag names or ids (`[]` removes them all)         |
 
-Owner of the bundle or admin only (401 otherwise).
+Owner of the bundle or admin only (403 otherwise).
 
 ### Errors
 
 | Status | Meaning |
 |--------|---------|
 | 400    | Invalid field type, empty name, unknown tag, or no field to update |
-| 401    | Not the owner / an admin |
+| 403    | Not the owner / an admin |
 | 403    | Missing or invalid API key |
 | 404    | Bundle not found |
 
@@ -620,7 +620,7 @@ class EditBundle(Resource):
         if not bundle:
             return {"success": False, "message": "Bundle not found"}, 404
         if not _is_manager(bundle):
-            return {"success": False, "message": "You don't have the permission to do that!"}, 401
+            return {"success": False, "message": "You don't have the permission to do that!"}, 403
 
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
@@ -718,7 +718,7 @@ names 1-255 characters without `/`.
 | Status | Meaning |
 |--------|---------|
 | 400    | Invalid tree, or a referenced rule does not exist (`missing_rules`) |
-| 401    | Not the owner / an admin |
+| 403    | Not the owner / an admin |
 | 403    | Missing or invalid API key |
 | 404    | Bundle not found |
 
@@ -742,7 +742,7 @@ class EditBundleStructure(Resource):
         if not bundle:
             return {"success": False, "message": "Bundle not found"}, 404
         if not _is_manager(bundle):
-            return {"success": False, "message": "You don't have the permission to do that!"}, 401
+            return {"success": False, "message": "You don't have the permission to do that!"}, 403
 
         data = request.get_json(silent=True) or {}
         structure = data.get("structure")
@@ -818,7 +818,7 @@ Delete a bundle **permanently** (its tree, notes, releases and history go with i
 
 | Status | Meaning |
 |--------|---------|
-| 401    | Not the owner / an admin |
+| 403    | Not the owner / an admin |
 | 403    | Missing or invalid API key |
 | 404    | Bundle not found |
 
@@ -836,7 +836,7 @@ class DeleteBundle(Resource):
         if not bundle:
             return {"success": False, "message": "Bundle not found"}, 404
         if not _is_manager(bundle):
-            return {"success": False, "message": "You don't have the permission to do that!"}, 401
+            return {"success": False, "message": "You don't have the permission to do that!"}, 403
         bundle_id, bundle_name, bundle_uuid = bundle.id, bundle.name, bundle.uuid
         if not BundleModel.delete_bundle(bundle_id):
             return {"success": False, "message": "Delete failed"}, 500
