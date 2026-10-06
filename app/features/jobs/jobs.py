@@ -11,6 +11,7 @@ from flask_login import current_user, login_required
 import app.features.jobs.jobs_core as JobsModel
 from app.core.db_class.db import BackgroundJob
 from app.core.utils.activity_log import log_activity
+from app.core.utils.utils import json_object
 from app import db
 
 jobs_blueprint = Blueprint(
@@ -415,20 +416,28 @@ def job_logs(job_uuid):
 # connector pulls, trash purge, db backup, ...) stays admin-only.
 _TAG_MANAGER_JOB_TYPES = {'bulk_add_tag_to_rules', 'bulk_remove_tag_from_rules'}
 
+_LABEL_MAX = BackgroundJob.label.property.columns[0].type.length
+
 
 @jobs_blueprint.route('/create', methods=['POST'])
 @login_required
 def create_job():
-    data     = request.json or {}
+    data     = json_object()
     job_type = data.get('job_type')
     payload  = data.get('payload', {})
-    label    = data.get('label', job_type)
+    label    = data.get('label')
+    if label is None:
+        label = job_type
 
-    if not job_type:
+    if not job_type or not isinstance(job_type, str):
         return jsonify({"error": "job_type is required."}), 400
     from app.features.jobs.job_worker import _HANDLERS
     if job_type not in _HANDLERS:
         return jsonify({"error": "Unknown job_type."}), 400
+    if not isinstance(payload, dict):
+        return jsonify({"error": "payload must be a JSON object."}), 400
+    if not isinstance(label, str) or len(label) > _LABEL_MAX:
+        return jsonify({"error": f"label must be a text of at most {_LABEL_MAX} characters."}), 400
 
     # Job types reachable from this endpoint are administrative by default —
     # user-level jobs are created server-side by their own gated routes,
