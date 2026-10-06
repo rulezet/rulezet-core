@@ -11,7 +11,6 @@ from tests.helpers.comments import (
 )
 from tests.helpers.db import count, reload
 from tests.helpers.rules import make_rule
-from tests.helpers.users import make_user
 
 
 def _notifications(user, notif_type):
