@@ -1296,6 +1296,7 @@ class Bundle(db.Model):
 
     def to_json(self):
         submitter = User.query.get(self.user_id)
+        active_rules = [a.rule for a in self.rules_assoc if a.rule and not a.rule.is_deleted]
         return {
             "id": self.id,
             "author_avatar": submitter.get_avatar_url() if submitter else None,
@@ -1309,8 +1310,8 @@ class Bundle(db.Model):
             "vote_up": self.vote_up,
             "vote_down": self.vote_down,
             "user_name": self.get_rule_user_first_name_by_id(),
-            "list_of_format_of_rules": list(set([assoc.rule.format for assoc in self.rules_assoc])),
-            "number_of_rules": len(self.rules_assoc.all()),
+            "list_of_format_of_rules": list(set([r.format for r in active_rules])),
+            "number_of_rules": len(active_rules),
             "is_verified": self.is_verified,
             "view_count": self.view_count,
             "download_count": self.download_count,
