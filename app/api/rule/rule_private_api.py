@@ -334,6 +334,8 @@ class FavoriteRule(Resource):
             AccountModel.remove_favorite(rule_id=rule_id, user_id=user.id)
             return {"success": True, "message": "Rule removed from favorites"}, 200
         else:
+            if not RuleModel.get_rule(rule_id):
+                return {"success": False, "message": "Rule not found"}, 404
             AccountModel.add_favorite(rule_id=rule_id, user_id=user.id)
             return {"success": True, "message": "Rule added to favorites"}, 200
 

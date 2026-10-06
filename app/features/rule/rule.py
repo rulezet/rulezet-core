@@ -1755,6 +1755,11 @@ def add_favorite_rule(rule_id) -> redirect:
             "message": "rule remove from favorite"
         }), 200
     else:
+        # Removing always works (a trashed rule can still be un-favorited);
+        # adding only for an existing, active rule.
+        if not RuleModel.get_rule(rule_id):
+            return jsonify({"is_favorited": False, "toast_class": "danger",
+                            "message": "Rule not found"}), 404
         add_favorite(user_id=current_user.id, rule_id=rule_id)
         log_activity("rule.favorite", f"Added rule id={rule_id} to favorites",
                      target_type="rule", target_id=rule_id)
