@@ -356,3 +356,15 @@ def test_justification_of_an_unknown_proposal_is_not_found(method, clients):
     response = getattr(clients["owner"], method)("/rule/edit_proposal_message/999999", json={"message": "x"})
 
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("query", ["", "rule_id=abc", "rule_id=99999999999999999999", "rule_id=²", "rule_id=1&page=abc",
+                                   "rule_id=1&page=99999999999999999999", "rule_id=1&page=-3",
+                                   "rule_id=1&status=merged", "rule_id=1&sort=random", "rule_id=1&q=%25_%00",
+                                   "rule_id=1&edit_type=" + "x" * 5000, "rule_id=1&q=" + "y" * 100000])
+def test_proposal_threads_with_odd_parameters_never_errors(query, clients, users):
+    make_rule(users.owner)
+
+    response = clients["anonymous"].get(f"/rule/get_proposal_threads?{query}")
+
+    assert response.status_code in (200, 400, 404)

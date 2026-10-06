@@ -411,3 +411,86 @@ def test_permanent_delete_of_a_batch_deletes_that_batch_only(clients, users):
 
     assert all(reload(r) is None for r in batch)
     assert reload(other) is not None
+
+
+# ── Proposals grouped into threads (the rule's "Proposals" page) ─────────────
+
+def _proposal(rule, author, *, previous=None, status="pending", minutes=0):
+    import datetime
+    from app import db
+    proposal = RuleEditProposal(
+        rule_id=rule.id, user_id=author.id, proposed_content=yara_rule(f"p{minutes}"), old_content=rule.to_string,
+        status=status, previous_proposal_id=previous.id if previous else None,
+        timestamp=datetime.datetime(2026, 1, 1) + datetime.timedelta(minutes=minutes))
+    db.session.add(proposal)
+    db.session.commit()
+    return proposal
+
+
+def test_proposals_are_grouped_into_threads_in_reading_order(clients, users):
+    rule = make_rule(users.owner)
+    first = _proposal(rule, users.user, status="rejected", minutes=0)
+    alone = _proposal(rule, users.admin, minutes=5)
+    revision = _proposal(rule, users.user, previous=first, status="rejected", minutes=10)
+    branch = _proposal(rule, users.admin, previous=first, status="accepted", minutes=20)
+    of_revision = _proposal(rule, users.user, previous=revision, minutes=30)
+
+    data = clients["anonymous"].get(f"/rule/get_proposal_threads?rule_id={rule.id}").get_json()
+
+    # latest activity first: the thread of `first` (30 min) before `alone` (5 min)
+    assert [t["id"] for t in data["threads"]] == [first.id, alone.id]
+    thread = data["threads"][0]
+    # depth-first, oldest revision first; version numbers follow the dates
+    assert [(p["id"], p["depth"], p["version"]) for p in thread["proposals"]] == [
+        (first.id, 0, 1), (revision.id, 1, 2), (of_revision.id, 2, 4), (branch.id, 1, 3)]
+    assert thread["status"] == "accepted" and data["threads"][1]["status"] == "open"
+    assert (data["total_proposals"], data["total_threads"]) == (5, 2)
+
+
+def test_proposal_threads_are_never_split_across_pages(clients, users):
+    from app.features.rule.rule_core import PROPOSAL_THREADS_PER_PAGE
+    rule = make_rule(users.owner)
+    for n in range(PROPOSAL_THREADS_PER_PAGE + 1):
+        root = _proposal(rule, users.user, minutes=n * 10)
+        _proposal(rule, users.user, previous=root, minutes=n * 10 + 1)
+
+    first = clients["anonymous"].get(f"/rule/get_proposal_threads?rule_id={rule.id}&page=1").get_json()
+    second = clients["anonymous"].get(f"/rule/get_proposal_threads?rule_id={rule.id}&page=2").get_json()
+
+    assert first["total_pages"] == 2
+    assert len(first["threads"]) == PROPOSAL_THREADS_PER_PAGE and len(second["threads"]) == 1
+    assert all(len(t["proposals"]) == 2 for t in first["threads"] + second["threads"])
+
+
+def test_proposal_threads_of_a_trashed_rule_are_not_found(clients, users):
+    rule = make_rule(users.owner, is_deleted=True)
+
+    response = clients["anonymous"].get(f"/rule/get_proposal_threads?rule_id={rule.id}")
+
+    assert response.status_code == 404
+
+
+def test_proposal_threads_filters_and_sort(clients, users):
+    from app import db
+    rule = make_rule(users.owner)
+    merged = _proposal(rule, users.user, status="rejected", minutes=0)
+    _proposal(rule, users.user, previous=merged, status="accepted", minutes=1)
+    open_one = _proposal(rule, users.admin, minutes=10)
+    open_one.edit_type, open_one.message = "security", "Fixes a bypass"
+    closed = _proposal(rule, users.user, status="rejected", minutes=20)
+    db.session.commit()
+
+    def ids(**params):
+        query = "&".join(f"{k}={v}" for k, v in params.items())
+        data = clients["anonymous"].get(f"/rule/get_proposal_threads?rule_id={rule.id}&{query}").get_json()
+        return [t["id"] for t in data["threads"]], data["status_counts"]
+
+    assert ids(status="accepted")[0] == [merged.id]
+    assert ids(status="open")[0] == [open_one.id]
+    assert ids(status="closed")[0] == [closed.id]
+    assert ids(status="open")[1] == {"open": 1, "accepted": 1, "closed": 1}   # counts ignore the filter
+    assert ids(edit_type="security")[0] == [open_one.id]
+    assert ids(q="bypass")[0] == [open_one.id]
+    assert ids(q=f"%23{closed.id}")[0] == [closed.id]                           # "#<id>"
+    assert ids(sort="oldest")[0] == [merged.id, open_one.id, closed.id]
+    assert ids(sort="versions")[0][0] == merged.id
