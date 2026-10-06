@@ -4,6 +4,7 @@ import app.features.tags.tags_core as tags_core
 import app.features.rule.rule_core as RuleModel
 from app import db
 from app.core.utils.activity_log import log_activity
+from app.core.utils.utils import as_db_id, json_object
 
 
 tags_blueprint = Blueprint(
@@ -50,6 +51,39 @@ def _can_delete_tag(tag_id):
 
 
 # ─── Pages ───────────────────────────────────────────────────────────────────
+
+TAG_NAME_MAX = 1000                      # same cap as the MISP taxonomy / galaxy imports
+_TAG_FIELD_MAX = {"color": 50, "icon": 50}   # their column sizes
+
+
+def _tag_fields(data, *, creating):
+    """(fields, error message) — the tag fields a create / edit body may set,
+    checked: a non-blank text name, text (or null) optional fields that fit
+    their column, a known visibility, no NUL character (PostgreSQL refuses
+    it). Status, approval, author and source are never taken from the body."""
+    name = data.get('name')
+    if not isinstance(name, str) or not name.strip():
+        return None, "Tag name is required."
+    fields = {"name": name.strip()}
+    if len(fields["name"]) > TAG_NAME_MAX:
+        return None, f"Tag name is too long (max {TAG_NAME_MAX} characters)."
+    for key in ("description", "color", "icon", "external_id"):
+        if key not in data:
+            continue
+        value = data[key]
+        if value is not None and not isinstance(value, str):
+            return None, f"{key} must be text."
+        if value and key in _TAG_FIELD_MAX and len(value) > _TAG_FIELD_MAX[key]:
+            return None, f"{key} is too long (max {_TAG_FIELD_MAX[key]} characters)."
+        fields[key] = value
+    if creating:
+        fields["visibility"] = data.get('visibility', 'private')
+        if fields["visibility"] not in ('public', 'private'):
+            return None, "visibility must be 'public' or 'private'."
+    if any(isinstance(v, str) and '\x00' in v for v in fields.values()):
+        return None, "Tag fields cannot contain NUL characters."
+    return fields, None
+
 
 @tags_blueprint.route('/admin/list', methods=['GET'])
 @login_required
@@ -286,7 +320,10 @@ def edit_tag(tag_id):
     if err: return err
     if not tag_id:
         return {"status": "error", "message": "Tag ID is required."}, 400
-    success, message = tags_core.edit_tag(request.json, tag_id)
+    fields, error = _tag_fields(json_object(), creating=False)
+    if error:
+        return {"status": "error", "message": error, "toast_class": "danger-subtle"}, 400
+    success, message = tags_core.edit_tag(fields, tag_id)
     if success:
         log_activity("tag.edit", f"Edited tag id={tag_id}",
                      target_type="tag", target_id=tag_id)
@@ -301,12 +338,10 @@ def edit_tag(tag_id):
 @tags_blueprint.route('/create_tag', methods=['POST'])
 @login_required
 def create_tag():
-    data = request.json
-    if not data or not data.get('name'):
-        return {"status": "error", "message": "Tag name is required."}, 400
-    if 'visibility' not in data:
-        data['visibility'] = 'private'
-    tag = tags_core.create_tag(data, current_user)
+    fields, error = _tag_fields(json_object(), creating=True)
+    if error:
+        return {"status": "error", "message": error, "toast_class": "danger-subtle"}, 400
+    tag = tags_core.create_tag(fields, current_user)   # always a "Manual" tag
     if tag is False:
         return {"status": "error", "message": "A tag with this name already exists.", "toast_class": "warning-subtle"}, 409
     if tag is None:
