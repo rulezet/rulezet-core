@@ -610,7 +610,7 @@ def list_bundle_notes(bundle_id):
         j = n.to_json()
         j["can_edit"] = bool(me and (n.user_id == me or manager))
         j["can_delete"] = j["can_edit"]
-        j["can_resolve"] = manager
+        j["can_resolve"] = j["can_edit"]
         out.append(j)
     return jsonify({
         "success": True, "notes": out,
@@ -662,7 +662,7 @@ def _own_note_or_error(bundle, note_id, need="edit"):
     if not note:
         return None, ({"success": False, "message": "Note not found", "toast_class": "danger"}, 404)
     manager = _is_bundle_manager(bundle)
-    allowed = manager if need == "resolve" else (manager or note.user_id == current_user.id)
+    allowed = manager or note.user_id == current_user.id
     if not allowed:
         return None, ({"success": False, "message": "You can't change this note", "toast_class": "danger"}, 403)
     return note, None

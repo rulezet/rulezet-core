@@ -1627,8 +1627,9 @@ class BundleNote(db.Model):
 
     Can only be created while the bundle is public (or by its owner / an
     admin). Reading — including for its own author — follows the bundle's
-    access: if the bundle goes private, the author gets it back only
-    through the bundle's share link.
+    access: while the bundle is private, the author reaches it only through
+    the bundle's share link; once it is public again the note is still
+    theirs (edit, delete, resolve).
     """
     __tablename__ = 'bundle_note'
 

@@ -4,7 +4,7 @@
  *
  * Who can do what is decided server-side (/bundle/<id>/notes): anyone who
  * can view the bundle reads; logged-in users write while the bundle is
- * public; authors edit/delete their own notes; owner/admin resolve.
+ * public; authors edit/delete/resolve their own notes, owner/admin any note.
  *
  * Props:  bundleId, csrfToken, isAuthenticated,
  *         refs  [{ kind: 'rule', id, label } | { kind: 'file', path, label }] — what "#" can reference
