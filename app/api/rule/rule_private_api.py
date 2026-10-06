@@ -120,6 +120,17 @@ class CreateRule(Resource):
         user = utils.get_user_from_api(request.headers)
 
         data = request.get_json(silent=True) or request.args.to_dict()
+        if not isinstance(data, dict):
+            return {"message": "The body must be a JSON object"}, 400
+
+        # Every field is text; a version may also be sent as a plain number.
+        if isinstance(data.get("version"), int) and not isinstance(data.get("version"), bool):
+            data["version"] = str(data["version"])
+        text_fields = ["title", "format", "to_string", "version", "license", "description",
+                       "source", "original_uuid", "cve_id"]
+        wrong_type = [f for f in text_fields if data.get(f) is not None and not isinstance(data.get(f), str)]
+        if wrong_type:
+            return {"message": f"These fields must be text: {', '.join(wrong_type)}"}, 400
 
         # Required fields
         required_fields = ["title", "format", "to_string", "version", "license"]
@@ -240,13 +251,13 @@ class DeleteRule(Resource):
             }, 401
 
         data = request.get_json(silent=True)
-        if not data:
+        if not data or not isinstance(data, dict):
             return {
                 "success": False,
                 "message": "Missing JSON body"
             }, 400
 
-        rule_id = data.get('rule_id')
+        rule_id = utils.as_db_id(data.get('rule_id'))
         if not rule_id:
             return {
                 "success": False,
