@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, render_template, abort
 from flask_login import login_required, current_user
 from app import cache, memory_cache
-from app.core.utils.utils import json_object
+from app.core.utils.utils import as_db_id, json_object
 from . import attack_core as AttackModel
 from ..jobs import jobs_core as JobModel
 
@@ -78,10 +78,16 @@ def techniques_usage():
 
 # ── Per-rule associations ─────────────────────────────────────────────────────
 
+def _active_rule(rule_id):
+    """The active rule `rule_id`, or None — also for an id no database row
+    can have (an out-of-range number would crash the lookup)."""
+    from app.features.rule import rule_core as RuleModel
+    return RuleModel.get_rule(rule_id) if as_db_id(rule_id) else None
+
+
 @attack_blueprint.route('/rule/<int:rule_id>')
 def get_rule_techniques(rule_id):
-    from app.features.rule import rule_core as RuleModel
-    if not RuleModel.get_rule(rule_id):
+    if not _active_rule(rule_id):
         return jsonify({'error': 'Rule not found'}), 404
     return jsonify(AttackModel.get_techniques_for_rule(rule_id))
 
@@ -91,7 +97,7 @@ def get_rule_techniques(rule_id):
 def add_to_rule(rule_id):
     from app.core.utils.activity_log import log_activity
     from app.features.rule import rule_core as RuleModel
-    rule = RuleModel.get_rule(rule_id)
+    rule = _active_rule(rule_id)
     if not rule:
         return jsonify({'error': 'Rule not found'}), 404
     is_owner_or_admin = rule.user_id == current_user.id or current_user.is_admin()
@@ -131,7 +137,7 @@ def add_to_rule(rule_id):
 def remove_from_rule(rule_id, technique_id):
     from app.core.utils.activity_log import log_activity
     from app.features.rule import rule_core as RuleModel
-    rule = RuleModel.get_rule(rule_id)
+    rule = _active_rule(rule_id)
     if not rule:
         return jsonify({'error': 'Rule not found'}), 404
     is_owner_or_admin = rule.user_id == current_user.id or current_user.is_admin()
