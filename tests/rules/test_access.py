@@ -262,3 +262,37 @@ def test_accept_an_edit_proposal(role, expected, clients, users):
 
     assert_outcome(response, expected)
     assert (reload(rule).to_string == proposed) is (expected is OK)
+
+
+def _proposal_by(author, rule_owner, status):
+    rule = make_rule(rule_owner)
+    proposal = RuleEditProposal(rule_id=rule.id, user_id=author.id, proposed_content=yara_rule("proposed"),
+                                old_content=rule.to_string, message="Why this change", status=status)
+    db.session.add(proposal)
+    db.session.commit()
+    return proposal
+
+
+# The justification is its author's text: here "owner" is the proposal's author
+# (the rule belongs to someone else), and the status doesn't matter.
+@pytest.mark.parametrize("status", ["pending", "accepted", "rejected"])
+@pytest.mark.parametrize("role, expected", matrix(OWNER_OR_ADMIN))
+def test_edit_a_proposal_justification(role, expected, status, clients, users):
+    proposal = _proposal_by(users.owner, users.user, status)
+
+    response = clients[role].post(f"/rule/edit_proposal_message/{proposal.id}", json={"message": "Better reason"})
+
+    assert_outcome(response, expected)
+    assert (reload(proposal).message == "Better reason") is (expected is OK)
+
+
+@pytest.mark.parametrize("status", ["pending", "accepted", "rejected"])
+@pytest.mark.parametrize("role, expected", matrix(OWNER_OR_ADMIN))
+def test_delete_a_proposal_justification(role, expected, status, clients, users):
+    proposal = _proposal_by(users.owner, users.user, status)
+
+    response = clients[role].delete(f"/rule/edit_proposal_message/{proposal.id}")
+
+    assert_outcome(response, expected)
+    assert (reload(proposal).message == "") is (expected is OK)
+    assert reload(proposal) is not None   # only the text goes, the proposal stays

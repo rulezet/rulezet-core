@@ -334,3 +334,25 @@ def test_global_search_with_an_odd_number_never_errors(query, clients, users):
     response = clients["anonymous"].get(f"/global_search?q={query}")
 
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize("body", [{"message": BLANK}, {"message": 5}, {"message": None}, {}, [], "text"])
+def test_edit_a_proposal_justification_with_a_bad_message_keeps_it(body, clients, users):
+    rule = make_rule(users.user)
+    proposal = RuleEditProposal(rule_id=rule.id, user_id=users.owner.id, proposed_content=yara_rule("p"),
+                                old_content=rule.to_string, message="Why this change", status="pending")
+    from app import db
+    db.session.add(proposal)
+    db.session.commit()
+
+    response = clients["owner"].post(f"/rule/edit_proposal_message/{proposal.id}", json=body)
+
+    assert response.status_code == 400
+    assert reload(proposal).message == "Why this change"
+
+
+@pytest.mark.parametrize("method", ["post", "delete"])
+def test_justification_of_an_unknown_proposal_is_not_found(method, clients):
+    response = getattr(clients["owner"], method)("/rule/edit_proposal_message/999999", json={"message": "x"})
+
+    assert response.status_code == 404
