@@ -426,6 +426,9 @@ def create_job():
 
     if not job_type:
         return jsonify({"error": "job_type is required."}), 400
+    from app.features.jobs.job_worker import _HANDLERS
+    if job_type not in _HANDLERS:
+        return jsonify({"error": "Unknown job_type."}), 400
 
     # Job types reachable from this endpoint are administrative by default —
     # user-level jobs are created server-side by their own gated routes,
