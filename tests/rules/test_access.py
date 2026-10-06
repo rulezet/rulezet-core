@@ -51,6 +51,13 @@ def test_download_rule(role, expected, clients, users):
     assert response.get_json()["success"] is True
 
 
+@pytest.mark.parametrize("role, expected", matrix(LOGGED_IN))
+def test_list_my_rules(role, expected, clients, users):
+    response = clients[role].get("/rule/get_rules_page_owner?page=1")
+
+    assert_outcome(response, expected)
+
+
 # ── Creating ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("role, expected", matrix(LOGGED_IN))
