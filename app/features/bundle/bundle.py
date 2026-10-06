@@ -1736,7 +1736,7 @@ def download_bundle_full():
 
 @bundle_blueprint.route('/download_misp', methods=['GET'])
 def download_bundle_misp():
-    bundle_id = request.args.get("bundle_id", type=int)
+    bundle_id = as_db_id(request.args.get("bundle_id"))
     if not bundle_id:
         return {"success": False, "message": "Missing bundle_id", "toast_class": "danger-subtle"}, 400
 
