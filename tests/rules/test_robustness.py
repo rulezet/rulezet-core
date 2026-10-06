@@ -325,3 +325,12 @@ def test_create_rule_with_an_unknown_tag_id_links_no_tag(clients):
     assert response.status_code < 500
     rule = Rule.query.filter_by(title=form["title"]).one()
     assert count(RuleTagAssociation, rule_id=rule.id, tag_id=999999) == 0
+
+
+@pytest.mark.parametrize("query", ["99999999999999999999", "0", "²", "1"])
+def test_global_search_with_an_odd_number_never_errors(query, clients, users):
+    make_rule(users.owner)
+
+    response = clients["anonymous"].get(f"/global_search?q={query}")
+
+    assert response.status_code == 200
