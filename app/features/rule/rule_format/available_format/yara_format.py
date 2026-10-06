@@ -309,6 +309,9 @@ def allowed_externals() -> set:
     return YaraRule.ALLOWED_EXTERNALS | set(extra)
 
 
+_RULE_START = re.compile(r"(?:(?:private|global)\s+)*rule\b")
+
+
 class YaraRule(RuleType):
     @property
     def format(self) -> str:
@@ -599,10 +602,15 @@ class YaraRule(RuleType):
                     i += 1
                     continue
 
-                # Detect the beginning of a rule
-                if not in_rule and content.startswith("rule", i):
-                    in_rule = True
-                    current_rule = []
+                # Detect the beginning of a rule — with its private / global
+                # modifiers, and only on a whole word (not "myrule")
+                if not in_rule and (i == 0 or not (content[i - 1].isalnum() or content[i - 1] == "_")):
+                    start = _RULE_START.match(content, i)
+                    if start:
+                        in_rule = True
+                        current_rule = list(content[i:start.end()])
+                        i = start.end()
+                        continue
 
                 # Count braces only outside strings, comments, and regex
                 if char == "{":
