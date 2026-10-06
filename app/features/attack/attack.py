@@ -19,7 +19,8 @@ def list_techniques():
 @attack_blueprint.route('/techniques/search')
 def search_techniques():
     q = request.args.get('q', '')
-    limit = min(int(request.args.get('limit', 20)), 50)
+    limit = request.args.get('limit', 20, type=int) or 20   # not a number → default
+    limit = max(1, min(limit, 50))
     return jsonify(AttackModel.search_techniques(q, limit))
 
 
