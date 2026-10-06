@@ -289,10 +289,7 @@ class ConvertMISP(Resource):
 
         def convert_rule(rule_id: int) -> Optional[dict]:
             try:
-                misp_json = get_rule_misp_object(rule_id)
-                # load the JSON string into a Python dictionary
-                misp_json = json.loads(misp_json)
-                return misp_json
+                return get_rule_misp_object(rule_id) or None   # already a dict
             except Exception:
                 return None
 
