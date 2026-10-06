@@ -455,6 +455,8 @@ class CommentHardDelete(Resource):
 
     def delete(self, uuid):
         """Hard-delete a comment and its entire reply subtree (admin only)."""
+        if not current_user.is_authenticated:
+            return {'message': 'Login required'}, 401
         if not _can_moderate():
             return {'message': 'Admin required'}, 403
 
@@ -492,6 +494,8 @@ class CommentRestore(Resource):
 
     def post(self, uuid):
         """Restore a soft-deleted comment (moderators only)."""
+        if not current_user.is_authenticated:
+            return {'message': 'Login required'}, 401
         if not _can_moderate():
             return {'message': 'Moderation required'}, 403
 
