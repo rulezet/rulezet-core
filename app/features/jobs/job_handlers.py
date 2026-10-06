@@ -263,6 +263,7 @@ def handle_bulk_add_tag_to_rules(job, app):
     tags = Tag.query.filter(Tag.id.in_(tag_ids)).all()
     if not tags:
         raise ValueError("None of the provided tags were found.")
+    tag_ids = [t.id for t in tags]   # only the tags that exist get linked
 
     tag_names = ', '.join(t.name for t in tags)
     rule_query = _build_rule_query(filters)
