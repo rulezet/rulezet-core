@@ -706,8 +706,14 @@ def is_lock_for_update()-> render_template:
     return jsonify({"is_locked": is_locked}), 200
 
 @rule_blueprint.route("/update_lock/<int:rule_id>", methods=['GET'])
+@login_required
 def update_lock(rule_id):
-    """Update the lock status of the rule's last history entry."""
+    """Update the lock status of the rule's last history entry (owner or admin)."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return jsonify({"message": "Rule not found", "toast_class": "danger"}), 404
+    if current_user.id != rule.user_id and not current_user.is_admin():
+        return jsonify({"message": "Access denied.", "toast_class": "danger"}), 403
     manuel_submit = request.args.get('manuel_submit', 'false').lower() == 'true'  # string → bool
     is_locked = RuleModel.manage_history_rule(rule_id, manuel_submit)
     return jsonify({"is_locked": is_locked, "message": "Rule lock status updated successfully", "toast_class": "success-subtle"})
