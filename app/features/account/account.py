@@ -11,7 +11,7 @@ from ..rule import rule_core as RuleModel
 from . import account_core as AccountModel
 from . import oidc_core as OIDCModel
 from ..bundle import bundle_core as BundleModel
-from ...core.utils.utils import form_to_dict, generate_api_key, safe_referrer
+from ...core.utils.utils import as_db_id, form_to_dict, generate_api_key, json_object, safe_referrer
 from ...core.utils.activity_log import log_activity
 from flask_login import current_user, login_required, login_user, logout_user
 from datetime import datetime, timedelta, timezone
@@ -269,11 +269,13 @@ def get_user_donne() -> jsonify:
 @login_required
 def promote_remove_admin() -> jsonify:
     """Return the user activity and metadata."""
-    data    = request.get_json() or {}
-    user_id = int(data.get('userId', 0)) or None
-    action  = str(data.get('action', ''))
+    data    = json_object()
+    user_id = as_db_id(data.get('userId'))
+    action  = data.get('action')
 
     if current_user.is_admin():
+        if user_id is None:
+            return jsonify({"success": False, "message": "Missing or invalid userId"}), 400
         response = AccountModel.promote_remove_user_admin(user_id, action)
         if response:
             if action == "remove":
@@ -296,10 +298,9 @@ def toggle_user_verified() -> jsonify:
     if not current_user.is_admin():
         return jsonify({"success": False, "message": "Forbidden"}), 403
 
-    data    = request.get_json() or {}
-    user_id = int(data.get('userId', 0)) or None
+    user_id = as_db_id(json_object().get('userId'))
     if not user_id:
-        return jsonify({"success": False, "message": "Missing userId"}), 400
+        return jsonify({"success": False, "message": "Missing or invalid userId"}), 400
 
     success, verified = AccountModel.toggle_user_verified(user_id)
     if not success:
@@ -315,10 +316,14 @@ def toggle_user_verified() -> jsonify:
 @login_required
 def delete_user() -> render_template:
     """Delete an user"""
-    data    = request.get_json() or {}
-    user_id = int(data.get('id', 0)) or None
+    user_id = as_db_id(json_object().get('id'))
     if current_user.is_admin():
-        if AccountModel.is_protected_system_user(AccountModel.get_user(user_id)):
+        if user_id is None:
+            return {"message": "Missing or invalid id", "success": False, "toast_class": "danger-subtle"}, 400
+        target = AccountModel.get_user(user_id)
+        if not target:
+            return {"message": "User not found", "success": False, "toast_class": "danger-subtle"}, 404
+        if AccountModel.is_protected_system_user(target):
             return {"message": "This is a system account (e.g. a connector's shadow user) and can't be deleted",
                     "success": False,
                     "toast_class" : "danger-subtle"}, 400
@@ -831,7 +836,9 @@ def get_rules_page_favorite() -> jsonify:
 @login_required
 def remove_rule_favorite() -> jsonify:
     """Remove a rule from favorite"""
-    rule_id = request.args.get('id', 1, type=int)
+    rule_id = as_db_id(request.args.get('id'))
+    if rule_id is None:
+        return jsonify({"success": False, "message": "Missing or invalid rule id"}), 400
     rep = AccountModel.remove_favorite(current_user.id, rule_id)
     if rep:
         log_activity(
@@ -981,6 +988,8 @@ def get_user_contributions(user_id):
     """Recup the user contributions"""
     if current_user.id != user_id and not current_user.is_admin():
         return jsonify({"error": "Forbidden"}), 403
+    if not AccountModel.get_user(user_id):
+        return jsonify({"error": "User not found"}), 404
 
     data = AccountModel.get_user_contributions_data(user_id=user_id)
     
@@ -1371,6 +1380,8 @@ def platform_tag_configs_delete(config_id):
 @account_blueprint.route('/user_activity_stats/<int:user_id>')
 @login_required
 def get_user_activity_stats(user_id):
+    if not AccountModel.get_user(user_id):
+        return jsonify({"error": "User not found"}), 404
     user_rules = RuleModel.get_all_rules_by_user(user_id)
     user_bundles = BundleModel.get_all_bundles_by_user(user_id)
     
@@ -1411,6 +1422,8 @@ def get_user_activity_stats(user_id):
 @account_blueprint.route('/user_edit_proposals/<int:user_id>')
 @login_required
 def get_user_edit_proposals(user_id):
+    if not AccountModel.get_user(user_id):
+        return jsonify({"error": "User not found"}), 404
     proposals = RuleModel.get_all_rule_proposal_user_id(user_id)
 
     if not proposals:

@@ -4,6 +4,7 @@ from flask_login import current_user
 from wtforms.validators import Email, ValidationError
 
 from app.core.utils.decorators import api_required
+from app.core.utils.utils import as_db_id
 
 from app.core.db_class.db import User
 from app.features.account import account_core as AccountModel
@@ -98,7 +99,9 @@ class GetRulesPageFavorite(Resource):
 class RemoveRuleFavorite(Resource):
     @api_required
     def post(self):
-        rule_id = request.args.get('id', 1, type=int)
+        rule_id = as_db_id(request.args.get('id'))
+        if rule_id is None:
+            return {"success": False, "message": "Missing or invalid rule id"}, 400
         
         rep = AccountModel.remove_favorite(current_user.id, rule_id)
 

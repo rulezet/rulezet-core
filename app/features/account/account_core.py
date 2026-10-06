@@ -536,8 +536,10 @@ def get_admin_user()-> id:
     return User.query.filter_by(email='admin@admin.admin').first()
 
 def get_user(id) -> id:
-    """Return the user"""
-    return User.query.get(id)
+    """Return the user, or None — also for an id that can't be one (None,
+    text, out of the database's integer range)."""
+    user_id = as_db_id(id)
+    return db.session.get(User, user_id) if user_id is not None else None
 
 
 def search_users_lite(query: str, limit: int = 5, exclude_id: int = None) -> list[dict]:
