@@ -191,7 +191,7 @@ def create_app(start_worker=True):
                 ollama = get_ollama_settings()
             # Only ever auto-start a local `ollama serve` for a local URL —
             # a remote server configured in the AI admin is not ours to start.
-            if ollama['is_local']:
+            if ollama.get('kind', 'ollama') == 'ollama' and ollama['is_local']:
                 ensure_ollama_running(ollama['url'])
         except Exception as e:
             print(f"[chatbot] Ollama auto-start check failed: {e}")

@@ -4878,6 +4878,11 @@ def handle_rule_analysis(job, app):
     regenerate     = bool(payload.get('regenerate_existing'))
     default_public = payload.get('default_public', True)
     model          = payload.get('model')
+    # Which Rule Analysis script: 'standard' (compact structured breakdown,
+    # rule_analysis_agent.py) or 'deep' (long in-depth report with CVE /
+    # ATT&CK context, rule_deep_analysis_agent.py). Both store
+    # agent_key='rule_analysis' rows, told apart by meta['script'].
+    script         = 'deep' if payload.get('script') == 'deep' else 'standard'
     # Both caps can be lifted from the AI admin ("No limit") for a one-off
     # run over the whole catalog — rules are then streamed in chunks of
     # AI_GENERATE_CHUNK so memory stays flat whatever the backlog size.
@@ -4906,6 +4911,9 @@ def handle_rule_analysis(job, app):
 
     if not regenerate:
         already = db.session.query(AIGeneration.rule_id).filter(AIGeneration.agent_key == 'rule_analysis')
+        if script == 'deep':
+            # A standard report doesn't count — the in-depth one is still missing.
+            already = already.filter(AIGeneration.meta['script'].as_string() == 'deep')
         q = q.filter(~Rule.id.in_(already))
 
     remaining = q.count()
@@ -4921,7 +4929,8 @@ def handle_rule_analysis(job, app):
 
     log_job(job,
             f'Starting — {"all " if batch_size is None else "up to "}{job.total} rule(s) this run '
-            f'({remaining} left in the backlog), model "{model}", '
+            f'({remaining} left in the backlog), {"in-depth report" if script == "deep" else "standard"} script, '
+            f'model "{model}", '
             f'{"no time limit" if max_seconds is None else f"max {max_seconds}s"} …',
             level='info', event='start')
 
@@ -4929,7 +4938,7 @@ def handle_rule_analysis(job, app):
     # alive; on a catalog-wide run it would double the log volume for nothing.
     log_each_rule = job.total <= AI_GENERATE_CHUNK
 
-    agent          = get_agent('rule_analysis')
+    agent          = get_agent('rule_deep_analysis' if script == 'deep' else 'rule_analysis')
     admin_user     = User.query.get(job.created_by)
     started        = _time.monotonic()
     generated      = 0
@@ -5013,16 +5022,41 @@ def handle_rule_analysis(job, app):
                 log_job(job, f'Generating rule #{rule_id} ({processed + 1}/{job.total})…',
                         level='info', event='progress')
 
-            result = agent.run(
-                user=admin_user, rule_id=rule_id,
-                input_summary=f"Rule #{rule_id}: {title or '(untitled)'}",
-                rule_stub=stub, acquire_timeout=acquire_timeout, model=model or None,
-            )
+            if script == 'deep':
+                from app.features.rule.rule_ai_core import build_rule_deep_context
+                if log_each_rule:
+                    log_job(job, f'Rule #{rule_id}: gathering context (ATT&CK, CVE details from '
+                                 f'Vulnerability Lookup, quality checks, linked rules)…',
+                            level='info', event='progress')
+                rule_context, snapshot = build_rule_deep_context(rule_id)
+                result = agent.run(
+                    user=admin_user, rule_id=rule_id,
+                    input_summary=f"Rule #{rule_id}: {title or '(untitled)'}",
+                    rule_context=rule_context or '', rule_content=to_string or '',
+                    has_cves=bool(snapshot and snapshot['cves']),
+                    has_attack=bool(snapshot and snapshot['techniques']),
+                    acquire_timeout=acquire_timeout, model=model or None,
+                    progress=(lambda stage, text, _rid=rule_id: log_job(
+                        job, f'Rule #{_rid}: {text}', level='info', event='progress')) if log_each_rule else None,
+                    should_stop=lambda: _is_cancelled(job),
+                )
+            else:
+                snapshot = None
+                result = agent.run(
+                    user=admin_user, rule_id=rule_id,
+                    input_summary=f"Rule #{rule_id}: {title or '(untitled)'}",
+                    rule_stub=stub, acquire_timeout=acquire_timeout, model=model or None,
+                )
 
             if result.ok:
+                meta = dict(result.meta or {})
+                meta.pop('status', None)
+                meta['script'] = script
+                if snapshot:
+                    meta['snapshot'] = snapshot
                 db.session.add(AIGeneration(
                     uuid=str(uuid_mod.uuid4()), agent_key='rule_analysis', rule_id=rule_id,
-                    user_id=job.created_by, content=result.content, meta=result.meta or None,
+                    user_id=job.created_by, content=result.content, meta=meta,
                     model=result.model_used, is_public=bool(default_public),
                 ))
                 db.session.commit()
@@ -5032,7 +5066,7 @@ def handle_rule_analysis(job, app):
                             level='info', event='progress')
             else:
                 status = result.meta.get('status')
-                if status in ('disabled', 'busy'):
+                if status in ('disabled', 'busy', 'budget'):
                     # Systemic, not per-rule — every remaining rule would fail
                     # identically this run. Stop entirely; nothing to resume,
                     # the next scheduled run just tries again.

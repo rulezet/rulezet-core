@@ -77,11 +77,11 @@ DEFAULT_OLLAMA_URL   = 'http://localhost:11434'
 DEFAULT_OLLAMA_MODEL = 'qwen2.5:1.5b'
 
 
-def get_ollama_settings():
-    """The Ollama server every agent talks to. InstanceConfig (set from the
-    AI admin) wins; each empty field falls back to config.py's OLLAMA_URL /
-    OLLAMA_MODEL, so an instance that never touched the admin setting
-    behaves exactly as before. Needs an app context."""
+def _legacy_ollama_settings():
+    """The Ollama server from before AI providers existed. InstanceConfig
+    (set from the AI admin) wins; each empty field falls back to config.py's
+    OLLAMA_URL / OLLAMA_MODEL. Only used to seed the first AIProvider (and
+    as a fallback while the ai_provider table isn't migrated yet)."""
     from app.core.db_class.db import InstanceConfig
 
     cfg = None
@@ -102,12 +102,305 @@ def get_ollama_settings():
     }
 
 
+def get_ollama_settings():
+    """The ACTIVE provider's connection settings (name kept for the existing
+    callers: Ollama auto-start, system status, chatbot model label). 'kind'
+    tells an Ollama apart from a cloud/OpenAI-compatible provider. Needs an
+    app context."""
+    p = get_active_provider()
+    return {
+        'url':            p.url,
+        'default_model':  p.default_model,
+        'remote_allowed': p.remote_allowed,
+        'is_local':       p.is_local,
+        'kind':           p.kind,
+        'name':           p.name,
+    }
+
+
 def get_ollama_url():
     return get_ollama_settings()['url']
 
 
 def get_default_ollama_model():
     return get_ollama_settings()['default_model']
+
+
+# ─── AI providers (AI admin → Models & Security) ────────────────────────────
+# Several backends can be registered (AIProvider rows); exactly one is
+# active and every agent goes through it. The first row is seeded from the
+# old Ollama settings, so by default everything keeps running on Ollama.
+
+PROVIDER_KINDS = {
+    'ollama':            {'label': 'Ollama',                       'default_url': DEFAULT_OLLAMA_URL,
+                          'needs_key': False, 'cloud': False},
+    'anthropic':         {'label': 'Claude (Anthropic API)',       'default_url': 'https://api.anthropic.com',
+                          'needs_key': True,  'cloud': True},
+    'openai':            {'label': 'ChatGPT (OpenAI API)',         'default_url': 'https://api.openai.com/v1',
+                          'needs_key': True,  'cloud': True},
+    'openai_compatible': {'label': 'Internal / OpenAI-compatible', 'default_url': 'http://localhost:8000/v1',
+                          'needs_key': False, 'cloud': False},
+}
+
+
+@dataclass
+class ProviderConfig:
+    kind: str
+    url: str
+    name: str = 'Ollama'
+    id: int | None = None
+    # repr=False: a logged/printed ProviderConfig must never show the key.
+    api_key: str | None = field(default=None, repr=False)
+    default_model: str | None = None
+    remote_allowed: bool = False
+    workspace_id: str | None = None
+    monthly_budget_usd: float | None = None
+    price_input_per_mtok: float | None = None
+    price_output_per_mtok: float | None = None
+    block_over_budget: bool = False
+
+    @property
+    def is_local(self):
+        return not PROVIDER_KINDS.get(self.kind, {}).get('cloud') and is_local_ollama_url(self.url)
+
+
+def _derive_fernet_key(secret):
+    import base64
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    raw = HKDF(algorithm=hashes.SHA256(), length=32, salt=b'rulezet-ai-provider',
+               info=b'ai-provider-api-key').derive(secret.encode())
+    return base64.urlsafe_b64encode(raw)
+
+
+def _fernet():
+    """API keys are encrypted at rest (Fernet = AES-128-CBC + HMAC-SHA256).
+    The encryption key never lives in the database: it is derived from
+    AI_SECRETS_KEY (.env, recommended — rotate it independently of the
+    session key) or, if unset, from SECRET_KEY. A database dump alone never
+    reveals a provider key. MultiFernet: encrypts with the first key,
+    decrypts with either, so setting AI_SECRETS_KEY later doesn't lose keys
+    saved under SECRET_KEY (they are re-encrypted on next save)."""
+    import os
+    from cryptography.fernet import Fernet, MultiFernet
+    secrets = [current_app.config.get('AI_SECRETS_KEY') or os.environ.get('AI_SECRETS_KEY'),
+               current_app.config.get('SECRET_KEY')]
+    keys = [Fernet(_derive_fernet_key(x)) for x in secrets if x]
+    if not keys:
+        raise RuntimeError("No AI_SECRETS_KEY / SECRET_KEY configured — cannot store API keys.")
+    return MultiFernet(keys)
+
+
+def encrypt_secret(value):
+    return _fernet().encrypt(value.encode()).decode() if value else None
+
+
+def decrypt_secret(token):
+    """None if empty or unreadable (SECRET_KEY changed since it was saved —
+    the admin has to re-enter the key)."""
+    if not token:
+        return None
+    from cryptography.fernet import InvalidToken
+    try:
+        return _fernet().decrypt(token.encode()).decode()
+    except (InvalidToken, ValueError):
+        return None
+
+
+def describe_secret(token):
+    """Display status only — not even a fragment of the key leaves the server."""
+    if not token:
+        return None
+    return 'Stored' if decrypt_secret(token) is not None else 'Unreadable — re-enter it'
+
+
+def _provider_from_row(row):
+    meta = PROVIDER_KINDS.get(row.kind) or PROVIDER_KINDS['ollama']
+    return ProviderConfig(
+        id=row.id, name=row.name, kind=row.kind,
+        url=(row.base_url or meta['default_url']).rstrip('/'),
+        api_key=decrypt_secret(row.api_key_enc),
+        default_model=row.default_model,
+        remote_allowed=bool(row.remote_allowed),
+        workspace_id=row.workspace_id,
+        monthly_budget_usd=row.monthly_budget_usd,
+        price_input_per_mtok=row.price_input_per_mtok,
+        price_output_per_mtok=row.price_output_per_mtok,
+        block_over_budget=bool(row.block_over_budget),
+    )
+
+
+def _seed_default_provider():
+    """First provider = the Ollama this instance was already using."""
+    from app import db
+    from app.core.db_class.db import AIProvider
+    legacy = _legacy_ollama_settings()
+    row = AIProvider(
+        uuid=str(uuid_mod.uuid4()), name='Ollama (default)', kind='ollama',
+        base_url=legacy['url'], default_model=legacy['default_model'],
+        remote_allowed=legacy['remote_allowed'], is_active=True,
+    )
+    db.session.add(row)
+    db.session.commit()
+    return row
+
+
+def get_active_provider():
+    """The provider every agent uses. Seeds the default Ollama one on first
+    call; falls back to the legacy Ollama settings if the table isn't
+    migrated yet. Needs an app context."""
+    from app import db
+    from app.core.db_class.db import AIProvider
+    try:
+        row = AIProvider.query.filter_by(is_active=True).first()
+        if row is None:
+            row = (AIProvider.query.filter_by(kind='ollama').order_by(AIProvider.id).first()
+                   or AIProvider.query.order_by(AIProvider.id).first())
+            if row is None:
+                row = _seed_default_provider()
+            else:
+                row.is_active = True
+                db.session.commit()
+        return _provider_from_row(row)
+    except Exception:
+        db.session.rollback()
+        legacy = _legacy_ollama_settings()
+        return ProviderConfig(kind='ollama', url=legacy['url'], name='Ollama',
+                              default_model=legacy['default_model'],
+                              remote_allowed=legacy['remote_allowed'])
+
+
+# ─── Spending (monthly budget per provider) ─────────────────────────────────
+# Neither Anthropic nor OpenAI exposes the remaining credit to a normal API
+# key, so Rulezet tracks what IT spends: every client tallies the tokens of
+# its calls (client.usage), run() turns them into a cost and stores it on
+# the AIExecutionLog row. USD per million tokens, Anthropic list prices
+# (Sept 2026); a provider's own price fields override them.
+CLAUDE_PRICES = {
+    'claude-fable-5-1':  (10.0, 50.0),
+    'claude-fable-5':    (10.0, 50.0),
+    'claude-opus-5-5':   (4.0, 20.0),
+    'claude-opus-5':     (5.0, 25.0),
+    'claude-opus-4-8':   (5.0, 25.0),
+    'claude-opus-4-7':   (5.0, 25.0),
+    'claude-opus-4-6':   (5.0, 25.0),
+    'claude-sonnet-5-5': (2.0, 10.0),
+    'claude-sonnet-5':   (2.0, 10.0),
+    'claude-sonnet-4-6': (3.0, 15.0),
+    'claude-haiku-4-5':  (1.0, 5.0),
+}
+
+
+def price_for(provider, model):
+    """(input, output) USD per million tokens, or None if unknown. A local
+    Ollama is free (0, 0)."""
+    if provider.price_input_per_mtok is not None and provider.price_output_per_mtok is not None:
+        return provider.price_input_per_mtok, provider.price_output_per_mtok
+    if provider.kind == 'ollama':
+        return 0.0, 0.0
+    if provider.kind == 'anthropic' and model:
+        # Longest matching prefix, so 'claude-opus-5-5' wins over 'claude-opus-5'
+        # and dated ids ('claude-haiku-4-5-20251001') still match.
+        for name in sorted(CLAUDE_PRICES, key=len, reverse=True):
+            if model == name or model.startswith(name + '-'):
+                return CLAUDE_PRICES[name]
+    return None
+
+
+def estimate_cost(provider, model, usage):
+    """USD for a usage tally, or None when the price is unknown. Claude prompt
+    caching: writes cost 1.25x the input price, reads 0.1x."""
+    price = price_for(provider, model)
+    if price is None or not usage:
+        return None
+    p_in, p_out = price
+    return round((
+        usage.get('input_tokens', 0) * p_in
+        + usage.get('cache_write_tokens', 0) * p_in * 1.25
+        + usage.get('cache_read_tokens', 0) * p_in * 0.1
+        + usage.get('output_tokens', 0) * p_out
+    ) / 1_000_000, 6)
+
+
+def month_spend(provider_id):
+    """This calendar month (UTC): {'spent', 'calls', 'input_tokens', 'output_tokens'}."""
+    from sqlalchemy import func
+    from app import db
+    from app.core.db_class.db import AIExecutionLog
+    now = datetime.datetime.now(datetime.timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    spent, calls, tok_in, tok_out = db.session.query(
+        func.coalesce(func.sum(AIExecutionLog.cost_usd), 0.0),
+        func.count(AIExecutionLog.id),
+        func.coalesce(func.sum(AIExecutionLog.input_tokens), 0),
+        func.coalesce(func.sum(AIExecutionLog.output_tokens), 0),
+    ).filter(AIExecutionLog.provider_id == provider_id, AIExecutionLog.created_at >= start,
+             AIExecutionLog.input_tokens.isnot(None)).one()
+    return {'spent': float(spent or 0), 'calls': int(calls or 0), 'input_tokens': int(tok_in or 0),
+            'output_tokens': int(tok_out or 0), 'month_start': start.isoformat()}
+
+
+def _new_usage():
+    return {'input_tokens': 0, 'output_tokens': 0, 'cache_write_tokens': 0, 'cache_read_tokens': 0}
+
+
+def make_client(provider, model='', timeout=120, num_ctx=8192, num_predict=2048, temperature=0.3):
+    """The client for one provider — all expose the same chat() /
+    chat_stream() / list_models() surface, so agents never care which
+    backend runs them. Refuses a non-local endpoint the admin hasn't
+    explicitly allowed (cloud APIs included)."""
+    if not provider.is_local and not provider.remote_allowed:
+        raise AgentConnectionError(
+            f"Refusing to send content to “{provider.name}” ({provider.url}) — it is not on this "
+            "server's network. Allow it explicitly in AI admin → Models & Security."
+        )
+    if provider.kind == 'ollama':
+        return OllamaClient(base_url=provider.url, model=model, timeout=timeout, num_ctx=num_ctx,
+                            num_predict=num_predict, temperature=temperature, allow_remote=True)
+    if provider.kind == 'anthropic':
+        if not provider.api_key:
+            raise AgentConnectionError(f"No API key set for “{provider.name}”.")
+        return AnthropicClient(provider, model=model, timeout=timeout, num_predict=num_predict)
+    if provider.kind in ('openai', 'openai_compatible'):
+        if provider.kind == 'openai' and not provider.api_key:
+            raise AgentConnectionError(f"No API key set for “{provider.name}”.")
+        return OpenAIClient(provider, model=model, timeout=timeout, num_predict=num_predict,
+                            temperature=temperature)
+    raise AgentConnectionError(f"Unknown AI provider type {provider.kind!r}.")
+
+
+_models_cache = {}   # provider id/url -> (monotonic ts, [model names])
+
+
+def list_active_models(force=False):
+    """(provider, [models]) for the active provider, cached 60s so model
+    pickers don't hammer a cloud API. Raises AgentConnectionError."""
+    provider = get_active_provider()
+    key = (provider.id, provider.url, provider.kind)
+    hit = _models_cache.get(key)
+    if hit and not force and time.monotonic() - hit[0] < 60:
+        return provider, hit[1]
+    models = make_client(provider, timeout=10).list_models()
+    _models_cache[key] = (time.monotonic(), models)
+    return provider, models
+
+
+def _resolve_model(provider, wanted):
+    """For an Ollama, the requested model is used as is (old behaviour).
+    For any other provider, a model name left over from Ollama (agent
+    config, old payload) would just 404 — fall back to the provider's
+    default model, else its first listed one."""
+    if provider.kind == 'ollama':
+        return wanted or provider.default_model
+    try:
+        _, available = list_active_models()
+    except AgentConnectionError:
+        return wanted or provider.default_model
+    if wanted and (wanted in available or not available):
+        return wanted
+    if provider.default_model:
+        return provider.default_model
+    return available[0] if available else wanted
 
 
 def is_allowed_ollama_url(url):
@@ -181,22 +474,25 @@ def looks_like_injection(text):
 # production box's 24 physical cores. NOTE: this only governs one process —
 # if Rulezet ever runs multiple gunicorn/uwsgi workers, this needs a DB- or
 # Redis-backed lock instead.
-_ollama_slots = None
-_ollama_slots_lock = threading.Lock()
+# Cloud / OpenAI-compatible providers get their own pool
+# (AI_CLOUD_MAX_CONCURRENT, default 4) — they handle parallel calls fine
+# and must not queue behind a slow local Ollama, or vice versa.
+_slots = {}
+_slots_lock = threading.Lock()
 
 
-def _get_slots():
-    global _ollama_slots
-    if _ollama_slots is None:
-        with _ollama_slots_lock:
-            if _ollama_slots is None:
-                max_concurrent = current_app.config.get('OLLAMA_MAX_CONCURRENT', 2)
-                _ollama_slots = threading.Semaphore(max_concurrent)
-    return _ollama_slots
+def _get_slots(pool='ollama'):
+    if pool not in _slots:
+        with _slots_lock:
+            if pool not in _slots:
+                key = 'OLLAMA_MAX_CONCURRENT' if pool == 'ollama' else 'AI_CLOUD_MAX_CONCURRENT'
+                default = 2 if pool == 'ollama' else 4
+                _slots[pool] = threading.Semaphore(current_app.config.get(key, default))
+    return _slots[pool]
 
 
-def _call_with_governor(fn, acquire_timeout):
-    slots = _get_slots()
+def _call_with_governor(fn, acquire_timeout, pool='ollama'):
+    slots = _get_slots(pool)
     if not slots.acquire(timeout=acquire_timeout):
         raise AgentBusy("Ollama is busy with another request right now.")
     try:
@@ -215,8 +511,8 @@ class OllamaClient:
 
     def __init__(self, base_url, model, timeout,
                  num_ctx=8192, num_predict=2048,
-                 temperature=0.3, keep_alive="10m"):
-        if not is_allowed_ollama_url(base_url):
+                 temperature=0.3, keep_alive="10m", allow_remote=False):
+        if not allow_remote and not is_allowed_ollama_url(base_url):
             raise AgentConnectionError(
                 f"Refusing to use a non-local Ollama URL ({base_url!r}) — rule/user "
                 "content must never leave this server unless an admin explicitly "
@@ -375,6 +671,228 @@ class OllamaClient:
         )
 
 
+# ─── Cloud / OpenAI-compatible clients ──────────────────────────────────────
+# Same surface as OllamaClient. chat_stream() runs one complete request (no
+# token streaming): these APIs answer a section in seconds, and the
+# cancellation check happens between calls, which is enough.
+
+def _strip_json_fence(text):
+    m = re.match(r'^\s*```(?:json)?\s*(.*?)\s*```\s*$', text or '', re.DOTALL)
+    return m.group(1) if m else (text or '')
+
+
+def _strict_schema(schema):
+    """Structured outputs want additionalProperties: false on every object."""
+    if isinstance(schema, dict):
+        out = {k: _strict_schema(v) for k, v in schema.items()}
+        if out.get('type') == 'object':
+            out.setdefault('additionalProperties', False)
+        return out
+    if isinstance(schema, list):
+        return [_strict_schema(v) for v in schema]
+    return schema
+
+
+_JSON_ONLY = "Respond with ONLY a valid JSON object — no prose, no Markdown fences."
+
+
+class AnthropicClient:
+    """Claude through the official `anthropic` SDK (Messages API)."""
+
+    MAX_TOKENS = 16000   # thinking + answer; prompt word targets keep sections bounded
+
+    def __init__(self, provider, model, timeout, num_predict=2048):
+        self.provider    = provider
+        self.base_url    = provider.url
+        self.model       = model or provider.default_model or 'claude-opus-5-5'
+        self.timeout     = max(timeout or 0, 300)
+        self.num_predict = num_predict
+        self.usage       = _new_usage()
+
+    def _client(self):
+        import anthropic
+        # An organization-level key must say which workspace it acts in.
+        headers = {'anthropic-workspace-id': self.provider.workspace_id} if self.provider.workspace_id else None
+        return anthropic.Anthropic(api_key=self.provider.api_key, base_url=self.provider.url,
+                                   timeout=self.timeout, max_retries=2, default_headers=headers)
+
+    def _call(self, messages, json_schema):
+        import anthropic
+        system = "\n\n".join(m['content'] for m in messages if m['role'] == 'system')
+        convo = [{"role": m['role'], "content": m['content']} for m in messages if m['role'] != 'system']
+        extra = {"cache_control": {"type": "ephemeral"}}   # agents resend the same long prefix
+        if isinstance(json_schema, dict):
+            extra["output_config"] = {"format": {"type": "json_schema", "schema": _strict_schema(json_schema)}}
+        elif json_schema is None:
+            system = f"{system}\n\n{_JSON_ONLY}".strip()
+
+        def _send(extra_body, system_text):
+            kwargs = dict(model=self.model, max_tokens=self.MAX_TOKENS, messages=convo, extra_body=extra_body)
+            if system_text:
+                kwargs['system'] = system_text
+            with self._client().messages.stream(**kwargs) as stream:
+                return stream.get_final_message()
+
+        try:
+            try:
+                msg = _send(extra, system)
+            except anthropic.BadRequestError as e:
+                if 'output_config' not in extra:
+                    raise
+                # Schema not accepted as structured output — ask for JSON in the prompt instead.
+                print(f"[ai_core] structured output refused by {self.model}, falling back to prompt-only JSON: {e}")
+                extra.pop('output_config')
+                msg = _send(extra, f"{system}\n\n{_JSON_ONLY}".strip())
+        except anthropic.AuthenticationError:
+            raise AgentConnectionError(f"“{self.provider.name}”: the API key was rejected.")
+        except anthropic.NotFoundError as e:
+            raise AgentConnectionError(f"“{self.provider.name}”: unknown model {self.model!r} ({e}).")
+        except anthropic.RateLimitError:
+            raise AgentBusy(f"“{self.provider.name}”: rate limited by the API, try again shortly.")
+        except anthropic.APITimeoutError:
+            raise AgentTimeout(f"“{self.provider.name}” did not answer within {self.timeout}s.")
+        except anthropic.APIConnectionError as e:
+            raise AgentConnectionError(f"Could not reach “{self.provider.name}” ({self.base_url}): {e}")
+        except anthropic.APIStatusError as e:
+            if 'credit balance is too low' in str(e.message).lower():
+                raise AgentConnectionError(
+                    f"“{self.provider.name}”: no API credit left on this Anthropic account. API usage is billed "
+                    "separately from Claude Pro/Max subscriptions — buy credits in the Claude console → "
+                    "Settings → Billing (console.anthropic.com/settings/billing)."
+                )
+            raise AgentConnectionError(f"“{self.provider.name}” returned an error ({e.status_code}): {e.message}")
+
+        u = getattr(msg, 'usage', None)
+        if u is not None:
+            self.usage['input_tokens']       += getattr(u, 'input_tokens', 0) or 0
+            self.usage['output_tokens']      += getattr(u, 'output_tokens', 0) or 0
+            self.usage['cache_write_tokens'] += getattr(u, 'cache_creation_input_tokens', 0) or 0
+            self.usage['cache_read_tokens']  += getattr(u, 'cache_read_input_tokens', 0) or 0
+        if msg.stop_reason == 'refusal':
+            raise AgentInvalidResponse(f"{self.model} declined this request.")
+        text = ''.join(b.text for b in msg.content if getattr(b, 'type', '') == 'text')
+        if not text.strip():
+            raise AgentInvalidResponse(f"Empty response from {self.model} (stop_reason={msg.stop_reason}).")
+        return _strip_json_fence(text) if json_schema is not False else text
+
+    def chat(self, messages, json_schema=None, acquire_timeout=10):
+        return _call_with_governor(lambda: self._call(messages, json_schema), acquire_timeout, pool='cloud')
+
+    def chat_stream(self, messages, json_schema=None, acquire_timeout=10,
+                    idle_timeout=None, num_predict=None, should_stop=None):
+        if should_stop and should_stop():
+            raise AgentInvalidResponse("Stopped.")
+        return self.chat(messages, json_schema=json_schema, acquire_timeout=acquire_timeout)
+
+    def list_models(self):
+        import anthropic
+        try:
+            return sorted(m.id for m in self._client().models.list(limit=100))
+        except anthropic.AuthenticationError:
+            raise AgentConnectionError(f"“{self.provider.name}”: the API key was rejected.")
+        except anthropic.APIError as e:
+            raise AgentConnectionError(f"Could not list models on “{self.provider.name}”: {e}")
+
+
+class OpenAIClient:
+    """ChatGPT (OpenAI API) and any OpenAI-compatible server (vLLM, LM
+    Studio, LiteLLM, an internal gateway…) through the `openai` SDK.
+    Compatible servers differ in what they accept, so a refused optional
+    parameter (response_format, temperature) is dropped and retried once."""
+
+    def __init__(self, provider, model, timeout, num_predict=2048, temperature=0.3):
+        self.provider    = provider
+        self.base_url    = provider.url
+        self.model       = model or provider.default_model or ''
+        self.timeout     = max(timeout or 0, 180)
+        self.num_predict = num_predict
+        self.temperature = temperature
+        self.usage       = _new_usage()
+
+    def _client(self):
+        import openai
+        return openai.OpenAI(api_key=self.provider.api_key or 'not-needed', base_url=self.provider.url,
+                             timeout=self.timeout, max_retries=2)
+
+    def _call(self, messages, json_schema, num_predict):
+        import openai
+        kwargs = {"model": self.model, "messages": messages, "temperature": self.temperature}
+        if self.provider.kind == 'openai':
+            # Reasoning models count thinking in this budget — keep headroom.
+            kwargs["max_completion_tokens"] = max((num_predict or self.num_predict) * 4, 8000)
+        else:
+            kwargs["max_tokens"] = num_predict or self.num_predict
+        if isinstance(json_schema, dict):
+            kwargs["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": "response", "schema": json_schema}}
+        elif json_schema is None:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        client = self._client()
+        for _ in range(3):
+            try:
+                resp = client.chat.completions.create(**kwargs)
+                break
+            except openai.BadRequestError as e:
+                detail = str(e).lower()
+                if 'temperature' in detail and 'temperature' in kwargs:
+                    kwargs.pop('temperature')
+                elif 'response_format' in kwargs and ('response_format' in detail or 'json' in detail):
+                    kwargs.pop('response_format')
+                    kwargs["messages"] = messages + [{"role": "system", "content": _JSON_ONLY}]
+                else:
+                    raise AgentConnectionError(f"“{self.provider.name}” rejected the request: {e}")
+            except openai.AuthenticationError:
+                raise AgentConnectionError(f"“{self.provider.name}”: the API key was rejected.")
+            except openai.NotFoundError as e:
+                raise AgentConnectionError(f"“{self.provider.name}”: unknown model {self.model!r} ({e}).")
+            except openai.RateLimitError:
+                raise AgentBusy(f"“{self.provider.name}”: rate limited by the API, try again shortly.")
+            except openai.APITimeoutError:
+                raise AgentTimeout(f"“{self.provider.name}” did not answer within {self.timeout}s.")
+            except openai.APIConnectionError as e:
+                raise AgentConnectionError(f"Could not reach “{self.provider.name}” ({self.base_url}): {e}")
+            except openai.APIStatusError as e:
+                raise AgentConnectionError(f"“{self.provider.name}” returned an error ({e.status_code}): {e}")
+        else:
+            raise AgentConnectionError(f"“{self.provider.name}” kept rejecting the request.")
+
+        u = getattr(resp, 'usage', None)
+        if u is not None:
+            self.usage['input_tokens']  += getattr(u, 'prompt_tokens', 0) or 0
+            self.usage['output_tokens'] += getattr(u, 'completion_tokens', 0) or 0
+        choice = resp.choices[0] if resp.choices else None
+        text = (choice.message.content if choice and choice.message else '') or ''
+        if not text.strip():
+            reason = choice.finish_reason if choice else 'no choice'
+            raise AgentInvalidResponse(f"Empty response from {self.model} (finish_reason={reason}).")
+        return _strip_json_fence(text) if json_schema is not False else text
+
+    def chat(self, messages, json_schema=None, acquire_timeout=10):
+        return _call_with_governor(lambda: self._call(messages, json_schema, None), acquire_timeout, pool='cloud')
+
+    def chat_stream(self, messages, json_schema=None, acquire_timeout=10,
+                    idle_timeout=None, num_predict=None, should_stop=None):
+        if should_stop and should_stop():
+            raise AgentInvalidResponse("Stopped.")
+        return _call_with_governor(lambda: self._call(messages, json_schema, num_predict),
+                                   acquire_timeout, pool='cloud')
+
+    def list_models(self):
+        import openai
+        try:
+            ids = sorted(m.id for m in self._client().models.list())
+        except openai.AuthenticationError:
+            raise AgentConnectionError(f"“{self.provider.name}”: the API key was rejected.")
+        except openai.APIError as e:
+            raise AgentConnectionError(f"Could not list models on “{self.provider.name}”: {e}")
+        if self.provider.kind == 'openai':
+            # The OpenAI list also holds embeddings, TTS, image models…
+            ids = [i for i in ids if i.startswith(('gpt-', 'o1', 'o3', 'o4', 'chatgpt'))
+                   and not any(x in i for x in ('audio', 'realtime', 'transcribe', 'tts', 'image', 'search'))]
+        return ids
+
+
 # ─── Resilient JSON extraction (shared helper, not load-bearing on hardware
 #     that supports real JSON Schema output, but kept as defense in depth —
 #     see AI_02's postmortem: format="json" constrains token-level grammar,
@@ -531,14 +1049,23 @@ class AIAgent(ABC):
 
         started = time.monotonic()
         agent_config = AIAgentConfig.query.filter_by(agent_key=self.config_key).first()
+        ctx = {'provider': None, 'client': None, 'model': None}
 
         def _finish(result, status, flagged_reason=None):
             # Every caller can tell success/disabled/rate_limited/busy/failed
             # apart without re-deriving it from `error` text — the chatbot
             # route uses this to pick an HTTP status, for example.
             result.meta.setdefault('status', status)
+            provider_ = ctx['provider']
+            usage = getattr(ctx['client'], 'usage', None)
+            has_usage = bool(usage and (usage['input_tokens'] or usage['output_tokens']))
             try:
                 db.session.add(AIExecutionLog(
+                    provider_id=getattr(provider_, 'id', None),
+                    input_tokens=(usage['input_tokens'] + usage['cache_write_tokens'] + usage['cache_read_tokens'])
+                                 if has_usage else None,
+                    output_tokens=usage['output_tokens'] if has_usage else None,
+                    cost_usd=estimate_cost(provider_, result.model_used or ctx['model'], usage) if has_usage else None,
                     uuid=str(uuid_mod.uuid4()),
                     agent_key=self.key,
                     user_id=getattr(user, 'id', None),
@@ -575,21 +1102,24 @@ class AIAgent(ABC):
 
         flagged_reason = looks_like_injection(input_summary) if input_summary else None
 
-        ollama = get_ollama_settings()
-        base_url = ollama['url']
-        model = (
-            model
-            or (agent_config.default_model if agent_config else None)
-            or ollama['default_model']
-        )
+        provider = get_active_provider()
+        model = _resolve_model(provider, model or (agent_config.default_model if agent_config else None))
+        ctx['provider'], ctx['model'] = provider, model
+
+        if provider.block_over_budget and provider.monthly_budget_usd and provider.id:
+            if month_spend(provider.id)['spent'] >= provider.monthly_budget_usd:
+                return _finish(
+                    AgentResult(ok=False, error=f"The monthly AI budget for “{provider.name}” "
+                                                f"(${provider.monthly_budget_usd:g}) is used up.", model_used=model),
+                    'budget', flagged_reason,
+                )
         timeout     = agent_config.timeout_s if agent_config else 120
         num_predict = agent_config.num_predict if agent_config else 2048
 
         try:
-            client = OllamaClient(
-                base_url=base_url, model=model, timeout=timeout, num_predict=num_predict,
-                num_ctx=self.num_ctx,
-            )
+            client = make_client(provider, model=model, timeout=timeout, num_predict=num_predict,
+                                 num_ctx=self.num_ctx)
+            ctx['client'] = client
             result = self.execute(client, acquire_timeout=acquire_timeout, **kwargs)
             result.model_used = result.model_used or model
             return _finish(result, 'success' if result.ok else 'failed', flagged_reason)

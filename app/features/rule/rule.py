@@ -1180,7 +1180,9 @@ def detail_rule_ai_analysis(rule_id):
         return render_template("404.html"), 404
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
+    from app.features.ai.ai_core import get_active_provider
     return render_template("rule/detail_rule/detail_rule_ai_analysis.html", rule=rule,
+                           ai_runs_locally=get_active_provider().is_local,
                            **_nav_counts(rule.id))
 
 
@@ -1214,7 +1216,7 @@ def ai_analysis_models():
     depth: the launch card itself is only shown to admins/ai.use holders in
     the template."""
     from app.core.db_class.db import AIAgentConfig
-    from app.features.ai.ai_core import AgentConnectionError, OllamaClient, get_ollama_url
+    from app.features.ai.ai_core import AgentConnectionError, list_active_models
 
     if not (current_user.is_admin() or current_user.has_permission('ai.use')):
         return jsonify({"error": "Forbidden."}), 403
@@ -1223,17 +1225,16 @@ def ai_analysis_models():
     enabled = cfg.enabled if cfg else True
     default_model = cfg.default_model if cfg else None
 
-    models = []
+    models, provider = [], None
     try:
-        client = OllamaClient(
-            base_url=get_ollama_url(),
-            model='', timeout=5,
-        )
-        models = client.list_models()
+        provider, models = list_active_models()
     except AgentConnectionError:
         pass
+    if provider and provider.kind != 'ollama' and default_model not in models:
+        default_model = provider.default_model
 
-    return jsonify({'enabled': enabled, 'models': models, 'default_model': default_model})
+    return jsonify({'enabled': enabled, 'models': models, 'default_model': default_model,
+                    'provider': {'name': provider.name, 'kind': provider.kind} if provider else None})
 
 
 def _get_visible_ai_generation_or_none(rule_id, analysis_id):

@@ -4770,6 +4770,72 @@ class AIModelConfig(db.Model):
         }
 
 
+class AIProvider(db.Model):
+    """One AI backend an admin registered on AI admin → Models & Security:
+    a local or remote Ollama, Claude (Anthropic API), ChatGPT (OpenAI API),
+    or any internal OpenAI-compatible server (vLLM, LM Studio, LiteLLM…).
+    Exactly one is active — every agent goes through it (ai_core.py
+    get_active_provider). The first one is seeded from the old Ollama
+    settings, so an instance that never touches this keeps running on
+    Ollama. The API key is stored encrypted (ai_core.encrypt_secret)."""
+    __tablename__ = 'ai_provider'
+
+    id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid           = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    name           = db.Column(db.String(128), nullable=False)
+    kind           = db.Column(db.String(32), nullable=False)   # ollama | anthropic | openai | openai_compatible
+    base_url       = db.Column(db.String(512), nullable=True)
+    api_key_enc    = db.Column(db.Text, nullable=True)
+    # Claude only: sent as the anthropic-workspace-id header, needed when the
+    # API key is organization-level rather than scoped to one workspace.
+    workspace_id   = db.Column(db.String(128), nullable=True)
+    default_model  = db.Column(db.String(128), nullable=True)
+    # Explicit admin consent that rule/user content may be sent to this
+    # endpoint when it is not on the local network (cloud APIs always are).
+    remote_allowed = db.Column(db.Boolean, nullable=False, default=False)
+    is_active      = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    # Spending tracked by Rulezet itself (AIExecutionLog.cost_usd) against a
+    # monthly budget — the providers expose no "remaining credit" API. Prices
+    # in USD per million tokens; empty = built-in Claude price list
+    # (ai_core.CLAUDE_PRICES), unknown for other providers.
+    monthly_budget_usd     = db.Column(db.Float, nullable=True)
+    price_input_per_mtok   = db.Column(db.Float, nullable=True)
+    price_output_per_mtok  = db.Column(db.Float, nullable=True)
+    block_over_budget      = db.Column(db.Boolean, nullable=False, default=False)
+    # Last "Test connection" of the SAVED settings — reset whenever the type,
+    # URL or key change, so a green badge always describes what's stored.
+    last_test_at      = db.Column(db.DateTime, nullable=True)
+    last_test_ok      = db.Column(db.Boolean, nullable=True)
+    last_test_message = db.Column(db.String(300), nullable=True)
+    created_at     = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at     = db.Column(db.DateTime, nullable=True)
+
+    def to_json(self):
+        from app.features.ai.ai_core import describe_secret
+        return {
+            'id':             self.id,
+            'uuid':           self.uuid,
+            'name':           self.name,
+            'kind':           self.kind,
+            'base_url':       self.base_url,
+            'has_api_key':    bool(self.api_key_enc),
+            'api_key_hint':   describe_secret(self.api_key_enc),
+            'workspace_id':   self.workspace_id,
+            'monthly_budget_usd':    self.monthly_budget_usd,
+            'price_input_per_mtok':  self.price_input_per_mtok,
+            'price_output_per_mtok': self.price_output_per_mtok,
+            'block_over_budget':     bool(self.block_over_budget),
+            'default_model':  self.default_model,
+            'remote_allowed': self.remote_allowed,
+            'is_active':      self.is_active,
+            'last_test_at':      self.last_test_at.isoformat() if self.last_test_at else None,
+            'last_test_ok':      self.last_test_ok,
+            'last_test_message': self.last_test_message,
+            'created_at':     self.created_at.isoformat() if self.created_at else None,
+            'updated_at':     self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class AIExecutionLog(db.Model):
     """One row per agent invocation, every agent, success or failure — the
     unified history + security-visibility surface the admin AI hub reads
@@ -4785,12 +4851,18 @@ class AIExecutionLog(db.Model):
     input_summary   = db.Column(db.String(300), nullable=True)  # short, truncated — never full rule content
     content         = db.Column(db.Text, nullable=True)          # the agent's output (report / rule / fix / reply)
     model_used      = db.Column(db.String(128), nullable=True)
-    status          = db.Column(db.String(20), nullable=False)   # success | failed | rate_limited | disabled | busy
+    status          = db.Column(db.String(20), nullable=False)   # success | failed | rate_limited | disabled | busy | budget
     error_message   = db.Column(db.Text, nullable=True)
     is_public       = db.Column(db.Boolean, nullable=False, default=True)  # admin moderation lever
     flagged_reason  = db.Column(db.String(200), nullable=True)   # e.g. 'possible_prompt_injection'
     iteration_count = db.Column(db.Integer, nullable=True)       # for the repair loop (rule generator/fixer)
     latency_ms      = db.Column(db.Integer, nullable=True)
+    # Which AI provider ran it and what it consumed (all calls of the run
+    # summed) — feeds the per-provider monthly budget on Models & Security.
+    provider_id     = db.Column(db.Integer, db.ForeignKey('ai_provider.id', ondelete='SET NULL'), nullable=True, index=True)
+    input_tokens    = db.Column(db.Integer, nullable=True)
+    output_tokens   = db.Column(db.Integer, nullable=True)
+    cost_usd        = db.Column(db.Float, nullable=True)
     created_at      = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
 
     user = db.relationship('User', foreign_keys=[user_id])
@@ -4812,6 +4884,9 @@ class AIExecutionLog(db.Model):
             'flagged_reason':  self.flagged_reason,
             'iteration_count': self.iteration_count,
             'latency_ms':      self.latency_ms,
+            'input_tokens':    self.input_tokens,
+            'output_tokens':   self.output_tokens,
+            'cost_usd':        self.cost_usd,
             'created_at':      self.created_at.isoformat() if self.created_at else None,
         }
 

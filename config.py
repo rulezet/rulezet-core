@@ -62,6 +62,12 @@ class Config:
     # (production hardware, 24 physical cores) to give genuine partial
     # parallelism without either request slowing down too much.
     OLLAMA_MAX_CONCURRENT = int(os.environ.get('OLLAMA_MAX_CONCURRENT', 2))
+    # Concurrent calls to a cloud / OpenAI-compatible AI provider (Claude,
+    # ChatGPT, internal gateway) — separate pool from Ollama's.
+    AI_CLOUD_MAX_CONCURRENT = int(os.environ.get('AI_CLOUD_MAX_CONCURRENT', 4))
+    # Encrypts the AI provider API keys stored in the database (falls back to
+    # SECRET_KEY when unset). Keep it out of the DB and its backups.
+    AI_SECRETS_KEY = os.environ.get('AI_SECRETS_KEY')
 
     MAIL_SERVER   = os.environ.get('MAIL_SERVER',   'smtp.gmail.com')
     MAIL_PORT     = int(os.environ.get('MAIL_PORT', 587))
