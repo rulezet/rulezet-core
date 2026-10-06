@@ -20,15 +20,16 @@ class EditUser(Resource):
     @api_required
     def post(self):
         data = request.get_json(silent=True)
-        if not data:
+        if data is None:
             data = request.args.to_dict()
+        if not isinstance(data, dict):
+            return {"message": "The body must be a JSON object"}, 400
+        error = AccountModel.account_fields_error(data, with_password=False)
+        if error:
+            return {"message": error}, 400
         first_name = data.get("first_name")
         last_name = data.get("last_name")
         email = data.get("email")
-
-        for field_name, value in [("first_name", first_name), ("last_name", last_name), ("email", email)]:
-            if not value:
-                return {"message": f"{field_name} is required"}, 400
 
         try:
             Email(message="Invalid email format")(None, type("DummyField", (), {"data": email})())

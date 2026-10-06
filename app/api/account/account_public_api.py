@@ -33,11 +33,16 @@ class Register(Resource):
         if not current_app.config.get("SIGN_UP_ENABLED"):
             return {"message": "Sign-up is disabled on this instance"}, 404
         data = request.get_json(silent=True)
-        if not data:
+        if data is None:
             data = request.args.to_dict()
+        if not isinstance(data, dict):
+            return {"message": "The body must be a JSON object"}, 400
         required_fields = ["email", "password", "first_name", "last_name"]
         if not all(field in data for field in required_fields):
             return {"message": "Missing fields in request"}, 400
+        error = AccountModel.account_fields_error(data, with_password=True)
+        if error:
+            return {"message": error}, 400
 
         # Validate email format using WTForms Email validator
         try:

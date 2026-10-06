@@ -76,6 +76,24 @@ def add_user_core(form_dict) -> tuple:
     return user, True
 
 
+ACCOUNT_TEXT_FIELDS_MAX = {"first_name": 64, "last_name": 64, "email": 64}
+
+
+def account_fields_error(data: dict, with_password: bool) -> str | None:
+    """What's wrong with the name / email / password sent to the account API,
+    or None. Same limits as the web forms (the DB columns are 64 long)."""
+    for field, max_length in ACCOUNT_TEXT_FIELDS_MAX.items():
+        value = data.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return f"{field} is required and must be text"
+        if len(value) > max_length:
+            return f"{field} must be at most {max_length} characters"
+    password = data.get("password")
+    if (with_password or password is not None) and not isinstance(password, str):
+        return "password must be text"
+    return None
+
+
 def resend_verification_code_core(user_id) -> bool:
     """Resend the verification code to the user"""
     user = get_user(user_id)
