@@ -22,6 +22,7 @@ from sqlalchemy import func
 
 from app.core.db_class.db import UnifiedComment, UnifiedCommentReaction
 from app.core.utils.activity_log import log_activity
+from app.core.utils.utils import DB_ID_MAX, as_db_id, json_object
 from app import db
 
 comment_ns = Namespace('comments', description='Unified comment thread API')
@@ -40,9 +41,8 @@ def _can_read_object(object_type, object_id) -> bool:
     bundle's discussion is not public just because comments are a separate
     table)."""
     from app.core.db_class.db import Rule, Bundle, BlogPost, RuleEditProposal
-    try:
-        object_id = int(object_id)
-    except (TypeError, ValueError):
+    object_id = as_db_id(object_id)
+    if not object_id:
         return False
     is_admin = current_user.is_authenticated and current_user.is_admin()
 
@@ -84,6 +84,23 @@ def _user_can_read_object(user, object_type, object_id) -> bool:
         post = db.session.get(BlogPost, object_id)
         return bool(post) and ((post.is_public and not post.is_draft) or post.user_id == user.id or is_admin)
     return False
+
+
+def _text(value):
+    """A text field of the JSON body, stripped and without NUL characters
+    (PostgreSQL refuses them) — None when the value isn't text at all."""
+    if not isinstance(value, str):
+        return None
+    return value.replace('\x00', '').strip()
+
+
+def _int_arg(name, default, low=1, high=DB_ID_MAX):
+    """An integer query parameter clamped to [low, high] (a huge page number
+    would overflow the database) — `default` when absent or not a number."""
+    value = request.args.get(name, type=int)
+    if value is None:
+        return default
+    return max(low, min(value, high))
 
 
 def _get_or_404(uuid):
@@ -184,13 +201,16 @@ class CommentList(Resource):
     def get(self):
         """List comments for an object (paginated). Pass parent_id to fetch replies."""
         object_type = request.args.get('object_type', '').strip()
-        object_id   = request.args.get('object_id', type=int)
-        parent_id   = request.args.get('parent_id', type=int, default=None)
-        page        = request.args.get('page', 1, type=int)
-        per_page    = min(request.args.get('per_page', 20, type=int), _PER_PAGE_MAX)
+        object_id   = as_db_id(request.args.get('object_id'))
+        parent_arg  = request.args.get('parent_id')
+        parent_id   = as_db_id(parent_arg) if parent_arg is not None else None
+        page        = _int_arg('page', 1)
+        per_page    = _int_arg('per_page', 20, high=_PER_PAGE_MAX)
 
         if object_type not in _VALID_OBJECT_TYPES or not object_id:
             return {'message': 'object_type and object_id are required'}, 400
+        if parent_arg is not None and not parent_id:
+            return {'message': 'invalid parent_id'}, 400
         if not _can_read_object(object_type, object_id):
             return {'message': 'Not found'}, 404
 
@@ -218,16 +238,18 @@ class CommentList(Resource):
         if not current_user.is_authenticated:
             return {'message': 'Login required'}, 401
 
-        data = request.get_json(silent=True) or {}
-        object_type = data.get('object_type', '').strip()
-        object_id   = data.get('object_id')
-        content     = data.get('content', '').strip()
-        parent_id   = data.get('parent_id')
+        data = json_object()
+        object_type = _text(data.get('object_type'))
+        object_id   = as_db_id(data.get('object_id'))
+        content     = _text(data.get('content'))
+        parent_id   = as_db_id(data.get('parent_id')) if data.get('parent_id') is not None else None
 
         if object_type not in _VALID_OBJECT_TYPES:
             return {'message': f'object_type must be one of {_VALID_OBJECT_TYPES}'}, 400
         if not object_id:
             return {'message': 'object_id is required'}, 400
+        if data.get('parent_id') is not None and not parent_id:
+            return {'message': 'invalid parent_id'}, 400
         if not content:
             return {'message': 'content is required'}, 400
         if len(content) > 10000:
@@ -386,9 +408,9 @@ class CommentHub(Resource):
             sort=request.args.get('sort', 'last_activity').strip(),
             direction=request.args.get('dir', 'desc').strip(),
             mine=request.args.get('mine', '').strip() in ('1', 'true'),
-            min_comments=max(request.args.get('min_comments', 0, type=int) or 0, 0),
-            page=request.args.get('page', 1, type=int),
-            per_page=min(request.args.get('per_page', 20, type=int), _PER_PAGE_MAX),
+            min_comments=_int_arg('min_comments', 0, low=0),
+            page=_int_arg('page', 1),
+            per_page=_int_arg('per_page', 20, high=_PER_PAGE_MAX),
         )
 
 
@@ -423,8 +445,7 @@ class CommentDetail(Resource):
         if not comment.is_active:
             return {'message': 'Cannot edit a deleted comment'}, 400
 
-        data    = request.get_json(silent=True) or {}
-        content = data.get('content', '').strip()
+        content = _text(json_object().get('content'))
         if not content:
             return {'message': 'content is required'}, 400
         if len(content) > 10000:
@@ -543,7 +564,7 @@ class CommentResolve(Resource):
 
     def get(self, comment_id):
         """Return a comment's root_id and ordered ancestor chain for deep-link navigation."""
-        c = UnifiedComment.query.get(comment_id)
+        c = db.session.get(UnifiedComment, comment_id) if as_db_id(comment_id) else None
         if not c or not c.is_active or not _can_read_object(c.object_type, c.object_id):
             return {'message': 'Comment not found'}, 404
 
@@ -577,8 +598,7 @@ class CommentReact(Resource):
         if not comment.is_active:
             return {'message': 'Cannot react to a deleted comment'}, 400
 
-        data     = request.get_json(silent=True) or {}
-        reaction = data.get('reaction', '').strip()
+        reaction = _text(json_object().get('reaction'))
         if reaction not in ('like', 'dislike'):
             return {'message': 'reaction must be "like" or "dislike"'}, 400
 
