@@ -350,10 +350,12 @@ def update_bundle(bundle_id: int, form_dict: dict ) -> Bundle | None:
             vulnerabilities_json = json.dumps(v_raw)
         elif isinstance(v_raw, str) and v_raw.strip():
             try:
-                json.loads(v_raw)
-                vulnerabilities_json = v_raw
+                parsed = json.loads(v_raw)
             except (TypeError, ValueError):
-                vulnerabilities_json = "[]"
+                parsed = None
+            # only a JSON list of identifiers — anything else ("{}", "12", a
+            # bare string) would be read back as a non-list
+            vulnerabilities_json = json.dumps([str(v) for v in parsed]) if isinstance(parsed, list) else "[]"
         else:
             vulnerabilities_json = "[]"
         bundle.vulnerability_identifiers = vulnerabilities_json

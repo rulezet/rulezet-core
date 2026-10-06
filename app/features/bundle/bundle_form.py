@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms.validators import InputRequired, Length, ValidationError
+from wtforms.validators import DataRequired, InputRequired, Length, ValidationError
 from wtforms import StringField, SubmitField, TextAreaField, BooleanField
 
 from app.core.db_class.db import Bundle
@@ -7,8 +7,8 @@ from app.core.db_class.db import Bundle
 class AddNewBundleForm(FlaskForm):
     """Form to create a new bundle."""
     
-    name = StringField('Bundle Name', validators=[
-        InputRequired(message="Bundle name is required"),
+    name = StringField('Bundle Name', filters=[lambda v: v.strip() if isinstance(v, str) else v], validators=[
+        DataRequired(message="Bundle name is required"),
         Length(max=255, message="Bundle name must be less than 255 characters")
     ])
     
@@ -29,7 +29,10 @@ class AddNewBundleForm(FlaskForm):
 class EditBundleForm(FlaskForm):
     """Form to edit a bundle."""
 
-    name = StringField('Bundle Name', validators=[InputRequired(message="Bundle name is required")])
+    name = StringField('Bundle Name', filters=[lambda v: v.strip() if isinstance(v, str) else v], validators=[
+        DataRequired(message="Bundle name is required"),
+        Length(max=255, message="Bundle name must be less than 255 characters")
+    ])
     description = TextAreaField('Description', validators=[InputRequired(message="Bundle description is required")])
     public = BooleanField('Public', default=True)
 
