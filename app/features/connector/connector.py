@@ -235,6 +235,54 @@ def preview_connector(connector_uuid):
         return jsonify({'success': False, 'error': str(exc)}), 500
 
 
+# Pull filters, in the shape the connector_pull job reads them
+# (app/static/js/connector/connectorPullFilter.js builds them).
+_TEXT_LIST_FILTERS = ('formats', 'authors', 'attacks')
+_GROUP_FILTERS     = ('cves', 'licenses', 'tags')     # [{names: [...], mode, exclude}]
+_DATE_FILTERS      = ('date_from', 'date_to')
+
+
+def _is_text_list(value) -> bool:
+    return isinstance(value, list) and all(isinstance(v, str) for v in value)
+
+
+def _pull_filters(filters):
+    """(filters, error) — the filters of a pull request, checked; unknown
+    keys are dropped, an empty / missing value means "no filter"."""
+    if filters is None:
+        return {}, None
+    if not isinstance(filters, dict):
+        return None, 'filters must be an object.'
+    clean = {}
+    for key in _TEXT_LIST_FILTERS:
+        value = filters.get(key)
+        if value is None:
+            continue
+        if not _is_text_list(value):
+            return None, f'filters.{key} must be a list of text values.'
+        clean[key] = value
+    for key in _GROUP_FILTERS:
+        groups = filters.get(key)
+        if groups is None:
+            continue
+        if not isinstance(groups, list):
+            return None, f'filters.{key} must be a list.'
+        for group in groups:
+            if (not isinstance(group, dict) or not _is_text_list(group.get('names'))
+                    or not isinstance(group.get('mode', 'OR'), str)
+                    or not isinstance(group.get('exclude', False), bool)):
+                return None, f'filters.{key} must be a list of {{names, mode, exclude}} groups.'
+        clean[key] = groups
+    for key in _DATE_FILTERS:
+        value = filters.get(key)
+        if value is None or value == '':
+            continue
+        if not isinstance(value, str):
+            return None, f'filters.{key} must be a date.'
+        clean[key] = value
+    return clean, None
+
+
 @connector_blueprint.route('/pull/<string:connector_uuid>', methods=['POST'])
 def pull_connector(connector_uuid):
     connector = ConnectorModel.get_connector_by_uuid(connector_uuid)
@@ -247,10 +295,14 @@ def pull_connector(connector_uuid):
     if not connector.is_active:
         return jsonify({'success': False, 'error': 'Connector is disabled.'}), 400
 
-    data         = request.get_json(silent=True) or {}
+    data         = json_object()
     sync_rules   = data.get('sync_rules',   connector.sync_rules)
     sync_bundles = data.get('sync_bundles', connector.sync_bundles)
-    filters      = data.get('filters') or {}
+    if not isinstance(sync_rules, bool) or not isinstance(sync_bundles, bool):
+        return jsonify({'success': False, 'error': 'sync_rules and sync_bundles must be true or false.'}), 400
+    filters, error = _pull_filters(data.get('filters'))
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
 
     if not sync_rules and not sync_bundles:
         return jsonify({'success': False, 'error': 'Nothing to pull — select rules and/or bundles.'}), 400
