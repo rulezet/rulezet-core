@@ -379,8 +379,7 @@ def job_errors():
 def get_zombies():
     if not current_user.is_admin():
         return jsonify({"error": "Forbidden."}), 403
-    zombies = JobsModel.get_zombie_jobs()
-    return jsonify([j.to_json() for j in zombies]), 200
+    return jsonify(JobsModel.get_zombie_jobs()), 200
 
 
 @jobs_blueprint.route('/kill_zombies', methods=['POST'])
