@@ -205,7 +205,8 @@ def verify_syntax_rule_by_format(rule_dict: dict, rule=None) -> tuple[bool, str]
     dependencies (an admin or a proposer isn't the author).
     """
 
-    rule_format = rule_dict.get("format", "").lower()
+    rule_format = rule_dict.get("format")
+    rule_format = rule_format.strip().lower() if isinstance(rule_format, str) else ""
     if not rule_format:
         return False, "Missing rule format."
     load_all_rule_formats()
