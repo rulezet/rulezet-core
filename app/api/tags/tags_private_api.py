@@ -7,6 +7,7 @@ from app.core.utils.decorators import api_required
 from app.core.utils.utils import as_db_id, get_user_from_api
 from app.features.jobs.jobs_core import create_job
 from app.features.rule.rule_core import _active
+from app.features.tags.tags_core import _like_literal
 
 tags_private_ns = Namespace(
     'Tags — Private 🔑',
@@ -99,7 +100,9 @@ class LookupTag(Resource):
                 return {'message': 'No tag found matching id/uuid.'}, 404
             return {'tags': [tag.to_json()]}, 200
 
-        matches = Tag.query.filter(Tag.name.ilike(f'%{name}%')).order_by(Tag.name).limit(50).all()
+        # A literal substring: "%" / "_" in the name are not wildcards.
+        matches = Tag.query.filter(Tag.name.ilike(f'%{_like_literal(name)}%', escape='\\')) \
+                           .order_by(Tag.name).limit(50).all()
         if not matches:
             return {'message': f'No tag found matching name "{name}".'}, 404
         return {'tags': [t.to_json() for t in matches]}, 200

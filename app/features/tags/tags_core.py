@@ -130,6 +130,11 @@ def get_tags(args):
     return pagination
 
 
+def _like_literal(text):
+    """`text` with the LIKE wildcards escaped (use with escape='\\')."""
+    return text.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
+
 def _family_like_pattern(family):
     """
     Build the SQL LIKE pattern that matches every tag belonging to a family.
@@ -141,9 +146,11 @@ def _family_like_pattern(family):
     """
     if not family:
         return None
+    # The family is a literal prefix: "%" or "_" in it must not turn into a
+    # wildcard (a family "%" would match — and delete — every tag).
     if family.startswith("misp-galaxy:"):
-        return f"{family}=%"
-    return f"{family}:%"
+        return f"{_like_literal(family)}=%"
+    return f"{_like_literal(family)}:%"
 
 
 def get_tags_by_family(family, source=None):
@@ -151,7 +158,7 @@ def get_tags_by_family(family, source=None):
     pattern = _family_like_pattern(family)
     if not pattern:
         return []
-    query = Tag.query.filter(Tag.name.ilike(pattern))
+    query = Tag.query.filter(Tag.name.ilike(pattern, escape='\\'))
     if source and source != 'all':
         query = query.filter_by(source=source)
     return query.order_by(Tag.name.asc()).all()
@@ -223,7 +230,7 @@ def remove_family(family, source=None):
     if not pattern:
         return 0, "Invalid family."
     try:
-        query = Tag.query.filter(Tag.name.ilike(pattern))
+        query = Tag.query.filter(Tag.name.ilike(pattern, escape='\\'))
         if source and source != 'all':
             query = query.filter_by(source=source)
         ids = [t.id for t in query.with_entities(Tag.id).all()]
