@@ -23,8 +23,8 @@ sys.path.append(os.getcwd())
 os.environ.setdefault("FLASKENV", "testing")
 
 from app import create_app, db  # noqa: E402
-from app.core.utils.init_db import create_default_user, insert_default_formats  # noqa: E402
-from tests.helpers.users import make_user  # noqa: E402
+from app.core.utils.init_db import insert_default_formats  # noqa: E402
+from tests.helpers.users import _password_hash, make_user  # noqa: E402
 
 # The copy-me examples for a new feature live here, they are not tests.
 collect_ignore_glob = ["_template/*"]
@@ -68,7 +68,7 @@ def app(_app):
         _empty_all_tables()
         from app.features.roles.roles_core import seed_default_permissions_and_roles
         seed_default_permissions_and_roles()
-        default_user = create_default_user()   # author of rules imported without an owner
+        default_user = _seed_default_user()   # author of rules imported without an owner
         _seed_default_tags(created_by=default_user)
 
         # The login brute-force guard is per process and keyed by IP — every
@@ -79,6 +79,19 @@ def app(_app):
         yield _app
 
         db.session.remove()
+
+
+def _seed_default_user():
+    """The account init_db.create_default_user() makes — built here with the
+    cached password hash: hashing its random password (scrypt) on every test
+    was most of the per-test setup time."""
+    from app.core.db_class.db import User
+    from app.core.utils.utils import generate_api_key
+    user = User(first_name="no editor", last_name="no editor", email="default@default.default",
+                password_hash=_password_hash(), admin=False, api_key=generate_api_key(), is_verified=True)
+    db.session.add(user)
+    db.session.commit()
+    return user
 
 
 def _seed_default_tags(created_by):
