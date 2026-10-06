@@ -33,6 +33,9 @@ class AddNewRuleForm(FlaskForm):
         self.format.choices = [(f['name'], f['name']) for f in formats_rules_list]
 
     def validate_title(self, field):
+        field.data = (field.data or '').strip()
+        if not field.data:
+            raise ValidationError('A title is required.')
         existing_rule = _active().filter_by(title=field.data).first()
         if existing_rule:
             if current_user.id == existing_rule.user_id or current_user.is_admin():
@@ -112,7 +115,11 @@ class EditRuleForm(FlaskForm):
         self.format.choices = [(f['name'], f['name']) for f in formats_rules_list]
 
     def validate_title(self, field):
-        """Same rule as on create: a title used by another active rule is refused."""
+        """Same rules as on create: a blank title, or one used by another
+        active rule, is refused."""
+        field.data = (field.data or '').strip()
+        if not field.data:
+            raise ValidationError('A title is required.')
         clash = _active().filter(Rule.title == field.data, Rule.id != self.rule_id).first()
         if clash:
             raise ValidationError('Another rule already uses this title.')
