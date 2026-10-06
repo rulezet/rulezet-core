@@ -648,6 +648,30 @@ def check_bit_collision_risk(rule_format: str, content: str, exclude_rule_id: in
 
 
 # Create
+def _existing_tag_ids(raw) -> list:
+    """Ids of tags that exist, from untrusted form/API input: a list (or JSON
+    list) of {"id": …} objects or bare ids. Anything else is ignored — a
+    non-numeric id, or the id of a tag that doesn't exist (which PostgreSQL
+    would refuse on the foreign key)."""
+    from app.core.utils.utils import as_db_id
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    if not isinstance(raw, list):
+        return []
+    wanted = []
+    for item in raw:
+        tag_id = as_db_id(item.get('id') if isinstance(item, dict) else item)
+        if tag_id and tag_id not in wanted:
+            wanted.append(tag_id)
+    if not wanted:
+        return []
+    existing = {row.id for row in Tag.query.filter(Tag.id.in_(wanted)).with_entities(Tag.id)}
+    return [i for i in wanted if i in existing]
+
+
 def _parse_vulnerabilities(value) -> list:
     """Vulnerability ids from a form/API value: a list, a JSON list (the
     vulnerability picker's hidden field), or the plain "CVE" text field
@@ -767,21 +791,14 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         db.session.flush()
         
 
-        tags_list = form_dict.get("tags")
-        if tags_list and isinstance(tags_list, list):
-            for tag_data in tags_list:
-                if not isinstance(tag_data, dict):
-                    continue
-                tag_id = tag_data.get('id')
-                if tag_id:
-                    assoc = RuleTagAssociation(
-                        uuid=str(uuid.uuid4()),
-                        rule_id=new_rule.id,
-                        tag_id=int(tag_id),
-                        user_id=user.id if user else None,
-                        added_at=datetime.datetime.now(tz=datetime.timezone.utc)
-                    )
-                    db.session.add(assoc)
+        for tag_id in _existing_tag_ids(form_dict.get("tags")):
+            db.session.add(RuleTagAssociation(
+                uuid=str(uuid.uuid4()),
+                rule_id=new_rule.id,
+                tag_id=tag_id,
+                user_id=user.id if user else None,
+                added_at=datetime.datetime.now(tz=datetime.timezone.utc)
+            ))
 
         _attach_default_tags(new_rule, user_id)
 
@@ -950,18 +967,7 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
 
     if "tags" in form_dict:
         try:
-            tags_input = form_dict.get("tags")
-            if isinstance(tags_input, str):
-                tags_data_list = json.loads(tags_input)
-            else:
-                tags_data_list = tags_input
-
-            new_tag_ids = set()
-            for t in tags_data_list:
-                if isinstance(t, dict) and t.get('id'):
-                    new_tag_ids.add(int(t.get('id')))
-                elif isinstance(t, (int, str)):
-                    new_tag_ids.add(int(t))
+            new_tag_ids = set(_existing_tag_ids(form_dict.get("tags")))
 
             current_associations = RuleTagAssociation.query.filter_by(rule_id=rule.id).all()
             current_tag_ids = {assoc.tag_id for assoc in current_associations}
