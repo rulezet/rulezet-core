@@ -295,7 +295,9 @@ def search_bundles_lite(query: str, limit: int = 5) -> list[dict]:
 
     exact = None
     if is_numeric:
-        exact = _visible(Bundle.query.filter(Bundle.id == int(query))).first()
+        from app.core.utils.utils import as_db_id
+        bundle_id = as_db_id(query)
+        exact = _visible(Bundle.query.filter(Bundle.id == bundle_id)).first() if bundle_id else None
     else:
         exact = _visible(Bundle.query.filter(Bundle.uuid == query)).first()
 
