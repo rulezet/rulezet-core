@@ -65,6 +65,27 @@ def _can_read_object(object_type, object_id) -> bool:
     return False
 
 
+def _user_can_read_object(user, object_type, object_id) -> bool:
+    """Whether `user` (not necessarily the caller) can open the object — used
+    to decide who may be notified about its thread. A private bundle's share
+    link holders can't be known server-side, so only its owner and admins."""
+    from app.core.db_class.db import Rule, Bundle, BlogPost, RuleEditProposal
+    is_admin = user.is_admin()
+    if object_type == 'rule':
+        rule = db.session.get(Rule, object_id)
+        return bool(rule) and not rule.is_deleted
+    if object_type == 'proposal':
+        proposal = db.session.get(RuleEditProposal, object_id)
+        return bool(proposal) and _user_can_read_object(user, 'rule', proposal.rule_id)
+    if object_type == 'bundle':
+        bundle = db.session.get(Bundle, object_id)
+        return bool(bundle) and (bool(bundle.access) or bundle.user_id == user.id or is_admin)
+    if object_type == 'blog_post':
+        post = db.session.get(BlogPost, object_id)
+        return bool(post) and ((post.is_public and not post.is_draft) or post.user_id == user.id or is_admin)
+    return False
+
+
 def _get_or_404(uuid):
     c = UnifiedComment.query.filter_by(uuid=uuid).first()
     if not c:
@@ -324,10 +345,14 @@ class CommentList(Resource):
                             notify_comment_reply(parent_comment.created_by, current_user.id, blog_post.title, link)
 
             # ── @mentions — any object type, "@[Display Name](id)" tokens ──
+            # Only existing users who can open the object hear about it — a
+            # notification carries its title and link.
             if link:
+                from app.core.db_class.db import User
                 mentioned_ids = {int(uid) for uid in re.findall(r'@\[[^\]\n]{1,200}\]\((\d{1,12})\)', content)}
-                for uid in mentioned_ids:
-                    if uid != current_user.id:
+                for uid in sorted(mentioned_ids - {current_user.id}):
+                    mentioned = db.session.get(User, uid)
+                    if mentioned and _user_can_read_object(mentioned, object_type, object_id):
                         notify_user_mentioned(uid, current_user.id, title, link)
 
         except Exception as _e:
