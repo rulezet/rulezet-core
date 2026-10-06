@@ -1780,11 +1780,22 @@ def add_favorite_rule(rule_id) -> redirect:
 #   Comment section     #
 #########################
 
+def _comment_on_active_rule(comment_id):
+    """The legacy rule comment `comment_id`, or None when it doesn't exist or
+    its rule is trashed (a trashed rule's thread is gone for everyone)."""
+    comment = RuleModel.get_comment_by_id(comment_id)
+    if comment and RuleModel.get_rule(comment.rule_id):
+        return comment
+    return None
+
+
 @rule_blueprint.route("/detail_rule/get_comments_page", methods=['GET'])
 def comment_rule() -> jsonify:
     """Get all the comment of the rule"""
     page = request.args.get('page', 1, type=int)
     rule_id = request.args.get('rule_id', type=int)
+    if not RuleModel.get_rule(rule_id):
+        return {"message": "Rule not found"}, 404
     comments = RuleModel.get_comment_page(page , rule_id)
     total_comments = RuleModel.get_total_comments_count()
     if comments:
@@ -1798,6 +1809,8 @@ def get_comments():
     page    = request.args.get('page', 1, type=int)
     if not rule_id:
         return jsonify({"message": "Missing rule_id"}), 400
+    if not RuleModel.get_rule(rule_id):
+        return jsonify({"message": "Rule not found"}), 404
     uid = current_user.id if current_user.is_authenticated else None
     pagination, comments = RuleModel.get_comments_for_rule(rule_id, page, user_id=uid)
     return jsonify({
@@ -1815,6 +1828,8 @@ def add_comment():
     parent_comment_id = request.args.get('parent_comment_id', type=int, default=None)
     if not rule_id or not content.strip():
         return jsonify({"message": "Missing rule_id or content", "toast_class": "danger-subtle"}), 400
+    if not RuleModel.get_rule(rule_id):
+        return jsonify({"message": "Rule not found", "toast_class": "danger-subtle"}), 404
     success, message = RuleModel.add_comment_core(rule_id, content, current_user, parent_comment_id)
     if not success:
         return jsonify({"message": message, "toast_class": "danger-subtle"}), 500
@@ -1832,7 +1847,7 @@ def add_comment():
 def edit_comment():
     comment_id  = request.args.get('comment_id', type=int) or request.args.get('commentID', type=int)
     new_content = request.args.get('content', '', type=str) or request.args.get('newContent', '', type=str)
-    comment = RuleModel.get_comment_by_id(comment_id)
+    comment = _comment_on_active_rule(comment_id)
     if not comment:
         return jsonify({"message": "Comment not found", "toast_class": "danger-subtle"}), 404
     if comment.user_id != current_user.id and not current_user.is_admin():
@@ -1845,7 +1860,7 @@ def edit_comment():
 @login_required
 def delete_comment_route():
     comment_id = request.args.get('comment_id', type=int)
-    comment = RuleModel.get_comment_by_id(comment_id)
+    comment = _comment_on_active_rule(comment_id)
     if not comment:
         return jsonify({"message": "Comment not found", "toast_class": "danger-subtle"}), 404
     if comment.user_id != current_user.id and not current_user.is_admin():
@@ -1868,6 +1883,8 @@ def add_reaction():
     reaction_type = request.args.get('reaction_type', type=str)
     if not comment_id or not reaction_type:
         return jsonify({"message": "Missing params", "toast_class": "danger-subtle"}), 400
+    if not _comment_on_active_rule(comment_id):
+        return jsonify({"message": "Comment not found", "toast_class": "danger-subtle"}), 404
     success, message = RuleModel.add_reaction_to_rule_comment(comment_id, current_user.id, reaction_type)
     cls = "success-subtle" if success else "danger-subtle"
     return jsonify({"message": message, "toast_class": cls}), (200 if success else 500)
