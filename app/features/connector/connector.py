@@ -10,6 +10,7 @@ from flask import Blueprint, abort, jsonify, redirect, render_template, request,
 from flask_login import current_user, login_required
 
 import app.features.connector.connector_core as ConnectorModel
+from app.core.utils.utils import json_object
 
 connector_blueprint = Blueprint(
     'connector',
@@ -61,28 +62,79 @@ def get_connectors():
     return jsonify(result), 200
 
 
+# Text fields of a connector and their column sizes (None = unbounded).
+_TEXT_FIELDS = {'name': 255, 'instance_url': 512, 'api_key_outbound': 512, 'icon': 64, 'description': None}
+_FLAGS = ('sync_rules', 'sync_bundles', 'is_active')
+_OWNER_MODES = ('shadow', 'self')
+_CONNECTOR_TYPES = ('rulezet',)
+
+
+def _valid_remote_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        return parsed.scheme in ('http', 'https') and bool(parsed.hostname)
+    except ValueError:
+        return False
+
+
+def _connector_fields(data: dict, creating: bool):
+    """(fields, error) — the connector fields of a create / update body,
+    checked: text that fits its column (NUL characters dropped), real
+    booleans, a known owner mode, a non-empty name and an http(s) URL.
+    Only the keys present in `data` are returned."""
+    fields = {}
+    for key, limit in _TEXT_FIELDS.items():
+        if key not in data:
+            continue
+        value = data[key]
+        if value is None:
+            value = ''
+        if not isinstance(value, str):
+            return None, f'{key} must be text.'
+        value = value.replace('\x00', '').strip()
+        if limit and len(value) > limit:
+            return None, f'{key} is too long (max {limit} characters).'
+        fields[key] = value or None
+
+    for key in ('name', 'instance_url'):
+        if (creating or key in data) and not fields.get(key):
+            return None, 'Name and URL are required.'
+    if fields.get('instance_url') and not _valid_remote_url(fields['instance_url']):
+        return None, 'URL must start with http:// or https://'
+
+    for key in _FLAGS:
+        if key in data:
+            if not isinstance(data[key], bool):
+                return None, f'{key} must be true or false.'
+            fields[key] = data[key]
+    if 'owner_mode' in data:
+        if data['owner_mode'] not in _OWNER_MODES:
+            return None, f"owner_mode must be one of: {', '.join(_OWNER_MODES)}."
+        fields['owner_mode'] = data['owner_mode']
+    if creating and 'connector_type' in data:
+        if data['connector_type'] not in _CONNECTOR_TYPES:
+            return None, f"connector_type must be one of: {', '.join(_CONNECTOR_TYPES)}."
+        fields['connector_type'] = data['connector_type']
+    return fields, None
+
+
 @connector_blueprint.route('/create', methods=['POST'])
 def create_connector():
-    data = request.get_json() or {}
-    name         = (data.get('name') or '').strip()
-    instance_url = (data.get('instance_url') or '').strip()
-    if not name or not instance_url:
-        return jsonify({'success': False, 'error': 'Name and URL are required.'}), 400
-    _parsed_url = urlparse(instance_url)
-    if _parsed_url.scheme not in ('http', 'https') or not _parsed_url.netloc:
-        return jsonify({'success': False, 'error': 'URL must start with http:// or https://'}), 400
+    fields, error = _connector_fields(json_object(), creating=True)
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
 
     connector = ConnectorModel.create_connector(
         owner_id=current_user.id,
-        name=name,
-        instance_url=instance_url,
-        connector_type=data.get('connector_type', 'rulezet'),
-        api_key_outbound=data.get('api_key_outbound') or None,
-        description=data.get('description') or None,
-        icon=data.get('icon') or None,
-        sync_rules=data.get('sync_rules', True),
-        sync_bundles=data.get('sync_bundles', False),
-        owner_mode=data.get('owner_mode', 'shadow'),
+        name=fields['name'],
+        instance_url=fields['instance_url'],
+        connector_type=fields.get('connector_type', 'rulezet'),
+        api_key_outbound=fields.get('api_key_outbound'),
+        description=fields.get('description'),
+        icon=fields.get('icon'),
+        sync_rules=fields.get('sync_rules', True),
+        sync_bundles=fields.get('sync_bundles', False),
+        owner_mode=fields.get('owner_mode', 'shadow'),
     )
     if not connector:
         return jsonify({'success': False, 'error': 'Could not create connector.'}), 500
@@ -98,13 +150,10 @@ def update_connector(connector_uuid):
     if connector.is_system:
         return jsonify({'success': False, 'error': 'System connectors cannot be modified.'}), 403
 
-    data = request.get_json() or {}
-    new_url = (data.get('instance_url') or '').strip()
-    if new_url:
-        _pu = urlparse(new_url)
-        if _pu.scheme not in ('http', 'https') or not _pu.netloc:
-            return jsonify({'success': False, 'error': 'URL must start with http:// or https://'}), 400
-    ok = ConnectorModel.update_connector(connector, data)
+    fields, error = _connector_fields(json_object(), creating=False)
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
+    ok = ConnectorModel.update_connector(connector, fields)
     return jsonify({'success': ok}), 200 if ok else 500
 
 
