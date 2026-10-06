@@ -344,6 +344,25 @@ def _new_usage():
     return {'input_tokens': 0, 'output_tokens': 0, 'cache_write_tokens': 0, 'cache_read_tokens': 0}
 
 
+# Python SDK each provider type needs. Installed with requirements.txt; when a
+# server lacks one, the providers page offers to install it — only these
+# exact, pinned specs, never anything taken from the request.
+PROVIDER_SDKS = {
+    'anthropic':         ('anthropic', 'anthropic==0.67.0'),
+    'openai':            ('openai', 'openai==1.107.1'),
+    'openai_compatible': ('openai', 'openai==1.107.1'),
+}
+
+
+def missing_sdk(kind):
+    """(module, pip spec) if this provider type's SDK isn't importable, else None."""
+    import importlib.util
+    entry = PROVIDER_SDKS.get(kind)
+    if entry and importlib.util.find_spec(entry[0]) is None:
+        return entry
+    return None
+
+
 def make_client(provider, model='', timeout=120, num_ctx=8192, num_predict=2048, temperature=0.3):
     """The client for one provider — all expose the same chat() /
     chat_stream() / list_models() surface, so agents never care which
@@ -353,6 +372,12 @@ def make_client(provider, model='', timeout=120, num_ctx=8192, num_predict=2048,
         raise AgentConnectionError(
             f"Refusing to send content to “{provider.name}” ({provider.url}) — it is not on this "
             "server's network. Allow it explicitly in AI admin → Models & Security."
+        )
+    missing = missing_sdk(provider.kind)
+    if missing:
+        raise AgentConnectionError(
+            f"“{provider.name}” needs the Python package “{missing[0]}”, which isn't installed on this "
+            "server — test the provider in AI admin → Models & Security to install it."
         )
     if provider.kind == 'ollama':
         return OllamaClient(base_url=provider.url, model=model, timeout=timeout, num_ctx=num_ctx,

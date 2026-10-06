@@ -48,4 +48,6 @@ cryptography
 grpcio
 pyvelociraptor
 psutil
+anthropic
+openai
 -e ./app/modules/rulezet-validation

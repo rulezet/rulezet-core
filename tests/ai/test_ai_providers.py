@@ -322,3 +322,20 @@ def test_budget_shown_and_enforced(app, admin_client):
             assert agent.run(user=None, history=[], message='hi').ok     # $14 now, over budget
             blocked = agent.run(user=None, history=[], message='hi')
     assert not blocked.ok and blocked.meta['status'] == 'budget'
+
+
+# ── missing SDK: the page is told to install it, only from the fixed list ────
+
+def test_test_reports_missing_sdk_instead_of_failing(admin_client):
+    with patch('app.features.ai.ai_core.missing_sdk', return_value=('anthropic', 'anthropic==0.67.0')):
+        res = admin_client.post('/ai/admin/providers/test', json={
+            'name': 'Claude', 'kind': 'anthropic', 'api_key': KEY, 'remote_allowed': True})
+    assert res.status_code == 409
+    assert res.get_json()['needs_install'] is True and res.get_json()['package'] == 'anthropic'
+
+
+def test_install_sdk_only_for_known_provider_types(admin_client):
+    with patch('subprocess.run') as run:
+        assert admin_client.post('/ai/admin/providers/install_sdk', json={'kind': 'ollama'}).status_code == 400
+        assert admin_client.post('/ai/admin/providers/install_sdk', json={'kind': 'requests; rm -rf /'}).status_code == 400
+    run.assert_not_called()

@@ -484,6 +484,55 @@ def _test_response(ok, models, error, row=None):
     return jsonify(body), (200 if ok else 502)
 
 
+def _needs_install_response(kind):
+    """409 telling the page this provider type's SDK must be installed first."""
+    from app.features.ai.ai_core import missing_sdk
+    missing = missing_sdk(kind)
+    if not missing:
+        return None
+    return jsonify({
+        'success': False, 'needs_install': True, 'package': missing[0], 'spec': missing[1],
+        'error': f"The Python package “{missing[0]}” needed for {PROVIDER_KINDS[kind]['label']} is not installed.",
+    }), 409
+
+
+@ai_blueprint.route('/admin/providers/install_sdk', methods=['POST'])
+def providers_install_sdk():
+    """pip-installs the SDK of one provider type into this server's Python
+    environment. Real admins only; the package spec comes from the fixed
+    PROVIDER_SDKS table, never from the request."""
+    import importlib
+    import subprocess
+    import sys
+    from app.features.ai.ai_core import PROVIDER_SDKS, missing_sdk
+
+    denied = _require_real_admin()
+    if denied:
+        return denied
+    kind = (request.get_json(force=True) or {}).get('kind')
+    if kind not in PROVIDER_SDKS:
+        return jsonify({"error": "Nothing to install for this provider type."}), 400
+    module, spec = PROVIDER_SDKS[kind]
+    if not missing_sdk(kind):
+        return jsonify({'success': True, 'package': module, 'already_installed': True})
+
+    try:
+        proc = subprocess.run([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', spec],
+                              capture_output=True, text=True, timeout=110)
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "error": f"Installing {spec} took too long — run "
+                                                   f"“pip install {spec}” on the server."}), 504
+    importlib.invalidate_caches()
+    if proc.returncode != 0 or missing_sdk(kind):
+        tail = (proc.stderr or proc.stdout or '').strip().splitlines()[-3:]
+        current_app.logger.warning(f'AI SDK install failed ({spec}): {" | ".join(tail)}')
+        return jsonify({"success": False, "error": f"Could not install {spec}: {' '.join(tail)[:300] or 'pip failed'}. "
+                                                   f"Run “pip install {spec}” on the server."}), 500
+    log_activity('ai.provider_sdk_install', f'Installed Python package {spec} for AI providers',
+                 target_type='ai_provider', is_public=False)
+    return jsonify({'success': True, 'package': module, 'spec': spec})
+
+
 @ai_blueprint.route('/admin/providers/test', methods=['POST'])
 def providers_test():
     """Connect + list models for a provider form, before or after saving.
@@ -505,6 +554,9 @@ def providers_test():
     api_key = fields['api_key']
     if _key_over_plain_http(fields['base_url'], bool(api_key)):
         return jsonify({"error": _PLAIN_HTTP_KEY_ERROR}), 400
+    needs = _needs_install_response(fields['kind'])
+    if needs:
+        return needs
     same_target = bool(existing and existing.kind == fields['kind'] and existing.base_url == fields['base_url'])
     if not api_key and same_target:
         api_key = decrypt_secret(existing.api_key_enc)
@@ -533,6 +585,9 @@ def providers_test_saved(provider_id):
     if not provider.is_local and not provider.remote_allowed:
         return jsonify({"error": "This provider is outside this server's network — edit it and tick "
                                  "\"Allow sending content\" first."}), 400
+    needs = _needs_install_response(row.kind)
+    if needs:
+        return needs
     ok, models, error = _run_provider_test(provider)
     _record_test(row, ok, models, error)
     return _test_response(ok, models, error, row)

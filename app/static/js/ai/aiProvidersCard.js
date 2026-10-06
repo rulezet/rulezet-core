@@ -322,8 +322,8 @@ export default {
                                 </div>
                                 <div class="modal-footer border-0 pt-0 justify-content-end gap-2" v-if="form">
                                     <button class="btn btn-light rounded-pill px-4 btn-sm" data-bs-dismiss="modal">Cancel</button>
-                                    <button class="btn btn-outline-secondary rounded-pill px-3 btn-sm" :disabled="testing || blockedByConsent" @click="test">
-                                        <i class="fa-solid me-1" :class="testing ? 'fa-spinner fa-spin' : 'fa-plug'"></i>Test connection
+                                    <button class="btn btn-outline-secondary rounded-pill px-3 btn-sm" :disabled="testing || installing || blockedByConsent" @click="test">
+                                        <i class="fa-solid me-1" :class="testing || installing ? 'fa-spinner fa-spin' : 'fa-plug'"></i>[[ installing ? 'Installing…' : 'Test connection' ]]
                                     </button>
                                     <button class="btn btn-primary rounded-pill px-4 btn-sm" :disabled="saving || !form.name" @click="save">
                                         <i class="fa-solid me-1" :class="saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'"></i>Save
@@ -517,11 +517,38 @@ export default {
             return { ok: res.ok, data }
         }
 
+        // A Claude / ChatGPT provider needs its Python SDK on the server: if
+        // it's missing, say so, download + install it, then retry the test.
+        const installing = ref(false)
+
+        async function installSdkIfNeeded(data, kind) {
+            if (!data?.needs_install) return false
+            const ok = confirm(`${kindLabel(kind)} needs the Python package "${data.package}", which isn't installed on this server yet.\n\n`
+                + `Rulezet will now download and install it (${data.spec}). This can take up to a minute.\n\nContinue?`)
+            if (!ok) return false
+            installing.value = true
+            create_message(`Downloading and installing ${data.spec}…`, 'info-subtle')
+            try {
+                const res = await post('/ai/admin/providers/install_sdk', { kind })
+                if (res.ok && res.data.success) {
+                    create_message(`${data.package} installed`, 'success-subtle')
+                    return true
+                }
+                create_message(res.data.error || `Could not install ${data.package}`, 'danger-subtle')
+                return false
+            } finally {
+                installing.value = false
+            }
+        }
+
         async function test() {
             testing.value = true
             testResult.value = null
             try {
-                const { data } = await post('/ai/admin/providers/test', body())
+                let { data } = await post('/ai/admin/providers/test', body())
+                if (await installSdkIfNeeded(data, form.value.kind)) {
+                    ({ data } = await post('/ai/admin/providers/test', body()))
+                }
                 testResult.value = data.success ? { success: true, models: data.models || [] }
                                                 : { success: false, error: data.error || 'Connection failed.' }
                 if (data.provider) refresh()   // result recorded on the saved provider
@@ -574,7 +601,10 @@ export default {
         async function testSaved(p) {
             testingId.value = p.id
             try {
-                const { data } = await post(`/ai/admin/providers/${p.id}/test`)
+                let { data } = await post(`/ai/admin/providers/${p.id}/test`)
+                if (await installSdkIfNeeded(data, p.kind)) {
+                    ({ data } = await post(`/ai/admin/providers/${p.id}/test`))
+                }
                 if (data.success) create_message(`"${p.name}" reachable — ${(data.models || []).length} model(s)`, 'success-subtle')
                 else create_message(`"${p.name}": ${data.error || 'test failed'}`, 'danger-subtle')
                 refresh()
@@ -595,7 +625,7 @@ export default {
 
         return {
             loading, loadError, modalEl, tableRef, fetchUrl, columns, kindFilter, testFilter, testingId, fmtDate,
-            testSaved, budgets, budgetLoading, loadBudget, fmtUsd, budgetLevel, budgetTitle, saving, testing, activating, kinds, canEdit, form, testResult,
+            testSaved, installing, budgets, budgetLoading, loadBudget, fmtUsd, budgetLevel, budgetTitle, saving, testing, activating, kinds, canEdit, form, testResult,
             kindLabel, kindIcon, formIsExternal, blockedByConsent, externalHost, urlChanged, testedModels,
             suggest, tabFill, startCreate, startEdit, cancel, onKindChange, test, save, activate, remove,
         }
