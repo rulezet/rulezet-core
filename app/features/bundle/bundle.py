@@ -1837,10 +1837,11 @@ def update_bundle_from_structure():
     bundle_id = request.args.get("id", type=int)
     if not bundle_id:
         return {"message": "No bundle id provided", "toast_class": "danger-subtle"}, 400
-    if not current_user.is_admin():
-        return {"message": "You don't have the permission to do that !", "toast_class": "danger-subtle"}, 403
-    if not BundleModel.get_bundle_by_id(bundle_id):
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle:
         return {"message": "Bundle not found", "toast_class": "danger-subtle"}, 404
+    if not _is_bundle_manager(bundle):
+        return {"message": "You don't have the permission to do that !", "toast_class": "danger-subtle"}, 403
    # take all the rule associate to ths bundle and create a structure with BundleNode (create one folder and put all the rule id in there)
     success, msg = BundleModel.update_bundle_from_rule_id_into_structure(bundle_id)
 
