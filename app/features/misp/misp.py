@@ -11,7 +11,9 @@ from flask_login import current_user
 
 import app.features.misp.misp_connector_core as MispModel
 from app.core.utils.activity_log import log_activity
-from app.core.utils.utils import json_object
+from app.core.utils.utils import as_db_id, json_object
+from app.features.bundle import bundle_core as BundleModel
+from app.features.rule import rule_core as RuleModel
 
 misp_blueprint = Blueprint(
     'misp',
@@ -161,20 +163,28 @@ def test_server(server_uuid):
 
 @misp_blueprint.route('/push', methods=['POST'])
 def push_rule():
-    data        = request.get_json() or {}
-    rule_id     = data.get('rule_id')
-    bundle_id   = data.get('bundle_id')
+    data        = json_object()
+    raw_rule    = data.get('rule_id')
+    raw_bundle  = data.get('bundle_id')
     server_uuid = data.get('server_uuid')
     push_type   = data.get('push_type', 'object')
 
-    if not server_uuid or (not rule_id and not bundle_id):
+    if not isinstance(server_uuid, str) or not server_uuid or (raw_rule is None and raw_bundle is None):
         return jsonify({'success': False, 'error': 'rule_id or bundle_id, and server_uuid are required.'}), 400
-    if rule_id and bundle_id:
+    if raw_rule is not None and raw_bundle is not None:
         return jsonify({'success': False, 'error': 'Provide either rule_id or bundle_id, not both.'}), 400
-    if push_type not in ('object', 'event'):
+    if not isinstance(push_type, str) or push_type not in ('object', 'event'):
         return jsonify({'success': False, 'error': "push_type must be 'object' or 'event'."}), 400
-    if bundle_id and push_type != 'event':
+    if raw_bundle is not None and push_type != 'event':
         return jsonify({'success': False, 'error': "A bundle can only be pushed as an 'event'."}), 400
+
+    rule_id, bundle_id = as_db_id(raw_rule), as_db_id(raw_bundle)
+    if rule_id is None and bundle_id is None:
+        return jsonify({'success': False, 'error': 'Invalid rule_id or bundle_id.'}), 400
+    if rule_id is not None and not RuleModel.get_rule(rule_id):
+        return jsonify({'success': False, 'error': 'Rule not found.'}), 404
+    if bundle_id is not None and not BundleModel.get_bundle_by_id(bundle_id):
+        return jsonify({'success': False, 'error': 'Bundle not found.'}), 404
 
     server = MispModel.get_server_by_uuid(server_uuid)
     if not server:
