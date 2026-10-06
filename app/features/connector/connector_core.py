@@ -199,7 +199,7 @@ def delete_connector(connector: Connector) -> bool:
         db.session.delete(connector)
         db.session.commit()
         log_activity('connector.delete', f"Deleted connector '{name}'",
-                     extra={'connector_uuid': cuuid})
+                     target_type='connector', target_id=cid, target_uuid=cuuid)
         return True
     except Exception as e:
         db.session.rollback()

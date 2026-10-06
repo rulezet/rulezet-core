@@ -10,7 +10,6 @@ from flask import Blueprint, abort, jsonify, redirect, render_template, request,
 from flask_login import current_user, login_required
 
 import app.features.connector.connector_core as ConnectorModel
-from app.core.utils.activity_log import log_activity
 
 connector_blueprint = Blueprint(
     'connector',
@@ -88,8 +87,6 @@ def create_connector():
     if not connector:
         return jsonify({'success': False, 'error': 'Could not create connector.'}), 500
 
-    log_activity('connector.create', f"Created connector '{connector.name}' ({connector.instance_url})",
-                 target_type='connector', target_id=connector.id, target_uuid=connector.uuid)
     return jsonify({'success': True, 'connector': connector.to_json()}), 200
 
 
@@ -108,9 +105,6 @@ def update_connector(connector_uuid):
         if _pu.scheme not in ('http', 'https') or not _pu.netloc:
             return jsonify({'success': False, 'error': 'URL must start with http:// or https://'}), 400
     ok = ConnectorModel.update_connector(connector, data)
-    if ok:
-        log_activity('connector.update', f"Updated connector '{connector.name}'",
-                     target_type='connector', target_id=connector.id, target_uuid=connector.uuid)
     return jsonify({'success': ok}), 200 if ok else 500
 
 
@@ -122,11 +116,7 @@ def delete_connector(connector_uuid):
     if connector.is_system:
         return jsonify({'success': False, 'error': 'System connectors cannot be deleted.'}), 403
 
-    name, conn_id = connector.name, connector.id
     ok = ConnectorModel.delete_connector(connector)
-    if ok:
-        log_activity('connector.delete', f"Deleted connector '{name}'",
-                     target_type='connector', target_id=conn_id, target_uuid=connector_uuid)
     return jsonify({'success': ok}), 200 if ok else 500
 
 
@@ -139,9 +129,6 @@ def test_connector(connector_uuid):
         return jsonify({'success': False, 'error': 'Not found.'}), 404
 
     ok, msg, stats = ConnectorModel.test_connector(connector)
-    if ok:
-        log_activity('connector.test_ok', f"Connection test passed for '{connector.name}'",
-                     target_type='connector', target_id=connector.id, target_uuid=connector.uuid)
     return jsonify({'success': ok, 'message': msg, 'stats': stats}), 200
 
 
@@ -226,8 +213,6 @@ def pull_connector(connector_uuid):
         return jsonify({'success': False, 'error': 'Could not queue pull job.'}), 500
 
     what = ' + '.join(filter(None, ['rules' if sync_rules else '', 'bundles' if sync_bundles else '']))
-    log_activity('connector.pull_triggered', f"Triggered pull ({what}) from connector '{connector.name}'",
-                 target_type='connector', target_id=connector.id, target_uuid=connector.uuid)
     return jsonify({
         'success': True,
         'message': f'Pull queued ({what}) as background job.',
