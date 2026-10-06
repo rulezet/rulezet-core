@@ -2084,7 +2084,11 @@ def get_vulnerabilities(target_type, target_id):
         item = BundleModel.get_bundle_by_id(target_id)
     else:
         return jsonify({"message": "Invalid target type", "vulnerability_identifiers": []}), 400
-        
+    if not item:
+        return jsonify({"message": "Bundle not found", "vulnerability_identifiers": []}), 404
+    if not BundleModel.can_view_bundle(item):
+        return jsonify({"message": "Access denied", "vulnerability_identifiers": []}), 403
+
     return jsonify(item.to_json().get('vulnerability_identifiers', []))
 
 
