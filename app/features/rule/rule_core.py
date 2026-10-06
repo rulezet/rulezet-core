@@ -1793,6 +1793,104 @@ def get_all_rules_edit_propose_page(page, rule_id) -> RuleEditProposal:
         RuleEditProposal.rule_id == rule_id,
         Rule.is_deleted == False,
     ).paginate(page=page, per_page=20, max_per_page=20)
+PROPOSAL_THREADS_PER_PAGE = 10
+
+
+def _proposal_time(proposal):
+    """A proposal's timestamp, comparable whether it was stored naive or aware."""
+    ts = proposal.timestamp or datetime.datetime.min
+    return ts.replace(tzinfo=None)
+
+
+PROPOSAL_THREAD_STATUSES = ("open", "accepted", "closed")
+PROPOSAL_THREAD_SORTS = ("recent", "oldest", "versions")
+
+
+def _thread_matches(thread, *, status=None, edit_type=None, q=None):
+    """Filters of the Proposals page — a thread matches when it has the
+    status, and when one of its proposals has the edit type / the text
+    (in its justification, its author's name or its #id)."""
+    if status and thread["status"] != status:
+        return False
+    proposals = [p for p, _, _ in thread["proposals"]]
+    if edit_type and not any((p.edit_type or "other") == edit_type for p in proposals):
+        return False
+    if q:
+        needle = q.lower().lstrip("#")
+        def text(p):
+            author = f"{p.user.first_name} {p.user.last_name}" if p.user else ""
+            return f"{p.id} {p.message or ''} {author}".lower()
+        if not any(needle in text(p) for p in proposals):
+            return False
+    return True
+
+
+def get_proposal_threads(rule_id, page=1, per_page=PROPOSAL_THREADS_PER_PAGE,
+                         status=None, edit_type=None, q=None, sort="recent"):
+    """The edit proposals of an active rule grouped into threads.
+
+    A thread is a first proposal plus every revision made from it (and from
+    those revisions — revisions can branch). Within a thread the proposals
+    come in reading order: depth-first, oldest revision first, each with its
+    version number (v1 = the first proposal, then by date) and its depth.
+    Threads are filtered (see _thread_matches), sorted — latest activity
+    first ("recent", the default), first proposal first ("oldest") or most
+    versions first ("versions") — and paginated (a thread is never split
+    across pages).
+
+    Returns (threads of the page, total_pages, number of matching threads,
+    {status: number of threads} before filtering); each thread is a dict
+    {root, proposals: [(proposal, depth, version)], last_activity, status},
+    status being "accepted" (a version was merged), "open" (one still
+    pending) or "closed".
+    """
+    rule = _active().filter(Rule.id == rule_id).first()
+    if not rule:
+        return [], 0, 0, {s: 0 for s in PROPOSAL_THREAD_STATUSES}
+    proposals = RuleEditProposal.query.filter_by(rule_id=rule_id).all()
+    by_id = {p.id: p for p in proposals}
+    children = {}
+    roots = []
+    for p in proposals:
+        # A revision whose parent is gone (or belongs to another rule) starts its own thread
+        if p.previous_proposal_id in by_id and p.previous_proposal_id != p.id:
+            children.setdefault(p.previous_proposal_id, []).append(p)
+        else:
+            roots.append(p)
+
+    threads = []
+    for root in roots:
+        ordered, stack, seen = [], [(root, 0)], set()
+        while stack:
+            node, depth = stack.pop()
+            if node.id in seen:          # never loop on corrupted links
+                continue
+            seen.add(node.id)
+            ordered.append((node, depth))
+            for child in sorted(children.get(node.id, []), key=_proposal_time, reverse=True):
+                stack.append((child, depth + 1))
+        versions = {p.id: n for n, p in enumerate(sorted((p for p, _ in ordered), key=_proposal_time), start=1)}
+        statuses = {p.status for p, _ in ordered}
+        threads.append({
+            "root": root,
+            "proposals": [(p, depth, versions[p.id]) for p, depth in ordered],
+            "last_activity": max(_proposal_time(p) for p, _ in ordered),
+            "status": "accepted" if "accepted" in statuses else "open" if "pending" in statuses else "closed",
+        })
+
+    counts = {s: sum(t["status"] == s for t in threads) for s in PROPOSAL_THREAD_STATUSES}
+    threads = [t for t in threads if _thread_matches(t, status=status, edit_type=edit_type, q=q)]
+    if sort == "oldest":
+        threads.sort(key=lambda t: _proposal_time(t["root"]))
+    elif sort == "versions":
+        threads.sort(key=lambda t: (len(t["proposals"]), t["last_activity"]), reverse=True)
+    else:
+        threads.sort(key=lambda t: t["last_activity"], reverse=True)
+    total_pages = max(1, -(-len(threads) // per_page))
+    page = min(max(page, 1), total_pages)
+    return threads[(page - 1) * per_page: page * per_page], total_pages, len(threads), counts
+
+
 def get_rule_proposal(id) -> RuleEditProposal:
     """Return the rule"""
     return RuleEditProposal.query.get(id)

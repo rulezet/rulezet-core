@@ -1989,6 +1989,45 @@ def get_rules_propose_page() -> jsonify:
         })
     return jsonify({"message": "No Rule"})
 
+@rule_blueprint.route("/get_proposal_threads", methods=['GET'])
+def get_proposal_threads() -> jsonify:
+    """The edit proposals of a rule, grouped into threads (a proposal and its
+    revisions, in order) — see RuleModel.get_proposal_threads."""
+    from app.core.utils.utils import as_db_id
+    rule_id = as_db_id(request.args.get('rule_id'))
+    page = as_db_id(request.args.get('page')) or 1
+    if not rule_id:
+        return jsonify({"message": "A valid rule_id is required"}), 400
+    if not RuleModel.get_rule(rule_id):
+        return jsonify({"message": "Rule not found"}), 404
+
+    status = request.args.get('status') or None
+    sort = request.args.get('sort') or "recent"
+    edit_type = (request.args.get('edit_type') or '').strip()[:50] or None
+    q = (request.args.get('q') or '').strip()[:200] or None
+    if status is not None and status not in RuleModel.PROPOSAL_THREAD_STATUSES:
+        return jsonify({"message": f"status must be one of {', '.join(RuleModel.PROPOSAL_THREAD_STATUSES)}"}), 400
+    if sort not in RuleModel.PROPOSAL_THREAD_SORTS:
+        return jsonify({"message": f"sort must be one of {', '.join(RuleModel.PROPOSAL_THREAD_SORTS)}"}), 400
+
+    threads, total_pages, total_threads, status_counts = RuleModel.get_proposal_threads(
+        rule_id, page, status=status, edit_type=edit_type, q=q, sort=sort)
+    return jsonify({
+        "threads": [{
+            "id": t["root"].id,
+            "status": t["status"],
+            "last_activity": t["last_activity"].isoformat(),
+            "proposals": [{**p.to_json(), "depth": depth, "version": version}
+                          for p, depth, version in t["proposals"]],
+        } for t in threads],
+        "page": min(page, total_pages),
+        "total_pages": total_pages,
+        "total_proposals": _rule_proposal_count(rule_id),
+        "total_threads": total_threads,
+        "status_counts": status_counts,
+    })
+
+
 @rule_blueprint.route('/propose_edit/<int:rule_id>', methods=['POST'])
 @login_required
 def propose_edit(rule_id) -> redirect:
