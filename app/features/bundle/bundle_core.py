@@ -1512,7 +1512,9 @@ def get_paginated_rules_info_by_bundle(bundle_id: int, page: int):
     Returns a pagination object containing combined info for rules in a bundle.
     """
 
-    query = BundleRuleAssociation.query.filter_by(bundle_id=bundle_id)
+    query = (BundleRuleAssociation.query.filter_by(bundle_id=bundle_id)
+             .join(Rule, Rule.id == BundleRuleAssociation.rule_id)
+             .filter(Rule.is_deleted == False))
     
 
     pagination = query.paginate(page=page, per_page=20, error_out=False)
