@@ -115,7 +115,10 @@ def search_techniques(q: str, limit: int = 20) -> list:
 def get_all_techniques(tactic: str = None) -> list:
     q = AttackTechnique.query.filter(~AttackTechnique.deprecated)
     if tactic:
-        q = q.filter(AttackTechnique.tactic_keys.contains([tactic]))
+        # tactic_keys is a JSON list: match the quoted key in its text form
+        # (works on PostgreSQL JSON and SQLite alike, any position in the list).
+        from sqlalchemy import cast, Text
+        q = q.filter(cast(AttackTechnique.tactic_keys, Text).like(f'%"{tactic}"%'))
     return [t.to_json() for t in q.order_by(AttackTechnique.technique_id).all()]
 
 
