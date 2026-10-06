@@ -79,17 +79,19 @@ def techniques_usage():
 
 @attack_blueprint.route('/rule/<int:rule_id>')
 def get_rule_techniques(rule_id):
+    from app.features.rule import rule_core as RuleModel
+    if not RuleModel.get_rule(rule_id):
+        return jsonify({'error': 'Rule not found'}), 404
     return jsonify(AttackModel.get_techniques_for_rule(rule_id))
 
 
 @attack_blueprint.route('/rule/<int:rule_id>/add', methods=['POST'])
 @login_required
 def add_to_rule(rule_id):
-    from ...core.db_class.db import Rule
     from app.core.utils.activity_log import log_activity
     from app.features.rule import rule_core as RuleModel
-    rule = Rule.query.get(rule_id)
-    if not rule or rule.is_deleted:
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
         return jsonify({'error': 'Rule not found'}), 404
     is_owner_or_admin = rule.user_id == current_user.id or current_user.is_admin()
     if not is_owner_or_admin and not current_user.has_permission('rule.tag_any'):
@@ -126,11 +128,10 @@ def add_to_rule(rule_id):
 @attack_blueprint.route('/rule/<int:rule_id>/remove/<technique_id>', methods=['DELETE'])
 @login_required
 def remove_from_rule(rule_id, technique_id):
-    from ...core.db_class.db import Rule
     from app.core.utils.activity_log import log_activity
     from app.features.rule import rule_core as RuleModel
-    rule = Rule.query.get(rule_id)
-    if not rule or rule.is_deleted:
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
         return jsonify({'error': 'Rule not found'}), 404
     is_owner_or_admin = rule.user_id == current_user.id or current_user.is_admin()
     if not is_owner_or_admin and not current_user.has_permission('rule.tag_any'):
