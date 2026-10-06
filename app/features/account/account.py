@@ -631,8 +631,8 @@ def add_user() -> redirect:
 @account_blueprint.route('/favorite')
 @login_required
 def favorite() -> render_template:
-    """Favorite page"""
-    return render_template("account/favorite_user.html")
+    """Favorites now live in the "Favorites" tab of the "My rules" page."""
+    return redirect("/rule/owner_rules")
 
 @account_blueprint.route("/profil")
 @login_required
