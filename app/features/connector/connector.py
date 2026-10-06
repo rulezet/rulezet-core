@@ -4,7 +4,7 @@ All DB logic lives in connector_core.py.
 Access is restricted to admin users only.
 """
 
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from flask import Blueprint, abort, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -222,16 +222,18 @@ def preview_connector(connector_uuid):
         headers['X-API-KEY'] = connector.api_key_outbound
     try:
         resp = http_requests.get(
-            f"{connector.instance_url}/api/sync/rules?cve={cve}&count_only=true",
+            f"{connector.instance_url}/api/sync/rules?cve={quote(cve, safe=',')}&count_only=true",
             headers=headers, timeout=10,
         )
-        if resp.status_code == 200:
-            data  = resp.json()
-            count = data.get('count', data.get('total', 0))
-            return jsonify({'success': True, 'count': count, 'cve': cve}), 200
-        return jsonify({'success': False, 'error': f'Remote returned HTTP {resp.status_code}'}), 502
+        if resp.status_code != 200:
+            return jsonify({'success': False, 'error': f'Remote returned HTTP {resp.status_code}'}), 502
+        data  = resp.json()
+        count = data.get('count', data.get('total', 0)) if isinstance(data, dict) else None
+        if isinstance(count, bool) or not isinstance(count, int):
+            return jsonify({'success': False, 'error': 'The remote answered something that is not a rule count.'}), 502
+        return jsonify({'success': True, 'count': count, 'cve': cve}), 200
     except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({'success': False, 'error': f'Could not reach the remote: {exc}'}), 502
 
 
 # Pull filters, in the shape the connector_pull job reads them
