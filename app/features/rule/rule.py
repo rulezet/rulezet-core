@@ -745,6 +745,7 @@ def get_rules_page_history()-> render_template:
 #################
 
 @rule_blueprint.route("/get_rules_page_owner", methods=['GET'])
+@login_required
 def get_rules_page_owner() -> jsonify:
     """Get all the rule of the user"""
     page = request.args.get('page', 1, type=int)
@@ -761,6 +762,7 @@ def get_rules_page_owner() -> jsonify:
     return {"message": "No Rule"}, 400
 
 @rule_blueprint.route("/get_my_rules_page_filter", methods=['GET'])
+@login_required
 def get_rules_page_filter_owner() -> jsonify:
     """Get all the rules of the current user with filter"""
     page = int(request.args.get("page", 1))
@@ -789,6 +791,7 @@ def get_rules_page_filter_owner() -> jsonify:
     }), 200
 
 @rule_blueprint.route("/get_my_rules_page_filter_github", methods=['GET'])
+@login_required
 def get_my_rules_page_filter_github() -> jsonify:
     """Get all the rules of the current user with filter"""
     page = int(request.args.get("page", 1))

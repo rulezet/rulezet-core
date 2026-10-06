@@ -1147,16 +1147,16 @@ def get_rules() -> Rule:
     """Get all the rules"""
     return Rule.query.all()
 def get_rules_page(page) -> Rule:
-    """Return all rules by page"""
-    return Rule.query.paginate(page=page, per_page=20, max_per_page=20)
+    """Return all active rules by page"""
+    return _active().paginate(page=page, per_page=20, max_per_page=20)
 
 def get_rules_of_user_with_id(user_id) -> Rule:
     """Get all the rule made by the user (with id)"""
     return Rule.query.filter(Rule.user_id == user_id).all()
 
 def get_rules_of_user_with_id_page(user_id, page, search, sort_by, rule_type) -> Rule:
-    """Get all the page rule made by the user (with id)"""
-    query = Rule.query.filter(Rule.user_id == user_id)
+    """Get all the page rule made by the user (with id) — active rules only"""
+    query = _active().filter(Rule.user_id == user_id)
 
     if search:
         search_lower = f"%{search.lower()}%"
@@ -1463,11 +1463,11 @@ def get_all_rule_sources_by_user():
 
 def get_rules_page_owner(page) -> Rule:
     """Return all owner rules by page where the user_id matches the current logged-in user"""
-    return Rule.query.filter_by(user_id=current_user.id).paginate(page=page, per_page=30, max_per_page=30)
+    return _active().filter_by(user_id=current_user.id).paginate(page=page, per_page=30, max_per_page=30)
 
 def get_total_rules_count_owner() -> int:
-    """Return the total count of rules created by the current logged-in user"""
-    return Rule.query.filter_by(user_id=current_user.id).count()
+    """Return the total count of active rules created by the current logged-in user"""
+    return _active().filter_by(user_id=current_user.id).count()
 
 def give_all_right_to_admin(rules) -> None:
     """give all right for admin for each rule"""
