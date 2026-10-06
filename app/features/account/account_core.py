@@ -579,8 +579,8 @@ def search_users_lite(query: str, limit: int = 5, exclude_id: int = None) -> lis
     return results
 
 def get_user_rules(user_id: int) -> list:
-    """Return all rules created by the user."""
-    return Rule.query.filter_by(user_id=user_id).all()
+    """Return all the user's rules, trashed ones excluded."""
+    return RuleModel._active().filter_by(user_id=user_id).all()
 
 def get_user_votes_summary(user_id: int) -> dict:
     """

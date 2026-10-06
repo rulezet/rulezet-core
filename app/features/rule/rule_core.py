@@ -1194,7 +1194,7 @@ def get_rule(id, include_deleted=False) -> Rule:
 
 def get_rule_type_count(user_id):
     """Return JSON of the different rule types and total"""
-    rules = Rule.query.filter_by(user_id=user_id).all()
+    rules = _active().filter_by(user_id=user_id).all()
     if not rules:
         return jsonify({
             "total": 0,
@@ -1508,7 +1508,7 @@ def get_rules_page_favorite(page, id_user, search=None, author=None, sort_by=Non
     """Get paginated favorite rules of a user with optional filters"""
 
     # Base query: select favorite rules for the user
-    query = Rule.query\
+    query = _active()\
         .join(RuleFavoriteUser, Rule.id == RuleFavoriteUser.rule_id)\
         .filter(RuleFavoriteUser.user_id == id_user)
 
