@@ -132,7 +132,7 @@ def edit(bundle_id) :
     if not bundle:
         return render_template("404.html"), 404
     if current_user.id == bundle.user_id or current_user.is_admin():
-        form = EditBundleForm(bundle_id=bundle_id)
+        form = EditBundleForm(bundle_id=bundle_id, owner_id=bundle.user_id)
         if form.validate_on_submit():
             form_dict = form_to_dict(form)
             v_data = request.form.get('vulnerabilities')
@@ -2237,6 +2237,10 @@ def add_single_rule_to_bundle():
             "id": bundle.id,
             "rule_ids": [rule_id]
         }, 200
+
+    if BundleModel.bundle_name_taken(new_bundle_name, current_user.id):
+        return {"success": False, "message": "You already have a bundle with this name",
+                "toast_class": "danger-subtle"}, 409
 
     form_dict = {
         "name": new_bundle_name,

@@ -5967,6 +5967,8 @@ def bundle_from_filters():
             if bundle.user_id != current_user.id and not current_user.is_admin():
                 return jsonify({"message": "You don't have permission to edit this bundle"}), 403
         else:
+            if BundleModel.bundle_name_taken(data.get('new_bundle_name'), current_user.id):
+                return jsonify({"message": "You already have a bundle with this name"}), 409
             dict_form = {
                 "name": data.get('new_bundle_name'),
                 "description": data.get('new_bundle_description'),

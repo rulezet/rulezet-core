@@ -21,6 +21,15 @@ CRUD operations for Bundle model.
 - delete_bundle: Delete a bundle by ID.
 """
 
+def bundle_name_taken(name, user_id, exclude_id=None) -> bool:
+    """A bundle name is unique per user: does `user_id` already own a bundle
+    called `name` (other than `exclude_id`, the bundle being renamed)?"""
+    query = Bundle.query.filter_by(name=name, user_id=user_id)
+    if exclude_id:
+        query = query.filter(Bundle.id != exclude_id)
+    return db.session.query(query.exists()).scalar()
+
+
 def create_bundle(form_dict , user) -> Bundle:
     """
     Create a new Bundle.

@@ -201,6 +201,9 @@ class CreateBundle(Resource):
         if missing_rules:
             return {"message": "Invalid bundle", "error": "Rule(s) not found", "missing_rules": missing_rules}, 400
 
+        if BundleModel.bundle_name_taken(name, user.id):
+            return {"message": "Invalid bundle", "error": "You already have a bundle with this name"}, 409
+
         # --- Create bundle ---
         my_bundle = BundleModel.create_bundle(
             {"name": name, "description": description, "public": public,
@@ -638,6 +641,9 @@ class EditBundle(Resource):
                 return {"success": False, "message": "'name' must be a non-empty string of at most 255 characters",
                         "toast_class": "danger"}, 400
             changes["name"] = data["name"].strip()
+            if BundleModel.bundle_name_taken(changes["name"], bundle.user_id, exclude_id=bundle.id):
+                return {"success": False, "message": "The owner already has a bundle with this name",
+                        "toast_class": "danger"}, 409
         if "description" in data:
             if data["description"] is not None and not isinstance(data["description"], str):
                 return {"success": False, "message": "'description' must be a string", "toast_class": "danger"}, 400

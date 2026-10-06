@@ -542,6 +542,9 @@ def _create_bundle(user, params: dict) -> dict:
     if not name:
         return {"success": False, "reply": "What should the bundle be called?"}
 
+    if BundleModel.bundle_name_taken(name, user.id):
+        return {"success": False, "reply": f"You already have a bundle called \"{name}\" — pick another name."}
+
     form_dict = {"name": name, "description": params.get('description') or ''}
     bundle = BundleModel.create_bundle(form_dict, user)
     return {"success": True, "reply": f"Done — created bundle \"{name}\".", "link": f"/bundle/detail/{bundle.id}"}
