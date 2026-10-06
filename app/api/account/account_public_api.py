@@ -2,7 +2,7 @@
 #                                               PUBLIC ENDPOINT                                                       #
 # ------------------------------------------------------------------------------------------------------------------- #
 from flask_restx import Namespace, Resource
-from flask import request
+from flask import current_app, request
 from wtforms.validators import Email, ValidationError
 
 
@@ -30,6 +30,8 @@ class Register(Resource):
         'last_name': 'Last name'
     })
     def post(self):
+        if not current_app.config.get("SIGN_UP_ENABLED"):
+            return {"message": "Sign-up is disabled on this instance"}, 404
         data = request.get_json(silent=True)
         if not data:
             data = request.args.to_dict()
