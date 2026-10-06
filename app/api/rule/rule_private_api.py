@@ -256,7 +256,7 @@ class DeleteRule(Resource):
 
         # Permission check: owner or admin
         if user.id == rule_owner_id or user.is_admin():
-            success = RuleModel.delete_rule_core(rule_id)
+            success = RuleModel.delete_rule_core(rule_id, user_id=user.id)
             if success:
                 log_activity(
                     "rule.delete",
