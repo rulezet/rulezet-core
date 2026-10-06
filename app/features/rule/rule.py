@@ -2714,42 +2714,40 @@ def changes_decision() -> jsonify:
     if not rule_:
         return jsonify({"success": False, "message": "Rule not found", "toast_class": "danger-subtle"}), 404
 
-    if _is_github_manager() or rule_.user_id == current_user.id:
-        # change all the RuleStatue from Update with this same rule_id
-        succ = RuleModel.update_all_updater_status(history_id, history.message)
-        if not succ:
-            return jsonify({"success": False, "message": "Failled to update updater status", "toast_class": "danger-subtle"}), 500
-        if decision == 'accepted':
-            rule = RuleModel.get_rule(history.rule_id)
+    if not (_is_github_manager() or rule_.user_id == current_user.id):
+        return jsonify({"success": False, "message": "Access denied", "toast_class": "danger-subtle"}), 403
+    if decision not in ('accepted', 'rejected'):
+        return jsonify({"success": False, "message": "Unknown decision", "toast_class": "danger-subtle"}), 400
 
-            # verify if the rule has a good syntaxe
-            if not rule:
-                return jsonify({"success": False, "message": "Rule not found", "toast_class": "danger-subtle"}), 404
-            
-            if rule:
-                # is the rule with a good syntaxe ?
-                valide = RuleModel.verify_rule_syntaxe(rule , history.new_content)
-                if not valide.ok:
-                    history.message = "rejected"
-                    return jsonify({"success": True, "message": "Rule content rejected because Invalide syntax !", "toast_class": "warning-subtle"}), 200
-                else:
-                    rule.to_string = history.new_content
-                    history.message = "accepted"
-                    try:
-                        from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
-                        recompute_rule_quality_score(rule)
-                    except Exception:
-                        pass
-                    return jsonify({"success": True, "message": "Rule content modified !", "toast_class": "success-subtle"}), 200
+    # Check the new content BEFORE recording anything: an update that no
+    # longer validates is a rejection, never an "accepted" that left the
+    # rule unchanged.
+    if decision == 'accepted':
+        valide = RuleModel.verify_rule_syntaxe(rule_, history.new_content) if history.new_content else None
+        if not valide or not valide.ok:
+            decision = 'rejected_invalid'
 
-            return jsonify({"success": False, "message": "Rule not found", "toast_class": "danger-subtle"}), 404
-        if decision == 'rejected':
-            rule = RuleModel.get_rule(history.rule_id)
-            if rule:
-                history.message = "rejected"
-        return jsonify({"success": True, "message": "No change for the rule !", "toast_class": "success-subtle"}), 200
-    else:
-       return jsonify({"success": False, "message": "Access denied", "toast_class": "danger-subtle"}), 403
+    # change all the RuleStatus of every update check for this rule
+    succ = RuleModel.update_all_updater_status(history_id, history.message)
+    if not succ:
+        return jsonify({"success": False, "message": "Failled to update updater status", "toast_class": "danger-subtle"}), 500
+
+    if decision == 'accepted':
+        rule_.to_string = history.new_content
+        history.message = "accepted"
+        db.session.commit()
+        try:
+            from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
+            recompute_rule_quality_score(rule_)
+        except Exception:
+            pass
+        return jsonify({"success": True, "message": "Rule content modified !", "toast_class": "success-subtle"}), 200
+
+    history.message = "rejected"
+    db.session.commit()
+    if decision == 'rejected_invalid':
+        return jsonify({"success": True, "message": "Rule content rejected because Invalide syntax !", "toast_class": "warning-subtle"}), 200
+    return jsonify({"success": True, "message": "No change for the rule !", "toast_class": "success-subtle"}), 200
 
 ##################################
 #   CHoose changes in diff page  #
