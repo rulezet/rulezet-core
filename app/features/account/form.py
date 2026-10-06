@@ -7,8 +7,20 @@ from wtforms.fields import (
     BooleanField, PasswordField, StringField,
     SubmitField, EmailField, TextAreaField
 )
-from wtforms.validators import Email, EqualTo, InputRequired, Length, Regexp, Optional, URL
+from urllib.parse import urlparse
+
+from wtforms.validators import DataRequired, Email, EqualTo, InputRequired, Length, Regexp, Optional, URL
 from ...core.db_class.db import User
+
+
+def web_address(form, field):
+    """A profile link is shown to every visitor as a clickable link: only a
+    real http(s) address, never javascript:, data: or anything else."""
+    if not field.data:
+        return
+    parsed = urlparse(field.data)
+    if parsed.scheme.lower() not in ('http', 'https') or not parsed.netloc or field.data != field.data.strip():
+        raise ValidationError('Please enter a web address starting with http:// or https://.')
 
 
 class LoginForm(FlaskForm):
@@ -21,9 +33,9 @@ class LoginForm(FlaskForm):
 
 class EditUserForm(FlaskForm):
     """Edit form to change user's information"""
-    first_name = StringField('First name', validators=[InputRequired()])
-    last_name = StringField('Last name', validators=[InputRequired()])
-    email = EmailField('Email', validators=[InputRequired(), Email()])
+    first_name = StringField('First name', validators=[DataRequired(), Length(max=64)])
+    last_name = StringField('Last name', validators=[DataRequired(), Length(max=64)])
+    email = EmailField('Email', validators=[InputRequired(), Email(), Length(max=64)])
     change_password = BooleanField('Change password')
     password = PasswordField('New Password', validators=[Optional()])
     password2 = PasswordField('Confirm password', validators=[Optional()])
@@ -54,15 +66,15 @@ class EditUserForm(FlaskForm):
     )
     website_url = StringField(
         'Website',
-        validators=[Optional(), Length(max=256)]
+        validators=[Optional(), Length(max=256), web_address]
     )
     github_url = StringField(
         'GitHub',
-        validators=[Optional(), Length(max=256)]
+        validators=[Optional(), Length(max=256), web_address]
     )
     twitter_url = StringField(
         'Twitter / X',
-        validators=[Optional(), Length(max=256)]
+        validators=[Optional(), Length(max=256), web_address]
     )
     # --- END NEW FIELDS ---
 
@@ -107,9 +119,10 @@ class EditUserForm(FlaskForm):
 
 class AddNewUserForm(FlaskForm):
     """Creation form to create a user"""
-    first_name = StringField('First name', validators=[InputRequired()])
-    last_name = StringField('Last name', validators=[InputRequired()])
-    email = StringField('Email', validators=[InputRequired(), Email(message="Please enter a valid email address.")])
+    first_name = StringField('First name', validators=[DataRequired(), Length(max=64)])
+    last_name = StringField('Last name', validators=[DataRequired(), Length(max=64)])
+    email = StringField('Email', validators=[InputRequired(), Email(message="Please enter a valid email address."),
+                                             Length(max=64)])
     password = PasswordField(
         'Password',
         validators=[
