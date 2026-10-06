@@ -984,15 +984,15 @@ def add_rule_bundle() :
     if not bundle:
         return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 404
     if current_user.id == bundle.user_id or current_user.is_admin():
-        if rule_id and bundle_id:
-            success_ = BundleModel.add_rule_to_bundle(bundle_id , rule_id , description)
-            if success_:
-                return {"success": True, 
-                        "message": "Rule added  !", 
-                        "toast_class" : "success"}, 200
+        if not rule_id:
+            return {"success": False, "message": "Missing rule id", "toast_class": "danger"}, 400
+        if BundleModel.add_rule_to_bundle(bundle_id , rule_id , description):
+            return {"success": True, 
+                    "message": "Rule added  !", 
+                    "toast_class" : "success"}, 200
         return {"success": False, 
-                    "message": "error no rule or bundle found  !", 
-                    "toast_class" : "danger"}, 500
+                    "message": "Rule not found", 
+                    "toast_class" : "danger"}, 404
     return {"success": False, 
             "message": "You don't have the permission to do that !", 
             "toast_class" : "danger"}, 403
@@ -1044,15 +1044,15 @@ def remove() :
     if not bundle:
         return {"success": False, "message": "Bundle not found", "toast_class": "danger-subtle"}, 404
     if current_user.id == bundle.user_id or current_user.is_admin():
-        if rule_id and bundle_id:
-            success_ = BundleModel.remove_rule_from_bundle(bundle_id , rule_id)
-            if success_:
-                return {"success": True, 
-                        "message": "Rule removed  !", 
-                        "toast_class" : "success"}, 200
+        if not rule_id:
+            return {"success": False, "message": "Missing rule id", "toast_class": "danger"}, 400
+        if BundleModel.remove_rule_from_bundle(bundle_id , rule_id):
+            return {"success": True, 
+                    "message": "Rule removed  !", 
+                    "toast_class" : "success"}, 200
         return {"success": False, 
-                    "message": "error no rule or bundle found  !", 
-                    "toast_class" : "danger"}, 500
+                    "message": "Rule not in this bundle", 
+                    "toast_class" : "danger"}, 404
     return {"success": False, 
             "message": "You don't have the permission to do that !", 
             "toast_class" : "danger"}, 403
