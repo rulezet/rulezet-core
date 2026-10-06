@@ -1928,12 +1928,11 @@ def set_status(proposal_id, status, reviewed_by_id=None) -> json:
 
 
 def update_proposal_message(proposal_id, new_message):
-    """Update the author justification message of a pending proposal."""
-    proposal = RuleEditProposal.query.get(proposal_id)
+    """Update (or, with an empty message, delete) the author justification of
+    a proposal — whatever its status: it is the author's text, not the edit."""
+    proposal = db.session.get(RuleEditProposal, proposal_id)
     if not proposal:
-        return {'success': False, 'message': 'Proposition non trouvée'}, 404
-    if proposal.status != 'pending':
-        return {'success': False, 'message': 'Cannot edit a decided proposal'}, 400
+        return {'success': False, 'message': 'Proposal not found'}, 404
     proposal.message = new_message
     db.session.commit()
     return {'success': True, 'message': proposal.message}, 200

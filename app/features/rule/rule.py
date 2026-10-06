@@ -2593,21 +2593,21 @@ def _build_proposal_system_events(proposal) -> list:
 @rule_blueprint.route('/edit_proposal_message/<int:proposal_id>', methods=['POST'])
 @login_required
 def edit_proposal_message(proposal_id) -> jsonify:
-    """Edit the author-justification message of a pending proposal (author or admin only)."""
+    """Edit the author's justification of a proposal (its author or an admin),
+    whatever the proposal's status."""
     from app.core.db_class.db import RuleEditProposal
+    from app.core.utils.utils import json_object
 
-    proposal = RuleEditProposal.query.get(proposal_id)
+    proposal = db.session.get(RuleEditProposal, proposal_id)
     if not proposal:
         return jsonify({"success": False, "message": "Proposal not found"}), 404
     if current_user.id != proposal.user_id and not current_user.is_admin():
         return jsonify({"success": False, "message": "Forbidden"}), 403
-    if proposal.status != 'pending':
-        return jsonify({"success": False, "message": "Cannot edit a decided proposal"}), 400
 
-    data = request.get_json(silent=True) or {}
-    new_message = (data.get('message') or '').strip()
-    if not new_message:
+    new_message = json_object().get('message')
+    if not isinstance(new_message, str) or not new_message.strip():
         return jsonify({"success": False, "message": "Justification cannot be empty"}), 400
+    new_message = new_message.strip()
 
     result, status_code = RuleModel.update_proposal_message(proposal_id, new_message)
     if not result.get('success'):
@@ -2621,6 +2621,30 @@ def edit_proposal_message(proposal_id) -> jsonify:
         is_public=False,
     )
 
+    return jsonify(result), status_code
+
+
+@rule_blueprint.route('/edit_proposal_message/<int:proposal_id>', methods=['DELETE'])
+@login_required
+def delete_proposal_message(proposal_id) -> jsonify:
+    """Delete the author's justification of a proposal (its author or an admin)."""
+    from app.core.db_class.db import RuleEditProposal
+
+    proposal = db.session.get(RuleEditProposal, proposal_id)
+    if not proposal:
+        return jsonify({"success": False, "message": "Proposal not found"}), 404
+    if current_user.id != proposal.user_id and not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    result, status_code = RuleModel.update_proposal_message(proposal_id, "")
+    if result.get('success'):
+        log_activity(
+            "proposal.message_deleted",
+            f"Deleted justification for proposal id={proposal_id}",
+            target_type="proposal", target_id=proposal_id,
+            extra={"rule_id": proposal.rule_id},
+            is_public=False,
+        )
     return jsonify(result), status_code
 
 

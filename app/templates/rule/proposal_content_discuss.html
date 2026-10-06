@@ -455,6 +455,13 @@
                                 type="button">
                             <i class="fa-solid fa-pen me-1"></i>Edit
                         </button>
+                        <button v-if="canEditMessage && proposal.message" class="btn btn-sm px-2 py-0 rounded-pill"
+                                style="font-size:.68rem;background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);"
+                                :disabled="savingMessage"
+                                @click="deleteMessage"
+                                type="button">
+                            <i class="fa-solid fa-trash me-1"></i>Delete
+                        </button>
                         <button v-if="proposal.message" class="btn btn-sm px-2 py-0 rounded-pill"
                                 style="font-size:.68rem;background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);"
                                 @click="showRawMessage = !showRawMessage"
@@ -608,9 +615,10 @@
             const editingMessage  = ref(false);
             const editMessageDraft = ref('');
             const savingMessage   = ref(false);
+            // The justification is the author's own text: they (or an admin)
+            // can edit or delete it whatever the proposal's status.
             const canEditMessage = computed(() =>
                 !!proposal.value &&
-                proposal.value.status === 'pending' &&
                 (CURRENT_USER_ID === proposal.value.user_id || IS_ADMIN)
             );
             const relatedProposals = computed(() => {
@@ -680,6 +688,30 @@
                     }
                 } catch (e) {
                     create_message('Error updating justification', 'danger-subtle');
+                } finally {
+                    savingMessage.value = false;
+                }
+            }
+
+            async function deleteMessage() {
+                if (savingMessage.value) return;
+                savingMessage.value = true;
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || '';
+                    const res = await fetch('/rule/edit_proposal_message/' + PROPOSAL_ID, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRFToken': csrf },
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        proposal.value.message = '';
+                        renderedMessage.value = '';
+                        create_message('Justification deleted', 'success-subtle');
+                    } else {
+                        create_message(data.message || 'Error deleting justification', 'danger-subtle');
+                    }
+                } catch (e) {
+                    create_message('Error deleting justification', 'danger-subtle');
                 } finally {
                     savingMessage.value = false;
                 }
@@ -786,7 +818,7 @@
                 showRawMessage, renderedMessage,
                 editingMessage, editMessageDraft, savingMessage, canEditMessage, canReviseProposal, relatedProposals, participants,
                 isSupersededByAcceptedChild, commentParticipants,
-                startEditMessage, cancelEditMessage, saveMessage,
+                startEditMessage, cancelEditMessage, saveMessage, deleteMessage,
                 editTypeMeta, truncate, formatDate, scoreColor,
                 toggleFavorite, decideProposal,
             };
