@@ -1194,7 +1194,7 @@ def handle_connector_pull(job, app):
         _get_or_create_shadow_user, _upsert_rule, _upsert_bundle,
         _extract_tag_family, build_tag_cache,
         _prepare_new_rule, _import_rule_history_new, _sync_tags, _sync_cve_ids, _sync_attacks,
-        structure_rule_uuids,
+        structure_rule_uuids, clean_remote_rule, clean_remote_bundle, _remote_count,
     )
     from app.core.utils.activity_log import log_activity
     from sqlalchemy import or_
@@ -1403,12 +1403,15 @@ def handle_connector_pull(job, app):
                 r = http_requests.get(_build_preflight_url(), headers=headers, timeout=10)
                 if r.status_code == 200:
                     d = r.json()
-                    total_rules_remote = d.get('count', d.get('total', 0))
+                    if isinstance(d, dict):
+                        total_rules_remote = _remote_count(d.get('count', d.get('total', 0))) or 0
             if do_bundles:
                 r = http_requests.get(f"{base}/api/sync/bundles?since={since}&page=1&per_page=1",
                                       headers=headers, timeout=10)
                 if r.status_code == 200:
-                    total_bundles_remote = r.json().get('total', 0)
+                    d = r.json()
+                    if isinstance(d, dict):
+                        total_bundles_remote = _remote_count(d.get('total', 0)) or 0
         except Exception:
             pass
 
@@ -1458,6 +1461,7 @@ def handle_connector_pull(job, app):
                 return http_requests.get(_build_rule_url(p), headers=headers, timeout=120)
 
             page          = 1
+            prev_uuids    = None  # uuids of the previous page — a remote repeating itself is stopped
             page_futures  = {}   # page_num → Future
             executor      = ThreadPoolExecutor(max_workers=PREFETCH)
 
@@ -1497,16 +1501,52 @@ def handle_connector_pull(job, app):
                         had_error = True
                         break
 
-                    data  = resp.json()
-                    items = data.get('rules', [])
+                    try:
+                        data = resp.json()
+                    except ValueError:
+                        data = None
+                    items = data.get('rules', []) if isinstance(data, dict) else None
+                    if not isinstance(items, list):
+                        msg = f"Remote answered something that is not a page of rules (page {page})."
+                        log_job(job, msg, level='error', event='progress')
+                        connector.last_error = msg
+                        had_error = True
+                        break
                     if not items and page > 1:
                         break
+
+                    # Untrusted items: malformed ones are skipped, a uuid
+                    # repeated within the page is only imported once.
+                    clean_items, seen = [], set()
+                    for raw in items:
+                        item = clean_remote_rule(raw)
+                        if item is None:
+                            rules_errors += 1
+                        elif item['uuid'] in seen:
+                            rules_skipped += 1
+                        else:
+                            seen.add(item['uuid'])
+                            clean_items.append(item)
+                    invalid = len(items) - len(clean_items)
+                    if invalid:
+                        log_job(job, f"Rules p.{page}: {invalid} malformed or repeated item(s) skipped.",
+                                level='warning', event='progress')
+                    items = clean_items
+
+                    page_uuids = [item['uuid'] for item in items]
+                    if page > 1 and page_uuids and page_uuids == prev_uuids:
+                        msg = (f"Remote served the same rules again on page {page} — stopping "
+                               "(it may ignore the page parameter).")
+                        log_job(job, msg, level='error', event='progress')
+                        connector.last_error = msg
+                        had_error = True
+                        break
+                    prev_uuids = page_uuids
 
                     # Advance the sliding window
                     _enqueue(page + PREFETCH)
 
                     # ── Batch UUID lookup: 1 query for the whole page ─────────
-                    page_uuids = [item['uuid'] for item in items if item.get('uuid')]
                     existing_rules = Rule.query.filter(
                         or_(Rule.remote_rule_uuid.in_(page_uuids),
                             Rule.uuid.in_(page_uuids))
@@ -1537,10 +1577,7 @@ def handle_connector_pull(job, app):
                     new_rules_pending: list = []   # [(remote_item, Rule)]
 
                     for item in items:
-                        remote_uuid = item.get('uuid')
-                        if not remote_uuid:
-                            rules_errors += 1
-                            continue
+                        remote_uuid = item['uuid']
                         pre_match = rule_lookup.get(remote_uuid)
 
                         if pre_match:
@@ -1646,9 +1683,18 @@ def handle_connector_pull(job, app):
                     if resp.status_code != 200:
                         had_error = True; break
                     data  = resp.json()
-                    items = data.get('bundles', [])
+                    items = data.get('bundles', []) if isinstance(data, dict) else None
+                    if not isinstance(items, list):
+                        log_job(job, f"Remote answered something that is not a page of bundles (page {page}).",
+                                level='error', event='progress')
+                        had_error = True; break
                     if not items and page > 1:
                         break
+                    clean_items = [b for b in (clean_remote_bundle(x) for x in items) if b]
+                    if len(clean_items) < len(items):
+                        log_job(job, f"Bundles p.{page}: {len(items) - len(clean_items)} malformed item(s) skipped.",
+                                level='warning', event='progress')
+                    items = clean_items
                     all_bundle_items.extend(items)
                     for item in items:
                         bundle_rule_uuids.update(item.get('rules', []))
@@ -1703,7 +1749,14 @@ def handle_connector_pull(job, app):
                                 log_job(job, f"Failed to fetch bundle rules chunk (HTTP {r.status_code})",
                                         level='warning', event='progress')
                                 continue
-                            chunk_rules = r.json().get('rules', [])
+                            chunk_data  = r.json()
+                            chunk_rules = chunk_data.get('rules', []) if isinstance(chunk_data, dict) else None
+                            if not isinstance(chunk_rules, list):
+                                log_job(job, "Remote answered something that is not a list of rules "
+                                             "for the bundle rules chunk.", level='warning', event='progress')
+                                continue
+                            chunk_rules = list({c['uuid']: c for c in
+                                                (clean_remote_rule(x) for x in chunk_rules) if c}.values())
                             new_rules_pending = []
                             chunk_uuids = [item['uuid'] for item in chunk_rules if item.get('uuid')]
                             existing_chunk = Rule.query.filter(
@@ -1779,7 +1832,9 @@ def handle_connector_pull(job, app):
                         bundles_updated += 1
                     elif result == 'skipped':
                         bundles_skipped += 1
+                    db.session.commit()   # one bundle at a time: a failure only undoes its own
                 except Exception as bundle_exc:
+                    db.session.rollback()
                     log_job(job, f"Error on bundle '{item.get('name', '?')}': {bundle_exc}",
                             level='warning', event='progress')
                 processed = rules_created + rules_updated + rules_skipped + rules_errors + bundles_created + bundles_updated + bundles_skipped

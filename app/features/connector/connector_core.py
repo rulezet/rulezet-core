@@ -386,6 +386,117 @@ def trigger_pull(connector: Connector, triggered_by: int,
     return job
 
 
+# ─── Remote payloads (untrusted) ──────────────────────────────────────────────
+# A remote instance can answer anything. Every rule / bundle it sends goes
+# through clean_remote_rule() / clean_remote_bundle() before it touches the
+# database: one malformed item is skipped instead of failing the whole page
+# (or being half-written), and NUL characters — which PostgreSQL refuses —
+# are dropped.
+
+_REMOTE_RULE_TEXT = ('format', 'title', 'description', 'to_string', 'author', 'license', 'source')
+_BUNDLE_NAME_MAX = 255
+
+
+def _no_nul(value: str) -> str:
+    return value.replace('\x00', '')
+
+
+def _remote_uuid(value) -> str | None:
+    """A uuid sent by a remote, if it is one (fits the 36-character columns)."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if len(value) > 36:
+        return None
+    try:
+        uuid_mod.UUID(value)
+    except ValueError:
+        return None
+    return value
+
+
+def _remote_text_list(value) -> list:
+    """The non-empty strings of a remote list; anything else is dropped."""
+    if not isinstance(value, list):
+        return []
+    return [v for v in (_no_nul(x).strip() for x in value if isinstance(x, str)) if v]
+
+
+def _remote_history(entries) -> list:
+    """Remote update-history entries, reduced to well-typed fields."""
+    if not isinstance(entries, list):
+        return []
+    clean = []
+    for h in entries:
+        if not isinstance(h, dict):
+            continue
+        entry = {k: (_no_nul(h[k]) if isinstance(h.get(k), str) else None)
+                 for k in ('old_content', 'new_content', 'message', 'analyzed_at')}
+        entry['success']       = h['success'] if isinstance(h.get('success'), bool) else True
+        entry['manuel_submit'] = h['manuel_submit'] if isinstance(h.get('manuel_submit'), bool) else False
+        clean.append(entry)
+    return clean
+
+
+def clean_remote_rule(item) -> dict | None:
+    """A rule from a remote sync payload, safe to store — or None when it
+    can't be: not an object, no valid uuid, no content, or a text field
+    (title, content, format…) that isn't text. Tags, CVEs, techniques and
+    history of the wrong shape are dropped, not guessed."""
+    if not isinstance(item, dict):
+        return None
+    remote_uuid = _remote_uuid(item.get('uuid'))
+    if not remote_uuid:
+        return None
+    clean = {'uuid': remote_uuid}
+    for field in _REMOTE_RULE_TEXT:
+        value = item.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            return None
+        clean[field] = _no_nul(value)
+    if 'to_string' not in clean:
+        return None
+    version = item.get('version')
+    if isinstance(version, (int, float)) and not isinstance(version, bool):
+        clean['version'] = str(version)
+    elif isinstance(version, str):
+        clean['version'] = _no_nul(version)
+    clean['tags']           = _remote_text_list(item.get('tags'))
+    clean['cve_ids']        = _remote_text_list(item.get('cve_ids'))
+    clean['attack_ids']     = _remote_text_list(item.get('attack_ids'))
+    clean['update_history'] = _remote_history(item.get('update_history'))
+    return clean
+
+
+def clean_remote_bundle(item) -> dict | None:
+    """A bundle from a remote sync payload, safe to store — or None when it
+    can't be (not an object, no valid uuid, a name that isn't text or is too
+    long, a description that isn't text)."""
+    if not isinstance(item, dict):
+        return None
+    remote_uuid = _remote_uuid(item.get('uuid'))
+    name = item.get('name')
+    description = item.get('description')
+    if not remote_uuid or not isinstance(name, str) or len(_no_nul(name)) > _BUNDLE_NAME_MAX:
+        return None
+    if description is not None and not isinstance(description, str):
+        return None
+    updated_at = item.get('updated_at')
+    structure = item.get('structure')
+    return {
+        'uuid':                      remote_uuid,
+        'name':                      _no_nul(name),
+        'description':               _no_nul(description) if description is not None else None,
+        'rules':                     _remote_text_list(item.get('rules')),
+        'tags':                      _remote_text_list(item.get('tags')),
+        'vulnerability_identifiers': _remote_text_list(item.get('vulnerability_identifiers')),
+        'updated_at':                updated_at if isinstance(updated_at, str) else None,
+        'structure':                 structure if isinstance(structure, list) else None,
+    }
+
+
 # ─── Sync helpers (called from job handler) ───────────────────────────────────
 
 def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
