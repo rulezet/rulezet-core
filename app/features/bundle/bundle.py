@@ -1013,7 +1013,7 @@ def update_bundle_tags(bundle_id):
         return {"success": False, "message": "Bundle not found"}, 404
 
     if current_user.id != bundle.user_id and not current_user.is_admin():
-        return {"success": False, "message": "You don't have the permission to do that!"}, 401
+        return {"success": False, "message": "You don't have the permission to do that!"}, 403
 
     success = BundleModel.update_bundle_tags(bundle_id, tag_ids, current_user)
     if success:
