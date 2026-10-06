@@ -1571,7 +1571,8 @@ def rule_history_data(rule_id):
 
 @rule_blueprint.route("/get_stix/<int:rule_id>")
 def get_stix(rule_id):
-    rule_misp = get_rule_misp_event(rule_id)
+    rule_id = as_db_id(rule_id)   # the <int:> converter lets out-of-range ids through
+    rule_misp = get_rule_misp_event(rule_id) if rule_id else None
     if not rule_misp:
         return jsonify({"stix": None})
     
