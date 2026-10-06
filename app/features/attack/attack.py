@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request, render_template, abort
 from flask_login import login_required, current_user
 from app import cache, memory_cache
+from app.core.utils.utils import json_object
 from . import attack_core as AttackModel
 from ..jobs import jobs_core as JobModel
 
@@ -97,8 +98,8 @@ def add_to_rule(rule_id):
     if not is_owner_or_admin and not current_user.has_permission('rule.tag_any'):
         return jsonify({'error': 'Forbidden'}), 403
 
-    technique_id = (request.json or {}).get('technique_id', '')
-    if not technique_id:
+    technique_id = json_object().get('technique_id')
+    if not isinstance(technique_id, str) or not technique_id.strip():
         return jsonify({'error': 'technique_id required'}), 400
 
     old_snapshot = RuleModel.rule_metadata_snapshot(rule)
