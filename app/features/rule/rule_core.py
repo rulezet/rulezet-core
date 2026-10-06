@@ -3936,7 +3936,7 @@ def get_all_rule_by_url_github(url: str = None, current_user_: User = None, bran
     have another branch's rules checked/updated against this branch's clone."""
     query = _active().filter(Rule.source.isnot(None))
 
-    if current_user_.is_admin():
+    if current_user_.is_admin() or current_user_.has_permission('github.manage'):
         if url:
             query = query.filter(Rule.source.ilike(f"%{url}%"))
 

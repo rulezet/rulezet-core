@@ -488,7 +488,7 @@ class Update_class:
 
                             # Use self.local_repo_path instead of self.repo_sources
                             user = db.session.merge(user)
-                            if existing_rule.user_id == user.id or user.is_admin():
+                            if existing_rule.user_id == user.id or user.is_admin() or user.has_permission('github.manage'):
 
                                 # Backfill github_path once matched so the NEXT sync's
                                 # incremental diff can map this rule to its file instead
@@ -576,7 +576,7 @@ class Update_class:
                         if existing_rule:
                             # Case 2.1: Rule EXISTS but the content in the repo is INVALID (Log as Invalid Update Status AND Create History)
                             user = db.session.merge(user)
-                            if existing_rule.user_id == user.id or user.is_admin():
+                            if existing_rule.user_id == user.id or user.is_admin() or user.has_permission('github.manage'):
 
                                 # Backfill github_path even on a failed/invalid update —
                                 # see the matching comment in the Case 1.1 branch above.
