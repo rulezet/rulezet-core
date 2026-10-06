@@ -1,10 +1,12 @@
 from flask import request
 from flask_restx import Namespace, Resource
+from sqlalchemy import or_
 
 from app.core.db_class.db import Rule, Tag
 from app.core.utils.decorators import api_required
-from app.core.utils.utils import get_user_from_api
+from app.core.utils.utils import as_db_id, get_user_from_api
 from app.features.jobs.jobs_core import create_job
+from app.features.rule.rule_core import _active
 
 tags_private_ns = Namespace(
     'Tags — Private 🔑',
@@ -166,12 +168,15 @@ class BulkAddTags(Resource):
         if err:
             return err
 
-        data = request.get_json(force=True, silent=True) or {}
+        data = request.get_json(force=True, silent=True)
+        if not isinstance(data, dict):
+            data = {}
         rule_ids = data.get('rule_ids') or []
         rule_uuids = data.get('rule_uuids') or []
         tag_ids = data.get('tag_ids') or []
         tag_uuids = data.get('tag_uuids') or []
-        confirm = bool(data.get('confirm', False))
+        # Only a real JSON `true` confirms — the string "false" is truthy.
+        confirm = data.get('confirm') is True
 
         if not isinstance(rule_ids, list) or not isinstance(rule_uuids, list):
             return {'message': 'rule_ids and rule_uuids must be lists'}, 400
@@ -182,41 +187,42 @@ class BulkAddTags(Resource):
         if not tag_ids and not tag_uuids:
             return {'message': 'Provide tag_ids and/or tag_uuids'}, 400
 
-        resolved_rule_ids = set(rule_ids)
-        if rule_uuids:
-            resolved_rule_ids.update(
-                r.id for r in Rule.query.filter(Rule.uuid.in_(rule_uuids)).with_entities(Rule.id).all()
-            )
-        resolved_rule_ids = list(resolved_rule_ids)
+        # Only what exists goes to the job: active rules and real tags — the
+        # job links every tag id it is given (an unknown one broke it, and
+        # PostgreSQL refuses the link) and must never touch a rule in the
+        # trash. Values that aren't valid ids / uuid strings match nothing.
+        wanted_rule_ids = {i for i in map(as_db_id, rule_ids) if i}
+        wanted_rule_uuids = {u for u in rule_uuids if isinstance(u, str)}
+        wanted_tag_ids = {i for i in map(as_db_id, tag_ids) if i}
+        wanted_tag_uuids = {u for u in tag_uuids if isinstance(u, str)}
 
-        resolved_tag_ids = set(tag_ids)
-        if tag_uuids:
-            resolved_tag_ids.update(
-                t.id for t in Tag.query.filter(Tag.uuid.in_(tag_uuids)).with_entities(Tag.id).all()
-            )
-        resolved_tag_ids = list(resolved_tag_ids)
-
-        tags = Tag.query.filter(Tag.id.in_(resolved_tag_ids)).all()
+        tags = Tag.query.filter(or_(Tag.id.in_(wanted_tag_ids), Tag.uuid.in_(wanted_tag_uuids))) \
+                        .order_by(Tag.id).all()
         if not tags:
             return {'message': 'None of the provided tag_ids/tag_uuids resolved to a tag.'}, 400
+        resolved_tag_ids = [t.id for t in tags]
 
-        matched_rule_count = Rule.query.filter(Rule.id.in_(resolved_rule_ids)).count()
-        if not resolved_rule_ids or matched_rule_count == 0:
+        resolved_rule_ids = [r.id for r in _active()
+                             .filter(or_(Rule.id.in_(wanted_rule_ids), Rule.uuid.in_(wanted_rule_uuids)))
+                             .with_entities(Rule.id).order_by(Rule.id).all()]
+        matched_rule_count = len(resolved_rule_ids)
+        if not matched_rule_count:
             return {'message': 'None of the provided rule_ids/rule_uuids resolved to a rule.'}, 400
+        requested_rule_count = len(wanted_rule_ids) + len(wanted_rule_uuids)
         tag_label = ', '.join(f'"{t.name}" (id={t.id})' for t in tags)
 
         if not confirm:
             return {
                 'message': (
                     f'This will apply tag(s) {tag_label} to {matched_rule_count} of the '
-                    f'{len(resolved_rule_ids)} rule(s) resolved from what was provided '
-                    f'(some may not exist or may already carry the tag). Re-submit this '
+                    f'{requested_rule_count} rule(s) given (the others don\'t exist or are '
+                    f'deleted; rules already carrying the tag are skipped). Re-submit this '
                     f'same request with "confirm": true to proceed.'
                 ),
                 'confirmed': False,
                 'preview': {
                     'tags': [{'id': t.id, 'name': t.name} for t in tags],
-                    'requested_rule_count': len(resolved_rule_ids),
+                    'requested_rule_count': requested_rule_count,
                     'matched_rule_count': matched_rule_count,
                 },
             }, 200
