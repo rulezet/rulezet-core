@@ -384,3 +384,30 @@ def test_create_rule_with_the_vulnerability_picker_links_them(clients):
 
     rule = Rule.query.filter_by(title=form["title"]).one()
     assert set(json.loads(rule.cve_id)) == {"CVE-2023-1111", "CVE-2023-2222"}
+
+
+def test_bulk_restore_without_an_explicit_choice_restores_nothing(clients, users):
+    rule = make_rule(users.owner, is_deleted=True)
+
+    response = clients["admin"].post("/rule/restore_bulk", json={"ids": []})
+
+    assert response.status_code == 400
+    assert reload(rule).is_deleted is True
+
+
+def test_bulk_restore_of_everything_needs_restore_all(clients, users):
+    rules = [make_rule(users.owner, is_deleted=True), make_rule(users.owner, is_deleted=True)]
+
+    clients["admin"].post("/rule/restore_bulk", json={"restore_all": True})
+
+    assert all(reload(r).is_deleted is False for r in rules)
+
+
+def test_permanent_delete_of_a_batch_deletes_that_batch_only(clients, users):
+    batch = [make_rule(users.owner, is_deleted=True, delete_batch_uuid="batch-1") for _ in range(2)]
+    other = make_rule(users.owner, is_deleted=True, delete_batch_uuid="batch-2")
+
+    clients["admin"].post("/rule/permanent_delete_bulk", json={"batch_uuid": "batch-1"})
+
+    assert all(reload(r) is None for r in batch)
+    assert reload(other) is not None
