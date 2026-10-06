@@ -498,7 +498,9 @@ def rule_voters(rule_id):
 def edit_rule(rule_id) -> render_template:
     """Edit a rule"""
     rule = RuleModel.get_rule(rule_id)
-    user_id = RuleModel.get_rule_user_id(rule_id)
+    if not rule:   # missing or in the trash
+        return render_template("404.html"), 404
+    user_id = rule.user_id
 
     is_owner_or_admin = current_user.id == user_id or current_user.is_admin()
     # A non-owner holding rule.tag_any may still reach this page, but only to
