@@ -1,5 +1,8 @@
 # pyproject.toml
 [tool.pytest.ini_options]
+# The new suite (docs/design/test_restructure.md). The previous suite is kept in
+# tests_legacy/ and only runs when asked: `pytest tests_legacy`.
+testpaths = ["tests"]
 filterwarnings = [
     "error",
     "ignore::UserWarning",

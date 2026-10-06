@@ -226,6 +226,6 @@ of a feature to check nothing it covered broke.
 
 | Feature | Access | CRUD | API | Robustness | Legacy reviewed | Documented |
 |---|---|---|---|---|---|---|
-| infrastructure | – | – | – | – | – | |
+| infrastructure ✅ | – | – | – | – | – | |
 | rules | | | | | | |
 | bundles | | | | | | |
