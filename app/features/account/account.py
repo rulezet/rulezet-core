@@ -535,7 +535,7 @@ def regenerate_api_key():
 @login_required
 def confirm_email_change(token):
     """Apply a pending email change after the user clicks the confirmation link."""
-    success, message = AccountModel.confirm_email_change_core(token)
+    success, message = AccountModel.confirm_email_change_core(token, current_user.id)
     if success:
         log_activity("user.email_change", "Changed email address",
                      target_type="user", target_id=current_user.id)

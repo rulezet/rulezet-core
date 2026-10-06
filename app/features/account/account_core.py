@@ -341,11 +341,12 @@ def request_email_change_core(user_id: int, new_email: str) -> bool:
     return True
 
 
-def confirm_email_change_core(raw_token: str) -> tuple:
-    """Validate an email-change token and apply the new address. Returns (success, message)."""
+def confirm_email_change_core(raw_token: str, user_id: int) -> tuple:
+    """Validate an email-change token of account `user_id` (the one logged in)
+    and apply the new address. Returns (success, message)."""
     hashed = hashlib.sha256(raw_token.encode()).hexdigest()
     user   = User.query.filter_by(email_change_token=hashed).first()
-    if not user:
+    if not user or user.id != user_id:
         return False, "Invalid or expired link."
     now = datetime.datetime.now(timezone.utc).replace(tzinfo=None)
     if not user.email_change_expiration or now > user.email_change_expiration:
