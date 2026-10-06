@@ -367,7 +367,15 @@ class YaraRule(RuleType):
             parts = [f'import "{m}"' for m in header_imports] + [d.to_string or '' for d in deps]
             source_text = '\n\n'.join(parts + [current_rule_text])
             try:
-                yara.compile(source=source_text, externals=externals)
+                compiled = yara.compile(source=source_text, externals=externals)
+                # libyara compiles some broken text to an empty ruleset without
+                # an error (e.g. an unterminated string: '"><img ...'), so a
+                # clean compile isn't enough — the content must define at least
+                # one rule of its own (the rules it depends on don't count).
+                dep_names = {n for d in deps for n in re.findall(r'\brule\s+(\w+)', d.to_string or '')}
+                if not any(r.identifier not in dep_names for r in compiled):
+                    return ValidationResult(ok=False, errors=["The content defines no YARA rule."],
+                                            normalized_content=current_rule_text)
                 risk = detect_global_rule_risk(current_rule_text)
                 warnings = list(risk['reasons'])
                 if deps:
