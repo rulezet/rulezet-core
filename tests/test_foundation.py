@@ -33,3 +33,25 @@ def test_assert_outcome_rejects_a_login_redirect_as_ok(clients):
         assert_outcome(response, OK)
     with pytest.raises(AssertionError):
         assert_outcome(response, FORBIDDEN)
+
+
+def test_each_client_stays_its_own_user_across_requests(clients, users):
+    """Several clients in one test must not share the logged-in user (Flask's
+    `g` is reset per request — see conftest._app)."""
+    whoami = {}
+    for role in ("owner", "user", "admin", "owner"):
+        response = clients[role].get("/account/")
+        whoami.setdefault(role, set()).add(response.status_code)
+
+    assert_outcome(clients["anonymous"].get("/account/"), LOGIN)
+    assert all(codes == {200} for codes in whoami.values())
+
+
+def test_api_key_user_does_not_leak_into_the_next_request(app, users):
+    from tests.helpers.users import api_headers
+    client = app.test_client()
+
+    client.get("/api/rule/private/me", headers=api_headers(users.owner))
+    response = client.get("/account/")
+
+    assert_outcome(response, LOGIN)

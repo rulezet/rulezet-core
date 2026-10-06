@@ -38,6 +38,17 @@ def _app():
         "TESTING": True,
         "SERVER_NAME": f"{app.config.get('FLASK_URL')}:{app.config.get('FLASK_PORT')}",
     })
+    # Tests run inside one app context (so their objects stay usable), and a
+    # request reuses the app context already pushed — so Flask's `g`, where
+    # Flask-Login caches the logged-in user, would leak from one request to
+    # the next (every client seen as the first user loaded). Start each
+    # request with an empty `g`, as on a real server.
+    def _fresh_request_globals():
+        from flask import g
+        for name in list(vars(g)):
+            delattr(g, name)
+    app.before_request_funcs.setdefault(None, []).insert(0, _fresh_request_globals)
+
     with app.app_context():
         db.drop_all()
         db.create_all()
