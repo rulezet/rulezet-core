@@ -203,7 +203,11 @@ def test_export_public_bundle_as_misp(role, expected, clients, users):
     assert bundle.uuid.encode() in response.data
 
 
-@pytest.mark.parametrize("role, expected", matrix(OWNER_OR_ADMIN))
+# Same answer as every other read of a private bundle: 403, anonymous included
+PRIVATE_BUNDLE_READ = {"anonymous": FORBIDDEN, "user": FORBIDDEN, "owner": OK, "admin": OK}
+
+
+@pytest.mark.parametrize("role, expected", matrix(PRIVATE_BUNDLE_READ))
 def test_export_private_bundle_as_misp(role, expected, clients, users):
     bundle = add_to_bundle(make_bundle(users.owner, public=False), make_rule(users.owner))
 
