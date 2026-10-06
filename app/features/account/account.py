@@ -658,6 +658,11 @@ def verify(user_id):
     if not user:
         flash("User not found.", "warning")
         return redirect("/account/login")
+    # The code only ever confirms a new account: once verified, it must not
+    # stay a second (6-digit, guessable) password that logs anyone in.
+    if user.is_verified:
+        flash("This account is already verified. Please log in.", "info")
+        return redirect("/account/login")
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     # Never delete an already-verified account just because this stale

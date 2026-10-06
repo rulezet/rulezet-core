@@ -242,6 +242,8 @@ def verify_user_core(id) -> bool:
     user = get_user(id)
     if user:
         user.is_verified = True
+        user.verification_code = None
+        user.verification_expiration = None
         db.session.commit()
         return True
     else:
