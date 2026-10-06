@@ -112,11 +112,13 @@ def _build_rule_query(payload):
     """
     Build a Rule query from the filter payload.
     Mirrors get_rules_page_filter params exactly so the job processes
-    the same rules the user previewed in the UI.
+    the same rules the user previewed in the UI — active rules only, never
+    the trash.
     """
     from sqlalchemy import or_, func
+    from app.features.rule.rule_core import _active
 
-    query = Rule.query
+    query = _active()
 
     # pick mode — only these specific rule IDs, skip all other filters
     if payload.get('rule_ids'):
