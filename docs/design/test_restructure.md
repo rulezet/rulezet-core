@@ -19,7 +19,7 @@ by role, after every change. The new suite must catch those automatically.
    (see "Definition of done") before moving to the next. More precise tests
    only come once every feature has this clean base.
 3. **The old tests are kept, not deleted.** They are moved to a backup folder
-   (see "Old tests"), and the new suite is written from scratch in `tests/`.
+   (see "Old tests"), and the new suite is written from scratch in `tests_new/`.
 4. **No network, no external services.** GitHub, MISP, Ollama/AI providers,
    Vulnerability Lookup, mail… are mocked.
 
@@ -85,12 +85,12 @@ Inputs an attacker or a careless client would send. Expected result: a clean
 The suite must be easy to read and easy to extend by someone who has never
 seen it. Every test follows the same conventions:
 
-- **Same layout everywhere.** `tests/<feature>/test_access.py`,
+- **Same layout everywhere.** `tests_new/<feature>/test_access.py`,
   `test_crud.py`, `test_api.py`, `test_robustness.py` — nothing else at the
-  top of a feature folder. A new feature copies `tests/_template/`.
+  top of a feature folder. A new feature copies `tests_new/_template/`.
   Logic that isn't about access / CRUD / API / robustness gets its own folder
   named after what it tests, with files named after the behaviour — e.g.
-  `tests/rule_formats/test_syntax.py` and `test_parser.py` for every rule
+  `tests_new/rule_formats/test_syntax.py` and `test_parser.py` for every rule
   format.
 - **Names say the expectation.** `test_<action>_<who>_<expected>`, e.g.
   `test_delete_rule_as_non_owner_is_forbidden` — the name alone tells what
@@ -99,7 +99,7 @@ seen it. Every test follows the same conventions:
   obvious, no comments restating the code.
 - **Arrange / act / assert** in that order, separated by a blank line.
 - **No copy-paste setup.** Users, logged-in clients, API clients and resource
-  factories come from shared fixtures (`conftest.py`, `tests/helpers/`); a
+  factories come from shared fixtures (`conftest.py`, `tests_new/helpers/`); a
   test never re-implements login or builds a rule by hand.
 - **Access rules as data.** Each feature declares its permission table once
   (action × role → expected outcome) and the access-matrix helper runs it —
@@ -114,7 +114,7 @@ seen it. Every test follows the same conventions:
 - **Only what matters**: no assertion on HTML layout, CSS classes, wording of
   UI text or JS behaviour (see ground rule 1).
 
-`tests/_template/` holds the four files with one commented example each, and
+`tests_new/_template/` holds the four files with one commented example each, and
 the "Testing" chapter of the official documentation walks through adding a
 feature from it.
 
@@ -128,7 +128,7 @@ feature from it.
 ## Structure
 
 ```
-tests/
+tests_new/
   conftest.py              # app + DB, users per role, logged-in clients, API clients
   helpers/                 # shared helpers (access-matrix runner, factories)
   _template/               # the four files to copy for a new feature
@@ -158,11 +158,13 @@ Environment stays as today: `FLASKENV=testing`, SQLite, CSRF off
 
 ## Old tests
 
-The current `tests/` content is moved to `tests_legacy/` (kept in git,
-excluded from the default `pytest` run, still runnable with
-`pytest tests_legacy`). When a feature has been rewritten, its legacy tests
-are reviewed: anything still useful and not covered is ported, then that
-feature's legacy folder is dropped. CI keeps running the new `tests/`.
+Until the rework is finished, the previous suite stays in `tests/` and is
+what CI runs on every commit; the new suite is in `tests_new/` and runs
+only when asked (`FLASKENV=testing pytest tests_new`). When a feature has
+been rewritten, its legacy tests are reviewed: anything still useful and
+not covered is ported, and legacy tests asserting a behaviour that was
+deliberately changed are updated so CI stays green. At the end the new
+suite takes the `tests/` name and the legacy one is dropped.
 
 ## Documentation (English)
 
@@ -213,8 +215,8 @@ feature.
 **Before writing anything**
 
 1. Read this whole document, then the reference implementation:
-   `tests/conftest.py`, `tests/helpers/` (users, access, db, inputs, rules)
-   and `tests/rules/` — the four files there are the model to follow.
+   `tests_new/conftest.py`, `tests_new/helpers/` (users, access, db, inputs, rules)
+   and `tests_new/rules/` — the four files there are the model to follow.
 2. Map the feature: every web route of its blueprint
    (`app/features/<feature>/`), every API endpoint (`app/api/<feature>/`),
    the decorators and the ownership / admin / permission checks inside, the
@@ -223,11 +225,11 @@ feature.
 
 **Writing the tests**
 
-3. `tests/<feature>/__init__.py` + the four layer files (copy
-   `tests/_template/`). Tables first (`matrix()` + `assert_outcome()`), then
+3. `tests_new/<feature>/__init__.py` + the four layer files (copy
+   `tests_new/_template/`). Tables first (`matrix()` + `assert_outcome()`), then
    CRUD checked in the DB (`reload()`, `count()`), then API with a key per
-   role (`api_headers()`), then robustness with `tests/helpers/inputs.py`.
-4. Factories for the feature's objects go in **`tests/helpers/<feature>.py`**
+   role (`api_headers()`), then robustness with `tests_new/helpers/inputs.py`.
+4. Factories for the feature's objects go in **`tests_new/helpers/<feature>.py`**
    (like `helpers/rules.py`). Never edit the other shared helpers, the
    conftest or another feature's tests — if one needs a change, say so in the
    final report instead.
@@ -236,8 +238,8 @@ feature.
 
 **Running and fixing**
 
-6. Run `FLASKENV=testing pytest -q -p no:cacheprovider tests/<feature>` (and
-   `tests/test_foundation.py`) after each file. Read the failure: a wrong
+6. Run `FLASKENV=testing pytest -q -p no:cacheprovider tests_new/<feature>` (and
+   `tests_new/test_foundation.py`) after each file. Read the failure: a wrong
    test is fixed in the test; **a Rulezet bug is fixed in Rulezet**, with the
    smallest correct change, following CLAUDE.md (e.g. `_active()` for rules,
    owner-or-admin checks, `log_activity`). Shared helpers already exist for
@@ -267,7 +269,7 @@ feature.
 - commits (hash + subject), bugs fixed (one line each: the failure, the fix);
 - product decisions to take, with the current behaviour;
 - anything left out of scope and why;
-- any file touched outside `tests/<feature>/`, `tests/helpers/<feature>.py`
+- any file touched outside `tests_new/<feature>/`, `tests_new/helpers/<feature>.py`
   and the feature's own code.
 
 **Feature batches** (at most 5 agents at a time)
@@ -301,11 +303,104 @@ feature.
 - [ ] whole new suite green
 - [ ] the feature's part of the "Testing" chapter written (English)
 
+> **Folders (2026-10-06):** while the rework is unfinished, the new suite
+> lives in **`tests_new/`** and the previous suite is back in **`tests/`** —
+> the one CI, `./launch.sh -t` and `manage.py test` run on every commit.
+> When every feature is done: swap them back (new suite → `tests/`, old →
+> `tests_legacy/` or deleted). Worktree branches made before the swap still
+> use `tests/<feature>/` paths: after cherry-picking, `git mv` those files to
+> `tests_new/<feature>/` and rename `tests.helpers` → `tests_new.helpers`.
+
 ## Progress
+
+_Last update: 2026-10-06._ Merged = cherry-picked into `tests-restructure`
+(nothing pushed). Whole new suite after the last merge: green (2672 passed,
+1 skipped — `nse` needs `luac`), ~9 min.
 
 | Feature | Access | CRUD | API | Robustness | Legacy reviewed | Documented |
 |---|---|---|---|---|---|---|
 | infrastructure ✅ | – | – | – | – | – | |
-| rules | ✅ | ✅ | ✅ | ✅ | pending | |
-| rule formats ✅ (syntax + parser, 15 formats) | – | – | – | – | pending | |
-| bundles | | | | | | |
+| rules ✅ (+ proposal threads, justification edit/delete) | ✅ | ✅ | ✅ | ✅ | pending | |
+| rule formats ✅ (syntax + parser, 15 formats) | – | – | – | – | ✅ (187 legacy pass) | |
+| ATT&CK ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| comments ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| tags ✅ (+ `tests_new/imported_tags/`) | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| account ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (1 legacy test outdated) | |
+| bundles ✅ | ✅ | ✅ | ✅ | ✅ | pending | |
+| MISP | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| jobs | running | | | | | |
+| connectors | ⏸ | ⏸ | ⏸ | ⏸ | | |
+| GitHub for rules | ⏸ | ⏸ | ⏸ | ⏸ | | |
+| workspace | ⏸ | ⏸ | ⏸ | ⏸ | | |
+| roles | not started | | | | | |
+| batch 3 (AI, notifications, reports, blog, community, rule tester, rule relations, Velociraptor, admin / config) | not started | | | | | |
+
+### To resume (next session)
+
+Credits: launch **at most one or two agents at a time**, and only after
+asking — a feature agent costs ~200–340k tokens.
+
+1. **MISP** — finished on `worktree-agent-a25c7188313fbb269`, not merged
+   yet if this line is still here:
+   `git cherry-pick 39ca1a5a..worktree-agent-a25c7188313fbb269`
+   (watch `app/features/bundle/bundle.py`, also touched by the bundles work).
+2. **jobs** — agent still running on `worktree-agent-acabcfd64d80c4d1e`; when
+   it reports, cherry-pick its commits from the merge-base
+   (`git log $(git merge-base tests-restructure <branch>)..<branch>`).
+3. **Stopped agents (⏸)** — their commits are kept on their worktree
+   branches (`.claude/worktrees/agent-*`). Resume each with the same brief
+   ("finish the remaining layers, green run, final report"), then
+   cherry-pick:
+   - connectors — `worktree-agent-a2e8b745043534368`: 15 commits, nothing
+     uncommitted; was on "the core cleaners for remote payloads".
+   - GitHub for rules — `worktree-agent-aee616aa3aec834ba`: 15 commits,
+     2 files uncommitted; was about to run its whole suite.
+   - workspace — `worktree-agent-a1c82f23a2f45c6d6`: 2 files uncommitted;
+     was on a `quick_meta` workspace loophole.
+4. **roles**, then **batch 3**, one feature at a time.
+5. Run the whole new suite **alone** (two pytest runs in one checkout share
+   the SQLite file and corrupt each other), then update this table.
+6. Review / drop the legacy tests of rules and bundles; write the "Testing"
+   chapter (English) in `full_documentation.html`, README, CLAUDE.md.
+
+Legacy tests now failing **on purpose** (they asserted the old behaviour):
+`tests/roles/test_edit_rule_restricted.py` (2 — expect 200 instead
+of 403), `tests/account/...test_edit_user_without_authentication`,
+`tests/rules/test_proposal_edit.py::test_cannot_edit_decided_proposal`.
+
+### Product decisions already taken (2026-10-06)
+
+- Bundle names are unique **per user** (form, API, create-from-rule, chatbot).
+- A bundle's owner (not only an admin) can rebuild its structure.
+- A note's author edits / deletes / resolves it; while the bundle is private
+  they can't reach it, and it is still theirs once it is public again.
+- A proposal's author (or an admin) edits and deletes its justification,
+  whatever the proposal's status.
+- Proposals page: threads (a proposal + its revisions, in order), collapsed
+  by default, filters, "?" help.
+
+### Product decisions still open (tests follow the current behaviour)
+
+- **Tags** — `rule.tag_any` rights are inconsistent (can delete any tag
+  incl. `tlp:clear`, make a private tag public, but can't edit others'
+  tags); state-changing GETs (`remove_tag`, `toggle_visibility`…) without
+  CSRF; users can create `tlp:red`-style tags in taxonomy namespaces; rules
+  accept another user's private tag.
+- **Account** — emails case-sensitive; unlimited guesses on `/verify` codes
+  for unverified accounts; register API returns a working key before
+  verification; anyone logged in sees another user's stats (incl. private
+  bundles); deleting a user may hit ~70 FKs without cascade on PostgreSQL;
+  check `detail_user.html` for Vue `[[ ]]` injection via name / bio.
+- **Comments** — `/api/comments` ignores `X-API-KEY`; bundle owner can't
+  moderate comments on their bundle; no cap on @mentions per comment;
+  dead legacy rule comment routes; `/rule/delete_comment` registered twice.
+- **ATT&CK** — owner / admin technique edits not logged; deprecated
+  techniques can be mapped; heatmap cached 6 h; admin routes check rights
+  per route instead of `before_request`.
+- **Bundles** — profile list shows public bundles only (even to the owner);
+  `download_count` counts every download.
+- **MISP** — an admin's export includes other users' private tags;
+  `is_verified` kept after a failing test; `Convert_MISP` has no pagination;
+  export includes owner's id and full name.
+- **Formats** — NSE validation passes everything without `luac`; Suricata
+  unknown keywords pass; "no format" rules can't be edited.
