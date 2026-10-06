@@ -275,7 +275,7 @@ feature.
 | Batch | Features |
 |---|---|
 | 1 | bundles, tags, ATT&CK (`attack`), comments (`api/comment`, rule & bundle comments), account |
-| 2 | connectors, MISP, jobs, workspace, roles |
+| 2 | GitHub for rules — import, update / sync schedule and proposals (`app/features/rule/rule_from_github/`, `github.manage`; network mocked), connectors, MISP, jobs, workspace, roles |
 | 3 | AI, notifications, reports, blog, community, rule tester, rule relations, Velociraptor, admin / config |
 
 ## Order of work
@@ -307,5 +307,5 @@ feature.
 |---|---|---|---|---|---|---|
 | infrastructure ✅ | – | – | – | – | – | |
 | rules | ✅ | ✅ | ✅ | ✅ | pending | |
-| rule formats (syntax, parser) | – | – | – | – | | |
+| rule formats ✅ (syntax + parser, 15 formats) | – | – | – | – | pending | |
 | bundles | | | | | | |
