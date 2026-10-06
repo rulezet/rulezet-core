@@ -283,12 +283,10 @@ def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=
     if form_dict.get("password") and not is_sso:
         user.password = form_dict["password"]
 
-    user.username    = form_dict.get("username") or None
-    user.bio         = form_dict.get("bio") or None
-    user.location    = form_dict.get("location") or None
-    user.website_url = form_dict.get("website_url") or None
-    user.github_url  = form_dict.get("github_url") or None
-    user.twitter_url = form_dict.get("twitter_url") or None
+    # Profile fields: only those sent are changed (the API edit sends none).
+    for field in ("username", "bio", "location", "website_url", "github_url", "twitter_url"):
+        if field in form_dict:
+            setattr(user, field, form_dict[field] or None)
 
     if remove_avatar and user.profile_picture:
         _delete_avatar_file(user.profile_picture)

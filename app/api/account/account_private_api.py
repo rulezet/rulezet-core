@@ -72,7 +72,12 @@ class EditUser(Resource):
                 "last_name": last_name
             }
 
-        AccountModel.edit_user_core(form_dict, current_user.id)
+        is_sso = (current_user.auth_provider or 'local') != 'local'
+        _, pending_email = AccountModel.edit_user_core(form_dict, current_user.id, is_sso=is_sso)
+        if pending_email:
+            AccountModel.request_email_change_core(current_user.id, pending_email)
+            return {"message": "User updated successfully. A confirmation link was sent to the new "
+                               "email address, which applies once confirmed."}, 200
 
         return {"message": "User updated successfully"}, 200
 
