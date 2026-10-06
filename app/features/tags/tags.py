@@ -55,7 +55,7 @@ def _can_delete_tag(tag_id):
 def list_tags():
     if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         flash('You need to be admin to access this page.', 'danger')
-        return render_template("access_denied.html")
+        return render_template("access_denied.html"), 403
     return render_template('tags/list.html', tag_manager_view=not current_user.is_admin())
 
 
@@ -463,7 +463,7 @@ def import_all_galaxies():
 def validation():
     if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         flash('You need to be admin to access this page.', 'danger')
-        return render_template("access_denied.html")
+        return render_template("access_denied.html"), 403
     return render_template('tags/validation.html', tag_manager_view=not current_user.is_admin())
 
 
