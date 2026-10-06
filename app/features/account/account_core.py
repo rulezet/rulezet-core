@@ -15,7 +15,7 @@ from app import mail
 from ... import db
 from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, Connector, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleAttackAssociation, RuleEditProposal, RuleFavoriteUser, RuleTest, RuleUpdateHistory, RuleVote, Tag, User, UserBadge, UserConfig
 from .badges import BADGES
-from ...core.utils.utils import generate_api_key
+from ...core.utils.utils import as_db_id, generate_api_key
 from ..rule import rule_core as RuleModel
 import uuid
 
@@ -557,7 +557,8 @@ def search_users_lite(query: str, limit: int = 5, exclude_id: int = None) -> lis
         .all()
     )
 
-    exact = User.query.get(int(query)) if query.isdigit() else None
+    exact_id = as_db_id(query)
+    exact = db.session.get(User, exact_id) if exact_id else None
 
     results = []
     seen_ids = set()
