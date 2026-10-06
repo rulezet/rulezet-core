@@ -2,8 +2,10 @@ import subprocess
 import os
 import re
 import uuid
+import json
 from typing import Any, Dict, List
 from app.features.rule.rule_core import get_rule
+from app.core.utils.utils import detect_cve
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult
 
 
@@ -68,7 +70,7 @@ class ZeekRule(RuleType):
                 "version": info.get("version", "1.0"),
                 "original_uuid": None,
                 "author": info.get("author", "Unknown"),
-                "cve_id": info.get("cve_id", None),
+                "cve_id": detect_cve(content)[1],
                 "source": info.get("repo_url", ""),
                 "to_string": normalized_content.strip(),
             }
@@ -82,7 +84,7 @@ class ZeekRule(RuleType):
                 "version": "N/A",
                 "original_uuid": "Unknown",
                 "author": info.get("author", "Unknown"),
-                "cve_id": [],
+                "cve_id": json.dumps([]),
                 "source": info.get("repo_url", ""),
                 "to_string": content,
             }
