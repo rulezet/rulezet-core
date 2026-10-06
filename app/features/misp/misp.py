@@ -4,17 +4,55 @@ All DB logic lives in misp_connector_core.py.
 Access is restricted to admin users only.
 """
 
+from urllib.parse import urlparse
+
 from flask import Blueprint, abort, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 
 import app.features.misp.misp_connector_core as MispModel
 from app.core.utils.activity_log import log_activity
+from app.core.utils.utils import json_object
 
 misp_blueprint = Blueprint(
     'misp',
     __name__,
     template_folder='templates',
 )
+
+
+_MAX_LENGTHS = {'name': 255, 'url': 255, 'api_key': 1000, 'description': 5000}
+
+
+def _server_fields(data: dict, partial: bool):
+    """The server fields of a create / update body, checked: (fields, None)
+    or (None, error message). Text fields must be strings (trimmed, no NUL,
+    within the column size), the URL an http(s) URL, verify_tls a boolean.
+    `partial` (update): absent or blank fields are simply left out."""
+    fields = {}
+    for key, limit in _MAX_LENGTHS.items():
+        value = data.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            return None, f"'{key}' must be a string."
+        value = value.strip()
+        if '\x00' in value:
+            return None, f"'{key}' contains a NUL byte."
+        if len(value) > limit:
+            return None, f"'{key}' is too long (max {limit} characters)."
+        if value or key == 'description':
+            fields[key] = value
+    if 'verify_tls' in data:
+        if not isinstance(data['verify_tls'], bool):
+            return None, "'verify_tls' must be true or false."
+        fields['verify_tls'] = data['verify_tls']
+    if not partial and not all(fields.get(k) for k in ('name', 'url', 'api_key')):
+        return None, 'Name, URL and API key are all required.'
+    if 'url' in fields:
+        parsed = urlparse(fields['url'])
+        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+            return None, 'The URL must be an http(s):// URL.'
+    return fields, None
 
 
 @misp_blueprint.before_request
@@ -47,25 +85,17 @@ def get_servers():
 
 @misp_blueprint.route('/create', methods=['POST'])
 def create_server():
-    data        = request.get_json() or {}
-    name        = (data.get('name') or '').strip()
-    url_        = (data.get('url') or '').strip()
-    api_key     = (data.get('api_key') or '').strip()
-    verify_tls  = data.get('verify_tls', True)
-
-    if not name or not url_ or not api_key:
-        return jsonify({
-            'success': False,
-            'error': 'Name, URL and API key are all required.',
-        }), 400
+    fields, error = _server_fields(json_object(), partial=False)
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
 
     server = MispModel.create_server(
         added_by_id=current_user.id,
-        name=name,
-        url=url_,
-        api_key=api_key,
-        verify_tls=verify_tls,
-        description=data.get('description') or None,
+        name=fields['name'],
+        url=fields['url'],
+        api_key=fields['api_key'],
+        verify_tls=fields.get('verify_tls', True),
+        description=fields.get('description') or None,
     )
 
     if not server:
@@ -88,8 +118,10 @@ def update_server(server_uuid):
     if not server:
         return jsonify({'success': False, 'error': 'Not found.'}), 404
 
-    data = request.get_json() or {}
-    ok = MispModel.update_server(server, data)
+    fields, error = _server_fields(json_object(), partial=True)
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
+    ok = MispModel.update_server(server, fields)
 
     return jsonify({'success': ok, 'server': server.to_json() if ok else None}), 200 if ok else 500
 
