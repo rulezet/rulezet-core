@@ -131,8 +131,9 @@ class NovaRule(RuleType):
             with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
 
-            # Naive split: every "rule <name>" starts a new rule
-            split_rules = re.split(r'(?=rule\s+\w+)', content, flags=re.IGNORECASE)
+            # A new rule starts with "rule <name>" at the beginning of a line —
+            # not wherever the word appears (a description, a keyword string…)
+            split_rules = re.split(r'(?im)^(?=[ \t]*rule\s+\w+)', content)
             for r in split_rules:
                 r = r.strip()
                 if r:
