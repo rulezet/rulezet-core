@@ -913,7 +913,7 @@ class RuleEditProposal(db.Model):
     old_content = db.Column(db.Text) 
     message = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
-    status = db.Column(db.String(20), default="pending") # pending, approved, rejected
+    status = db.Column(db.String(20), default="pending") # pending, accepted, rejected, superseded
 
     edit_type = db.Column(db.String(50), nullable=True) # ex: 'typo', 'content_update', 'legal'
     change_score = db.Column(db.Float, nullable=True)   # (0-100)
@@ -996,6 +996,7 @@ class RuleEditProposal(db.Model):
                 'accepted': 'success',
                 'approved': 'success',
                 'rejected': 'danger',
+                'superseded': 'secondary',
             }.get(self.status, 'secondary')
         }
 

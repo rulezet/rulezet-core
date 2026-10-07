@@ -27,7 +27,8 @@ const UserProposalsComponent = {
             const classes = {
                 'pending': 'bg-warning text-dark',
                 'accepted': 'bg-success text-white',
-                'rejected': 'bg-danger text-white'
+                'rejected': 'bg-danger text-white',
+                'superseded': 'bg-secondary text-white'
             };
             return classes[status] || 'bg-success';
         };

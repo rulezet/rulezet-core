@@ -1783,6 +1783,7 @@ def add_favorite_rule(rule_id) -> redirect:
 
 _COMMENT_MAX_LENGTH = 10000   # same limit as the unified comment API
 _REACTION_MAX_LENGTH = 50     # RuleCommentReaction.reaction_type
+PROPOSAL_REASON_MAX = 2000      # a reviewer's accept / reject reason
 
 
 def _comment_on_active_rule(comment_id):
@@ -1957,7 +1958,7 @@ def get_my_proposals() -> jsonify:
 
     result = RuleModel.get_my_proposals_page(page, current_user.id, search=search, status=status)
     return jsonify({
-        "rules_list": [r.to_json() for r in result],
+        "rules_list": RuleModel.with_thread_positions([r.to_json() for r in result]),
         "total_pages_old": result.pages,
     })
 
@@ -1970,7 +1971,7 @@ def get_rules_propose_edit_history_page() -> jsonify:
 
     result , total_pending = RuleModel.get_rules_propose_edit_history_page(page, search=search, status=status, user_id=current_user.id, is_admin=current_user.is_admin())
     return jsonify({
-        "rules_list": [r.to_json() for r in result],
+        "rules_list": RuleModel.with_thread_positions([r.to_json() for r in result]),
         "total_pages_old": result.pages,
         "total_count": total_pending
     })
@@ -2126,12 +2127,12 @@ def propose_revision(proposal_id) -> redirect:
         return redirect(url_for('rule.proposal_content_discuss', id=proposal_id))
 
     previous = RuleEditProposal.query.get(proposal_id)
-    if not previous:
+    if not previous or not RuleModel.get_rule(previous.rule_id):
         return _err("Proposal not found.", 404)
-    if current_user.id != previous.user_id and not current_user.is_admin():
+    if previous.status not in RuleModel.PROPOSAL_REVISABLE_STATUSES:
+        return _err("Cannot revise a decided proposal.")
+    if not RuleModel.can_revise_proposal(current_user, previous):
         return _err("Forbidden", 403)
-    if previous.status not in ('pending', 'rejected'):
-        return _err("Cannot revise a decided or already-revised proposal.")
 
     data = request.form
     proposed_content = data.get('rule_content')
@@ -2167,10 +2168,13 @@ def propose_revision(proposal_id) -> redirect:
         AccountModel.update_propose_edit_gamification(gamification.id, "add_one_to_suggested")
 
     try:
-        from app.features.notification.notification_core import notify_proposal_submitted
+        from app.features.notification.notification_core import notify_proposal_submitted, notify_proposal_participants
         new_proposal_obj = RuleEditProposal.query.get(new_proposal_id)
         if new_proposal_obj:
             notify_proposal_submitted(new_proposal_obj, rule)
+            notify_proposal_participants(
+                new_proposal_obj, actor_id=current_user.id, exclude={rule.user_id},
+                title=f'{current_user.get_username()} revised a proposal you follow', body=rule.title)
     except Exception as _e:
         print(f"[rule] notify_proposal_submitted error: {_e}")
 
@@ -2193,135 +2197,68 @@ def propose_revision(proposal_id) -> redirect:
     flash("Revision submitted.", "success", discuss_url)
     return redirect(discuss_url)
 
-@rule_blueprint.route("/validate_proposal", methods=['GET'])
+@rule_blueprint.route("/validate_proposal", methods=['GET', 'POST'])
 @login_required
 def validate_proposal() -> jsonify:
-    """Validate a proposal on a rule"""
-    rule_id = as_db_id(request.args.get('ruleId')) # id of the real rule
-    decision = request.args.get('decision', type=str)
-    rule_proposal_id = as_db_id(request.args.get('ruleproposalId')) #id of the rule request
+    """Accept or reject a pending proposal (the rule's owner or an admin),
+    with an optional reason. Parameters in the JSON body (POST) or the
+    query string (GET, kept for older clients)."""
+    params = json_object() if request.method == 'POST' else request.args
+    rule_id = as_db_id(params.get('ruleId'))
+    decision = params.get('decision')
+    rule_proposal_id = as_db_id(params.get('ruleproposalId'))
+    reason = params.get('reason')
     if not (rule_id and rule_proposal_id) or decision not in ('accepted', 'rejected'):
         return jsonify({"message": "ruleId, ruleproposalId and decision (accepted / rejected) are required.",
                         "success": False, "toast_class": "danger"}), 400
-    user_id = RuleModel.get_rule_user_id(rule_id)
-    if user_id == current_user.id or current_user.is_admin():
-        if rule_id and decision and rule_proposal_id:
-            # the rule modified
-            rule_proposal = RuleModel.get_rule_proposal(rule_proposal_id)
+    if reason is not None and not isinstance(reason, str):
+        return jsonify({"message": "The reason must be a text.", "success": False, "toast_class": "danger"}), 400
+    reason = (reason or "").strip()
+    if len(reason) > PROPOSAL_REASON_MAX:
+        return jsonify({"message": f"The reason is limited to {PROPOSAL_REASON_MAX} characters.",
+                        "success": False, "toast_class": "danger"}), 400
 
-            # rule_proposal_id is caller-supplied and independent from
-            # rule_id — without this check, an owner/admin of rule_id could
-            # decide (and, on accept, overwrite rule_id's content with) a
-            # pending proposal that actually belongs to a completely
-            # different rule, hijacking another user's review queue.
-            if not rule_proposal or rule_proposal.rule_id != rule_id:
-                return jsonify({"message": "Proposal not found for this rule.",
-                                "success": False,
-                                "toast_class": "danger"}), 404
-
-            new_version = None
-            if decision == "accepted":
-                RuleModel.set_status(rule_proposal_id,"accepted", reviewed_by_id=current_user.id)
-                # change the to_string part of the rule in the db
-                response , status_code = RuleModel.set_to_string_rule(rule_id, rule_proposal.proposed_content)
-                message = response["message"]
-                log_activity(
-                    "rule.proposal_approved",
-                    f"Approved edit proposal id={rule_proposal_id} for rule id={rule_id}",
-                    target_type="rule", target_id=rule_id,
-                    extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id},
-                    is_public=False,
-                )
-                try:
-                    from app.features.notification.notification_core import notify_proposal_status_change
-                    _rule_for_notif = RuleModel.get_rule(rule_id)
-                    notify_proposal_status_change(rule_proposal, 'accepted',
-                                                  _rule_for_notif.title if _rule_for_notif else '')
-                except Exception as _e:
-                    print(f"[rule] notify_proposal_status_change accepted error: {_e}")
-                # add to contributor
-                user_proposal_id = RuleModel.get_rule_proposal_user_id(rule_proposal_id)
-                RuleModel.create_contribution(user_proposal_id,rule_proposal_id)
-                # add to history rule
-                rule = RuleModel.get_rule(rule_id)
-                result = {
-                    "id": rule_id,
-                    "title": rule.title,
-                    "success": True,
-                    "message": "accepted",
-                    "new_content": rule_proposal.proposed_content,
-                    "old_content": rule_proposal.old_content,
-                    "manual_submit": True,
-                }
-
-            
-                history_id = RuleModel.create_rule_history(result)
-                if not history_id:
-                    return jsonify({"message": "Error during the creation of the history." ,
-                        "success": False,
-                        "toast_class" : "danger"
-                        }),500
-                
-                # update gamification
-                gamification = AccountModel.get_or_create_gamification_profile(rule_proposal.user_id)
-                if gamification == None:
-                    return jsonify({"message": "Error during the update of the gamification." ,
-                        "success": False,
-                        "toast_class" : "danger"
-                        }),500
-                _ = AccountModel.update_propose_edit_gamification(gamification.id , "add_one_to_accepted")
-
-                # Increment community version
-                current_v = rule.version or "1.0"
-                try:
-                    new_version = bump_version(current_v) or current_v
-                except Exception:
-                    new_version = current_v
-                rule.version = new_version
-                db.session.commit()
-                log_activity(
-                    "rule.version_bump",
-                    f"Content updated — rule bumped from v{current_v} to v{new_version} (proposal #{rule_proposal_id})",
-                    target_type="rule", target_id=rule_id, target_uuid=rule.uuid,
-                    extra={"from_version": current_v, "to_version": new_version, "proposal_id": rule_proposal_id},
-                    is_public=False,
-                )
-
-            elif decision == "rejected":
-                RuleModel.set_status(rule_proposal_id,"rejected", reviewed_by_id=current_user.id)
-                message = "Proposal rejected."
-                log_activity(
-                    "rule.proposal_rejected",
-                    f"Rejected edit proposal id={rule_proposal_id} for rule id={rule_id}",
-                    target_type="rule", target_id=rule_id,
-                    extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id},
-                    is_public=False,
-                )
-                try:
-                    from app.features.notification.notification_core import notify_proposal_status_change
-                    _rule_for_notif = RuleModel.get_rule(rule_id)
-                    notify_proposal_status_change(rule_proposal, 'rejected',
-                                                  _rule_for_notif.title if _rule_for_notif else '')
-                except Exception as _e:
-                    print(f"[rule] notify_proposal_status_change rejected error: {_e}")
-                # update gamification
-                gamification = AccountModel.get_or_create_gamification_profile(rule_proposal.user_id)
-                if gamification == None:
-                    return jsonify({"message": "Error during the update of the gamification." ,
-                        "success": False,
-                        "toast_class" : "danger"
-                        }),500
-                _ = AccountModel.update_propose_edit_gamification(gamification.id , "add_one_to_rejected")
-            else:
-                return jsonify({"message": "Invalid decision",
-                                "success": False,
-                                "toast_class" : "danger"}), 400
-        resp = {"message": message, "success": True, "toast_class": "success"}
-        if new_version:
-            resp["new_version"] = new_version
-        return jsonify(resp), 200
-    else:
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return jsonify({"message": "Rule not found.", "success": False, "toast_class": "danger"}), 404
+    if rule.user_id != current_user.id and not current_user.is_admin():
         return jsonify({"success": False, "message": "Access denied.", "toast_class": "danger"}), 403
+
+    # rule_proposal_id is caller-supplied and independent from rule_id —
+    # without this check, an owner/admin of rule_id could decide (and, on
+    # accept, overwrite rule_id's content with) a pending proposal that
+    # actually belongs to a completely different rule.
+    rule_proposal = RuleModel.get_rule_proposal(rule_proposal_id)
+    if not rule_proposal or rule_proposal.rule_id != rule_id:
+        return jsonify({"message": "Proposal not found for this rule.",
+                        "success": False, "toast_class": "danger"}), 404
+
+    previous_version = rule.version
+    ok, result = RuleModel.decide_proposal(rule_proposal, decision, current_user.id, reason=reason)
+    if not ok:
+        return jsonify({"message": result, "success": False, "toast_class": "danger"}), 409
+
+    superseded_ids = [p.id for p in result["superseded"]]
+    log_activity(
+        "rule.proposal_approved" if decision == "accepted" else "rule.proposal_rejected",
+        f"{'Approved' if decision == 'accepted' else 'Rejected'} edit proposal id={rule_proposal_id} for rule id={rule_id}",
+        target_type="rule", target_id=rule_id,
+        extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id,
+               "reason": reason or None, "superseded_ids": superseded_ids},
+        is_public=False,
+    )
+    if decision == "rejected":
+        return jsonify({"message": "Proposal rejected.", "success": True, "toast_class": "success"}), 200
+
+    log_activity(
+        "rule.version_bump",
+        f"Content updated — rule bumped from v{previous_version} to v{result['new_version']} (proposal #{rule_proposal_id})",
+        target_type="rule", target_id=rule_id, target_uuid=rule.uuid,
+        extra={"from_version": previous_version, "to_version": result["new_version"], "proposal_id": rule_proposal_id},
+        is_public=False,
+    )
+    return jsonify({"message": "accepted", "success": True, "toast_class": "success",
+                    "new_version": result["new_version"], "superseded_ids": superseded_ids}), 200
 
 # manage_proposals
 @rule_blueprint.route("/manage_proposals", methods=['POST'])
@@ -2559,6 +2496,28 @@ def get_proposal() -> jsonify:
 
     d['system_events'] = _build_proposal_system_events(proposal)
 
+    thread = RuleModel.get_proposal_thread(proposal)
+    d['thread_status'] = thread['status']
+    d['thread'] = [{
+        'id': p.id,
+        'version': version,
+        'depth': depth,
+        'status': p.status,
+        'previous_proposal_id': p.previous_proposal_id,
+        'user_id': p.user_id,
+        'user_name': f"{p.user.first_name} {p.user.last_name}" if p.user else "Unknown",
+        'user_avatar': p.user.get_avatar_url() if p.user else None,
+        'timestamp': p.timestamp.isoformat() if p.timestamp else None,
+        'discuss_url': f"/rule/proposal_content_discuss?id={p.id}",
+        'proposed_content': p.proposed_content,
+    } for p, depth, version in thread['proposals']]
+    d['version'] = next(v['version'] for v in d['thread'] if v['id'] == proposal.id)
+    d['rule_content'] = rule_obj.to_string if rule_obj else None
+    d['rule_format'] = rule_obj.format if rule_obj else None
+    d['can_revise'] = RuleModel.can_revise_proposal(current_user, proposal)
+    d['can_decide'] = bool(rule_obj) and proposal.status == 'pending' and (
+        current_user.id == rule_obj.user_id or current_user.is_admin())
+
     return {
         "proposal": d,
     }
@@ -2614,11 +2573,15 @@ def _build_proposal_system_events(proposal) -> list:
             "status": revision.status,
         })
 
-    if proposal.status in ("accepted", "rejected") and proposal.reviewed_at:
+    if proposal.status in ("accepted", "rejected", "superseded") and proposal.reviewed_at:
         events.append({
             "type": proposal.status,
-            "icon": "fa-solid fa-check" if proposal.status == "accepted" else "fa-solid fa-xmark",
-            "text": f"{proposal.status} this proposal",
+            "icon": {"accepted": "fa-solid fa-check", "rejected": "fa-solid fa-xmark"}.get(
+                proposal.status, "fa-solid fa-code-branch"),
+            "text": {"accepted": "accepted this proposal",
+                     "rejected": "rejected this proposal",
+                     "superseded": "accepted another version of this thread — this one is superseded"}[proposal.status],
+            "reason": proposal.rejection_reason if proposal.status == "rejected" else None,
             "actor_id": proposal.reviewed_by_id,
             "actor_name": (f"{proposal.reviewer.first_name} {proposal.reviewer.last_name}"
                            if proposal.reviewer else "Unknown"),

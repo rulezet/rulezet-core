@@ -23,6 +23,7 @@ from ... import db
 from ...core.db_class.db import *
 
 from ..account import account_core as AccountModel
+from app.core.utils.utils import bump_version
 
 ###################
 #   Rule action   #
@@ -1637,14 +1638,14 @@ def create_proposal_revision(previous_proposal_id, proposed_content, message, ed
     """Create a proposal that continues a prior one (discussion-driven revision).
 
     The prior proposal is left exactly as-is (still "pending"/"rejected") and
-    stays fully decidable — it can still be accepted or rejected on its own
-    merits at any time, independently of however many revisions get attached
-    to it. Any number of revisions can be created from the same proposal.
+    stays decidable until a version of its thread is accepted (the others are
+    then superseded, see decide_proposal). Any number of revisions can be
+    created from the same proposal — a thread can branch.
     """
     previous = RuleEditProposal.query.get(previous_proposal_id)
     if not previous:
         return False, None, "Proposal not found"
-    if previous.status not in ('pending', 'rejected'):
+    if previous.status not in PROPOSAL_REVISABLE_STATUSES:
         return False, None, "Cannot revise a decided proposal"
 
     change_score = calculate_diff_score(previous.proposed_content or "", proposed_content)
@@ -1672,10 +1673,10 @@ def bulk_manage_proposals(action: str, mode: str, selected_ids: list, excluded_i
     Non-admins may only ever affect proposals against rules they own — this
     is enforced at the query level (not just checked-and-skipped per item)
     so "mode=all" for a regular user means "all of my rules' pending
-    proposals", never every pending proposal system-wide.
+    proposals", never every pending proposal system-wide. Each proposal goes
+    through decide_proposal, so accepting one supersedes the rest of its
+    thread — a proposal superseded earlier in the same batch is skipped.
     """
-    import datetime
-
     try:
         if mode == "all":
             query = RuleEditProposal.query.filter_by(status="pending")
@@ -1683,7 +1684,7 @@ def bulk_manage_proposals(action: str, mode: str, selected_ids: list, excluded_i
                 query = query.join(Rule, Rule.id == RuleEditProposal.rule_id).filter(Rule.user_id == reviewed_by_id)
             if excluded_ids:
                 query = query.filter(~RuleEditProposal.id.in_(excluded_ids))
-            proposals = query.all()
+            proposals = query.order_by(RuleEditProposal.timestamp.asc()).all()
         else:
             query = RuleEditProposal.query.filter(
                 RuleEditProposal.id.in_(selected_ids),
@@ -1691,65 +1692,21 @@ def bulk_manage_proposals(action: str, mode: str, selected_ids: list, excluded_i
             )
             if not is_admin:
                 query = query.join(Rule, Rule.id == RuleEditProposal.rule_id).filter(Rule.user_id == reviewed_by_id)
-            proposals = query.all()
+            proposals = query.order_by(RuleEditProposal.timestamp.asc()).all()
 
         if not proposals:
             return {"success": False, "message": "No proposals found."}
 
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        decision = "accepted" if action == "accept" else "rejected"
         count = 0
-
         for proposal in proposals:
-            # Ownership already enforced above at the query level for
-            # non-admins; this just fetches the rule to update its content.
-            rule = get_rule(proposal.rule_id)
-            if not rule:
+            if proposal.status != "pending":
                 continue
-            if not is_admin and rule.user_id != reviewed_by_id:
-                continue
+            ok, _ = decide_proposal(proposal, decision, reviewed_by_id)
+            if ok:
+                count += 1
 
-            proposal.status = "accepted" if action == "accept" else "rejected"
-            proposal.reviewed_by_id = reviewed_by_id
-            proposal.reviewed_at = now
-            if action == "accept":
-                _auto_reject_parent_on_child_accept(proposal)
-
-            if action == "accept":
-                # update the rule content
-                rule.to_string = proposal.proposed_content
-                db.session.add(rule)
-
-                # contribution
-                create_contribution(proposal.user_id, proposal.id)
-
-                # history
-                result = {
-                    "id": rule.id,
-                    "title": rule.title,
-                    "success": True,
-                    "message": "accepted",
-                    "new_content": proposal.proposed_content,
-                    "old_content": proposal.old_content,
-                    "manual_submit": True,
-                }
-                create_rule_history(result)
-
-                # gamification
-                gamification = AccountModel.get_or_create_gamification_profile(proposal.user_id)
-                if gamification:
-                    AccountModel.update_propose_edit_gamification(gamification.id, "add_one_to_accepted")
-            else:
-                # gamification
-                gamification = AccountModel.get_or_create_gamification_profile(proposal.user_id)
-                if gamification:
-                    AccountModel.update_propose_edit_gamification(gamification.id, "add_one_to_rejected")
-
-            db.session.add(proposal)
-            count += 1
-
-        db.session.commit()
-        action_label = "accepted" if action == "accept" else "rejected"
-        return {"success": True, "message": f"{count} proposal(s) {action_label} successfully."}
+        return {"success": True, "message": f"{count} proposal(s) {decision} successfully.", "count": count}
 
     except Exception as e:
         db.session.rollback()
@@ -1804,6 +1761,87 @@ def _proposal_time(proposal):
 
 PROPOSAL_THREAD_STATUSES = ("open", "accepted", "closed")
 PROPOSAL_THREAD_SORTS = ("recent", "oldest", "versions")
+# A version can be revised while it is still open or after a plain rejection —
+# never once it (or another version of its thread) was accepted.
+PROPOSAL_REVISABLE_STATUSES = ("pending", "rejected")
+
+
+def _proposal_tree(rule_id):
+    """The proposals of a rule as (thread roots, {parent id: [revisions]})."""
+    proposals = RuleEditProposal.query.filter_by(rule_id=rule_id).all()
+    by_id = {p.id: p for p in proposals}
+    children = {}
+    roots = []
+    for p in proposals:
+        # A revision whose parent is gone (or belongs to another rule) starts its own thread
+        if p.previous_proposal_id in by_id and p.previous_proposal_id != p.id:
+            children.setdefault(p.previous_proposal_id, []).append(p)
+        else:
+            roots.append(p)
+    return roots, children
+
+
+def _build_thread(root, children):
+    """One thread: the root and its revisions in reading order — depth-first,
+    oldest revision first — each with its depth and version number (v1 = the
+    first proposal, then by date)."""
+    ordered, stack, seen = [], [(root, 0)], set()
+    while stack:
+        node, depth = stack.pop()
+        if node.id in seen:          # never loop on corrupted links
+            continue
+        seen.add(node.id)
+        ordered.append((node, depth))
+        for child in sorted(children.get(node.id, []), key=_proposal_time, reverse=True):
+            stack.append((child, depth + 1))
+    versions = {p.id: n for n, p in enumerate(sorted((p for p, _ in ordered), key=_proposal_time), start=1)}
+    statuses = {p.status for p, _ in ordered}
+    return {
+        "root": root,
+        "proposals": [(p, depth, versions[p.id]) for p, depth in ordered],
+        "last_activity": max(_proposal_time(p) for p, _ in ordered),
+        "status": "accepted" if "accepted" in statuses else "open" if "pending" in statuses else "closed",
+    }
+
+
+def get_proposal_thread(proposal):
+    """The thread `proposal` belongs to (see _build_thread)."""
+    roots, children = _proposal_tree(proposal.rule_id)
+    parent_of = {child.id: parent_id for parent_id, kids in children.items() for child in kids}
+    root_id, seen = proposal.id, set()
+    while root_id in parent_of and root_id not in seen:
+        seen.add(root_id)
+        root_id = parent_of[root_id]
+    root = next((r for r in roots if r.id == root_id), proposal)
+    return _build_thread(root, children)
+
+
+def with_thread_positions(proposal_dicts):
+    """Add to each proposal (as to_json() returns it) where it sits in its
+    thread: `thread_root_id`, `thread_version`, `thread_depth` and
+    `thread_size` — so a list can be grouped by thread."""
+    positions = {}
+    for rule_id in {d["rule_id"] for d in proposal_dicts}:
+        roots, children = _proposal_tree(rule_id)
+        for root in roots:
+            thread = _build_thread(root, children)
+            for p, depth, version in thread["proposals"]:
+                positions[p.id] = (root.id, version, depth, len(thread["proposals"]))
+    for d in proposal_dicts:
+        root_id, version, depth, size = positions.get(d["id"], (d["id"], 1, 0, 1))
+        d.update(thread_root_id=root_id, thread_version=version, thread_depth=depth, thread_size=size)
+    return proposal_dicts
+
+
+def can_revise_proposal(user, proposal):
+    """A version is revised by its author, the rule's owner or an admin,
+    while it is still open or was plainly rejected."""
+    if not user or not user.is_authenticated or proposal.status not in PROPOSAL_REVISABLE_STATUSES:
+        return False
+    rule = get_rule(proposal.rule_id)
+    if not rule:
+        return False
+    return user.id in (proposal.user_id, rule.user_id) or user.is_admin()
 
 
 def _thread_matches(thread, *, status=None, edit_type=None, q=None):
@@ -1847,36 +1885,8 @@ def get_proposal_threads(rule_id, page=1, per_page=PROPOSAL_THREADS_PER_PAGE,
     rule = _active().filter(Rule.id == rule_id).first()
     if not rule:
         return [], 0, 0, {s: 0 for s in PROPOSAL_THREAD_STATUSES}
-    proposals = RuleEditProposal.query.filter_by(rule_id=rule_id).all()
-    by_id = {p.id: p for p in proposals}
-    children = {}
-    roots = []
-    for p in proposals:
-        # A revision whose parent is gone (or belongs to another rule) starts its own thread
-        if p.previous_proposal_id in by_id and p.previous_proposal_id != p.id:
-            children.setdefault(p.previous_proposal_id, []).append(p)
-        else:
-            roots.append(p)
-
-    threads = []
-    for root in roots:
-        ordered, stack, seen = [], [(root, 0)], set()
-        while stack:
-            node, depth = stack.pop()
-            if node.id in seen:          # never loop on corrupted links
-                continue
-            seen.add(node.id)
-            ordered.append((node, depth))
-            for child in sorted(children.get(node.id, []), key=_proposal_time, reverse=True):
-                stack.append((child, depth + 1))
-        versions = {p.id: n for n, p in enumerate(sorted((p for p, _ in ordered), key=_proposal_time), start=1)}
-        statuses = {p.status for p, _ in ordered}
-        threads.append({
-            "root": root,
-            "proposals": [(p, depth, versions[p.id]) for p, depth in ordered],
-            "last_activity": max(_proposal_time(p) for p, _ in ordered),
-            "status": "accepted" if "accepted" in statuses else "open" if "pending" in statuses else "closed",
-        })
+    roots, children = _proposal_tree(rule_id)
+    threads = [_build_thread(root, children) for root in roots]
 
     counts = {s: sum(t["status"] == s for t in threads) for s in PROPOSAL_THREAD_STATUSES}
     threads = [t for t in threads if _thread_matches(t, status=status, edit_type=edit_type, q=q)]
@@ -1996,33 +2006,88 @@ def set_to_string_rule(rule_id, proposed_content) -> json:
     db.session.commit()
     return {"message": "Rule updated successfully"}, 200
     
-def _auto_reject_parent_on_child_accept(proposal):
-    """When a revision is accepted, its parent proposal is auto-rejected —
-    the parent's own content was never the one that got merged, so leaving
-    it "pending" forever would be confusing. Never overwrites a parent
-    that's already been accepted on its own merits."""
-    if not proposal.previous_proposal_id:
-        return
-    parent = RuleEditProposal.query.get(proposal.previous_proposal_id)
-    if parent and parent.status != 'accepted':
-        parent.status = 'rejected'
+def _supersede_thread(proposal, reviewed_by_id, now):
+    """Once `proposal` is accepted, every other open or rejected version of
+    its thread is closed as "superseded" — its content was never the one
+    merged. Versions already accepted on their own (old data) are left alone.
+    Returns the superseded proposals."""
+    superseded = []
+    for other, _, _ in get_proposal_thread(proposal)["proposals"]:
+        if other.id != proposal.id and other.status in PROPOSAL_REVISABLE_STATUSES:
+            other.status = "superseded"
+            other.reviewed_by_id = reviewed_by_id
+            other.reviewed_at = now
+            superseded.append(other)
+    return superseded
 
 
-def set_status(proposal_id, status, reviewed_by_id=None) -> json:
-    """Set the statue of an edit request"""
-    if status not in ['accepted', 'rejected']:
-        return {'error': 'Statut invalide'}, 400
-    proposal = RuleEditProposal.query.get(proposal_id)
-    if not proposal:
-        return {'error': 'Proposition non trouvée'}, 404
-    proposal.status = status
-    if reviewed_by_id is not None:
-        proposal.reviewed_by_id = reviewed_by_id
-        proposal.reviewed_at = datetime.datetime.now(tz=datetime.timezone.utc)
-    if status == 'accepted':
-        _auto_reject_parent_on_child_accept(proposal)
-    db.session.commit()
-    return {'success': True, 'new_status': status}, 200
+def decide_proposal(proposal, decision, reviewed_by_id, reason=None):
+    """Accept or reject a pending proposal, with an optional reason.
+
+    Accepting applies its content to the rule (history entry, contribution,
+    version bump) and supersedes the rest of its thread. The author and the
+    thread's participants are notified. Returns (True, {"new_version",
+    "superseded"}) or (False, error message).
+    """
+    if decision not in ("accepted", "rejected"):
+        return False, "Invalid decision."
+    if proposal.status != "pending":
+        return False, "This proposal was already decided."
+    rule = get_rule(proposal.rule_id)
+    if not rule:
+        return False, "Rule not found."
+
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    proposal.status = decision
+    proposal.reviewed_by_id = reviewed_by_id
+    proposal.reviewed_at = now
+    proposal.rejection_reason = (reason or None) if decision == "rejected" else None
+    result = {"new_version": None, "superseded": []}
+
+    if decision == "accepted":
+        result["superseded"] = _supersede_thread(proposal, reviewed_by_id, now)
+        previous_content = rule.to_string
+        rule.to_string = proposal.proposed_content
+        rule.last_modif = now
+        current_v = rule.version or "1.0"
+        try:
+            result["new_version"] = bump_version(current_v) or current_v
+        except Exception:
+            result["new_version"] = current_v
+        rule.version = result["new_version"]
+        db.session.commit()
+
+        create_contribution(proposal.user_id, proposal.id)
+        create_rule_history({
+            "id": rule.id,
+            "title": rule.title,
+            "success": True,
+            "message": "accepted",
+            "new_content": proposal.proposed_content,
+            "old_content": previous_content,
+            "manual_submit": True,
+            "analyzed_by_user_id": reviewed_by_id,
+        })
+    else:
+        db.session.commit()
+
+    gamification = AccountModel.get_or_create_gamification_profile(proposal.user_id)
+    if gamification:
+        AccountModel.update_propose_edit_gamification(
+            gamification.id, "add_one_to_accepted" if decision == "accepted" else "add_one_to_rejected")
+
+    try:
+        from app.features.notification.notification_core import (
+            notify_proposal_status_change, notify_proposal_participants)
+        notify_proposal_status_change(proposal, decision, rule.title, reason=proposal.rejection_reason)
+        notify_proposal_participants(
+            proposal, actor_id=reviewed_by_id, exclude={proposal.user_id},
+            title=f'A proposal you follow was {decision}',
+            body=rule.title, pref="pref_proposal_accepted")
+    except Exception as e:
+        print(f"[rule_core] decide_proposal notification error: {e}")
+
+    return True, result
 
 
 def update_proposal_message(proposal_id, new_message):

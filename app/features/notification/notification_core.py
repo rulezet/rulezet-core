@@ -50,6 +50,7 @@ _TYPE_ICON = {
     'proposal_comment':        'fa-solid fa-message',
     'proposal_accepted':       'fa-solid fa-circle-check',
     'proposal_rejected':       'fa-solid fa-circle-xmark',
+    'proposal_thread':         'fa-solid fa-code-branch',
     'comment_reply':           'fa-solid fa-reply',
     'user_mentioned':          'fa-solid fa-at',
     'session_running':         'fa-solid fa-spinner',
@@ -735,8 +736,9 @@ def notify_proposal_comment(proposal_id, proposal_owner_id, commenter_id, rule_t
         print(f"[notification_core] notify_proposal_comment error: {e}")
 
 
-def notify_proposal_status_change(proposal, status, rule_title):
-    """Notify the proposal author when their proposal is accepted or rejected (honours pref_proposal_accepted)."""
+def notify_proposal_status_change(proposal, status, rule_title, reason=None):
+    """Notify the proposal author when their proposal is accepted or rejected
+    — with the reviewer's reason, if any (honours pref_proposal_accepted)."""
     try:
         pref = _get_pref(proposal.user_id)
         if not pref.pref_proposal_accepted:
@@ -744,15 +746,57 @@ def notify_proposal_status_change(proposal, status, rule_title):
 
         notif_type = 'proposal_accepted' if status == 'accepted' else 'proposal_rejected'
         verb = 'accepted' if status == 'accepted' else 'rejected'
+        body = rule_title or ''
+        if reason:
+            body = f'{body} — {reason}' if body else reason
         create_notification(
             user_id    = proposal.user_id,
             notif_type = notif_type,
             title      = f'Your proposal was {verb}',
-            body       = rule_title or '',
+            body       = body[:500],
             link       = f'/rule/proposal_content_discuss?id={proposal.id}',
         )
     except Exception as e:
         print(f"[notification_core] notify_proposal_status_change error: {e}")
+
+
+def notify_proposal_participants(proposal, actor_id, title, body=None, exclude=(), pref='pref_proposal'):
+    """Notify everyone taking part in `proposal`'s thread — the authors of
+    its versions, the people who commented on them and the rule's owner —
+    except the one acting and `exclude` (already notified otherwise).
+    Each recipient's `pref` preference is honoured."""
+    try:
+        from app.core.db_class.db import Rule, UnifiedComment
+        from app.features.rule.rule_core import get_proposal_thread
+
+        versions = [p for p, _, _ in get_proposal_thread(proposal)['proposals']]
+        recipients = {p.user_id for p in versions}
+        commenters = (db.session.query(UnifiedComment.created_by)
+                      .filter(UnifiedComment.object_type == 'proposal',
+                              UnifiedComment.object_id.in_([p.id for p in versions]),
+                              UnifiedComment.is_active.is_(True))
+                      .distinct().all())
+        recipients.update(uid for (uid,) in commenters)
+        rule = db.session.get(Rule, proposal.rule_id)
+        if rule and rule.user_id:
+            recipients.add(rule.user_id)
+        recipients.discard(None)
+        recipients.discard(actor_id)
+        recipients.difference_update(exclude)
+
+        for uid in recipients:
+            if not getattr(_get_pref(uid), pref, True):
+                continue
+            create_notification(
+                user_id    = uid,
+                notif_type = 'proposal_thread',
+                title      = title,
+                body       = body or '',
+                link       = f'/rule/proposal_content_discuss?id={proposal.id}',
+            )
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_proposal_participants error: {e}")
 
 
 def notify_comment_reply(parent_comment_author_id, replier_id, object_title, link):

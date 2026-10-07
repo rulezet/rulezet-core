@@ -122,7 +122,7 @@
                             <i class="fa-solid fa-angles-up"></i>
                         </button>
                         <help-tip title="How to read a thread" :width="340"
-                                  text="Threads are collapsed: click one to see its versions on a timeline, oldest first.&#10;Dot colours — yellow: pending, green: accepted (merged), red: rejected, purple: superseded (closed automatically because one of its revisions was accepted instead).&#10;An indented version is a revision of the version above it (“revised v1”), not of the latest one.&#10;diff % — how much the version changes the rule's content. The speech bubble counts the comments; click a version to read and discuss it."></help-tip>
+                                  text="Threads are collapsed: click one to see its versions on a timeline, oldest first.&#10;Dot colours — yellow: pending, green: accepted (merged), red: rejected, purple: superseded (closed automatically because another version of the thread was accepted).&#10;An indented version is a revision of the version above it (“revised v1”), not of the latest one.&#10;diff % — how much the version changes the rule's content. The speech bubble counts the comments; click a version to read and discuss it."></help-tip>
                     </span>
                 </div>
 
@@ -184,7 +184,7 @@
                                             <span class="pt-step__action">[[ stepAction(thread, p) ]]</span>
                                         </div>
                                         <span class="pt-status" :class="'pt-status--' + displayStatus(p)"
-                                              :title="displayStatus(p) === 'superseded' ? 'Closed automatically: one of its revisions was accepted instead.' : ''">
+                                              :title="displayStatus(p) === 'superseded' ? 'Closed automatically: another version of its thread was accepted.' : ''">
                                             [[ displayStatus(p) ]]<template v-if="p.status === 'accepted'"> — merged</template>
                                         </span>
                                     </div>
@@ -271,9 +271,9 @@
                 return EDIT_TYPE_META[type] || { label: type || 'General', icon: 'fa-pen' };
             }
 
-            // A proposal auto-rejected because one of its revisions got accepted
-            // (see _auto_reject_parent_on_child_accept) reads as "superseded",
-            // not a plain "rejected" — it wasn't rejected on its own merits.
+            // Closed because another version of its thread was accepted (see
+            // decide_proposal) — older rows were stored as "rejected" with an
+            // accepted revision, they read as superseded too.
             function displayStatus(p) {
                 if (p.status === 'rejected' && (p.revisions || []).some(r => r.status === 'accepted')) return 'superseded';
                 return p.status === 'approved' ? 'accepted' : p.status;
