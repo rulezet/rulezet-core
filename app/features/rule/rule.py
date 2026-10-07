@@ -2106,7 +2106,7 @@ def propose_edit(rule_id) -> redirect:
             "toast_class": "success",
             "redirect_url": discuss_url,
         })
-    flash("Request sended.", "success", discuss_url)
+    flash(f"Request sended.||{discuss_url}", "success")   # "||link": shown as a link
     return redirect(url_for('rule.detail_rule', rule_id=rule_id))
 
 @rule_blueprint.route('/propose_revision/<int:proposal_id>', methods=['POST'])
@@ -2194,7 +2194,7 @@ def propose_revision(proposal_id) -> redirect:
             "toast_class": "success",
             "redirect_url": discuss_url,
         })
-    flash("Revision submitted.", "success", discuss_url)
+    flash(f"Revision submitted.||{discuss_url}", "success")   # "||link": shown as a link
     return redirect(discuss_url)
 
 @rule_blueprint.route("/validate_proposal", methods=['GET', 'POST'])
