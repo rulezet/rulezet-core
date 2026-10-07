@@ -29,3 +29,7 @@ jobs:
     - name: Test
       run: |
         ./launch.sh -t
+    - name: Test (new suite, tests_new/)
+      if: ${{ !cancelled() }}
+      run: |
+        FLASKENV=testing pytest tests_new
