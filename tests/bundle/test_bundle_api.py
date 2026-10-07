@@ -190,7 +190,7 @@ def test_add_rule_errors(client, app):
         # not the owner: 401 (unchanged contract), admin: ok
         r2 = _rule("Other")
         q = {"rule_id": r2.id, "bundle_id": b.id, "description": "d"}
-        assert client.get(url, headers=H_OTHER, query_string=q).status_code == 401
+        assert client.get(url, headers=H_OTHER, query_string=q).status_code == 403
         assert client.get(url, headers=H_ADMIN, query_string=q).status_code == 200
         assert _assoc(b.id) == {r2.id}
 
@@ -211,7 +211,7 @@ def test_add_rules_bulk(client, app):
         assert data["added"] == 1 and data["already_present"] == 1 and data["missing_rules"] == ["missing-uuid"]
         assert _assoc(b.id) == {r1.id, r2.id, r3.id}
         assert _tree(b.id)[0] == {r1.id: "Unsorted", r2.id: "Unsorted", r3.id: "c"}
-        assert client.post(url, headers=H_OTHER, json={"bundle_id": b.id, "rule_ids": [r1.id]}).status_code == 401
+        assert client.post(url, headers=H_OTHER, json={"bundle_id": b.id, "rule_ids": [r1.id]}).status_code == 403
         assert client.post(url, headers=H_OWNER, json={"bundle_id": b.id}).status_code == 400
         assert client.post(url, headers=H_OWNER, json={"bundle_id": 999, "rule_ids": [r1.id]}).status_code == 404
 
@@ -235,7 +235,7 @@ def test_remove_rule_also_takes_it_out_of_the_tree(client, app):
         # not in the bundle anymore: 404 (was a 500)
         resp = client.get(url, headers=H_OWNER, query_string={"rule_id": r1.id, "bundle_id": b.id})
         assert resp.status_code == 404
-        assert client.get(url, headers=H_OTHER, query_string={"rule_id": r1.id, "bundle_id": b.id}).status_code == 401
+        assert client.get(url, headers=H_OTHER, query_string={"rule_id": r1.id, "bundle_id": b.id}).status_code == 403
         assert client.get(url, headers=H_OWNER, query_string={"bundle_id": b.id}).status_code == 400
 
 
@@ -273,7 +273,7 @@ def test_edit_tags_and_validation(client, app):
         assert client.post(url, headers=H_OWNER, json={"public": "yes"}).status_code == 400
         assert client.post(url, headers=H_OWNER, json={}).status_code == 400
         assert client.post(url, headers=H_OWNER, data="not json").status_code == 400
-        assert client.post(url, headers=H_OTHER, json={"name": "x"}).status_code == 401
+        assert client.post(url, headers=H_OTHER, json={"name": "x"}).status_code == 403
         assert client.post("/api/bundle/private/edit_bundle/999", headers=H_OWNER, json={"name": "x"}).status_code == 404
         assert fresh(Bundle, b.id).name == "Test bundle"
 
@@ -313,7 +313,7 @@ def test_structure_validation_and_permissions(client, app):
         assert client.post(url, headers=H_OWNER, json={"structure": [{"type": "file", "name": "a/b"}]}).status_code == 400
         assert client.post(url, headers=H_OWNER, json={"structure": [{"type": "weird", "name": "x"}]}).status_code == 400
         assert client.post(url, headers=H_OWNER, json={"structure": "nope"}).status_code == 400
-        assert client.post(url, headers=H_OTHER, json={"structure": []}).status_code == 401
+        assert client.post(url, headers=H_OTHER, json={"structure": []}).status_code == 403
         assert client.post("/api/bundle/private/999/structure", headers=H_OWNER, json={"structure": []}).status_code == 404
         assert _tree(b.id) == ({}, set())
 
@@ -323,7 +323,7 @@ def test_structure_validation_and_permissions(client, app):
 def test_delete_bundle(client, app):
     with app.app_context():
         b, b2 = make_bundle("A"), make_bundle("B")
-        assert client.post(f"/api/bundle/private/delete_bundle/{b.id}", headers=H_OTHER).status_code == 401
+        assert client.post(f"/api/bundle/private/delete_bundle/{b.id}", headers=H_OTHER).status_code == 403
         assert fresh(Bundle, b.id) is not None
         assert client.post(f"/api/bundle/private/delete_bundle/{b.id}", headers=H_OWNER).status_code == 200
         assert fresh(Bundle, b.id) is None
@@ -502,7 +502,7 @@ def test_share_key_never_grants_write_access(client, app):
         db.session.commit()
         resp = client.post(f"/api/bundle/private/edit_bundle/{b.id}?share_key=s3cr3t-share-token",
                            headers=H_OTHER, json={"name": "hacked"})
-        assert resp.status_code == 401
+        assert resp.status_code == 403
         assert fresh(Bundle, b.id).name == "Hidden"
 
 

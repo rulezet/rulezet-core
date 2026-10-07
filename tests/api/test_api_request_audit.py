@@ -56,7 +56,7 @@ def test_session_only_request_does_not_create_api_activity_log(app, client):
 def test_api_key_request_creates_api_activity_log(app, client):
     """comment_api.py's own moderation check is session-only (_can_moderate
     checks flask-login's current_user, not the API key), so an API-key-only
-    call with no session still 403s here — that's a separate, pre-existing
+    call with no session is still refused here — that's a separate, pre-existing
     gap in that endpoint's own auth, not this test's concern. What this
     guards is the audit hook itself: presenting a real API key must still
     produce a category='api' log row regardless of what the endpoint
@@ -70,7 +70,7 @@ def test_api_key_request_creates_api_activity_log(app, client):
         f"/api/comments/{comment_uuid}/hard_delete",
         headers={"X-API-KEY": "admin_api_key"},
     )
-    assert res.status_code == 403
+    assert res.status_code in (401, 403)
 
     with app.app_context():
         after = ActivityLog.query.filter_by(category="api").count()

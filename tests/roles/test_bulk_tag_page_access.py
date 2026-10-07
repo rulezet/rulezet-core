@@ -40,7 +40,7 @@ def test_plain_user_gets_access_denied(app, client):
     with app.app_context():
         _login(client, "t@t.t")
         res = client.get("/rule/bulk_tag")
-        assert res.status_code == 200
+        assert res.status_code == 403
         assert b"Access Denied" in res.data or b"access" in res.data.lower()
         # Never the real page content
         assert b"Bulk Tag Rules" not in res.data

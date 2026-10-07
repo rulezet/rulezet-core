@@ -149,7 +149,7 @@ def test_get_proposal_exposes_revision_links(app, client):
     assert created_event["link"] == f"/rule/proposal_content_discuss?id={proposal_id}"
 
 
-def test_accepting_a_revision_auto_rejects_the_parent(app, client):
+def test_accepting_a_revision_supersedes_the_parent(app, client):
     with app.app_context():
         rule = Rule.query.filter_by(title="test").first()
         rule_id = rule.id
@@ -162,7 +162,7 @@ def test_accepting_a_revision_auto_rejects_the_parent(app, client):
                        headers={"Accept": "application/json"})
     revision_id = res.get_json()["redirect_url"].split("id=")[1]
 
-    # Accept the revision (child) — the parent must flip to rejected on its own.
+    # Accept the revision (child) — the parent is closed as superseded on its own.
     res = client.get(
         f"/rule/validate_proposal?ruleId={rule_id}&decision=accepted&ruleproposalId={revision_id}")
     assert res.status_code == 200
@@ -171,4 +171,4 @@ def test_accepting_a_revision_auto_rejects_the_parent(app, client):
         parent = RuleEditProposal.query.get(proposal_id)
         revision = RuleEditProposal.query.get(int(revision_id))
         assert revision.status == "accepted"
-        assert parent.status == "rejected"
+        assert parent.status == "superseded"

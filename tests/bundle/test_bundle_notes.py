@@ -22,7 +22,7 @@ def test_anyone_logged_in_can_add_a_note_on_a_public_bundle(client, app):
         r = _note(client, b.id)
         assert r.status_code == 201
         d = client.get(f"/bundle/{b.id}/notes").get_json()
-        assert d["open"] == 1 and d["notes"][0]["can_edit"] and not d["notes"][0]["can_resolve"]
+        assert d["open"] == 1 and d["notes"][0]["can_edit"] and d["notes"][0]["can_resolve"]   # its author
 
         as_anonymous()
         anon = app.test_client()
@@ -67,7 +67,7 @@ def test_private_bundle_hides_notes_from_their_author_except_via_share_link(clie
         assert _note(client, b.id).status_code == 403
 
 
-def test_only_author_edits_only_managers_resolve(client, app):
+def test_author_edits_and_resolves_managers_moderate(client, app):
     with app.app_context():
         b = make_bundle()
         login(client, other())
@@ -76,8 +76,8 @@ def test_only_author_edits_only_managers_resolve(client, app):
         login(client, admin())     # admin: can resolve and edit anything
         assert client.post(f"/bundle/{b.id}/notes/{note_id}/status", json={"status": "resolved"}).get_json()["note"]["status"] == "resolved"
 
-        login(client, other())     # author: edit yes, resolve no
-        assert client.post(f"/bundle/{b.id}/notes/{note_id}/status", json={"status": "open"}).status_code == 403
+        login(client, other())     # author: edits and resolves their own note
+        assert client.post(f"/bundle/{b.id}/notes/{note_id}/status", json={"status": "open"}).status_code == 200
         assert client.put(f"/bundle/{b.id}/notes/{note_id}", json=NOTE).status_code == 200
 
         login(client, owner())     # bundle owner: moderates

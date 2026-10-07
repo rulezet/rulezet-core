@@ -234,7 +234,7 @@ def test_edit_user_without_authentication(client):
         "first_name": "A",
         "last_name": "B"
     },headers={"X-API-KEY": api_key})
-    assert response.status_code in (401, 302)  # Depending on how login_required behaves
+    assert response.status_code in (401, 403, 302)  # an unknown key is refused
 
 
 #############

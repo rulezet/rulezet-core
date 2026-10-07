@@ -166,9 +166,9 @@ def test_share_link_full_flow(client, app):
             assert viewer.get(u).status_code == 200, u
 
         # read-only: every write is refused
-        assert viewer.post(f"/bundle/edit_access?id={b.id}").status_code == 401
-        assert viewer.post(f"/bundle/delete?id={b.id}").status_code == 401
-        assert viewer.post(f"/bundle/save_workspace/{b.id}", json={"structure": []}).status_code == 401
+        assert viewer.post(f"/bundle/edit_access?id={b.id}").status_code == 403
+        assert viewer.post(f"/bundle/delete?id={b.id}").status_code == 403
+        assert viewer.post(f"/bundle/save_workspace/{b.id}", json={"structure": []}).status_code == 403
         assert viewer.post(f"/bundle/{b.id}/share").status_code == 403
         assert viewer.get(f"/bundle/{b.id}/share").status_code == 403
         assert viewer.post(f"/bundle/{b.id}/releases", json={"version": "v1.0.0"}).status_code == 403

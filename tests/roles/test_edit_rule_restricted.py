@@ -69,7 +69,7 @@ def test_plain_user_cannot_view_edit_rule_for_someone_elses_rule(app, client):
         rule = Rule.query.filter_by(title="test").first()
         _login(client, "neo@admin.admin")  # no role, not owner
         res = client.get(f"/rule/edit_rule/{rule.id}")
-        assert res.status_code == 200
+        assert res.status_code == 403
         assert b"Access Denied" in res.data or b"access" in res.data.lower()
 
 
@@ -148,7 +148,7 @@ def test_plain_user_post_to_edit_rule_is_forbidden(app, client):
         rule = Rule.query.filter_by(title="test").first()
         _login(client, "neo@admin.admin")  # no role at all
         res = client.post(f"/rule/edit_rule/{rule.id}", data={"tags": "[]", "vulnerabilities": "[]"})
-        assert res.status_code == 200
+        assert res.status_code == 403
         assert b"Access Denied" in res.data or b"access" in res.data.lower()
 
 
@@ -228,7 +228,7 @@ def test_plain_user_cannot_view_tags_admin_list(app, client):
     with app.app_context():
         _login(client, "neo@admin.admin")  # no role
         res = client.get("/tags/admin/list")
-        assert res.status_code == 200
+        assert res.status_code == 403
         assert b"Access Denied" in res.data or b"access" in res.data.lower()
 
 

@@ -139,7 +139,7 @@ def test_add_rule_to_bundle_permission_denied(client):
         },
         headers={"X-API-KEY": API_KEY_USER}
     )
-    assert response.status_code == 401
+    assert response.status_code == 403
     json_data = response.get_json()
     assert json_data["success"] is False
     assert "permission" in json_data["message"].lower()

@@ -90,7 +90,7 @@ def test_admin_can_edit_pending_proposal(app, client):
     assert res.status_code == 200
 
 
-def test_cannot_edit_decided_proposal(app, client):
+def test_author_edits_the_justification_of_a_decided_proposal(app, client):
     with app.app_context():
         rule = Rule.query.filter_by(title="test").first()
         author = User.query.filter_by(email="t@t.t").first()
@@ -98,12 +98,12 @@ def test_cannot_edit_decided_proposal(app, client):
 
     _login(client, "t@t.t", "password1@A")
     res = client.post(f"/rule/edit_proposal_message/{proposal_id}",
-                       json={"message": "too late"})
-    assert res.status_code == 400
+                       json={"message": "still mine"})
+    assert res.status_code == 200
 
     with app.app_context():
         proposal = RuleEditProposal.query.get(proposal_id)
-        assert proposal.message == "original justification"
+        assert proposal.message == "still mine"
 
 
 def test_validate_proposal_records_reviewer(app, client):
