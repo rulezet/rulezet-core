@@ -292,7 +292,10 @@ def test_auto_accept_never_accepts_invalid_syntax(app, monkeypatch):
         # real update scan always creates alongside a RuleStatus, so both
         # rows need one here too or this test would only be exercising that
         # abort path instead of the real accept/reject-on-syntax behavior.
+        # Accepting re-validates the upstream content and writes it to the rule.
+        good_upstream = 'rule good { strings: $a = "good" condition: $a }'
         good_history = RuleUpdateHistory(rule_id=good_rule.id, rule_title="good", success=True,
+                                          old_content=good_rule.to_string, new_content=good_upstream,
                                           analyzed_by_user_id=admin.id, analyzed_at=datetime.datetime.utcnow())
         bad_history = RuleUpdateHistory(rule_id=bad_rule.id, rule_title="bad", success=True,
                                          analyzed_by_user_id=admin.id, analyzed_at=datetime.datetime.utcnow())
@@ -351,6 +354,7 @@ def test_auto_accept_never_accepts_invalid_syntax(app, monkeypatch):
         # The valid-syntax update was really auto-accepted...
         assert good_status.update_available is False
         assert good_status.message == "Updated successfully"
+        assert db.session.get(Rule, good_rule.id).to_string == good_upstream
         # ...but the invalid-syntax one was force-rejected, never accepted,
         # by accept_all_update's own per-row syntax gate — this is the
         # guarantee the whole feature was built around.
