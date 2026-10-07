@@ -2540,7 +2540,7 @@ def get_proposal() -> jsonify:
     """Get the detail porposal"""
     proposalId = as_db_id(request.args.get('id'))
     proposal = RuleModel.get_rule_proposal(proposalId) if proposalId else None
-    if not proposal:
+    if not proposal or not RuleModel.get_rule(proposal.rule_id):
         return jsonify({"success": False, "message": "Proposal not found"}), 404
 
     old_content = proposal.old_content or ""
