@@ -6,7 +6,7 @@ from app.core.db_class.db import (
     Rule, RuleEditProposal, RuleFavoriteUser, RuleTagAssociation, RuleUpdateHistory, RuleVote, Tag,
 )
 from tests_new.helpers.db import count, reload
-from tests_new.helpers.rules import edit_form, make_rule, new_rule_form, yara_rule
+from tests_new.helpers.rules import edit_form, make_proposal, make_rule, new_rule_form, yara_rule
 
 
 def _tag_names(rule):
@@ -494,3 +494,130 @@ def test_proposal_threads_filters_and_sort(clients, users):
     assert ids(q=f"%23{closed.id}")[0] == [closed.id]                           # "#<id>"
     assert ids(sort="oldest")[0] == [merged.id, open_one.id, closed.id]
     assert ids(sort="versions")[0][0] == merged.id
+
+
+# ── Deciding a thread (accept supersedes the other versions, reasons) ────────
+
+def _decide(client, proposal, decision, reason=None):
+    return client.post("/rule/validate_proposal", json={
+        "ruleId": proposal.rule_id, "ruleproposalId": proposal.id, "decision": decision, "reason": reason})
+
+
+def test_accepting_a_version_supersedes_the_rest_of_its_thread(clients, users):
+    rule = make_rule(users.owner)
+    v1 = make_proposal(rule, users.user, status="rejected", minutes=0)
+    v2 = make_proposal(rule, users.user, previous=v1, minutes=1)
+    v3 = make_proposal(rule, users.admin, previous=v1, minutes=2)
+    other_thread = make_proposal(rule, users.admin, minutes=3)
+
+    response = _decide(clients["owner"], v2, "accepted")
+
+    assert response.status_code == 200
+    assert sorted(response.get_json()["superseded_ids"]) == sorted([v1.id, v3.id])
+    assert [reload(p).status for p in (v1, v2, v3, other_thread)] == ["superseded", "accepted", "superseded", "pending"]
+    assert reload(rule).to_string == v2.proposed_content
+
+
+def test_a_decided_or_superseded_version_cannot_be_decided_again(clients, users):
+    rule = make_rule(users.owner)
+    original = rule.to_string
+    v1 = make_proposal(rule, users.user, status="superseded")
+    accepted = make_proposal(rule, users.user, status="accepted", minutes=1)
+
+    responses = [_decide(clients["owner"], p, "accepted") for p in (v1, accepted)]
+
+    assert [r.status_code for r in responses] == [409, 409]
+    assert reload(rule).to_string == original
+    assert reload(v1).status == "superseded"
+
+
+def test_a_superseded_version_cannot_be_revised(clients, users):
+    rule = make_rule(users.owner)
+    v1 = make_proposal(rule, users.user, status="superseded")
+
+    response = clients["user"].post(f"/rule/propose_revision/{v1.id}", headers={"Accept": "application/json"},
+                                    data={"rule_content": yara_rule("late"), "message": "too late"})
+
+    assert response.status_code == 400
+    assert count(RuleEditProposal, previous_proposal_id=v1.id) == 0
+
+
+def test_rejection_reason_is_stored_returned_and_notified(clients, users):
+    from app.core.db_class.db import Notification
+    rule = make_rule(users.owner)
+    proposal = make_proposal(rule, users.user)
+
+    _decide(clients["owner"], proposal, "rejected", reason="  Breaks the condition  ")
+
+    assert reload(proposal).rejection_reason == "Breaks the condition"
+    data = clients["user"].get(f"/rule/get_proposal?id={proposal.id}").get_json()["proposal"]
+    assert data["rejection_reason"] == "Breaks the condition"
+    notification = Notification.query.filter_by(user_id=users.user.id, notif_type="proposal_rejected").one()
+    assert "Breaks the condition" in notification.body
+
+
+def test_accepting_a_revision_records_the_rule_s_real_previous_content(clients, users):
+    """The history entry diffs the rule as it was, not the version the revision started from."""
+    rule = make_rule(users.owner)
+    original = rule.to_string
+    v1 = make_proposal(rule, users.user)
+    v2 = make_proposal(rule, users.user, previous=v1, minutes=1)
+
+    _decide(clients["owner"], v2, "accepted")
+
+    history = RuleUpdateHistory.query.filter_by(rule_id=rule.id).order_by(RuleUpdateHistory.id.desc()).first()
+    assert (history.old_content, history.new_content) == (original, v2.proposed_content)
+
+
+def test_bulk_accept_keeps_one_version_per_thread(clients, users):
+    rule = make_rule(users.owner)
+    v1 = make_proposal(rule, users.user, minutes=0)
+    v2 = make_proposal(rule, users.user, previous=v1, minutes=1)
+
+    clients["owner"].post("/rule/manage_proposals", json={"action": "accept", "mode": "partial",
+                                                           "selected_ids": [v1.id, v2.id]})
+
+    assert (reload(v1).status, reload(v2).status) == ("accepted", "superseded")
+    assert reload(rule).to_string == v1.proposed_content
+
+
+def test_thread_participants_are_notified_of_a_decision(clients, users):
+    from app.core.db_class.db import Notification, UnifiedComment
+    rule = make_rule(users.owner)
+    v1 = make_proposal(rule, users.admin)
+    v2 = make_proposal(rule, users.user, previous=v1, minutes=1)
+    db.session.add(UnifiedComment(content="looks good", object_type="proposal", object_id=v1.id,
+                                  created_by=users.user.id))
+    db.session.commit()
+
+    _decide(clients["owner"], v1, "accepted")
+
+    notified = {n.user_id for n in Notification.query.filter_by(notif_type="proposal_thread")}
+    assert users.user.id in notified          # author of v2 and commenter
+    assert users.owner.id not in notified     # the one deciding
+    assert reload(v2).status == "superseded"
+
+
+def test_get_proposal_returns_its_thread_and_what_the_viewer_may_do(clients, users):
+    rule = make_rule(users.owner)
+    v1 = make_proposal(rule, users.user, status="rejected", minutes=0)
+    v2 = make_proposal(rule, users.user, previous=v1, minutes=1)
+
+    as_owner = clients["owner"].get(f"/rule/get_proposal?id={v2.id}").get_json()["proposal"]
+    as_stranger = clients["admin"].get(f"/rule/get_proposal?id={v1.id}").get_json()["proposal"]
+
+    assert [(v["id"], v["version"]) for v in as_owner["thread"]] == [(v1.id, 1), (v2.id, 2)]
+    assert as_owner["version"] == 2 and as_owner["rule_content"] == rule.to_string
+    assert (as_owner["can_decide"], as_owner["can_revise"]) == (True, True)
+    assert (as_stranger["can_decide"], as_stranger["can_revise"]) == (False, True)   # admin; v1 is not pending
+
+
+def test_review_queue_lists_each_version_with_its_place_in_the_thread(clients, users):
+    rule = make_rule(users.owner)
+    v1 = make_proposal(rule, users.user, minutes=0)
+    v2 = make_proposal(rule, users.user, previous=v1, minutes=1)
+
+    rows = clients["owner"].get("/rule/get_rules_propose_edit_history_page").get_json()["rules_list"]
+
+    positions = {r["id"]: (r["thread_root_id"], r["thread_version"], r["thread_size"]) for r in rows}
+    assert positions == {v1.id: (v1.id, 1, 2), v2.id: (v1.id, 2, 2)}

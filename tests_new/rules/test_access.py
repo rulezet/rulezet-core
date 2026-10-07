@@ -12,7 +12,7 @@ from app import db
 from app.core.db_class.db import Rule, RuleEditProposal, RuleFavoriteUser, RuleTagAssociation, RuleVote, Tag
 from tests_new.helpers.access import FORBIDDEN, LOGIN, OK, assert_outcome, matrix
 from tests_new.helpers.db import count, reload
-from tests_new.helpers.rules import edit_form, make_rule, new_rule_form, yara_rule
+from tests_new.helpers.rules import edit_form, make_proposal, make_rule, new_rule_form, yara_rule
 from tests_new.helpers.users import make_user_with_permission
 
 EVERYONE = {"anonymous": OK, "user": OK, "owner": OK, "admin": OK}
@@ -262,6 +262,58 @@ def test_accept_an_edit_proposal(role, expected, clients, users):
 
     assert_outcome(response, expected)
     assert (reload(rule).to_string == proposed) is (expected is OK)
+
+
+@pytest.mark.parametrize("role, expected", matrix(OWNER_OR_ADMIN))
+def test_reject_an_edit_proposal_with_a_reason(role, expected, clients, users):
+    rule = make_rule(users.owner)
+    proposal = make_proposal(rule, users.user)
+
+    response = clients[role].post("/rule/validate_proposal", json={
+        "ruleId": rule.id, "ruleproposalId": proposal.id, "decision": "rejected", "reason": "Breaks the rule"})
+
+    assert_outcome(response, expected)
+    assert (reload(proposal).status == "rejected") is (expected is OK)
+    assert (reload(proposal).rejection_reason == "Breaks the rule") is (expected is OK)
+
+
+# A version is revised by its author, the rule's owner or an admin. Here the
+# author is the admin, so "user" is a stranger to both the proposal and the rule.
+REVISE_A_PROPOSAL = {"anonymous": LOGIN, "user": FORBIDDEN, "owner": OK, "admin": OK}
+
+
+def _revise(client, proposal):
+    return client.post(f"/rule/propose_revision/{proposal.id}", headers={"Accept": "application/json"},
+                       data={"rule_content": yara_rule("revised"), "message": "v2"})
+
+
+@pytest.mark.parametrize("role, expected", matrix(REVISE_A_PROPOSAL))
+def test_revise_an_edit_proposal(role, expected, clients, users):
+    proposal = make_proposal(make_rule(users.owner), users.admin)
+
+    response = _revise(clients[role], proposal)
+
+    assert_outcome(response, expected)
+    assert (count(RuleEditProposal, previous_proposal_id=proposal.id) == 1) is (expected is OK)
+
+
+def test_the_author_revises_their_own_proposal(clients, users):
+    proposal = make_proposal(make_rule(users.owner), users.user)
+
+    response = _revise(clients["user"], proposal)
+
+    assert response.status_code == 200
+    assert count(RuleEditProposal, previous_proposal_id=proposal.id) == 1
+
+
+@pytest.mark.parametrize("role", ["user", "owner", "admin"])
+def test_a_proposal_of_a_trashed_rule_is_not_found(role, clients, users):
+    rule = _trashed_rule(users.owner, users.admin)
+    proposal = make_proposal(rule, users.user)
+
+    response = clients[role].get(f"/rule/get_proposal?id={proposal.id}")
+
+    assert response.status_code == 404
 
 
 def _proposal_by(author, rule_owner, status):

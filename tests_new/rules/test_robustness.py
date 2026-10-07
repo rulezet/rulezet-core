@@ -8,7 +8,7 @@ import pytest
 from app.core.db_class.db import Rule, RuleEditProposal, RuleVote
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.inputs import BAD_IDS, BLANK, EMPTY, INJECTIONS, ODD_CHARACTERS, TOO_LONG, WRONG_TYPES
-from tests_new.helpers.rules import edit_form, make_rule, new_rule_form, yara_rule
+from tests_new.helpers.rules import edit_form, make_proposal, make_rule, new_rule_form, yara_rule
 from tests_new.helpers.users import api_headers
 
 BAD_TEXT = [TOO_LONG, *INJECTIONS, *ODD_CHARACTERS]
@@ -216,6 +216,44 @@ def test_validate_proposal_with_missing_or_bad_parameters_never_errors(query, cl
     response = clients["admin"].get(f"/rule/validate_proposal?{query}")
 
     assert response.status_code < 500
+
+
+@pytest.mark.parametrize("body", [None, "not json", [1], {"decision": "rejected"},
+                                  {"ruleId": [1], "ruleproposalId": {}, "decision": "rejected"}])
+def test_validate_proposal_with_a_broken_body_never_errors(body, clients, users):
+    rule = make_rule(users.owner)
+    proposal = make_proposal(rule, users.user)
+
+    if isinstance(body, str):
+        response = clients["owner"].post("/rule/validate_proposal", data=body, content_type="application/json")
+    else:
+        response = clients["owner"].post("/rule/validate_proposal", json=body)
+
+    assert 400 <= response.status_code < 500
+    assert reload(proposal).status == "pending"
+
+
+@pytest.mark.parametrize("reason", [TOO_LONG, 5, ["why"], {"a": 1}])
+def test_reject_with_a_reason_too_long_or_not_a_text_is_refused(reason, clients, users):
+    rule = make_rule(users.owner)
+    proposal = make_proposal(rule, users.user)
+
+    response = clients["owner"].post("/rule/validate_proposal", json={
+        "ruleId": rule.id, "ruleproposalId": proposal.id, "decision": "rejected", "reason": reason})
+
+    assert response.status_code == 400
+    assert reload(proposal).status == "pending"
+
+
+@pytest.mark.parametrize("reason", INJECTIONS)
+def test_reject_reason_is_stored_verbatim(reason, clients, users):
+    rule = make_rule(users.owner)
+    proposal = make_proposal(rule, users.user)
+
+    clients["owner"].post("/rule/validate_proposal", json={
+        "ruleId": rule.id, "ruleproposalId": proposal.id, "decision": "rejected", "reason": reason})
+
+    assert reload(proposal).rejection_reason == reason.strip()
 
 
 @pytest.mark.parametrize("proposal_id", ["", "999999", "abc"])

@@ -71,3 +71,19 @@ def edit_form(rule, **changes):
     form.update(changes)
     return form
 
+
+
+def make_proposal(rule, author, *, previous=None, status="pending", minutes=0, content=None):
+    """An edit proposal of `rule` by `author` — a revision of `previous` when
+    given — dated `minutes` after a fixed start, so versions keep their order."""
+    from app.core.db_class.db import RuleEditProposal
+    proposal = RuleEditProposal(
+        rule_id=rule.id, user_id=author.id,
+        proposed_content=content or yara_rule(f"proposed_{next(_counter)}"),
+        old_content=previous.proposed_content if previous else rule.to_string,
+        message="Why this change", status=status,
+        previous_proposal_id=previous.id if previous else None,
+        timestamp=datetime.datetime(2026, 1, 1) + datetime.timedelta(minutes=minutes))
+    db.session.add(proposal)
+    db.session.commit()
+    return proposal
