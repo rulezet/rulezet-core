@@ -4647,12 +4647,12 @@ def bulk_new_rules_decision(sid):
     """Dispatch add-all or reject-all new rules as a background job."""
     if not _is_github_manager():
         return {"message": "Access denied", "toast_class": "danger-subtle"}, 403
+    if not RuleModel.get_updater_result(sid):
+        return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
     data = json_object()
     action = data.get('action')
     if action not in ('add', 'reject'):
         return {'message': 'Invalid action', 'toast_class': 'danger-subtle'}, 400
-    if not RuleModel.get_updater_result(sid):
-        return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
     import app.features.jobs.jobs_core as JobsModel
     label = f"{'Add' if action == 'add' else 'Reject'} all new rules ({sid[:8]}…)"
 
