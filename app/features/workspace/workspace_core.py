@@ -1,7 +1,7 @@
 import uuid as _uuid
 import datetime
 from ... import db
-from ...core.db_class.db import Workspace, WorkspaceRule, Rule
+from ...core.db_class.db import Workspace, WorkspaceRule, WorkspaceBundle, Bundle, Rule
 
 
 def get_user_workspaces(user_id: int) -> list:
@@ -92,3 +92,44 @@ def get_workspace_rule_ids(ws: Workspace) -> list:
         .filter(WorkspaceRule.workspace_id == ws.id, Rule.is_deleted == False)
         .all()
     ]
+
+
+# ── Bundles collected in a workspace ────────────────────────────────────────
+
+def add_bundle_to_workspace(ws: Workspace, bundle_id: int, commit: bool = True) -> bool:
+    if WorkspaceBundle.query.filter_by(workspace_id=ws.id, bundle_id=bundle_id).first():
+        return False
+    db.session.add(WorkspaceBundle(workspace_id=ws.id, bundle_id=bundle_id))
+    ws.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
+    if commit:
+        db.session.commit()
+    return True
+
+
+def remove_bundle_from_workspace(ws: Workspace, bundle_id: int) -> bool:
+    """Drop the workspace ↔ bundle link. Also clears the "exported from this
+    workspace" provenance so the bundle doesn't reappear. The bundle itself
+    is never touched."""
+    wb = WorkspaceBundle.query.filter_by(workspace_id=ws.id, bundle_id=bundle_id).first()
+    bundle = Bundle.query.get(bundle_id)
+    exported_here = bool(bundle and bundle.source_workspace_id == ws.id)
+    if not wb and not exported_here:
+        return False
+    if wb:
+        db.session.delete(wb)
+    if exported_here:
+        bundle.source_workspace_id = None
+    ws.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
+    db.session.commit()
+    return True
+
+
+def get_workspace_bundle_links(ws: Workspace) -> list:
+    """(WorkspaceBundle, Bundle) pairs, newest first."""
+    return (
+        db.session.query(WorkspaceBundle, Bundle)
+        .join(Bundle, Bundle.id == WorkspaceBundle.bundle_id)
+        .filter(WorkspaceBundle.workspace_id == ws.id)
+        .order_by(WorkspaceBundle.added_at.desc())
+        .all()
+    )

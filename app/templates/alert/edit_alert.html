@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% set page_title = (alert.name if is_edit else 'New alert') %}
+{% block title %}{{ page_title }} — Alerts — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/alert/alert.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container my-5" id="alert-form-app" v-cloak>
+
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-bell banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/alert/" class="text-decoration-none text-muted">Alerts</a></li>
+        {% if is_edit %}
+        <li class="breadcrumb-item"><a href="/alert/{{ alert.uuid }}" class="text-decoration-none text-muted">{% if alert.name|length > 40 %}{{ alert.name[:40] }}…{% else %}{{ alert.name }}{% endif %}</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Edit</li>
+        {% else %}
+        <li class="breadcrumb-item active text-muted" aria-current="page">New alert</li>
+        {% endif %}
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid {{ 'fa-pen' if is_edit else 'fa-bell' }}"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">{% if page_title|length > 60 %}{{ page_title[:60] }}…{% else %}{{ page_title }}{% endif %}</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+      {% if is_edit %}Refine what this alert watches and how it reaches you.{% else %}Choose what to watch — the preview on the right shows what it would have caught over the last 30 days.{% endif %}
+    </p>
+  </div>
+
+  <alert-form
+    :initial="initial"
+    :criteria-display="criteriaDisplay"
+    :is-edit="{{ is_edit | tojson }}"
+    alert-uuid="{{ alert.uuid if is_edit else '' }}"
+    :email-available="{{ email_available | tojson }}"
+    :csrf-token="csrfToken">
+  </alert-form>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+import AlertForm from '/static/js/alert/alertForm.js'
+
+const { createApp } = Vue
+
+createApp({
+    delimiters: ['[[', ']]'],
+    components: { 'alert-form': AlertForm },
+    setup() {
+        return {
+            initial: {{ alert_data | tojson }},
+            criteriaDisplay: {{ criteria_display | tojson }},
+            csrfToken: document.getElementById('csrf_token')?.value || '',
+        }
+    },
+}).mount('#alert-form-app')
+</script>
+{% endblock %}

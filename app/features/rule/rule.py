@@ -12,7 +12,7 @@ from datetime import datetime,  timezone
 
 from app.features.misp.rule.misp_object import content_convert_to_misp_object, get_rule_misp_event, get_rule_misp_event, get_rule_misp_object
 from .rule_form import AddNewRuleForm, CreateFormatRuleForm, EditRuleForm
-from app.core.utils.utils import  bump_version, form_to_dict, generate_side_by_side_diff_html, safe_referrer
+from app.core.utils.utils import  DB_ID_MAX, as_db_id, bump_version, form_to_dict, generate_side_by_side_diff_html, json_object, safe_referrer, internal_error
 
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
@@ -401,8 +401,9 @@ def get_rules_page_filter() -> jsonify:
 @login_required
 def delete_rule() -> jsonify:
     """Delete a rule"""
-    data = request.get_json() or {}
-    rule_id  = data.get("id")
+    rule_id = as_db_id(json_object().get("id"))
+    if not rule_id:
+        return jsonify({"success": False, "message": "A valid rule id is required.", "toast_class": "danger"}), 400
     user_id = RuleModel.get_rule_user_id(rule_id)
 
     if current_user.id == user_id or current_user.is_admin():
@@ -420,7 +421,7 @@ def delete_rule() -> jsonify:
                      extra={"rule_id": rule_id})
         return {"success": True, "message": "Rule moved to trash!" , "toast_class" : "success"}, 200
     
-    return render_template("access_denied.html")
+    return jsonify({"success": False, "message": "Access denied.", "toast_class": "danger"}), 403
 
 @rule_blueprint.route("/get_current_user", methods=['GET'])
 def get_current_user() -> jsonify:
@@ -431,12 +432,14 @@ def get_current_user() -> jsonify:
 @login_required
 def vote_rule() -> jsonify:
     """Update the vote up or down"""
-    data = request.get_json() or {}
-    rule_id   = int(data.get('id', 0))
-    vote_type = str(data.get('vote_type', ''))
+    data = json_object()
+    rule_id   = as_db_id(data.get('id'))
+    vote_type = data.get('vote_type')
 
     if vote_type not in ('up', 'down'):
         return jsonify({"message": "Invalid vote type"}), 400
+    if not rule_id:
+        return jsonify({"message": "Rule not found"}), 404
 
     result = RuleModel.process_vote(rule_id, current_user.id, vote_type)
     if result is None:
@@ -498,7 +501,9 @@ def rule_voters(rule_id):
 def edit_rule(rule_id) -> render_template:
     """Edit a rule"""
     rule = RuleModel.get_rule(rule_id)
-    user_id = RuleModel.get_rule_user_id(rule_id)
+    if not rule:   # missing or in the trash
+        return render_template("404.html"), 404
+    user_id = rule.user_id
 
     is_owner_or_admin = current_user.id == user_id or current_user.is_admin()
     # A non-owner holding rule.tag_any may still reach this page, but only to
@@ -558,7 +563,7 @@ def edit_rule(rule_id) -> render_template:
                                deep_validation_available=is_deep_validation_configured())
 
     if is_owner_or_admin:
-        form = EditRuleForm()
+        form = EditRuleForm(rule_id=rule.id)
         licenses = get_licst_license()
         # Rules imported from GitHub (see rule_from_github/proposal_core.py)
         # can carry a free-text license that isn't in licenses.txt — without
@@ -580,7 +585,7 @@ def edit_rule(rule_id) -> render_template:
             rule_dict = fill_all_void_field(form_dict)
            
             
-            valide , error = verify_syntax_rule_by_format(rule_dict)
+            valide , error = verify_syntax_rule_by_format(rule_dict, rule=rule)
             if not valide:
                 form.to_string.errors.append(f"Syntax Error: {error}")
                 from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
@@ -693,7 +698,7 @@ def edit_rule(rule_id) -> render_template:
         return render_template("rule/edit_rule.html", form=form, rule=rule,
                                deep_validation_available=is_deep_validation_configured())
     else:
-        return render_template("access_denied.html")
+        return render_template("access_denied.html"), 403
     
 
 @rule_blueprint.route("/is_lock_for_update", methods=['GET'])
@@ -706,8 +711,14 @@ def is_lock_for_update()-> render_template:
     return jsonify({"is_locked": is_locked}), 200
 
 @rule_blueprint.route("/update_lock/<int:rule_id>", methods=['GET'])
+@login_required
 def update_lock(rule_id):
-    """Update the lock status of the rule's last history entry."""
+    """Update the lock status of the rule's last history entry (owner or admin)."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return jsonify({"message": "Rule not found", "toast_class": "danger"}), 404
+    if current_user.id != rule.user_id and not current_user.is_admin():
+        return jsonify({"message": "Access denied.", "toast_class": "danger"}), 403
     manuel_submit = request.args.get('manuel_submit', 'false').lower() == 'true'  # string → bool
     is_locked = RuleModel.manage_history_rule(rule_id, manuel_submit)
     return jsonify({"is_locked": is_locked, "message": "Rule lock status updated successfully", "toast_class": "success-subtle"})
@@ -739,6 +750,7 @@ def get_rules_page_history()-> render_template:
 #################
 
 @rule_blueprint.route("/get_rules_page_owner", methods=['GET'])
+@login_required
 def get_rules_page_owner() -> jsonify:
     """Get all the rule of the user"""
     page = request.args.get('page', 1, type=int)
@@ -755,6 +767,7 @@ def get_rules_page_owner() -> jsonify:
     return {"message": "No Rule"}, 400
 
 @rule_blueprint.route("/get_my_rules_page_filter", methods=['GET'])
+@login_required
 def get_rules_page_filter_owner() -> jsonify:
     """Get all the rules of the current user with filter"""
     page = int(request.args.get("page", 1))
@@ -783,6 +796,7 @@ def get_rules_page_filter_owner() -> jsonify:
     }), 200
 
 @rule_blueprint.route("/get_my_rules_page_filter_github", methods=['GET'])
+@login_required
 def get_my_rules_page_filter_github() -> jsonify:
     """Get all the rules of the current user with filter"""
     page = int(request.args.get("page", 1))
@@ -809,23 +823,26 @@ def get_my_rules_page_filter_github() -> jsonify:
 @login_required
 def delete_selected_rules() -> jsonify:
     """Delete all the selected rule"""
-    data = request.get_json()
-    rule_ids = data.get('ids', [])
-    if not rule_ids:
-        return jsonify({"success": False, "message": "No rules selected.", "toast_class": "danger"}), 400
+    raw_ids = json_object().get('ids')
+    rule_ids = [as_db_id(i) for i in raw_ids] if isinstance(raw_ids, list) else []
+    if not rule_ids or None in rule_ids:
+        return jsonify({"success": False, "message": "No valid rules selected.", "toast_class": "danger"}), 400
 
-    # Permission check
+    # Permission check — and note each owner now: once trashed, a rule no
+    # longer resolves through the active-rule lookups below.
+    owner_ids = set()
     for rule_id in rule_ids:
         user_id = RuleModel.get_rule_user_id(rule_id)
         if current_user.id != user_id and not current_user.is_admin():
-            return render_template("access_denied.html")
+            return jsonify({"success": False, "message": "Access denied.", "toast_class": "danger"}), 403
+        if user_id:
+            owner_ids.add(user_id)
 
     import uuid as _uuid
     batch_uuid = str(_uuid.uuid4())
     count = RuleModel.soft_delete_rule_list(rule_ids, current_user.id, batch_uuid=batch_uuid)
 
-    for rule_id in rule_ids:
-        user_id = RuleModel.get_rule_user_id(rule_id)
+    for user_id in owner_ids:
         profil = AccountModel.get_or_create_gamification_profile(user_id)
         if profil:
             AccountModel.update_rules_owned_gamification(profil.id, user_id)
@@ -989,8 +1006,14 @@ def _rule_linked_rules_count(rule_id):
     return count_relations_for_rule(rule_id)
 
 
+def _rule_bundle_count(rule_id):
+    from app.features.bundle import bundle_core as _BundleModel
+    return len(_BundleModel.get_bundles_by_rule(rule_id))
+
+
 def _nav_counts(rule_id):
     return {
+        'bundle_count':        _rule_bundle_count(rule_id),
         'similarity_count':    _rule_similarity_count(rule_id),
         'history_count':       _rule_history_count(rule_id),
         'proposal_count':      _rule_proposal_count(rule_id),
@@ -1141,6 +1164,19 @@ def detail_rule_linked_rules(rule_id):
                            **_nav_counts(rule.id))
 
 
+@rule_blueprint.route("/detail_rule/<int:rule_id>/bundles", methods=['GET'])
+def detail_rule_bundles(rule_id):
+    """Bundles sub-page for a rule — every bundle (the viewer can see) that
+    ships this rule, and where it sits in each bundle's structure."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_bundles.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
 @rule_blueprint.route("/detail_rule/<int:rule_id>/similarity", methods=['GET'])
 def detail_rule_similarity(rule_id):
     """Similarity sub-page for a rule."""
@@ -1161,7 +1197,9 @@ def detail_rule_ai_analysis(rule_id):
         return render_template("404.html"), 404
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
+    from app.features.ai.ai_core import get_active_provider
     return render_template("rule/detail_rule/detail_rule_ai_analysis.html", rule=rule,
+                           ai_runs_locally=get_active_provider().is_local,
                            **_nav_counts(rule.id))
 
 
@@ -1178,6 +1216,10 @@ def detail_rule_ai_analysis_list(rule_id):
     out = []
     for a in items:
         row = a.to_json()
+        if not a.is_public:
+            # to_json() blanks private entries — only AI managers get here
+            # with private rows (filtered above), and they need the text.
+            row['content'], row['meta'] = a.content, a.meta
         row['username'] = (f"{a.user.first_name} {a.user.last_name}".strip() or a.user.email) if a.user else None
         out.append(row)
     return jsonify({'items': out})
@@ -1191,7 +1233,7 @@ def ai_analysis_models():
     depth: the launch card itself is only shown to admins/ai.use holders in
     the template."""
     from app.core.db_class.db import AIAgentConfig
-    from app.features.ai.ai_core import AgentConnectionError, OllamaClient, get_ollama_url
+    from app.features.ai.ai_core import AgentConnectionError, list_active_models
 
     if not (current_user.is_admin() or current_user.has_permission('ai.use')):
         return jsonify({"error": "Forbidden."}), 403
@@ -1200,17 +1242,16 @@ def ai_analysis_models():
     enabled = cfg.enabled if cfg else True
     default_model = cfg.default_model if cfg else None
 
-    models = []
+    models, provider = [], None
     try:
-        client = OllamaClient(
-            base_url=get_ollama_url(),
-            model='', timeout=5,
-        )
-        models = client.list_models()
+        provider, models = list_active_models()
     except AgentConnectionError:
         pass
+    if provider and provider.kind != 'ollama' and default_model not in models:
+        default_model = provider.default_model
 
-    return jsonify({'enabled': enabled, 'models': models, 'default_model': default_model})
+    return jsonify({'enabled': enabled, 'models': models, 'default_model': default_model,
+                    'provider': {'name': provider.name, 'kind': provider.kind} if provider else None})
 
 
 def _get_visible_ai_generation_or_none(rule_id, analysis_id):
@@ -1309,7 +1350,7 @@ def detail_rule_ai_analysis_download_pdf(rule_id, analysis_id):
     except Exception as e:
         current_app.logger.exception(f'AI analysis PDF export failed (rule {rule_id}, analysis {analysis_id})')
         return current_app.response_class(
-            f'PDF export failed: {type(e).__name__}: {e}\n'
+            'PDF export failed.\n'
             'The Markdown download still works. Server log has the full traceback.',
             status=500, mimetype='text/plain',
         )
@@ -1530,7 +1571,8 @@ def rule_history_data(rule_id):
 
 @rule_blueprint.route("/get_stix/<int:rule_id>")
 def get_stix(rule_id):
-    rule_misp = get_rule_misp_event(rule_id)
+    rule_id = as_db_id(rule_id)   # the <int:> converter lets out-of-range ids through
+    rule_misp = get_rule_misp_event(rule_id) if rule_id else None
     if not rule_misp:
         return jsonify({"stix": None})
     
@@ -1548,13 +1590,13 @@ def get_sigma_convert(rule_id):
         content = convert_sigma_rule(rule, target)
         return jsonify({"success": True, "content": content})
     except Exception as e:
-        return jsonify({"success": False, "content": None, "error": str(e)})
+        return jsonify({"success": False, "content": None, "error": internal_error(e, "Conversion failed for this rule.")})
 
 @rule_blueprint.route("/download_rule", methods=['GET'])
 def download_rule_unified() -> Response:
-    rule_id = request.args.get('rule_id', type=int)
+    rule_id = as_db_id(request.args.get('rule_id'))
     fmt = request.args.get('format', default='txt')
-    rule = RuleModel.get_rule(rule_id)
+    rule = RuleModel.get_rule(rule_id) if rule_id else None
     if not rule:
         return jsonify({
             "message": f"No rule found with id={rule_id}",
@@ -1678,7 +1720,7 @@ def download_rule_unified() -> Response:
             error_mesg = f"Unknown format: {fmt}"
 
     except Exception as e:
-        error_mesg = f"Failed to prepare download: {str(e)}"
+        error_mesg = internal_error(e, "Failed to prepare the download.")
 
     if error_mesg:
         return jsonify({
@@ -1719,6 +1761,11 @@ def add_favorite_rule(rule_id) -> redirect:
             "message": "rule remove from favorite"
         }), 200
     else:
+        # Removing always works (a trashed rule can still be un-favorited);
+        # adding only for an existing, active rule.
+        if not RuleModel.get_rule(rule_id):
+            return jsonify({"is_favorited": False, "toast_class": "danger",
+                            "message": "Rule not found"}), 404
         add_favorite(user_id=current_user.id, rule_id=rule_id)
         log_activity("rule.favorite", f"Added rule id={rule_id} to favorites",
                      target_type="rule", target_id=rule_id)
@@ -1734,11 +1781,39 @@ def add_favorite_rule(rule_id) -> redirect:
 #   Comment section     #
 #########################
 
+_COMMENT_MAX_LENGTH = 10000   # same limit as the unified comment API
+_REACTION_MAX_LENGTH = 50     # RuleCommentReaction.reaction_type
+PROPOSAL_REASON_MAX = 2000      # a reviewer's accept / reject reason
+
+
+def _comment_on_active_rule(comment_id):
+    """The legacy rule comment `comment_id` (untrusted), or None when it isn't
+    a valid id, doesn't exist or its rule is trashed (a trashed rule's thread
+    is gone for everyone)."""
+    comment_id = as_db_id(comment_id)
+    comment = RuleModel.get_comment_by_id(comment_id) if comment_id else None
+    if comment and RuleModel.get_rule(comment.rule_id):
+        return comment
+    return None
+
+
+def _comment_text(*names):
+    """The first non-empty of the query parameters `names`, stripped and
+    without NUL characters (PostgreSQL refuses them)."""
+    for name in names:
+        value = (request.args.get(name) or '').replace('\x00', '').strip()
+        if value:
+            return value
+    return ''
+
+
 @rule_blueprint.route("/detail_rule/get_comments_page", methods=['GET'])
 def comment_rule() -> jsonify:
     """Get all the comment of the rule"""
-    page = request.args.get('page', 1, type=int)
-    rule_id = request.args.get('rule_id', type=int)
+    page = min(request.args.get('page', 1, type=int), DB_ID_MAX)
+    rule_id = as_db_id(request.args.get('rule_id'))
+    if not rule_id or not RuleModel.get_rule(rule_id):
+        return {"message": "Rule not found"}, 404
     comments = RuleModel.get_comment_page(page , rule_id)
     total_comments = RuleModel.get_total_comments_count()
     if comments:
@@ -1748,10 +1823,12 @@ def comment_rule() -> jsonify:
 
 @rule_blueprint.route("/get_comments", methods=["GET"])
 def get_comments():
-    rule_id = request.args.get('rule_id', type=int)
-    page    = request.args.get('page', 1, type=int)
+    rule_id = as_db_id(request.args.get('rule_id'))
+    page    = min(request.args.get('page', 1, type=int), DB_ID_MAX)
     if not rule_id:
         return jsonify({"message": "Missing rule_id"}), 400
+    if not RuleModel.get_rule(rule_id):
+        return jsonify({"message": "Rule not found"}), 404
     uid = current_user.id if current_user.is_authenticated else None
     pagination, comments = RuleModel.get_comments_for_rule(rule_id, page, user_id=uid)
     return jsonify({
@@ -1764,11 +1841,20 @@ def get_comments():
 @rule_blueprint.route("/comment_add", methods=["GET"])
 @login_required
 def add_comment():
-    content           = request.args.get('content', '', type=str) or request.args.get('new_content', '', type=str)
-    rule_id           = request.args.get('rule_id', type=int)
-    parent_comment_id = request.args.get('parent_comment_id', type=int, default=None)
-    if not rule_id or not content.strip():
+    content           = _comment_text('content', 'new_content')
+    rule_id           = as_db_id(request.args.get('rule_id'))
+    parent_arg        = request.args.get('parent_comment_id')
+    parent_comment_id = as_db_id(parent_arg) if parent_arg else None
+    if not rule_id or not content:
         return jsonify({"message": "Missing rule_id or content", "toast_class": "danger-subtle"}), 400
+    if len(content) > _COMMENT_MAX_LENGTH:
+        return jsonify({"message": "Comment too long (max 10 000 chars)", "toast_class": "danger-subtle"}), 400
+    if not RuleModel.get_rule(rule_id):
+        return jsonify({"message": "Rule not found", "toast_class": "danger-subtle"}), 404
+    if parent_arg:
+        parent = _comment_on_active_rule(parent_comment_id)
+        if not parent or parent.rule_id != rule_id:
+            return jsonify({"message": "Parent comment not found on this rule", "toast_class": "danger-subtle"}), 400
     success, message = RuleModel.add_comment_core(rule_id, content, current_user, parent_comment_id)
     if not success:
         return jsonify({"message": message, "toast_class": "danger-subtle"}), 500
@@ -1784,26 +1870,27 @@ def add_comment():
 @rule_blueprint.route("/edit_comment", methods=["GET"])
 @login_required
 def edit_comment():
-    comment_id  = request.args.get('comment_id', type=int) or request.args.get('commentID', type=int)
-    new_content = request.args.get('content', '', type=str) or request.args.get('newContent', '', type=str)
-    comment = RuleModel.get_comment_by_id(comment_id)
+    comment     = _comment_on_active_rule(request.args.get('comment_id') or request.args.get('commentID'))
+    new_content = _comment_text('content', 'newContent')
     if not comment:
         return jsonify({"message": "Comment not found", "toast_class": "danger-subtle"}), 404
     if comment.user_id != current_user.id and not current_user.is_admin():
         return jsonify({"message": "Not authorized", "toast_class": "danger-subtle"}), 403
-    RuleModel.update_comment(comment_id, new_content)
+    if not new_content or len(new_content) > _COMMENT_MAX_LENGTH:
+        return jsonify({"message": "A comment needs 1 to 10 000 characters", "toast_class": "danger-subtle"}), 400
+    RuleModel.update_comment(comment.id, new_content)
     return jsonify({"message": "Comment edited.", "toast_class": "success-subtle"}), 200
 
 
 @rule_blueprint.route("/delete_comment", methods=["GET"])
 @login_required
 def delete_comment_route():
-    comment_id = request.args.get('comment_id', type=int)
-    comment = RuleModel.get_comment_by_id(comment_id)
+    comment = _comment_on_active_rule(request.args.get('comment_id'))
     if not comment:
         return jsonify({"message": "Comment not found", "toast_class": "danger-subtle"}), 404
     if comment.user_id != current_user.id and not current_user.is_admin():
         return jsonify({"message": "Not authorized", "toast_class": "danger-subtle"}), 403
+    comment_id = comment.id
     rule_obj = RuleModel.get_rule(comment.rule_id)
     success = RuleModel.delete_comment(comment_id)
     if success:
@@ -1818,10 +1905,12 @@ def delete_comment_route():
 @rule_blueprint.route("/add_reaction", methods=["GET"])
 @login_required
 def add_reaction():
-    comment_id    = request.args.get('comment_id', type=int)
-    reaction_type = request.args.get('reaction_type', type=str)
-    if not comment_id or not reaction_type:
-        return jsonify({"message": "Missing params", "toast_class": "danger-subtle"}), 400
+    comment_id    = as_db_id(request.args.get('comment_id'))
+    reaction_type = _comment_text('reaction_type')
+    if not comment_id or not reaction_type or len(reaction_type) > _REACTION_MAX_LENGTH:
+        return jsonify({"message": "Missing or invalid params", "toast_class": "danger-subtle"}), 400
+    if not _comment_on_active_rule(comment_id):
+        return jsonify({"message": "Comment not found", "toast_class": "danger-subtle"}), 404
     success, message = RuleModel.add_reaction_to_rule_comment(comment_id, current_user.id, reaction_type)
     cls = "success-subtle" if success else "danger-subtle"
     return jsonify({"message": message, "toast_class": cls}), (200 if success else 500)
@@ -1869,7 +1958,7 @@ def get_my_proposals() -> jsonify:
 
     result = RuleModel.get_my_proposals_page(page, current_user.id, search=search, status=status)
     return jsonify({
-        "rules_list": [r.to_json() for r in result],
+        "rules_list": RuleModel.with_thread_positions([r.to_json() for r in result]),
         "total_pages_old": result.pages,
     })
 
@@ -1882,7 +1971,7 @@ def get_rules_propose_edit_history_page() -> jsonify:
 
     result , total_pending = RuleModel.get_rules_propose_edit_history_page(page, search=search, status=status, user_id=current_user.id, is_admin=current_user.is_admin())
     return jsonify({
-        "rules_list": [r.to_json() for r in result],
+        "rules_list": RuleModel.with_thread_positions([r.to_json() for r in result]),
         "total_pages_old": result.pages,
         "total_count": total_pending
     })
@@ -1901,6 +1990,45 @@ def get_rules_propose_page() -> jsonify:
             "total_pages_pending": all_rules_propose.pages,
         })
     return jsonify({"message": "No Rule"})
+
+@rule_blueprint.route("/get_proposal_threads", methods=['GET'])
+def get_proposal_threads() -> jsonify:
+    """The edit proposals of a rule, grouped into threads (a proposal and its
+    revisions, in order) — see RuleModel.get_proposal_threads."""
+    from app.core.utils.utils import as_db_id
+    rule_id = as_db_id(request.args.get('rule_id'))
+    page = as_db_id(request.args.get('page')) or 1
+    if not rule_id:
+        return jsonify({"message": "A valid rule_id is required"}), 400
+    if not RuleModel.get_rule(rule_id):
+        return jsonify({"message": "Rule not found"}), 404
+
+    status = request.args.get('status') or None
+    sort = request.args.get('sort') or "recent"
+    edit_type = (request.args.get('edit_type') or '').strip()[:50] or None
+    q = (request.args.get('q') or '').strip()[:200] or None
+    if status is not None and status not in RuleModel.PROPOSAL_THREAD_STATUSES:
+        return jsonify({"message": f"status must be one of {', '.join(RuleModel.PROPOSAL_THREAD_STATUSES)}"}), 400
+    if sort not in RuleModel.PROPOSAL_THREAD_SORTS:
+        return jsonify({"message": f"sort must be one of {', '.join(RuleModel.PROPOSAL_THREAD_SORTS)}"}), 400
+
+    threads, total_pages, total_threads, status_counts = RuleModel.get_proposal_threads(
+        rule_id, page, status=status, edit_type=edit_type, q=q, sort=sort)
+    return jsonify({
+        "threads": [{
+            "id": t["root"].id,
+            "status": t["status"],
+            "last_activity": t["last_activity"].isoformat(),
+            "proposals": [{**p.to_json(), "depth": depth, "version": version}
+                          for p, depth, version in t["proposals"]],
+        } for t in threads],
+        "page": min(page, total_pages),
+        "total_pages": total_pages,
+        "total_proposals": _rule_proposal_count(rule_id),
+        "total_threads": total_threads,
+        "status_counts": status_counts,
+    })
+
 
 @rule_blueprint.route('/propose_edit/<int:rule_id>', methods=['POST'])
 @login_required
@@ -1933,7 +2061,7 @@ def propose_edit(rule_id) -> redirect:
 
     rule_dict = rule.to_json()
     rule_dict['to_string'] = proposed_content
-    valide, error = verify_syntax_rule_by_format(rule_dict)
+    valide, error = verify_syntax_rule_by_format(rule_dict, rule=rule)
     if not valide:
         return _err(f"Syntax error in proposed content: {error}")
 
@@ -1978,7 +2106,7 @@ def propose_edit(rule_id) -> redirect:
             "toast_class": "success",
             "redirect_url": discuss_url,
         })
-    flash("Request sended.", "success", discuss_url)
+    flash(f"Request sended.||{discuss_url}", "success")   # "||link": shown as a link
     return redirect(url_for('rule.detail_rule', rule_id=rule_id))
 
 @rule_blueprint.route('/propose_revision/<int:proposal_id>', methods=['POST'])
@@ -1999,12 +2127,12 @@ def propose_revision(proposal_id) -> redirect:
         return redirect(url_for('rule.proposal_content_discuss', id=proposal_id))
 
     previous = RuleEditProposal.query.get(proposal_id)
-    if not previous:
+    if not previous or not RuleModel.get_rule(previous.rule_id):
         return _err("Proposal not found.", 404)
-    if current_user.id != previous.user_id and not current_user.is_admin():
+    if previous.status not in RuleModel.PROPOSAL_REVISABLE_STATUSES:
+        return _err("Cannot revise a decided proposal.")
+    if not RuleModel.can_revise_proposal(current_user, previous):
         return _err("Forbidden", 403)
-    if previous.status not in ('pending', 'rejected'):
-        return _err("Cannot revise a decided or already-revised proposal.")
 
     data = request.form
     proposed_content = data.get('rule_content')
@@ -2024,7 +2152,7 @@ def propose_revision(proposal_id) -> redirect:
 
     rule_dict = rule.to_json()
     rule_dict['to_string'] = proposed_content
-    valide, error = verify_syntax_rule_by_format(rule_dict)
+    valide, error = verify_syntax_rule_by_format(rule_dict, rule=rule)
     if not valide:
         return _err(f"Syntax error in proposed content: {error}")
 
@@ -2040,10 +2168,13 @@ def propose_revision(proposal_id) -> redirect:
         AccountModel.update_propose_edit_gamification(gamification.id, "add_one_to_suggested")
 
     try:
-        from app.features.notification.notification_core import notify_proposal_submitted
+        from app.features.notification.notification_core import notify_proposal_submitted, notify_proposal_participants
         new_proposal_obj = RuleEditProposal.query.get(new_proposal_id)
         if new_proposal_obj:
             notify_proposal_submitted(new_proposal_obj, rule)
+            notify_proposal_participants(
+                new_proposal_obj, actor_id=current_user.id, exclude={rule.user_id},
+                title=f'{current_user.get_username()} revised a proposal you follow', body=rule.title)
     except Exception as _e:
         print(f"[rule] notify_proposal_submitted error: {_e}")
 
@@ -2063,135 +2194,71 @@ def propose_revision(proposal_id) -> redirect:
             "toast_class": "success",
             "redirect_url": discuss_url,
         })
-    flash("Revision submitted.", "success", discuss_url)
+    flash(f"Revision submitted.||{discuss_url}", "success")   # "||link": shown as a link
     return redirect(discuss_url)
 
-@rule_blueprint.route("/validate_proposal", methods=['GET'])
+@rule_blueprint.route("/validate_proposal", methods=['GET', 'POST'])
 @login_required
 def validate_proposal() -> jsonify:
-    """Validate a proposal on a rule"""
-    rule_id = request.args.get('ruleId', type=int) # id of the real rule 
-    decision = request.args.get('decision', type=str)
-    rule_proposal_id = request.args.get('ruleproposalId', type=int) #id of the rule request
-    user_id = RuleModel.get_rule_user_id(rule_id)
-    if user_id == current_user.id or current_user.is_admin():
-        if rule_id and decision and rule_proposal_id:
-            # the rule modified
-            rule_proposal = RuleModel.get_rule_proposal(rule_proposal_id)
+    """Accept or reject a pending proposal (the rule's owner or an admin),
+    with an optional reason. Parameters in the JSON body (POST) or the
+    query string (GET, kept for older clients)."""
+    params = json_object() if request.method == 'POST' else request.args
+    rule_id = as_db_id(params.get('ruleId'))
+    decision = params.get('decision')
+    rule_proposal_id = as_db_id(params.get('ruleproposalId'))
+    reason = params.get('reason')
+    if not (rule_id and rule_proposal_id) or decision not in ('accepted', 'rejected'):
+        return jsonify({"message": "ruleId, ruleproposalId and decision (accepted / rejected) are required.",
+                        "success": False, "toast_class": "danger"}), 400
+    if reason is not None and not isinstance(reason, str):
+        return jsonify({"message": "The reason must be a text.", "success": False, "toast_class": "danger"}), 400
+    reason = (reason or "").strip()
+    if len(reason) > PROPOSAL_REASON_MAX:
+        return jsonify({"message": f"The reason is limited to {PROPOSAL_REASON_MAX} characters.",
+                        "success": False, "toast_class": "danger"}), 400
 
-            # rule_proposal_id is caller-supplied and independent from
-            # rule_id — without this check, an owner/admin of rule_id could
-            # decide (and, on accept, overwrite rule_id's content with) a
-            # pending proposal that actually belongs to a completely
-            # different rule, hijacking another user's review queue.
-            if not rule_proposal or rule_proposal.rule_id != rule_id:
-                return jsonify({"message": "Proposal not found for this rule.",
-                                "success": False,
-                                "toast_class": "danger"}), 404
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return jsonify({"message": "Rule not found.", "success": False, "toast_class": "danger"}), 404
+    if rule.user_id != current_user.id and not current_user.is_admin():
+        return jsonify({"success": False, "message": "Access denied.", "toast_class": "danger"}), 403
 
-            new_version = None
-            if decision == "accepted":
-                RuleModel.set_status(rule_proposal_id,"accepted", reviewed_by_id=current_user.id)
-                # change the to_string part of the rule in the db
-                response , status_code = RuleModel.set_to_string_rule(rule_id, rule_proposal.proposed_content)
-                message = response["message"]
-                log_activity(
-                    "rule.proposal_approved",
-                    f"Approved edit proposal id={rule_proposal_id} for rule id={rule_id}",
-                    target_type="rule", target_id=rule_id,
-                    extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id},
-                    is_public=False,
-                )
-                try:
-                    from app.features.notification.notification_core import notify_proposal_status_change
-                    _rule_for_notif = RuleModel.get_rule(rule_id)
-                    notify_proposal_status_change(rule_proposal, 'accepted',
-                                                  _rule_for_notif.title if _rule_for_notif else '')
-                except Exception as _e:
-                    print(f"[rule] notify_proposal_status_change accepted error: {_e}")
-                # add to contributor
-                user_proposal_id = RuleModel.get_rule_proposal_user_id(rule_proposal_id)
-                RuleModel.create_contribution(user_proposal_id,rule_proposal_id)
-                # add to history rule
-                rule = RuleModel.get_rule(rule_id)
-                result = {
-                    "id": rule_id,
-                    "title": rule.title,
-                    "success": True,
-                    "message": "accepted",
-                    "new_content": rule_proposal.proposed_content,
-                    "old_content": rule_proposal.old_content,
-                    "manual_submit": True,
-                }
+    # rule_proposal_id is caller-supplied and independent from rule_id —
+    # without this check, an owner/admin of rule_id could decide (and, on
+    # accept, overwrite rule_id's content with) a pending proposal that
+    # actually belongs to a completely different rule.
+    rule_proposal = RuleModel.get_rule_proposal(rule_proposal_id)
+    if not rule_proposal or rule_proposal.rule_id != rule_id:
+        return jsonify({"message": "Proposal not found for this rule.",
+                        "success": False, "toast_class": "danger"}), 404
 
-            
-                history_id = RuleModel.create_rule_history(result)
-                if not history_id:
-                    return jsonify({"message": "Error during the creation of the history." ,
-                        "success": False,
-                        "toast_class" : "danger"
-                        }),500
-                
-                # update gamification
-                gamification = AccountModel.get_or_create_gamification_profile(rule_proposal.user_id)
-                if gamification == None:
-                    return jsonify({"message": "Error during the update of the gamification." ,
-                        "success": False,
-                        "toast_class" : "danger"
-                        }),500
-                _ = AccountModel.update_propose_edit_gamification(gamification.id , "add_one_to_accepted")
+    previous_version = rule.version
+    ok, result = RuleModel.decide_proposal(rule_proposal, decision, current_user.id, reason=reason)
+    if not ok:
+        return jsonify({"message": result, "success": False, "toast_class": "danger"}), 409
 
-                # Increment community version
-                current_v = rule.version or "1.0"
-                try:
-                    new_version = bump_version(current_v) or current_v
-                except Exception:
-                    new_version = current_v
-                rule.version = new_version
-                db.session.commit()
-                log_activity(
-                    "rule.version_bump",
-                    f"Content updated — rule bumped from v{current_v} to v{new_version} (proposal #{rule_proposal_id})",
-                    target_type="rule", target_id=rule_id, target_uuid=rule.uuid,
-                    extra={"from_version": current_v, "to_version": new_version, "proposal_id": rule_proposal_id},
-                    is_public=False,
-                )
+    superseded_ids = [p.id for p in result["superseded"]]
+    log_activity(
+        "rule.proposal_approved" if decision == "accepted" else "rule.proposal_rejected",
+        f"{'Approved' if decision == 'accepted' else 'Rejected'} edit proposal id={rule_proposal_id} for rule id={rule_id}",
+        target_type="rule", target_id=rule_id,
+        extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id,
+               "reason": reason or None, "superseded_ids": superseded_ids},
+        is_public=False,
+    )
+    if decision == "rejected":
+        return jsonify({"message": "Proposal rejected.", "success": True, "toast_class": "success"}), 200
 
-            elif decision == "rejected":
-                RuleModel.set_status(rule_proposal_id,"rejected", reviewed_by_id=current_user.id)
-                message = "Proposal rejected."
-                log_activity(
-                    "rule.proposal_rejected",
-                    f"Rejected edit proposal id={rule_proposal_id} for rule id={rule_id}",
-                    target_type="rule", target_id=rule_id,
-                    extra={"proposal_id": rule_proposal_id, "proposer_id": rule_proposal.user_id},
-                    is_public=False,
-                )
-                try:
-                    from app.features.notification.notification_core import notify_proposal_status_change
-                    _rule_for_notif = RuleModel.get_rule(rule_id)
-                    notify_proposal_status_change(rule_proposal, 'rejected',
-                                                  _rule_for_notif.title if _rule_for_notif else '')
-                except Exception as _e:
-                    print(f"[rule] notify_proposal_status_change rejected error: {_e}")
-                # update gamification
-                gamification = AccountModel.get_or_create_gamification_profile(rule_proposal.user_id)
-                if gamification == None:
-                    return jsonify({"message": "Error during the update of the gamification." ,
-                        "success": False,
-                        "toast_class" : "danger"
-                        }),500
-                _ = AccountModel.update_propose_edit_gamification(gamification.id , "add_one_to_rejected")
-            else:
-                return jsonify({"message": "Invalid decision",
-                                "success": False,
-                                "toast_class" : "danger"}), 400
-        resp = {"message": message, "success": True, "toast_class": "success"}
-        if new_version:
-            resp["new_version"] = new_version
-        return jsonify(resp), 200
-    else:
-        return render_template("access_denied.html")
+    log_activity(
+        "rule.version_bump",
+        f"Content updated — rule bumped from v{previous_version} to v{result['new_version']} (proposal #{rule_proposal_id})",
+        target_type="rule", target_id=rule_id, target_uuid=rule.uuid,
+        extra={"from_version": previous_version, "to_version": result["new_version"], "proposal_id": rule_proposal_id},
+        is_public=False,
+    )
+    return jsonify({"message": "accepted", "success": True, "toast_class": "success",
+                    "new_version": result["new_version"], "superseded_ids": superseded_ids}), 200
 
 # manage_proposals
 @rule_blueprint.route("/manage_proposals", methods=['POST'])
@@ -2306,7 +2373,7 @@ def post_rule_edit_comment() -> jsonify:
             print(f"[rule] notify_proposal_comment error: {_e}")
         return jsonify(new_comment.to_json()), 201
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': internal_error(e)}), 500
 
 @rule_blueprint.route('/delete_comment', methods=['GET'])
 @login_required
@@ -2408,8 +2475,10 @@ def get_history_rule():
 @login_required
 def get_proposal() -> jsonify:
     """Get the detail porposal"""
-    proposalId = request.args.get('id', type=int)
-    proposal = RuleModel.get_rule_proposal(proposalId)
+    proposalId = as_db_id(request.args.get('id'))
+    proposal = RuleModel.get_rule_proposal(proposalId) if proposalId else None
+    if not proposal or not RuleModel.get_rule(proposal.rule_id):
+        return jsonify({"success": False, "message": "Proposal not found"}), 404
 
     old_content = proposal.old_content or ""
     new_content = proposal.proposed_content or ""
@@ -2426,6 +2495,28 @@ def get_proposal() -> jsonify:
     d['rule_version'] = rule_obj.version if rule_obj else None
 
     d['system_events'] = _build_proposal_system_events(proposal)
+
+    thread = RuleModel.get_proposal_thread(proposal)
+    d['thread_status'] = thread['status']
+    d['thread'] = [{
+        'id': p.id,
+        'version': version,
+        'depth': depth,
+        'status': p.status,
+        'previous_proposal_id': p.previous_proposal_id,
+        'user_id': p.user_id,
+        'user_name': f"{p.user.first_name} {p.user.last_name}" if p.user else "Unknown",
+        'user_avatar': p.user.get_avatar_url() if p.user else None,
+        'timestamp': p.timestamp.isoformat() if p.timestamp else None,
+        'discuss_url': f"/rule/proposal_content_discuss?id={p.id}",
+        'proposed_content': p.proposed_content,
+    } for p, depth, version in thread['proposals']]
+    d['version'] = next(v['version'] for v in d['thread'] if v['id'] == proposal.id)
+    d['rule_content'] = rule_obj.to_string if rule_obj else None
+    d['rule_format'] = rule_obj.format if rule_obj else None
+    d['can_revise'] = RuleModel.can_revise_proposal(current_user, proposal)
+    d['can_decide'] = bool(rule_obj) and proposal.status == 'pending' and (
+        current_user.id == rule_obj.user_id or current_user.is_admin())
 
     return {
         "proposal": d,
@@ -2482,11 +2573,15 @@ def _build_proposal_system_events(proposal) -> list:
             "status": revision.status,
         })
 
-    if proposal.status in ("accepted", "rejected") and proposal.reviewed_at:
+    if proposal.status in ("accepted", "rejected", "superseded") and proposal.reviewed_at:
         events.append({
             "type": proposal.status,
-            "icon": "fa-solid fa-check" if proposal.status == "accepted" else "fa-solid fa-xmark",
-            "text": f"{proposal.status} this proposal",
+            "icon": {"accepted": "fa-solid fa-check", "rejected": "fa-solid fa-xmark"}.get(
+                proposal.status, "fa-solid fa-code-branch"),
+            "text": {"accepted": "accepted this proposal",
+                     "rejected": "rejected this proposal",
+                     "superseded": "accepted another version of this thread — this one is superseded"}[proposal.status],
+            "reason": proposal.rejection_reason if proposal.status == "rejected" else None,
             "actor_id": proposal.reviewed_by_id,
             "actor_name": (f"{proposal.reviewer.first_name} {proposal.reviewer.last_name}"
                            if proposal.reviewer else "Unknown"),
@@ -2501,21 +2596,21 @@ def _build_proposal_system_events(proposal) -> list:
 @rule_blueprint.route('/edit_proposal_message/<int:proposal_id>', methods=['POST'])
 @login_required
 def edit_proposal_message(proposal_id) -> jsonify:
-    """Edit the author-justification message of a pending proposal (author or admin only)."""
+    """Edit the author's justification of a proposal (its author or an admin),
+    whatever the proposal's status."""
     from app.core.db_class.db import RuleEditProposal
+    from app.core.utils.utils import json_object
 
-    proposal = RuleEditProposal.query.get(proposal_id)
+    proposal = db.session.get(RuleEditProposal, proposal_id)
     if not proposal:
         return jsonify({"success": False, "message": "Proposal not found"}), 404
     if current_user.id != proposal.user_id and not current_user.is_admin():
         return jsonify({"success": False, "message": "Forbidden"}), 403
-    if proposal.status != 'pending':
-        return jsonify({"success": False, "message": "Cannot edit a decided proposal"}), 400
 
-    data = request.get_json(silent=True) or {}
-    new_message = (data.get('message') or '').strip()
-    if not new_message:
+    new_message = json_object().get('message')
+    if not isinstance(new_message, str) or not new_message.strip():
         return jsonify({"success": False, "message": "Justification cannot be empty"}), 400
+    new_message = new_message.strip()
 
     result, status_code = RuleModel.update_proposal_message(proposal_id, new_message)
     if not result.get('success'):
@@ -2532,12 +2627,36 @@ def edit_proposal_message(proposal_id) -> jsonify:
     return jsonify(result), status_code
 
 
+@rule_blueprint.route('/edit_proposal_message/<int:proposal_id>', methods=['DELETE'])
+@login_required
+def delete_proposal_message(proposal_id) -> jsonify:
+    """Delete the author's justification of a proposal (its author or an admin)."""
+    from app.core.db_class.db import RuleEditProposal
+
+    proposal = db.session.get(RuleEditProposal, proposal_id)
+    if not proposal:
+        return jsonify({"success": False, "message": "Proposal not found"}), 404
+    if current_user.id != proposal.user_id and not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    result, status_code = RuleModel.update_proposal_message(proposal_id, "")
+    if result.get('success'):
+        log_activity(
+            "proposal.message_deleted",
+            f"Deleted justification for proposal id={proposal_id}",
+            target_type="proposal", target_id=proposal_id,
+            extra={"rule_id": proposal.rule_id},
+            is_public=False,
+        )
+    return jsonify(result), status_code
+
+
 
 @rule_blueprint.route("/update_github/history_json/<int:history_id>", methods=['GET'])
 @login_required
 def history_diff_json(history_id):
     """Return old_content / new_content for inline diff display."""
-    history = RuleModel.get_history_rule_by_id(history_id)
+    history = RuleModel.get_history_rule_by_id(history_id) if as_db_id(history_id) else None
     if not history:
         return {'message': 'Not found'}, 404
     return history.to_json(), 200
@@ -2585,51 +2704,50 @@ def accept_all_changes() -> jsonify:
 @login_required
 def changes_decision() -> jsonify:
     """Update a rule from github"""
-    history_id = request.args.get('history_id')
+    history_id = as_db_id(request.args.get('history_id'))
     decision = request.args.get('decision')
 
-
-    history = RuleModel.get_history_rule_by_id(history_id)
+    history = RuleModel.get_history_rule_by_id(history_id) if history_id else None
+    if not history:
+        return jsonify({"success": False, "message": "Update not found", "toast_class": "danger-subtle"}), 404
     rule_ = RuleModel.get_rule(history.rule_id)
     if not rule_:
         return jsonify({"success": False, "message": "Rule not found", "toast_class": "danger-subtle"}), 404
 
-    if _is_github_manager() or rule_.user_id == current_user.id:
-        # change all the RuleStatue from Update with this same rule_id
-        succ = RuleModel.update_all_updater_status(history_id, history.message)
-        if not succ:
-            return jsonify({"success": False, "message": "Failled to update updater status", "toast_class": "danger-subtle"}), 500
-        if decision == 'accepted':
-            rule = RuleModel.get_rule(history.rule_id)
+    if not (_is_github_manager() or rule_.user_id == current_user.id):
+        return jsonify({"success": False, "message": "Access denied", "toast_class": "danger-subtle"}), 403
+    if decision not in ('accepted', 'rejected'):
+        return jsonify({"success": False, "message": "Unknown decision", "toast_class": "danger-subtle"}), 400
 
-            # verify if the rule has a good syntaxe
-            if not rule:
-                return jsonify({"success": False, "message": "Rule not found", "toast_class": "danger-subtle"}), 404
-            
-            if rule:
-                # is the rule with a good syntaxe ?
-                valide = RuleModel.verify_rule_syntaxe(rule , history.new_content)
-                if not valide.ok:
-                    history.message = "rejected"
-                    return jsonify({"success": True, "message": "Rule content rejected because Invalide syntax !", "toast_class": "warning-subtle"}), 200
-                else:
-                    rule.to_string = history.new_content
-                    history.message = "accepted"
-                    try:
-                        from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
-                        recompute_rule_quality_score(rule)
-                    except Exception:
-                        pass
-                    return jsonify({"success": True, "message": "Rule content modified !", "toast_class": "success-subtle"}), 200
+    # Check the new content BEFORE recording anything: an update that no
+    # longer validates is a rejection, never an "accepted" that left the
+    # rule unchanged.
+    if decision == 'accepted':
+        valide = RuleModel.verify_rule_syntaxe(rule_, history.new_content) if history.new_content else None
+        if not valide or not valide.ok:
+            decision = 'rejected_invalid'
 
-            return jsonify({"success": False, "message": "Rule not found", "toast_class": "danger-subtle"}), 404
-        if decision == 'rejected':
-            rule = RuleModel.get_rule(history.rule_id)
-            if rule:
-                history.message = "rejected"
-        return jsonify({"success": True, "message": "No change for the rule !", "toast_class": "success-subtle"}), 200
-    else:
-       return jsonify({"success": False, "message": "Access denied", "toast_class": "danger-subtle"}), 403
+    # change all the RuleStatus of every update check for this rule
+    succ = RuleModel.update_all_updater_status(history_id, history.message)
+    if not succ:
+        return jsonify({"success": False, "message": "Failled to update updater status", "toast_class": "danger-subtle"}), 500
+
+    if decision == 'accepted':
+        rule_.to_string = history.new_content
+        history.message = "accepted"
+        db.session.commit()
+        try:
+            from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
+            recompute_rule_quality_score(rule_)
+        except Exception:
+            pass
+        return jsonify({"success": True, "message": "Rule content modified !", "toast_class": "success-subtle"}), 200
+
+    history.message = "rejected"
+    db.session.commit()
+    if decision == 'rejected_invalid':
+        return jsonify({"success": True, "message": "Rule content rejected because Invalide syntax !", "toast_class": "warning-subtle"}), 200
+    return jsonify({"success": True, "message": "No change for the rule !", "toast_class": "success-subtle"}), 200
 
 ##################################
 #   CHoose changes in diff page  #
@@ -2638,11 +2756,12 @@ def changes_decision() -> jsonify:
 @login_required
 def update_github_rule() -> render_template:
     """Update a rule from github"""
-    history_id = request.args.get('rule_id')
+    history_id = as_db_id(request.args.get('rule_id'))
     decision = request.args.get('decision')
 
-
-    history = RuleModel.get_history_rule_by_id(history_id)
+    history = RuleModel.get_history_rule_by_id(history_id) if history_id else None
+    if not history:
+        return render_template("404.html"), 404
     rule_ = RuleModel.get_rule(history.rule_id)
     if not rule_:
         flash('Rule not found', 'danger')
@@ -2681,7 +2800,7 @@ def update_github_rule() -> render_template:
         flash('No change for the rule !', 'success')
         return redirect('/rule/update_github/update_rules_from_github')
     else:
-        return render_template("access_denied.html")
+        return render_template("access_denied.html"), 403
 
 #########################################
 #    Choose change in updater UUID page #
@@ -2698,12 +2817,16 @@ def decision_rule() -> jsonify:
     if not updater:
         return {"message": "Session Not found", 'toast_class': "danger-subtle"}, 404
 
-    history = RuleModel.get_history_rule_by_id(history_id)
+    history_id = as_db_id(history_id)
+    history = RuleModel.get_history_rule_by_id(history_id) if history_id else None
     if not history:
         return {"message": "History Not found", 'toast_class': "danger-subtle"}, 404
     rule_ = RuleModel.get_rule(history.rule_id)
     if not rule_:
         return {"message": "Rule Not found", 'toast_class': "danger-subtle"}, 404
+    from app.core.db_class.db import RuleStatus
+    if not RuleStatus.query.filter_by(rule_id=str(rule_.id), update_result_id=updater.id).first():
+        return {"message": "This rule is not part of that update check", 'toast_class': "danger-subtle"}, 404
 
     if _is_github_manager() or rule_.user_id == current_user.id:
         if decision == 'accepted':
@@ -2754,7 +2877,7 @@ def decision_rule() -> jsonify:
             "message": "Access denied !",
             "success": False,
             "toast_class": "danger-subtle"
-        })
+        }), 403
 
 @rule_blueprint.route("/github/update_github/update_rules_from_github", methods=['GET'])
 @login_required
@@ -2804,7 +2927,7 @@ def get_all_sources_owner():
         return jsonify(simplified_sources)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': internal_error(e)}), 500
 
 
 @rule_blueprint.route("/update_to_check", methods=['GET'])
@@ -3138,7 +3261,7 @@ def delete_all_bad_rule() -> jsonify:
         return jsonify({ 
             "success": False,
             "toast_class": 'danger',
-            "message": f"System error during deletion: {str(e)}"
+            "message": internal_error(e, "System error during deletion.")
         }), 500
 
 
@@ -3247,7 +3370,7 @@ def report_rule():
         return jsonify({'success': True, 'message': 'Report submitted.',
                         'toast_class': 'success-subtle'}), 200
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e),
+        return jsonify({'success': False, 'message': internal_error(e),
                         'toast_class': 'danger-subtle'}), 500
 
 @rule_blueprint.route('/admin/rules_reported', methods=['GET'])
@@ -4020,10 +4143,13 @@ def import_rules_from_github():
     if not _is_github_manager():
         return {"message": "Admin access required. Non-admins can submit a proposal instead.", "toast_class": "danger-subtle"}, 403
     try:
-        repo_url = request.json.get('url')
-        selected_license = request.json.get('license')
-        branch = (request.json.get('branch') or '').strip() or None
-        is_generic_source = bool(request.json.get('is_generic_source'))
+        data = json_object()
+        if not all(isinstance(data.get(k), (str, type(None))) for k in ('url', 'license', 'branch')):
+            return {"message": "url, license and branch must be text.", "toast_class": "danger-subtle"}, 400
+        repo_url = data.get('url')
+        selected_license = data.get('license')
+        branch = (data.get('branch') or '').strip() or None
+        is_generic_source = bool(data.get('is_generic_source'))
 
         verif = valider_repo_github(repo_url, is_generic_source=is_generic_source)
         if not verif:
@@ -4316,7 +4442,7 @@ def history_github_importer_delete():
 
     if success:
         return {"message": msg, "toast_class": "success-subtle"}, 200
-    return {"message": msg, "toast_class": "danger-subtle"}, 500
+    return {"message": msg, "toast_class": "danger-subtle"}, (404 if msg.endswith("not found") else 500)
 
 
 @rule_blueprint.route("/import_get_session_running", methods=['GET'])
@@ -4431,7 +4557,7 @@ def history_github_updater_delete():
 
     if success:
         return {"message": msg, "toast_class": "success-subtle"}, 200
-    return {"message": msg, "toast_class": "danger-subtle"}, 500
+    return {"message": msg, "toast_class": "danger-subtle"}, (404 if msg.endswith("not found") else 500)
 
 @rule_blueprint.route("/update_loading_status/<sid>/get_rules", methods=['GET'])
 @login_required
@@ -4484,7 +4610,7 @@ def bulk_update_decision(sid):
         return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
     if not _can_manage_update_session(updater):
         return {"message": "Access denied", "toast_class": "danger-subtle"}, 403
-    data   = request.get_json() or {}
+    data   = json_object()
     action = data.get('action')
     if action not in ('accept', 'reject'):
         return {'message': 'Invalid action', 'toast_class': 'danger-subtle'}, 400
@@ -4521,12 +4647,12 @@ def bulk_new_rules_decision(sid):
     """Dispatch add-all or reject-all new rules as a background job."""
     if not _is_github_manager():
         return {"message": "Access denied", "toast_class": "danger-subtle"}, 403
-    data = request.get_json() or {}
+    if not RuleModel.get_updater_result(sid):
+        return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
+    data = json_object()
     action = data.get('action')
     if action not in ('add', 'reject'):
         return {'message': 'Invalid action', 'toast_class': 'danger-subtle'}, 400
-    if not RuleModel.get_updater_result(sid):
-        return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
     import app.features.jobs.jobs_core as JobsModel
     label = f"{'Add' if action == 'add' else 'Reject'} all new rules ({sid[:8]}…)"
 
@@ -4597,8 +4723,12 @@ def check_updates_by_url():
 
     # except Exception as e:
     #     return {"message": f"Error while checking updates: {str(e)}", "toast_class": "danger-subtle"}, 500
-    data = request.get_json()
+    data = json_object()
     urls = data.get("url", None)
+    # Each entry is {"url": ..., "branch": ...} — anything else is ignored.
+    if isinstance(urls, list):
+        urls = [u for u in urls if isinstance(u, dict) and isinstance(u.get("url"), str)
+                and isinstance(u.get("branch"), (str, type(None)))]
 
     if not urls or not isinstance(urls, list):
         return {
@@ -4681,8 +4811,10 @@ def check_updates_by_rule():
     #     return {"message": f"Error while checking rule updates: {str(e)}", "toast_class": "danger-subtle"}, 500
 
 
-    data = request.get_json()
+    data = json_object()
     rule_ids = data.get("rules", [])
+    if isinstance(rule_ids, list):
+        rule_ids = [rid for rid in (as_db_id(r) for r in rule_ids) if rid]
 
     if not rule_ids or not isinstance(rule_ids, list):
         return {
@@ -4878,10 +5010,16 @@ def bulk_action_github():
     if not _is_github_manager():
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
-    data = request.get_json()
+    data = json_object()
     action = data.get('action')
     mode = data.get('mode', 'partial')
     excluded_ids = data.get('excluded_ids') or []
+    selected_ids = data.get('selected_ids') or []
+    if not isinstance(excluded_ids, list) or not isinstance(selected_ids, list) or not all(
+            isinstance(e, str) or (isinstance(e, dict) and isinstance(e.get('url'), str))
+            for e in excluded_ids + selected_ids):
+        return jsonify({"message": "selected_ids / excluded_ids must be lists of URLs.",
+                        "toast_class": "danger-subtle"}), 400
     # mode='all' excludes are URL-level only — "select every GitHub source"
     # has no per-branch granularity there; a per-row exclude just drops that
     # repo's URL entirely from the global set.
@@ -4900,7 +5038,7 @@ def bulk_action_github():
         if not target_urls:
             return jsonify({"message": "No URLs to delete", "status": "warning-subtle"}), 400
         
-        success, message, nb = RuleModel.delete_all_rule_by_url(target_urls)
+        success, message, nb = RuleModel.delete_all_rule_by_url(target_urls, current_user.id)
         if success:
             log_activity("github.source_deleted",
                          f"Bulk-deleted {nb} rule(s) from {len(target_urls)} GitHub source(s)",
@@ -4921,7 +5059,7 @@ def bulk_action_github():
         try:
             return RuleModel.export_rules_by_urls_as_zip(target_urls)
         except Exception as e:
-            return jsonify({"message": f"Export failed: {str(e)}", "toast_class": "danger-subtle"}), 500
+            return jsonify({"message": internal_error(e, "Export failed."), "toast_class": "danger-subtle"}), 500
 
     return jsonify({"message": "Action not supported"}), 400
 
@@ -5028,9 +5166,62 @@ def github_detail():
         url=url
     )
 
-def _csv_arg(name):
-    raw = request.args.get(name, '', type=str)
+def _csv_arg(name, args=None):
+    raw = (args if args is not None else request.args).get(name, '', type=str)
     return [v.strip() for v in raw.split(',') if v.strip()] if raw else None
+
+
+def _data_table_filter_kwargs(args):
+    """Parse the RuleList / rule-data-table filter params from a MultiDict
+    into build_rules_data_table_query() kwargs. Shared by /rule/data_table
+    and bundle-from-filters so both see exactly the same filter set."""
+    sources = _csv_arg('sources', args)
+    source  = args.get('source', None, type=str)
+    if source:
+        sources = (sources or []) + [source]
+
+    branches = _csv_arg('branches', args)
+    branch   = args.get('branch', None, type=str)
+    if branch:
+        branches = (branches or []) + [branch]
+
+    authors_list  = _csv_arg('authors', args)
+    single_author = args.get('author', None, type=str)
+    author_filter = authors_list or ([single_author] if single_author else None)
+
+    ids_csv = _csv_arg('ids', args)
+    ids = [int(i) for i in ids_csv if i.isdigit()] if ids_csv else None
+
+    return dict(
+        search=args.get('search', None, type=str),
+        sort=args.get('sort', None, type=str),
+        direction=args.get('dir', 'asc', type=str),
+        source=sources,
+        user_id=args.get('user_id', None, type=int),
+        search_field=args.get('search_field', 'all', type=str),
+        exact_match=args.get('exact_match', 'false', type=str) == 'true',
+        rule_type=args.get('rule_type', None, type=str),
+        author=author_filter,
+        vulnerabilities=_csv_arg('vulnerabilities', args),
+        licenses=_csv_arg('licenses', args),
+        tags=_csv_arg('tags', args),
+        editor_names=_csv_arg('editors', args),
+        bundle_id=args.get('bundle_id', None, type=int),
+        attacks=_csv_arg('attacks', args),
+        status=args.get('status', None, type=str),
+        workspace_uuid=args.get('workspace_uuid', None, type=str),
+        exclude_workspace_uuid=args.get('exclude_workspace_uuid', None, type=str),
+        ids=ids,
+        has_cve=args.get('has_cve', 'false', type=str) == 'true',
+        quality_score_min=args.get('quality_score_min', None, type=float),
+        quality_score_max=args.get('quality_score_max', None, type=float),
+        has_ai_analysis=args.get('has_ai_analysis', 'false', type=str) == 'true',
+        has_relations=args.get('has_relations', 'false', type=str) == 'true',
+        branch=branches,
+        has_tags=args.get('has_tags', 'false', type=str) == 'true',
+        has_license=args.get('has_license', 'false', type=str) == 'true',
+        has_attack=args.get('has_attack', 'false', type=str) == 'true',
+    )
 
 
 @rule_blueprint.route("/data_table", methods=['GET'])
@@ -5040,54 +5231,10 @@ def rules_data_table():
     rule_type, author, sources, vulnerabilities, licenses, tags) on top of
     page / per_page / search / sort / dir.
     Response shape: { items, total, total_pages }."""
-    sources = _csv_arg('sources')
-    source  = request.args.get('source', None, type=str)
-    if source:
-        sources = (sources or []) + [source]
-
-    branches = _csv_arg('branches')
-    branch   = request.args.get('branch', None, type=str)
-    if branch:
-        branches = (branches or []) + [branch]
-
-    authors_list  = _csv_arg('authors')
-    single_author = request.args.get('author', None, type=str)
-    author_filter = authors_list or ([single_author] if single_author else None)
-
-    ids_csv = _csv_arg('ids')
-    ids = [int(i) for i in ids_csv if i.isdigit()] if ids_csv else None
-
     pagination = RuleModel.get_rules_data_table(
         page=request.args.get('page', 1, type=int),
         per_page=request.args.get('per_page', 10, type=int),
-        search=request.args.get('search', None, type=str),
-        sort=request.args.get('sort', None, type=str),
-        direction=request.args.get('dir', 'asc', type=str),
-        source=sources,
-        user_id=request.args.get('user_id', None, type=int),
-        search_field=request.args.get('search_field', 'all', type=str),
-        exact_match=request.args.get('exact_match', 'false', type=str) == 'true',
-        rule_type=request.args.get('rule_type', None, type=str),
-        author=author_filter,
-        vulnerabilities=_csv_arg('vulnerabilities'),
-        licenses=_csv_arg('licenses'),
-        tags=_csv_arg('tags'),
-        editor_names=_csv_arg('editors'),
-        bundle_id=request.args.get('bundle_id', None, type=int),
-        attacks=_csv_arg('attacks'),
-        status=request.args.get('status', None, type=str),
-        workspace_uuid=request.args.get('workspace_uuid', None, type=str),
-        exclude_workspace_uuid=request.args.get('exclude_workspace_uuid', None, type=str),
-        ids=ids,
-        has_cve=request.args.get('has_cve', 'false', type=str) == 'true',
-        quality_score_min=request.args.get('quality_score_min', None, type=float),
-        quality_score_max=request.args.get('quality_score_max', None, type=float),
-        has_ai_analysis=request.args.get('has_ai_analysis', 'false', type=str) == 'true',
-        has_relations=request.args.get('has_relations', 'false', type=str) == 'true',
-        branch=branches,
-        has_tags=request.args.get('has_tags', 'false', type=str) == 'true',
-        has_license=request.args.get('has_license', 'false', type=str) == 'true',
-        has_attack=request.args.get('has_attack', 'false', type=str) == 'true',
+        **_data_table_filter_kwargs(request.args),
     )
 
     items = RuleModel.serialize_rules_for_data_table(pagination.items, current_user)
@@ -5108,8 +5255,7 @@ def update_rule_status(rule_id):
         return jsonify({'success': False, 'message': 'Rule not found'}), 404
     if rule.user_id != current_user.id and not current_user.is_admin():
         return jsonify({'success': False}), 403
-    data = request.get_json(force=True)
-    status = data.get('status')
+    status = json_object().get('status')
     if status not in ('draft', 'testing', 'production', 'deprecated'):
         return jsonify({'success': False, 'message': 'Invalid status'}), 400
     rule.status = status
@@ -5127,7 +5273,12 @@ def quick_meta(rule_id):
     if not rule:
         return jsonify({'success': False}), 404
 
-    data = request.get_json(force=True)
+    data = json_object()
+    for key in ('tag_ids', 'cve_ids', 'technique_ids'):
+        if key in data and not isinstance(data[key], list):
+            return jsonify({'success': False, 'message': f'{key} must be a list'}), 400
+    if 'cve_ids' in data and not all(isinstance(c, str) for c in data['cve_ids']):
+        return jsonify({'success': False, 'message': 'cve_ids must be a list of strings'}), 400
 
     # Allow edit if owner, admin, or the rule is in one of the user's workspaces
     if rule.user_id != current_user.id and not current_user.is_admin():
@@ -5148,7 +5299,7 @@ def quick_meta(rule_id):
     # Tags
     if 'tag_ids' in data:
         import uuid as _uuid
-        tag_ids = [int(t) for t in data['tag_ids'] if str(t).isdigit()]
+        tag_ids = [i for i in (as_db_id(t) for t in data['tag_ids']) if i]
         current_tag_ids = {a.tag_id for a in RuleTagAssociation.query.filter_by(rule_id=rule.id).all()}
         for tid in tag_ids:
             if tid not in current_tag_ids:
@@ -5537,7 +5688,7 @@ def get_all_rules_vulnerabilities_usage():
         })
     except Exception as e:
 
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 
 
@@ -5553,7 +5704,7 @@ def get_rule_vulnerabilities_display(rule_id):
             "total_vulnerabilities": len(v_list)
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
 
 
 
@@ -5646,20 +5797,30 @@ def get_tags(rule_id):
 
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 @rule_blueprint.route('/get_all_tags_usage')
-@memory_cache.cached(timeout=60, query_string=True)
+# Only anonymous responses are cached: what's returned depends on who asks
+# (private tags for their owner, every tag for an admin) and the cache key is
+# the query string alone — cached for everyone, an admin's response could be
+# served to a visitor.
+@memory_cache.cached(timeout=60, query_string=True, unless=lambda: current_user.is_authenticated)
 def get_all_tags_usage():
     try:
         filters = RuleModel.parse_facet_filters(request.args, exclude=['tags'])
+        if request.args.get('view'):
+            # Lazy MultiTagFilter: folders, one folder / search page, or the
+            # selected chips — see tags_core.usage_view.
+            from app.features.tags.tags_core import usage_view
+            return jsonify({"success": True,
+                            **usage_view(RuleModel.tag_usage_snapshot(filters), request.args)})
         tags = RuleModel.get_all_used_tags_with_counts(filters=filters)
         return jsonify({
             "success": True,
             "tags": tags
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 @rule_blueprint.route('/get_rule_tags_display/<int:rule_id>')
 def get_rule_tags_display(rule_id):
@@ -5674,7 +5835,7 @@ def get_rule_tags_display(rule_id):
 
         })
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": internal_error(e)}), 500
     
 
 
@@ -5707,6 +5868,10 @@ def download_rules_export():
     if ids:
         filters["ids"] = ids
         rules = RuleModel.get_active_rules_by_ids(ids)
+    elif request.args.get("data_table_filters") == "1":
+        # RuleList sends its full /rule/data_table filter set (ATT&CK,
+        # branches, editors, CVE-only…) — apply it verbatim.
+        rules = RuleModel.build_rules_data_table_query(**_data_table_filter_kwargs(request.args)).all()
     else:
         query = RuleModel.filter_rules(
             search=filters["search"],
@@ -5764,6 +5929,8 @@ def download_rules_export():
                 zf.writestr(f"rules_export/{rtype}/{rtype}_merged.{sample_ext}", "".join(contents))
 
     memory_file.seek(0)
+    log_activity("rule.export", f"Exported {len(rules)} rule(s) (format={filters['export_format']})",
+                 extra={"format": filters["export_format"], "count": len(rules)}, is_public=False)
     return send_file(
         memory_file,
         mimetype='application/zip',
@@ -5785,7 +5952,23 @@ def bundle_from_filters():
         if len(explicit_ids) > MAX_BUNDLE_RULES:
             return jsonify({"message": f"Selection too large — maximum {MAX_BUNDLE_RULES} rules per bundle."}), 400
         rules_objects = RuleModel.get_active_rules_by_ids(explicit_ids)
+    elif data.get('filter_query') is not None:
+        # Same query string RuleList sends to /rule/data_table — so every
+        # filter the list supports (ATT&CK, branches, editors, CVE-only,
+        # quality range…) scopes the bundle exactly like what's on screen.
+        from werkzeug.datastructures import MultiDict
+        from urllib.parse import parse_qsl
+        args = MultiDict(parse_qsl(str(data.get('filter_query') or '')))
+        for k in ('page', 'per_page'):
+            args.pop(k, None)
+        if not any(v for k, v in args.items(multi=True) if k not in ('sort', 'dir', 'search_field', 'exact_match')):
+            return jsonify({"message": "At least one filter must be active to create a bundle."}), 400
+        query = RuleModel.build_rules_data_table_query(**_data_table_filter_kwargs(args))
+        rules_objects = query.limit(MAX_BUNDLE_RULES + 1).all()
+        if len(rules_objects) > MAX_BUNDLE_RULES:
+            return jsonify({"message": f"Too many rules match these filters — maximum {MAX_BUNDLE_RULES}. Please refine your filters."}), 400
     else:
+        # Legacy dict filters (older callers)
         filters = data.get('filters') or {}
         if not any([
             filters.get("search"), filters.get("rule_type"), filters.get("author"),
@@ -5830,6 +6013,8 @@ def bundle_from_filters():
             if bundle.user_id != current_user.id and not current_user.is_admin():
                 return jsonify({"message": "You don't have permission to edit this bundle"}), 403
         else:
+            if BundleModel.bundle_name_taken(data.get('new_bundle_name'), current_user.id):
+                return jsonify({"message": "You already have a bundle with this name"}), 409
             dict_form = {
                 "name": data.get('new_bundle_name'),
                 "description": data.get('new_bundle_description'),
@@ -5848,7 +6033,7 @@ def bundle_from_filters():
         }), 200
 
     except Exception as e:
-        return jsonify({"message": str(e)}), 500
+        return jsonify({"message": internal_error(e)}), 500
     
 
 #####################
@@ -6116,7 +6301,7 @@ def bulk_tag():
     if current_user.is_admin() or current_user.has_permission('rule.tag_any'):
         return render_template('jobs/bulk_tag.html')
     else:
-        return render_template('access_denied.html')
+        return render_template('access_denied.html'), 403
 
 
 # ── Rule Scope (environment / "works for me") ─────────────────────────────────
@@ -6174,7 +6359,7 @@ def scope_delete(rule_id):
 @login_required
 def trash():
     if not current_user.is_admin():
-        return render_template('access_denied.html')
+        return render_template('access_denied.html'), 403
     return render_template('rule/trash.html')
 
 
@@ -6270,10 +6455,12 @@ def resolve_conflict():
     """Admin chooses which rule to keep when a restore conflict occurs."""
     if not current_user.is_admin():
         return jsonify({'success': False}), 403
-    data       = request.get_json() or {}
+    data       = json_object()
     action     = data.get('action')          # 'keep_active' | 'keep_trash'
-    trash_id   = data.get('trash_id')
-    active_id  = data.get('active_id')
+    trash_id   = as_db_id(data.get('trash_id'))
+    active_id  = as_db_id(data.get('active_id'))
+    if action in ('keep_active', 'keep_trash') and not (trash_id and active_id):
+        return jsonify({'success': False, 'message': 'trash_id and active_id are required'}), 400
 
     if action == 'keep_active':
         # Just permanently delete the trashed copy
@@ -6282,18 +6469,20 @@ def resolve_conflict():
         return jsonify({'success': ok}), 200
 
     if action == 'keep_trash':
-        # Soft-delete the active rule, then restore the trashed one
-        RuleModel.soft_delete_rule(active_id, current_user.id)
-        RuleModel.permanent_delete_rule(active_id)   # hard-delete the active duplicate
-        # Force restore ignoring content conflict
-        trashed = Rule.query.get(trash_id)
-        if trashed:
-            trashed.is_deleted = False
-            trashed.deleted_at = None
-            trashed.deleted_by_id = None
-            trashed.delete_batch_uuid = None
-            from app import db as _db
-            _db.session.commit()
+        # Check everything BEFORE deleting anything: the two ids must really be
+        # a trashed rule and the active rule holding the same content —
+        # otherwise a wrong id would permanently delete an unrelated rule.
+        trashed = RuleModel.get_rule(trash_id, include_deleted=True)
+        active = RuleModel.get_rule(active_id)
+        if not trashed or not trashed.is_deleted or not active:
+            return jsonify({'success': False, 'message': 'Rule not found'}), 404
+        if trashed.content_hash != active.content_hash:
+            return jsonify({'success': False, 'message': 'These two rules are not in conflict'}), 400
+        # Drop the active duplicate, then restore the trashed rule.
+        RuleModel.soft_delete_rule(active.id, current_user.id)
+        RuleModel.permanent_delete_rule(active.id)
+        if RuleModel.restore_rule(trashed.id) is not True:
+            return jsonify({'success': False, 'message': 'Could not restore the rule'}), 500
         log_activity('rule.conflict_resolved', f"Conflict resolved — restored trash id={trash_id}, removed active id={active_id}")
         return jsonify({'success': True}), 200
 
@@ -6310,15 +6499,37 @@ def _create_trash_job(job_type: str, label: str, payload: dict):
                                 label=label, created_by=current_user.id)
 
 
+def _trash_selection(data, all_flag):
+    """What a bulk trash action targets: (ids, all, batch_uuid, error).
+    Exactly one explicit choice is required — a list of ids, a batch uuid,
+    or `<all_flag>: true` — so an empty or unreadable body never means
+    "the whole trash"."""
+    raw_ids = data.get('ids')
+    if raw_ids:
+        ids = [as_db_id(i) for i in raw_ids] if isinstance(raw_ids, list) else [None]
+        if None in ids:
+            return [], False, None, 'ids must be a list of rule ids'
+        return ids, False, None, None
+    batch_uuid = data.get('batch_uuid')
+    if batch_uuid:
+        if not isinstance(batch_uuid, str):
+            return [], False, None, 'batch_uuid must be a string'
+        return [], False, batch_uuid, None
+    if data.get(all_flag) is True:
+        return [], True, None, None
+    return [], False, None, f'Nothing selected: send ids, batch_uuid or {all_flag}: true'
+
+
 @rule_blueprint.route('/restore_bulk', methods=['POST'])
 @login_required
 def restore_rules_bulk():
     if not current_user.is_admin():
         return jsonify({'success': False}), 403
-    data        = request.get_json() or {}
-    rule_ids    = data.get('ids', [])
-    restore_all = data.get('restore_all', False)
-    batch_uuid  = data.get('batch_uuid')
+    rule_ids, restore_all, batch_uuid, error = _trash_selection(json_object(), 'restore_all')
+    if error:
+        return jsonify({'success': False, 'message': error}), 400
+    if batch_uuid:
+        return restore_batch(batch_uuid)
     count       = len(rule_ids) if rule_ids else RuleModel.count_deleted_rules()
 
     if count > TRASH_JOB_THRESHOLD:
@@ -6378,11 +6589,14 @@ def permanent_delete_rule(rule_id):
 def permanent_delete_bulk():
     if not current_user.is_admin():
         return jsonify({'success': False}), 403
-    data       = request.get_json() or {}
-    ids        = data.get('ids', [])
-    delete_all = data.get('delete_all', False)
-    batch_uuid = data.get('batch_uuid')
-    count      = len(ids) if ids else RuleModel.count_deleted_rules()
+    ids, delete_all, batch_uuid, error = _trash_selection(json_object(), 'delete_all')
+    if error:
+        return jsonify({'success': False, 'message': error}), 400
+    if batch_uuid:
+        from app.core.db_class.db import Rule as _Rule
+        ids = [r.id for r in _Rule.query.filter(_Rule.is_deleted == True,
+                                                _Rule.delete_batch_uuid == batch_uuid).all()]
+    count      = len(ids) if (ids or batch_uuid) else RuleModel.count_deleted_rules()
 
     if count > TRASH_JOB_THRESHOLD:
         payload = {'ids': ids, 'delete_all': delete_all, 'batch_uuid': batch_uuid}

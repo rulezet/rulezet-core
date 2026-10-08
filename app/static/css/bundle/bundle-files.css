@@ -1,0 +1,370 @@
+/*
+  bundle-files.css — BundleFileViewer (.bfv-*) overlay and BundleFilesPanel (.bfp-*)
+  on the bundle detail page.
+*/
+
+/* ── Viewer overlay ─────────────────────────────────────────────── */
+
+body.bfv-open { overflow: hidden; }
+
+.bfv-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1080;
+    background: rgba(8, 15, 30, .55);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4vh 16px;
+}
+
+.bfv-dialog {
+    width: min(1100px, 100%);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, .35);
+    overflow: hidden;
+}
+
+.bfv-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-color);
+    border-top: 3px solid #0d6efd;
+}
+.bfv-header--doc { border-top-color: #14b8a6; }
+
+.bfv-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+
+.bfv-title-wrap { min-width: 0; flex: 1; }
+.bfv-title {
+    font-weight: 700;
+    font-size: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bfv-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 3px;
+    font-size: .74rem;
+    color: var(--subtle-text-color);
+    min-width: 0;
+}
+.bfv-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+.bfv-size { flex-shrink: 0; }
+.bfv-kind {
+    flex-shrink: 0;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: .64rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+.bfv-kind--rule { background: rgba(13, 110, 253, .12); color: #0d6efd; }
+.bfv-kind--doc  { background: rgba(20, 184, 166, .14); color: #0f9488; }
+
+.bfv-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.bfv-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--subtle-text-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    transition: background .12s, color .12s;
+}
+.bfv-btn:hover:not(:disabled) { background: var(--light-bg-color); color: var(--text-color); }
+.bfv-btn:disabled { opacity: .35; cursor: not-allowed; }
+.bfv-btn--close:hover:not(:disabled) { color: #dc3545; }
+
+.bfv-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-right: 4px;
+}
+.bfv-toggle button {
+    border: 0;
+    background: transparent;
+    color: var(--subtle-text-color);
+    font-size: .75rem;
+    padding: 5px 10px;
+}
+.bfv-toggle button.active { background: rgba(20, 184, 166, .15); color: #0f9488; font-weight: 600; }
+
+.bfv-body { padding: 16px 18px 18px; overflow: auto; flex: 1; min-height: 0; }
+
+.bfv-markdown {
+    padding: 8px 12px;
+    max-width: 860px;
+    margin: 0 auto;
+}
+.bfv-md { line-height: 1.75; font-size: .97rem; color: var(--text-color); }
+.bfv-md h1, .bfv-md h2 { font-weight: 700; margin: 1.6rem 0 .8rem; }
+.bfv-md h1 { font-size: 1.6rem; border-bottom: 1px solid var(--border-color); padding-bottom: .4rem; }
+.bfv-md h2 { font-size: 1.3rem; }
+.bfv-md h3 { font-weight: 600; font-size: 1.1rem; margin: 1.3rem 0 .6rem; }
+.bfv-md > :first-child { margin-top: 0; }
+.bfv-md p, .bfv-md ul, .bfv-md ol { margin-bottom: .9rem; }
+.bfv-md ul, .bfv-md ol { padding-left: 1.5rem; }
+.bfv-md code {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: .86rem;
+    background: var(--light-bg-color);
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+.bfv-md pre {
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+}
+.bfv-md pre code { background: none; padding: 0; }
+.bfv-md blockquote {
+    border-left: 4px solid #14b8a6;
+    padding-left: 1rem;
+    color: var(--subtle-text-color);
+    margin: 1rem 0;
+}
+.bfv-md a { color: #0d6efd; }
+.bfv-markdown img { max-width: 100%; }
+.bfv-markdown table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+.bfv-markdown th, .bfv-markdown td { border: 1px solid var(--border-color); padding: 6px 10px; }
+
+.bfv-empty { text-align: center; color: var(--subtle-text-color); padding: 3rem 0; }
+
+.bfv-fade-enter-active, .bfv-fade-leave-active { transition: opacity .15s ease; }
+.bfv-fade-enter-from, .bfv-fade-leave-to { opacity: 0; }
+
+@media (max-width: 640px) {
+    .bfv-header { flex-wrap: wrap; }
+    .bfv-actions { width: 100%; justify-content: flex-end; }
+}
+
+/* ── Files panel ────────────────────────────────────────────────── */
+
+.bfp-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.bfp-search { position: relative; flex: 1; min-width: 200px; }
+.bfp-search > i {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: .75rem;
+    color: var(--subtle-text-color);
+}
+.bfp-search input {
+    width: 100%;
+    padding: 6px 30px 6px 30px;
+    font-size: .85rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    outline: none;
+}
+.bfp-search input:focus { border-color: #14b8a6; }
+.bfp-search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 0;
+    background: none;
+    color: var(--subtle-text-color);
+    font-size: .75rem;
+}
+
+.bfp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.bfp-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .74rem;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--subtle-text-color);
+}
+.bfp-chip.active { border-color: #14b8a6; color: #0f9488; background: rgba(20, 184, 166, .1); font-weight: 600; }
+.bfp-chip-count {
+    font-size: .66rem;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--light-bg-color);
+}
+
+.bfp-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 8px;
+}
+
+.bfp-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    border-left: 3px solid #14b8a6;
+    background: var(--card-bg-color);
+    cursor: pointer;
+    min-width: 0;
+    transition: transform .12s, box-shadow .12s;
+}
+.bfp-item:hover, .bfp-item:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .08);
+    outline: none;
+}
+
+.bfp-item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.bfp-item-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.bfp-item-name {
+    font-weight: 600;
+    font-size: .86rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bfp-item-path {
+    font-size: .7rem;
+    color: var(--subtle-text-color);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bfp-item-size { font-size: .68rem; color: var(--subtle-text-color); flex-shrink: 0; }
+.bfp-item-btn {
+    border: 0;
+    background: transparent;
+    color: var(--subtle-text-color);
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+.bfp-item-btn:hover { background: var(--light-bg-color); color: #0f9488; }
+
+.bfp-empty { text-align: center; color: var(--subtle-text-color); padding: 1.5rem 0; font-size: .85rem; }
+
+.bfp-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+}
+.bfp-range { font-size: .75rem; color: var(--subtle-text-color); }
+
+/* Safety notice under the viewer header (non-rule files only) */
+.bfv-warn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 18px;
+    font-size: .74rem;
+    color: var(--subtle-text-color);
+    background: rgba(255, 193, 7, .08);
+    border-bottom: 1px solid rgba(255, 193, 7, .3);
+}
+.bfv-warn i { color: #d4a700; flex-shrink: 0; }
+
+/* Neutralised media / links inside rendered markdown (see hardenMarkdownHtml) */
+.bfv-img-ph {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px dashed var(--border-color);
+    color: var(--subtle-text-color);
+    font-size: .8rem;
+}
+.bfv-ext-link::after {
+    content: "\f35d";
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    font-size: .65em;
+    margin-left: 4px;
+    opacity: .6;
+}
+
+/* "Show in structure / Rules / Files" — locate the open file in the bundle */
+.bfv-locate {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(13, 110, 253, .35);
+    background: transparent;
+    color: #0d6efd;
+    font-size: .76rem;
+    font-weight: 600;
+    white-space: nowrap;
+    margin-right: 2px;
+}
+.bfv-locate:hover { background: rgba(13, 110, 253, .08); }
+@media (max-width: 640px) { .bfv-locate span { display: none; } }
+
+/* Files panel: item located from the viewer */
+@keyframes bfp-flash {
+    0%, 60% { box-shadow: 0 0 0 3px rgba(13, 110, 253, .35); }
+    100%    { box-shadow: none; }
+}
+.bfp-item--flash { animation: bfp-flash 2.2s ease-out 1; }

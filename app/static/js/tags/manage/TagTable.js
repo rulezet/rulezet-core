@@ -19,12 +19,14 @@ function familyLabel(family) {
 function sourceColor(source) {
     if (source === 'Galaxy') return '#9b7ede';
     if (source === 'Taxonomy') return '#0d6efd';
+    if (source === 'Imported') return '#fd7e14';
     return '#198754';
 }
 
 function sourceIconClass(source) {
     if (source === 'Galaxy') return 'fas fa-atom';
     if (source === 'Taxonomy') return 'fas fa-list';
+    if (source === 'Imported') return 'fas fa-user-tag';
     return 'fas fa-tag';
 }
 

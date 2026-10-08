@@ -30,7 +30,7 @@ def send_message():
     agent_status = result.pop('_agent_status', None)
     if agent_status == 'disabled':
         status_code = 403
-    elif agent_status == 'rate_limited':
+    elif agent_status in ('rate_limited', 'budget'):
         status_code = 429
     elif agent_status in ('failed', 'busy'):
         status_code = 502

@@ -35,7 +35,7 @@ _HANDLERS = {}
 # module docstring above. Empty until an AI agent bulk job type actually
 # registers itself — the background-lane thread simply finds nothing to
 # claim and sleeps until one exists, so this is safe to ship ahead of time.
-_BACKGROUND_LANE_TYPES = {'ai_generate'}
+_BACKGROUND_LANE_TYPES = {'ai_generate', 'ai_bundle_analysis'}
 
 
 def register_handler(job_type):
@@ -80,136 +80,153 @@ def _scope_to_lane(query, BackgroundJob, lane):
     return query
 
 
+def recover_interrupted_jobs(lane='default'):
+    """Put back to pending the jobs of `lane` a server restart left 'running'
+    (they resume from their last saved offset). Returns how many."""
+    from app import db
+    from app.core.db_class.db import BackgroundJob, BackgroundJobLog
+
+    interrupted = _scope_to_lane(
+        BackgroundJob.query.filter_by(status='running'), BackgroundJob, lane
+    ).all()
+    for job in interrupted:
+        job.status     = 'pending'
+        job.started_at = None
+        _log(job, db, BackgroundJobLog,
+             "Server was restarted while this job was running — "
+             "automatically queued to resume from last saved offset.",
+             level='warning', event='recovered')
+    if interrupted:
+        db.session.commit()
+    return len(interrupted)
+
+
+def _job_finished_hooks(job):
+    """Scheduler follow-ups and the owner's notification, once a job ended."""
+    if job.status in ('done', 'failed'):
+        try:
+            from app.features.admin.task_scheduler.scheduler_engine import on_job_finished
+            on_job_finished(job)
+        except Exception as e:
+            print(f"[task_scheduler] on_job_finished error: {e}")
+
+    # Update notification so bell shows final state
+    try:
+        from app.features.notification.notification_core import update_job_notification
+        update_job_notification(job)
+    except Exception:
+        pass
+
+
+def run_next_job(app, lane='default'):
+    """Claim the oldest pending job of `lane` and run its handler to the end.
+
+    One step of the worker loop, callable on its own (needs an app context).
+    Returns the uuid of the job it ran, or None when nothing was pending."""
+    from app import db
+    from app.core.db_class.db import BackgroundJob, BackgroundJobLog
+
+    db.session.expire_all()
+
+    job = (
+        _scope_to_lane(
+            BackgroundJob.query.filter(BackgroundJob.status.in_(['pending'])),
+            BackgroundJob, lane
+        )
+        .order_by(BackgroundJob.created_at.asc())
+        .first()
+    )
+
+    if job is None:
+        # No pending job: the query above still opened a transaction.
+        # Close it now — left open, it pins Postgres's vacuum horizon
+        # and blocks dead-tuple cleanup instance-wide for as long as
+        # the queue stays empty (which is most of the time).
+        db.session.rollback()
+        return None
+
+    job_uuid = job.uuid
+    handler = _HANDLERS.get(job.job_type)
+    if handler is None:
+        # Every handler is registered at startup, so a type without one never
+        # gets one. Left pending, it would sit at the head of the queue and
+        # stall every job queued after it — fail it instead.
+        job.status      = 'failed'
+        job.error       = f"Unknown job type '{job.job_type}'."
+        job.finished_at = datetime.datetime.now(datetime.timezone.utc)
+        db.session.commit()
+        _log(job, db, BackgroundJobLog, job.error, level='error', event='failed')
+        _job_finished_hooks(job)
+        return job_uuid
+
+    job.status     = 'running'
+    job.started_at = datetime.datetime.now(datetime.timezone.utc)
+    db.session.commit()
+
+    _log(job, db, BackgroundJobLog,
+         f"Worker picked up job — starting execution.",
+         level='info', event='picked_up')
+
+    print(f"[worker:{lane}] Starting job {job.uuid} type={job.job_type} done={job.done}")
+
+    try:
+        handler(job, app)
+
+        # reload from DB by uuid — the handler may have spawned its own
+        # app_context (e.g. delete_github_rules) which closes its session,
+        # leaving the worker's object stale/detached
+        db.session.expire_all()
+        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+        if not job:
+            print(f"[worker:{lane}] Job {job_uuid} disappeared after handler.")
+            return job_uuid
+
+        if job.status not in ('cancelled', 'failed', 'paused'):
+            job.status      = 'done'
+            job.finished_at = datetime.datetime.now(datetime.timezone.utc)
+            if job.payload and '_resume_offset' in job.payload:
+                payload = dict(job.payload)
+                del payload['_resume_offset']
+                job.payload = payload
+            db.session.commit()
+
+        print(f"[worker:{lane}] Job {job.uuid} finished with status={job.status}")
+        _job_finished_hooks(job)
+
+    except Exception as e:
+        db.session.rollback()
+        try:
+            job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
+            if job:
+                job.status      = 'failed'
+                job.error       = str(e)
+                job.finished_at = datetime.datetime.now(datetime.timezone.utc)
+                db.session.commit()
+                _log(job, db, BackgroundJobLog,
+                     f"Unexpected error: {str(e)}",
+                     level='error', event='failed')
+                _job_finished_hooks(job)
+        except Exception:
+            pass
+        print(f"[worker:{lane}] Job {job_uuid} failed: {e}")
+
+    return job_uuid
+
+
 def _worker_loop(app, lane='default'):
     """Runs in a background daemon thread. Picks one pending job (from this
     lane only) at a time."""
     with app.app_context():
         from app import db
-        from app.core.db_class.db import BackgroundJob, BackgroundJobLog
 
-        # ── Recover jobs interrupted by a server restart ──────────────────────
-        interrupted = _scope_to_lane(
-            BackgroundJob.query.filter_by(status='running'), BackgroundJob, lane
-        ).all()
-        if interrupted:
-            for job in interrupted:
-                job.status     = 'pending'
-                job.started_at = None
-                _log(job, db, BackgroundJobLog,
-                     "Server was restarted while this job was running — "
-                     "automatically queued to resume from last saved offset.",
-                     level='warning', event='recovered')
-            db.session.commit()
-            print(f"[worker:{lane}] Recovered {len(interrupted)} interrupted job(s) → pending.")
+        recovered = recover_interrupted_jobs(lane)
+        if recovered:
+            print(f"[worker:{lane}] Recovered {recovered} interrupted job(s) → pending.")
 
         while True:
             try:
-                db.session.expire_all()
-
-                job = (
-                    _scope_to_lane(
-                        BackgroundJob.query.filter(BackgroundJob.status.in_(['pending'])),
-                        BackgroundJob, lane
-                    )
-                    .order_by(BackgroundJob.created_at.asc())
-                    .first()
-                )
-
-                if job is None:
-                    # No pending job: the query above still opened a transaction.
-                    # Close it now — left open, it pins Postgres's vacuum horizon
-                    # and blocks dead-tuple cleanup instance-wide for as long as
-                    # the queue stays empty (which is most of the time).
-                    db.session.rollback()
+                if run_next_job(app, lane) is None:
                     time.sleep(2)
-                    continue
-
-                handler = _HANDLERS.get(job.job_type)
-                if handler is None:
-                    # Put back to pending so it's retried after a server restart
-                    # that loads the missing handler.
-                    job.status = 'pending'
-                    _log(job, db, BackgroundJobLog,
-                         f"No handler for type '{job.job_type}' — requeueing (restart may be needed).",
-                         level='warning', event='requeued')
-                    db.session.commit()
-                    time.sleep(5)
-                    continue
-
-                job.status     = 'running'
-                job.started_at = datetime.datetime.now(datetime.timezone.utc)
-                db.session.commit()
-
-                _log(job, db, BackgroundJobLog,
-                     f"Worker picked up job — starting execution.",
-                     level='info', event='picked_up')
-
-                print(f"[worker:{lane}] Starting job {job.uuid} type={job.job_type} done={job.done}")
-
-                try:
-                    job_uuid = job.uuid  # save uuid before handler runs
-                    handler(job, app)
-
-                    # reload from DB by uuid — the handler may have spawned its own
-                    # app_context (e.g. delete_github_rules) which closes its session,
-                    # leaving the worker's object stale/detached
-                    db.session.expire_all()
-                    job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
-                    if not job:
-                        print(f"[worker:{lane}] Job {job_uuid} disappeared after handler.")
-                        continue
-
-                    if job.status not in ('cancelled', 'failed', 'paused'):
-                        job.status      = 'done'
-                        job.finished_at = datetime.datetime.now(datetime.timezone.utc)
-                        if job.payload and '_resume_offset' in job.payload:
-                            payload = dict(job.payload)
-                            del payload['_resume_offset']
-                            job.payload = payload
-                        db.session.commit()
-
-                    print(f"[worker:{lane}] Job {job.uuid} finished with status={job.status}")
-
-                    if job.status in ('done', 'failed'):
-                        try:
-                            from app.features.admin.task_scheduler.scheduler_engine import on_job_finished
-                            on_job_finished(job)
-                        except Exception as e:
-                            print(f"[task_scheduler] on_job_finished error: {e}")
-
-                    # Update notification so bell shows final state
-                    try:
-                        from app.features.notification.notification_core import update_job_notification
-                        update_job_notification(job)
-                    except Exception:
-                        pass
-
-                except Exception as e:
-                    db.session.rollback()
-                    try:
-                        job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
-                        if job:
-                            job.status      = 'failed'
-                            job.error       = str(e)
-                            job.finished_at = datetime.datetime.now(datetime.timezone.utc)
-                            db.session.commit()
-                            _log(job, db, BackgroundJobLog,
-                                 f"Unexpected error: {str(e)}",
-                                 level='error', event='failed')
-                            try:
-                                from app.features.notification.notification_core import update_job_notification
-                                update_job_notification(job)
-                            except Exception:
-                                pass
-                            try:
-                                from app.features.admin.task_scheduler.scheduler_engine import on_job_finished
-                                on_job_finished(job)
-                            except Exception as hook_err:
-                                print(f"[task_scheduler] on_job_finished error: {hook_err}")
-                    except Exception:
-                        pass
-                    print(f"[worker:{lane}] Job {job_uuid} failed: {e}")
-
             except Exception as e:
                 print(f"[worker:{lane}] Unexpected error in worker loop: {e}")
                 try:

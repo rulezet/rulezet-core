@@ -1,0 +1,233 @@
+/* Edit proposal discussion page (rule/proposal_content_discuss.html) */
+
+/* ── Status colors ── */
+.pstatus-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.32rem 0.8rem;
+    border-radius: 20px;
+}
+.pstatus-pending  { background: #ffc107; color: #000; }
+.pstatus-accepted,
+.pstatus-approved { background: #198754; color: #fff; }
+.pstatus-rejected { background: #dc3545; color: #fff; }
+.pstatus-superseded { background: #6f42c1; color: #fff; }
+
+/* ── Info grid ── */
+.proposal-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+@media (max-width: 576px) {
+    .proposal-meta-grid { grid-template-columns: 1fr; }
+}
+.meta-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.65rem 0.85rem;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.82rem;
+}
+.meta-item__icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--subtle-text-color);
+    font-size: 0.75rem;
+}
+.meta-item__label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--subtle-text-color);
+    font-weight: 600;
+    line-height: 1.2;
+}
+.meta-item__value {
+    color: var(--text-color);
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+/* ── Message block ── */
+.proposal-message-block {
+    background: var(--light-bg-color);
+    border-left: 3px solid #0d6efd;
+    border-radius: 0 10px 10px 0;
+    padding: 0.85rem 1rem;
+    font-size: 0.88rem;
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+/* ── Score bar ── */
+.score-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.score-bar {
+    width: 80px;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 99px;
+    overflow: hidden;
+    display: inline-block;
+}
+.score-bar__fill {
+    display: block;
+    height: 6px;
+    border-radius: 99px;
+    transition: width 0.3s ease;
+}
+
+/* ── Section divider ── */
+.section-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+.section-divider__line {
+    width: 3px;
+    height: 16px;
+    background: linear-gradient(180deg, #0d6efd, #0a58ca);
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+.section-divider__label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--subtle-text-color);
+}
+
+/* ── Rejection alert ── */
+.rejection-alert {
+    background: rgba(220, 53, 69, 0.08);
+    border: 1px solid rgba(220, 53, 69, 0.3);
+    border-left: 3px solid #dc3545;
+    border-radius: 0 10px 10px 0;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+/* ── GitHub-style "ready to decide" bar (bottom of the conversation) ── */
+.proposal-decision-box {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.1rem 1.4rem;
+    background: var(--cm-brand-glow, rgba(13,110,253,.06));
+    border: 1px solid var(--cm-brand-dim, rgba(13,110,253,.25));
+    border-left: 4px solid #0d6efd;
+    border-radius: 12px;
+    flex-wrap: wrap;
+}
+.proposal-decision-box__icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #0d6efd;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+.proposal-decision-box__title {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-color);
+}
+.proposal-decision-box__subtitle {
+    font-size: 0.82rem;
+    color: var(--subtle-text-color);
+}
+@media (max-width: 576px) {
+    .proposal-decision-box { flex-direction: column; align-items: stretch; }
+}
+
+/* ── Rendered justification (markdown) ── */
+.md-body { font-size: .88rem; line-height: 1.7; color: var(--text-color); }
+.md-body h1,.md-body h2,.md-body h3,.md-body h4 { font-weight: 700; margin: .75rem 0 .35rem; }
+.md-body p { margin: 0 0 .6rem; }
+.md-body code { font-size:.8rem; background:var(--light-bg-color); border:1px solid var(--border-color); border-radius:4px; padding:.1rem .3rem; }
+.md-body pre { background:var(--light-bg-color); border:1px solid var(--border-color); border-radius:8px; padding:.75rem 1rem; overflow-x:auto; margin:.5rem 0; }
+.md-body pre code { background:none; border:none; padding:0; }
+.md-body ul,.md-body ol { padding-left:1.4rem; margin-bottom:.6rem; }
+.md-body a { color:#0d6efd; }
+.md-body blockquote { border-left:3px solid #0d6efd; margin:0; padding:.4rem .8rem; color:var(--subtle-text-color); font-style:italic; background:var(--light-bg-color); border-radius:0 6px 6px 0; }
+
+/* ── Thread navigator (the versions of this proposal's thread) ── */
+.pd-thread {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+.pd-thread__version {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .35rem .75rem;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: .8rem;
+    text-decoration: none;
+}
+.pd-thread__version:hover { border-color: #0d6efd; color: var(--text-color); }
+.pd-thread__version--current {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, .25);
+    font-weight: 700;
+}
+.pd-thread__num { font-weight: 700; }
+.pd-thread__parent { color: var(--subtle-text-color); font-size: .72rem; }
+.pd-thread__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--subtle-text-color);
+}
+.pd-thread__dot--pending    { background: #ffc107; }
+.pd-thread__dot--accepted   { background: #198754; }
+.pd-thread__dot--rejected   { background: #dc3545; }
+.pd-thread__dot--superseded { background: #6f42c1; }
+
+/* ── Diff: what is compared with what ── */
+.pd-compare {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+    margin-bottom: .75rem;
+}
+.pd-compare select { width: auto; min-width: 12rem; font-size: .8rem; }
+
+/* ── Decision: optional reason, consequences on the thread ── */
+.proposal-decision-box__reason { flex-basis: 100%; }
+.proposal-decision-box__reason textarea { font-size: .85rem; }
+.proposal-decision-box__note { font-size: .78rem; color: var(--subtle-text-color); }

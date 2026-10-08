@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+{% block title %}{{ alert.name }} — Alerts — Rulezet{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/alert/alert.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container my-5" id="alert-detail-app" v-cloak>
+
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-bell banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="/alert/" class="text-decoration-none text-muted">Alerts</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">{% if alert.name|length > 40 %}{{ alert.name[:40] }}…{% else %}{{ alert.name }}{% endif %}</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-bell"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">{% if alert.name|length > 60 %}{{ alert.name[:60] }}…{% else %}{{ alert.name }}{% endif %}</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+      Everything this alert caught, most recent first.
+    </p>
+  </div>
+
+  <!-- Main card -->
+  <div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4" style="border-radius:12px;">
+    <div class="card-watermark-detail"><i class="fa-solid fa-bell"></i></div>
+    <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+      <span class="badge rounded-pill" :class="alert.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
+        <i class="fa-solid me-1" :class="alert.is_active ? 'fa-circle-play' : 'fa-circle-pause'"></i>[[ alert.is_active ? 'Active' : 'Paused' ]]
+      </span>
+    </div>
+    <div class="card-body p-4 p-md-5">
+      <div class="al-field-label"><i class="fa-solid fa-filter"></i>Watching</div>
+      <alert-criteria-chips class="mb-4" :criteria="alert.criteria" :match-mode="alert.match_mode" :users="users"></alert-criteria-chips>
+
+      <div class="ud-info-grid mb-4">
+        <div class="ud-info-cell">
+          <div class="ud-info-cell-icon"><i class="fa-solid fa-cubes"></i></div>
+          <div class="ud-info-cell-body">
+            <div class="ud-info-cell-label">Targets</div>
+            <div class="ud-info-cell-value">[[ alert.targets.map(t => t === 'bundle' ? 'Bundles' : 'Rules').join(' & ') ]]</div>
+          </div>
+        </div>
+        <div class="ud-info-cell">
+          <div class="ud-info-cell-icon"><i class="fa-solid fa-bolt"></i></div>
+          <div class="ud-info-cell-body">
+            <div class="ud-info-cell-label">Events</div>
+            <div class="ud-info-cell-value">[[ alert.events.map(e => e === 'updated' ? 'Updated' : 'Published').join(' & ') ]]</div>
+          </div>
+        </div>
+        <div class="ud-info-cell">
+          <div class="ud-info-cell-icon"><i class="fa-solid fa-bell"></i></div>
+          <div class="ud-info-cell-body">
+            <div class="ud-info-cell-label">On Rulezet</div>
+            <div class="ud-info-cell-value">[[ alert.notify_in_app ? 'Yes' : 'No' ]]</div>
+          </div>
+        </div>
+        <div class="ud-info-cell">
+          <div class="ud-info-cell-icon"><i class="fa-solid fa-envelope"></i></div>
+          <div class="ud-info-cell-body">
+            <div class="ud-info-cell-label">Email</div>
+            <div class="ud-info-cell-value">
+              <template v-if="emailAvailable">[[ emailLabel ]]</template>
+              <span v-else class="text-muted" title="Email is disabled on this instance">Unavailable</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        {% if current_user.id == alert.user_id or current_user.is_admin() %}
+        <a :href="'/alert/' + alert.uuid + '/edit'" class="btn btn-sm btn-primary rounded-pill px-3">
+          <i class="fa-solid fa-pen me-1"></i>Edit
+        </a>
+        <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="toggle">
+          <i class="fa-solid me-1" :class="alert.is_active ? 'fa-pause' : 'fa-play'"></i>[[ alert.is_active ? 'Pause' : 'Resume' ]]
+        </button>
+        <button class="btn btn-sm btn-outline-danger rounded-pill px-3" @click="remove">
+          <i class="fa-solid fa-trash me-1"></i>Delete
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="ud-kpi-card ud-kpi-card--blue">
+        <div class="ud-kpi-icon"><i class="fa-solid fa-bolt"></i></div>
+        <div class="ud-kpi-body"><div class="ud-kpi-value">[[ alert.match_count ]]</div><div class="ud-kpi-label">Total matches</div></div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="ud-kpi-card ud-kpi-card--orange">
+        <div class="ud-kpi-icon"><i class="fa-solid fa-envelope-open-text"></i></div>
+        <div class="ud-kpi-body"><div class="ud-kpi-value">[[ alert.unseen_count || 0 ]]</div><div class="ud-kpi-label">New since last visit</div></div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="ud-kpi-card ud-kpi-card--green">
+        <div class="ud-kpi-icon"><i class="fa-regular fa-clock"></i></div>
+        <div class="ud-kpi-body"><div class="ud-kpi-value" style="font-size:1.05rem;">[[ alert.last_triggered_at ? formatDate(alert.last_triggered_at) : 'Not yet' ]]</div><div class="ud-kpi-label">Last match</div></div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="ud-kpi-card ud-kpi-card--purple">
+        <div class="ud-kpi-icon"><i class="fa-solid fa-calendar-plus"></i></div>
+        <div class="ud-kpi-body"><div class="ud-kpi-value" style="font-size:1.05rem;">[[ formatDate(alert.created_at) ]]</div><div class="ud-kpi-label">Created</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity chart -->
+  <div class="ud-section-header mb-3">
+    <div class="ud-section-icon"><i class="fa-solid fa-chart-column"></i></div>
+    <div><div class="ud-section-title">Activity</div><div class="ud-section-sub">Matches per day, last 30 days</div></div>
+  </div>
+  <div class="ud-chart-card ud-chart-card--accent-blue mb-4">
+    <chart-viewer v-if="activity" :data="activity" views="bar" height="240px" :exportable="false" minimal></chart-viewer>
+    <div v-else class="text-center py-5 text-muted"><i class="fa-solid fa-spinner fa-spin"></i></div>
+  </div>
+
+  <!-- Matches -->
+  <div class="ud-section-header mb-3">
+    <div class="ud-section-icon"><i class="fa-solid fa-list"></i></div>
+    <div><div class="ud-section-title">Matches</div><div class="ud-section-sub">[[ total ]] in total — click one to open it</div></div>
+  </div>
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <div v-if="!loadingMatches && !matches.length" class="text-center text-muted py-4">
+        <i class="fa-solid fa-hourglass-half fa-2x mb-2 opacity-50"></i>
+        <div class="fw-semibold">Nothing yet</div>
+        <div class="small">Alerts are checked every few minutes — matching content will show up here.</div>
+      </div>
+      <div v-else-if="loadingMatches" class="text-center py-4 text-muted"><i class="fa-solid fa-spinner fa-spin"></i></div>
+      <div v-else>
+        <a v-for="m in matches" :key="m.id" :href="m.link" class="al-match-row">
+          <div class="al-match-icon" :class="m.object_type === 'bundle' ? 'al-match-icon--bundle' : ''">
+            <i class="fa-solid" :class="m.object_type === 'bundle' ? 'fa-layer-group' : 'fa-shield-halved'"></i>
+          </div>
+          <div class="flex-grow-1 min-w-0">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="al-match-title">[[ m.label ]]</span>
+              <span class="al-chip" :class="m.event === 'updated' ? 'al-chip--attack' : 'al-chip--muted'">
+                [[ m.event === 'updated' ? 'Updated' : 'New' ]] [[ m.object_type ]]
+              </span>
+              <span v-if="!m.seen" class="al-match-new" title="New since your last visit"></span>
+            </div>
+            <div class="al-match-reasons" v-if="m.matched_on.length">
+              <span v-for="r in m.matched_on" :key="r" class="al-chip" :class="reasonChip(r).cls">
+                <i :class="reasonChip(r).icon"></i>[[ reasonChip(r).label ]]
+              </span>
+            </div>
+          </div>
+          <div class="al-match-time" :title="m.created_at">[[ relative(m.created_at) ]]</div>
+        </a>
+      </div>
+      <div class="d-flex justify-content-center mt-3" v-if="totalPages > 1">
+        <pagination-component :current-page="page" :total-pages="totalPages" @change-page="loadMatches"></pagination-component>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+import { create_message } from '/static/js/toaster.js'
+import ChartViewer from '/static/js/components/chart-viewer.js'
+import PaginationComponent from '/static/js/rule/paginationComponent.js'
+import AlertCriteriaChips, { CRITERIA_KINDS } from '/static/js/alert/alertCriteriaChips.js'
+
+const { createApp, ref, computed, onMounted } = Vue
+
+// matched_on entries are "kind:value" — map each kind to its criteria chip style.
+const REASON_KIND = { cve: 'cves', tag: 'tags', attack: 'attacks', keyword: 'keywords', format: 'formats',
+                      user: 'users', repo: 'github_repos' }
+
+createApp({
+    delimiters: ['[[', ']]'],
+    components: { 'chart-viewer': ChartViewer, 'pagination-component': PaginationComponent,
+                  'alert-criteria-chips': AlertCriteriaChips },
+    setup() {
+        const csrfToken = document.getElementById('csrf_token')?.value || ''
+        const alert = ref({{ alert_data | tojson }})
+        const users = {{ criteria_display.users | tojson }}
+        const emailAvailable = {{ email_available | tojson }}
+        const activity = ref(null)
+        const matches = ref([])
+        const total = ref(0)
+        const page = ref(1)
+        const totalPages = ref(1)
+        const loadingMatches = ref(true)
+
+        const emailLabel = computed(() => ({ off: 'Off', instant: 'Instant', daily: 'Daily digest',
+                                             weekly: 'Weekly digest' })[alert.value.email_mode] || alert.value.email_mode)
+
+        const userNames = Object.fromEntries(users.map(u => [String(u.id), u.username]))
+        function reasonChip(r) {
+            const [kind, ...rest] = r.split(':')
+            const value = rest.join(':')
+            if (kind === 'github') {
+                return { cls: 'al-chip--github', icon: 'fa-brands fa-github', label: 'GitHub import' }
+            }
+            const spec = CRITERIA_KINDS.find(k => k.key === REASON_KIND[kind])
+            const icon = spec ? (spec.icon.startsWith('fa-brands') ? spec.icon : 'fa-solid ' + spec.icon) : 'fa-solid fa-check'
+            const label = kind === 'user' ? (userNames[value] || `user #${value}`) : value
+            return { cls: spec ? spec.cls : 'al-chip--muted', icon, label }
+        }
+
+        function relative(iso) {
+            if (!iso) return ''
+            const diff = (Date.now() - new Date(iso + (iso.endsWith('Z') ? '' : 'Z')).getTime()) / 1000
+            if (diff < 60) return 'just now'
+            if (diff < 3600) return `${Math.floor(diff / 60)} min ago`
+            if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`
+            return formatDate(iso)
+        }
+
+        function formatDate(iso) {
+            if (!iso) return '—'
+            return new Date(iso + (iso.endsWith('Z') ? '' : 'Z')).toLocaleDateString(undefined,
+                { year: 'numeric', month: 'short', day: 'numeric' })
+        }
+
+        async function loadMatches(p = 1) {
+            loadingMatches.value = true
+            try {
+                const data = await fetch(`/alert/${alert.value.uuid}/matches?page=${p}`).then(r => r.json())
+                matches.value = data.items || []
+                total.value = data.total || 0
+                totalPages.value = data.total_pages || 1
+                page.value = p
+            } finally {
+                loadingMatches.value = false
+            }
+        }
+
+        async function post(url, body) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify(body || {}),
+            })
+            return res.json()
+        }
+
+        async function toggle() {
+            const data = await post(`/alert/${alert.value.uuid}/toggle`, { is_active: !alert.value.is_active })
+            if (data.success) {
+                alert.value.is_active = data.is_active
+                create_message(`Alert ${data.is_active ? 'resumed' : 'paused'}.`, 'success-subtle')
+            } else create_message(data.message || 'Failed.', 'danger-subtle')
+        }
+
+        async function remove() {
+            if (!confirm(`Delete the alert "${alert.value.name}"? Its match history goes with it.`)) return
+            const data = await post(`/alert/${alert.value.uuid}/delete`)
+            if (data.success) window.location.href = '/alert/'
+            else create_message(data.message || 'Failed.', 'danger-subtle')
+        }
+
+        onMounted(async () => {
+            loadMatches(1).then(() => { if (alert.value.unseen_count) post(`/alert/${alert.value.uuid}/seen`) })
+            try { activity.value = await fetch(`/alert/${alert.value.uuid}/activity`).then(r => r.json()) }
+            catch { activity.value = { categories: [], series: [] } }
+        })
+
+        return { alert, users, emailAvailable, emailLabel, activity, matches, total, page, totalPages,
+                 loadingMatches, reasonChip, relative, formatDate, loadMatches, toggle, remove }
+    },
+}).mount('#alert-detail-app')
+</script>
+{% endblock %}

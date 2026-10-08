@@ -39,7 +39,16 @@ const TagInput = {
     delimiters: ['[[', ']]'],
     setup(props, { emit }) {
         const searchQuery = Vue.ref('');
-        const availableTags = Vue.ref([]);
+        // Browse panel, loaded lazily: the folder list (+ counts) when the
+        // panel first opens, then one page of one folder at a time — never
+        // the whole catalog (~75k tags / 85 MB after MISP imports).
+        const namespaceGroups = Vue.ref(null);        // { Public: [{namespace, count}], Private: [...] }
+        const folderTags = Vue.ref([]);
+        const folderPage = Vue.ref(0);
+        const folderHasMore = Vue.ref(false);
+        const folderLoading = Vue.ref(false);
+        let folderRequestId = 0;
+        const FOLDER_PAGE_SIZE = 50;
         const searchResults = Vue.ref([]);
         const isLoading = Vue.ref(false);
         const isSearching = Vue.ref(false);
@@ -50,11 +59,6 @@ const TagInput = {
         let searchRequestId = 0;
 
         // ── label helpers ─────────────────────────────────────────────────────
-        function namespaceOf(name) {
-            if (!name || !name.includes(':')) return '';
-            if (name.startsWith('misp-galaxy:') && name.includes('=')) return name.split(':')[1].split('=')[0];
-            return name.split(':')[0];
-        }
         function valueOf(name) {
             if (!name) return '';
             const m = name.match(/="(.+)"$/);
@@ -63,7 +67,7 @@ const TagInput = {
             return name;
         }
         // Full-detail label: parses the RAW tag name directly rather than
-        // going through namespaceOf() (which deliberately collapses
+        // going through the folder namespace (tag_namespace() in db.py, which collapses
         // "misp-galaxy:tool=..." to just "tool" for the browse-folder
         // grouping). Previously this dropped the predicate entirely for
         // taxonomy tags (showed "ms-caro-malware-full:Trojan", hiding that
@@ -92,16 +96,18 @@ const TagInput = {
             return `${rawNs}:${pred}=${valueOf(name)}`;
         }
 
-        async function fetchAvailableTags() {
+        function scopeParams(extra = {}) {
+            const params = new URLSearchParams(extra);
+            if (props.userId) params.append('user_id', String(props.userId));
+            return params;
+        }
+
+        async function fetchNamespaces() {
+            if (namespaceGroups.value || isLoading.value) return;
             isLoading.value = true;
             try {
-                const params = new URLSearchParams();
-                if (props.userId) params.append('user_id', String(props.userId));
-                const res = await fetch(`/tags/get_all_tags?${params}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    availableTags.value = Array.isArray(data) ? data : (data.tags || []);
-                }
+                const res = await fetch(`/tags/picker/namespaces?${scopeParams()}`);
+                if (res.ok) namespaceGroups.value = (await res.json()).groups || {};
             } catch (e) {
                 console.error('TagInput fetch error:', e);
             } finally {
@@ -109,18 +115,52 @@ const TagInput = {
             }
         }
 
+        // { Public: [{namespace, label, count}], … } — label is the folder
+        // name as shown ('' → OTHER), namespace the raw value sent back.
         const sortedGroupedTags = Vue.computed(() => {
-            const groups = { Public: {}, Private: {} };
-            availableTags.value.forEach(tag => {
-                const type = tag.visibility === 'public' ? 'Public' : 'Private';
-                const ns = namespaceOf(tag.name)?.toUpperCase() || 'OTHER';
-                if (!groups[type][ns]) groups[type][ns] = [];
-                groups[type][ns].push({ ...tag, displayLabel: tagLabel(tag.name) });
-            });
-            if (!Object.keys(groups.Private).length) delete groups.Private;
-            if (!Object.keys(groups.Public).length) delete groups.Public;
+            const groups = {};
+            for (const [type, folders] of Object.entries(namespaceGroups.value || {})) {
+                if (folders.length) groups[type] = folders.map(f => ({ ...f, label: (f.namespace || 'other').toUpperCase() }));
+            }
             return groups;
         });
+
+        async function loadFolderPage() {
+            if (!activeNamespace.value) return;
+            const myRequestId = ++folderRequestId;
+            folderLoading.value = true;
+            try {
+                const params = scopeParams({
+                    type: activeType.value, namespace: activeNamespace.value.namespace,
+                    page: String(folderPage.value + 1), per_page: String(FOLDER_PAGE_SIZE),
+                });
+                const res = await fetch(`/tags/picker/tags?${params}`);
+                if (myRequestId !== folderRequestId || !res.ok) return;
+                const data = await res.json();
+                folderTags.value = [...folderTags.value, ...(data.tags || [])];
+                folderPage.value = data.page;
+                folderHasMore.value = !!data.has_more;
+            } catch (e) {
+                console.error('TagInput folder error:', e);
+            } finally {
+                if (myRequestId === folderRequestId) folderLoading.value = false;
+            }
+        }
+
+        function openFolder(folder) {
+            activeNamespace.value = folder;
+            folderTags.value = [];
+            folderPage.value = 0;
+            folderHasMore.value = false;
+            loadFolderPage();
+        }
+
+        function closeFolder() {
+            folderRequestId++;
+            activeNamespace.value = null;
+            folderTags.value = [];
+            folderLoading.value = false;
+        }
 
         // Search is server-side (the /tags/get_all_tags `search` + `limit`
         // params already existed but went unused) instead of a client-side
@@ -134,8 +174,7 @@ const TagInput = {
             const myRequestId = ++searchRequestId;
             isSearching.value = true;
             try {
-                const params = new URLSearchParams({ search: q, limit: String(SEARCH_LIMIT) });
-                if (props.userId) params.append('user_id', String(props.userId));
+                const params = scopeParams({ search: q, limit: String(SEARCH_LIMIT), lean: '1' });
                 const res = await fetch(`/tags/get_all_tags?${params}`);
                 if (myRequestId !== searchRequestId) return; // a newer keystroke already superseded this response
                 if (res.ok) {
@@ -181,8 +220,7 @@ const TagInput = {
         // those match the whole raw (possibly multi-token) query string.
         async function findExistingTagByName(name) {
             try {
-                const params = new URLSearchParams({ search: name, limit: '10' });
-                if (props.userId) params.append('user_id', String(props.userId));
+                const params = scopeParams({ search: name, limit: '10', lean: '1' });
                 const res = await fetch(`/tags/get_all_tags?${params}`);
                 if (!res.ok) return null;
                 const data = await res.json();
@@ -212,7 +250,7 @@ const TagInput = {
             // else, or a name outside this picker's own search scope
             // (private tag owned by another user). Either way, resolve it
             // by name instead of failing the whole batch.
-            if (res.status === 201 && data.status === 'error') {
+            if (res.status === 409) {
                 return await findExistingTagByName(name);
             }
             throw new Error(data.message || 'Could not create tag.');
@@ -263,7 +301,7 @@ const TagInput = {
         // Explicit chevron button — a dedicated, always-reliable open/close
         // control, instead of relying only on the input's focus event.
         function toggleDropdown() {
-            if (!isDropdownOpen.value && availableTags.value.length === 0) fetchAvailableTags();
+            if (!isDropdownOpen.value) fetchNamespaces();
             isDropdownOpen.value = !isDropdownOpen.value;
         }
 
@@ -271,7 +309,7 @@ const TagInput = {
         // already-open one — a toggle here misfired shut in some browsers
         // when the input re-gained focus while already open.
         function openDropdown() {
-            if (availableTags.value.length === 0) fetchAvailableTags();
+            fetchNamespaces();
             isDropdownOpen.value = true;
         }
 
@@ -290,7 +328,7 @@ const TagInput = {
             // keystrokes, making it look like typing "does nothing".
             isDropdownOpen.value = true;
             activeType.value = null;
-            activeNamespace.value = null;
+            closeFolder();
             searchDebounceTimer = setTimeout(() => runSearch(q), SEARCH_DEBOUNCE_MS);
         });
 
@@ -305,6 +343,7 @@ const TagInput = {
             toggleTag, isTagSelected, toggleDropdown, openDropdown,
             getTextColor, mapIcon, tagLabel,
             sortedGroupedTags, activeType, activeNamespace,
+            folderTags, folderHasMore, folderLoading, openFolder, closeFolder, loadFolderPage,
             isCreatingTags, createTagsError, pendingCreateTokens, createAndSelectTags, onSearchEnter,
         };
     },
@@ -413,27 +452,27 @@ const TagInput = {
                     <button @click.stop="activeType = null" class="btn btn-sm text-primary p-0 fw-bold mb-2">
                         <i class="fas fa-chevron-left me-1"></i>Back
                     </button>
-                    <div v-for="(tags, ns) in sortedGroupedTags[activeType]" :key="ns"
-                         @click.stop="activeNamespace = ns"
+                    <div v-for="folder in sortedGroupedTags[activeType]" :key="folder.namespace"
+                         @click.stop="openFolder(folder)"
                          class="p-2 rounded border d-flex align-items-center justify-content-between mb-2"
                          style="cursor:pointer">
                         <div class="d-flex align-items-center">
                             <i class="fas fa-folder text-primary opacity-75 me-3"></i>
-                            <span class="fw-bold" style="color: var(--text-color)">[[ ns ]]</span>
+                            <span class="fw-bold" style="color: var(--text-color)">[[ folder.label ]]</span>
                         </div>
-                        <span class="badge rounded-pill border" style="background: var(--light-bg-color); color: var(--text-color)">[[ tags.length ]]</span>
+                        <span class="badge rounded-pill border" style="background: var(--light-bg-color); color: var(--text-color)">[[ folder.count ]]</span>
                     </div>
                 </div>
 
                 <!-- Tag level -->
                 <div v-else>
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <button @click.stop="activeNamespace = null" class="btn btn-sm text-primary p-0 fw-bold">
+                        <button @click.stop="closeFolder" class="btn btn-sm text-primary p-0 fw-bold">
                             <i class="fas fa-chevron-left me-1"></i>Back
                         </button>
-                        <small class="text-uppercase fw-bold text-muted">[[ activeNamespace ]]</small>
+                        <small class="text-uppercase fw-bold text-muted">[[ activeNamespace.label ]] · [[ activeNamespace.count ]]</small>
                     </div>
-                    <div v-for="tag in sortedGroupedTags[activeType][activeNamespace]" :key="tag.id"
+                    <div v-for="tag in folderTags" :key="tag.id"
                          @click.stop="toggleTag(tag)"
                          class="dropdown-item rounded border mb-2 p-2 d-flex align-items-center justify-content-between"
                          :class="{ 'border-primary bg-primary-subtle shadow-sm': isTagSelected(tag.id) }"
@@ -442,12 +481,19 @@ const TagInput = {
                             <span class="tag-left" v-html="mapIcon(tag.icon)"></span>
                             <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }">
                                 <span :style="{ color: getTextColor(tag.color || '#6c757d') }">
-                                    [[ tag.displayLabel ]]
+                                    [[ tagLabel(tag.name) ]]
                                 </span>
                             </span>
                         </span>
                         <i :class="isTagSelected(tag.id) ? 'fas fa-check-circle text-primary' : 'fas fa-plus-circle text-muted'"></i>
                     </div>
+                    <div v-if="folderLoading" class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary"></div>
+                    </div>
+                    <button v-else-if="folderHasMore" type="button" @click.stop="loadFolderPage"
+                            class="btn btn-sm btn-outline-primary rounded-pill w-100 fw-bold" style="font-size:.75rem;">
+                        Load more
+                    </button>
                 </div>
             </div>
 

@@ -1,0 +1,31 @@
+/* AI admin — Bundle Analysis page */
+.ba-search { position: relative; }
+.ba-search i { position: absolute; left: .8rem; top: 50%; transform: translateY(-50%); font-size: .75rem; color: var(--subtle-text-color); pointer-events: none; }
+.ba-search input {
+    width: 100%; padding: .42rem .9rem .42rem 2.1rem;
+    border: 1px solid var(--border-color); border-radius: 999px;
+    background: var(--card-bg-color); color: var(--text-color); font-size: .84rem; outline: none;
+}
+.ba-search input:focus { border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13,110,253,.12); }
+
+.ba-pick {
+    display: flex; align-items: center; gap: .75rem; height: 60px;
+    padding: .55rem .85rem; border: 1px solid var(--border-color); border-radius: 12px;
+    background: var(--card-bg-color); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.ba-pick:hover { border-color: rgba(13,110,253,.4); }
+.ba-pick.is-selected { border-color: #0d6efd; background: rgba(13,110,253,.05); }
+.ba-pick > .form-check-input { flex: 0 0 18px; width: 18px; height: 18px; margin: 0; }
+.ba-pick__icon {
+    flex: 0 0 32px; height: 32px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(13,110,253,.1); color: #0d6efd; font-size: .85rem;
+}
+.ba-pick__body { flex: 1 1 auto; min-width: 0; color: var(--text-color); }
+
+.ba-launch {
+    height: 100%; padding: 1rem 1.1rem; border-radius: 14px;
+    border: 1px solid rgba(13,110,253,.25);
+    background: linear-gradient(135deg, rgba(13,110,253,.06), rgba(10,88,202,.02));
+}
+.ba-launch__target { font-weight: 700; color: var(--text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

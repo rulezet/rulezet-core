@@ -1,6 +1,6 @@
 """
 Tests for the pivotick blueprint (admin-configurable node/edge render style
-for the rule/bundle/attack PivoTick graphs).
+for the rule/bundle/attack Pivotick graphs).
 """
 
 
@@ -125,3 +125,34 @@ def test_save_rejects_malformed_payload(client):
     r = client.post("/admin/pivotick/style/rule", json={"nope": True})
     assert r.status_code == 400
     assert r.get_json()["success"] is False
+
+
+# ── On/off switch per graph + renderer choice (rule/bundle) ──────────────────
+
+def test_graphs_enabled_by_default_and_converters_renderer(client):
+    from app.features.pivotick.pivotick_core import graphs_enabled, graph_renderers
+    with client.application.app_context():
+        assert graphs_enabled() == {'rule': True, 'bundle': True, 'attack': True}
+        assert graph_renderers() == {'rule': 'converters', 'bundle': 'converters'}
+
+
+def test_toggle_and_renderer_require_admin(client):
+    login_user(client)
+    assert client.post('/admin/pivotick/rule/enabled', json={'enabled': False}).status_code == 403
+    assert client.post('/admin/pivotick/rule/renderer', json={'renderer': 'rulezet'}).status_code == 403
+
+
+def test_disabling_the_attack_graph_hides_its_view(client):
+    login_admin(client)
+    assert client.post('/admin/pivotick/attack/enabled', json={'enabled': False}).get_json()['success']
+    assert "viewMode = 'graph'" not in client.get('/attack/heatmap').get_data(as_text=True)
+    client.post('/admin/pivotick/attack/enabled', json={'enabled': True})
+    assert "viewMode = 'graph'" in client.get('/attack/heatmap').get_data(as_text=True)
+
+
+def test_renderer_choice_only_for_misp_graphs(client):
+    login_admin(client)
+    assert client.post('/admin/pivotick/bundle/renderer', json={'renderer': 'rulezet'}).get_json()['renderer'] == 'rulezet'
+    assert client.post('/admin/pivotick/attack/renderer', json={'renderer': 'rulezet'}).status_code == 400
+    assert client.post('/admin/pivotick/rule/renderer', json={'renderer': 'evil'}).status_code == 400
+    assert client.post('/admin/pivotick/rule/enabled', json={'enabled': 'no'}).status_code == 400

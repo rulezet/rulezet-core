@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Bundles — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_bundles.css') }}">
+{% if current_user.is_authenticated %}
+{# "Add to a bundle" modal (RuleExportAction → structure editor + rule selector) #}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+{% endif %}
+<style>[v-cloak] { display: none; }</style>
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav with context %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-layer-group banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+                        [[ RULE_TITLE_SHORT ]]
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Bundles</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-layer-group"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Bundles</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width: 640px; font-size: 0.95rem;">
+            Every bundle that ships this rule, and exactly where it sits in each bundle's folder structure.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'bundles', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count, test_count=test_count, ai_analysis_count=ai_analysis_count, linked_rules_count=linked_rules_count) }}
+
+    <!-- Loading -->
+    <div v-if="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div>
+    </div>
+
+    <template v-else>
+        <!-- ── Summary ── -->
+        <div class="rb-stats mb-3">
+            <div class="rb-stat">
+                <div class="rb-stat__icon"><i class="fa-solid fa-layer-group"></i></div>
+                <div><div class="rb-stat__value">[[ bundles.length ]]</div><div class="rb-stat__label">Bundles</div></div>
+            </div>
+            <div class="rb-stat">
+                <div class="rb-stat__icon rb-stat__icon--teal"><i class="fa-solid fa-users"></i></div>
+                <div><div class="rb-stat__value">[[ authorCount ]]</div><div class="rb-stat__label">Curators</div></div>
+            </div>
+            <div class="rb-stat">
+                <div class="rb-stat__icon rb-stat__icon--green"><i class="fa-solid fa-download"></i></div>
+                <div><div class="rb-stat__value">[[ totalDownloads ]]</div><div class="rb-stat__label">Bundle downloads</div></div>
+            </div>
+            <div class="rb-stat" v-if="isAuthenticated">
+                <div class="rb-stat__icon rb-stat__icon--gold"><i class="fa-solid fa-user"></i></div>
+                <div><div class="rb-stat__value">[[ mineCount ]]</div><div class="rb-stat__label">In your bundles</div></div>
+            </div>
+        </div>
+
+        <div class="h-card">
+            <div class="h-card__header">
+                <div class="h-card__accent"></div>
+                <span class="h-card__title"><i class="fa-solid fa-layer-group me-1"></i>Bundles containing this rule</span>
+                <div class="d-flex flex-wrap align-items-center gap-2 ms-auto">
+                    <span v-for="f in filterOptions" :key="f.key" class="h-filter-chip"
+                          :class="{ active: filter === f.key }" @click="filter = f.key">
+                        [[ f.label ]] <span class="opacity-75">[[ filterCount(f.key) ]]</span>
+                    </span>
+                    {% if current_user.is_authenticated %}
+                    <button class="btn btn-sm btn-primary rounded-pill px-3" @click="openAddToBundle">
+                        <i class="fa-solid fa-plus me-1"></i>Add to a bundle
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="h-card__body">
+                <div v-if="bundles.length" class="d-flex flex-wrap gap-2 mb-3">
+                    <div class="rb-search flex-grow-1">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="search" v-model="search" placeholder="Search bundles, curators, folders…">
+                    </div>
+                    <select class="form-select form-select-sm rounded-pill rb-sort" v-model="sortKey">
+                        <option value="updated">Recently updated</option>
+                        <option value="rules">Most rules</option>
+                        <option value="downloads">Most downloaded</option>
+                        <option value="votes">Most upvoted</option>
+                        <option value="name">Name (A–Z)</option>
+                    </select>
+                </div>
+
+                <!-- Empty -->
+                <div v-if="bundles.length === 0" class="rb-empty">
+                    <i class="fa-solid fa-box-open"></i>
+                    <h6 class="fw-bold mb-1">Not part of any bundle yet</h6>
+                    <p class="mb-3">Bundles group rules into shareable, deployable rulesets.</p>
+                    {% if current_user.is_authenticated %}
+                    <button class="btn btn-sm btn-primary rounded-pill px-3" @click="openAddToBundle">
+                        <i class="fa-solid fa-plus me-1"></i>Add it to a bundle
+                    </button>
+                    {% endif %}
+                </div>
+                <div v-else-if="visibleBundles.length === 0" class="rb-empty">
+                    <i class="fa-solid fa-filter-circle-xmark"></i>
+                    <p class="mb-0">No bundle matches.</p>
+                </div>
+
+                <!-- List -->
+                <div v-else class="d-flex flex-column gap-3">
+                    <article v-for="b in visibleBundles" :key="b.id" class="rb-item">
+                        <div class="rb-item__main">
+                            <div class="rb-item__icon"><i class="fa-solid fa-layer-group"></i></div>
+                            <div class="flex-grow-1" style="min-width:0;">
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <a :href="`/bundle/detail/${b.id}`" class="rb-item__title">[[ b.name ]]</a>
+                                    <span v-if="b.is_verified" class="rb-badge rb-badge--verified"><i class="fa-solid fa-circle-check"></i>Verified</span>
+                                    <span v-if="!b.access" class="rb-badge"><i class="fa-solid fa-lock"></i>Private</span>
+                                    <span v-if="b.is_own" class="rb-badge rb-badge--own"><i class="fa-solid fa-user"></i>Yours</span>
+                                </div>
+                                <div class="rb-item__meta">
+                                    <a :href="`/account/detail_user/${b.user_id}`" class="rb-item__author">
+                                        <img v-if="b.author_avatar" :src="b.author_avatar" alt="">
+                                        <span>[[ b.user_name || b.author ]]</span>
+                                    </a>
+                                    <span>·</span>
+                                    <span title="Last updated"><i class="fa-regular fa-clock me-1"></i>[[ (b.updated_at || '').slice(0, 10) ]]</span>
+                                </div>
+                                <p v-if="b.description" class="rb-item__desc">[[ b.description ]]</p>
+
+                                <!-- Where this rule sits in the bundle -->
+                                <div class="rb-location">
+                                    <span class="rb-location__label"><i class="fa-solid fa-location-dot me-1"></i>Location</span>
+                                    <template v-if="b.rule_paths.length">
+                                        <a v-for="(path, i) in b.rule_paths.slice(0, 3)" :key="i" class="rb-path"
+                                           :href="ruleInBundleUrl(b)" :title="'Open in the bundle structure — ' + path">
+                                            <template v-for="(seg, j) in path.split('/')" :key="j">
+                                                <i v-if="j > 0" class="fa-solid fa-chevron-right rb-path__sep"></i>
+                                                <span class="rb-path__seg" :class="{ 'rb-path__seg--file': j === path.split('/').length - 1 }">
+                                                    <i :class="j === path.split('/').length - 1 ? 'fa-regular fa-file-code' : 'fa-regular fa-folder'"></i>[[ seg ]]
+                                                </span>
+                                            </template>
+                                        </a>
+                                        <span v-if="b.rule_paths.length > 3" class="rb-location__more">+[[ b.rule_paths.length - 3 ]] more</span>
+                                    </template>
+                                    <span v-else class="rb-location__none">Included but not placed in the folder structure</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rb-item__side">
+                            <div class="rb-item__nums">
+                                <div title="Rules in this bundle"><strong>[[ b.number_of_rules ]]</strong><span>rules</span></div>
+                                <div title="Downloads"><strong>[[ b.download_count || 0 ]]</strong><span>downloads</span></div>
+                                <div title="Upvotes"><strong>[[ b.vote_up || 0 ]]</strong><span>upvotes</span></div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 justify-content-end">
+                                <span v-for="fmt in (b.list_of_format_of_rules || []).filter(Boolean).slice(0, 4)" :key="fmt" class="rb-fmt">[[ fmt ]]</span>
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 justify-content-end" v-if="b.tags && b.tags.length">
+                                <span v-for="t in b.tags.slice(0, 3)" :key="t.id || t.name" class="rb-tag"
+                                      :style="t.color ? { borderColor: t.color + '66', color: t.color } : {}">[[ t.name ]]</span>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2 justify-content-end mt-auto">
+                                <a :href="`/bundle/detail/${b.id}`" class="btn btn-sm rounded-pill px-3 rb-open rb-open--ghost">
+                                    <i class="fa-solid fa-layer-group me-1"></i>Open bundle
+                                </a>
+                                <a :href="ruleInBundleUrl(b)" class="btn btn-sm rounded-pill px-3 rb-open"
+                                   :title="b.rule_paths.length ? 'Open the bundle structure on this rule' : 'Not placed in the structure — shows it in the bundle\'s rule list'">
+                                    <i class="fa-solid fa-folder-tree me-1"></i>Open rule in bundle
+                                </a>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    {% if current_user.is_authenticated %}
+    <!-- Same "Add to Bundle" flow as the rule list: pick/create a bundle, then
+         place this rule in its folder structure. -->
+    <rule-export-action
+        :show-button="false"
+        :rule-ids="[RULE_ID]"
+        :total-rules="1"
+        :csrf-token="csrfToken"
+        current-user-is-authenticated="True"
+        :start-view="exportStartView"
+        modal-id="rb-add-bundle-modal">
+    </rule-export-action>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, computed, onMounted, nextTick } = Vue;
+    import RuleExportAction from '/static/js/rule/ruleExportAction.js';
+
+    const RULE_ID = {{ rule.id }};
+    const RULE_TITLE = {{ rule.title | tojson }};
+    const RULE_TITLE_SHORT = RULE_TITLE.length > 40 ? RULE_TITLE.slice(0, 40) + '…' : RULE_TITLE;
+    const isAuthenticated = {{ current_user.is_authenticated | tojson }};
+    const csrfToken       = '{{ csrf_token() }}';
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'rule-export-action': RuleExportAction },
+        setup() {
+            const loading = ref(true);
+            const bundles = ref([]);
+            const search  = ref('');
+            const sortKey = ref('updated');
+            const filter  = ref('all');
+
+            const filterOptions = [
+                { key: 'all', label: 'All' },
+                { key: 'verified', label: 'Verified' },
+                ...(isAuthenticated ? [{ key: 'mine', label: 'Mine' }, { key: 'others', label: 'Community' }] : []),
+            ];
+            function matchesFilter(b, key) {
+                if (key === 'verified') return !!b.is_verified;
+                if (key === 'mine')     return b.is_own;
+                if (key === 'others')   return !b.is_own;
+                return true;
+            }
+            const filterCount = key => bundles.value.filter(b => matchesFilter(b, key)).length;
+
+            const SORTERS = {
+                updated:   (a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''),
+                rules:     (a, b) => (b.number_of_rules || 0) - (a.number_of_rules || 0),
+                downloads: (a, b) => (b.download_count || 0) - (a.download_count || 0),
+                votes:     (a, b) => (b.vote_up || 0) - (a.vote_up || 0),
+                name:      (a, b) => (a.name || '').localeCompare(b.name || ''),
+            };
+            const visibleBundles = computed(() => {
+                const q = search.value.trim().toLowerCase();
+                return bundles.value
+                    .filter(b => matchesFilter(b, filter.value))
+                    .filter(b => !q || [b.name, b.description, b.user_name, b.author, ...(b.rule_paths || [])]
+                        .some(v => (v || '').toLowerCase().includes(q)))
+                    .sort(SORTERS[sortKey.value] || SORTERS.updated);
+            });
+
+            const authorCount    = computed(() => new Set(bundles.value.map(b => b.user_id)).size);
+            const totalDownloads = computed(() => bundles.value.reduce((n, b) => n + (b.download_count || 0), 0));
+            const mineCount      = computed(() => bundles.value.filter(b => b.is_own).length);
+
+            async function fetchBundles() {
+                try {
+                    const res = await fetch(`/bundle/get_bundle_list_rule_part_of?rule_id=${RULE_ID}`);
+                    if (res.ok) bundles.value = (await res.json()).bundles || [];
+                } finally {
+                    loading.value = false;
+                }
+            }
+
+            // Re-trigger the start view on every open (the component resets
+            // itself to 'main' when its modal closes).
+            // Bundle detail reveals + opens the rule in its structure tree
+            // (or falls back to its rule list when it isn't placed).
+            const ruleInBundleUrl = b => `/bundle/detail/${b.id}?focus_rule=${RULE_ID}`;
+
+            const exportStartView = ref('main');
+            async function openAddToBundle() {
+                exportStartView.value = 'main';
+                await nextTick();
+                exportStartView.value = 'bundle';
+                await nextTick();
+                const el = document.getElementById('rb-add-bundle-modal');
+                if (!el) return;
+                el.addEventListener('hidden.bs.modal', fetchBundles, { once: true });
+                bootstrap.Modal.getOrCreateInstance(el).show();
+            }
+
+            onMounted(fetchBundles);
+
+            return {
+                RULE_ID, RULE_TITLE_SHORT, isAuthenticated, csrfToken,
+                loading, bundles, search, sortKey, filter, filterOptions, filterCount,
+                visibleBundles, authorCount, totalDownloads, mineCount,
+                exportStartView, openAddToBundle, ruleInBundleUrl,
+            };
+        }
+    }).mount('#main-container');
+</script>
+{% endblock %}

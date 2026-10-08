@@ -94,6 +94,7 @@
                                 <th class="dt-th text-center">Tasks</th>
                                 <th class="dt-th">Editor</th>
                                 <th class="dt-th text-center">Status</th>
+                                <th class="dt-th">Next launch</th>
                                 <th class="dt-th">Created</th>
                                 <th class="dt-th text-center">Actions</th>
                             </tr>
@@ -112,6 +113,17 @@
                                 <td class="dt-td text-center">
                                     <span class="badge" :class="w.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
                                         [[ w.is_active ? 'Active' : 'Paused' ]]
+                                    </span>
+                                </td>
+                                <td class="dt-td">
+                                    <span v-if="!w.is_active" class="text-muted small">— (paused)</span>
+                                    <template v-else-if="w.launch_status && w.launch_status.will_run">
+                                        <div class="fw-semibold small"><i class="fa-regular fa-clock me-1 text-primary"></i>[[ formatLocalDate(w.launch_status.next_run_at) ]]</div>
+                                        <div class="text-muted" style="font-size:.72rem;" v-if="w.first_task">[[ triggerSummary(w.first_task) ]]</div>
+                                    </template>
+                                    <span v-else-if="w.launch_status" class="badge bg-warning-subtle text-warning-emphasis" style="cursor:help;white-space:normal;text-align:left;"
+                                          :title="w.launch_status.warning">
+                                        <i class="fa-solid fa-triangle-exclamation me-1"></i>Never runs
                                     </span>
                                 </td>
                                 <td class="dt-td">[[ w.created_at ]]</td>
@@ -143,6 +155,9 @@
             <strong>[[ pausedCount ]]</strong> paused ·
             next scheduled run: <strong>[[ nextRunSummary ]]</strong>
         </p>
+        <div v-if="neverRunsWarning" class="rounded-3 border border-warning p-2 px-3 mb-3 small text-warning-emphasis bg-warning-subtle">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i>[[ neverRunsWarning ]]
+        </div>
 
         <div class="dr-nav mb-3" role="tablist">
             <a class="dr-nav__item" :class="{ active: detailTab === 'history' }" href="#" role="tab" @click.prevent="switchDetailTab('history')">
@@ -569,6 +584,30 @@
                         </div>
                     </div>
 
+                    <div class="task-form-section" v-if="workflowForm.uuid">
+                        <div class="task-form-section__title">
+                            <div class="task-form-bar"></div>
+                            <span><i class="fa-regular fa-clock me-1"></i>Launch date</span>
+                        </div>
+                        <div class="task-form-subcard">
+                            <p v-if="!workflowForm.first_task" class="text-muted small mb-0">
+                                <i class="fa-solid fa-triangle-exclamation me-1 text-warning"></i>This workflow has no task yet — add one, then set its launch date here.
+                            </p>
+                            <template v-else>
+                                <p class="text-muted small mb-2">
+                                    The workflow starts when its first task, <strong>[[ workflowForm.first_task.title ]]</strong>, does —
+                                    changing the launch date here updates that task's trigger.
+                                </p>
+                                <p v-if="workflowForm.first_task.trigger_mode === 'after_task' || !workflowForm.first_task.is_active" class="small text-warning-emphasis mb-2">
+                                    <i class="fa-solid fa-triangle-exclamation me-1"></i>No launch date yet — this workflow never runs on its own. Pick one below.
+                                </p>
+                                <schedule-recurrence-picker :key="workflowFormInstance" allow-once
+                                    :initial="workflowForm.launch_initial" @recurrence-change="onWorkflowLaunchChange">
+                                </schedule-recurrence-picker>
+                            </template>
+                        </div>
+                    </div>
+
                     <div class="task-form-section">
                         <div class="task-form-section__title">
                             <div class="task-form-bar"></div>
@@ -964,7 +1003,36 @@
             const workflowForm = reactive({
                 uuid: null, title: '', description: '', is_active: true,
                 notify_on_failure: true, notify_on_success: false, notify_emails_text: '',
+                first_task: null, launch_initial: {},
             });
+            const workflowFormInstance = ref(0);
+            // The picker emits once on mount (= the current trigger): only a
+            // later, different emission counts as the admin changing the
+            // launch date, so saving a rename never rewrites the trigger.
+            let workflowLaunchBaseline = null;
+            let workflowLaunch = null;
+            function onWorkflowLaunchChange(payload) {
+                const snap = JSON.stringify(payload);
+                if (workflowLaunchBaseline === null) { workflowLaunchBaseline = snap; return; }
+                workflowLaunch = snap === workflowLaunchBaseline ? null : payload;
+            }
+            function launchInitialFrom(t) {
+                // No launch date yet: start on an empty "Once, at a date" so
+                // whatever the admin picks (a date, or Recurring) is a change.
+                if (!t || t.trigger_mode === 'after_task' || !t.is_active) return { mode: 'once', run_once_at: null };
+                return {
+                    mode: t.trigger_mode === 'once' ? 'once' : 'recurring',
+                    frequency: ['daily', 'weekly', 'monthly', 'cron'].includes(t.trigger_mode) ? t.trigger_mode : 'weekly',
+                    days_of_week: t.days_of_week, day_of_month: t.day_of_month,
+                    hour: t.hour, minute: t.minute, cron_expr: t.cron_expr, timezone: t.timezone,
+                    run_once_at: t.run_once_at,
+                };
+            }
+            function formatLocalDate(iso) {
+                if (!iso) return '—';
+                const d = new Date(iso);
+                return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+            }
             const savingWorkflow = ref(false);
             const mailConfigured = ref(true); // optimistic default until /admin/tasks/config answers
 
@@ -978,7 +1046,9 @@
                 Object.assign(workflowForm, {
                     uuid: null, title: '', description: '', is_active: true,
                     notify_on_failure: true, notify_on_success: false, notify_emails_text: '',
+                    first_task: null, launch_initial: {},
                 });
+                workflowLaunch = null;
             }
             function openEditWorkflow(w) {
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('workflowModal')).show();
@@ -986,7 +1056,11 @@
                     uuid: w.uuid, title: w.title, description: w.description || '', is_active: w.is_active,
                     notify_on_failure: w.notify_on_failure, notify_on_success: w.notify_on_success,
                     notify_emails_text: (w.notify_emails || []).join(', '),
+                    first_task: w.first_task || null, launch_initial: launchInitialFrom(w.first_task),
                 });
+                workflowLaunchBaseline = null;
+                workflowLaunch = null;
+                workflowFormInstance.value++;
             }
             async function submitWorkflowForm() {
                 if (!workflowForm.title.trim()) { create_message('Title is required.', 'danger-subtle'); return; }
@@ -994,6 +1068,19 @@
                 try {
                     const notifyEmails = workflowForm.notify_emails_text
                         .split(',').map(e => e.trim()).filter(Boolean);
+                    let launch = null;
+                    if (workflowForm.uuid && workflowLaunch) {
+                        const r = workflowLaunch;
+                        if (r.mode === 'once') {
+                            if (!r.run_once_at) { create_message('Pick a launch date and time.', 'danger-subtle'); return; }
+                            launch = { trigger_mode: 'once', run_once_at: r.run_once_at };
+                        } else {
+                            launch = {
+                                trigger_mode: r.frequency || 'weekly', days_of_week: r.days_of_week, day_of_month: r.day_of_month,
+                                hour: r.hour, minute: r.minute, cron_expr: r.cron_expr, timezone: r.timezone,
+                            };
+                        }
+                    }
                     const endpoint = workflowForm.uuid ? `/admin/tasks/workflows/${workflowForm.uuid}/update` : '/admin/tasks/workflows/create';
                     const res = await fetch(endpoint, {
                         method: 'POST',
@@ -1002,6 +1089,7 @@
                             title: workflowForm.title, description: workflowForm.description, is_active: workflowForm.is_active,
                             notify_on_failure: workflowForm.notify_on_failure, notify_on_success: workflowForm.notify_on_success,
                             notify_emails: notifyEmails,
+                            ...(launch ? { launch } : {}),
                         }),
                     });
                     const data = await res.json();
@@ -1009,7 +1097,10 @@
                     if (res.ok) {
                         bootstrap.Modal.getInstance(document.getElementById('workflowModal'))?.hide();
                         fetchWorkflows(workflowsPage.value);
-                        if (activeWorkflow.value && activeWorkflow.value.uuid === data.workflow.uuid) activeWorkflow.value = data.workflow;
+                        if (activeWorkflow.value && activeWorkflow.value.uuid === data.workflow.uuid) {
+                            activeWorkflow.value = data.workflow;
+                            if (launch) refreshLists();
+                        }
                     }
                 } finally {
                     savingWorkflow.value = false;
@@ -1078,7 +1169,21 @@
             // nothing to fire and the button should say so rather than silently
             // failing server-side when clicked.
             const canRunWorkflow = computed(() =>
-                graphSchedules.value.some(s => s.trigger_mode !== 'after_task' && s.is_active));
+                graphSchedules.value.some(s => (s.trigger_mode !== 'after_task' || !s.depends_on_schedule_id) && s.is_active));
+            // Same rule as scheduler_engine.workflow_launch_status(): the workflow
+            // starts on its own only through a first task (not chained after
+            // another one) that is active and has an upcoming time trigger.
+            const neverRunsWarning = computed(() => {
+                if (!activeWorkflow.value || !activeWorkflow.value.is_active) return null;
+                const tasks = graphSchedules.value;
+                if (!tasks.length) return 'This workflow has no task — it will never run.';
+                const roots = tasks.filter(s => s.trigger_mode !== 'after_task' || !s.depends_on_schedule_id);
+                if (roots.some(s => s.is_active && s.trigger_mode !== 'after_task' && s.next_run_at)) return null;
+                const names = roots.slice(0, 3).map(s => `"${s.title}"`).join(', ');
+                if (roots.some(s => s.trigger_mode === 'after_task')) return `This workflow will never run automatically: its first task (${names}) has no launch date — edit it and give it a time trigger.`;
+                if (roots.some(s => !s.is_active)) return `This workflow will never run automatically: its first task (${names}) is paused.`;
+                return `This workflow will never run automatically: its first task (${names}) has no upcoming run.`;
+            });
             const nextRunSummary = computed(() => {
                 const upcoming = graphSchedules.value
                     .filter(s => s.is_active && s.next_run_at)
@@ -1370,7 +1475,7 @@
                 if (s.trigger_mode === 'after_task') {
                     return `After "${s.depends_on_schedule_title || '?'}" — ${conditionLabel(s.depends_on_condition)}`;
                 }
-                if (s.trigger_mode === 'once') return `Once at ${s.run_once_at || '?'}`;
+                if (s.trigger_mode === 'once') return `Once at ${s.run_once_at ? formatLocalDate(s.run_once_at) : '?'}`;
                 const time = `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}`;
                 const tz = s.timezone ? ` (${s.timezone})` : '';
                 if (s.trigger_mode === 'daily') return `Daily at ${time}${tz}`;
@@ -1801,10 +1906,11 @@
                 workflowsPage, workflowsTotalPages, totalWorkflows,
                 fetchWorkflows, openCreateWorkflow, openEditWorkflow, deleteWorkflow,
                 workflowForm, savingWorkflow, submitWorkflowForm, mailConfigured, currentUserEmail,
+                workflowFormInstance, onWorkflowLaunchChange, formatLocalDate,
 
                 search, totalSchedules, detailTab,
                 taskTypes, taskTypeLabel, taskTypeIcon, taskTypeOf,
-                activeCount, pausedCount, nextRunSummary, canRunWorkflow,
+                activeCount, pausedCount, nextRunSummary, canRunWorkflow, neverRunsWarning,
                 progressCounts, progressPct, progressTotal,
                 graphSchedules, graphLoading, refreshLists,
                 liveStatus, focusedTaskUuids, focusedTaskUuidsArray, lastFocusedTaskUuid, jobUuidFor, isWorkflowRunning,

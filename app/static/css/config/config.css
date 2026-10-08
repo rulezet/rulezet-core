@@ -770,7 +770,7 @@ body.dark-mode .tsp--default .tsp-toast {
     text-align: center;
 }
 
-/* ── PivoTick graph background preview ─────────────────── */
+/* ── Pivotick graph background preview ─────────────────── */
 .pvtbg-preview {
     height: 88px;
     background: #fbfbfc;
@@ -818,7 +818,7 @@ body.dark-mode .tsp--default .tsp-toast {
     font-size: 1.3rem;
 }
 
-/* ── PivoTick background gallery (Image mode) ──────────── */
+/* ── Pivotick background gallery (Image mode) ──────────── */
 .pvtbg-gallery-item {
     position: relative;
     width: 84px;

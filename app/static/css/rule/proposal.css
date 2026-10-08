@@ -54,3 +54,19 @@ body.dark-mode .proposal-history-container tbody tr.row-pending:hover {
 .proposal-history-container tbody tr.row-pending {
     border-left: 3px solid rgba(255, 193, 7, 0.6) !important;
 }
+/* ── Review queue: versions grouped by thread ── */
+.pht-thread-row td {
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--subtle-text-color);
+    background: var(--light-bg-color);
+    border-left: 3px solid #6f42c1;
+}
+.pht-version {
+    font-size: .7rem;
+    font-weight: 700;
+    padding: .1rem .45rem;
+    border-radius: 6px;
+    background: rgba(111, 66, 193, .12);
+    color: #6f42c1;
+}

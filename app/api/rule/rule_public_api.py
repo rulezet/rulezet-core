@@ -289,10 +289,7 @@ class ConvertMISP(Resource):
 
         def convert_rule(rule_id: int) -> Optional[dict]:
             try:
-                misp_json = get_rule_misp_object(rule_id)
-                # load the JSON string into a Python dictionary
-                misp_json = json.loads(misp_json)
-                return misp_json
+                return get_rule_misp_object(rule_id) or None   # already a dict
             except Exception:
                 return None
 
@@ -360,7 +357,8 @@ class DetailRule(Resource):
             "version": rule.version,
             "to_string": rule.to_string,
             "description": rule.description or "No description for the rule",
-            "source": rule.source or f"{rule.author.first_name}, {rule.author.last_name}",
+            # rule.author is the free-text author, not a User
+            "source": rule.source or rule.author or f"{author.first_name} {author.last_name}".strip(),
             "license": rule.license,
             "cve_id": rule.cve_id,
             "original_uuid": rule.original_uuid,
@@ -562,12 +560,16 @@ class RulesByAttackTechnique(Resource):
     ###########################################
 
 
+MAX_VALIDATE_CONTENT = 512 * 1024   # public endpoint: one rule, not a corpus
+
+
 @rule_public_ns.route('/validate')
 @rule_public_ns.doc(
     description="""
 Check whether a rule's content is **syntactically valid** for a given format — the same
 per-format check a rule goes through on creation/import, run here as a dry run: nothing
-is saved, no rule is created.
+is saved, no rule is created. The content is checked on its own (max 512 KB): a YARA
+rule referencing other rules by name is not compiled together with them here.
 
 ### JSON body
 
@@ -596,6 +598,8 @@ class ValidateRule(Resource):
             return {"error": "No format provided."}, 400
         if not content.strip():
             return {"error": "No content provided."}, 400
+        if len(content) > MAX_VALIDATE_CONTENT:
+            return {"error": f"Content too large (max {MAX_VALIDATE_CONTENT // 1024} KB)."}, 413
 
         result = RuleModel.validate_rule_syntax(rule_format, content)
         if result is None:

@@ -305,7 +305,7 @@ def delete_custom_theme_core(uuid, user_id):
         return False, f'Error deleting theme: {e}'
 
 
-# ── PivoTick background gallery (admin uploads, any user can select) ─────────
+# ── Pivotick background gallery (admin uploads, any user can select) ─────────
 
 PIVOTICK_BG_UPLOAD_FOLDER = os.path.join("app", "static", "uploads", "pivotick_backgrounds")
 ALLOWED_PIVOTICK_BG_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}

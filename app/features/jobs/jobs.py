@@ -11,6 +11,7 @@ from flask_login import current_user, login_required
 import app.features.jobs.jobs_core as JobsModel
 from app.core.db_class.db import BackgroundJob
 from app.core.utils.activity_log import log_activity
+from app.core.utils.utils import as_db_id, json_object
 from app import db
 
 jobs_blueprint = Blueprint(
@@ -176,8 +177,8 @@ def api_list_jobs():
     sort_dir   = request.args.get('dir', 'desc')
     query = query.order_by(sort_field.asc() if sort_dir == 'asc' else sort_field.desc())
 
-    page     = max(1, request.args.get('page', 1, type=int))
-    per_page = min(100, max(1, request.args.get('per_page', 10, type=int)))
+    page     = JobsModel.clamp_int_arg(request.args, 'page', 1, 1, JobsModel.MAX_PAGE)
+    per_page = JobsModel.clamp_int_arg(request.args, 'per_page', 10, 1, 100)
     total    = query.count()
     items    = query.offset((page - 1) * per_page).limit(per_page).all()
 
@@ -283,22 +284,27 @@ def api_delete_job(job_uuid):
 
 
 def _resolve_job(ref):
-    """Resolve a job by integer ID or UUID string — the DataTable sends integer IDs."""
-    try:
-        return db.session.get(BackgroundJob, int(ref))
-    except (ValueError, TypeError):
-        return JobsModel.get_job_by_uuid(str(ref))
+    """Resolve a job by integer ID or UUID string — the DataTable sends integer IDs.
+    Anything else (a float, a boolean, a list…) resolves to nothing."""
+    job_id = as_db_id(ref)
+    if job_id:
+        return db.session.get(BackgroundJob, job_id)
+    if isinstance(ref, str):
+        return JobsModel.get_job_by_uuid(ref)
+    return None
 
 
 @jobs_blueprint.route('/api/bulk', methods=['POST'])
 @login_required
 def api_bulk_jobs():
-    data   = request.json or {}
+    data   = json_object()
     action = data.get('action')
     refs   = data.get('uuids', [])   # may be int IDs or UUID strings
 
-    if action not in ('cancel', 'delete'):
+    if not isinstance(action, str) or action not in ('cancel', 'delete'):
         return jsonify({"message": "Unknown action."}), 400
+    if not isinstance(refs, list):
+        return jsonify({"message": "uuids must be a list."}), 400
     if not refs:
         return jsonify({"message": "No jobs selected."}), 400
 
@@ -370,7 +376,7 @@ def job_errors():
     """Recent error/warning log lines across all jobs — admin only."""
     if not current_user.is_admin():
         return jsonify({"error": "Forbidden."}), 403
-    limit = min(300, request.args.get('limit', 100, type=int))
+    limit = JobsModel.clamp_int_arg(request.args, 'limit', 100, 1, 300)
     return jsonify(JobsModel.get_job_error_logs(limit=limit)), 200
 
 
@@ -379,8 +385,7 @@ def job_errors():
 def get_zombies():
     if not current_user.is_admin():
         return jsonify({"error": "Forbidden."}), 403
-    zombies = JobsModel.get_zombie_jobs()
-    return jsonify([j.to_json() for j in zombies]), 200
+    return jsonify(JobsModel.get_zombie_jobs()), 200
 
 
 @jobs_blueprint.route('/kill_zombies', methods=['POST'])
@@ -406,7 +411,7 @@ def job_logs(job_uuid):
     """Return log lines for a job. Pass ?since_id=N to get only new lines."""
     job, err = _get_job_or_403(job_uuid)
     if err: return err
-    since_id = request.args.get('since_id', 0, type=int)
+    since_id = as_db_id(request.args.get('since_id')) or 0
     logs = JobsModel.get_job_logs(job_uuid, since_id=since_id)
     return jsonify([l.to_json() for l in logs]), 200
 
@@ -416,17 +421,28 @@ def job_logs(job_uuid):
 # connector pulls, trash purge, db backup, ...) stays admin-only.
 _TAG_MANAGER_JOB_TYPES = {'bulk_add_tag_to_rules', 'bulk_remove_tag_from_rules'}
 
+_LABEL_MAX = BackgroundJob.label.property.columns[0].type.length
+
 
 @jobs_blueprint.route('/create', methods=['POST'])
 @login_required
 def create_job():
-    data     = request.json or {}
+    data     = json_object()
     job_type = data.get('job_type')
     payload  = data.get('payload', {})
-    label    = data.get('label', job_type)
+    label    = data.get('label')
+    if label is None:
+        label = job_type
 
-    if not job_type:
+    if not job_type or not isinstance(job_type, str):
         return jsonify({"error": "job_type is required."}), 400
+    from app.features.jobs.job_worker import _HANDLERS
+    if job_type not in _HANDLERS:
+        return jsonify({"error": "Unknown job_type."}), 400
+    if not isinstance(payload, dict):
+        return jsonify({"error": "payload must be a JSON object."}), 400
+    if not isinstance(label, str) or len(label) > _LABEL_MAX:
+        return jsonify({"error": f"label must be a text of at most {_LABEL_MAX} characters."}), 400
 
     # Job types reachable from this endpoint are administrative by default —
     # user-level jobs are created server-side by their own gated routes,

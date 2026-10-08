@@ -1,6 +1,6 @@
 """
 Tests that ATT&CK techniques associated with a rule show up in the MISP JSON
-export consumed by the PivoTick graph (bundleMispGraph.js parseMispBundle),
+export consumed by the Pivotick graph (bundleMispGraph.js, via pivotick-converters),
 as proper "attack-id" MISP object attributes — same object_relation pattern
 as the existing "cve-id" vulnerability attribute, not a custom top-level key.
 """

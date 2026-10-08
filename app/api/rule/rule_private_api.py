@@ -120,6 +120,17 @@ class CreateRule(Resource):
         user = utils.get_user_from_api(request.headers)
 
         data = request.get_json(silent=True) or request.args.to_dict()
+        if not isinstance(data, dict):
+            return {"message": "The body must be a JSON object"}, 400
+
+        # Every field is text; a version may also be sent as a plain number.
+        if isinstance(data.get("version"), int) and not isinstance(data.get("version"), bool):
+            data["version"] = str(data["version"])
+        text_fields = ["title", "format", "to_string", "version", "license", "description",
+                       "source", "original_uuid", "cve_id"]
+        wrong_type = [f for f in text_fields if data.get(f) is not None and not isinstance(data.get(f), str)]
+        if wrong_type:
+            return {"message": f"These fields must be text: {', '.join(wrong_type)}"}, 400
 
         # Required fields
         required_fields = ["title", "format", "to_string", "version", "license"]
@@ -129,6 +140,13 @@ class CreateRule(Resource):
             return {"message": f"Missing or empty fields: {', '.join(missing_fields)}"}, 400
 
         title = data.get("title").strip()
+
+        # Same rule as the web form (and the API docs): a title used by an
+        # active rule is refused.
+        same_title = RuleModel._active().filter(Rule.title == title).first()
+        if same_title:
+            return {"message": f'A rule with this title already exists: "{same_title.title}".',
+                    "rule": same_title.to_json()}, 409
 
 
         cve_id = data.get("cve_id")
@@ -233,13 +251,13 @@ class DeleteRule(Resource):
             }, 401
 
         data = request.get_json(silent=True)
-        if not data:
+        if not data or not isinstance(data, dict):
             return {
                 "success": False,
                 "message": "Missing JSON body"
             }, 400
 
-        rule_id = data.get('rule_id')
+        rule_id = utils.as_db_id(data.get('rule_id'))
         if not rule_id:
             return {
                 "success": False,
@@ -256,7 +274,7 @@ class DeleteRule(Resource):
 
         # Permission check: owner or admin
         if user.id == rule_owner_id or user.is_admin():
-            success = RuleModel.delete_rule_core(rule_id)
+            success = RuleModel.delete_rule_core(rule_id, user_id=user.id)
             if success:
                 log_activity(
                     "rule.delete",
@@ -334,6 +352,8 @@ class FavoriteRule(Resource):
             AccountModel.remove_favorite(rule_id=rule_id, user_id=user.id)
             return {"success": True, "message": "Rule removed from favorites"}, 200
         else:
+            if not RuleModel.get_rule(rule_id):
+                return {"success": False, "message": "Rule not found"}, 404
             AccountModel.add_favorite(rule_id=rule_id, user_id=user.id)
             return {"success": True, "message": "Rule added to favorites"}, 200
 
@@ -423,11 +443,19 @@ class ImportRulesFromGithub(Resource):
             return {"success": False, "message": "Unauthorized"}, 403
 
         if not user.is_admin():
-            return {"success": False, "message": "You have to be an admin to import"}, 400
+            return {"success": False, "message": "You have to be an admin to import"}, 403
 
-        data = request.get_json(silent=True) or request.args.to_dict()
+        body = request.get_json(silent=True)
+        if body is None:
+            data = request.args.to_dict()
+        elif isinstance(body, dict):
+            data = body
+        else:
+            return {"success": False, "message": "The JSON body must be an object"}, 400
+        if not all(isinstance(data.get(k), (str, type(None))) for k in ('url', 'license', 'branch')):
+            return {"success": False, "message": "'url', 'license' and 'branch' must be text"}, 400
         repo_url = data.get('url')
-        selected_license = data.get('license', '').strip()
+        selected_license = (data.get('license') or '').strip()
         branch = (data.get('branch') or '').strip() or None
         is_generic_source = bool(data.get('is_generic_source'))
 
@@ -440,15 +468,18 @@ class ImportRulesFromGithub(Resource):
             return {"success": False, "message": "Invalid repository URL"}, 400
 
         # Clone or access repo
-        repo_dir, exists = clone_or_access_repo(repo_url, branch=branch, is_generic_source=is_generic_source)
+        # An unreachable repository or an unknown / invalid branch is the
+        # caller's input, not a server error.
+        try:
+            repo_dir, exists = clone_or_access_repo(repo_url, branch=branch, is_generic_source=is_generic_source)
+            if is_generic_source:
+                info = generic_repo_metadata(repo_url, selected_license, user)
+            else:
+                info = github_repo_metadata(repo_url, selected_license)
+        except Exception as e:
+            return {"success": False, "message": f"Could not access the repository: {str(e)[:300]}"}, 400
         if not repo_dir:
-            return {"success": False, "message": "Failed to clone or access the repository"}, 500
-
-        # Extract rules
-        if is_generic_source:
-            info = generic_repo_metadata(repo_url, selected_license, user)
-        else:
-            info = github_repo_metadata(repo_url, selected_license)
+            return {"success": False, "message": "Failed to clone or access the repository"}, 400
         if branch:
             info['branch'] = branch
         try:

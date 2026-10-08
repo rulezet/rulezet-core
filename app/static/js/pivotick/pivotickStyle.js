@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  pivotickStyle.js — shared helpers to turn an admin-configured PivoTick style
+//  pivotickStyle.js — shared helpers to turn an admin-configured Pivotick style
 //  config (see app/features/pivotick/) into the node/edge style objects the
 //  Pivotick renderer understands (nodeStyleMap / per-edge style).
 //
 //  Used by app/static/js/bundle/bundleMispGraph.js and
 //  app/static/js/attack/attackGraph.js — kept independent from the pivotick
-//  submodule and from any one feature so it survives both a PivoTick version
+//  submodule and from any one feature so it survives both a Pivotick version
 //  bump and future graph types.
 // ─────────────────────────────────────────────────────────────────────────────
 

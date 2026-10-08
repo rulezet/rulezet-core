@@ -5,6 +5,20 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/file-tree.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-files.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/timeline.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/meta-change-list.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/vote-pill.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-health.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-releases.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-notes.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-ai-analysis.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
@@ -51,12 +65,11 @@
                 <i class="fa-solid fa-box-archive"></i>
             </div>
             <div>
-                <h2 class="fw-bold mb-1">[[ bundleNameMedium ]]</h2>
+                <h2 class="fw-bold mb-1 text-break" :title="bundle?.name">[[ bundleNameMedium ]]</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
 
-        <code v-if="detail_page_1_is_loading" class="ms-auto text-muted" style="font-size: 0.7rem; opacity: 0.6;">[[ bundle.uuid ]]</code>
         <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
             Propose edits, share your bundle, and engage with the community.
         </p>
@@ -71,149 +84,169 @@
                 <i class="fa-solid fa-box-archive"></i>
             </div>
 
-            <!-- Badge -->
-            <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2 flex-wrap justify-content-end"
-                style="z-index: 2; max-width: 50%;">
-                <span v-if="bundle.is_verified" class="badge bg-primary shadow-sm pt-1">
-                    <i class="fa-solid fa-circle-check me-1"></i> VERIFIED
-                </span>
+            <div class="card-body p-4 p-md-5 position-relative" style="z-index:1;">
 
-                <template v-if="parseInt('{{ current_user.id }}') === bundle.user_id || is_admin">
-                    <button :class="['badge shadow-sm pt-1', bundle.access ? 'bg-success' : 'bg-danger']"
-                        title="Edit access" @click="edit_access(bundle.id)">
-                        <i :class="['fa-solid me-1', bundle.access ? 'fa-unlock' : 'fa-lock']"></i>
-                        [[ bundle.access ? 'PUBLIC' : 'PRIVATE' ]]
-                </template>
-                <template v-else>
-                    <span :class="['badge shadow-sm pt-1', bundle.access ? 'bg-success' : 'bg-danger']">
-                        <i :class="['fa-solid me-1', bundle.access ? 'fa-unlock' : 'fa-lock']"></i>
-                        [[ bundle.access ? 'PUBLIC' : 'PRIVATE' ]]
+                <!-- Title + meta (left) · status chips (always right) -->
+                <div class="bd-head">
+                    <div class="bd-head-main">
+                <!-- Full name only when the banner had to truncate it (> 60 chars) -->
+                <h3 v-if="bundle.name && bundle.name.length > 60" class="bd-title text-break">[[ bundle.name ]]</h3>
+                <div class="bd-meta">
+                    <user-chip :user-id="bundle.user_id" :username="bundle.user_name" :avatar="bundle.author_avatar" size="xs"></user-chip>
+                    <span class="bd-meta-item" :title="'Last updated ' + bundle.updated_at">
+                        <i class="fa-regular fa-clock"></i>Updated [[ dayjs(bundle.last_modif || bundle.updated_at).fromNow() ]]
                     </span>
-                </template>
-                <template v-if="parseInt('{{ current_user.id }}') === bundle.user_id || is_admin">
-                    <span class="badge bg-dark shadow-sm pt-1"><i class="fa-solid fa-crown me-1"></i> OWNER</span>
-                </template>
-            </div>
-
-            <div class="card-body p-4 p-md-5">
-                <!-- Name -->
-                <div class="mb-4 pe-5">
-
-                    <h3 class="fw-bold mb-2  text-break">
-
-                        <a :href="`/bundle/detail/${bundle.id}`"
-                            class="fw-bold h5 border-start border-primary border-4 ps-3 custom-rule-link text-decoration-none d-block">
-                            [[ bundle.name ]]
-                        </a>
-                    </h3>
-                    <div class="d-flex align-items-center gap-2 mt-3 flex-wrap">
-                        <user-chip :user-id="bundle.user_id" :username="bundle.user_name" :avatar="bundle.author_avatar" size="xs"></user-chip>
-                        <span class="text-muted opacity-50">|</span>
-                        <small class="text-muted"><i class="far fa-calendar-alt me-1"></i> [[ dayjs(bundle.last_modif).fromNow() ]]</small>
-                    </div>
-                </div>
-
-                <!-- Description -->
-                <div class="mb-4">
-                    <p class="text-muted small lh-base mb-0">
-                        <i class="fas fa-quote-left me-2 opacity-50 text-primary"></i>
-                        <span :class="{'text-truncate-custom': !showFullDesc}" class="lh-base">
-                            [[ showFullDesc ? bundle.description : truncateText(bundle.description, 180) ]]
-                        </span>
-                        <button v-if="bundle.description && bundle.description.length > 180"
-                            @click="showFullDesc = !showFullDesc"
-                            class="btn btn-link btn-sm p-0 ms-1 fw-bold text-decoration-none shadow-none"
-                            style="vertical-align: baseline;">
-                            [[ showFullDesc ? 'Show Less' : '... Read More' ]]
-                        </button>
-                    </p>
-                </div>
-
-                <!-- Stats -->
-                <div class="row g-3 mb-4">
-                    <div class="col-6 col-md-3" v-for="stat in stats" :key="stat.label">
-                        <div class="p-3 border rounded-3 text-center shadow-sm h-100 transition-all hover-up"
-                            style="background-color: var(--card-bg-color);">
-                            <i :class="[stat.icon, stat.color]" class="mb-2"></i>
-                            <div class="small text-muted text-uppercase" style="font-size: 0.7rem;">[[ stat.label ]]
-                            </div>
-                            <div class="fw-bold h5 mb-0">[[ stat.value ]]</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="mb-4 d-flex align-items-center gap-2 group-hover">
-                    <span class="text-secondary font-monospace" style="font-size: 0.9rem;">
-                        <i class="fas fa-fingerprint me-1 op-50"></i> [[ bundle.uuid ]]
+                    <span class="bd-meta-item" :title="'Created ' + bundle.created_at">
+                        <i class="fa-regular fa-calendar"></i>Created [[ dayjs(bundle.created_at).format('MMM D, YYYY') ]]
                     </span>
-                    <button @click="copyToClipboard(bundle.uuid)"
-                        class="btn btn-sm btn-light border-0 rounded-circle shadow-sm"
-                        style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
-                        <i class="fas fa-copy" style="font-size: 0.75rem;"></i>
+                    <button type="button" class="bd-uuid" @click="copyToClipboard(bundle.uuid)" :title="'Copy UUID ' + bundle.uuid">
+                        <i class="fa-solid fa-fingerprint"></i>
+                        <span>[[ bundle.uuid ]]</span>
+                        <i class="fa-regular fa-copy"></i>
                     </button>
                 </div>
+                    </div>
+                    <div class="bd-chips bd-status">
+                    <span v-if="releasesSummary && releasesSummary.releases.length" class="bd-chip bd-chip--release"
+                          :class="{ 'bd-chip--drift': releasesSummary.latest_changes && releasesSummary.latest_changes.total }"
+                          :title="releasesSummary.latest_changes && releasesSummary.latest_changes.total
+                                  ? releasesSummary.latest_changes.total + ' change(s) since this release — not released yet'
+                                  : 'Latest release — identical to the current bundle'"
+                          @click="setTab('releases')">
+                        <i class="fa-solid fa-tag"></i>[[ releasesSummary.releases[0].version ]]
+                        <template v-if="releasesSummary.latest_changes && releasesSummary.latest_changes.total">+[[ releasesSummary.latest_changes.total ]]</template>
+                    </span>
+                    <span v-if="bundle.is_verified" class="bd-chip bd-chip--blue" title="Verified bundle">
+                        <i class="fa-solid fa-circle-check"></i>Verified
+                    </span>
+                    <button v-if="parseInt('{{ current_user.id }}') === bundle.user_id || is_admin" type="button"
+                            class="bd-chip bd-chip--toggle" :class="bundle.access ? 'bd-chip--green' : 'bd-chip--red'"
+                            :title="bundle.access ? 'Public — click to make it private' : 'Private — click to make it public'"
+                            @click="edit_access(bundle.id)">
+                        <i :class="bundle.access ? 'fa-solid fa-lock-open' : 'fa-solid fa-lock'"></i>
+                        [[ bundle.access ? 'Public' : 'Private' ]]
+                        <i class="fa-solid fa-repeat bd-chip-hint"></i>
+                    </button>
+                    <span v-else class="bd-chip" :class="bundle.access ? 'bd-chip--green' : 'bd-chip--red'">
+                        <i :class="bundle.access ? 'fa-solid fa-lock-open' : 'fa-solid fa-lock'"></i>
+                        [[ bundle.access ? 'Public' : 'Private' ]]
+                    </span>
+                    <span v-if="parseInt('{{ current_user.id }}') === bundle.user_id" class="bd-chip bd-chip--dark">
+                        <i class="fa-solid fa-crown"></i>Owner
+                    </span>
+                    <span v-else-if="is_admin" class="bd-chip bd-chip--dark" title="You can edit this bundle as an admin">
+                        <i class="fa-solid fa-user-shield"></i>Admin access
+                    </span>
+                    {% if via_share_link %}
+                    <span class="bd-chip bd-chip--blue" title="You can view this private bundle because you opened its share link">
+                        <i class="fa-solid fa-link"></i>Shared with you
+                    </span>
+                    {% endif %}
+                    </div>
+                </div>
 
+                <!-- Description (markdown, collapsed when long) -->
+                <div v-if="viewRelease ? releaseData.bundle.description : bundle.description" class="bd-desc" :class="{ 'bd-desc--collapsed': descOverflows && !showFullDesc }">
+                    <div class="bd-desc-tools">
+                        <button type="button" class="bd-desc-tool" @click="copyDescription" title="Copy description (Markdown)">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                        <button type="button" class="bd-desc-tool" @click="downloadDescription" title="Download description (.md)">
+                            <i class="fa-solid fa-download"></i>
+                        </button>
+                    </div>
+                    <div ref="descEl" class="bd-desc-body bfv-md" v-html="descHtml"></div>
+                    <div v-if="descOverflows" class="bd-desc-toggle">
+                        <button type="button" class="bd-desc-more" @click="showFullDesc = !showFullDesc">
+                            <i class="fa-solid me-1" :class="showFullDesc ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                            [[ showFullDesc ? 'Show less' : 'Read more' ]]
+                        </button>
+                    </div>
+                </div>
 
-                <!-- Action -->
-                <div class="row g-3 mb-3 mt-3">
-                    <div class="d-flex justify-content-between align-items-center pt-4 border-top flex-wrap gap-3">
-                        <div class="btn-group shadow-sm border rounded-pill overflow-hidden ">
-                            <voter-popover :fetch-url="'/bundle/voters?bundleId=' + bundle.id + '&voteType=up'" label="Liked by">
-                                <button @click="vote('up', bundle.id); animateClick($event)"
-                                    class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn"
-                                    :class="bundleUserVote === 'up' ? 'rl-vote-btn--active-up' : ''"
-                                    title="Vote up">
-                                    <i class="fas fa-thumbs-up me-1"></i> [[ bundle.vote_up ]]
-                                </button>
-                            </voter-popover>
-                            <voter-popover :fetch-url="'/bundle/voters?bundleId=' + bundle.id + '&voteType=down'" label="Disliked by">
-                                <button @click="vote('down', bundle.id); animateClick($event)"
-                                    class="btn btn-sm px-3 border-0 shadow-none btn-animate home-btn"
-                                    :class="bundleUserVote === 'down' ? 'rl-vote-btn--active-down' : ''"
-                                    title="Vote down">
-                                    <i class="fas fa-thumbs-down me-1"></i> [[ bundle.vote_down ]]
-                                </button>
-                            </voter-popover>
+                <!-- Open known issues (community notes) -->
+                <div v-if="notesAlert" class="bn-banner" :class="{ 'bn-banner--critical': notesAlert.critical }"
+                     role="button" tabindex="0" @click="setTab('notes'); scrollToZone()" @keydown.enter="setTab('notes'); scrollToZone()">
+                    <i :class="notesAlert.critical ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-triangle-exclamation'"></i>
+                    <span><strong>[[ notesAlert.count ]] open known issue[[ notesAlert.count > 1 ? 's' : '' ]]</strong> reported on this bundle —
+                        <em>[[ notesAlert.first ]]</em><template v-if="notesAlert.count > 1"> and more</template>.</span>
+                    <span class="ms-auto small">Read the notes <i class="fa-solid fa-arrow-right"></i></span>
+                </div>
+
+                <!-- KPIs -->
+                <div class="row g-3 my-4">
+                    <div class="col-6 col-lg-3" v-for="stat in stats" :key="stat.label">
+                        <div class="bd-kpi" :class="'bd-kpi--' + stat.tone">
+                            <div class="bd-kpi-icon"><i :class="stat.icon"></i></div>
+                            <div style="min-width:0;">
+                                <div class="bd-kpi-value">[[ stat.value ]]</div>
+                                <div class="bd-kpi-label">[[ stat.label ]]</div>
+                                <div v-if="stat.sub" class="bd-kpi-sub" :title="stat.sub">[[ stat.sub ]]</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action bar -->
+                <div class="bd-actionbar">
+                    <div class="vote-pill">
+                        <voter-popover :fetch-url="'/bundle/voters?bundleId=' + bundle.id + '&voteType=up'" label="Liked by">
+                            <button type="button" @click="vote('up', bundle.id); animateClick($event)"
+                                class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--up': bundleUserVote === 'up' }" title="Vote up">
+                                <i class="fa-solid fa-thumbs-up"></i>[[ bundle.vote_up ]]
+                            </button>
+                        </voter-popover>
+                        <voter-popover :fetch-url="'/bundle/voters?bundleId=' + bundle.id + '&voteType=down'" label="Disliked by">
+                            <button type="button" @click="vote('down', bundle.id); animateClick($event)"
+                                class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--down': bundleUserVote === 'down' }" title="Vote down">
+                                <i class="fa-solid fa-thumbs-down"></i>[[ bundle.vote_down ]]
+                            </button>
+                        </voter-popover>
+                        <button type="button" @click="toggleFavorite(); animateClick($event)"
+                            class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--fav': bundle.is_favorited }"
+                            :title="bundle.is_favorited ? 'Remove from favorites' : 'Add to favorites'">
+                            <i :class="bundle.is_favorited ? 'fa-solid fa-star' : 'fa-regular fa-star'"></i>
+                        </button>
+                    </div>
+
+                    <div class="bd-actions">
+                        <div class="dropdown">
+                            <button type="button" class="bd-btn bd-btn--primary" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa-solid fa-download"></i><span>Download</span><i class="fa-solid fa-chevron-down bd-caret"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 p-2 bd-dl-menu">
+                                <li><button type="button" class="dropdown-item bd-dl-full" @click="DownloadBundleFull">
+                                    <i class="fa-solid fa-box-archive"></i><div><strong>Everything</strong><small>README, description, tags, CVEs, structure, rules, ATT&amp;CK, MISP (ZIP)</small></div></button></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><button type="button" class="dropdown-item" @click="DownloadBundleStructure">
+                                    <i class="fa-solid fa-folder-tree"></i><div><strong>Structure</strong><small>Full folder layout (ZIP)</small></div></button></li>
+                                <li><button type="button" class="dropdown-item" @click="DownloadBundle">
+                                    <i class="fa-solid fa-shield-halved"></i><div><strong>Rules</strong><small>Rules + JSON metadata (ZIP)</small></div></button></li>
+                                <li v-if="docFiles.length"><button type="button" class="dropdown-item" @click="DownloadBundleFiles">
+                                    <i class="fa-solid fa-file-lines"></i><div><strong>Files &amp; documents</strong><small>[[ docFiles.length ]] non-rule files (ZIP)</small></div></button></li>
+                                <li><button type="button" class="dropdown-item" @click="DownloadMISP">
+                                    <i class="fa-solid fa-diagram-project"></i><div><strong>MISP event</strong><small>JSON</small></div></button></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li class="bd-dl-warn">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                    <span>User-submitted content, not reviewed by Rulezet — it may contain malicious code. Inspect it before use.</span>
+                                </li>
+                            </ul>
                         </div>
 
-                        <div class="d-flex gap-2">
-                            <!-- Download list-->
-                            <div class="dropdown">
-                                <button
-                                    class="btn btn-success rounded-pill px-4 fw-bold shadow-sm d-flex align-items-center transition-all"
-                                    data-bs-toggle="dropdown">
-                                    <i class="fas fa-file-zipper me-2"></i> <span class="d-none d-sm-inline">DOWNLOAD
-                                    </span><i class="fas fa-caret-down ms-2 small"></i>
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 p-2"
-                                    style="border-radius: 12px;">
-                                    <li><button class="dropdown-item rounded-2" @click="DownloadBundle">
-                                            <i class="fas fa-file-zipper me-2"></i> Download Rules ZIP</button></li>
-                                    <li>
-                                        <button class="dropdown-item rounded-2" @click="DownloadBundleStructure">
-                                            <i class="fas fa-folder-open me-2"></i> Download Structure ZIP
-                                        </button>
-                                    </li>
-                                    <!-- download_misp -->
-                                    <li><button class="dropdown-item rounded-2" @click="DownloadMISP">
-                                            <i class="fas fa-file-code me-2"></i> Download MISP Event</button></li>
-
-                                </ul>
-                            </div>
-
-                            <template v-if="parseInt('{{ current_user.id }}') === bundle.user_id || is_admin">
-                            <a :href="'/bundle/edit/' + bundle_id"
-                               class="btn btn-sm rounded-pill px-3"
-                               style="background:transparent; border:1px solid #0d6efd55; color:#0d6efd;"
-                               title="Edit this bundle">
-                                <i class="fas fa-pen me-1"></i>Edit
-                            </a>
-                            <button class="btn btn-sm rounded-pill px-3"
-                                    style="background:transparent; border:1px solid #dc354555; color:#dc3545;"
-                                    data-bs-toggle="modal" :data-bs-target="'#delete_bundle_modal_'+bundle.id"
-                                    title="Delete this bundle">
-                                <i class="fa-solid fa-trash me-1"></i>Delete
+                        <template v-if="parseInt('{{ current_user.id }}') === bundle.user_id || is_admin">
+                            <button type="button" class="bd-btn bd-btn--icon" :class="{ 'bd-btn--active': sharePanelOpen }"
+                                    title="Private share link" @click="toggleSharePanel">
+                                <i class="fa-solid fa-link"></i><span>Share</span>
                             </button>
-                            </template>
+                            <a :href="'/bundle/edit/' + bundle_id" class="bd-btn bd-btn--icon" title="Edit this bundle">
+                                <i class="fa-solid fa-pen"></i><span>Edit</span>
+                            </a>
+                            <button type="button" class="bd-btn bd-btn--danger bd-btn--icon" title="Delete this bundle"
+                                    data-bs-toggle="modal" :data-bs-target="'#delete_bundle_modal_'+bundle.id">
+                                <i class="fa-solid fa-trash"></i><span>Delete</span>
+                            </button>
+                        </template>
 
                             {% if current_user.is_authenticated %}
                             <report-modal
@@ -222,15 +255,65 @@
                                 :object-label="bundle.name"
                                 csrf-token="{{ csrf_token() }}">
                                 <template #trigger="{ open }">
-                                    <button @click="open"
-                                        class="btn btn-sm rounded-pill px-3"
-                                        style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
+                                    <button type="button" @click="open" class="bd-btn bd-btn--ghost bd-btn--icon"
                                         title="Report an issue with this bundle">
-                                        <i class="fas fa-flag me-1"></i>Report
+                                        <i class="fa-solid fa-flag"></i><span>Report</span>
                                     </button>
                                 </template>
                             </report-modal>
                             {% endif %}
+
+                    </div>
+                </div>
+
+                <!-- Share-link panel (owner / admin) -->
+                <div v-if="sharePanelOpen" class="bd-share">
+                    <div class="bd-share-head">
+                        <div class="bd-section-title">
+                            <i class="fa-solid fa-link"></i>
+                            <div>
+                                <div class="bd-section-name">Private share link <help-tip title="Private share link" text="Lets someone with a Rulezet account view this bundle while it is private — read-only, they can download and comment but never edit.&#10;Regenerate to cut off everyone who has the current link; Revoke to disable it."></help-tip></div>
+                                <div class="bd-section-sub">Anyone with this link <strong>and a Rulezet account</strong> can view (not edit) this bundle, even while it is private.</div>
+                            </div>
+                        </div>
+                        <button type="button" class="bfv-btn bfv-btn--close" title="Close" @click="sharePanelOpen = false">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div v-if="bundle.access" class="bd-share-note">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <span>This bundle is currently <strong>public</strong>: everyone can already see it. The share link only matters once you make it private.</span>
+                    </div>
+
+                    <div v-if="shareLoading" class="small" style="color:var(--subtle-text-color);">
+                        <i class="fas fa-spinner fa-spin me-1"></i>Loading…
+                    </div>
+                    <template v-else-if="shareUrl">
+                        <div class="bd-share-link">
+                            <i class="fa-solid fa-key"></i>
+                            <input type="text" readonly :value="shareUrl" @focus="$event.target.select()" aria-label="Share link">
+                            <button type="button" class="bd-btn bd-btn--primary" @click="copyShareUrl">
+                                <i class="fa-regular fa-copy"></i><span>Copy</span>
+                            </button>
+                        </div>
+                        <div class="bd-share-actions">
+                            <span class="bd-share-meta" v-if="shareCreatedAt">Created [[ shareCreatedAt ]]</span>
+                            <button type="button" class="bd-btn" :class="{ 'bd-btn--armed': regenArmed }" @click="regenerateShare" :disabled="shareBusy">
+                                <i class="fa-solid fa-rotate"></i><span>[[ regenArmed ? 'Click again — the old link will stop working' : 'Regenerate' ]]</span>
+                            </button>
+                            <button type="button" class="bd-btn bd-btn--danger" @click="revokeShare" :disabled="shareBusy">
+                                <i class="fa-solid fa-ban"></i><span>Revoke</span>
+                            </button>
+                        </div>
+                    </template>
+                    <div v-else class="bd-share-actions">
+                        <span class="bd-share-meta">No share link yet.</span>
+                        <button type="button" class="bd-btn bd-btn--primary" @click="regenerateShare" :disabled="shareBusy">
+                            <i class="fa-solid fa-link"></i><span>Generate a share link</span>
+                        </button>
+                    </div>
+                </div>
 
                             <!-- Modal-->
                             <div class="modal fade" :id="'delete_bundle_modal_'+bundle.id" tabindex="-1"
@@ -258,10 +341,9 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
+
                 <!-- Tags-->
+                <template v-if="!viewRelease">
                 <div class="mt-4">
                     <!-- Tags Component -->
                     <tag-display :tags="displayTags" :loading="loadingDisplayTags" section-title="Workspace Tags"
@@ -274,18 +356,110 @@
                         css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
                     </vulnerability-display>
                 </div>
-                <!-- Rules -->
-                <div class="mt-5 mb-4">
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <div style="width:3px;height:16px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
-                        <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
-                            <i class="fa-solid fa-shield-halved me-1"></i>Included Security Rules
-                        </span>
+                </template>
+                <!-- Release mode: tags / identifiers as they were released -->
+                <div v-else class="mt-4 d-flex flex-column gap-3">
+                    <div>
+                        <div class="bd-zone-label mb-2"><div class="bd-zone-bar"></div>
+                            <span><i class="fa-solid fa-tags me-1"></i>Tags in [[ viewRelease.version ]]</span></div>
+                        <div class="bd-tagchips">
+                            <span v-for="t in (releaseData.bundle.tags || [])" :key="t" class="bd-chip">[[ t ]]</span>
+                            <span v-if="!(releaseData.bundle.tags || []).length" class="small" style="color:var(--subtle-text-color);">No tags</span>
+                        </div>
                     </div>
-                    <div class="gap-2 p-3 rounded-3 shadow-sm border" style="background: var(--light-bg-color);">
-                        <rule-list
+                    <div>
+                        <div class="bd-zone-label mb-2"><div class="bd-zone-bar"></div>
+                            <span><i class="fa-solid fa-bug me-1"></i>Security identifiers in [[ viewRelease.version ]]</span></div>
+                        <div class="bd-tagchips">
+                            <span v-for="v in (releaseData.bundle.vulnerabilities || [])" :key="v" class="bd-chip bd-chip--format">[[ v ]]</span>
+                            <span v-if="!(releaseData.bundle.vulnerabilities || []).length" class="small" style="color:var(--subtle-text-color);">None</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- ── Bundle content tabs ─────────────────────── -->
+                <div class="bd-zone">
+                    <div class="bd-zone-label">
+                        <div class="bd-zone-bar"></div>
+                        <span><i class="fa-solid fa-layer-group me-1"></i>Bundle Content
+                            <help-tip title="Bundle content" text="Everything the bundle ships: its folder structure, rules, extra files (README, IOCs…), ATT&CK coverage, releases, health report and history. Pick a tab below."></help-tip></span>
+                        <div v-if="releaseOptions.length" class="br-switch">
+                            <label for="bd-version-select"><i class="fa-solid fa-code-branch me-1"></i>Version</label>
+                            <help-tip title="Version" text="Current (live) = the bundle as it is now, including unreleased edits.&#10;A release (v1.0.0…) = the bundle frozen at publication: its structure, the exact content of every rule at that time, files, tags and downloads. Rules deleted or edited since are still shown as they were, with a badge."></help-tip>
+                            <select id="bd-version-select" :value="viewRelease ? viewRelease.version : ''"
+                                    @change="switchVersion($event.target.value)" :disabled="releaseSwitching">
+                                <option value="">Current (live)</option>
+                                <option v-for="r in releaseOptions" :key="r.id" :value="r.version">
+                                    [[ r.version ]] — [[ dayjs(r.created_at).format('MMM D, YYYY') ]]
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="bd-zone-box">
+                    <div v-if="viewRelease" class="br-viewbar">
+                        <i class="fa-solid fa-snowflake"></i>
+                        <div class="br-viewbar-main">
+                            <strong>Viewing release [[ viewRelease.version ]]<template v-if="viewRelease.title"> — [[ viewRelease.title ]]</template> (frozen)</strong>
+                            <span>
+                                Published [[ dayjs(viewRelease.created_at).format('MMM D, YYYY HH:mm') ]]<template v-if="viewRelease.user_name"> by [[ viewRelease.user_name ]]</template>
+                                · [[ releaseData.rules.length ]] rules · structure, content and downloads are exactly as released
+                                <template v-if="releaseData.rule_counts.updated"> · [[ releaseData.rule_counts.updated ]] updated since</template>
+                                <template v-if="releaseData.rule_counts.deleted"> · [[ releaseData.rule_counts.deleted ]] deleted since</template>
+                            </span>
+                        </div>
+                        <button type="button" class="bd-btn bd-btn--primary" @click="switchVersion('')">
+                            <i class="fa-solid fa-arrow-rotate-left"></i><span>Back to current</span>
+                        </button>
+                    </div>
+                    <nav class="dr-nav bd-nav" role="tablist">
+                        <button v-for="t in contentTabs" :key="t.key" type="button" role="tab"
+                                class="dr-nav__item" :class="{ active: activeTab === t.key }"
+                                :aria-selected="activeTab === t.key" @click="setTab(t.key)">
+                            <i :class="t.icon"></i>
+                            <span>[[ t.label ]]</span>
+                            <span v-if="t.count !== null" class="bd-nav-count">[[ t.count ]]</span>
+                        </button>
+                    </nav>
+
+                    <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-body p-4">
+                        <!-- Rules -->
+                        <div v-show="activeTab === 'rules'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-shield-halved"></i>
+                                    <div>
+                                        <div class="bd-section-name">Included Security Rules <help-tip title="Rules" text="Every detection rule attached to the bundle, with their format, author and license. Use the folder button on a row to see where a rule sits in the structure."></help-tip></div>
+                                        <div class="bd-section-sub">[[ totalRules ]] rule[[ totalRules === 1 ? '' : 's' ]] in this bundle</div>
+                                    </div>
+                                </div>
+                                <div class="bd-section-actions">
+                                    <button type="button" class="bd-btn bd-btn--primary" @click="DownloadBundle" :disabled="!totalRules">
+                                        <i class="fa-solid fa-file-zipper"></i><span>Download rules</span>
+                                    </button>
+                                </div>
+                            </div>
+                        <div v-if="releaseSwitching" class="text-center py-5" style="color:var(--subtle-text-color);">
+                            <div class="spinner-border text-primary mb-2" role="status"></div>
+                            <div class="small">Loading release…</div>
+                        </div>
+                        <bundle-release-rules v-else-if="viewRelease" :rules="releaseData.rules" :version="viewRelease.version"
+                            @open="openReleaseRule" @diff="openReleaseRuleDiff"
+                            @show-structure="showRuleInStructure"></bundle-release-rules>
+                        <template v-else>
+                        <div v-if="focusRule" class="bd-focus-bar">
+                            <i class="fa-solid fa-filter"></i>
+                            <span>Showing only <strong>[[ focusRule.name ]]</strong></span>
+                            <button type="button" class="bd-btn bd-btn--ghost ms-auto" @click="focusRule = null">
+                                <i class="fa-solid fa-xmark"></i><span>Show all rules</span>
+                            </button>
+                        </div>
+                        <rule-list :key="'rl-' + ruleListKey"
+                            :ids="focusRule ? [focusRule.rule_id] : null"
+                            :extra-row-actions="[{ key: 'structure', label: 'Show in structure', icon: 'fa-solid fa-folder-tree' }]"
+                            @row-action="onRuleListAction"
                             mode="read"
                             default-view="table"
+                            :initial-per-page="10"
                             :hidden-filters="['format','sources','tags','licenses','vulnerabilities','person']"
                             :show-filters="true"
                             :sync-url="false"
@@ -297,78 +471,209 @@
                             :current-user-is-authenticated="{{ current_user.is_authenticated | tojson }}"
                             :csrf-token="csrfToken">
                         </rule-list>
-                     </div>
-                </div>
+                        </template>
+                        </div>
 
-                <!-- ── ATT&CK Coverage ────────────────────────── -->
-                <div class="mt-5">
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <div style="width:3px;height:16px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
-                        <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
-                            <i class="fa-solid fa-crosshairs me-1"></i>ATT&amp;CK Coverage
-                        </span>
-                        <span v-if="attackStats" class="badge rounded-pill ms-1"
-                              style="font-size:.65rem;background:rgba(13,110,253,.12);color:#0d6efd;border:1px solid rgba(13,110,253,.2);">
-                            [[ attackStats.covered_tactics ]]/[[ attackStats.total_tactics ]] tactics
-                        </span>
-                    </div>
-                    <div class="p-3 rounded-3 shadow-sm border" style="background:var(--light-bg-color);">
-                        <attack-matrix
+                        <!-- Structure -->
+                        <div v-show="activeTab === 'structure'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-folder-tree"></i>
+                                    <div>
+                                        <div class="bd-section-name">
+                                            Structure
+                                            <help-tip title="Structure" text="The folder layout of the bundle, exactly as it is downloaded (Download structure).&#10;Blue shield = a detection rule · bold name with its own icon = a file / document (md, txt, json…).&#10;Click any item to open it; Expand all / Collapse all is at the top right."></help-tip>
+                                        </div>
+                                        <div class="bd-section-sub">[[ allFiles.length ]] file[[ allFiles.length === 1 ? '' : 's' ]] · folder layout as downloaded</div>
+                                    </div>
+                                </div>
+                                <div class="bd-section-actions">
+                                    <button type="button" class="bd-btn bd-btn--primary" @click="DownloadBundleStructure" :disabled="!allFiles.length">
+                                        <i class="fa-solid fa-folder-open"></i><span>Download structure</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Big bundles can take a while to load — never show "no structure" before it's in -->
+                            <div v-if="!structureLoaded || releaseSwitching" class="text-center py-5" style="color:var(--subtle-text-color);">
+                                <div class="spinner-border text-primary mb-2" role="status"></div>
+                                <div class="small">
+                                    [[ releaseSwitching ? 'Loading release…' : 'Loading structure…' ]]
+                                    <span v-if="!releaseSwitching && bundle && bundle.number_of_rules > 200">([[ bundle.number_of_rules ]] rules — this can take a moment)</span>
+                                </div>
+                            </div>
+                            <file-tree v-else-if="allFiles.length" ref="fileTreeRef" :nodes="fileTreeNodes" mode="read" @select="handleFileTreeSelect"
+                                :row-actions="canEditStructure ? [{ key: 'edit', label: 'Edit', icon: 'fa-solid fa-pen' }] : []"
+                                @row-action="onTreeRowAction"></file-tree>
+                            <div v-else class="text-center py-4 small" style="color:var(--subtle-text-color);">
+                                <i class="fa-regular fa-folder-open me-1"></i>This bundle has no structure yet.
+                            </div>
+                        </div>
+
+                        <!-- Files & documents (non-rule files) -->
+                        <div v-if="docFiles.length > 0" v-show="activeTab === 'files'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-file-lines"></i>
+                                    <div>
+                                        <div class="bd-section-name">Files &amp; Documents <help-tip title="Files & documents" text="Everything in the bundle that is not a rule — READMEs, analyst notes, IOC lists, configs. They are user-submitted: review them before running anything."></help-tip></div>
+                                        <div class="bd-section-sub">Everything that isn't a rule — READMEs, notes, IOCs, configs</div>
+                                    </div>
+                                </div>
+                                <div class="bd-section-actions">
+                                    <button type="button" class="bd-btn bd-btn--primary" @click="DownloadBundleFiles">
+                                        <i class="fa-solid fa-file-zipper"></i><span>Download all ([[ docFiles.length ]])</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="bd-warn mb-3" role="note">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <div>
+                                    <strong>Handle with care.</strong>
+                                    files and rules in a bundle are user-submitted and are not reviewed by Rulezet. They may contain malicious code, links or scripts — inspect them before opening, running or deploying, preferably in an isolated environment.
+                                </div>
+                            </div>
+                            <bundle-files-panel ref="filesPanelRef" :files="docFiles" @open="f => openFile(f, null, 'files')"></bundle-files-panel>
+                        </div>
+
+                        <!-- ATT&CK coverage -->
+                        <div v-show="activeTab === 'attack'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-crosshairs"></i>
+                                    <div>
+                                        <div class="bd-section-name">ATT&amp;CK Coverage <help-tip title="ATT&CK coverage" text="MITRE ATT&CK techniques referenced by the bundle's rules (from their tags / metadata). Click a technique to list its rules and jump to them."></help-tip></div>
+                                        <div class="bd-section-sub" v-if="attackStats">[[ attackStats.covered_tactics ]]/[[ attackStats.total_tactics ]] tactics covered by the bundle's rules</div>
+                                        <div class="bd-section-sub" v-else>MITRE ATT&amp;CK techniques referenced by the bundle's rules</div>
+                                    </div>
+                                </div>
+                                <div class="bd-section-actions">
+                                    <button type="button" class="bd-btn bd-btn--primary" @click="DownloadAttackCoverage" :disabled="!attackCoverage">
+                                        <i class="fa-solid fa-download"></i><span>Download JSON</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <attack-matrix
+                            rule-actions
+                            @rule-action="onAttackRuleAction"
                             :coverage="attackCoverage"
                             :loading="attackLoading">
                         </attack-matrix>
-                    </div>
-                </div>
+                        </div>
 
-                <!--Structure section-->
-                <div v-if="rules.length > 0" class="mt-5">
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <div style="width:3px;height:16px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
-                        <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
-                            <i class="fa-solid fa-folder-tree me-1"></i>Structure
-                        </span>
-                    </div>
-                   <div class="gap-2 p-3 rounded-3 shadow-sm border" style="background: var(--light-bg-color);">
-                        <file-tree :nodes="fileTreeNodes" mode="read" @select="handleFileTreeSelect"></file-tree>
-                        <div v-if="selectedFileNode" class="mt-3">
-                            <div class="d-flex align-items-center justify-content-between mb-2">
-                                <span class="small fw-bold" style="color: var(--subtle-text-color)">
-                                    <i class="fas fa-file-code me-1 text-primary"></i>[[ selectedFileNode.name ]]
-                                </span>
-                                <button class="btn btn-sm btn-outline-secondary rounded-pill" @click="selectedFileNode = null">
-                                    <i class="fas fa-times"></i>
-                                </button>
+                        <!-- Releases (versioned, frozen) -->
+                        <div v-show="activeTab === 'releases'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-tags"></i>
+                                    <div>
+                                        <div class="bd-section-name">Releases <help-tip title="Releases" text="A release freezes the bundle so it can be deployed and referenced reliably (&quot;we run v1.2&quot;). Its content never changes afterwards, even if the rules are edited or deleted. Compare releases, download a release, or view the page as it was."></help-tip></div>
+                                        <div class="bd-section-sub">Frozen versions you can deploy, reference and compare — later edits never change a published release</div>
+                                    </div>
+                                </div>
                             </div>
-                            <code-viewer :code="selectedFileNode.content || ''" language="text" max-height="400px"></code-viewer>
+                            <bundle-releases-panel :bundle-id="bundle_id" :csrf-token="csrfToken" :active="activeTab === 'releases'"
+                                @loaded="d => releasesSummary = d"
+                                @view-release="v => { switchVersion(v); setTab('structure'); }"
+                                @changed="loadHistory(1)"
+                                @show-structure="showRuleInStructure"
+                                @show-list="e => showRuleInList(e.ruleId, e.name)"></bundle-releases-panel>
                         </div>
-                    </div>
-                </div>
 
-
-                <!--MISP Event section-->
-                <div v-if="rules.length > 0" class="mt-5">
-                    
-                    <div class="d-flex align-items-center justify-content-between mb-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <div style="width:3px;height:16px;background:#0d6efd;border-radius:2px;flex-shrink:0;"></div>
-                            <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
-                                <i class="fa-solid fa-diagram-project me-1"></i>Visualized Bundle
-                            </span>
+                        <!-- Health (pre-deployment checks) -->
+                        <div v-show="activeTab === 'health'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-heart-pulse"></i>
+                                    <div>
+                                        <div class="bd-section-name">Health check <help-tip title="Health check" text="Automatic pre-deployment checks: syntax, duplicate SIDs / rule names, missing dependencies (flowbits, Wazuh parents…), TLP/PAP consistency, quality. Computed on demand — always up to date with your latest edits."></help-tip></div>
+                                        <div class="bd-section-sub">What a SOC would hit when deploying this bundle — syntax, ID collisions, missing dependencies, TLP/PAP, quality</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <bundle-health-panel :bundle-id="bundle_id" :active="activeTab === 'health'" :csrf-token="csrfToken"
+                                @fixed="reloadAfterFix"
+                                :release="viewRelease ? viewRelease.version : ''"
+                                @loaded="h => healthSummary = h"
+                                @show-structure="showRuleInStructure"
+                                @show-list="e => showRuleInList(e.ruleId, e.name)"></bundle-health-panel>
                         </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <button class="btn btn-sm btn-outline-secondary rounded-pill" @click="DownloadMISP" :disabled="!mispJson">
-                                <i class="fas fa-download me-1"></i> Download
+
+                        <!-- Notes / known issues -->
+                        <div v-show="activeTab === 'notes'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-note-sticky"></i>
+                                    <div>
+                                        <div class="bd-section-name">Notes &amp; known issues <help-tip title="Notes" text="Community notes in Markdown: known issues, deployment caveats, false positives (&quot;this bundle doesn't work if…&quot;).&#10;Anyone logged in can add one while the bundle is public; authors edit or delete their own; the owner or an admin marks them resolved.&#10;If the bundle becomes private, notes are only visible to people who can still open it (owner, admins, share-link holders)."></help-tip></div>
+                                        <div class="bd-section-sub">What the community found when using this bundle — read before deploying</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <bundle-notes-panel :bundle-id="bundle_id" :csrf-token="csrfToken"
+                                :refs="noteRefs" @open-ref="openNoteRef"
+                                :is-authenticated="{{ current_user.is_authenticated | tojson }}"
+                                @loaded="d => notesSummary = d"></bundle-notes-panel>
+                        </div>
+
+                        <!-- AI Analysis (Rulezy's review of the whole bundle) -->
+                        <div v-if="showAiTab" v-show="activeTab === 'ai'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-robot"></i>
+                                    <div>
+                                        <div class="bd-section-name">AI Analysis <help-tip title="AI Analysis" text="A detailed review of the whole bundle written by a locally-hosted model: purpose, how it is built, coverage and blind spots, operational readiness, deployment guidance and a verdict.&#10;It reads every rule, the structure, documents, health checks, ATT&CK coverage and community notes. Nothing leaves the server.&#10;Only admins and AI Managers can launch or moderate it; public reports are visible to everyone who can see the bundle."></help-tip></div>
+                                        <div class="bd-section-sub">Rulezy's review of the whole bundle — AI-generated, read it with a critical eye</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <bundle-ai-analysis-panel :bundle-id="bundle_id" :csrf-token="csrfToken"
+                                :active="activeTab === 'ai'" :can-manage="CAN_MANAGE_AI"
+                                @loaded="d => aiSummary = d"></bundle-ai-analysis-panel>
+                        </div>
+
+                        <!-- History -->
+                        <div v-show="activeTab === 'history'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-clock-rotate-left"></i>
+                                    <div>
+                                        <div class="bd-section-name">History <help-tip title="History" text="Every change to the bundle: details, visibility, tags, rules, files, folders, share links and releases. Edits made in the editor within 10 minutes are grouped into one entry."></help-tip></div>
+                                        <div class="bd-section-sub">Every change to the bundle — details, visibility, tags, rules, files and folders</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <timeline :items="historyItems" :loading="historyLoading && !historyItems.length"
+                                      @view-content="openHistoryDiff"></timeline>
+                            <div v-if="historyPages > 1" class="bfp-footer">
+                                <pagination-component :current-page="historyPage" :total-pages="historyPages"
+                                    @change-page="p => loadHistory(p)"></pagination-component>
+                                <span class="bfp-range">[[ historyTotal ]] change[[ historyTotal === 1 ? '' : 's' ]] · page [[ historyPage ]] of [[ historyPages ]]</span>
+                            </div>
+                        </div>
+
+                        <!-- MISP event -->
+                        <div v-if="rules.length > 0 && !viewRelease" v-show="activeTab === 'misp'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-diagram-project"></i>
+                                    <div>
+                                        <div class="bd-section-name">MISP Event <help-tip title="MISP event" text="The bundle converted to a MISP event (graph + raw JSON), built from the current bundle. Admins can push it to a connected MISP instance."></help-tip></div>
+                                        <div class="bd-section-sub">The bundle as a MISP event — graph and raw JSON</div>
+                                    </div>
+                                </div>
+                                <div class="bd-section-actions">
+                                <button type="button" class="bd-btn bd-btn--primary" @click="DownloadMISP">
+                                <i class="fa-solid fa-download"></i><span>Download event</span>
                             </button>
                             {% if current_user.is_authenticated and current_user.is_admin() %}
-                            <button class="btn btn-sm btn-outline-primary rounded-pill" @click="mispPushPanelOpen = !mispPushPanelOpen"
+                            <button type="button" class="bd-btn" @click="mispPushPanelOpen = !mispPushPanelOpen"
                                     :aria-expanded="mispPushPanelOpen" aria-controls="bundle-misp-push-panel">
                                 <i class="fa-solid fa-share-nodes me-1"></i>Push to MISP
                                 <i class="fa-solid ms-1" :class="mispPushPanelOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                             </button>
                             {% endif %}
-                        </div>
-                    </div>
-
+                                </div>
+                            </div>
                     {% if current_user.is_authenticated and current_user.is_admin() %}
                     <div class="collapse mb-3" :class="{ show: mispPushPanelOpen }" id="bundle-misp-push-panel">
                         <div v-if="!mispServersLoading && !mispServers.length"
@@ -412,59 +717,102 @@
                         </div>
                     </div>
                     {% endif %}
-
-                        <div class="gap-2 p-3 rounded-3 shadow-sm border" style="background: var(--light-bg-color);">
-                            <div class="border rounded-3 overflow-hidden shadow-sm">
-                            <ul class="nav nav-tabs nav-fill border-bottom" id="ruleTabs" role="tablist">
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link active small fw-bold py-2 border-0" id="misp-graph-tab"
-                                        data-bs-toggle="tab" data-bs-target="#misp-graph" type="button" role="tab">
-                                        <i class="fas fa-chart-line me-1"></i>Graph
-                                    </button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link small fw-bold py-2 border-0" id="misp-json-tab"
-                                        data-bs-toggle="tab" data-bs-target="#misp-json" type="button" role="tab">
-                                        <i class="fas fa-code me-1"></i> JSON
-                                    </button>
-                                </li>
-                            </ul>
-
-                            <div class="tab-content" id="mispTabsContent">
-                                <!-- Graph tab -->
-                                <div class="tab-pane fade show active" id="misp-graph" role="tabpanel">
-                                    <div v-if="mispLoading" class="text-center py-5">
-                                        <div class="spinner-border text-primary" role="status"></div>
-                                        <div class="text-muted mt-2 small">Loading MISP event…</div>
+                            <!-- MISP event: JSON first; the graph is only built on request -->
+                            <div v-if="mispLoading" class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status"></div>
+                                <div class="text-muted mt-2 small">Building the MISP event…</div>
+                            </div>
+                            <div v-else-if="mispError" class="text-center py-4" style="color: var(--subtle-text-color)">
+                                <i class="fas fa-exclamation-circle me-2"></i>Could not build the MISP event
+                                <button type="button" class="bd-btn ms-2" @click="reloadMisp"><i class="fa-solid fa-rotate"></i><span>Retry</span></button>
+                            </div>
+                            <template v-else-if="mispJson">
+                                <div class="bm-summary">
+                                    <div class="bm-summary-main">
+                                        <div class="bm-info" :title="mispStats.info">[[ mispStats.info ]]</div>
+                                        <div class="bm-counts">
+                                            <span class="bm-count bm-count--blue"><i class="fa-solid fa-cubes"></i><b>[[ mispStats.objects ]]</b> object[[ mispStats.objects === 1 ? '' : 's' ]]</span>
+                                            <span class="bm-count bm-count--teal"><i class="fa-solid fa-list"></i><b>[[ mispStats.attributes ]]</b> attribute[[ mispStats.attributes === 1 ? '' : 's' ]]</span>
+                                            <span v-if="mispStats.tags" class="bm-count"><i class="fa-solid fa-tags"></i><b>[[ mispStats.tags ]]</b> tag[[ mispStats.tags === 1 ? '' : 's' ]]</span>
+                                            <span v-if="mispStats.uuid" class="bm-uuid" :title="'Event UUID ' + mispStats.uuid"><i class="fa-solid fa-fingerprint"></i>[[ mispStats.uuid ]]</span>
+                                        </div>
                                     </div>
-                                    <div v-else-if="mispError" class="text-center py-4" style="color: var(--subtle-text-color)">
-                                        <i class="fas fa-exclamation-circle me-2"></i>Could not load MISP event
+                                    {% if pivotick_graph_enabled('bundle') %}
+                                    <div class="bm-toggle" role="group" aria-label="MISP view">
+                                        <button type="button" :class="{ active: mispView === 'json' }" @click="showMispJson">
+                                            <i class="fa-solid fa-code"></i>JSON
+                                        </button>
+                                        <button type="button" :class="{ active: mispView === 'graph' }" @click="showMispGraph">
+                                            <i class="fa-solid fa-diagram-project"></i>Graph
+                                        </button>
                                     </div>
-                                    <!-- Plain div — Pivotick initialized directly by bundleMispGraph.js -->
-                                    <div v-else id="misp-graph-container" style="height:660px;width:100%;"></div>
+                                    {% endif %}
                                 </div>
-
-                                <!-- JSON tab -->
-                                <div class="tab-pane fade" id="misp-json" role="tabpanel">
-                                    <div v-if="mispLoading" class="text-center py-5">
-                                        <div class="spinner-border text-primary" role="status"></div>
-                                        <div class="text-muted mt-2 small">Loading MISP event…</div>
+                                <code-viewer v-if="mispView === 'json'"
+                                    :code="mispJson"
+                                    language="json"
+                                    title="misp-event.json"
+                                    max-height="620px">
+                                </code-viewer>
+                                <div v-else class="bm-graph-wrap">
+                                    <div v-if="mispGraphError" class="text-center py-4" style="color: var(--subtle-text-color)">
+                                        <i class="fas fa-exclamation-circle me-2"></i>The graph could not be drawn — the JSON view is still available.
                                     </div>
-                                    <div v-else-if="mispError" class="text-center py-4" style="color: var(--subtle-text-color)">
-                                        <i class="fas fa-exclamation-circle me-2"></i>Could not load MISP event
-                                    </div>
-                                    <code-viewer v-else
-                                        :code="mispJson || ''"
-                                        language="json"
-                                        title="misp-event.json"
-                                        max-height="600px">
-                                    </code-viewer>
+                                    <!-- Plain div — Pivotick draws into it (bundleMispGraph.js). Created only
+                                         when the graph is requested, so it always has a real size. -->
+                                    <div id="misp-graph-container" style="height:620px;width:100%;"></div>
                                 </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                </div>
+                </div>
+
+                <teleport to="body">
+                    <div v-if="historyDiff" class="bfv-backdrop" @mousedown.self="historyDiff = null">
+                        <div class="bfv-dialog" role="dialog" aria-modal="true" aria-label="Description changes">
+                            <div class="bfv-header">
+                                <div class="bfv-icon" style="color:#0d6efd;background:rgba(13,110,253,.1);">
+                                    <i class="fa-solid fa-code-compare"></i>
+                                </div>
+                                <div class="bfv-title-wrap">
+                                    <div class="bfv-title">[[ historyDiff.title || 'Description changes' ]]</div>
+                                    <div class="bfv-meta">
+                                        <span v-if="historyDiff.subtitle">[[ historyDiff.subtitle ]]</span>
+                                        <template v-else>
+                                            <span>[[ historyDiff.user_name || 'System' ]]</span>
+                                            <span>[[ dayjs(historyDiff.updated_at || historyDiff.created_at).format('MMM D, YYYY HH:mm') ]]</span>
+                                        </template>
+                                    </div>
+                                </div>
+                                <div class="bfv-actions">
+                                    <button type="button" class="bfv-btn bfv-btn--close" title="Close (Esc)" @click="historyDiff = null">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="bfv-body">
+                                <diff-viewer :key="historyDiff.id"
+                                    :initial-left="historyDiff.old_description"
+                                    :initial-right="historyDiff.new_description"
+                                    :left-label="historyDiff.left_label || 'Before'" :right-label="historyDiff.right_label || 'After'"></diff-viewer>
                             </div>
                         </div>
                     </div>
-                    
-                </div>
+                </teleport>
+
+                <bundle-file-viewer
+                    :file="openedFile"
+                    :has-prev="openedIndex > 0"
+                    :has-next="openedIndex > -1 && openedIndex < viewerList.length - 1"
+                    :origin="openedOrigin"
+                    :can-edit="canEditStructure"
+                    @edit="f => openInEditor(f)"
+                    @prev="stepFile(-1)" @next="stepFile(1)"
+                    @locate="locateOpenedFile"
+                    @close="closeFile">
+                </bundle-file-viewer>
             </div>
 
         </div>
@@ -499,13 +847,26 @@
 {% block script %}
 <script type="module">
     const bundle_id = document.getElementById('bundle-info').dataset.bundleId;
-    const { createApp, ref, onMounted, nextTick, computed } = Vue;
+    const { createApp, ref, onMounted, nextTick, computed, watch } = Vue;
     import { message_list, create_message } from '/static/js/toaster.js';
     import TagDisplay from '/static/js/tags/tagDisplay.js';
     import CommentThread from '/static/js/components/comments/comment-thread.js';
     import VulnerabilityDisplay from '/static/js/vulnerability/vulnerabilityDisplay.js';
     import UserChip from '/static/js/components/UserChip.js';
     import FileTree from '/static/js/components/file-tree.js';
+    import BundleFileViewer from '/static/js/bundle/BundleFileViewer.js';
+    import Timeline from '/static/js/components/timeline.js';
+    import DiffViewer from '/static/js/components/diff-viewer.js';
+    import BundleFilesPanel from '/static/js/bundle/BundleFilesPanel.js';
+    import BundleHealthPanel from '/static/js/bundle/BundleHealthPanel.js';
+    import BundleReleasesPanel from '/static/js/bundle/BundleReleasesPanel.js';
+    import BundleReleaseRules from '/static/js/bundle/BundleReleaseRules.js';
+    import HelpTip from '/static/js/components/help-tip.js';
+    import PaginationComponent from '/static/js/rule/paginationComponent.js';
+    import BundleNotesPanel from '/static/js/bundle/BundleNotesPanel.js';
+    import BundleAIAnalysisPanel from '/static/js/bundle/BundleAIAnalysisPanel.js';
+    const CAN_MANAGE_AI = {{ (current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.manage'))) | tojson }};
+    import { flattenFiles, isRuleNode, docIcon, extOf, RULE_ICON, downloadFromUrl, downloadText, renderSafeMarkdown } from '/static/js/bundle/bundleFileTypes.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
     import { initBundleGraph } from '/static/js/bundle/bundleMispGraph.js';
     import RuleList                  from '/static/js/rule/ruleList.js';
@@ -522,6 +883,17 @@
 
         components: {
             'file-tree': FileTree,
+            'bundle-file-viewer': BundleFileViewer,
+            'timeline': Timeline,
+            'diff-viewer': DiffViewer,
+            'bundle-files-panel': BundleFilesPanel,
+            'bundle-health-panel': BundleHealthPanel,
+            'bundle-releases-panel': BundleReleasesPanel,
+            'bundle-release-rules': BundleReleaseRules,
+            'help-tip': HelpTip,
+            'pagination-component': PaginationComponent,
+            'bundle-notes-panel': BundleNotesPanel,
+            'bundle-ai-analysis-panel': BundleAIAnalysisPanel,
             'code-viewer': CodeViewer,
             'tag-display': TagDisplay,
             'vulnerability-display': VulnerabilityDisplay,
@@ -605,6 +977,11 @@
              */
 
             const bundle = ref(null);
+            // Release mode (see RELEASE MODE below) — declared early: several
+            // computeds/watchers above that section depend on them.
+            const viewRelease      = ref(null);   // release meta, null = live bundle
+            const releaseData      = ref(null);   // /releases/<v>/view payload
+            const releaseSwitching = ref(false);
             const bundleNameShort  = computed(() => {
                 const name = bundle.value?.name || '';
                 return name.length > 40 ? name.slice(0, 40) + '…' : name;
@@ -683,7 +1060,7 @@
                 const params = new URLSearchParams({
                     id
                 })
-                const res = await fetch('/bundle/delete?' + params.toString())
+                const res = await fetch('/bundle/delete?' + params.toString(), { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
                 if (await res.status == 200) {
                     var myModalEl = document.getElementById('delete_bundle_modal_' + id);
                     var modal = bootstrap.Modal.getInstance(myModalEl)
@@ -698,11 +1075,13 @@
                 const params = new URLSearchParams({
                     id
                 })
-                const res = await fetch('/bundle/edit_access?' + params.toString())
-                if (await res.status == 200) {
+                const res = await fetch('/bundle/edit_access?' + params.toString(), { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
+                const data = await res.json().catch(() => ({}))
+                if (res.status == 200) {
                     bundle.value.access = !bundle.value.access
                 }
-                create_message(res.message, res.toast_class);
+                create_message(data.message || (res.ok ? 'Visibility updated' : 'Could not change visibility'),
+                               data.toast_class || (res.ok ? 'success-subtle' : 'danger-subtle'));
             }
 
             async function saveNewDescription(association_id, item) {
@@ -712,7 +1091,7 @@
                         new_description: item.new_description,
                         association_id
                     })
-                    const res = await fetch('/bundle/change_description?' + params.toString())
+                    const res = await fetch('/bundle/change_description?' + params.toString(), { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
                     if (await res.status == 200) {
                         item.association.description = item.new_description;
                         var myModalEl = document.getElementById('description_bundle_modal_' + item.rule.id);
@@ -723,7 +1102,19 @@
                 }
             }
 
+            // ?release=<version> on every download while viewing a release
+            function _dlParams() {
+                const p = new URLSearchParams({ bundle_id });
+                if (viewRelease.value) p.set('release', viewRelease.value.version);
+                return p;
+            }
+            function _dlName(suffix) {
+                const base = (bundle.value?.name || 'bundle');
+                return viewRelease.value ? `${base}_${viewRelease.value.version}${suffix}.zip` : `${base}${suffix}.zip`;
+            }
+
             async function DownloadBundle() {
+                if (viewRelease.value) return downloadFromUrl('/bundle/download?' + _dlParams(), _dlName('_rules'));
                 const params = new URLSearchParams({ bundle_id });
                 const res = await fetch('/bundle/download?' + params.toString());
 
@@ -763,6 +1154,10 @@
             // }
 
             async function DownloadMISP() {
+                if (viewRelease.value) {
+                    create_message('The MISP event is built from the current bundle — switch back to "Current" to download it', 'warning-subtle');
+                    return;
+                }
                 const params = new URLSearchParams({ bundle_id });
                 const res = await fetch('/bundle/download_misp?' + params.toString());
 
@@ -827,6 +1222,7 @@
 
 
             async function DownloadBundleStructure() {
+                if (viewRelease.value) return downloadFromUrl('/bundle/download_structure?' + _dlParams(), _dlName('_structure'));
                 const params = new URLSearchParams({ bundle_id });
                 const res = await fetch('/bundle/download_structure?' + params.toString());
 
@@ -860,7 +1256,7 @@
             async function vote(voteType, bundleId) {
                 if (current_user_is_connected.value == true) {
                     const params = new URLSearchParams({ bundleId, voteType });
-                    const res = await fetch('/bundle/evaluate?' + params.toString());
+                    const res = await fetch('/bundle/evaluate?' + params.toString(), { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
                     const data = await res.json()
 
                     bundle.value.vote_up = data.vote_up
@@ -870,6 +1266,25 @@
                     window.location.href = `/account/login`;
                 }
 
+            }
+
+            async function toggleFavorite() {
+                if (current_user_is_connected.value != true) {
+                    window.location.href = `/account/login`;
+                    return;
+                }
+                try {
+                    const res = await fetch(`/bundle/favorite/${bundle_id}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        bundle.value.is_favorited = data.is_favorited;
+                        create_message(data.message, 'success-subtle');
+                    } else {
+                        create_message(data.message || 'Could not update favorites', 'danger-subtle');
+                    }
+                } catch {
+                    create_message('Network error', 'danger-subtle');
+                }
             }
 
             /**
@@ -892,7 +1307,7 @@
                 const params = new URLSearchParams({
                     id
                 })
-                const res = await fetch('/bundle/update_bundle_from_structure?' + params.toString())
+                const res = await fetch('/bundle/update_bundle_from_structure?' + params.toString(), { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
                 const data = await res.json()
                 await create_message(data.message, data.toast_class)
 
@@ -912,10 +1327,15 @@
             };
 
             const stats = computed(() => [
-                { label: 'Rules', value: totalRules.value, icon: 'fa-solid fa-file-shield', color: 'text-primary' },
-                { label: 'Views', value: bundle.value?.view_count || 0, icon: 'fa-solid fa-eye', color: 'text-secondary' },
-                { label: 'Downloads', value: bundle.value?.download_count || 0, icon: 'fa-solid fa-download', color: 'text-success' },
-                { label: 'Score', value: (bundle.value?.vote_up || 0) - (bundle.value?.vote_down || 0), icon: 'fa-solid fa-star', color: 'text-warning' }
+                { label: viewRelease.value ? 'Rules in ' + viewRelease.value.version : 'Rules',
+                  value: viewRelease.value ? releaseData.value.rules.length : totalRules.value,
+                  icon: 'fa-solid fa-shield-halved', tone: 'blue',
+                  sub: [...new Set((viewRelease.value ? releaseData.value.rules.map(r => r.format)
+                                                      : (bundle.value?.list_of_format_of_rules || []))
+                        .filter(Boolean).map(f => f.toLowerCase()))].sort().join(' · ') },
+                { label: 'Files',     value: docFiles.value.length,              icon: 'fa-solid fa-file-lines',    tone: 'teal' },
+                { label: 'Downloads', value: bundle.value?.download_count || 0,  icon: 'fa-solid fa-download',      tone: 'green' },
+                { label: 'Score',     value: (bundle.value?.vote_up || 0) - (bundle.value?.vote_down || 0), icon: 'fa-solid fa-star', tone: 'gold' },
             ]);
 
             function animateClick(event) {
@@ -948,7 +1368,8 @@
             async function fetchAttackCoverage() {
                 attackLoading.value = true;
                 try {
-                    const res  = await fetch(`/bundle/attack_coverage/${bundle_id}`);
+                    const rq   = viewRelease.value ? '?' + new URLSearchParams({ release: viewRelease.value.version }) : '';
+                    const res  = await fetch(`/bundle/attack_coverage/${bundle_id}${rq}`);
                     const data = await res.json();
                     attackCoverage.value = data;
                 } catch {
@@ -964,24 +1385,144 @@
             const treeData = ref([]);
             const bundleId = ref(null);
 
-            // FileTree: convert API format to FileTree component format
-            function _toFileTree(nodes) {
-                return (nodes || []).map(node => ({
-                    name: node.name,
-                    type: node.type === 'folder' ? 'dir' : 'file',
-                    path: String(node.id),
-                    ext: node.type === 'file' ? node.name.split('.').pop() : undefined,
-                    content: node.content,
-                    children: node.children ? _toFileTree(node.children) : undefined
-                }));
+            // FileTree: convert API format to FileTree component format.
+            // Rules get a blue shield, custom files (md/txt/json…) a teal
+            // per-extension icon + badge + tinted row so they stand out.
+            // Only the first root folder starts expanded.
+            function _toFileTree(nodes, depth = 0) {
+                let firstDirSeen = false;
+                return (nodes || []).map(node => {
+                    const isDir = node.type === 'folder';
+                    const out = {
+                        name: node.name,
+                        type: isDir ? 'dir' : 'file',
+                        path: String(node.id),
+                        ext: isDir ? undefined : extOf(node.name),
+                        children: node.children ? _toFileTree(node.children, depth + 1) : undefined,
+                    };
+                    if (isDir) {
+                        out.defaultOpen = depth === 0 && !firstDirSeen;
+                        firstDirSeen = true;
+                    } else if (isRuleNode(node)) {
+                        out.icon = RULE_ICON.icon;
+                        out.color = RULE_ICON.color;
+                    } else {
+                        const d = docIcon(node.name);
+                        out.icon = d.icon;
+                        out.color = d.color;
+                        out.variant = 'doc';
+                    }
+                    return out;
+                });
             }
             const fileTreeNodes = computed(() => _toFileTree(treeData.value));
 
-            const selectedFileNode = ref(null);
-            const handleFileTreeSelect = (node) => {
-                if (node.type === 'file') {
-                    selectedFileNode.value = selectedFileNode.value?.path === node.path ? null : node;
+            // Flat file lists — all files (tree order, for prev/next in the
+            // viewer) and non-rule files only (Files & Documents panel).
+            const allFiles = computed(() => flattenFiles(treeData.value));
+            const docFiles = computed(() => allFiles.value.filter(f => !f.isRule));
+
+            // Viewer overlay: opened on top of the page wherever the file
+            // was clicked. viewerList = the list prev/next walks through
+            // (whole tree from Structure, docs only from the Files panel).
+            const openedFile = ref(null);
+            const viewerList = ref([]);
+            const openedIndex = computed(() =>
+                openedFile.value ? viewerList.value.findIndex(f => f.id === openedFile.value.id) : -1
+            );
+            const openedOrigin = ref('');
+            // Rule content is lazy (light tree) — fetched once, then cached.
+            const _ruleContent = new Map();
+            async function openFile(file, list, origin = '') {
+                viewerList.value = list || docFiles.value;
+                openedOrigin.value = origin;
+                if (!file.lazy) { openedFile.value = file; return; }
+                const rel = viewRelease.value ? viewRelease.value.version : '';
+                const cacheKey = rel + ':' + file.rule_id;
+                if (_ruleContent.has(cacheKey)) {
+                    openedFile.value = { ...file, content: _ruleContent.get(cacheKey), lazy: false };
+                    return;
                 }
+                openedFile.value = { ...file, loading: true };
+                try {
+                    const q = rel ? '?' + new URLSearchParams({ release: rel }) : '';
+                    const data = await fetch(`/bundle/${bundle_id}/rule_content/${file.rule_id}${q}`).then(r => r.json());
+                    if (!data.success) throw new Error(data.message);
+                    _ruleContent.set(cacheKey, data.content);
+                    if (openedFile.value && openedFile.value.id === file.id)
+                        openedFile.value = { ...file, content: data.content, lazy: false };
+                } catch (e) {
+                    create_message((e && e.message) || 'Could not load the rule', 'danger-subtle');
+                    if (openedFile.value && openedFile.value.id === file.id) openedFile.value = null;
+                }
+            }
+
+            // "Show in bundle" from the viewer: in the structure tree, or —
+            // when the file was opened from the tree — in the Rules tab
+            // (list narrowed to that rule) / the Files & Documents panel.
+            const fileTreeRef   = ref(null);
+            const filesPanelRef = ref(null);
+            const focusRule     = ref(null);
+            function _scrollToContent() {
+                nextTick(() => document.querySelector('.bd-zone')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            }
+            async function revealInStructure(fileId) {
+                setTab('structure');
+                await nextTick();
+                // reveal() unfolds the folders, selects + flashes the row and
+                // centres it in the viewport (no extra scroll here, it would fight it)
+                const found = await fileTreeRef.value?.reveal(fileId);
+                if (found === false) create_message('Could not find it in the structure', 'warning-subtle');
+            }
+            function showRuleInList(ruleId, name) {
+                focusRule.value = { rule_id: ruleId, name: name || ('Rule #' + ruleId) };
+                setTab('rules');
+                _scrollToContent();
+            }
+            function showRuleInStructure(ruleId) {
+                const node = allFiles.value.find(f => f.rule_id === ruleId);
+                if (!node) {
+                    create_message('This rule is not placed in the structure yet', 'warning-subtle');
+                    return;
+                }
+                revealInStructure(node.id);
+            }
+
+            async function locateOpenedFile(target) {
+                const file = openedFile.value;
+                if (!file) return;
+                closeFile();
+                if (target === 'structure') {
+                    revealInStructure(file.id);
+                } else if (file.isRule) {
+                    showRuleInList(file.rule_id, file.name);
+                } else {
+                    setTab('files');
+                    await nextTick();
+                    filesPanelRef.value?.focus(file);
+                    _scrollToContent();
+                }
+            }
+
+            // ATT&CK matrix → rule of a technique: "In list" / "In structure"
+            function onAttackRuleAction({ action, rule }) {
+                if (action === 'list') showRuleInList(rule.id, rule.name);
+                else if (action === 'structure') showRuleInStructure(rule.id);
+            }
+            // Rules tab row button → "Show in structure"
+            function onRuleListAction({ action, rule }) {
+                if (action === 'structure') showRuleInStructure(rule.id);
+            }
+            function closeFile() { openedFile.value = null; }
+            function stepFile(delta) {
+                const next = viewerList.value[openedIndex.value + delta];
+                if (next) openFile(next, viewerList.value, openedOrigin.value);
+            }
+
+            const handleFileTreeSelect = (node) => {
+                if (node.type !== 'file') return;
+                const file = allFiles.value.find(f => f.id === node.path);
+                if (file) openFile(file, allFiles.value, 'structure');
             };
 
             // Shared MISP data — used by both Graph and MISP views
@@ -1013,43 +1554,432 @@
             }
 
 
-            // Graph is initialized lazily: only once, when the container is visible.
-            // Triggers either when MISP data arrives (if tab already open)
-            // or when the tab is first shown (if data already loaded).
-            let _graphInited = false;
-            function _maybeInitGraph() {
-                if (_graphInited || !_mispParsed.value) return;
-                const container = document.getElementById('misp-graph-container');
-                if (!container) return;
-                _graphInited = true;
-                initBundleGraph('misp-graph-container', JSON.stringify(_mispParsed.value), { graphType: 'bundle' });
+            // DESCRIPTION — markdown rendered with the same sanitiser +
+            // hardening as bundle files; collapsed past DESC_MAX_H px.
+            const DESC_MAX_H    = 220;
+            const descHtml      = ref('');
+            const descEl        = ref(null);
+            const descOverflows = ref(false);
+            watch(() => viewRelease.value ? (releaseData.value?.bundle?.description || '') : bundle.value?.description, async (md) => {
+                descHtml.value = md ? await renderSafeMarkdown(md) : '';
+                showFullDesc.value = false;
+                // Measure once the card (v-if on load) and the HTML are painted.
+                await nextTick();
+                requestAnimationFrame(() => {
+                    descOverflows.value = !!descEl.value && descEl.value.scrollHeight > DESC_MAX_H + 40;
+                });
+            }, { immediate: true });
+
+            function copyDescription() {
+                navigator.clipboard.writeText(bundle.value?.description || '')
+                    .then(() => create_message('Description copied (Markdown)', 'success-subtle'))
+                    .catch(() => create_message('Could not copy the description', 'danger-subtle'));
+            }
+            function downloadDescription() {
+                const safe = (bundle.value?.name || 'bundle').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'bundle';
+                downloadText(`${safe}_description.md`, bundle.value?.description || '');
+            }
+
+            // HISTORY — /bundle/history/<id>, rendered with the shared
+            // Timeline (+ meta-change-list rows for each change).
+            const HISTORY_ICONS = {
+                created: 'fa-solid fa-plus', details: 'fa-solid fa-pen', visibility: 'fa-solid fa-lock-open',
+                tags: 'fa-solid fa-tags', structure: 'fa-solid fa-folder-tree', rules: 'fa-solid fa-shield-halved',
+                sharing: 'fa-solid fa-link', release: 'fa-solid fa-tag',
+            };
+            const historyEntries = ref([]);
+            const historyPage    = ref(0);
+            const historyPages   = ref(0);
+            const historyTotal   = ref(0);
+            const historyLoading = ref(false);
+            const historyDiff    = ref(null);
+
+            const historyItems = computed(() => historyEntries.value.map(e => ({
+                uuid: e.uuid,
+                title: e.summary || 'Bundle updated',
+                level: e.action === 'created' ? 'success' : 'info',
+                category: e.action,
+                action: 'bundle.' + e.action,
+                icon: HISTORY_ICONS[e.action] || 'fa-solid fa-pen',
+                created_at: e.updated_at || e.created_at,
+                actor_name: e.user_name,
+                metadata_changes: e.changes || [],
+                hint: e.has_description_diff ? { label: 'See description changes', icon: 'fas fa-code-compare' } : null,
+                _entry: e,
+            })));
+
+            async function loadHistory(page = 1) {
+                if (historyLoading.value) return;
+                historyLoading.value = true;
+                try {
+                    const res = await fetch(`/bundle/history/${bundle_id}?page=${page}&per_page=10`);
+                    const data = await res.json();
+                    if (data.success) {
+                        historyEntries.value = data.entries;          // one page of 10 at a time
+                        historyPage.value = data.page;
+                        historyPages.value = data.pages;
+                        historyTotal.value = data.total;
+                    }
+                } catch {
+                    create_message('Could not load the history', 'danger-subtle');
+                } finally {
+                    historyLoading.value = false;
+                }
+            }
+
+            async function openHistoryDiff(item) {
+                const e = item._entry;
+                if (!e || !e.id) return;
+                const res = await fetch(`/bundle/history/${bundle_id}/${e.id}`);
+                const data = await res.json().catch(() => ({}));
+                if (data.success) historyDiff.value = data.entry;
+                else create_message(data.message || 'Could not load the changes', 'danger-subtle');
+            }
+            document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') historyDiff.value = null; });
+
+            // PRIVATE SHARE LINK (owner / admin)
+            const sharePanelOpen = ref(false);
+            const shareUrl       = ref(null);
+            const shareCreatedAt = ref(null);
+            const shareLoading   = ref(false);
+            const shareBusy      = ref(false);
+            const regenArmed     = ref(false);
+            let _regenTimer = null;
+
+            async function toggleSharePanel() {
+                sharePanelOpen.value = !sharePanelOpen.value;
+                if (!sharePanelOpen.value) return;
+                shareLoading.value = true;
+                try {
+                    const res = await fetch(`/bundle/${bundle_id}/share`);
+                    const data = await res.json().catch(() => null);
+                    if (!res.ok || !data) {
+                        create_message((data && data.message) || `Could not load the share link (HTTP ${res.status})`, 'danger-subtle');
+                        sharePanelOpen.value = false;
+                        return;
+                    }
+                    shareUrl.value = data.url || null;
+                    shareCreatedAt.value = data.created_at || null;
+                } catch { create_message('Could not load the share link (network error)', 'danger-subtle'); }
+                finally { shareLoading.value = false; }
+            }
+
+            async function regenerateShare() {
+                // Replacing an existing link needs a second click (it cuts off everyone who has it)
+                if (shareUrl.value && !regenArmed.value) {
+                    regenArmed.value = true;
+                    clearTimeout(_regenTimer);
+                    _regenTimer = setTimeout(() => { regenArmed.value = false; }, 3500);
+                    return;
+                }
+                regenArmed.value = false;
+                shareBusy.value = true;
+                try {
+                    const res = await fetch(`/bundle/${bundle_id}/share`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                    const data = await res.json().catch(() => ({ success: false, message: `Request failed (HTTP ${res.status})` }));
+                    if (data.success) {
+                        shareUrl.value = data.url;
+                        shareCreatedAt.value = dayjs().format('YYYY-MM-DD HH:mm');
+                        loadHistory(1);
+                    }
+                    create_message(data.message, data.toast_class || (data.success ? 'success-subtle' : 'danger-subtle'));
+                } catch { create_message('Could not create the share link', 'danger-subtle'); }
+                finally { shareBusy.value = false; }
+            }
+
+            async function revokeShare() {
+                shareBusy.value = true;
+                try {
+                    const res = await fetch(`/bundle/${bundle_id}/share`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
+                    const data = await res.json().catch(() => ({ success: false, message: `Request failed (HTTP ${res.status})` }));
+                    if (data.success) { shareUrl.value = null; shareCreatedAt.value = null; loadHistory(1); }
+                    create_message(data.message, data.toast_class || (data.success ? 'success-subtle' : 'danger-subtle'));
+                } catch { create_message('Could not revoke the share link', 'danger-subtle'); }
+                finally { shareBusy.value = false; }
+            }
+
+            function copyShareUrl() {
+                navigator.clipboard.writeText(shareUrl.value || '')
+                    .then(() => create_message('Share link copied', 'success-subtle'))
+                    .catch(() => create_message('Could not copy the link', 'danger-subtle'));
+            }
+
+            // RELEASE MODE — show the bundle exactly as a release froze it
+            // (structure, rule contents, files, description, tags, ATT&CK,
+            // health, downloads). ?release=<version> in the URL.
+            let _liveTree = null;
+            const releaseOptions = computed(() => releasesSummary.value?.releases || []);
+
+            function _setUrlRelease(version) {
+                const u = new URL(window.location.href);
+                if (version) u.searchParams.set('release', version); else u.searchParams.delete('release');
+                history.replaceState(null, '', u.pathname + u.search + u.hash);
+            }
+
+            async function switchVersion(version) {
+                if ((viewRelease.value?.version || '') === (version || '')) return;
+                closeFile();
+                if (!version) {
+                    if (_liveTree) treeData.value = _liveTree;
+                    _liveTree = null;
+                    viewRelease.value = null;
+                    releaseData.value = null;
+                    _setUrlRelease('');
+                    fetchAttackCoverage();
+                    return;
+                }
+                releaseSwitching.value = true;
+                try {
+                    const res = await fetch(`/bundle/${bundle_id}/releases/${encodeURIComponent(version)}/view`);
+                    const data = await res.json().catch(() => null);
+                    if (!res.ok || !data?.success) throw new Error(data?.message || `HTTP ${res.status}`);
+                    if (!viewRelease.value) _liveTree = treeData.value;
+                    releaseData.value = data;
+                    viewRelease.value = data.release;
+                    treeData.value = data.structure;
+                    focusRule.value = null;
+                    _setUrlRelease(data.release.version);
+                    if (activeTab.value === 'misp') setTab('structure');
+                    fetchAttackCoverage();
+                    create_message(`Viewing release ${data.release.version} — frozen content`, 'success-subtle');
+                } catch (e) {
+                    create_message('Could not open this release (' + (e.message || e) + ')', 'danger-subtle');
+                    _setUrlRelease(viewRelease.value?.version || '');
+                } finally {
+                    releaseSwitching.value = false;
+                }
+            }
+
+            // Rules tab (release mode): frozen content / diff with the current rule
+            function openReleaseRule(r) {
+                const node = allFiles.value.find(f => f.rule_id === r.rule_id);
+                const file = node || { id: 'relrule_' + r.rule_id, name: r.title, folder: '', path: r.title,
+                                       isRule: true, lazy: true, rule_id: r.rule_id, format: r.format };
+                openFile(file, allFiles.value.filter(f => f.isRule), 'rules');
+            }
+            async function openReleaseRuleDiff(r) {
+                try {
+                    const res = await fetch(`/bundle/${bundle_id}/releases/${viewRelease.value.id}/rule/${r.rule_id}/diff?against=current`);
+                    const d = await res.json();
+                    if (!d.success) throw new Error(d.message);
+                    historyDiff.value = {
+                        id: 'rel-' + viewRelease.value.id + '-' + r.rule_id,
+                        title: r.title, subtitle: `Released in ${viewRelease.value.version} → current rule`,
+                        old_description: d.old, new_description: d.new,
+                        left_label: viewRelease.value.version, right_label: 'Current',
+                    };
+                } catch (e) {
+                    create_message('Could not load the diff (' + (e.message || e) + ')', 'danger-subtle');
+                }
+            }
+
+            // After a health "Fix it for me": refresh the tree, lists and history
+            const ruleListKey = ref(0);
+            async function reloadAfterFix() {
+                try {
+                    const data = await fetch(`/bundle/get_bundle_json/${bundle_id}`).then(r => r.json());
+                    if (data.success && data.structure) {
+                        if (viewRelease.value) _liveTree = data.structure; else treeData.value = data.structure;
+                    }
+                } catch {}
+                ruleListKey.value++;
+                loadHistory(1);
+                fetchAttackCoverage();
+                fetchBundleTags && fetchBundleTags();
+            }
+
+            // CONTENT TABS (rules / structure / files / ATT&CK / MISP)
+            // --------------------------------------------
+            // One panel at a time instead of five stacked sections. The
+            // active tab is mirrored in the URL hash (#files…) so it can be
+            // linked and survives a reload.
+            const TAB_KEYS = ['structure', 'rules', 'files', 'attack', 'releases', 'health', 'notes', 'ai', 'history', 'misp'];
+            const notesSummary = ref(null);
+            const notesAlert = computed(() => {
+                const open = (notesSummary.value?.notes || []).filter(n => n.status === 'open' && n.severity !== 'info');
+                if (!open.length) return null;
+                return { count: open.length, critical: open.some(n => n.severity === 'critical'), first: open[0].title };
+            });
+            // Owner / admin: "Edit" on any file of the structure (and in the viewer)
+            // → bundle editor with that file selected. Not on a frozen release.
+            const _meId = {{ current_user.id if current_user.is_authenticated else 'null' }};
+            const canEditStructure = computed(() =>
+                !!bundle.value && !viewRelease.value && (is_admin.value || (_meId !== null && bundle.value.user_id === _meId)));
+            function editorUrlFor(file) {
+                const q = file.isRule ? { focus_rule: file.rule_id } : { focus_path: file.path };
+                return `/bundle/edit/${bundle_id}?` + new URLSearchParams(q);
+            }
+            function openInEditor(file) { if (file) window.location.href = editorUrlFor(file); }
+            function onTreeRowAction({ action, node }) {
+                if (action !== 'edit') return;
+                openInEditor(allFiles.value.find(f => f.id === node.path));
+            }
+
+            // What "#" can reference in a note: rules and files of the bundle
+            const noteRefs = computed(() => allFiles.value.map(f => f.isRule
+                ? { kind: 'rule', id: f.rule_id, label: f.name.replace(/\.[^.]+$/, '') }
+                : { kind: 'file', path: f.path, label: f.path }));
+            function openNoteRef({ kind, ref }) {
+                const file = kind === 'rule'
+                    ? allFiles.value.find(f => f.isRule && String(f.rule_id) === String(ref))
+                    : allFiles.value.find(f => !f.isRule && f.path === ref);
+                if (!file) {
+                    create_message(kind === 'rule' ? 'This rule is no longer in the bundle' : 'This file is no longer in the bundle', 'warning-subtle');
+                    return;
+                }
+                openFile(file, allFiles.value, 'notes');
+            }
+            function scrollToZone() {
+                nextTick(() => document.querySelector('.bd-zone')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            }
+            const healthSummary = ref(null);
+            // AI Analysis tab: AI managers always see it (to launch one);
+            // everyone else only once a public report exists.
+            const aiSummary = ref(null);
+            const showAiTab = computed(() => CAN_MANAGE_AI || !!(aiSummary.value && aiSummary.value.count));
+            fetch(`/bundle/${bundle_id}/ai_analysis/list`).then(r => r.ok ? r.json() : null)
+                .then(d => { if (d) aiSummary.value = { count: (d.items || []).length, latest: (d.items || [])[0] || null }; })
+                .catch(() => {});
+            const releasesSummary = ref(null);
+            const _hashTab = (location.hash || '').slice(1);
+            const activeTab = ref(TAB_KEYS.includes(_hashTab) ? _hashTab : 'structure');
+
+            const contentTabs = computed(() => {
+                const tabs = [
+                    { key: 'structure', label: 'Structure', icon: 'fa-solid fa-folder-tree',   count: allFiles.value.length || null },
+                    { key: 'rules',     label: 'Rules',     icon: 'fa-solid fa-shield-halved', count: totalRules.value },
+                ];
+                if (docFiles.value.length)
+                    tabs.push({ key: 'files', label: 'Files & Documents', icon: 'fa-solid fa-file-lines', count: docFiles.value.length });
+                tabs.push({ key: 'attack', label: 'ATT&CK', icon: 'fa-solid fa-crosshairs',
+                            count: attackStats.value ? `${attackStats.value.covered_tactics}/${attackStats.value.total_tactics}` : null });
+                tabs.push({ key: 'releases', label: 'Releases', icon: 'fa-solid fa-tags',
+                            count: releasesSummary.value && releasesSummary.value.releases.length ? releasesSummary.value.releases.length : null });
+                tabs.push({ key: 'health', label: 'Health', icon: 'fa-solid fa-heart-pulse',
+                            count: healthSummary.value ? ((healthSummary.value.counts.error + healthSummary.value.counts.warning) || '✓') : null });
+                tabs.push({ key: 'notes', label: 'Notes', icon: 'fa-solid fa-note-sticky',
+                            count: notesSummary.value && notesSummary.value.open ? notesSummary.value.open : null });
+                if (showAiTab.value)
+                    tabs.push({ key: 'ai', label: 'AI Analysis', icon: 'fa-solid fa-robot',
+                                count: aiSummary.value && aiSummary.value.count ? aiSummary.value.count : null });
+                tabs.push({ key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left', count: historyTotal.value || null });
+                if (rules.value.length && !viewRelease.value)
+                    tabs.push({ key: 'misp', label: 'MISP Event', icon: 'fa-solid fa-diagram-project', count: null });
+                return tabs;
+            });
+
+            // Per-section downloads (rules / structure / MISP reuse the
+            // existing Download* functions above).
+            function DownloadBundleFull() {
+                return downloadFromUrl('/bundle/download_full?' + _dlParams(), _dlName('_full'))
+                    .then(ok => { if (ok && bundle.value) bundle.value.download_count = (bundle.value.download_count || 0) + 1; });
+            }
+            function DownloadBundleFiles() {
+                return downloadFromUrl('/bundle/download_files?' + _dlParams(), _dlName('_files'));
+            }
+            function DownloadAttackCoverage() {
+                if (!attackCoverage.value) return;
+                const safe = (bundle.value.name || 'bundle').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_');
+                downloadText(`${safe}_attack_coverage.json`, JSON.stringify(attackCoverage.value, null, 2));
+            }
+
+            function setTab(key) {
+                activeTab.value = key;
+                history.replaceState(null, '', '#' + key);
+                if (key === 'misp') _loadMisp();            // built on first visit only
+                if (key === 'history') loadHistory(1);
+            }
+
+            // A tab that disappears once data is loaded (e.g. #files on a
+            // bundle with no docs) falls back to Rules.
+            const structureLoaded = ref(false);
+            watch([contentTabs, structureLoaded], ([tabs, loaded]) => {
+                if (loaded && !tabs.some(t => t.key === activeTab.value)) activeTab.value = 'structure';
+            });
+
+            // MISP tab: the JSON is shown directly; the Pivotick graph is only
+            // built when the user asks for it (its container is created by
+            // v-if at that moment, so it always has a real size — drawing into
+            // a hidden tab is what used to leave it blank).
+            const mispView       = ref('json');
+            const mispGraphError = ref(false);
+            const mispStats = computed(() => {
+                const e = _mispParsed.value ? (_mispParsed.value.Event || _mispParsed.value) : null;
+                return {
+                    info: e?.info || 'MISP event',
+                    uuid: e?.uuid || '',
+                    objects: (e?.Object || []).length,
+                    attributes: (e?.Attribute || []).length + (e?.Object || []).reduce((n, o) => n + ((o.Attribute || []).length), 0),
+                    tags: (e?.Tag || []).length,
+                };
+            });
+            function showMispJson() { mispView.value = 'json'; }
+            async function showMispGraph() {
+                if (mispView.value === 'graph') return;
+                mispView.value = 'graph';
+                mispGraphError.value = false;
+                await nextTick();
+                requestAnimationFrame(() => {
+                    try {
+                        if (!document.getElementById('misp-graph-container') || !_mispParsed.value) return;
+                        initBundleGraph('misp-graph-container', JSON.stringify(_mispParsed.value),
+                            { renderer: {{ pivotick_graph_renderer('bundle') | tojson }}, graphType: 'bundle' });
+                    } catch (e) {
+                        console.error('MISP graph', e);
+                        mispGraphError.value = true;
+                    }
+                });
+            }
+            function reloadMisp() { mispError.value = false; _mispParsed.value = null; _loadMisp(); }
+
+            // Structure JSON can be heavy on big bundles — start it alongside
+            // init() instead of after it, and always clear the spinner.
+            async function _loadStructure() {
+                try {
+                    const res = await fetch(`/bundle/get_bundle_json/${bundle_id}`);
+                    const data = await res.json();
+                    if (data.success && data.structure) {
+                        treeData.value = Array.isArray(data.structure) ? data.structure : [data.structure];
+                    }
+                } catch {
+                    create_message('Could not load the bundle structure', 'danger-subtle');
+                } finally {
+                    structureLoaded.value = true;
+                }
             }
 
             onMounted(async () => {
+                const _structureP = _loadStructure();
                 await init();
 
                 const el = document.getElementById('bundle-info');
                 if (el) {
                     bundleId.value = el.dataset.bundleId;
-                    const res = await fetch(`/bundle/get_bundle_json/${bundleId.value}`);
-                    const data = await res.json();
-                    if (data.success && data.structure) {
-                        treeData.value = Array.isArray(data.structure) ? data.structure : [data.structure];
+                    await _structureP;
+                    loadHistory(1);
+                    const _rq = new URL(window.location.href).searchParams.get('release');
+                    if (_rq) switchVersion(_rq);
+                    // ?focus_rule=<id> (e.g. "Open in bundle" from a rule's Bundles
+                    // tab): reveal the rule in the structure tree and open it.
+                    const _fr = parseInt(new URL(window.location.href).searchParams.get('focus_rule'), 10);
+                    if (_fr) {
+                        const node = allFiles.value.find(f => f.rule_id === _fr);
+                        if (node) {
+                            await revealInStructure(node.id);
+                            openFile(node, allFiles.value, 'structure');
+                        } else {
+                            showRuleInList(_fr);
+                        }
                     }
                 }
 
                 // Load ATT&CK coverage and MISP data
                 fetchAttackCoverage();
-                _loadMisp().then(() => nextTick(_maybeInitGraph));
+                if (activeTab.value === 'misp') _loadMisp();
                 {% if current_user.is_authenticated and current_user.is_admin() %}
                 fetchMispServers();
                 {% endif %}
 
-                // Also init when the graph tab is first shown (data may not be ready yet above)
-                const graphTabEl = document.getElementById('misp-graph-tab');
-                if (graphTabEl) {
-                    graphTabEl.addEventListener('shown.bs.tab', _maybeInitGraph);
-                }
             });
 
             async function fetchCurrentUser() {
@@ -1066,8 +1996,14 @@
                 vote, bundleUserVote, edit_access, deleteBundle, saveNewDescription, DownloadBundle, DownloadBundleStructure, current_user_is_connected,
                 goToRule, showFullDesc, truncateText, stats, update,
 
-                treeData, fileTreeNodes,
-                selectedFileNode, handleFileTreeSelect, mispJson, mispLoading, mispError, toggleContent,
+                treeData, fileTreeNodes, allFiles, docFiles,
+                openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
+                openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList, structureLoaded, toggleFavorite, showAiTab, aiSummary, CAN_MANAGE_AI,
+                viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
+                sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
+                toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,
+                historyItems, historyPage, historyPages, historyTotal, historyLoading, historyDiff, loadHistory, openHistoryDiff, DownloadBundleFiles, DownloadAttackCoverage, DownloadBundleFull, mispJson, mispLoading, mispError, toggleContent,
 
                 current_user_is_admin,
 

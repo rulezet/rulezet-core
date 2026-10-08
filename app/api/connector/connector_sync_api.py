@@ -16,6 +16,7 @@ from flask_restx import Namespace, Resource
 from sqlalchemy import or_, func
 
 from app.core.db_class.db import Rule, Bundle, Tag, RuleTagAssociation, BundleTagAssociation, RuleUpdateHistory, RuleAttackAssociation
+from app.features.connector.connector_core import bundle_structure_to_sync_json
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,26 @@ sync_ns = Namespace(
 )
 
 PER_PAGE_MAX = 2000
+PAGE_MAX = 1_000_000   # keeps the SQL offset (page × per_page) within a 64-bit integer
+
+# Sync protocol version + what this instance supports, advertised in the
+# manifest so a pulling instance never sends a parameter we'd silently
+# ignore (an ignored filter = the whole corpus comes back).
+#   1 — Rulezet 1.6.0+: rules (filters, uuids, count_only, attacks), bundles
+#       as a flat rule list. Remotes without `sync_api_version` are v1.
+#   2 — bundles also carry `structure` (folders, files, rule placement).
+# Payloads only ever GAIN fields: never rename or drop one, older pullers
+# read them with .get().
+SYNC_API_VERSION = 2
+SYNC_CAPABILITIES = {
+    'sync_rules':       True,
+    'sync_bundles':     True,
+    'rule_filters':     True,   # cve, formats, author, license, tags, dates
+    'rule_attacks':     True,   # attacks=T1059,...
+    'rule_uuids':       True,   # uuids=... (bundle-referenced rules)
+    'count_only':       True,
+    'bundle_structure': True,
+}
 
 
 def _since_dt(since_str: str | None) -> datetime.datetime:
@@ -180,6 +201,7 @@ def _bundle_to_sync_json(bundle: Bundle) -> dict:
         'vulnerability_identifiers': vuln_ids,
         'updated_at':              bundle.updated_at.isoformat() if bundle.updated_at else None,
         'created_at':              bundle.created_at.isoformat() if bundle.created_at else None,
+        'structure':               bundle_structure_to_sync_json(bundle.id),
     }
 
 
@@ -264,8 +286,7 @@ def _apply_rule_filters(query, params: dict):
                     for tid in tag_ids:
                         sub = (RuleTagAssociation.query
                                .filter_by(tag_id=tid)
-                               .with_entities(RuleTagAssociation.rule_id)
-                               .subquery())
+                               .with_entities(RuleTagAssociation.rule_id))
                         if tag_exclude:
                             query = query.filter(Rule.id.notin_(sub))
                         else:
@@ -274,8 +295,7 @@ def _apply_rule_filters(query, params: dict):
                     sub = (RuleTagAssociation.query
                            .filter(RuleTagAssociation.tag_id.in_(tag_ids))
                            .with_entities(RuleTagAssociation.rule_id)
-                           .distinct()
-                           .subquery())
+                           .distinct())
                     if tag_exclude:
                         query = query.filter(Rule.id.notin_(sub))
                     else:
@@ -298,8 +318,7 @@ def _apply_rule_filters(query, params: dict):
             atk_sub = (RuleAttackAssociation.query
                        .filter(RuleAttackAssociation.technique_id.in_(atk_list))
                        .with_entities(RuleAttackAssociation.rule_id)
-                       .distinct()
-                       .subquery())
+                       .distinct())
             query = query.filter(Rule.id.in_(atk_sub))
 
     return query
@@ -320,10 +339,8 @@ class SyncManifest(Resource):
                 'version': ver,
                 'url':     os.environ.get('FLASK_URL', ''),
             },
-            'capabilities': {
-                'sync_rules':   True,
-                'sync_bundles': True,
-            },
+            'sync_api_version': SYNC_API_VERSION,
+            'capabilities': dict(SYNC_CAPABILITIES),
         }, 200
 
 
@@ -391,7 +408,7 @@ class SyncRules(Resource):
 
         # ── Standard paginated fetch ──────────────────────────────────────────
         since    = _since_dt(request.args.get('since'))
-        page     = max(1, request.args.get('page', 1, type=int))
+        page     = min(PAGE_MAX, max(1, request.args.get('page', 1, type=int)))
         per_page = min(PER_PAGE_MAX, max(1, request.args.get('per_page', 50, type=int)))
 
         filter_params = {
@@ -458,7 +475,7 @@ class SyncBundles(Resource):
     )
     def get(self):
         since    = _since_dt(request.args.get('since'))
-        page     = max(1, request.args.get('page', 1, type=int))
+        page     = min(PAGE_MAX, max(1, request.args.get('page', 1, type=int)))
         per_page = min(PER_PAGE_MAX, max(1, request.args.get('per_page', 50, type=int)))
 
         since_dt = since.replace(tzinfo=None)

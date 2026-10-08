@@ -216,6 +216,9 @@ export default {
                         <span v-else class="badge bg-secondary" style="opacity:.55;">
                             <i class="fas fa-circle-xmark me-1"></i>Unverified
                         </span>
+                        <span class="ul-auth-badge" :class="authBadgeClass(user)">
+                            <i class="fas" :class="authIcon(user)"></i>{{ authLabel(user) }}
+                        </span>
                     </div>
                 </div>
 
@@ -341,6 +344,7 @@ export default {
                         <th class="dt-th" style="width:100px;">Role</th>
                         <th class="dt-th" style="width:90px;">Status</th>
                         <th class="dt-th" style="width:100px;">Verified</th>
+                        <th class="dt-th" style="width:110px;">Sign-in</th>
                         <th class="dt-th" style="width:80px;">Rules</th>
                         <th class="dt-th dt-th--sortable" style="width:120px;"
                             :class="{ 'dt-th--sorted': sortKey === 'created_at' }"
@@ -432,6 +436,13 @@ export default {
                                 <i class="fas fa-check"></i>
                             </span>
                             <span v-else class="text-muted small opacity-50">—</span>
+                        </td>
+
+                        <!-- Sign-in method -->
+                        <td class="dt-td">
+                            <span class="ul-auth-badge" :class="authBadgeClass(user)">
+                                <i class="fas" :class="authIcon(user)"></i>{{ authLabel(user) }}
+                            </span>
                         </td>
 
                         <!-- Rules -->
@@ -730,6 +741,11 @@ export default {
             } catch { return dateStr }
         }
 
+        function isLocalAuth(user) { return !user.auth_provider || user.auth_provider === 'local' }
+        function authBadgeClass(user) { return isLocalAuth(user) ? 'ul-auth-badge--local' : 'ul-auth-badge--sso' }
+        function authIcon(user) { return isLocalAuth(user) ? 'fa-key' : 'fa-shield-halved' }
+        function authLabel(user) { return isLocalAuth(user) ? 'Local' : (user.auth_provider || 'SSO').toUpperCase() }
+
         // ── Lifecycle ─────────────────────────────────────────────────────
         onMounted(() => {
             fetchData()
@@ -750,7 +766,7 @@ export default {
             blurEnabled, revealedIds,
             allRoles, openRoleMenuUserId,
             footerInfo,
-            isSelf, initials, fromNow,
+            isSelf, initials, fromNow, isLocalAuth, authBadgeClass, authIcon, authLabel,
             onSearchInput, clearSearch, onFilterChange, resetFilters,
             setSort, sortIcon, onCardSortChange, goToPage, toggleReveal, fetchData,
             toggleRoleMenu, hasRole, toggleUserRole,

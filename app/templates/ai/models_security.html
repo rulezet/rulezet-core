@@ -5,6 +5,7 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/table/data-table.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ai/ai_providers.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -27,7 +28,8 @@
       </div>
     </div>
     <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
-      The Ollama server behind every AI feature, one shared model allowlist, and every AI call on this
+      The AI providers behind every AI feature (Ollama, Claude, ChatGPT, internal servers — one active at a
+      time), one shared model allowlist, and every AI call on this
       instance in one place — success, failure, and anything that looked like a
       prompt-injection attempt.
     </p>
@@ -35,7 +37,7 @@
 
   {{ ai_nav.ai_admin_nav('models') }}
 
-  <ollama-server-card :csrf-token="csrfToken" @saved="syncModels"></ollama-server-card>
+  <ai-providers-card :csrf-token="csrfToken" @changed="syncModels"></ai-providers-card>
 
   <system-status-card :csrf-token="csrfToken"></system-status-card>
 
@@ -54,13 +56,13 @@
         </div>
         <button class="btn btn-sm btn-outline-primary rounded-pill px-3" :disabled="syncing" @click="syncModels">
           <i class="fa-solid me-1" :class="syncing ? 'fa-spinner fa-spin' : 'fa-rotate'"></i>
-          [[ syncing ? 'Syncing…' : 'Sync from Ollama' ]]
+          [[ syncing ? 'Syncing…' : 'Sync from active provider' ]]
         </button>
       </div>
 
       <div v-if="loadingModels" class="text-center py-3 text-muted"><i class="fa-solid fa-spinner fa-spin"></i></div>
       <div v-else-if="!models.length" class="text-center py-4 text-muted small">
-        No models found — is Ollama running? Try "Sync from Ollama" above.
+        No models found — is the active provider reachable? Try "Sync from active provider" above.
       </div>
       <table v-else class="dt-table">
         <thead class="dt-thead"><tr><th class="dt-th">Model</th><th class="dt-th" style="width:120px;">Enabled</th></tr></thead>
@@ -107,6 +109,7 @@
         <option value="rule_analysis">Rule Analysis</option>
         <option value="rule_generator">Rule Generator</option>
         <option value="rule_fixer">Rule Fixer</option>
+        <option value="bundle_analysis">Bundle Analysis</option>
       </select>
     </template>
     <template #cell-username="{ item }">
@@ -135,14 +138,14 @@
 import UserChip          from '/static/js/components/UserChip.js'
 import DataTable          from '/static/js/components/table/data-table.js'
 import SystemStatusCard  from '/static/js/ai/systemStatusCard.js'
-import OllamaServerCard  from '/static/js/ai/ollamaServerCard.js'
+import AiProvidersCard   from '/static/js/ai/aiProvidersCard.js'
 import { create_message } from '/static/js/toaster.js'
 
 const { createApp, ref, computed } = Vue
 
 createApp({
     delimiters: ['[[', ']]'],
-    components: { 'user-chip': UserChip, 'data-table': DataTable, 'system-status-card': SystemStatusCard, 'ollama-server-card': OllamaServerCard },
+    components: { 'user-chip': UserChip, 'data-table': DataTable, 'system-status-card': SystemStatusCard, 'ai-providers-card': AiProvidersCard },
     setup() {
         const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || ''
         const models = ref([])

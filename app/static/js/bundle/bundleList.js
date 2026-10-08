@@ -52,6 +52,7 @@ import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDis
 import AttackDisplayList        from '/static/js/attack/attackDisplayList.js'
 import UserChip                 from '/static/js/components/UserChip.js'
 import CodeViewer               from '/static/js/components/code-viewer.js'
+import { renderSafeMarkdown }   from '/static/js/bundle/bundleFileTypes.js'
 import { create_message }       from '/static/js/toaster.js'
 import ReportModal              from '/static/js/components/ReportModal.js'
 import VoterPopover             from '/static/js/components/VoterPopover.js'
@@ -85,6 +86,7 @@ export default {
         showFilters:        { type: Boolean,          default: true },
         showCreate:         { type: Boolean,          default: false },
         canVote:            { type: Boolean,          default: false },
+        canFavorite:        { type: Boolean,          default: false },
         bulkActions:        { type: Array,            default: () => [] },
         initialPerPage:     { type: Number,           default: 12 },
         hiddenFilters:      { type: Array,            default: () => [] },
@@ -94,7 +96,7 @@ export default {
         syncUrl:            { type: Boolean,          default: true },
     },
 
-    emits: ['create', 'delete', 'vote', 'bulk-action', 'send'],
+    emits: ['create', 'delete', 'vote', 'favorite', 'bulk-action', 'send'],
 
     expose: ['fetchData'],
 
@@ -124,7 +126,8 @@ export default {
                     <option value="newest">Newest</option>
                     <option value="oldest">Oldest</option>
                     <option value="most_voted">Most voted</option>
-                    <option value="most_viewed">Most viewed</option>
+                    <option value="recently_updated">Recently updated</option>
+                    <option value="most_downloaded">Most downloaded</option>
                     <option value="name_asc">A → Z</option>
                 </select>
 
@@ -358,17 +361,19 @@ export default {
                     <i class="fa-solid fa-layer-group"></i>
                 </div>
 
-                <!-- Top-right badges -->
-                <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
-                    <span v-if="bundle.is_verified"
-                          class="badge bg-primary shadow-sm pt-1" title="Verified bundle">
-                        <i class="fas fa-circle-check me-1"></i>Verified
+                <!-- Top-right status chips (same language as the detail page) -->
+                <div class="position-absolute top-0 end-0 mt-3 me-3 bl-chips" style="z-index:2;">
+                    <a v-if="bundle.latest_release" class="bl-chip bl-chip--release"
+                       :href="'/bundle/detail/' + bundle.id + '?release=' + encodeURIComponent(bundle.latest_release.version) + '#structure'"
+                       :title="'Latest release (' + bundle.release_count + ' in total) — open it'">
+                        <i class="fa-solid fa-tag"></i>{{ bundle.latest_release.version }}
+                    </a>
+                    <span v-if="bundle.is_verified" class="bl-chip bl-chip--blue" title="Verified bundle">
+                        <i class="fa-solid fa-circle-check"></i>Verified
                     </span>
-                    <span class="badge shadow-sm pt-1"
-                          :class="bundle.access ? 'bg-success' : 'bg-secondary'"
+                    <span class="bl-chip" :class="bundle.access ? 'bl-chip--green' : 'bl-chip--red'"
                           :title="bundle.access ? 'Public bundle' : 'Private bundle'">
-                        <i :class="bundle.access ? 'fas fa-lock-open me-1' : 'fas fa-lock me-1'"></i>
-                        {{ bundle.access ? 'Public' : 'Private' }}
+                        <i :class="bundle.access ? 'fa-solid fa-lock-open' : 'fa-solid fa-lock'"></i>{{ bundle.access ? 'Public' : 'Private' }}
                     </span>
                 </div>
 
@@ -400,25 +405,35 @@ export default {
                             <user-chip :user-id="bundle.user_id" :username="bundle.user_name"
                                        :avatar="bundle.author_avatar" size="xs"></user-chip>
                             <span class="text-muted opacity-50">|</span>
-                            <small class="text-muted">{{ fromNow(bundle.created_at) }}</small>
+                            <small class="text-muted" :title="'Created ' + bundle.created_at + ' · updated ' + bundle.updated_at">
+                                <i class="fa-regular fa-clock me-1"></i>updated {{ fromNow(bundle.updated_at || bundle.created_at) }}
+                            </small>
                         </div>
                     </div>
 
                     <!-- Description -->
-                    <p class="rl-card-desc mb-3"
-                       style="-webkit-line-clamp:3;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden;">
-                        <span v-html="highlight(bundle.description || 'No description.')"></span>
-                    </p>
+                    <div v-if="bundle.description" class="rl-card-desc bl-md-desc bl-md-desc--card mb-3"
+                         v-html="descFor(bundle)"></div>
+                    <p v-else class="rl-card-desc mb-3 fst-italic">No description.</p>
 
-                    <!-- Format badges + rule count -->
-                    <div class="d-flex flex-wrap gap-1 mb-2" @click.stop>
-                        <span class="badge rounded-pill bg-dark pt-1 shadow-sm"
-                              v-for="fmt in (bundle.list_of_format_of_rules || [])" :key="fmt">
-                            {{ fmt.toUpperCase() }}
+                    <!-- Key figures (same as the table columns) -->
+                    <div class="bl-stats mb-2">
+                        <span class="bl-stat bl-stat--blue" title="Rules">
+                            <i class="fa-solid fa-shield-halved"></i><b>{{ bundle.number_of_rules }}</b> rule{{ bundle.number_of_rules !== 1 ? 's' : '' }}
                         </span>
-                        <span class="badge rounded-pill bg-primary pt-1 shadow-sm">
-                            <i class="fas fa-file-code me-1"></i>{{ bundle.number_of_rules }} rule{{ bundle.number_of_rules !== 1 ? 's' : '' }}
+                        <span v-if="bundle.number_of_files != null" class="bl-stat bl-stat--teal" title="Files & documents (README, notes, IOCs…)">
+                            <i class="fa-solid fa-file-lines"></i><b>{{ bundle.number_of_files || 0 }}</b> file{{ bundle.number_of_files !== 1 ? 's' : '' }}
                         </span>
+                        <span v-if="bundle.number_of_folders != null" class="bl-stat" title="Folders">
+                            <i class="fa-solid fa-folder"></i><b>{{ bundle.number_of_folders || 0 }}</b>
+                        </span>
+                        <span class="bl-stat bl-stat--green" title="Downloads">
+                            <i class="fa-solid fa-download"></i><b>{{ bundle.download_count || 0 }}</b>
+                        </span>
+                    </div>
+                    <div v-if="formatsOf(bundle)" class="bl-fmt-row mb-2" :title="'Rule formats: ' + formatsShort(bundle, 3).all">
+                        <span v-for="f in formatsShort(bundle, 3).shown" :key="f" class="bl-fmt">{{ f }}</span>
+                        <span v-if="formatsShort(bundle, 3).more" class="bl-fmt bl-fmt--more">+{{ formatsShort(bundle, 3).more }}</span>
                     </div>
 
                     <!-- CVEs -->
@@ -445,17 +460,13 @@ export default {
 
                     <!-- Meta strip -->
                     <div class="rl-card-meta">
-                        <span class="rl-meta-item">
-                            <i class="fas fa-eye"></i>
-                            <span>{{ bundle.view_count }} views</span>
-                        </span>
-                        <span class="rl-meta-item">
-                            <i class="fas fa-download"></i>
-                            <span>{{ bundle.download_count }} downloads</span>
-                        </span>
                         <span class="rl-meta-item rl-meta-item--uuid" :title="bundle.uuid">
                             <i class="fas fa-fingerprint"></i>
                             <span>{{ bundle.uuid }}</span>
+                        </span>
+                        <span v-if="bundle.release_count" class="rl-meta-item" :title="bundle.release_count + ' release(s)'">
+                            <i class="fa-solid fa-tags"></i>
+                            <span>{{ bundle.release_count }} release{{ bundle.release_count !== 1 ? 's' : '' }}</span>
                         </span>
                     </div>
 
@@ -491,6 +502,15 @@ export default {
                                     @click="toggleExpand(bundle)">
                                 <i :class="expandedIds.has(bundle.id) ? 'fas fa-eye-slash' : 'fas fa-list'"
                                    style="font-size:.72rem;"></i>
+                            </button>
+
+                            <!-- Favorite -->
+                            <button v-if="canFavorite"
+                                    @click="handleFavorite(bundle)"
+                                    class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
+                                    style="width:32px;height:32px;border:1px solid #eee;"
+                                    :title="bundle.is_favorited ? 'Remove from favorites' : 'Add to favorites'">
+                                <i class="fa-star" :class="bundle.is_favorited ? 'fas text-warning' : 'far'"></i>
                             </button>
 
                             <!-- More dropdown -->
@@ -651,6 +671,8 @@ export default {
                         <th v-show="colVisible.description" class="dt-th">Description</th>
                         <th v-show="colVisible.author" class="dt-th" style="width:140px;">Author</th>
                         <th v-show="colVisible.rules" class="dt-th" style="width:120px;">Rules</th>
+                        <th v-show="colVisible.files" class="dt-th" style="width:90px;">Files</th>
+                        <th v-show="colVisible.release" class="dt-th" style="width:110px;">Release</th>
                         <th v-show="colVisible.tags" class="dt-th" style="width:160px;">Tags</th>
                         <th v-show="colVisible.cves" class="dt-th" style="width:130px;">CVEs</th>
                         <th v-show="colVisible.attacks" class="dt-th" style="width:180px;">ATT&amp;CK</th>
@@ -660,6 +682,22 @@ export default {
                             @click="setSort('created_at')">
                             <div class="dt-th-inner">
                                 Created <i class="fas dt-sort-icon" :class="sortIcon('created_at')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.updated"
+                            class="dt-th dt-th--sortable" style="width:110px;"
+                            :class="{ 'dt-th--sorted': sortKey === 'updated_at' }"
+                            @click="setSort('updated_at')">
+                            <div class="dt-th-inner">
+                                Updated <i class="fas dt-sort-icon" :class="sortIcon('updated_at')"></i>
+                            </div>
+                        </th>
+                        <th v-show="colVisible.downloads"
+                            class="dt-th dt-th--sortable" style="width:90px;"
+                            :class="{ 'dt-th--sorted': sortKey === 'download_count' }"
+                            @click="setSort('download_count')">
+                            <div class="dt-th-inner">
+                                <i class="fa-solid fa-download"></i> <i class="fas dt-sort-icon" :class="sortIcon('download_count')"></i>
                             </div>
                         </th>
                         <th v-show="colVisible.votes"
@@ -689,15 +727,13 @@ export default {
                             </td>
 
                             <td class="dt-td" style="max-width:200px;word-break:break-word;">
-                                <div class="d-flex align-items-center gap-1 mb-1 flex-wrap">
-                                    <span v-if="bundle.is_verified"
-                                          class="badge bg-primary pt-1" style="font-size:.62rem;">
-                                        <i class="fas fa-circle-check"></i>
+                                <div class="bl-chips bl-chips--sm mb-1">
+                                    <span v-if="bundle.is_verified" class="bl-chip bl-chip--blue" title="Verified bundle">
+                                        <i class="fa-solid fa-circle-check"></i>
                                     </span>
-                                    <span class="badge pt-1"
-                                          :class="bundle.access ? 'bg-success' : 'bg-secondary'"
-                                          style="font-size:.62rem;">
-                                        <i :class="bundle.access ? 'fas fa-lock-open' : 'fas fa-lock'"></i>
+                                    <span class="bl-chip" :class="bundle.access ? 'bl-chip--green' : 'bl-chip--red'"
+                                          :title="bundle.access ? 'Public bundle' : 'Private bundle'">
+                                        <i :class="bundle.access ? 'fa-solid fa-lock-open' : 'fa-solid fa-lock'"></i>{{ bundle.access ? 'Public' : 'Private' }}
                                     </span>
                                 </div>
                                 <a :href="'/bundle/detail/' + bundle.id" class="dt-rule-title"
@@ -706,7 +742,7 @@ export default {
 
                             <td v-show="colVisible.description" class="dt-td dt-td--truncate">
                                 <span class="text-muted"
-                                      v-html="highlight(bundle.description || '—')"></span>
+                                      v-html="highlight(mdToText(bundle.description) || '—')"></span>
                             </td>
 
                             <td v-show="colVisible.author" class="dt-td" @click.stop>
@@ -715,17 +751,27 @@ export default {
                             </td>
 
                             <td v-show="colVisible.rules" class="dt-td">
-                                <div class="d-flex flex-wrap gap-1">
-                                    <span class="badge rounded-pill bg-primary pt-1"
-                                          style="font-size:.65rem;">
-                                        {{ bundle.number_of_rules }}
-                                        <i class="fas fa-file-code ms-1"></i>
-                                    </span>
-                                    <span v-for="fmt in (bundle.list_of_format_of_rules || [])" :key="fmt"
-                                          class="badge rounded-pill bg-dark pt-1" style="font-size:.62rem;">
-                                        {{ fmt.toUpperCase() }}
-                                    </span>
+                                <span class="bl-stat bl-stat--blue"><i class="fa-solid fa-shield-halved"></i><b>{{ bundle.number_of_rules }}</b></span>
+                                <div v-if="formatsOf(bundle)" class="bl-fmt-row mt-1" :title="'Rule formats: ' + formatsShort(bundle).all">
+                                    <span v-for="f in formatsShort(bundle).shown" :key="f" class="bl-fmt">{{ f }}</span>
+                                    <span v-if="formatsShort(bundle).more" class="bl-fmt bl-fmt--more">+{{ formatsShort(bundle).more }}</span>
                                 </div>
+                            </td>
+
+                            <td v-show="colVisible.files" class="dt-td">
+                                <span v-if="bundle.number_of_files != null" class="bl-stat bl-stat--teal" :title="(bundle.number_of_folders || 0) + ' folder(s)'">
+                                    <i class="fa-solid fa-file-lines"></i><b>{{ bundle.number_of_files }}</b>
+                                </span>
+                                <span v-else class="text-muted small">—</span>
+                            </td>
+
+                            <td v-show="colVisible.release" class="dt-td">
+                                <a v-if="bundle.latest_release" class="bl-chip bl-chip--release"
+                                   :href="'/bundle/detail/' + bundle.id + '?release=' + encodeURIComponent(bundle.latest_release.version) + '#structure'"
+                                   :title="'Latest of ' + bundle.release_count + ' release(s) — ' + bundle.latest_release.created_at">
+                                    <i class="fa-solid fa-tag"></i>{{ bundle.latest_release.version }}
+                                </a>
+                                <span v-else class="text-muted small">—</span>
                             </td>
 
                             <td v-show="colVisible.tags" class="dt-td" @click.stop>
@@ -755,6 +801,15 @@ export default {
                                 {{ formatDate(bundle.created_at) }}
                             </td>
 
+                            <td v-show="colVisible.updated" class="dt-td" style="white-space:nowrap;font-size:.78rem;"
+                                :title="bundle.updated_at">
+                                {{ fromNow(bundle.updated_at || bundle.created_at) }}
+                            </td>
+
+                            <td v-show="colVisible.downloads" class="dt-td">
+                                <span class="bl-stat bl-stat--green"><i class="fa-solid fa-download"></i><b>{{ bundle.download_count || 0 }}</b></span>
+                            </td>
+
                             <td v-show="colVisible.votes" class="dt-td">
                                 <div class="rl-vote-row">
                                     <voter-popover :fetch-url="'/bundle/voters?bundleId=' + bundle.id + '&voteType=up'" label="Liked by">
@@ -778,6 +833,13 @@ export default {
 
                             <td class="dt-td dt-td--actions">
                                 <div class="dt-actions">
+                                    <button v-if="canFavorite"
+                                            class="dt-action-btn"
+                                            :class="{ 'rl-fav-active': bundle.is_favorited }"
+                                            :title="bundle.is_favorited ? 'Remove from favorites' : 'Add to favorites'"
+                                            @click.stop="handleFavorite(bundle)">
+                                        <i class="fa-star" :class="bundle.is_favorited ? 'fas' : 'far'"></i>
+                                    </button>
                                     <div class="rl-action-dropdown" @click.stop>
                                         <button class="dt-action-btn rl-action-dropdown-toggle" title="More actions">
                                             <i class="fas fa-ellipsis-v" style="font-size:.7rem;"></i>
@@ -848,10 +910,6 @@ export default {
                                             <span class="rl-expand-v">{{ bundle.number_of_rules }}</span>
                                         </div>
                                         <div class="rl-expand-kv">
-                                            <span class="rl-expand-k">Views</span>
-                                            <span class="rl-expand-v">{{ bundle.view_count }}</span>
-                                        </div>
-                                        <div class="rl-expand-kv">
                                             <span class="rl-expand-k">Downloads</span>
                                             <span class="rl-expand-v">{{ bundle.download_count }}</span>
                                         </div>
@@ -868,9 +926,10 @@ export default {
                                         <span class="rl-expand-k">
                                             <i class="fas fa-quote-left me-1 opacity-50"></i>Description
                                         </span>
-                                        <p class="mb-0 text-muted" style="font-size:.83rem;line-height:1.5;">
-                                            {{ bundle.description }}
-                                        </p>
+                                        <div class="bl-md-desc bl-md-desc--expand" v-html="descFor(bundle)"></div>
+                                        <a :href="'/bundle/detail/' + bundle.id" class="bl-md-more">
+                                            Full description <i class="fa-solid fa-arrow-right ms-1"></i>
+                                        </a>
                                     </div>
 
                                     <!-- Tags + CVEs + Rules list -->
@@ -1079,13 +1138,19 @@ export default {
             { key: 'description', label: 'Description' },
             { key: 'author',      label: 'Author'      },
             { key: 'rules',       label: 'Rules'       },
+            { key: 'files',       label: 'Files'       },
+            { key: 'release',     label: 'Release'     },
             { key: 'tags',        label: 'Tags'        },
             { key: 'cves',        label: 'CVEs'        },
             { key: 'attacks',     label: 'ATT&CK'      },
             { key: 'created',     label: 'Created'     },
+            { key: 'updated',     label: 'Updated'     },
+            { key: 'downloads',   label: 'Downloads'   },
             { key: 'votes',       label: 'Votes'       },
         ]
-        const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, true])))
+        // Hidden by default — available from the column picker
+        const HIDDEN_BY_DEFAULT = new Set(['release', 'updated', 'files'])
+        const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, !HIDDEN_BY_DEFAULT.has(c.key)])))
         function toggleColumn(key) { colVisible[key] = !colVisible[key] }
 
         // ── Selection ─────────────────────────────────────────────────────
@@ -1294,7 +1359,8 @@ export default {
                 newest:      { key: 'created_at', dir: 'desc' },
                 oldest:      { key: 'created_at', dir: 'asc'  },
                 most_voted:  { key: 'vote_up',    dir: 'desc' },
-                most_viewed: { key: 'view_count',  dir: 'desc' },
+                recently_updated: { key: 'updated_at', dir: 'desc' },
+                most_downloaded:  { key: 'download_count', dir: 'desc' },
                 name_asc:    { key: 'name',        dir: 'asc'  },
             }
             const s = map[cardSort.value]
@@ -1373,13 +1439,26 @@ export default {
         async function handleVote(type, bundle) {
             if (!props.canVote) return
             try {
-                const res  = await fetch(`/bundle/evaluate?bundleId=${bundle.id}&voteType=${type}`)
+                const res  = await fetch(`/bundle/evaluate?bundleId=${bundle.id}&voteType=${type}`, { method: 'POST', headers: { 'X-CSRFToken': props.csrfToken } })
                 const data = await res.json()
                 if (res.ok) {
                     bundle.vote_up   = data.vote_up
                     bundle.vote_down = data.vote_down
                     bundle.user_vote = data.user_vote ?? null
                     emit('vote', { bundleId: bundle.id, type })
+                }
+            } catch {}
+        }
+
+        // ── Favorite ──────────────────────────────────────────────────────
+        async function handleFavorite(bundle) {
+            if (!props.canFavorite) return
+            try {
+                const res  = await fetch(`/bundle/favorite/${bundle.id}`, { method: 'POST', headers: { 'X-CSRFToken': props.csrfToken || _csrf() } })
+                const data = await res.json()
+                if (res.ok && data.success) {
+                    bundle.is_favorited = data.is_favorited
+                    emit('favorite', { bundleId: bundle.id, isFavorited: data.is_favorited })
                 }
             } catch {}
         }
@@ -1413,15 +1492,82 @@ export default {
         })
 
         // ── Highlight ────────────────────────────────────────────────────
+        // "sigma · suricata · yara" — discreet, same in card and table
+        function _formats(b) {
+            return [...new Set((b.list_of_format_of_rules || []).filter(Boolean).map(f => f.toLowerCase()))].sort()
+        }
+        function formatsOf(b) { return _formats(b).join(' · ') }
+        // Compact list: the first `max` formats, the rest as "+N" (full list in the tooltip)
+        function formatsShort(b, max = 2) {
+            const f = _formats(b)
+            return { shown: f.slice(0, max), more: Math.max(0, f.length - max), all: f.join(' · ') }
+        }
+
+        // Descriptions are markdown — list views show them as plain text
+        function mdToText(md) {
+            if (!md) return ''
+            return String(md)
+                .replace(/```[\s\S]*?```/g, ' ')              // fenced code
+                .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')      // images -> alt
+                .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')       // links -> text
+                .replace(/<[^>]+>/g, ' ')                       // raw html
+                .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, '') // headings, quotes, lists
+                .replace(/(\*\*|__|\*|_|~~|`)/g, '')           // emphasis / inline code
+                .replace(/^\s*([-*_]\s*){3,}$/gm, ' ')           // hr
+                .replace(/\s+/g, ' ')
+                .trim()
+        }
+
+        // Rendered (sanitised + hardened) markdown per bundle, cached by
+        // id+content; search matches are highlighted inside text nodes only.
+        const _descCache = reactive({})
+        function _descKey(b) { return b.id + ':' + (b.description || '').length + ':' + (b.description || '').slice(0, 32) }
+        watch(items, (list) => {
+            for (const b of list || []) {
+                const k = _descKey(b)
+                if (!b.description || _descCache[k] !== undefined) continue
+                _descCache[k] = ''
+                renderSafeMarkdown(b.description).then(html => { _descCache[k] = html }).catch(() => {})
+            }
+        }, { immediate: true })
+
+        function _highlightHtml(html) {
+            const q = search.value.trim()
+            if (!html || !q || q.length < 2) return html
+            const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            const re = new RegExp(pattern, 'gi')
+            const doc = new DOMParser().parseFromString(html, 'text/html')
+            const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+            const nodes = []
+            while (walker.nextNode()) nodes.push(walker.currentNode)
+            for (const n of nodes) {
+                if (!re.test(n.nodeValue)) continue
+                re.lastIndex = 0
+                const span = doc.createElement('span')
+                span.innerHTML = n.nodeValue.split(new RegExp(`(${pattern})`, 'gi'))
+                    .map((part, i) => i % 2 ? `<mark class="rl-highlight">${_esc(part)}</mark>` : _esc(part))
+                    .join('')
+                n.replaceWith(...span.childNodes)
+            }
+            return doc.body.innerHTML
+        }
+
+        function descFor(b) {
+            const html = _descCache[_descKey(b)]
+            // Until the markdown is rendered, show the plain-text version
+            return html ? _highlightHtml(html) : highlight(mdToText(b.description))
+        }
+
         function highlight(text) {
             if (!text) return ''
             const q = search.value.trim()
             if (!q || q.length < 2) return _esc(text)
             const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-            return _esc(text).replace(
-                new RegExp(escaped, 'gi'),
-                m => `<mark class="rl-highlight">${m}</mark>`
-            )
+            // Match on the raw text, then escape each piece — matching on the
+            // escaped text would break entities ("amp" inside "&amp;").
+            return String(text).split(new RegExp(`(${escaped})`, 'gi'))
+                .map((part, i) => i % 2 ? `<mark class="rl-highlight">${_esc(part)}</mark>` : _esc(part))
+                .join('')
         }
         function _esc(s) {
             return String(s)
@@ -1481,8 +1627,8 @@ export default {
             toggleExpand, expandAll, collapseAll,
             toggleRuleExpand, isRuleExpanded,
             fetchBundleRules,
-            handleVote, emitBulkAction, emitSend,
-            fromNow, formatDate, highlight,
+            handleVote, handleFavorite, emitBulkAction, emitSend,
+            fromNow, formatDate, highlight, mdToText, descFor, formatsOf, formatsShort,
         }
     },
 }

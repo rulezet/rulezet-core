@@ -45,7 +45,9 @@ echo -e "\n${YELLOW}Updating Git submodules...${NC}"
 # remote branch here too, just like misp-taxonomies/misp-galaxy.
 git submodule update --init --recursive app/modules/rulezet-validation
 git submodule update --remote app/modules/rulezet-cast app/modules/misp-taxonomies app/modules/misp-galaxy app/modules/rulezet-validation 2>/dev/null || git submodule update --remote
-git submodule update app/modules/pivotick
+# pivotick + pivotick-converters stay pinned; their browser builds are committed
+# (app/static/js/pivotick.iife.js, app/static/js/pivotick/) — see `manage.py pivotick`.
+git submodule update --init app/modules/pivotick app/modules/pivotick-converters
 # Update cti with shallow fetch to keep the footprint small
 echo -e "${YELLOW}Pulling latest MITRE CTI data (shallow)...${NC}"
 git submodule update --remote --depth 1 app/modules/cti 2>/dev/null && \

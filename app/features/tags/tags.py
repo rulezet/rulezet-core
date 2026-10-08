@@ -2,7 +2,9 @@ from flask import Blueprint, flash, jsonify, render_template, request
 from flask_login import current_user, login_required
 import app.features.tags.tags_core as tags_core
 import app.features.rule.rule_core as RuleModel
+from app import db
 from app.core.utils.activity_log import log_activity
+from app.core.utils.utils import as_db_id, json_object
 
 
 tags_blueprint = Blueprint(
@@ -27,7 +29,8 @@ def _admin_only():
 def _can_edit_tag(tag_id):
     """Return error response if current user cannot edit this tag."""
     from app.core.db_class.db import Tag
-    tag = Tag.query.get(tag_id)
+    tag_id = as_db_id(tag_id)
+    tag = db.session.get(Tag, tag_id) if tag_id else None
     if not tag:
         return {"status": "error", "message": "Tag not found."}, 404
     if not current_user.is_admin() and tag.created_by != current_user.id:
@@ -39,13 +42,47 @@ def _can_edit_tag(tag_id):
 def _can_delete_tag(tag_id):
     """Return error response if current user cannot delete this tag."""
     from app.core.db_class.db import Tag
-    tag = Tag.query.get(tag_id)
+    tag_id = as_db_id(tag_id)
+    tag = db.session.get(Tag, tag_id) if tag_id else None
     if not tag:
         return {"status": "error", "message": "Tag not found."}, 404
     if not current_user.is_admin() and tag.created_by != current_user.id:
         return {"status": "error", "message": "You can only delete your own tags.",
                 "toast_class": "danger-subtle"}, 403
     return None
+
+
+TAG_NAME_MAX = 1000                      # same cap as the MISP taxonomy / galaxy imports
+_TAG_FIELD_MAX = {"color": 50, "icon": 50}   # their column sizes
+
+
+def _tag_fields(data, *, creating):
+    """(fields, error message) — the tag fields a create / edit body may set,
+    checked: a non-blank text name, text (or null) optional fields that fit
+    their column, a known visibility, no NUL character (PostgreSQL refuses
+    it). Status, approval, author and source are never taken from the body."""
+    name = data.get('name')
+    if not isinstance(name, str) or not name.strip():
+        return None, "Tag name is required."
+    fields = {"name": name.strip()}
+    if len(fields["name"]) > TAG_NAME_MAX:
+        return None, f"Tag name is too long (max {TAG_NAME_MAX} characters)."
+    for key in ("description", "color", "icon", "external_id"):
+        if key not in data:
+            continue
+        value = data[key]
+        if value is not None and not isinstance(value, str):
+            return None, f"{key} must be text."
+        if value and key in _TAG_FIELD_MAX and len(value) > _TAG_FIELD_MAX[key]:
+            return None, f"{key} is too long (max {_TAG_FIELD_MAX[key]} characters)."
+        fields[key] = value
+    if creating:
+        fields["visibility"] = data.get('visibility', 'private')
+        if fields["visibility"] not in ('public', 'private'):
+            return None, "visibility must be 'public' or 'private'."
+    if any(isinstance(v, str) and '\x00' in v for v in fields.values()):
+        return None, "Tag fields cannot contain NUL characters."
+    return fields, None
 
 
 # ─── Pages ───────────────────────────────────────────────────────────────────
@@ -55,7 +92,7 @@ def _can_delete_tag(tag_id):
 def list_tags():
     if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         flash('You need to be admin to access this page.', 'danger')
-        return render_template("access_denied.html")
+        return render_template("access_denied.html"), 403
     return render_template('tags/list.html', tag_manager_view=not current_user.is_admin())
 
 
@@ -97,7 +134,29 @@ def get_tags_bundle():
 @login_required
 def get_all_tags():
     tags = tags_core.get_all_tags(request.args)
-    return {"status": "success", "tags": [t.to_json() for t in tags], "total_tags": len(tags)}, 200
+    # lean=1: the slim picker payload (TagInput's live search) instead of the
+    # full Tag.to_json() — default unchanged for every other caller.
+    serialize = tags_core.picker_tag_json if request.args.get('lean') == '1' else (lambda t: t.to_json())
+    return {"status": "success", "tags": [serialize(t) for t in tags], "total_tags": len(tags)}, 200
+
+
+@tags_blueprint.route('/picker/namespaces', methods=['GET'])
+@login_required
+def picker_namespaces():
+    """Folders of the tag picker (TagInput.js), with their tag counts —
+    loaded when the picker opens instead of every tag."""
+    return {"status": "success", "groups": tags_core.picker_namespaces(request.args)}, 200
+
+
+@tags_blueprint.route('/picker/tags', methods=['GET'])
+@login_required
+def picker_tags():
+    """One page of one picker folder (?type=Public|Private&namespace=…&page=)."""
+    try:
+        data = tags_core.picker_tags(request.args)
+    except ValueError:
+        return {"status": "error", "message": "page and per_page must be integers"}, 400
+    return {"status": "success", **data}, 200
 
 
 @tags_blueprint.route('/get_all_tags_by_type', methods=['GET'])
@@ -146,12 +205,18 @@ def get_family():
 def delete_family():
     err = _admin_only()
     if err: return err
-    data = request.json or {}
+    data = json_object()
     family = data.get('family')
     source = data.get('source')
-    if not family:
+    if not isinstance(family, str) or not family.strip():
         return {"status": "error", "message": "Family is required."}, 400
+    if source is not None and not isinstance(source, str):
+        return {"status": "error", "message": "source must be text."}, 400
     deleted, msg = tags_core.remove_family(family, source)
+    if deleted is None:
+        return {"status": "error", "message": msg, "toast_class": "danger-subtle"}, 500
+    if not deleted:
+        return {"status": "error", "deleted": 0, "message": msg, "toast_class": "warning-subtle"}, 404
     log_activity(
         "tag.family_delete",
         f"Deleted tag family '{family}' (source={source or 'all'}): {deleted} tag(s) removed",
@@ -168,8 +233,13 @@ def delete_family():
 def remove_tag():
     err = _admin_only()
     if err: return err
-    tag_id = request.args.get("tag_id")
+    from app.core.db_class.db import Tag
+    tag_id = as_db_id(request.args.get("tag_id"))
+    if not tag_id or not db.session.get(Tag, tag_id):
+        return {"status": "error", "message": "Tag not found.", "toast_class": "danger-subtle"}, 404
     success, message = tags_core.remove_tag(tag_id)
+    if success:
+        log_activity("tag.delete", f"Deleted tag id={tag_id}", target_type="tag", target_id=tag_id)
     cls = "success-subtle" if success else "danger-subtle"
     return {"status": "success" if success else "error", "message": message, "toast_class": cls}, (200 if success else 500)
 
@@ -178,25 +248,27 @@ def remove_tag():
 @login_required
 def remove_tags_bulk():
     """Bulk delete tags. Admin: any tags. User: only their own Manual tags."""
-    data = request.json or {}
-    ids  = data.get('ids', [])
+    ids = json_object().get('ids', [])
     if not isinstance(ids, list):
         return {"status": "error", "message": "ids must be a list."}, 400
+    ids = [as_db_id(i) for i in ids]
+    if None in ids:
+        return {"status": "error", "message": "ids must be tag ids."}, 400
 
     # non-admins: filter to only their own tags
     if not current_user.is_admin():
         from app.core.db_class.db import Tag
         owned = {t.id for t in Tag.query.filter(
-            Tag.id.in_([int(i) for i in ids]),
+            Tag.id.in_(ids),
             Tag.created_by == current_user.id,
             Tag.source == 'Manual',
         ).all()}
-        ids = [i for i in ids if int(i) in owned]
+        ids = [i for i in ids if i in owned]
         if not ids:
             return {"status": "error", "message": "No eligible tags to delete.", "toast_class": "warning-subtle"}, 400
 
     deleted, msg = tags_core.remove_tags_bulk(ids)
-    if deleted > 0:
+    if deleted:
         log_activity(
             "tag.bulk_delete",
             f"Bulk deleted {deleted} tag(s) (ids={ids[:10]}{'...' if len(ids) > 10 else ''})",
@@ -204,6 +276,8 @@ def remove_tags_bulk():
             is_public=False,
         )
         return {"status": "success", "deleted": deleted, "message": msg, "toast_class": "success-subtle"}, 200
+    if deleted == 0:
+        return {"status": "error", "deleted": 0, "message": "No matching tags.", "toast_class": "warning-subtle"}, 404
     return {"status": "error", "deleted": 0, "message": msg, "toast_class": "danger-subtle"}, 500
 
 
@@ -216,6 +290,8 @@ def toggle_visibility():
     if not tag_uuid:
         return {"status": "error", "message": "Tag UUID is required."}, 400
     success, message = tags_core.toggle_tag_visibility(tag_uuid)
+    if message == "Tag not found.":
+        return {"status": "error", "message": message, "toast_class": "danger-subtle"}, 404
     if success:
         log_activity("tag.toggle_visibility", f"Toggled visibility of tag uuid={tag_uuid}",
                      target_type="tag", target_uuid=tag_uuid)
@@ -232,6 +308,8 @@ def toggle_status():
     if not tag_uuid:
         return {"status": "error", "message": "Tag UUID is required."}, 400
     success, message = tags_core.toggle_tag_status(tag_uuid)
+    if message == "Tag not found.":
+        return {"status": "error", "message": message, "toast_class": "danger-subtle"}, 404
     if success:
         log_activity("tag.toggle_status", f"Toggled status of tag uuid={tag_uuid}",
                      target_type="tag", target_uuid=tag_uuid)
@@ -247,27 +325,30 @@ def edit_tag(tag_id):
     if err: return err
     if not tag_id:
         return {"status": "error", "message": "Tag ID is required."}, 400
-    success, message = tags_core.edit_tag(request.json, tag_id)
+    fields, error = _tag_fields(json_object(), creating=False)
+    if error:
+        return {"status": "error", "message": error, "toast_class": "danger-subtle"}, 400
+    success, message = tags_core.edit_tag(fields, tag_id)
     if success:
         log_activity("tag.edit", f"Edited tag id={tag_id}",
                      target_type="tag", target_id=tag_id)
         return {"status": "success", "message": message, "toast_class": "success-subtle"}, 200
     if not message:
         return {"status": "error", "message": "Error while updating tag", "toast_class": "danger-subtle"}, 500
-    return {"status": "error", "message": message, "toast_class": "warning-subtle"}, 201
+    # "Tag not found." / a name or external id already used by another tag
+    status = 404 if message == "Tag not found." else 409
+    return {"status": "error", "message": message, "toast_class": "warning-subtle"}, status
 
 
 @tags_blueprint.route('/create_tag', methods=['POST'])
 @login_required
 def create_tag():
-    data = request.json
-    if not data or not data.get('name'):
-        return {"status": "error", "message": "Tag name is required."}, 400
-    if 'visibility' not in data:
-        data['visibility'] = 'private'
-    tag = tags_core.create_tag(data, current_user)
+    fields, error = _tag_fields(json_object(), creating=True)
+    if error:
+        return {"status": "error", "message": error, "toast_class": "danger-subtle"}, 400
+    tag = tags_core.create_tag(fields, current_user)   # always a "Manual" tag
     if tag is False:
-        return {"status": "error", "message": "A tag with this name already exists.", "toast_class": "warning-subtle"}, 201
+        return {"status": "error", "message": "A tag with this name already exists.", "toast_class": "warning-subtle"}, 409
     if tag is None:
         return {"status": "error", "message": "Error while creating tag", "toast_class": "danger-subtle"}, 500
     log_activity("tag.create", f"Created tag '{tag.name}'",
@@ -321,7 +402,8 @@ def add_tag_misp():
         return {"success": False, "message": "UUID is required.", "toast_class": "danger-subtle"}, 400
     success, message = tags_core.add_tags_from_misp_taxonomy(uuid_param, created_by=current_user)
     cls = "success-subtle" if success else "danger-subtle"
-    return {"success": bool(success), "message": message, "toast_class": cls}, (200 if success else 500)
+    status = 200 if success else (404 if message == "Taxonomy not found" else 400)
+    return {"success": bool(success), "message": message, "toast_class": cls}, status
 
 
 # ─── MISP Galaxies ───────────────────────────────────────────────────────────
@@ -357,12 +439,17 @@ def add_tags_galaxy():
     err = _admin_only()
     if err: return err
     if request.method == 'POST':
-        data          = request.json or {}
+        data          = json_object()
         uuid_param    = data.get("uuid")
         cluster_uuids = data.get("cluster_uuids") or None
     else:
         uuid_param    = request.args.get("uuid")
         cluster_uuids = None
+    if not isinstance(uuid_param, str) or (
+            cluster_uuids is not None
+            and not (isinstance(cluster_uuids, list) and all(isinstance(u, str) for u in cluster_uuids))):
+        return jsonify({"message": "uuid must be text and cluster_uuids a list of uuids.",
+                        "toast_class": "danger-subtle"}), 400
     success, message = tags_core.add_tags_from_misp_galaxy(uuid_param, current_user, cluster_uuids)
     cls = "success-subtle" if success else "danger-subtle"
     return jsonify({"message": message, "toast_class": cls}), (200 if success else 400)
@@ -441,7 +528,7 @@ def import_all_galaxies():
 def validation():
     if not current_user.is_admin() and not current_user.has_permission('rule.tag_any'):
         flash('You need to be admin to access this page.', 'danger')
-        return render_template("access_denied.html")
+        return render_template("access_denied.html"), 403
     return render_template('tags/validation.html', tag_manager_view=not current_user.is_admin())
 
 
@@ -453,13 +540,9 @@ def launch_validation():
     err = _admin_only()
     if err: return err
 
-    data  = request.json or {}
-    full  = bool(data.get('full', False))
-    limit = data.get('limit')
-    try:
-        limit = int(limit) if limit else None
-    except (TypeError, ValueError):
-        limit = None
+    data  = json_object()
+    full  = data.get('full') is True
+    limit = as_db_id(data.get('limit'))   # a positive count, else no limit
 
     from app.features.jobs.jobs_core import create_job
     job = create_job(
@@ -684,15 +767,16 @@ def validation_dismiss():
     err = _admin_only()
     if err: return err
 
-    data = request.json or {}
+    data = json_object()
     from app.features.jobs.jobs_core import get_job_by_uuid
-    job = get_job_by_uuid(data.get('job_uuid', ''))
+    job_uuid = data.get('job_uuid')
+    job = get_job_by_uuid(job_uuid) if isinstance(job_uuid, str) else None
     if not job or job.job_type != 'rule_validation_run':
         return jsonify({"success": False, "message": "Validation run not found"}), 404
 
-    try:
-        rule_ids = {int(r) for r in (data.get('rule_ids') or [])}
-    except (TypeError, ValueError):
+    raw_ids = data.get('rule_ids') or []
+    rule_ids = {as_db_id(r) for r in raw_ids} if isinstance(raw_ids, list) else {None}
+    if None in rule_ids:
         return jsonify({"success": False, "message": "Invalid rule ids"}), 400
     if not rule_ids:
         return jsonify({"success": False, "message": "No rule ids given"}), 400

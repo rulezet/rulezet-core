@@ -54,6 +54,7 @@ const ProposalHistoryTable = {
                 { value: 'pending', label: 'Pending' },
                 { value: 'accepted', label: 'Accepted' },
                 { value: 'rejected', label: 'Rejected' },
+                { value: 'superseded', label: 'Superseded' },
             ];
             return all.filter(opt => this.availableStatuses.has(opt.value));
         }
@@ -102,12 +103,21 @@ const ProposalHistoryTable = {
                         rule_id: p.rule_id,
                         rule_name: p.rule_name,
                         proposals: [],
-                        counts: { pending: 0, accepted: 0, rejected: 0 }
+                        counts: { pending: 0, accepted: 0, rejected: 0, superseded: 0 }
                     });
                 }
                 const group = map.get(p.rule_id);
                 group.proposals.push(p);
                 if (p.status in group.counts) group.counts[p.status]++;
+            }
+            // Within a rule, the versions of a thread (a proposal and its
+            // revisions) follow each other, oldest first, under a thread header.
+            for (const group of map.values()) {
+                group.proposals.sort((a, b) =>
+                    (a.thread_root_id - b.thread_root_id) || (a.thread_version - b.thread_version));
+                group.proposals.forEach((p, i) => {
+                    p._threadStart = i === 0 || group.proposals[i - 1].thread_root_id !== p.thread_root_id;
+                });
             }
             this.groupedProposals = Array.from(map.values());
         },
@@ -203,11 +213,12 @@ const ProposalHistoryTable = {
                 create_message("An error occurred.", "danger-subtle");
             }
         },
-        // A proposal auto-rejected because one of its revisions got accepted
-        // (see _auto_reject_parent_on_child_accept) reads as "Superseded",
-        // not a plain "Rejected" — it wasn't rejected on its own merits.
+        // Closed because another version of its thread was accepted (see
+        // decide_proposal) — older rows were stored as "rejected" with an
+        // accepted revision, they read as superseded too.
         isSuperseded(prop) {
-            return prop.status === 'rejected' && (prop.revisions || []).some(r => r.status === 'accepted');
+            return prop.status === 'superseded'
+                || (prop.status === 'rejected' && (prop.revisions || []).some(r => r.status === 'accepted'));
         },
 
         statusClass(prop) {
@@ -442,8 +453,17 @@ const ProposalHistoryTable = {
 
                             <!-- Proposals inside group -->
                             <template v-if="expandedRules.has(group.rule_id)">
-                                <tr v-for="prop in group.proposals" :key="prop.id"
-                                    :class="isChecked(prop.id) ? 'table-primary-subtle' : ''"
+                                <template v-for="prop in group.proposals" :key="prop.id">
+                                <tr v-if="prop._threadStart && prop.thread_size > 1" class="pht-thread-row">
+                                    <td></td>
+                                    <td v-if="showManage"></td>
+                                    <td :colspan="showManage ? 5 : 6" class="py-1 ps-3">
+                                        <i class="fas fa-code-branch me-1"></i>Thread of proposal
+                                        <a :href="'/rule/proposal_content_discuss?id=' + prop.thread_root_id" @click.stop>#[[ prop.thread_root_id ]]</a>
+                                        · [[ prop.thread_size ]] versions
+                                    </td>
+                                </tr>
+                                <tr :class="isChecked(prop.id) ? 'table-primary-subtle' : ''"
                                     style="border-left: 3px solid var(--bs-primary);">
                                     <td></td>
                                     <td v-if="showManage" class="text-center" @click.stop>
@@ -456,7 +476,9 @@ const ProposalHistoryTable = {
                                     <td :colspan="showManage ? 5 : 6" class="py-2 ps-3">
 
                                         <!-- Summary row -->
-                                        <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                        <div class="d-flex align-items-center gap-2 flex-wrap mb-1"
+                                             :style="{ paddingLeft: (prop.thread_depth || 0) * 1.25 + 'rem' }">
+                                            <span v-if="prop.thread_size > 1" class="pht-version" title="Version within its thread">v[[ prop.thread_version ]]</span>
                                             <button class="btn btn-link btn-sm p-0 text-dark"
                                                 @click.stop="toggleProposal(prop.id)">
                                                 <i class="fas"
@@ -464,7 +486,7 @@ const ProposalHistoryTable = {
                                                 </i>
                                             </button>
                                             <span class="badge rounded-pill" :class="statusClass(prop)" :style="statusStyle(prop)"
-                                                  :title="isSuperseded(prop) ? 'This proposal was automatically closed because one of its revisions was accepted instead.' : ''">
+                                                  :title="isSuperseded(prop) ? 'Closed automatically: another version of its thread was accepted.' : ''">
                                                 [[ statusLabel(prop) ]]
                                             </span>
                                             <span v-if="prop.revisions && prop.revisions.length && !isSuperseded(prop)" class="badge rounded-pill"
@@ -562,6 +584,7 @@ const ProposalHistoryTable = {
                                         </div>
                                     </td>
                                 </tr>
+                                </template>
                             </template>
 
                         </template>

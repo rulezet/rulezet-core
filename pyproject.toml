@@ -1,7 +1,15 @@
 # pyproject.toml
 [tool.pytest.ini_options]
+# tests/ is the suite run on every commit (CI, ./launch.sh -t, manage.py test).
+# tests_new/ is the rework in progress (docs/design/test_restructure.md) —
+# run it explicitly: `FLASKENV=testing pytest tests_new`.
+testpaths = ["tests"]
 filterwarnings = [
     "error",
     "ignore::UserWarning",
     "ignore::DeprecationWarning"
 ]
+
+[tool.alembic]
+# path to migration scripts
+script_location = "%(here)s/migrations"

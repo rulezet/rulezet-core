@@ -1,7 +1,7 @@
 import json
 from pymisp import MISPEvent, MISPObject
 
-from app.features.misp.rule.misp_object import content_convert_to_misp_object, create_rulezet_metadata_misp_object
+from app.features.misp.rule.misp_object import content_convert_to_misp_object, create_rulezet_metadata_misp_object, misp_tag_kwargs
 from ...bundle import bundle_core as BundleModel
 from ..object_templates import load_object_template
 
@@ -32,11 +32,8 @@ def get_bundle_misp_event_object(bundle_id: int) -> MISPEvent | None:
     if bundle_obj:
         event.add_object(bundle_obj)
 
-    # 2. Rules objects
-    for assoc in bundle.rules_assoc:
-        rule = assoc.rule
-        if not rule:
-            continue
+    # 2. Rules objects (trashed rules are not part of the bundle anymore)
+    for rule in BundleModel.get_rules_from_bundle(bundle_id):
         _add_rule_objects_to_event(event, rule, bundle_obj)
 
     # 3. Tags
@@ -85,10 +82,7 @@ def _add_bundle_tags_to_event(event: MISPEvent, bundle_id: int):
         if not tags:
             return
         for tag in tags:
-            if tag.external_id:
-                event.add_tag(**{'name': tag.name, 'uuid': tag.external_id})
-            else:
-                event.add_tag(tag.name)
+            event.add_tag(**misp_tag_kwargs(tag))
     except Exception:
         pass
 
@@ -166,16 +160,10 @@ def create_bundle_misp_object(bundle_id: int) -> MISPObject | None:
     if bundle.download_count is not None:
         misp_object.add_attribute('download-count', value=bundle.download_count)
 
-    if bundle.view_count is not None:
-        misp_object.add_attribute('view-count', value=bundle.view_count)
+    rules = BundleModel.get_rules_from_bundle(bundle_id)   # active rules only
+    misp_object.add_attribute('number-of-rules', value=len(rules))
 
-    number_of_rules = len(bundle.rules_assoc.all())
-    misp_object.add_attribute('number-of-rules', value=number_of_rules)
-
-    formats = list(set([
-        assoc.rule.format for assoc in bundle.rules_assoc
-        if assoc.rule and assoc.rule.format
-    ]))
+    formats = sorted({rule.format for rule in rules if rule.format})
     for fmt in formats:
         misp_object.add_attribute('rule-format', value=fmt)
 

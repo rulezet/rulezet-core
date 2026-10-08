@@ -1,12 +1,13 @@
 import datetime
 import uuid
-from sqlalchemy import Tuple, and_, or_
+from sqlalchemy import and_, or_
 from flask_login import current_user
 from ... import db
 from ...core.db_class.db import *
 from app.core.db_class.db import Bundle, BundleRuleAssociation
 from typing import Dict, Any, Union , List
 from ..rule import rule_core as RuleModel
+from .bundle_history_core import tracked, record_bundle_created
 import json
 from collections import Counter
 
@@ -19,6 +20,15 @@ CRUD operations for Bundle model.
 - update_bundle: Update fields of an existing bundle.
 - delete_bundle: Delete a bundle by ID.
 """
+
+def bundle_name_taken(name, user_id, exclude_id=None) -> bool:
+    """A bundle name is unique per user: does `user_id` already own a bundle
+    called `name` (other than `exclude_id`, the bundle being renamed)?"""
+    query = Bundle.query.filter_by(name=name, user_id=user_id)
+    if exclude_id:
+        query = query.filter(Bundle.id != exclude_id)
+    return db.session.query(query.exists()).scalar()
+
 
 def create_bundle(form_dict , user) -> Bundle:
     """
@@ -59,6 +69,8 @@ def create_bundle(form_dict , user) -> Bundle:
         db.session.rollback()
         raise e
 
+    record_bundle_created(new_bundle.id, user)
+
     try:
         from app.features.notification.notification_core import notify_followers_new_bundle
         notify_followers_new_bundle(new_bundle, user.id)
@@ -67,6 +79,7 @@ def create_bundle(form_dict , user) -> Bundle:
 
     return new_bundle
 
+@tracked("rules")
 def add_rules_to_bundle(bundle_id: int, rule_ids: list[int]) -> bool:
     try:
         existing_rule_ids = {
@@ -96,13 +109,87 @@ def add_rules_to_bundle(bundle_id: int, rule_ids: list[int]) -> bool:
 
 
 
+# ── Access & private share links ─────────────────────────────────────────
+
+_SHARE_SESSION_KEY = "bundle_share_grants"
+
+
+def has_share_grant(bundle) -> bool:
+    """True if the current (logged-in) user opened this bundle's *current*
+    share link in this session. Regenerating the link invalidates it."""
+    import hmac
+    from flask import session, has_request_context
+    if not bundle or not bundle.share_token or not has_request_context():
+        return False
+    if not current_user.is_authenticated:
+        return False
+    granted = (session.get(_SHARE_SESSION_KEY) or {}).get(str(bundle.id))
+    return bool(granted) and hmac.compare_digest(str(granted), bundle.share_token)
+
+
+def can_view_bundle(bundle) -> bool:
+    """Single read-access rule for a bundle: public, owner, admin, or a
+    logged-in user holding the current private share link."""
+    if not bundle:
+        return False
+    if bundle.access:
+        return True
+    if not current_user.is_authenticated:
+        return False
+    if current_user.id == bundle.user_id or current_user.is_admin():
+        return True
+    return has_share_grant(bundle)
+
+
+def grant_share_access(token: str):
+    """Resolve a share token; on success remember it in the session and
+    return the bundle (None if the token is unknown/revoked)."""
+    from flask import session
+    if not token or len(token) > 64:
+        return None
+    bundle = Bundle.query.filter_by(share_token=token).first()
+    if not bundle:
+        return None
+    grants = dict(session.get(_SHARE_SESSION_KEY) or {})
+    grants[str(bundle.id)] = token
+    session[_SHARE_SESSION_KEY] = grants
+    session.modified = True
+    return bundle
+
+
+@tracked("sharing")
+def regenerate_share_token(bundle_id: int):
+    """Create or replace the bundle's share token. Returns the new token."""
+    import secrets
+    bundle = db.session.get(Bundle, bundle_id)
+    if not bundle:
+        return None
+    bundle.share_token = secrets.token_urlsafe(32)
+    bundle.share_token_created_at = datetime.datetime.now(tz=datetime.timezone.utc)
+    db.session.commit()
+    return bundle.share_token
+
+
+@tracked("sharing")
+def revoke_share_token(bundle_id: int) -> bool:
+    bundle = db.session.get(Bundle, bundle_id)
+    if not bundle:
+        return False
+    bundle.share_token = None
+    bundle.share_token_created_at = None
+    db.session.commit()
+    return True
+
+
 def get_bundle_by_id(bundle_id: int) -> Bundle | None:
     """
     Retrieve a Bundle by its ID.
     :param bundle_id: ID of the bundle.
-    :return: Bundle instance or None if not found.
+    :return: Bundle instance or None if not found (or not a valid id).
     """
-    return Bundle.query.get(bundle_id)
+    from app.core.utils.utils import as_db_id
+    bundle_id = as_db_id(bundle_id)
+    return db.session.get(Bundle, bundle_id) if bundle_id else None
 def get_all_bundles_by_user(user_id: int):
      return Bundle.query.filter_by(user_id=user_id).all()
 
@@ -114,20 +201,15 @@ def get_bundle_by_uuid(uuid: str) -> Bundle | None:
     """
     return Bundle.query.filter_by(uuid=uuid).first()
 
-def add_view(bundle_id: int) -> bool:
-    bundle = Bundle.query.get(bundle_id)
-    if bundle:
-        bundle.view_count += 1
-        db.session.commit()
-        return True
-    return False
 def  get_association_by_id(association_id: int) -> Bundle | None:
     """
     Retrieve a Bundle by its ID.
     :param bundle_id: ID of the bundle.
     :return: Bundle instance or None if not found.
     """
-    return BundleRuleAssociation.query.get(association_id)
+    from app.core.utils.utils import as_db_id
+    association_id = as_db_id(association_id)
+    return db.session.get(BundleRuleAssociation, association_id) if association_id else None
 def get_all_bundles_page(page: int, search: str | None, own: bool, tag_names: list[str] | None = None, vulnerabilities: list[str] | None = None):
     query = Bundle.query
 
@@ -222,7 +304,9 @@ def search_bundles_lite(query: str, limit: int = 5) -> list[dict]:
 
     exact = None
     if is_numeric:
-        exact = _visible(Bundle.query.filter(Bundle.id == int(query))).first()
+        from app.core.utils.utils import as_db_id
+        bundle_id = as_db_id(query)
+        exact = _visible(Bundle.query.filter(Bundle.id == bundle_id)).first() if bundle_id else None
     else:
         exact = _visible(Bundle.query.filter(Bundle.uuid == query)).first()
 
@@ -252,6 +336,7 @@ def get_total_bundles_count() -> int:
 
 
 
+@tracked("details")
 def update_bundle(bundle_id: int, form_dict: dict ) -> Bundle | None:
     """
     Update a bundle's details.
@@ -263,27 +348,36 @@ def update_bundle(bundle_id: int, form_dict: dict ) -> Bundle | None:
     bundle = Bundle.query.get(bundle_id)
     if not bundle:
         return None
-    
-    v_raw = form_dict.get("vulnerabilities") 
-    
-   
-    if isinstance(v_raw, list):
-        vulnerabilities_json = json.dumps(v_raw)
-    elif isinstance(v_raw, str) and v_raw.strip():
-        try:
-            json.loads(v_raw) 
-            vulnerabilities_json = v_raw
-        except:
-            vulnerabilities_json = "[]"
-    else:
-        vulnerabilities_json = "[]"
+    if not form_dict:
+        return bundle
 
-    if form_dict is not None:
-        bundle.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
-        bundle.name = form_dict["name"]
-        bundle.description = form_dict["description"]
-        bundle.access = form_dict["public"]
+    # Partial update: a key that isn't sent leaves the field untouched (the
+    # API documents "name and/or description" — reading every key blindly
+    # used to 500 on a partial body and wipe the CVEs when "vulnerabilities"
+    # wasn't sent). The web edit form always sends every key.
+    if "vulnerabilities" in form_dict:
+        v_raw = form_dict.get("vulnerabilities")
+        if isinstance(v_raw, list):
+            vulnerabilities_json = json.dumps(v_raw)
+        elif isinstance(v_raw, str) and v_raw.strip():
+            try:
+                parsed = json.loads(v_raw)
+            except (TypeError, ValueError):
+                parsed = None
+            # only a JSON list of identifiers — anything else ("{}", "12", a
+            # bare string) would be read back as a non-list
+            vulnerabilities_json = json.dumps([str(v) for v in parsed]) if isinstance(parsed, list) else "[]"
+        else:
+            vulnerabilities_json = "[]"
         bundle.vulnerability_identifiers = vulnerabilities_json
+
+    if "name" in form_dict:
+        bundle.name = form_dict["name"]
+    if "description" in form_dict:
+        bundle.description = form_dict["description"]
+    if "public" in form_dict:
+        bundle.access = form_dict["public"]
+    bundle.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
     db.session.commit()
     return bundle
 
@@ -306,6 +400,7 @@ def delete_bundle(bundle_id: int) -> bool:
     return True
 
 
+@tracked("rules")
 def add_rule_to_bundle(bundle_id: int, rule_id: int , description: str) -> bool:
     """
     Add a single rule to a bundle.
@@ -336,11 +431,61 @@ def add_rule_to_bundle(bundle_id: int, rule_id: int , description: str) -> bool:
         added_at=datetime.datetime.now(tz=datetime.timezone.utc)
     )
     db.session.add(assoc)
+    db.session.flush()
+    # Give the rule a place in the folder tree too — without a node it was
+    # attached but invisible in the Structure tab, the ZIPs and releases.
+    place_rules_in_structure(bundle_id, [rule_id])
     db.session.commit()
-    if assoc:
-        return True
-    return False 
+    return True
 
+
+def place_rules_in_structure(bundle_id: int, rule_ids, folder_path: str | None = None) -> int:
+    """Give each rule (already attached to the bundle) a node in the folder
+    tree, if it has none yet. Nodes go into `folder_path` ("a/b", folders
+    created on demand) or, by default, the "Unsorted" root folder. Existing
+    nodes are left alone. No commit. Returns the number of nodes added."""
+    rule_ids = [rid for rid in dict.fromkeys(rule_ids or []) if rid]
+    if not rule_ids:
+        return 0
+    placed = {rid for (rid,) in db.session.query(BundleNode.rule_id)
+              .filter(BundleNode.bundle_id == bundle_id, BundleNode.rule_id.in_(rule_ids))}
+    todo = [rid for rid in rule_ids if rid not in placed]
+    if not todo:
+        return 0
+
+    parts = [p.strip() for p in (folder_path or "").split("/") if p.strip()] or ["Unsorted"]
+    parent = None
+    for name in parts:
+        q = BundleNode.query.filter_by(bundle_id=bundle_id, node_type="folder", name=name[:255],
+                                       parent_id=parent.id if parent else None)
+        folder = q.first()
+        if not folder:
+            folder = BundleNode(bundle_id=bundle_id, parent_id=parent.id if parent else None,
+                                name=name[:255], node_type="folder")
+            db.session.add(folder)
+            db.session.flush()
+        parent = folder
+
+    titles = dict(db.session.query(Rule.id, Rule.title).filter(Rule.id.in_(todo)))
+    for rid in todo:
+        db.session.add(BundleNode(bundle_id=bundle_id, parent_id=parent.id, name=(titles.get(rid) or "rule")[:255],
+                                  node_type="file", rule_id=rid))
+    db.session.flush()
+    return len(todo)
+
+def _existing_tag_ids(raw) -> set:
+    """Ids of tags that exist, from untrusted input (ids or {"id": …}) —
+    anything else is ignored (an unknown id would break the foreign key)."""
+    from app.core.utils.utils import as_db_id
+    if not isinstance(raw, (list, tuple, set)):
+        return set()
+    wanted = {as_db_id(t.get("id") if isinstance(t, dict) else t) for t in raw} - {None}
+    if not wanted:
+        return set()
+    return {i for (i,) in db.session.query(Tag.id).filter(Tag.id.in_(wanted))}
+
+
+@tracked("tags", user_arg=2)
 def update_bundle_tags(bundle_id: int, tags: List[int], user: User) -> bool:
     """
     Syncs the tags associated with a bundle without deleting existing ones
@@ -354,7 +499,7 @@ def update_bundle_tags(bundle_id: int, tags: List[int], user: User) -> bool:
         current_associations = BundleTagAssociation.query.filter_by(bundle_id=bundle_id).all()
         
         current_tag_ids = {assoc.tag_id for assoc in current_associations}
-        new_tag_ids = set(tags)
+        new_tag_ids = _existing_tag_ids(tags)
 
         
 
@@ -364,11 +509,12 @@ def update_bundle_tags(bundle_id: int, tags: List[int], user: User) -> bool:
         ids_to_add = new_tag_ids - current_tag_ids
 
 
-        if ids_to_remove:
-            BundleTagAssociation.query.filter(
-                BundleTagAssociation.bundle_id == bundle_id,
-                BundleTagAssociation.tag_id.in_(ids_to_remove)
-            ).delete(synchronize_session=False)
+        # ORM delete (not a bulk query.delete()): the rows are already in the
+        # session — a stale copy would collide with a new row reusing its id.
+        for assoc in current_associations:
+            if assoc.tag_id in ids_to_remove:
+                db.session.delete(assoc)
+        db.session.flush()
 
 
         for tag_id in ids_to_add:
@@ -421,7 +567,8 @@ def get_tags_for_bundle(bundle_id: int) -> List[Tag]:
         )
     )
 
-    if current_user.is_authenticated:
+    # No request (a background job, e.g. a MISP push): no user, public tags only.
+    if current_user and current_user.is_authenticated:
         if not current_user.is_admin():
             query = query.filter(
                 or_(
@@ -517,6 +664,7 @@ def get_total_rule_from_bundle_count(bundle_id: int) -> int:
         .count()
     )
 
+@tracked("rules")
 def remove_rule_from_bundle(bundle_id: int, rule_id: int) -> bool:
     """
     Remove a single rule from a bundle.
@@ -529,8 +677,22 @@ def remove_rule_from_bundle(bundle_id: int, rule_id: int) -> bool:
         return False  # No association found
 
     db.session.delete(existing)
+    # …and its place(s) in the folder tree, or it stays in the Structure tab
+    # and the ZIPs as a ghost of a rule that's no longer in the bundle.
+    for node in BundleNode.query.filter_by(bundle_id=bundle_id, rule_id=rule_id).all():
+        db.session.delete(node)
     db.session.commit()
     return True
+
+
+def get_bundle_by_ref(ref) -> Bundle | None:
+    """Bundle by numeric id or by uuid (API routes accept either)."""
+    if ref is None:
+        return None
+    ref = str(ref).strip()
+    if ref.isdigit():
+        return get_bundle_by_id(ref)
+    return Bundle.query.filter_by(uuid=ref).first() if ref else None
 
 def get_full_rule_bundle_info(rule_id: int) -> Union[Dict[str, Any], Dict[str, str]]:
     """
@@ -612,33 +774,56 @@ def get_rules_from_bundle(bundle_id: int) -> List[Rule]:
     )
 
 def get_bundles_by_rule(rule_id: int) -> List[Bundle]:
-    """
-    Retrieve all bundles that contain a specific rule and are publicly accessible.
-
-    :param rule_id: ID of the rule to search for.
-    :return: List of Bundle instances containing the specified rule and with access=True.
-    """
-    return (
+    """Bundles containing a rule that the current user may see: public ones,
+    plus (when logged in) their own private bundles — all of them for an
+    admin. Most recently updated first."""
+    from sqlalchemy import or_
+    q = (
         db.session.query(Bundle)
         .join(BundleRuleAssociation, BundleRuleAssociation.bundle_id == Bundle.id)
-        .filter(
-            BundleRuleAssociation.rule_id == rule_id,
-            Bundle.access.is_(True)
-        )
-        .all()
+        .filter(BundleRuleAssociation.rule_id == rule_id)
     )
+    if not current_user.is_authenticated:
+        q = q.filter(Bundle.access.is_(True))
+    elif not current_user.is_admin():
+        q = q.filter(or_(Bundle.access.is_(True), Bundle.user_id == current_user.id))
+    return q.distinct().order_by(Bundle.updated_at.desc()).all()
 
 
-def get_bundles_by_workspace(workspace_id: int) -> List[Bundle]:
-    """Bundles generated via a workspace's "Export as Bundle" action."""
-    return (
-        Bundle.query
-        .filter(Bundle.source_workspace_id == workspace_id)
-        .order_by(Bundle.created_at.desc())
-        .all()
-    )
+def get_rule_paths_in_bundles(rule_id: int, bundle_ids: list) -> dict:
+    """{bundle_id: ["folder/sub/file.yar", ...]} — where a rule sits in each
+    bundle's folder structure. Walks up from the rule's nodes one level per
+    query (depth-bounded) instead of loading every bundle's whole tree.
+    A bundle holding the rule without placing it in the tree maps to []."""
+    from app.core.db_class.db import BundleNode
+    if not bundle_ids:
+        return {}
+    leaves = (db.session.query(BundleNode.id, BundleNode.bundle_id, BundleNode.parent_id, BundleNode.name)
+              .filter(BundleNode.rule_id == rule_id, BundleNode.bundle_id.in_(bundle_ids)).all())
+    nodes = {n.id: n for n in leaves}
+    pending = {n.parent_id for n in leaves if n.parent_id}
+    for _ in range(32):
+        pending -= nodes.keys()
+        if not pending:
+            break
+        rows = (db.session.query(BundleNode.id, BundleNode.bundle_id, BundleNode.parent_id, BundleNode.name)
+                .filter(BundleNode.id.in_(pending)).all())
+        for r in rows:
+            nodes[r.id] = r
+        pending = {r.parent_id for r in rows if r.parent_id}
+
+    out = {bid: [] for bid in bundle_ids}
+    for leaf in leaves:
+        parts, cur, seen = [], leaf, set()
+        while cur is not None and cur.id not in seen:
+            seen.add(cur.id)
+            parts.append(cur.name)
+            cur = nodes.get(cur.parent_id) if cur.parent_id else None
+        out.setdefault(leaf.bundle_id, []).append('/'.join(reversed(parts)))
+    return out
 
 
+@tracked("visibility")
 def toggle_bundle_accessibility(bundle_id: int) -> bool:
     """
     Toggle the accessibility of a bundle between public and private.
@@ -763,6 +948,89 @@ def remove_has_voted(vote, bundle_id , id) -> bool:
     return False 
 
 
+# Bundle structures are user-supplied and served back to every viewer —
+# cap their size so one bundle can't be used as free file hosting / DoS.
+MAX_STRUCTURE_NODES = 5000
+MAX_FILE_BYTES      = 1 * 1024 * 1024    # per custom file
+MAX_TOTAL_BYTES     = 20 * 1024 * 1024   # all custom files together
+MAX_DEPTH           = 20
+
+
+def validate_structure(structure) -> str | None:
+    """Return an error message if the tree coming from the editor is not
+    acceptable, else None. Checks shape, node types, name length, depth,
+    per-file / total size. Nodes referencing missing/trashed rules are pruned."""
+    if not isinstance(structure, list):
+        return "Invalid structure"
+
+    count = 0
+    total = 0
+    rule_ids = set()
+    stack = [(n, 1) for n in structure]
+    while stack:
+        node, depth = stack.pop()
+        count += 1
+        if count > MAX_STRUCTURE_NODES:
+            return f"Too many items in this bundle (max {MAX_STRUCTURE_NODES})"
+        if depth > MAX_DEPTH:
+            return f"Folders are nested too deep (max {MAX_DEPTH} levels)"
+        if not isinstance(node, dict) or node.get('type') not in ('folder', 'file'):
+            return "Invalid item in structure"
+        rid = node.get('rule_id')
+        name = node.get('name')
+        if rid is not None:
+            # Rule nodes: the name is just the rule title (may contain '/'),
+            # never used as a path — the tree/ZIPs rebuild it from Rule.title.
+            if not isinstance(name, str) or not name.strip():
+                node['name'] = 'rule'
+            elif len(name) > 255:
+                node['name'] = name[:255]
+        else:
+            if not isinstance(name, str) or not name.strip() or len(name) > 255:
+                return "Every file and folder needs a name of 1-255 characters"
+            if name.strip() in ('.', '..') or '/' in name or '\\' in name:
+                return f"Invalid name: {name[:40]}"
+
+        if rid is not None:
+            if isinstance(rid, str) and rid.isdigit():
+                rid = node['rule_id'] = int(rid)
+            if not isinstance(rid, int) or isinstance(rid, bool):
+                return "Invalid rule reference"
+            rule_ids.add(rid)
+        elif node.get('type') == 'file':
+            content = node.get('content') or ''
+            if not isinstance(content, str):
+                return "Invalid file content"
+            size = len(content.encode('utf-8'))
+            if size > MAX_FILE_BYTES:
+                return f"File '{name[:40]}' is too large (max {MAX_FILE_BYTES // 1024} KB)"
+            total += size
+            if total > MAX_TOTAL_BYTES:
+                return f"Bundle files are too large in total (max {MAX_TOTAL_BYTES // (1024 * 1024)} MB)"
+        children = node.get('children') or []
+        if not isinstance(children, list):
+            return "Invalid structure"
+        if node.get('type') == 'file' and children:
+            return "Files can't contain other items"
+        stack.extend((c, depth + 1) for c in children)
+
+    if rule_ids:
+        from app.core.utils.utils import as_db_id
+        valid = {rid for rid in rule_ids if as_db_id(rid)}    # out-of-range ids match no rule
+        found = {r.id for r in Rule.query.filter(Rule.id.in_(valid), Rule.is_deleted == False)
+                 .with_entities(Rule.id).all()} if valid else set()
+        missing = rule_ids - found
+        if missing:
+            # Drop nodes pointing at trashed / non-existent rules (in place)
+            # instead of failing the save — they can't be shown anyway.
+            def prune(nodes):
+                nodes[:] = [n for n in nodes if n.get('rule_id') not in missing]
+                for n in nodes:
+                    prune(n.get('children') or [])
+            prune(structure)
+    return None
+
+
 def save_workspace(bundle_id, structure):
     """
     Docstring for save_workspace
@@ -771,7 +1039,13 @@ def save_workspace(bundle_id, structure):
     :param structure: Description
     """
     try:
-        BundleNode.query.filter_by(bundle_id=bundle_id).delete()
+        # ORM delete (not a bulk query.delete()): nodes already loaded in this
+        # session — by the history / release / health snapshot taken just
+        # before — must leave the identity map, otherwise a re-used primary
+        # key (SQLite) collides with the stale object and the save fails.
+        for old in BundleNode.query.filter_by(bundle_id=bundle_id).all():
+            db.session.delete(old)
+        db.session.flush()
 
         def save_recursive(nodes, parent_id=None):
             for node in nodes:
@@ -795,8 +1069,61 @@ def save_workspace(bundle_id, structure):
     except Exception as e:
         db.session.rollback()
         return False
+def build_tree_json(bundle_id: int) -> list:
+    """Light structure for the detail page / editor: same shape as
+    BundleNode.to_tree_json(), but rule nodes carry no `content` (fetched on
+    demand from /bundle/<id>/rule_content/<rule_id>) and the whole tree is
+    built from two queries instead of one query per node.
+    Custom files keep their content (they're capped by validate_structure)."""
+    from sqlalchemy import func
+    nodes = BundleNode.query.filter_by(bundle_id=bundle_id).order_by(BundleNode.id).all()
+    if not nodes:
+        return []
+    rule_ids = {n.rule_id for n in nodes if n.rule_id}
+    rules = {}
+    if rule_ids:
+        for rid, title, fmt, deleted, size in (
+            db.session.query(Rule.id, Rule.title, Rule.format, Rule.is_deleted, func.length(Rule.to_string))
+            .filter(Rule.id.in_(rule_ids))
+        ):
+            rules[rid] = (title, fmt, deleted, size or 0)
+
+    children = {}
+    for n in nodes:
+        children.setdefault(n.parent_id, []).append(n)
+
+    def to_json(n):
+        if n.rule_id:
+            info = rules.get(n.rule_id)
+            if not info or info[2]:
+                return {"id": f"rule_{n.rule_id}_{n.id}", "name": "(deleted rule)", "type": "file",
+                        "content": "", "children": [], "rule_id": n.rule_id, "format": "", "deleted": True}
+            title, fmt, _, size = info
+            ext = Rule(format=fmt).get_extension()
+            return {"id": f"rule_{n.rule_id}_{n.id}", "name": f"{(title or '').rstrip('.')}.{ext}",
+                    "type": n.node_type, "rule_id": n.rule_id, "format": fmt or "",
+                    "size": size, "lazy": True, "children": []}
+        return {"id": f"node_{n.id}", "name": n.name, "type": n.node_type,
+                "content": n.custom_content or "",
+                "children": [to_json(c) for c in children.get(n.id, [])]}
+
+    return [to_json(n) for n in children.get(None, [])]
+
+
+def get_rule_content_in_bundle(bundle_id: int, rule_id: int):
+    """The rule if it's part of the bundle (tree node or association) and not trashed."""
+    in_bundle = (BundleNode.query.filter_by(bundle_id=bundle_id, rule_id=rule_id).first() is not None
+                 or BundleRuleAssociation.query.filter_by(bundle_id=bundle_id, rule_id=rule_id).first() is not None)
+    if not in_bundle:
+        return None
+    rule = db.session.get(Rule, rule_id)
+    if not rule or rule.is_deleted:
+        return None
+    return rule
+
+
 def get_only_root_nodes(bundle_id):
-    return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).all()
+    return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).order_by(BundleNode.id).all()
 
 def extract_rule_ids(structure):
     """Recursively extract all rule_id values from the tree structure."""
@@ -858,6 +1185,7 @@ def update_bundle_from_structure(bundle_id, structure):
         return False
     
 
+@tracked("structure")
 def update_bundle_from_rule_id_into_structure(bundle_id):
     """
     Ensure every rule in BundleRuleAssociation has a matching BundleNode,
@@ -1091,6 +1419,21 @@ def add_reaction_to_comment(comment_id: int, user_id: int, reaction_type: str, b
         return False, f"Error: {str(e)}"
 
 
+def tag_usage_snapshot() -> list:
+    """Every tag used by the bundles the current user can see, with its
+    bundle count — the base of the lazy tag-filter views (tags_core.usage_view).
+    Not cached: which bundles count depends on who asks, and it's small."""
+    from app.features.tags.tags_core import usage_snapshot
+    query = (db.session.query(BundleTagAssociation.tag_id, func.count(BundleTagAssociation.id))
+             .join(Bundle, Bundle.id == BundleTagAssociation.bundle_id))
+    if current_user.is_authenticated:
+        if not current_user.is_admin():
+            query = query.filter(or_(Bundle.access.is_(True), Bundle.user_id == current_user.id))
+    else:
+        query = query.filter(Bundle.access.is_(True))
+    return usage_snapshot(dict(query.group_by(BundleTagAssociation.tag_id).all()))
+
+
 def get_all_used_tags_with_counts():
     """
     Returns tags with their usage count.
@@ -1201,7 +1544,9 @@ def get_paginated_rules_info_by_bundle(bundle_id: int, page: int):
     Returns a pagination object containing combined info for rules in a bundle.
     """
 
-    query = BundleRuleAssociation.query.filter_by(bundle_id=bundle_id)
+    query = (BundleRuleAssociation.query.filter_by(bundle_id=bundle_id)
+             .join(Rule, Rule.id == BundleRuleAssociation.rule_id)
+             .filter(Rule.is_deleted == False))
     
 
     pagination = query.paginate(page=page, per_page=20, error_out=False)
@@ -1220,11 +1565,6 @@ def get_paginated_rules_info_by_bundle(bundle_id: int, page: int):
     pagination.items = enriched_items
     return pagination
 
-def get_bundle_by_id(bundle_id: int):
-    return Bundle.query.get(bundle_id)
-
-def get_only_root_nodes(bundle_id: int):
-    return BundleNode.query.filter_by(bundle_id=bundle_id, parent_id=None).all()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1304,11 +1644,16 @@ def _parse_generic(content: str):
             for m in _TECH_RE.finditer(content)]
 
 
-def get_attack_coverage(bundle_id: int) -> dict:
+def get_attack_coverage(bundle_id: int, snapshot_rules: dict | None = None) -> dict:
     """
     Return MITRE ATT&CK coverage data for all rules in a bundle.
     Reads from RuleAttackAssociation (populated by the auto-parse job).
     Falls back to on-the-fly parsing when the DB has no associations yet.
+
+    snapshot_rules: a release snapshot's `rules` ({id: {title, uuid, format,
+    content}}) — coverage of that frozen set instead of the live bundle
+    (rules deleted since keep their mapping; the fallback parses the
+    frozen content).
     """
     from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
 
@@ -1316,16 +1661,21 @@ def get_attack_coverage(bundle_id: int) -> dict:
     if not bundle:
         return None
 
-    # All rule IDs in the bundle
-    rule_rows = (
-        db.session.query(Rule.id, Rule.title, Rule.uuid)
-        .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
-        .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
-        .all()
-    )
-    total_rules = len(rule_rows)
-    rule_map = {r.id: {'id': r.id, 'name': r.title or '', 'uuid': str(r.uuid) if r.uuid else ''}
-                for r in rule_rows}
+    if snapshot_rules is not None:
+        rule_map = {int(k): {'id': int(k), 'name': v.get('title') or '', 'uuid': v.get('uuid') or ''}
+                    for k, v in snapshot_rules.items()}
+        total_rules = len(rule_map)
+    else:
+        # All rule IDs in the bundle
+        rule_rows = (
+            db.session.query(Rule.id, Rule.title, Rule.uuid)
+            .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
+            .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
+            .all()
+        )
+        total_rules = len(rule_rows)
+        rule_map = {r.id: {'id': r.id, 'name': r.title or '', 'uuid': str(r.uuid) if r.uuid else ''}
+                    for r in rule_rows}
     rule_ids = list(rule_map.keys())
 
     # Fetch associations from DB
@@ -1344,7 +1694,7 @@ def get_attack_coverage(bundle_id: int) -> dict:
     use_fallback = not assoc_rows and rule_ids
 
     if use_fallback:
-        return _get_attack_coverage_parsed(bundle_id, rule_map, total_rules)
+        return _get_attack_coverage_parsed(bundle_id, rule_map, total_rules, snapshot_rules)
 
     # tactic_key -> technique_id -> list of rule dicts
     coverage: dict = _dd(lambda: _dd(list))
@@ -1397,14 +1747,17 @@ def get_attack_coverage(bundle_id: int) -> dict:
     }
 
 
-def _get_attack_coverage_parsed(bundle_id: int, rule_map: dict, total_rules: int) -> dict:
+def _get_attack_coverage_parsed(bundle_id: int, rule_map: dict, total_rules: int, snapshot_rules: dict | None = None) -> dict:
     """Fallback: parse rule content directly when no DB associations exist yet."""
-    rows = (
-        db.session.query(Rule.id, Rule.format, Rule.to_string)
-        .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
-        .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
-        .all()
-    )
+    if snapshot_rules is not None:
+        rows = [(int(k), (v.get('format') or '').lower(), v.get('content') or '') for k, v in snapshot_rules.items()]
+    else:
+        rows = (
+            db.session.query(Rule.id, Rule.format, Rule.to_string)
+            .join(BundleRuleAssociation, Rule.id == BundleRuleAssociation.rule_id)
+            .filter(BundleRuleAssociation.bundle_id == bundle_id, Rule.is_deleted == False)
+            .all()
+        )
 
     coverage: dict = _dd(lambda: _dd(list))
     rules_with_attack: set = set()
@@ -1469,3 +1822,32 @@ def _get_attack_coverage_parsed(bundle_id: int, rule_map: dict, total_rules: int
             'source':            'parsed',   # hint for frontend
         },
     }
+
+# ── Favorites ────────────────────────────────────────────────────────────────
+
+def toggle_bundle_favorite(user_id: int, bundle_id: int) -> bool:
+    """Adds the bundle to the user's favorites, or removes it if already
+    there. Returns the new state (True = favorited)."""
+    from app.core.db_class.db import BundleFavoriteUser
+    fav = BundleFavoriteUser.query.filter_by(user_id=user_id, bundle_id=bundle_id).first()
+    if fav:
+        db.session.delete(fav)
+        db.session.commit()
+        return False
+    db.session.add(BundleFavoriteUser(user_id=user_id, bundle_id=bundle_id))
+    db.session.commit()
+    return True
+
+
+def is_bundle_favorited(user_id: int, bundle_id: int) -> bool:
+    from app.core.db_class.db import BundleFavoriteUser
+    return BundleFavoriteUser.query.filter_by(user_id=user_id, bundle_id=bundle_id).first() is not None
+
+
+def favorite_bundle_ids(user_id: int, bundle_ids: list) -> set:
+    """Which of these bundles the user has favorited — one query for a page."""
+    from app.core.db_class.db import BundleFavoriteUser
+    if not bundle_ids:
+        return set()
+    return {bid for (bid,) in db.session.query(BundleFavoriteUser.bundle_id)
+            .filter(BundleFavoriteUser.user_id == user_id, BundleFavoriteUser.bundle_id.in_(bundle_ids))}

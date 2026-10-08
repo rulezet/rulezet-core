@@ -12,11 +12,14 @@ const { createApp, reactive } = Vue
 
 const SECTION_META = [
     { key: 'rule',   label: 'Rule graph',   icon: 'fa-solid fa-shield-halved',
-      hint: 'The "Graph" tab on a rule detail page (bundleMispGraph.js).' },
+      hint: 'The "Graph" tab on a rule detail page — only used when this graph is drawn with the Rulezet mapping (pivotick-converters brings its own look).',
+      offText: 'The Visualization card is hidden on rule pages.' },
     { key: 'bundle', label: 'Bundle graph', icon: 'fa-solid fa-box-archive',
-      hint: 'The "Graph" tab on a bundle detail page (bundleMispGraph.js).' },
+      hint: 'The "Graph" view of a bundle\'s MISP tab — only used when this graph is drawn with the Rulezet mapping (pivotick-converters brings its own look).',
+      offText: 'The bundle MISP tab shows only the JSON, without the Graph view.' },
     { key: 'attack', label: 'ATT&CK graph', icon: 'fa-solid fa-crosshairs',
-      hint: 'The "Graph" view of the MITRE ATT&CK heatmap (attackGraph.js). Technique/sub-technique color is always inherited from their parent tactic.' },
+      hint: 'The "Graph" view of the MITRE ATT&CK heatmap (attackGraph.js). Technique/sub-technique color is always inherited from their parent tactic.',
+      offText: 'The ATT&CK page offers only the Matrix and Charts views.' },
 ]
 
 const SHAPES = ['circle', 'square', 'triangle', 'hexagon']
@@ -48,7 +51,14 @@ function csrfHeader() {
     return { 'X-CSRFToken': el ? el.value : '' }
 }
 
-export function createPivotickAdminApp(initialConfigs, defaultConfigs) {
+export const RENDERERS = [
+    { id: 'converters', label: 'pivotick-converters', icon: 'fa-solid fa-wand-magic-sparkles',
+      title: 'MISP event drawn by pivotick-converters (cards, legend, grouped tags/attributes)' },
+    { id: 'rulezet',    label: 'Rulezet mapping',     icon: 'fa-solid fa-sitemap',
+      title: "Rulezet's own MISP mapping, styled with the settings below" },
+]
+
+export function createPivotickAdminApp(initialConfigs, defaultConfigs, initialEnabled = {}, initialRenderers = {}) {
     return createApp({
         delimiters: ['[[', ']]'],
 
@@ -57,6 +67,13 @@ export function createPivotickAdminApp(initialConfigs, defaultConfigs) {
         data() {
             return {
                 shapes: SHAPES,
+                renderers: RENDERERS,
+                graphs: SECTION_META.map(meta => reactive({
+                    key: meta.key, label: meta.label, icon: meta.icon, offText: meta.offText,
+                    enabled: initialEnabled[meta.key] !== false,
+                    renderer: initialRenderers[meta.key] || null,   // null for attack (no choice)
+                    busy: false,
+                })),
                 activeTab: SECTION_META[0].key,
                 sections: SECTION_META.map(meta => reactive({
                     ...meta,
@@ -75,6 +92,42 @@ export function createPivotickAdminApp(initialConfigs, defaultConfigs) {
 
         methods: {
             isAttack(section) { return section.key === 'attack' },
+
+            async _postGraphSetting(graph, path, body, okMsg) {
+                graph.busy = true
+                try {
+                    const res = await fetch(`/admin/pivotick/${graph.key}/${path}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...csrfHeader() },
+                        body: JSON.stringify(body),
+                    })
+                    const data = await res.json()
+                    if (data.success) { create_message(okMsg, 'success'); return true }
+                    create_message(data.message || 'Error saving', 'danger')
+                } catch (e) {
+                    create_message('Network error: ' + e.message, 'danger')
+                } finally {
+                    graph.busy = false
+                }
+                return false
+            },
+
+            async toggleGraph(graph) {
+                const wanted = !graph.enabled
+                if (await this._postGraphSetting(graph, 'enabled', { enabled: wanted },
+                        `${graph.label} ${wanted ? 'enabled' : 'disabled'}`)) {
+                    graph.enabled = wanted
+                }
+            },
+
+            async setRenderer(graph, renderer) {
+                if (graph.renderer === renderer) return
+                const label = RENDERERS.find(r => r.id === renderer)?.label || renderer
+                if (await this._postGraphSetting(graph, 'renderer', { renderer },
+                        `${graph.label}: drawn with ${label}`)) {
+                    graph.renderer = renderer
+                }
+            },
 
             setMode(section, mode) {
                 if (mode === 'json') {

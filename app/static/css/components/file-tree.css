@@ -171,6 +171,25 @@
     white-space: nowrap;
 }
 
+/*---FT_BADGE---*/
+
+.ft-badge {
+    flex-shrink: 0;
+    font-size: .6rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    line-height: 1.2;
+}
+
+/* "doc" variant — non-rule files (README.md, notes.txt…): bold name, the
+   per-extension icon does the rest */
+.ft-row--doc .ft-name { font-weight: 700; color: var(--text-main); }
+
 /*---FT_COUNT---*/
 
 .ft-count {
@@ -329,3 +348,36 @@
 }
 
 .ft-preview-error { color: #f87171; }
+
+/*---FT_REVEAL---*/
+/* reveal(path): brief highlight of the located row */
+@keyframes ft-flash {
+    0%, 60% { background: rgba(13, 110, 253, .22); box-shadow: inset 3px 0 0 #0d6efd; }
+    100%    { background: transparent; box-shadow: none; }
+}
+.ft-row--flash { animation: ft-flash 2.2s ease-out 1; }
+
+/*---FT_TOGGLE_ALL---*/
+/* Single "Expand all / Collapse all" toggle (replaces the two arrow buttons) */
+.ft-toolbar-btn--toggle {
+    width: auto;
+    gap: 6px;
+    padding: 0 10px;
+    font-size: .7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.ft-toolbar-btn--toggle i { font-size: .65rem; }
+
+/*---FT_ROW_ACTIONS---*/
+/* rowActions prop: small buttons on file rows, shown on hover (always on touch) */
+.ft-row-actions { display: inline-flex; gap: 4px; margin-left: auto; opacity: 0; transition: opacity .12s; flex-shrink: 0; }
+.ft-row:hover .ft-row-actions, .ft-row:focus-within .ft-row-actions, .ft-row--selected .ft-row-actions { opacity: 1; }
+@media (hover: none) { .ft-row-actions { opacity: 1; } }
+.ft-row-action {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 1px 8px; border-radius: 999px;
+    border: 1px solid var(--brand, #0d6efd); background: var(--bg-elevated, transparent);
+    color: var(--brand, #0d6efd); font-size: .68rem; font-weight: 600; font-family: inherit; line-height: 1.5;
+}
+.ft-row-action:hover { background: var(--brand-dim, rgba(13, 110, 253, .1)); }

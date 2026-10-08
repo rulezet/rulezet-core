@@ -89,8 +89,13 @@ const SingleTagDisplay = {
             window.location.href = `/rule/rules_list?tags=${encodeURIComponent(props.tag.name)}`;
         }
 
+        // The tag's own colour; an Imported tag (the rule author's own tag,
+        // GitHub #70) created before it got one is shown orange, not grey.
+        const chipColor = Vue.computed(() =>
+            props.tag.color || (props.tag.source === 'Imported' ? '#fd7e14' : '#6c757d'));
+
         return {
-            getTextColor, mapIcon, label,
+            getTextColor, mapIcon, label, chipColor,
             wrapperEl, showTooltip, tooltipStyle,
             onEnter, onLeave, onTooltipEnter, onTooltipLeave, goToTagRules,
         };
@@ -99,8 +104,8 @@ const SingleTagDisplay = {
         <div class="tag-wrapper d-inline-block" ref="wrapperEl" @mouseenter="onEnter" @mouseleave="onLeave">
             <span class="tag-split shadow-sm on-hover-zoom" style="cursor:pointer" @click="goToTagRules" title="View all rules with this tag">
                 <span class="tag-left" v-html="mapIcon(tag.icon)"></span>
-                <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }" :title="tag.name">
-                    <span :style="{ color: getTextColor(tag.color || '#6c757d') }" class="fw-bold">
+                <span class="tag-right" :style="{ backgroundColor: chipColor }" :title="tag.name">
+                    <span :style="{ color: getTextColor(chipColor) }" class="fw-bold">
                         [[ label(tag) ]]
                     </span>
                 </span>
@@ -112,7 +117,7 @@ const SingleTagDisplay = {
                      :style="tooltipStyle"
                      @mouseenter="onTooltipEnter"
                      @mouseleave="onTooltipLeave">
-                    <div class="tooltip-header" :style="{ borderLeft: '4px solid ' + (tag.color || '#6c757d') }">
+                    <div class="tooltip-header" :style="{ borderLeft: '4px solid ' + chipColor }">
                         <span v-html="mapIcon(tag.icon)" class="me-2 text-white"></span>
                         <strong class="text-white">[[ tag.name ]]</strong>
                     </div>

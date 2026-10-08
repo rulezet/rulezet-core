@@ -971,7 +971,11 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         branchesError.value     = "";
                         clearTimeout(_branchDebounce);
                         const trimmed = val.trim();
-                        if (!trimmed || !trimmed.includes('github.com')) return;
+                        // Only a real github.com URL — not "github.com" anywhere in the string
+                        // (https://evil.example/github.com/x would have passed).
+                        let host = '';
+                        try { host = new URL(trimmed).hostname.toLowerCase(); } catch { return; }
+                        if (host !== 'github.com' && host !== 'www.github.com') return;
                         _branchDebounce = setTimeout(async () => {
                               const requestId = ++_branchRequestId;
                               branchesLoading.value = true;

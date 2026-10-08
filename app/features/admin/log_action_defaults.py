@@ -28,7 +28,13 @@ ICONS: dict[str, str] = {
     "rule.vote_down":      "fa-solid fa-thumbs-down",
     "rule.favorite":       "fa-solid fa-heart",
     "rule.unfavorite":     "fa-regular fa-heart",
+    "bundle.favorite":     "fa-solid fa-star",
+    "bundle.unfavorite":   "fa-regular fa-star",
     "rule.download":       "fa-solid fa-download",
+    "rule.export":         "fa-solid fa-file-zipper",
+    "rule.ai_analysis_download": "fa-solid fa-download",
+    "bundle.download":     "fa-solid fa-download",
+    "bundle.ai_analysis_download": "fa-solid fa-download",
     "bundle.create":       "fa-solid fa-box",
     "bundle.edit":         "fa-solid fa-pen-to-square",
     "bundle.delete":       "fa-solid fa-box-open",
@@ -74,6 +80,16 @@ ICONS: dict[str, str] = {
     "chatbot.conversation": "fa-solid fa-robot",
     "proposal.message_edited": "fa-solid fa-pen",
     "proposal.revised": "fa-solid fa-code-branch",
+    "alert.create":            "fa-solid fa-bell",
+    "alert.update":            "fa-solid fa-pen",
+    "alert.toggle":            "fa-solid fa-toggle-on",
+    "alert.delete":            "fa-solid fa-bell-slash",
+    "alert.triggered":         "fa-solid fa-bolt",
+    "alert.email_sent":        "fa-solid fa-envelope",
+    "alert.email_failed":      "fa-solid fa-envelope-circle-check",
+    "alert.email_unsubscribe": "fa-solid fa-envelope-open",
+    "alert.sweep":             "fa-solid fa-satellite-dish",
+    "admin.email_toggle":      "fa-solid fa-envelope",
 }
 
 # Actions that are public by default
@@ -85,6 +101,7 @@ PUBLIC_ACTIONS: frozenset[str] = frozenset({
     "rule.favorite",
     "rule.download",
     "bundle.create",
+    "bundle.favorite",
     "bundle.edit",
     "comment.add",
     "user.register",
@@ -108,7 +125,13 @@ TITLES: dict[str, str] = {
     "rule.vote_down":           "Rule Downvoted",
     "rule.favorite":            "Rule Favorited",
     "rule.unfavorite":          "Rule Unfavorited",
+    "bundle.favorite":          "Bundle Favorited",
+    "bundle.unfavorite":        "Bundle Unfavorited",
     "rule.download":            "Rule Downloaded",
+    "rule.export":              "Rules Exported",
+    "rule.ai_analysis_download": "AI Analysis Downloaded",
+    "bundle.download":          "Bundle Downloaded",
+    "bundle.ai_analysis_download": "Bundle AI Analysis Downloaded",
     "rule.scope_add":           "Environment Scope Added",
     "rule.scope_update":        "Environment Scope Updated",
     "rule.scope_delete":        "Environment Scope Removed",
@@ -185,12 +208,22 @@ TITLES: dict[str, str] = {
     "chatbot.conversation":     "Chatbot Conversation Started",
     "proposal.message_edited":  "Proposal Justification Edited",
     "proposal.revised":         "Proposal Revised",
+    "alert.create":             "Alert Created",
+    "alert.update":             "Alert Updated",
+    "alert.toggle":             "Alert Paused / Resumed",
+    "alert.delete":             "Alert Deleted",
+    "alert.triggered":          "Alert Triggered",
+    "alert.email_sent":         "Alert Email Sent",
+    "alert.email_failed":       "Alert Email Failed",
+    "alert.email_unsubscribe":  "Alert Emails Stopped (email link)",
+    "alert.sweep":              "Alert Pass",
+    "admin.email_toggle":       "Email Features Toggled",
 }
 
 # Known category prefixes (first segment of action)
 KNOWN_CATEGORIES = frozenset({
     'rule', 'bundle', 'bundle_comment', 'user', 'tag', 'job',
-    'github', 'admin', 'comment', 'connector', 'api', 'chatbot', 'blog', 'proposal',
+    'github', 'admin', 'comment', 'connector', 'api', 'chatbot', 'blog', 'proposal', 'alert',
 })
 
 # Prefix to display category mapping

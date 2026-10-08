@@ -84,3 +84,8 @@
     color: #dc2626;
     text-decoration: line-through;
 }
+
+.mcl-tag--changed {
+    background: rgba(13, 110, 253, .1);
+    color: #0d6efd;
+}

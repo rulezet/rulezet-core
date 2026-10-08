@@ -299,112 +299,63 @@ body.dark-mode mark.dt-highlight {
 }
 
 /*---DT_BULK_BAR---*/
+/* Same floating pill as css/components/dataTable.css. The old version was a
+   full-width bar offset by a 200px sidebar (flask-launchpad layout) using
+   --bg-sidebar / --text-sidebar, which don't exist in Rulezet — it rendered
+   as a big bar half off to the left. */
 
 .dt-bulk-bar {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.625rem 1rem;
-    background-color: var(--bg-sidebar);
-    color: var(--text-sidebar);
-    border-top: 1px solid var(--border-sidebar);
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 1.25rem;
     z-index: 1050;
-    flex-wrap: nowrap;
-    box-shadow: 0 -4px 16px rgba(0,0,0,.25);
-    border-radius: 0;
-}
-
-@media (min-width: 992px) {
-    .dt-bulk-bar {
-        left: 200px;
-    }
-}
-
-.dt-wrapper--bulk-open {
-    padding-bottom: 52px;
-}
-
-.dt-bulk-count {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--text-sidebar);
-    flex: 1;
-    min-width: 80px;
-    white-space: nowrap;
-}
-
-.dt-bulk-actions {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
+    gap: 1rem;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+    padding: .55rem 1.1rem;
+    max-width: calc(100vw - 2rem);
     flex-wrap: wrap;
 }
 
+.dt-wrapper--bulk-open {
+    padding-bottom: 72px;
+}
+
+.dt-bulk-count { font-size: .85rem; font-weight: 600; color: var(--text-color); white-space: nowrap; }
+.dt-bulk-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
 .dt-bulk-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.3rem 0.65rem;
-    border-radius: var(--radius-sm);
-    border: 1px solid rgba(255,255,255,.2);
-    background: rgba(255,255,255,.08);
-    color: var(--text-sidebar);
-    font-size: 0.78rem;
-    font-weight: 500;
-    font-family: var(--font-sans);
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    color: var(--text-color);
+    border-radius: 999px;
+    padding: .3rem .8rem;
+    font-size: .8rem;
     cursor: pointer;
-    transition: all var(--transition);
+    display: inline-flex;
+    gap: .35rem;
+    align-items: center;
 }
-
-.dt-bulk-btn:hover {
-    background: rgba(255,255,255,.15);
-    border-color: rgba(255,255,255,.35);
-}
-
-.dt-bulk-btn--danger {
-    border-color: rgba(239, 68, 68, .5);
-    color: #fca5a5;
-}
-
-.dt-bulk-btn--danger:hover {
-    background: rgba(239, 68, 68, .2);
-    border-color: rgba(239, 68, 68, .75);
-}
-
+.dt-bulk-btn:hover { background: var(--border-color); }
+.dt-bulk-btn--danger { color: #dc3545; border-color: rgba(220, 53, 69, .4); }
+.dt-bulk-btn--danger:hover { background: rgba(220, 53, 69, .12); }
 .dt-bulk-clear {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.3rem 0.65rem;
-    border-radius: var(--radius-sm);
     border: none;
-    background: none;
-    color: var(--text-sidebar-muted);
-    font-size: 0.78rem;
+    background: transparent;
+    color: var(--subtle-text-color);
+    font-size: .8rem;
     cursor: pointer;
-    transition: color var(--transition);
 }
+.dt-bulk-clear:hover { color: var(--text-color); }
 
-.dt-bulk-clear:hover {
-    color: var(--text-sidebar);
-}
-
-/* Transition: bulk bar slides in from the bottom */
 .dt-bulk-slide-enter-active,
-.dt-bulk-slide-leave-active {
-    transition: transform 0.22s ease, opacity 0.22s ease;
-}
-
+.dt-bulk-slide-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .dt-bulk-slide-enter-from,
-.dt-bulk-slide-leave-to {
-    transform: translateY(100%);
-    opacity: 0;
-}
+.dt-bulk-slide-leave-to { opacity: 0; transform: translateX(-50%) translateY(12px); }
 
 /*---DT_TABLE---*/
 

@@ -22,6 +22,8 @@
  *   canVote             Boolean                                default:false
  *   canFavorite         Boolean                                default:false
  *   canEdit             Boolean                                default:false
+ *   extraRowActions     Array  [{ key, label, icon }]           default:[] — page-specific
+ *                       per-rule buttons; clicking one emits row-action({ action: key, rule })
  *   canDelete           Boolean                                default:false
  *   bulkActions         Array    [{key,label,icon?,variant?}]  default:[]
  *   initialPerPage      Number                                 default:12
@@ -64,6 +66,7 @@ import ReportModal              from '/static/js/components/ReportModal.js'
 import MultiAttackFilter        from '/static/js/attack/multiAttackFilter.js'
 import AttackDisplayList        from '/static/js/attack/attackDisplayList.js'
 import YaraMatchDetail           from '/static/js/rule_tester/YaraMatchDetail.js'
+import FormatChip                from '/static/js/rule/formatChip.js'
 import { MASCOT_ENABLED }       from '/static/js/components/mascot.js'
 
 const { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue
@@ -89,6 +92,7 @@ export default {
         MultiAttackFilter,
         AttackDisplayList,
         YaraMatchDetail,
+        FormatChip,
     },
 
     props: {
@@ -123,6 +127,9 @@ export default {
         canVote:            { type: Boolean,          default: false },
         canFavorite:        { type: Boolean,          default: false },
         canEdit:            { type: Boolean,          default: false },
+        // Opt-in, page-local per-row buttons (e.g. bundle detail: "Show in
+        // structure"). No effect on pages that don't pass it.
+        extraRowActions:    { type: Array,            default: () => [] },
         canDelete:          { type: Boolean,          default: false },
         bulkActions:        { type: Array,            default: () => [] },
         initialPerPage:     { type: Number,           default: 12 },
@@ -130,6 +137,8 @@ export default {
         initialFilters:     { type: Object,           default: () => ({}) },
         csrfToken:          { type: String,           default: '' },
         currentUserIsAuthenticated: { type: Boolean,  default: false },
+        // "Alert me for this search" link under the filters (read mode, logged in).
+        showAlertButton:    { type: Boolean,          default: true },
         showExport:         { type: Boolean,          default: true },
         syncUrl:            { type: Boolean,          default: true },
         confirmDisabled:    { type: Boolean,          default: false },
@@ -222,7 +231,7 @@ export default {
         showConfirmButton:  { type: Boolean,             default: true },
     },
 
-    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'toggle-select', 'rule-drag-start', 'rule-drag-end', 'status-change'],
+    emits: ['create', 'edit', 'delete', 'vote', 'favorite', 'bulk-action', 'send', 'toggle-select', 'rule-drag-start', 'rule-drag-end', 'status-change', 'row-action'],
 
     // 'ruleType'/'onFilterChange' let a parent page drive the format filter
     // from outside (e.g. clicking a "12 YARA rules" stat elsewhere on the
@@ -603,6 +612,7 @@ export default {
                         :selected-tags="selectedTags"
                         :total-rules="exportTotalRules"
                         :rule-ids="exportRuleIds"
+                        :filter-query="exportFilterQuery"
                         :csrf-token="csrfToken"
                         :current-user-is-authenticated="currentUserIsAuthenticated ? 'True' : 'False'"
                         :start-view="exportActionView"
@@ -610,8 +620,20 @@ export default {
                     </rule-export-action>
                 </div>
 
+
             </div>
         </template>
+
+        <!-- ── "Alert me" — turn the current filters into a saved alert ── -->
+        <div v-if="showAlertButton && currentUserIsAuthenticated && mode === 'read' && alertUrl"
+             class="rl-alert-row">
+            <span class="rl-alert-hint">
+                <i class="fa-solid fa-satellite-dish me-1"></i>Want to hear about new rules like these?
+            </span>
+            <a :href="alertUrl" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                <i class="fa-solid fa-bell me-1"></i>Alert me for this search
+            </a>
+        </div>
 
         <!-- ── Select-all-pages banner ── -->
         <div v-if="showSelectBanner" class="rl-select-banner">
@@ -724,9 +746,8 @@ export default {
                           title="Executable code, not a declarative detection rule">
                         <i class="fa-solid fa-code me-1"></i>CODE
                     </span>
-                    <span class="badge rounded-pill bg-dark pt-1 shadow-sm">
-                        {{ rule.format ? rule.format.toUpperCase() : '?' }}
-                    </span>
+                    <format-chip :format="rule.format" :can-filter="!isFilterHidden('format')"
+                                 :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
                     <span v-if="showRelationType && relationLabels[rule.id]" class="badge rounded-pill shadow-sm pt-1"
                           style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25);">
                         <i class="fa-solid fa-diagram-project me-1"></i>{{ relationLabels[rule.id] }}
@@ -929,6 +950,11 @@ export default {
                                         <a class="dropdown-item rounded-2" :href="'/rule/detail_rule/' + rule.id">
                                             <i class="fas fa-eye me-2 text-muted"></i>View Detail
                                         </a>
+                                    </li>
+                                    <li v-for="act in extraRowActions" :key="act.key">
+                                        <button class="dropdown-item rounded-2" @click="$emit('row-action', { action: act.key, rule })">
+                                            <i :class="act.icon + ' me-2 text-primary'"></i>{{ act.label }}
+                                        </button>
                                     </li>
                                     <template v-if="currentUserIsAuthenticated">
                                         <li>
@@ -1223,10 +1249,8 @@ export default {
                                       title="Executable code, not a declarative detection rule">
                                     <i class="fa-solid fa-code me-1"></i>CODE
                                 </span>
-                                <span v-if="rule.format"
-                                      class="badge rounded-pill bg-dark pt-1 shadow-sm">
-                                    {{ rule.format.toUpperCase() }}
-                                </span>
+                                <format-chip v-if="rule.format" :format="rule.format" :can-filter="!isFilterHidden('format')"
+                                             :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
                             </td>
 
                             <td v-show="colVisible.editor" class="dt-td" style="max-width:140px;"
@@ -1311,6 +1335,12 @@ export default {
 
                             <td class="dt-td dt-td--actions">
                                 <div class="dt-actions">
+                                    <button v-for="act in extraRowActions" :key="act.key"
+                                            class="dt-action-btn rl-extra-action"
+                                            :title="act.label"
+                                            @click.stop="$emit('row-action', { action: act.key, rule })">
+                                        <i :class="act.icon"></i>
+                                    </button>
                                     <!-- Favori : toujours visible -->
                                     <button v-if="canFavorite"
                                             class="dt-action-btn"
@@ -1450,9 +1480,8 @@ export default {
                                                       title="Executable code, not a declarative detection rule">
                                                     <i class="fa-solid fa-code me-1"></i>CODE
                                                 </span>
-                                                <span v-if="rule.format" class="badge rounded-pill bg-dark">
-                                                    {{ rule.format.toUpperCase() }}
-                                                </span>
+                                                <format-chip v-if="rule.format" :format="rule.format" :can-filter="!isFilterHidden('format')"
+                                                             :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
                                                 <span v-else>—</span>
                                             </span>
                                         </div>
@@ -1984,49 +2013,60 @@ export default {
         // silently won, occasionally leaving the list empty even though
         // the "correct" response was actually already in and then overwritten.
         let fetchSeq = 0
+        // Every filter the list sends to its fetch endpoint — shared with the
+        // export / bundle-from-filters action so both scope to exactly the
+        // rules on screen (anything missing here used to make the bundle
+        // endpoint think no filter was active → 400).
+        function buildFilterParams() {
+            const params = new URLSearchParams()
+            if (search.value)                    params.set('search', search.value)
+            if (searchField.value !== 'all')     params.set('search_field', searchField.value)
+            if (exactMatch.value)                params.set('exact_match', 'true')
+            if (ruleType.value)                  params.set('rule_type', ruleType.value)
+            if (sortKey.value)                   params.set('sort', sortKey.value)
+            if (sortKey.value)                   params.set('dir', sortDir.value)
+            if (props.source)                    params.set('source', props.source)
+            if (props.branch)                    params.set('branch', props.branch)
+            if (props.ids)                        params.set('ids', Array.isArray(props.ids) ? props.ids.join(',') : props.ids)
+            if (numericUserId.value)             params.set('user_id', numericUserId.value)
+            else if (scopeMine.value && numericCurrentUserId.value) params.set('user_id', numericCurrentUserId.value)
+            if (selectedTags.value.length)       params.set('tags', selectedTags.value.join(','))
+            if (selectedSources.value.length)    params.set('sources', selectedSources.value.join(','))
+            if (selectedBranches.value.length)   params.set('branches', selectedBranches.value.join(','))
+            if (selectedLicenses.value.length)   params.set('licenses', selectedLicenses.value.join(','))
+            if (selectedVulns.value.length)      params.set('vulnerabilities', selectedVulns.value.join(','))
+            if (selectedAttacks.value.length)    params.set('attacks', selectedAttacks.value.join(','))
+            if (cveOnly.value)                    params.set('has_cve', 'true')
+            if (aiAnalysisOnly.value)             params.set('has_ai_analysis', 'true')
+            if (hasRelationsOnly.value)            params.set('has_relations', 'true')
+            if (hasTagsOnly.value)                 params.set('has_tags', 'true')
+            if (hasLicenseOnly.value)              params.set('has_license', 'true')
+            if (hasAttackOnly.value)               params.set('has_attack', 'true')
+            if (qualityMin.value !== null)        params.set('quality_score_min', qualityMin.value)
+            if (qualityMax.value !== null)        params.set('quality_score_max', qualityMax.value)
+            if (personFilter.value.values.length) {
+                const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
+                params.set(pKey, personFilter.value.values.join(','))
+            }
+            if (props.showValidationFilters) {
+                if (riskFilter.value === 'mismatch') params.set('mismatch_only', 'true')
+                else if (riskFilter.value) params.set('risk_level', riskFilter.value)
+                for (const b of selectedBinaries.value) params.append('binary', b)
+                if (pendingOnly.value) params.set('pending_only', 'true')
+                if (resolvedOnly.value) params.set('resolved_only', 'true')
+            }
+            return params
+        }
+
+        const exportFilterQuery = computed(() => buildFilterParams().toString())
+
         async function fetchData() {
             const mySeq = ++fetchSeq
             loading.value = true
             try {
-                const params = new URLSearchParams()
+                const params = buildFilterParams()
                 params.set('page', page.value)
                 params.set('per_page', perPage.value)
-                if (search.value)                    params.set('search', search.value)
-                if (searchField.value !== 'all')     params.set('search_field', searchField.value)
-                if (exactMatch.value)                params.set('exact_match', 'true')
-                if (ruleType.value)                  params.set('rule_type', ruleType.value)
-                if (sortKey.value)                   params.set('sort', sortKey.value)
-                if (sortKey.value)                   params.set('dir', sortDir.value)
-                if (props.source)                    params.set('source', props.source)
-                if (props.branch)                    params.set('branch', props.branch)
-                if (props.ids)                        params.set('ids', Array.isArray(props.ids) ? props.ids.join(',') : props.ids)
-                if (numericUserId.value)             params.set('user_id', numericUserId.value)
-                else if (scopeMine.value && numericCurrentUserId.value) params.set('user_id', numericCurrentUserId.value)
-                if (selectedTags.value.length)       params.set('tags', selectedTags.value.join(','))
-                if (selectedSources.value.length)    params.set('sources', selectedSources.value.join(','))
-                if (selectedBranches.value.length)   params.set('branches', selectedBranches.value.join(','))
-                if (selectedLicenses.value.length)   params.set('licenses', selectedLicenses.value.join(','))
-                if (selectedVulns.value.length)      params.set('vulnerabilities', selectedVulns.value.join(','))
-                if (selectedAttacks.value.length)    params.set('attacks', selectedAttacks.value.join(','))
-                if (cveOnly.value)                    params.set('has_cve', 'true')
-                if (aiAnalysisOnly.value)             params.set('has_ai_analysis', 'true')
-                if (hasRelationsOnly.value)            params.set('has_relations', 'true')
-                if (hasTagsOnly.value)                 params.set('has_tags', 'true')
-                if (hasLicenseOnly.value)              params.set('has_license', 'true')
-                if (hasAttackOnly.value)               params.set('has_attack', 'true')
-                if (qualityMin.value !== null)        params.set('quality_score_min', qualityMin.value)
-                if (qualityMax.value !== null)        params.set('quality_score_max', qualityMax.value)
-                if (personFilter.value.values.length) {
-                    const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
-                    params.set(pKey, personFilter.value.values.join(','))
-                }
-                if (props.showValidationFilters) {
-                    if (riskFilter.value === 'mismatch') params.set('mismatch_only', 'true')
-                    else if (riskFilter.value) params.set('risk_level', riskFilter.value)
-                    for (const b of selectedBinaries.value) params.append('binary', b)
-                    if (pendingOnly.value) params.set('pending_only', 'true')
-                    if (resolvedOnly.value) params.set('resolved_only', 'true')
-                }
 
                 const sep = props.fetchUrl.includes('?') ? '&' : '?'
                 const res = await fetch(`${props.fetchUrl}${sep}${params}`)
@@ -2066,6 +2106,13 @@ export default {
         }
 
         // ── Filter change handlers ────────────────────────────────────────
+        // Format chip "Add to filter" (formatChip.js): filter this list on it.
+        function filterByFormat(fmt) {
+            if (!fmt || ruleType.value === fmt) return
+            ruleType.value = fmt
+            onFilterChange()
+        }
+
         function onFilterChange() {
             page.value = 1
             // only reset "select all pages" — individual picks survive the filter change
@@ -2548,8 +2595,34 @@ export default {
             selectedLicenses.value.length > 0 ||
             selectedVulns.value.length > 0 ||
             selectedAttacks.value.length > 0 ||
-            personFilter.value.values.length > 0
+            personFilter.value.values.length > 0 ||
+            cveOnly.value || aiAnalysisOnly.value || hasRelationsOnly.value ||
+            qualityMin.value !== null || qualityMax.value !== null
         )
+
+        // /alert/new prefill built from the active filters — only the filters
+        // an alert can watch are carried over; null when none of them is set.
+        const alertUrl = computed(() => {
+            const p = new URLSearchParams()
+            const q = search.value.trim()
+            if (q.length >= 3 && q.length <= 60 && searchField.value !== 'uuid') p.set('keywords', q)
+            if (ruleType.value) p.set('formats', ruleType.value)
+            if (selectedTags.value.length) p.set('tags', selectedTags.value.join(','))
+            if (selectedVulns.value.length) p.set('cves', selectedVulns.value.join(','))
+            if (selectedAttacks.value.length) p.set('attacks', selectedAttacks.value.join(','))
+            const repos = selectedSources.value
+                .map(s => (s.match(/github\.com\/([^/\s]+\/[^/\s#?]+)/i) || [])[1])
+                .filter(Boolean).map(r => r.replace(/\.git$/, '').toLowerCase())
+            if (repos.length) p.set('github_repos', repos.join(','))
+            if (cveOnly.value && !props.hasCveOnly) p.set('cve_any', 'true')
+            if (hasTagsOnly.value) p.set('tag_any', 'true')
+            if (hasAttackOnly.value) p.set('attack_any', 'true')
+            if (![...p.keys()].length) return null
+            const name = [q, ...selectedVulns.value, ...selectedTags.value, ...selectedAttacks.value, ruleType.value]
+                .filter(Boolean).slice(0, 3).join(', ')
+            p.set('name', (name || 'My search').slice(0, 120))
+            return `/alert/new?${p.toString()}`
+        })
 
         // IDs to pass to RuleExportAction:
         //   - null → filter-based export (all pages selected, or filters active but no manual pick)
@@ -2592,6 +2665,7 @@ export default {
         // rules until the page was manually reloaded.
         watch(() => props.source, () => { page.value = 1; fetchData() })
         watch(() => props.branch, () => { page.value = 1; fetchData() })
+        watch(() => props.ids, () => { page.value = 1; fetchData() })
 
         // Auto-expand all items when search field is "content"
         watch(items, (newItems) => {
@@ -2630,7 +2704,7 @@ export default {
             // Methods
             isOwner, isFilterHidden, rlRiskTextColor, rlRiskTitle, binaryBadgeStyle, isResolved,
             riskFilter, selectedBinaries, toggleBinary, pendingOnly, resolvedOnly, setPendingOnly, setResolvedOnly,
-            fetchData, onFilterChange, resetFilters,
+            fetchData, onFilterChange, filterByFormat, resetFilters,
             onSearchInput, clearSearch,
             setSort, sortIcon, onCardSortChange,
             goToPage,
@@ -2642,7 +2716,7 @@ export default {
             // Status
             statusIcon, statusLabel, canChangeStatus, cycleStatus,
             // Export
-            hasActiveFilters, exportRuleIds, showExportBar, exportTotalRules, facetContextParams,
+            hasActiveFilters, alertUrl, exportRuleIds, exportFilterQuery, showExportBar, exportTotalRules, facetContextParams,
             exportActionView,
         }
     },

@@ -462,7 +462,7 @@ export default {
                                 <div class="lt-actor-avatar">{{ getInitials(log.actor_name) }}</div>
                                 <span class="lt-actor-name" :title="log.actor_name">{{ log.actor_name }}</span>
                             </a>
-                            <span v-else class="lt-actor-none">System</span>
+                            <span v-else class="lt-actor-none">{{ log.actor_name || 'System' }}</span>
                         </td>
 
                         <!-- Visibility -->

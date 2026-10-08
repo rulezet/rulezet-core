@@ -47,7 +47,8 @@ def _safe_repo_files(repo_dir: str):
 ##############################################################################################
 
 
-def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, format_name: str , user: User) -> int:
+def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, format_name: str , user: User,
+                            repo_dir: str = None) -> int:
     imported = 0
     skipped = 0
     bad_rules = 0
@@ -65,6 +66,13 @@ def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, f
             validation_result  = format_rule.validate(rule_text)
             # Parse metadata
             metadata = format_rule.parse_metadata(rule_text , enriched_info , validation_result)
+            # Where the rule lives in the repository and which branch it came
+            # from — what an update check matches it with later (same as
+            # the interactive import, session_class.py).
+            if repo_dir:
+                metadata["github_path"] = os.path.relpath(filepath, repo_dir)
+            if info.get("branch"):
+                metadata["branch"] = info.get("branch")
 
             result_dict = {
                 "validation": {
@@ -137,7 +145,9 @@ async def extract_rule_from_repo(repo_dir: str, info: dict, user: User):
     imported = 0
     skipped = 0
 
-    # Get all subclasses of RuleType
+    # Get all subclasses of RuleType — the format modules must be imported
+    # first, or (e.g. right after a restart) there are none and nothing is imported.
+    load_all_rule_formats()
     subclasses = RuleType.__subclasses__()
 
     # __subclasses__() :
@@ -185,7 +195,7 @@ async def extract_rule_from_repo(repo_dir: str, info: dict, user: User):
             continue
 
         bad, imported_count, skipped_count = Process_rules_by_format(
-            files, rule_instance, info, format_name, user
+            files, rule_instance, info, format_name, user, repo_dir=repo_dir
         )
 
         bad_rules += bad
@@ -195,13 +205,18 @@ async def extract_rule_from_repo(repo_dir: str, info: dict, user: User):
     return bad_rules, imported, skipped
 
 
-def verify_syntax_rule_by_format(rule_dict: dict) -> tuple[bool, str]:
+def verify_syntax_rule_by_format(rule_dict: dict, rule=None) -> tuple[bool, str]:
     """
     Verify the syntax of the rule based on its format to accept or reject its creation.
     Returns (True, "") if the syntax is valid, (False, error_message) otherwise.
+
+    `rule`: the existing rule being edited / proposed an edit for — its
+    source, owner and links make the rules it references trusted YARA
+    dependencies (an admin or a proposer isn't the author).
     """
 
-    rule_format = rule_dict.get("format", "").lower()
+    rule_format = rule_dict.get("format")
+    rule_format = rule_format.strip().lower() if isinstance(rule_format, str) else ""
     if not rule_format:
         return False, "Missing rule format."
     load_all_rule_formats()
@@ -225,7 +240,15 @@ def verify_syntax_rule_by_format(rule_dict: dict) -> tuple[bool, str]:
         return False, "Rule content ('to_string') is empty."
 
     try:
-        result: ValidationResult = rule_instance.validate(content)
+        context = {}
+        if rule is not None:
+            from flask_login import current_user
+            owners = [rule.user_id]
+            if current_user and current_user.is_authenticated:
+                owners.append(current_user.id)
+            context = {"rule_id": rule.id, "source": rule.source, "github_path": rule.github_path,
+                       "owner_ids": tuple(owners)}
+        result: ValidationResult = rule_instance.validate(content, **context)
 
         if result.ok:
             return True, ""

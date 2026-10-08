@@ -114,7 +114,7 @@
         </p>
         <div v-if="fromProposalId" class="rounded-3 border p-3 mt-3 d-flex align-items-center gap-2" style="background:var(--light-bg-color);font-size:.85rem;max-width:600px;">
             <i class="fa-solid fa-code-branch text-muted"></i>
-            <span>Revising <a :href="'/rule/proposal_content_discuss?id=' + fromProposalId" class="fw-semibold">proposal #[[ fromProposalId ]]</a> — starting from its proposed content.</span>
+            <span>Revising <a :href="'/rule/proposal_content_discuss?id=' + fromProposalId" class="fw-semibold"><template v-if="fromVersion">v[[ fromVersion ]] — </template>proposal #[[ fromProposalId ]]</a> — starting from its proposed content. Your revision becomes a new version of the same thread.</span>
         </div>
     </div>
 
@@ -317,6 +317,7 @@ createApp({
         ];
 
         const fromProposalId = ref(FROM_PROPOSAL_ID ? parseInt(FROM_PROPOSAL_ID) : null);
+        const fromVersion    = ref(null);
 
         onMounted(async () => {
             try {
@@ -324,6 +325,7 @@ createApp({
                     const res  = await fetch('/rule/get_proposal?id=' + fromProposalId.value);
                     const data = await res.json();
                     if (data.proposal) {
+                        fromVersion.value     = data.proposal.version || null;
                         proposalContent.value = data.proposal.proposed_content || '';
                         originalContent.value = data.proposal.proposed_content || '';
                         ruleFormat.value       = data.proposal.rule_format || RULE_FORMAT;
@@ -381,7 +383,7 @@ createApp({
         }
 
         return {
-            RULE_TITLE_SHORT, fromProposalId,
+            RULE_TITLE_SHORT, fromProposalId, fromVersion,
             proposalContent, originalContent, ruleFormat,
             showOriginal, showDiff, editType, editTypes,
             proposalMessage, messageMode, messageModes,

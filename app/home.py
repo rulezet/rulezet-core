@@ -1370,6 +1370,97 @@ def admin_settings_update_env():
     return jsonify({'success': ok, 'message': msg})
 
 
+@home_blueprint.route('/admin/settings/sso', methods=['POST'])
+@login_required
+def admin_settings_sso():
+    """Save the Single Sign-On (OIDC) settings + local sign-up switch from
+    Admin → Settings → Security. Each value is validated and typed here (the
+    generic update_env route stores raw strings), written to .env, applied to
+    the running config, and the OIDC client is re-registered — no restart.
+    The client secret is write-only: empty = keep the current one."""
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    import re
+    from urllib.parse import urlparse
+    from .features.admin import admin_core as AdminModel
+    from .features.account.oidc_core import register_oidc_client
+    from .features.ai.ai_core import is_local_ollama_url
+
+    data = request.get_json() or {}
+    enabled = bool(data.get('oidc_enabled'))
+    values = {
+        'OIDC_DISCOVERY_ENDPOINT': (data.get('oidc_discovery_endpoint') or '').strip(),
+        'OIDC_CLIENT_ID':          (data.get('oidc_client_id') or '').strip(),
+        'OIDC_SCOPE':              (data.get('oidc_scope') or '').strip() or 'openid email profile',
+        'OIDC_GROUP_ADMIN':        (data.get('oidc_group_admin') or '').strip() or 'RulezetAdmin',
+        'OIDC_GROUP_EDITOR':       (data.get('oidc_group_editor') or '').strip() or 'RulezetEditor',
+    }
+    secret = (data.get('oidc_client_secret') or '').strip()
+
+    for key, val in list(values.items()) + [('OIDC_CLIENT_SECRET', secret)]:
+        if any(c in val for c in "'\"\r\n") or len(val) > 512:
+            return jsonify({'success': False, 'message': f'Invalid value for {key}.'}), 400
+    url = values['OIDC_DISCOVERY_ENDPOINT']
+    if url:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+            return jsonify({'success': False, 'message': 'The discovery URL must look like '
+                            'https://sso.example.org/realms/<realm>/.well-known/openid-configuration'}), 400
+        if parsed.scheme == 'http' and not is_local_ollama_url(url):
+            return jsonify({'success': False, 'message': 'The discovery URL must use https:// '
+                            '(plain http only for a server on this network).'}), 400
+    if not re.fullmatch(r'[\w .:/-]+', values['OIDC_SCOPE']) or 'openid' not in values['OIDC_SCOPE'].split():
+        return jsonify({'success': False, 'message': "The scope must contain 'openid'."}), 400
+    if enabled:
+        if not url or not values['OIDC_CLIENT_ID']:
+            return jsonify({'success': False, 'message': 'Set the discovery URL and the client ID before '
+                            'enabling single sign-on.'}), 400
+        if not (secret or current_app.config.get('OIDC_CLIENT_SECRET')):
+            return jsonify({'success': False, 'message': 'Set the client secret before enabling single sign-on.'}), 400
+
+    values['OIDC_ENABLED'] = 'true' if enabled else 'false'
+    values['SIGN_UP_ENABLED'] = 'true' if data.get('sign_up_enabled', True) else 'false'
+    if secret:
+        values['OIDC_CLIENT_SECRET'] = secret
+
+    for key, val in values.items():
+        if not AdminModel.write_env_value(key, val):
+            return jsonify({'success': False, 'message': f'Could not write {key} to .env.'}), 500
+        os.environ[key] = val
+        current_app.config[key] = (val == 'true') if key in ('OIDC_ENABLED', 'SIGN_UP_ENABLED') else val
+    register_oidc_client(current_app)
+
+    log_activity('admin.settings_changed',
+                 f"Single sign-on {'enabled' if enabled else 'disabled'}"
+                 f"{' (client secret replaced)' if secret else ''}; sign-up "
+                 f"{'open' if values['SIGN_UP_ENABLED'] == 'true' else 'closed'}",
+                 extra={'keys': sorted(values)})
+    return jsonify({'success': True, 'message': 'Saved and applied.'})
+
+
+@home_blueprint.route('/admin/settings/sso/test', methods=['POST'])
+@login_required
+def admin_settings_sso_test():
+    """Fetch the OIDC discovery document to check the URL before saving."""
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    import requests as http_requests
+    from urllib.parse import urlparse
+    url = ((request.get_json() or {}).get('oidc_discovery_endpoint') or '').strip()
+    if urlparse(url).scheme not in ('http', 'https') or not urlparse(url).hostname:
+        return jsonify({'success': False, 'message': 'Enter a valid discovery URL first.'}), 400
+    try:
+        resp = http_requests.get(url, timeout=8, headers={'Accept': 'application/json'})
+        resp.raise_for_status()
+        doc = resp.json()
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Could not read the discovery document ({type(e).__name__}).'}), 502
+    if not isinstance(doc, dict) or not doc.get('issuer') or not doc.get('authorization_endpoint'):
+        return jsonify({'success': False, 'message': 'This URL does not return an OpenID Connect discovery document.'}), 502
+    return jsonify({'success': True, 'issuer': str(doc.get('issuer'))[:300],
+                    'message': f"Reachable — issuer {str(doc.get('issuer'))[:200]}"})
+
+
 @home_blueprint.route('/admin/settings/test_email', methods=['POST'])
 @login_required
 def admin_settings_test_email():
@@ -1462,6 +1553,32 @@ def admin_settings_instance_init():
         'version':         cfg.version,
         'last_started_at': cfg.last_started_at.strftime('%Y-%m-%d %H:%M:%S'),
     })
+
+
+@home_blueprint.route('/admin/settings/email_toggle', methods=['POST'])
+@login_required
+def admin_settings_email_toggle():
+    """Enable/disable every user-facing email feature (alert emails and
+    digests) instance-wide. Their UI disappears and their routes refuse
+    server-side while off — see app/core/utils/mail_status.py."""
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from app import db
+    from .core.db_class.db import InstanceConfig
+    from .core.utils.activity_log import log_activity
+    from .core.utils.mail_status import email_status
+
+    data = request.get_json(silent=True) or {}
+    cfg = InstanceConfig.query.first()
+    if not cfg:
+        return jsonify({'error': 'Instance not configured yet'}), 400
+
+    cfg.email_enabled = bool(data.get('enabled', True))
+    db.session.commit()
+    log_activity('admin.email_toggle',
+                 f"{'Enabled' if cfg.email_enabled else 'Disabled'} email features instance-wide",
+                 target_type='instance_config', target_id=cfg.id, is_public=False)
+    return jsonify({'success': True, **email_status()})
 
 
 @home_blueprint.route('/admin/settings/chatbot_toggle', methods=['POST'])

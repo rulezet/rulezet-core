@@ -3,6 +3,7 @@ Flask + Vue.js 3 + PostgreSQL. Community platform for cybersecurity detection ru
 Preferred entrypoint is `manage.py` (wraps everything below): `python3 manage.py start` (dev server), `python3 manage.py test`, `python3 manage.py update` (post-`git pull` deps+db sync), `python3 manage.py deploy` (prod backup+update+restart), `python3 manage.py db-init` / `db-reload`, `python3 manage.py backup` / `restore`. Full list: `python3 manage.py --help`.
 Lower-level equivalents still used directly in dev: `source env/bin/activate && ./launch.sh -l` (run dev), `./launch.sh -t` or `FLASKENV=testing pytest tests` (run tests), `python3 app.py -i` (DB init) / `-r` (DB reset).
 Single test: `FLASKENV=testing pytest tests/rules/test_rule.py -k "test_name"`
+Test rework in progress: `tests/` = current suite run by CI on every commit; `tests_new/` = new suite by feature (access / CRUD / API / robustness), run with `FLASKENV=testing pytest tests_new` — plan and progress in `docs/design/test_restructure.md`. Never run two pytest processes in the same checkout (they share the SQLite file).
 Migrations: `flask db migrate -m "desc" && flask db upgrade`
 Environments via `FLASKENV`: `development` (pg, debug), `testing` (sqlite, no csrf), `production` (pg).
 App runs on `127.0.0.1:7009` by default. Secrets in `.env` — see `.env_default` for the full set (includes `GITHUB_TOKEN` for GitHub rule import/issue filing, `MAIL_SERVER`/`MAIL_PORT`/etc., `INSTANCE_PUBLIC_URL`); chatbot feature also reads `OLLAMA_URL`/`OLLAMA_MODEL` from `config.py`.

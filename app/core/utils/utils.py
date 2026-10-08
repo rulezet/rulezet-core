@@ -65,18 +65,65 @@ def verif_api_key(headers):
     return user is not None
 
 
+def internal_error(exc, message="An internal error occurred — please try again later."):
+    """Log an unexpected exception with its traceback and return a message
+    safe to show a client: the raw exception text (SQL, paths, internals)
+    stays in the server log."""
+    try:
+        from flask import current_app
+        current_app.logger.error("Unhandled error: %s", exc, exc_info=exc)
+    except Exception:
+        pass
+    return message
+
+
+# Largest value of a PostgreSQL `integer` primary key — a bigger number sent by
+# a client would make the query itself fail (500) instead of finding nothing.
+DB_ID_MAX = 2**31 - 1
+
+
+def as_db_id(value):
+    """An integer id from untrusted input (JSON value or query string), or
+    None. Refuses booleans (JSON `true` would otherwise read as id 1),
+    floats, text that isn't a plain number ("²" passes str.isdigit() but
+    not int()), and out-of-range numbers."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, str) and value.strip().isascii() and value.strip().isdigit():
+        number = int(value.strip())
+    else:
+        return None
+    return number if 1 <= number <= DB_ID_MAX else None
+
+
+def json_object():
+    """The request's JSON body when it is an object, else {} — never raises
+    on a missing / malformed body or a JSON list/string/number."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
 def safe_referrer(default='/'):
-    """Return request.referrer only when it points to the same host."""
+    """The referrer as a local path ("/…?…") when it points to this host —
+    else `default`. Never a full URL, never "//host" or "/\\host" (which
+    browsers follow to another site), never a non-http(s) scheme."""
     ref = request.referrer
     if not ref:
         return default
     try:
         parsed = urlparse(ref)
+        if parsed.scheme and parsed.scheme.lower() not in ('http', 'https'):
+            return default
         if parsed.netloc and parsed.netloc.lower() != request.host.lower():
+            return default
+        path = parsed.path or '/'
+        if not path.startswith('/') or path.startswith('//') or path.startswith('/\\'):
             return default
     except Exception:
         return default
-    return ref
+    return path + (f'?{parsed.query}' if parsed.query else '')
 
 
 def create_specific_dir(specific_dir):

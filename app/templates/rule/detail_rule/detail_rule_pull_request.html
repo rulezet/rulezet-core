@@ -2,159 +2,9 @@
 {% block title %}{{ rule.title }} — Proposals — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
-<style>
-.proposal-card {
-    background: var(--card-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    overflow: hidden;
-    transition: box-shadow 0.15s ease, transform 0.15s ease;
-    text-decoration: none;
-    color: inherit;
-    display: block;
-}
-.proposal-card:hover {
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-    transform: translateY(-1px);
-    text-decoration: none;
-    color: inherit;
-}
-.proposal-card__stripe {
-    height: 4px;
-    width: 100%;
-}
-.proposal-card__body {
-    padding: 1rem 1.25rem;
-}
-.proposal-card__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 0.6rem;
-}
-.proposal-card__meta {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 0;
-}
-.proposal-card__status-badge {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 0.28rem 0.65rem;
-    border-radius: 20px;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-.proposal-card__status-badge--final {
-    font-size: 0.8rem;
-    padding: 0.4rem 0.9rem;
-    box-shadow: 0 2px 8px rgba(25,135,84,0.35);
-}
-
-/* The accepted proposal is the final outcome of the whole discussion —
-   make it visually stand out from pending/rejected/superseded siblings. */
-.proposal-card--final {
-    border: 2px solid #198754;
-    box-shadow: 0 4px 18px rgba(25,135,84,0.15);
-    transform: scale(1.015);
-}
-.proposal-card--final:hover {
-    box-shadow: 0 8px 26px rgba(25,135,84,0.22);
-    transform: scale(1.015) translateY(-1px);
-}
-.proposal-card--final .proposal-card__body {
-    padding: 1.25rem 1.5rem;
-}
-.proposal-card__message {
-    font-size: 0.875rem;
-    color: var(--text-color);
-    background: var(--light-bg-color);
-    border-left: 3px solid var(--border-color);
-    border-radius: 0 6px 6px 0;
-    padding: 0.5rem 0.75rem;
-    margin: 0.5rem 0 0.75rem;
-    line-height: 1.5;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-}
-.proposal-card__footer {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    padding-top: 0.6rem;
-    border-top: 1px solid var(--border-color);
-}
-.proposal-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.72rem;
-    font-weight: 500;
-    padding: 0.2rem 0.55rem;
-    border-radius: 20px;
-    background: var(--light-bg-color);
-    color: var(--subtle-text-color);
-    border: 1px solid var(--border-color);
-}
-.proposal-score {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.72rem;
-    color: var(--subtle-text-color);
-}
-.proposal-score__bar {
-    width: 60px;
-    height: 6px;
-    background: var(--border-color);
-    border-radius: 99px;
-    overflow: hidden;
-    display: inline-block;
-    vertical-align: middle;
-}
-.proposal-score__fill {
-    display: block;
-    height: 6px;
-    border-radius: 99px;
-    transition: width 0.3s ease;
-}
-.proposal-card__time {
-    font-size: 0.72rem;
-    color: var(--subtle-text-color);
-    white-space: nowrap;
-}
-.proposal-comments-badge {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.75rem;
-    color: var(--subtle-text-color);
-    font-weight: 500;
-}
-.proposal-comments-badge.has-comments {
-    color: #0d6efd;
-}
-/* Status stripe colors */
-.stripe-pending  { background: linear-gradient(90deg, #ffc107, #fd7e14); }
-.stripe-approved,
-.stripe-accepted { background: linear-gradient(90deg, #198754, #20c997); }
-.stripe-rejected { background: linear-gradient(90deg, #dc3545, #c71f37); }
-
-/* Status badge colors */
-.status-pending  { background: #ffc107; color: #000; border: none; }
-.status-approved,
-.status-accepted { background: #198754; color: #fff; border: none; }
-.status-rejected { background: #dc3545; color: #fff; border: none; }
-.status-superseded { background: #6f42c1; color: #fff; border: none; }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_threads.css') }}">
 {% endblock %}
 {% import 'macros/detail_rule_nav.html' as nav with context %}
 
@@ -189,161 +39,208 @@
 
     {{ nav.detail_rule_nav(rule, 'pull_request', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count, test_count=test_count, ai_analysis_count=ai_analysis_count, linked_rules_count=linked_rules_count) }}
 
-    <div class="card border-0 shadow-sm rounded-4 p-4">
-
-        <div v-if="loading" class="text-center py-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading…</span>
-            </div>
+    <!-- Loading -->
+    <div v-if="!loaded" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading…</span>
         </div>
+    </div>
 
-        <template v-else>
-            <div v-if="pull_request_list.length === 0" class="text-center py-5" style="color: var(--subtle-text-color);">
-                <i class="fa-solid fa-code-pull-request fa-2x mb-3 d-block opacity-25"></i>
-                <p class="mb-2">No edit proposals yet for this rule.</p>
-                <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-primary rounded-pill">
+    <template v-else>
+
+        <!-- No proposal at all -->
+        <div v-if="total_proposals === 0 && !filtersActive" class="card border-0 shadow-sm rounded-4 p-5 text-center">
+            <i class="fa-solid fa-code-pull-request fa-2x mb-3 d-block opacity-25"></i>
+            <p class="mb-2 pt-muted">No edit proposals yet for this rule.</p>
+            <div>
+                <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-primary rounded-pill mt-2">
                     <i class="fa-solid fa-pen-to-square me-1"></i>Be the first to suggest an edit
                 </a>
             </div>
+        </div>
 
-            <div v-else>
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <p class="small fw-semibold mb-0" style="color: var(--subtle-text-color);">
-                        [[ pull_request_list.length ]] proposal[[ pull_request_list.length === 1 ? '' : 's' ]]
-                    </p>
-                    <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-outline-primary rounded-pill">
-                        <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
-                    </a>
+        <div v-else class="h-card">
+            <div class="h-card__header">
+                <div class="h-card__accent"></div>
+                <span class="h-card__title"><i class="fa-solid fa-code-pull-request me-1"></i>Edit proposals</span>
+                <help-tip title="Edit proposals"
+                          text="Anyone with an account can suggest a change to this rule; the rule's owner or an admin accepts (merges) or rejects it.&#10;When a proposal is revised, the revision joins it in the same thread — so a thread is one change and all its versions: v1 is the first proposal, v2, v3… the revisions, by date."></help-tip>
+
+                <!-- Summary badges -->
+                <div class="d-flex gap-2 ms-2">
+                    <span class="pt-count-badge">
+                        [[ total_proposals ]] proposal[[ total_proposals === 1 ? '' : 's' ]]
+                    </span>
+                    <span class="pt-count-badge pt-count-badge--purple">[[ thread_count_label ]]</span>
                 </div>
 
-                <div class="d-flex flex-column gap-3">
-                    <a v-for="proposal in pull_request_list" :key="proposal.id"
-                        :href="'/rule/proposal_content_discuss?id=' + proposal.id"
-                        class="proposal-card"
-                        :class="{ 'proposal-card--final': proposal.status === 'accepted' }">
+                <!-- Status filter chips -->
+                <div class="d-flex flex-wrap align-items-center gap-2 ms-auto">
+                    <help-tip title="Thread status"
+                              text="Open — at least one version is still waiting for review.&#10;Merged — one version was accepted: it is the rule's content now.&#10;Closed — every version was rejected."></help-tip>
+                    <span v-for="s in STATUS_FILTERS" :key="s.key"
+                          class="h-filter-chip" :class="{ active: filters.status === s.key }"
+                          role="button" tabindex="0"
+                          @click="setStatus(s.key)" @keydown.enter="setStatus(s.key)">
+                        <i class="fa-solid" :class="s.icon"></i>[[ s.label ]] · [[ statusCount(s.key) ]]
+                    </span>
+                </div>
 
-                        <!-- Status stripe -->
-                        <div class="proposal-card__stripe"
-                            :class="'stripe-' + proposal.status">
+                <a href="/rule/detail_rule/{{ rule.id }}/propose_edit" class="btn btn-sm btn-primary rounded-pill ms-2">
+                    <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
+                </a>
+            </div>
+
+            <div class="h-card__body">
+                <!-- Filters: one compact bar -->
+                <div class="pt-toolbar">
+                    <div class="pt-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="search" v-model="filters.q" placeholder="Search…" aria-label="Search proposals">
+                    </div>
+                    <select v-model="filters.edit_type" aria-label="Edit type" class="pt-select">
+                        <option value="">All types</option>
+                        <option v-for="(meta, key) in EDIT_TYPE_META" :key="key" :value="key">[[ meta.label ]]</option>
+                    </select>
+                    <select v-model="filters.sort" aria-label="Sort threads" class="pt-select">
+                        <option value="recent">Latest activity</option>
+                        <option value="oldest">Oldest first</option>
+                        <option value="versions">Most versions</option>
+                    </select>
+                    <help-tip title="Filters"
+                              text="Search looks in every version of a thread: its justification, its author's name or its number (#12).&#10;Type keeps the threads with at least one version of that kind of change.&#10;Sort: latest activity (newest version first), oldest thread first, or the threads with the most versions first."></help-tip>
+
+                    <button v-if="filtersActive" type="button" class="pt-tool-btn" @click="resetFilters" title="Clear filters">
+                        <i class="fa-solid fa-xmark"></i>[[ total_threads ]] match[[ total_threads === 1 ? '' : 'es' ]]
+                    </button>
+
+                    <span class="pt-toolbar__end">
+                        <button type="button" class="pt-tool-btn" @click="setAll(true)" title="Expand all threads" :disabled="!threads.length">
+                            <i class="fa-solid fa-angles-down"></i>
+                        </button>
+                        <button type="button" class="pt-tool-btn" @click="setAll(false)" title="Collapse all threads" :disabled="!threads.length">
+                            <i class="fa-solid fa-angles-up"></i>
+                        </button>
+                        <help-tip title="How to read a thread" :width="340"
+                                  text="Threads are collapsed: click one to see its versions on a timeline, oldest first.&#10;Dot colours — yellow: pending, green: accepted (merged), red: rejected, purple: superseded (closed automatically because another version of the thread was accepted).&#10;An indented version is a revision of the version above it (“revised v1”), not of the latest one.&#10;diff % — how much the version changes the rule's content. The speech bubble counts the comments; click a version to read and discuss it."></help-tip>
+                    </span>
+                </div>
+
+                <div v-if="threads.length === 0" class="text-center py-4 pt-empty">
+                    <i class="fa-solid fa-filter-circle-xmark fa-lg mb-2 d-block"></i>
+                    No proposal matches these filters.
+                </div>
+
+                <!-- One card per thread: a first proposal and the revisions made from it,
+                     in order (v1 → v2 → …). Collapsed by default: the header sums it up. -->
+                <div class="d-flex flex-column gap-3" :class="{ 'pt-list--loading': loading }">
+                    <section v-for="thread in threads" :key="thread.id"
+                             class="pt-thread" :class="'pt-thread--' + thread.status">
+
+                        <button type="button" class="pt-thread__header" @click="toggle(thread.id)"
+                                :aria-expanded="isOpen(thread.id)">
+                            <div class="pt-thread__title">
+                                <i class="fa-solid fa-chevron-right pt-thread__chevron" :class="{ 'pt-thread__chevron--open': isOpen(thread.id) }"></i>
+                                <i class="fa-solid" :class="thread.proposals.length > 1 ? 'fa-code-branch' : 'fa-code-pull-request'"></i>
+                                <span>[[ threadTitle(thread) ]]</span>
+                                <span class="pt-thread__sub">
+                                    · started by [[ thread.proposals[0].user_name ]] · last activity [[ formatDate(thread.last_activity) ]]
+                                </span>
+                            </div>
+                            <span class="pt-thread__outcome" :class="'pt-thread__outcome--' + thread.status">
+                                [[ threadOutcome(thread) ]]
+                            </span>
+                        </button>
+
+                        <!-- collapsed: the version chain at a glance -->
+                        <div v-if="!isOpen(thread.id)" class="pt-chain" @click="toggle(thread.id)">
+                            <template v-for="(p, i) in chronological(thread)" :key="'c' + p.id">
+                                <i v-if="i" class="fa-solid fa-arrow-right-long pt-chain__arrow"></i>
+                                <span class="pt-chain__step" :title="'#' + p.id + ' — ' + displayStatus(p)">
+                                    <span class="pt-step__dot position-static" :class="'pt-step__dot--' + displayStatus(p)"></span>
+                                    v[[ p.version ]]
+                                </span>
+                            </template>
+                            <span class="pt-chain__preview" v-if="latest(thread).message">
+                                [[ plain(latest(thread).message) ]]
+                            </span>
                         </div>
 
-                        <div class="proposal-card__body">
+                        <ol v-else class="pt-timeline">
+                            <li v-for="p in thread.proposals" :key="p.id"
+                                class="pt-step" :class="'pt-step--' + p.status"
+                                :style="{ '--pt-depth': p.depth }">
+                                <span class="pt-step__dot" :class="'pt-step__dot--' + displayStatus(p)"></span>
 
-                            <!-- Header: user + status badge -->
-                            <div class="proposal-card__header">
-                                <div class="proposal-card__meta">
-                                    <!-- Avatar -->
-                                    <div style="width:32px;height:32px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--light-bg-color);display:flex;align-items:center;justify-content:center;">
-                                        <img v-if="proposal.user_avatar"
-                                            :src="proposal.user_avatar"
-                                            :alt="proposal.user_name"
-                                            style="width:100%;height:100%;object-fit:cover;">
-                                        <span v-else style="font-size:0.8rem;font-weight:600;color:var(--subtle-text-color);">
-                                            [[ proposal.user_name ? proposal.user_name[0].toUpperCase() : '?' ]]
+                                <a :href="'/rule/proposal_content_discuss?id=' + p.id" class="pt-step__card">
+                                    <div class="pt-step__head">
+                                        <div class="pt-step__who">
+                                            <span class="pt-version">v[[ p.version ]]</span>
+                                            <span class="pt-avatar">
+                                                <img v-if="p.user_avatar" :src="p.user_avatar" :alt="p.user_name">
+                                                <template v-else>[[ p.user_name ? p.user_name[0].toUpperCase() : '?' ]]</template>
+                                            </span>
+                                            <span class="fw-semibold text-truncate">[[ p.user_name ]]</span>
+                                            <span class="pt-step__action">[[ stepAction(thread, p) ]]</span>
+                                        </div>
+                                        <span class="pt-status" :class="'pt-status--' + displayStatus(p)"
+                                              :title="displayStatus(p) === 'superseded' ? 'Closed automatically: another version of its thread was accepted.' : ''">
+                                            [[ displayStatus(p) ]]<template v-if="p.status === 'accepted'"> — merged</template>
                                         </span>
                                     </div>
-                                    <div>
-                                        <span class="fw-semibold" style="font-size:0.875rem;">[[ proposal.user_name ]]</span>
-                                        <span style="font-size:0.8rem;color:var(--subtle-text-color);margin-left:4px;">proposed an edit</span>
+
+                                    <div v-if="p.message" class="pt-step__message" v-html="p._renderedMessage || p.message"></div>
+                                    <div v-else class="pt-step__message pt-step__message--empty">No description provided.</div>
+
+                                    <div class="pt-step__meta">
+                                        <span class="pt-chip">#[[ p.id ]]</span>
+                                        <span v-if="p.edit_type" class="pt-chip">
+                                            <i class="fas fa-xs" :class="editTypeMeta(p.edit_type).icon"></i>[[ editTypeMeta(p.edit_type).label ]]
+                                        </span>
+                                        <span v-if="p.change_score !== null && p.change_score !== undefined" class="pt-score">
+                                            diff
+                                            <span class="pt-score__bar">
+                                                <span class="pt-score__fill" :style="{ width: p.change_score + '%', backgroundColor: scoreColor(p.change_score) }"></span>
+                                            </span>
+                                            [[ Math.round(p.change_score) ]]%
+                                        </span>
+                                        <span><i class="fa-regular fa-clock me-1"></i>[[ formatDate(p.timestamp) ]]</span>
+                                        <span class="pt-comments" :class="{ 'pt-comments--some': p.comment_count > 0 }">
+                                            <i class="fa-regular fa-comment"></i>[[ p.comment_count ]]
+                                        </span>
                                     </div>
-                                </div>
-
-                                <span class="proposal-card__status-badge"
-                                    :class="[isSuperseded(proposal) ? 'status-superseded' : 'status-' + proposal.status, { 'proposal-card__status-badge--final': proposal.status === 'accepted' }]"
-                                    :title="isSuperseded(proposal) ? 'This proposal was automatically closed because one of its revisions was accepted instead.' : ''">
-                                    <i class="fas me-1"
-                                        :class="{
-                                            'fa-clock': proposal.status === 'pending',
-                                            'fa-check': proposal.status === 'approved' || proposal.status === 'accepted',
-                                            'fa-code-branch': isSuperseded(proposal),
-                                            'fa-xmark': proposal.status === 'rejected' && !isSuperseded(proposal)
-                                        }"></i>[[ isSuperseded(proposal) ? 'Superseded' : proposal.status ]]
-                                    <span v-if="proposal.status === 'accepted'">&nbsp;— Final</span>
-                                </span>
-                            </div>
-
-                            <!-- Message -->
-                            <div class="proposal-card__message" v-if="proposal.message"
-                                 v-html="proposal._renderedMessage || proposal.message">
-                            </div>
-                            <div class="proposal-card__message" v-else style="color:var(--subtle-text-color);font-style:italic;">
-                                No description provided.
-                            </div>
-
-                            <!-- Footer: meta chips -->
-                            <div class="proposal-card__footer">
-
-                                <!-- Edit type -->
-                                <span v-if="proposal.edit_type" class="proposal-badge"
-                                      :style="'color:' + editTypeMeta(proposal.edit_type).color + ';border-color:' + editTypeMeta(proposal.edit_type).color + '44;background:' + editTypeMeta(proposal.edit_type).color + '12;'">
-                                    <i class="fas fa-xs" :class="editTypeMeta(proposal.edit_type).icon"></i>
-                                    [[ editTypeMeta(proposal.edit_type).label ]]
-                                </span>
-
-                                <!-- Change score -->
-                                <span v-if="proposal.change_score !== null && proposal.change_score !== undefined" class="proposal-score">
-                                    <span style="color:var(--subtle-text-color)">diff</span>
-                                    <span class="proposal-score__bar">
-                                        <span class="proposal-score__fill" :style="{ width: proposal.change_score + '%', backgroundColor: scoreColor(proposal.change_score) }"></span>
-                                    </span>
-                                    <span>[[ Math.round(proposal.change_score) ]]%</span>
-                                </span>
-
-                                <!-- Lineage: revision of / has revisions — concrete link between proposals -->
-                                <span v-if="proposal.previous_proposal" class="proposal-badge"
-                                      style="cursor:pointer;color:#0d6efd;border-color:#0d6efd44;background:#0d6efd12;"
-                                      @click="goToProposal(proposal.previous_proposal.id, $event)"
-                                      title="This proposal is a revision of another one">
-                                    <i class="fa-solid fa-code-branch fa-xs"></i> Revision of #[[ proposal.previous_proposal.id ]]
-                                </span>
-                                <span v-for="r in proposal.revisions" :key="'rev-' + r.id" class="proposal-badge"
-                                      style="cursor:pointer;color:#6c757d;border-color:#6c757d44;background:#6c757d12;"
-                                      @click="goToProposal(r.id, $event)"
-                                      title="A revision of this proposal exists">
-                                    <i class="fa-solid fa-code-branch fa-xs"></i> #[[ r.id ]] ([[ r.status ]])
-                                </span>
-
-                                <!-- Timestamp -->
-                                <span class="proposal-card__time">
-                                    <i class="fa-regular fa-clock me-1"></i>[[ formatDate(proposal.timestamp) ]]
-                                </span>
-
-                                <!-- Comments -->
-                                <span class="proposal-comments-badge" :class="{ 'has-comments': proposal.comment_count > 0 }">
-                                    <i class="fa-regular fa-comment"></i>
-                                    [[ proposal.comment_count ]]
-                                </span>
-
-                            </div>
-                        </div>
-                    </a>
+                                </a>
+                            </li>
+                        </ol>
+                    </section>
                 </div>
 
                 <nav v-if="total_pages > 1" class="mt-4">
                     <ul class="pagination justify-content-center">
                         <li class="page-item" :class="{ disabled: current_page === 1 }">
-                            <a class="page-link" href="#" @click.prevent="fetchPullRequest(current_page - 1)">Previous</a>
+                            <a class="page-link" href="#" @click.prevent="fetchThreads(current_page - 1)">Previous</a>
                         </li>
                         <li class="page-item disabled">
                             <span class="page-link">[[ current_page ]] / [[ total_pages ]]</span>
                         </li>
                         <li class="page-item" :class="{ disabled: current_page === total_pages }">
-                            <a class="page-link" href="#" @click.prevent="fetchPullRequest(current_page + 1)">Next</a>
+                            <a class="page-link" href="#" @click.prevent="fetchThreads(current_page + 1)">Next</a>
                         </li>
                     </ul>
                 </nav>
             </div>
-        </template>
+        </div>
 
-    </div>
+    </template>
 
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, onMounted } = Vue;
+    const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
     import { renderMarkdown } from '/static/js/sanitize.js';
+    import HelpTip from '/static/js/components/help-tip.js';
 
     const rule_id = {{ rule.id }};
     const RULE_TITLE = {{ rule.title | tojson }};
@@ -351,70 +248,116 @@
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { HelpTip },
         setup() {
-            const pull_request_list = ref([]);
+            // [{ id, status: accepted|open|closed, last_activity,
+            //    proposals: [{ ...proposal, version, depth }] }] — in reading order
+            const threads = ref([]);
+            const total_proposals = ref(0);
             const current_page = ref(1);
             const total_pages = ref(1);
             const loading = ref(true);
+            const loaded = ref(false);   // the full-page spinner only shows before the first answer
 
             const EDIT_TYPE_META = {
-                content_update: { label: 'Content update',  icon: 'fa-code',           color: '#0d6efd' },
-                typo:           { label: 'Typo / syntax',   icon: 'fa-spell-check',    color: '#6f42c1' },
-                security:       { label: 'Security fix',    icon: 'fa-shield-halved',  color: '#dc3545' },
-                documentation:  { label: 'Documentation',   icon: 'fa-book',           color: '#198754' },
-                legal:          { label: 'Legal / license', icon: 'fa-scale-balanced', color: '#fd7e14' },
-                other:          { label: 'Other',           icon: 'fa-ellipsis',       color: '#6c757d' },
+                content_update: { label: 'Content update',  icon: 'fa-code' },
+                typo:           { label: 'Typo / syntax',   icon: 'fa-spell-check' },
+                security:       { label: 'Security fix',    icon: 'fa-shield-halved' },
+                documentation:  { label: 'Documentation',   icon: 'fa-book' },
+                legal:          { label: 'Legal / license', icon: 'fa-scale-balanced' },
+                other:          { label: 'Other',           icon: 'fa-ellipsis' },
             };
             function editTypeMeta(type) {
-                return EDIT_TYPE_META[type] || { label: type || 'General', icon: 'fa-pen', color: '#6c757d' };
+                return EDIT_TYPE_META[type] || { label: type || 'General', icon: 'fa-pen' };
             }
 
-            // A proposal auto-rejected because one of its revisions got accepted
-            // (see _auto_reject_parent_on_child_accept) reads as "Superseded",
-            // not a plain "Rejected" — it wasn't rejected on its own merits.
-            function isSuperseded(proposal) {
-                return proposal.status === 'rejected' &&
-                    (proposal.revisions || []).some(r => r.status === 'accepted');
+            // Closed because another version of its thread was accepted (see
+            // decide_proposal) — older rows were stored as "rejected" with an
+            // accepted revision, they read as superseded too.
+            function displayStatus(p) {
+                if (p.status === 'rejected' && (p.revisions || []).some(r => r.status === 'accepted')) return 'superseded';
+                return p.status === 'approved' ? 'accepted' : p.status;
             }
 
-            // Lineage chips sit inside the card's own <a> (which already links to
-            // proposal.id) but must navigate elsewhere — stop the outer link.
-            function goToProposal(id, event) {
-                event.stopPropagation();
-                event.preventDefault();
-                window.location.href = '/rule/proposal_content_discuss?id=' + id;
+            function versionOf(thread, id) {
+                const found = thread.proposals.find(p => p.id === id);
+                return found ? found.version : null;
             }
+
+            function stepAction(thread, p) {
+                if (!p.previous_proposal_id) return 'proposed an edit';
+                const v = versionOf(thread, p.previous_proposal_id);
+                return v ? 'revised v' + v : 'revised #' + p.previous_proposal_id;
+            }
+
+            function threadTitle(thread) {
+                const n = thread.proposals.length;
+                return n === 1 ? 'Proposal #' + thread.id : 'Thread #' + thread.id + ' · ' + n + ' versions';
+            }
+
+            function threadOutcome(thread) {
+                if (thread.status === 'accepted') {
+                    const merged = thread.proposals.find(p => p.status === 'accepted');
+                    return 'Merged' + (thread.proposals.length > 1 && merged ? ' — v' + merged.version : '');
+                }
+                if (thread.status === 'open') {
+                    const pending = thread.proposals.filter(p => p.status === 'pending').length;
+                    return pending + ' awaiting review';
+                }
+                return 'Closed';
+            }
+
+            const total_threads = ref(0);
+            const status_counts = ref({ open: 0, accepted: 0, closed: 0 });
+
+            const STATUS_FILTERS = [
+                { key: '',         label: 'All',    icon: 'fa-layer-group' },
+                { key: 'open',     label: 'Open',   icon: 'fa-clock' },
+                { key: 'accepted', label: 'Merged', icon: 'fa-check' },
+                { key: 'closed',   label: 'Closed', icon: 'fa-xmark' },
+            ];
+            const filters = reactive({ status: '', edit_type: '', q: '', sort: 'recent' });
+            const filtersActive = computed(() => !!(filters.status || filters.edit_type || filters.q.trim()));
+            function statusCount(key) {
+                const c = status_counts.value;
+                return key ? (c[key] || 0) : (c.open || 0) + (c.accepted || 0) + (c.closed || 0);
+            }
+            function setStatus(key) { filters.status = key; }
+            function resetFilters() { Object.assign(filters, { status: '', edit_type: '', q: '' }); }
+
+            // Threads are collapsed by default; the ones opened stay open across reloads of the list
+            const opened = ref(new Set());
+            function isOpen(id) { return opened.value.has(id); }
+            function toggle(id) {
+                const next = new Set(opened.value);
+                next.has(id) ? next.delete(id) : next.add(id);
+                opened.value = next;
+            }
+            function setAll(open) {
+                opened.value = open ? new Set(threads.value.map(t => t.id)) : new Set();
+            }
+            function chronological(thread) {
+                return [...thread.proposals].sort((a, b) => a.version - b.version);
+            }
+            function latest(thread) {
+                const list = chronological(thread);
+                return list[list.length - 1];
+            }
+            function plain(markdown) {
+                return (markdown || '').replace(/[#*_`>\[\]()!-]/g, ' ').replace(/\s+/g, ' ').trim();
+            }
+            const thread_count_label = computed(() =>
+                total_threads.value + ' thread' + (total_threads.value === 1 ? '' : 's'));
 
             function formatDate(iso) {
                 if (!iso) return '';
                 const d = new Date(iso);
-                const now = new Date();
-                const diff = Math.floor((now - d) / 1000);
+                const diff = Math.floor((new Date() - d) / 1000);
                 if (diff < 60)   return 'just now';
                 if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
                 if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
                 if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
                 return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-            }
-
-            async function fetchPullRequest(page) {
-                loading.value = true;
-                try {
-                    const res = await fetch('/rule/get_rules_propose_page?page=' + page + '&rule_id=' + rule_id);
-                    const data = await res.json();
-                    if (data) {
-                        const list = data.rules_list || [];
-                        // Pre-render messages as sanitized markdown
-                        for (const p of list) {
-                            if (p.message) p._renderedMessage = await renderMarkdown(p.message);
-                        }
-                        pull_request_list.value = list;
-                        total_pages.value = data.total_pages_pending;
-                        current_page.value = page;
-                    }
-                } finally {
-                    loading.value = false;
-                }
             }
 
             function scoreColor(score) {
@@ -423,9 +366,49 @@
                 return '#dc3545';
             }
 
-            onMounted(() => fetchPullRequest(1));
+            async function fetchThreads(page) {
+                loading.value = true;
+                try {
+                    const params = new URLSearchParams({ rule_id, page, sort: filters.sort });
+                    if (filters.status) params.set('status', filters.status);
+                    if (filters.edit_type) params.set('edit_type', filters.edit_type);
+                    if (filters.q.trim()) params.set('q', filters.q.trim());
+                    const res = await fetch('/rule/get_proposal_threads?' + params.toString());
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    for (const thread of data.threads || []) {
+                        for (const p of thread.proposals) {
+                            if (p.message) p._renderedMessage = await renderMarkdown(p.message);
+                        }
+                    }
+                    threads.value = data.threads || [];
+                    total_proposals.value = data.total_proposals || 0;
+                    total_threads.value = data.total_threads || 0;
+                    status_counts.value = data.status_counts || status_counts.value;
+                    total_pages.value = data.total_pages || 1;
+                    current_page.value = data.page || page;
+                } finally {
+                    loading.value = false;
+                    loaded.value = true;
+                }
+            }
 
-            return { RULE_TITLE_SHORT, pull_request_list, current_page, total_pages, loading, fetchPullRequest, formatDate, scoreColor, editTypeMeta, goToProposal, isSuperseded };
+            // Any filter change reloads page 1 (the search waits for a pause in typing)
+            let searchTimer = null;
+            watch(() => [filters.status, filters.edit_type, filters.sort], () => fetchThreads(1));
+            watch(() => filters.q, () => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => fetchThreads(1), 300);
+            });
+
+            onMounted(() => fetchThreads(1));
+
+            return {
+                RULE_TITLE_SHORT, threads, total_proposals, total_threads, current_page, total_pages, loading, loaded, thread_count_label,
+                STATUS_FILTERS, EDIT_TYPE_META, filters, filtersActive, statusCount, setStatus, resetFilters,
+                isOpen, toggle, setAll, chronological, latest, plain,
+                fetchThreads, formatDate, scoreColor, editTypeMeta, displayStatus, stepAction, threadTitle, threadOutcome,
+            };
         }
     }).mount('#main-container');
 </script>

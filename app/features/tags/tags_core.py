@@ -6,10 +6,25 @@ import uuid
 from pathlib import Path
 
 from flask_login import current_user
-from sqlalchemy import case
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import joinedload
 from app import db
 from app.core.db_class.db import Tag
+
+
+# ─── Untrusted query-string values ───────────────────────────────────────────
+
+PAGE_MAX = 100_000   # far past any real listing — keeps OFFSET a sane number
+
+
+def _int_arg(args, key, default, *, lo=1, hi=PAGE_MAX):
+    """`args[key]` as an int clamped to [lo, hi], or `default` when missing
+    or not a number."""
+    try:
+        value = int(args.get(key, default))
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, value))
 
 
 # ─── CRUD basics ─────────────────────────────────────────────────────────────
@@ -123,11 +138,16 @@ def get_tags(args):
     sort_dir = args.get('dir') or default_dir
     query = query.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())
 
-    page = int(args.get('page', 1))
-    per_page = min(int(args.get('per_page', 20)), 500)
+    page = _int_arg(args, 'page', 1)
+    per_page = _int_arg(args, 'per_page', 20, hi=500)
     pagination = query.paginate(page=page, per_page=per_page, max_per_page=500)
     _inject_usage_counts(pagination.items)
     return pagination
+
+
+def _like_literal(text):
+    """`text` with the LIKE wildcards escaped (use with escape='\\')."""
+    return text.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
 
 
 def _family_like_pattern(family):
@@ -141,9 +161,11 @@ def _family_like_pattern(family):
     """
     if not family:
         return None
+    # The family is a literal prefix: "%" or "_" in it must not turn into a
+    # wildcard (a family "%" would match — and delete — every tag).
     if family.startswith("misp-galaxy:"):
-        return f"{family}=%"
-    return f"{family}:%"
+        return f"{_like_literal(family)}=%"
+    return f"{_like_literal(family)}:%"
 
 
 def get_tags_by_family(family, source=None):
@@ -151,7 +173,7 @@ def get_tags_by_family(family, source=None):
     pattern = _family_like_pattern(family)
     if not pattern:
         return []
-    query = Tag.query.filter(Tag.name.ilike(pattern))
+    query = Tag.query.filter(Tag.name.ilike(pattern, escape='\\'))
     if source and source != 'all':
         query = query.filter_by(source=source)
     return query.order_by(Tag.name.asc()).all()
@@ -175,15 +197,11 @@ def _delete_tag_associations_bulk(int_ids):
     """Remove all FK references to a list of tags before deletion."""
     if not int_ids:
         return
-    id_tuple = tuple(int_ids)
-    db.session.execute(
-        db.text("DELETE FROM rule_tag_association WHERE tag_id IN :ids"),
-        {"ids": id_tuple}
-    )
-    db.session.execute(
-        db.text("DELETE FROM bundle_tag_association WHERE tag_id IN :ids"),
-        {"ids": id_tuple}
-    )
+    # A raw "IN :ids" with a tuple only works with psycopg2 — SQLAlchemy's
+    # in_() expands the list on every database.
+    from app.core.db_class.db import RuleTagAssociation, BundleTagAssociation
+    for model in (RuleTagAssociation, BundleTagAssociation):
+        model.query.filter(model.tag_id.in_(list(int_ids))).delete(synchronize_session=False)
 
 
 # ─── Deletions ───────────────────────────────────────────────────────────────
@@ -199,11 +217,13 @@ def remove_tag(tag_id):
         return True, "Tag deleted."
     except Exception as e:
         db.session.rollback()
-        return False, f"Error deleting tag: {e}"
+        from app.core.utils.utils import internal_error
+        return False, internal_error(e, "Error deleting tag.")
 
 
 def remove_tags_bulk(tag_ids):
-    """Delete a list of tags, cleaning up all associations first."""
+    """Delete a list of tags, cleaning up all associations first.
+    Returns (deleted count — None on error, message)."""
     if not tag_ids:
         return 0, "No tags provided."
     try:
@@ -214,16 +234,18 @@ def remove_tags_bulk(tag_ids):
         return deleted, f"Deleted {deleted} tag(s)."
     except Exception as e:
         db.session.rollback()
-        return 0, f"Error during bulk delete: {e}"
+        from app.core.utils.utils import internal_error
+        return None, internal_error(e, "Error during bulk delete.")
 
 
 def remove_family(family, source=None):
-    """Delete every tag in a given family, cleaning up all associations first."""
+    """Delete every tag in a given family, cleaning up all associations first.
+    Returns (deleted count — 0 when the family is empty, None on error, message)."""
     pattern = _family_like_pattern(family)
     if not pattern:
         return 0, "Invalid family."
     try:
-        query = Tag.query.filter(Tag.name.ilike(pattern))
+        query = Tag.query.filter(Tag.name.ilike(pattern, escape='\\'))
         if source and source != 'all':
             query = query.filter_by(source=source)
         ids = [t.id for t in query.with_entities(Tag.id).all()]
@@ -235,7 +257,8 @@ def remove_family(family, source=None):
         return deleted, f"Deleted {deleted} tags from family '{family}'."
     except Exception as e:
         db.session.rollback()
-        return 0, f"Error deleting family: {e}"
+        from app.core.utils.utils import internal_error
+        return None, internal_error(e, "Error deleting family.")
 
 
 # ─── Visibility / status toggles ─────────────────────────────────────────────
@@ -303,7 +326,7 @@ def get_tags_bundle(args):
         if current_user.is_admin():
             query = query.filter_by(is_active=True)
         elif args.get('user_id'):
-            if current_user.id == int(args.get('user_id')):
+            if str(current_user.id) == str(args.get('user_id')):
                 from sqlalchemy import or_
                 query = query.filter_by(is_active=True).filter(
                     or_(Tag.visibility == 'public', Tag.created_by == current_user.id)
@@ -321,7 +344,7 @@ def get_tags_bundle(args):
     sort_order = args.get('sort_order', 'desc')
     query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
 
-    page = int(args.get('page', 1))
+    page = _int_arg(args, 'page', 1)
     pagination = query.paginate(page=page, per_page=20, max_per_page=20)
     _inject_usage_counts(pagination.items)
     return pagination
@@ -351,71 +374,56 @@ def get_my_tags_paged(args):
     sort_order = args.get('sort_order', 'desc')
     query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
 
-    page     = int(args.get('page', 1))
-    per_page = min(int(args.get('per_page', 20)), 100)
+    page     = _int_arg(args, 'page', 1)
+    per_page = _int_arg(args, 'per_page', 20, hi=100)
     pagination = query.paginate(page=page, per_page=per_page, max_per_page=100)
     _inject_usage_counts(pagination.items)
     return pagination
 
 
+def _picker_scope(args, query=None):
+    """Tags the current user may pick — the single visibility rule of every
+    tag picker endpoint: admins see every active tag; a user passing their
+    own user_id sees active public tags plus every tag they created;
+    everyone else sees active public tags only."""
+    query = query if query is not None else Tag.query
+    if current_user.is_authenticated and current_user.is_admin():
+        return query.filter(Tag.is_active == True)
+    user_id = args.get('user_id')
+    if current_user.is_authenticated and user_id and str(user_id) == str(current_user.id):
+        return query.filter(or_(
+            and_(Tag.is_active == True, Tag.visibility == 'public'),
+            Tag.created_by == current_user.id,
+        ))
+    return query.filter(Tag.is_active == True, Tag.visibility == 'public')
+
+
+def _prefix_first(query, search):
+    """A tag whose name *starts with* the search term (e.g. "tlp:clear" for
+    "tlp") is almost always the one wanted — ranked above a tag merely
+    containing it."""
+    return query.order_by(case((Tag.name.ilike(f"{search}%"), 0), else_=1), Tag.name.asc())
+
+
 def get_all_tags(args):
-    """Tag picker source (TagInput.js) + admin bulk-tag tool.
+    """Tag picker search (TagInput.js) + admin bulk-tag tool.
 
     Neither caller displays rule_count/bundle_count, so this skips
-    _inject_usage_counts() entirely — it's two extra grouped-count queries
-    for data nobody reads. Tag.user is eager-loaded (joinedload) everywhere
-    below because Tag.to_json() reads self.user.first_name — without that,
-    each row lazy-loads its own separate query, which turns "return every
-    tag" into one query per tag once the catalog grows into the thousands
-    (as it now does after bulk MISP taxonomy/galaxy imports).
+    _inject_usage_counts() entirely. Tag.user is eager-loaded (joinedload)
+    because Tag.to_json() reads self.user.first_name.
 
     An optional `limit` caps how many rows come back — used by the picker's
-    live search so a broad term can't still ship thousands of rows to an
-    autocomplete dropdown. Omitted (as the admin bulk-tag tool does) to keep
-    today's "load everything" behavior there.
+    live search so a broad term can't ship thousands of rows to an
+    autocomplete dropdown. Everything is filtered, ranked and limited in SQL
+    (the user_id branch used to load every public tag into Python first —
+    2 s per keystroke with ~75k tags).
     """
-    limit = args.get('limit')
-    limit = int(limit) if limit else None
+    limit = _int_arg(args, 'limit', None, hi=PAGE_MAX) if args.get('limit') else None
     search = args.get('search')
 
-    query = Tag.query.options(joinedload(Tag.user))
-    if current_user.is_authenticated:
-        if current_user.is_admin():
-            query = query.filter_by(is_active=True)
-        elif args.get('user_id'):
-            if current_user.id == int(args.get('user_id')):
-                # UNION ALL avoids equality check on json column; dedup by id in Python
-                public_q  = Tag.query.options(joinedload(Tag.user)).filter_by(is_active=True, visibility='public')
-                private_q = Tag.query.options(joinedload(Tag.user)).filter_by(created_by=current_user.id)
-                if search:
-                    public_q  = public_q.filter(Tag.name.ilike(f'%{search}%'))
-                    private_q = private_q.filter(Tag.name.ilike(f'%{search}%'))
-                seen = {}
-                for t in public_q.all() + private_q.all():
-                    seen.setdefault(t.id, t)
-                tags = sorted(seen.values(), key=lambda t: t.created_at, reverse=True)
-                if search:
-                    # A tag whose name *starts with* the search term (e.g. "tlp:clear"
-                    # for a search of "tlp") is what the user is almost always after —
-                    # rank those above a tag that merely contains the term elsewhere.
-                    needle = search.lower()
-                    tags = sorted(tags, key=lambda t: not t.name.lower().startswith(needle))
-                return tags[:limit] if limit else tags
-            else:
-                query = query.filter_by(is_active=True, visibility='public')
-        else:
-            query = query.filter_by(is_active=True, visibility='public')
-    else:
-        query = query.filter_by(is_active=True, visibility='public')
-
+    query = _picker_scope(args, Tag.query.options(joinedload(Tag.user)))
     if search:
-        query = query.filter(Tag.name.ilike(f"%{search}%"))
-        # Same prefix-first ranking as the union branch above, done in SQL:
-        # 0 for a name starting with the search term, 1 otherwise.
-        query = query.order_by(
-            case((Tag.name.ilike(f"{search}%"), 0), else_=1),
-            Tag.name.asc(),
-        )
+        query = _prefix_first(query.filter(Tag.name.ilike(f"%{search}%")), search)
     else:
         sort_order = args.get('sort_order', 'desc')
         query = query.order_by(Tag.created_at.desc() if sort_order == 'desc' else Tag.created_at.asc())
@@ -423,6 +431,172 @@ def get_all_tags(args):
     if limit:
         query = query.limit(limit)
     return query.all()
+
+
+# ─── Lazy tag pickers (folders first, one folder at a time) ─────────────────
+
+PICKER_MAX_PER_PAGE = 200
+
+
+def picker_tag_json(tag) -> dict:
+    """What a picker needs to render / select a tag — no author lookup, no
+    dates or counters (Tag.to_json() is ~10x heavier)."""
+    return {
+        "id": tag.id, "uuid": tag.uuid, "name": tag.name, "color": tag.color, "icon": tag.icon,
+        "source": tag.source, "visibility": tag.visibility, "namespace": tag.namespace or "",
+    }
+
+
+def _visibility_bucket():
+    return case((Tag.visibility == 'public', 'Public'), else_='Private')
+
+
+def picker_namespaces(args) -> dict:
+    """{"Public": [{"namespace", "count"}], "Private": [...]} — the folders of
+    the tag picker with how many pickable tags each holds. One GROUP BY
+    instead of downloading every tag to group them client-side."""
+    bucket = _visibility_bucket().label('bucket')
+    ns = func.coalesce(Tag.namespace, '').label('ns')
+    rows = (_picker_scope(args, db.session.query(bucket, ns, func.count(Tag.id)))
+            .group_by(bucket, ns).all())
+    groups = {}
+    for b, n, count in rows:
+        groups.setdefault(b, []).append({"namespace": n, "count": count})
+    for folders in groups.values():
+        folders.sort(key=lambda f: (f["namespace"] == "", f["namespace"].lower()))
+    return {k: groups[k] for k in ("Public", "Private") if k in groups}
+
+
+def picker_tags(args) -> dict:
+    """One page of one folder: type=Public|Private, namespace ('' = no
+    namespace), page, per_page (max 200). Sorted by name."""
+    page = min(PAGE_MAX, max(1, int(args.get('page') or 1)))
+    per_page = min(PICKER_MAX_PER_PAGE, max(1, int(args.get('per_page') or 50)))
+    query = _picker_scope(args)
+    bucket = (args.get('type') or '').strip()
+    if bucket == 'Public':
+        query = query.filter(Tag.visibility == 'public')
+    elif bucket == 'Private':
+        query = query.filter(or_(Tag.visibility != 'public', Tag.visibility.is_(None)))
+    if 'namespace' in args:
+        namespace = args.get('namespace') or ''
+        query = query.filter(func.coalesce(Tag.namespace, '') == namespace)
+    total = query.count()
+    tags = query.order_by(Tag.name.asc()).offset((page - 1) * per_page).limit(per_page).all()
+    return {"tags": [picker_tag_json(t) for t in tags], "page": page, "per_page": per_page,
+            "total": total, "has_more": page * per_page < total}
+
+
+# ─── Lazy tag filters (MultiTagFilter.js — rule / bundle facets) ────────────
+
+def usage_snapshot(usage: dict) -> list:
+    """{tag_id: usage_count} -> one lean dict per used tag, carrying the
+    fields the per-user visibility check needs. Cacheable as-is: nothing in
+    it depends on who asks (see _snapshot_visible)."""
+    ids = list(usage)
+    rows = []
+    for i in range(0, len(ids), 5000):
+        for t in (Tag.query.with_entities(Tag.id, Tag.uuid, Tag.name, Tag.color, Tag.icon, Tag.source,
+                                          Tag.visibility, Tag.namespace, Tag.is_active, Tag.created_by)
+                  .filter(Tag.id.in_(ids[i:i + 5000]))):
+            rows.append({"id": t.id, "uuid": t.uuid, "name": t.name, "color": t.color, "icon": t.icon,
+                         "source": t.source, "visibility": t.visibility, "namespace": t.namespace or "",
+                         "is_active": bool(t.is_active), "created_by": t.created_by,
+                         "usage_count": int(usage[t.id])})
+    return rows
+
+
+def _snapshot_visible(rows) -> list:
+    """Same visibility as the full tag-usage facets: admins see every active
+    tag, a user public ones + their own private ones, a visitor public ones."""
+    me = current_user.id if current_user.is_authenticated else None
+    admin = bool(me) and current_user.is_admin()
+
+    def ok(t):
+        if not t["is_active"]:
+            return False
+        vis = (t["visibility"] or "").lower()
+        if admin or vis == "public":
+            return True
+        return bool(me) and vis == "private" and t["created_by"] == me
+
+    return [t for t in rows if ok(t)]
+
+
+_SNAPSHOT_PRIVATE = ("is_active", "created_by")
+
+
+def _out(t):
+    return {k: v for k, v in t.items() if k not in _SNAPSHOT_PRIVATE}
+
+
+def _label(namespace):
+    return (namespace or 'other').upper()
+
+
+def usage_view(snapshot: list, args) -> dict:
+    """One lazy view of a tag facet, from a usage snapshot (usage_snapshot):
+    the tags used by the rules / bundles matching the page's other filters.
+
+    ?view=namespaces[&tag_source=]   folders + how many used tags each holds
+    ?view=tags[&tag_source=&tag_ns=&tag_q=&tag_page=&tag_per_page=]
+                                     one page of tags, most used first
+    ?view=selected&names=a,b         the given tags (chips of the selection)
+    """
+    view = args.get('view')
+    tags = _snapshot_visible(snapshot)
+
+    if view == 'selected':
+        names = {n.strip().lower() for n in (args.get('names') or '').split(',') if n.strip()}
+        found = {t["name"].lower(): _out(t) for t in tags if t["name"].lower() in names}
+        missing = names - set(found)
+        if missing:
+            # A selected tag no rule matching the other filters uses any more
+            # still needs its chip.
+            query = _usage_visibility(Tag.query).filter(func.lower(Tag.name).in_(list(missing)[:200]))
+            found.update({t.name.lower(): {**picker_tag_json(t), "usage_count": 0} for t in query.all()})
+        return {"tags": list(found.values())}
+
+    source = args.get('tag_source')
+    if source and source != 'all':
+        tags = [t for t in tags if t["source"] == source]
+
+    if view == 'namespaces':
+        folders = {}
+        for t in tags:
+            f = folders.setdefault(t["namespace"], {"namespace": t["namespace"], "label": _label(t["namespace"]),
+                                                    "tag_count": 0, "usage": 0})
+            f["tag_count"] += 1
+            f["usage"] += t["usage_count"]
+        return {"namespaces": sorted(folders.values(), key=lambda f: (-f["usage"], f["namespace"]))}
+
+    # view == 'tags'
+    page = _int_arg(args, 'tag_page', 1)
+    per_page = _int_arg(args, 'tag_per_page', 50, hi=PICKER_MAX_PER_PAGE)
+    if 'tag_ns' in args:
+        tags = [t for t in tags if t["namespace"] == (args.get('tag_ns') or '')]
+    search = (args.get('tag_q') or '').strip().lower()
+    if search:
+        tags = [t for t in tags if search in t["name"].lower()]
+        tags.sort(key=lambda t: (not t["name"].lower().startswith(search), -t["usage_count"], t["name"]))
+    else:
+        tags.sort(key=lambda t: (-t["usage_count"], t["name"]))
+    total = len(tags)
+    page_tags = tags[(page - 1) * per_page: page * per_page]
+    return {"tags": [_out(t) for t in page_tags], "page": page, "per_page": per_page,
+            "total": total, "has_more": page * per_page < total}
+
+
+def _usage_visibility(query):
+    query = query.filter(Tag.is_active.is_(True))
+    if current_user.is_authenticated:
+        if not current_user.is_admin():
+            query = query.filter(or_(
+                Tag.visibility.ilike('public'),
+                and_(Tag.visibility.ilike('private'), Tag.created_by == current_user.id),
+            ))
+        return query
+    return query.filter(Tag.visibility.ilike('public'))
 
 
 def get_all_tags_by_type(args):
@@ -469,7 +643,7 @@ def list_all_misp_taxonomies_meta(args):
             or search_term in (t["namespace"] or "").lower()
         ]
 
-    page     = int(args.get("page", 1))
+    page     = _int_arg(args, "page", 1)
     per_page = 20
     total    = len(taxonomies)
     total_pages = math.ceil(total / per_page) or 1
@@ -627,7 +801,7 @@ def list_all_misp_galaxies_meta(args):
             or search_term in (g["type"] or "").lower()
         ]
 
-    page     = int(args.get("page", 1))
+    page     = _int_arg(args, "page", 1)
     per_page = 20
     total    = len(galaxies)
     total_pages = math.ceil(total / per_page) or 1

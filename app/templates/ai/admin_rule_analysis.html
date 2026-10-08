@@ -63,6 +63,13 @@
 
       <div class="row g-2 align-items-end mb-3">
         <div class="col-auto">
+          <label class="form-label small mb-1">Script</label>
+          <select class="form-select form-select-sm" v-model="script" style="min-width:220px;">
+            <option value="standard">Standard analysis (fast, structured)</option>
+            <option value="deep">In-depth report (long, element by element)</option>
+          </select>
+        </div>
+        <div class="col-auto">
           <label class="form-label small mb-1">Skip rules that already have an analysis</label>
           <div class="form-check form-switch">
             <input class="form-check-input" type="checkbox" v-model="skipAnalysed">
@@ -262,6 +269,8 @@ createApp({
 
         // ── Trigger ──────────────────────────────────────────────────────
         const skipAnalysed       = ref(true)
+        // 'standard' (rule_analysis_agent.py) or 'deep' (rule_deep_analysis_agent.py)
+        const script             = ref('standard')
         const ruleListRef        = ref(null)
         // RuleList exposes its setup state on the component instance —
         // selectableTotal is the count of rules matching the current filters.
@@ -299,6 +308,7 @@ createApp({
         function onSend(ids, filters) {
             const payload = {
                 agent_key: 'rule_analysis',
+                script: script.value,
                 regenerate_existing: !skipAnalysed.value,
                 default_public: defaultPublic.value,
                 unlimited_batch: unlimitedBatch.value,
@@ -330,7 +340,7 @@ createApp({
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                     body: JSON.stringify({
                         job_type: 'ai_generate',
-                        label: 'AI Rule Analysis (admin-triggered)',
+                        label: `AI Rule Analysis${payload.script === 'deep' ? ' (in-depth)' : ''} (admin-triggered)`,
                         payload,
                     }),
                 })
@@ -382,7 +392,7 @@ createApp({
         return {
             csrfToken, onNotify, table_ref, columns, bulkActions,
             handleDelete, handleBulkAction, toggleVisibility,
-            skipAnalysed, ruleListRef, matchingTotal, analyseAllMatching, defaultPublic, batchSize, maxSeconds, unlimitedBatch, unlimitedTime, running, jobUuid, jobStatus, jobDone, jobTotal,
+            skipAnalysed, script, ruleListRef, matchingTotal, analyseAllMatching, defaultPublic, batchSize, maxSeconds, unlimitedBatch, unlimitedTime, running, jobUuid, jobStatus, jobDone, jobTotal,
             jobTerminalEntries, onSend,
         }
     }

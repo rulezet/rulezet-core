@@ -8,8 +8,13 @@
  *   - Preview / Editor panel (full width below)
  *
  * Props:
- *   bundleId   String|Number  required
- *   csrfToken  String         default ''
+ *   bundleId     String|Number  required
+ *   csrfToken    String         default ''
+ *   focusRuleId  Number         select + reveal this rule once the tree is loaded
+ *                               (arriving from the bundle's Health tab)
+ *   focusNote    String         the issue to show above that rule's preview
+ *   focusPath    String         select + reveal this custom file ("Folder/sub/README.md")
+ *                               (the detail page's "Edit" on a file)
  *
  * Emits:
  *   tree-saved — after a successful save
@@ -21,6 +26,7 @@
 import SmartEditor from '/static/js/components/smart-editor.js'
 import CodeViewer  from '/static/js/components/code-viewer.js'
 import { create_message } from '/static/js/toaster.js'
+import { editorModeFor, docIcon, RULE_ICON } from '/static/js/bundle/bundleFileTypes.js'
 
 const { ref, onMounted, onUnmounted, nextTick, watch } = Vue
 
@@ -34,6 +40,7 @@ const TREE_ITEM_TEMPLATE = `
             'bse-node-row--selected': selectedId === node.id,
             'bse-node-row--drop-target': localDropTarget && node.type === 'folder',
             'bse-node-row--multi': multiSet && multiSet.has(node.id),
+            'bse-node-row--doc': node.type === 'file' && !isRule(node),
         }"
         :title="multiSet && multiSet.size ? 'Ctrl/Cmd+click to add to selection' : ''"
         @click.stop="onRowClick($event, node)"
@@ -54,10 +61,10 @@ const TREE_ITEM_TEMPLATE = `
             <i :class="collapsed ? 'fas fa-folder text-warning' : 'fas fa-folder-open text-warning'"
                style="font-size:.78rem;flex-shrink:0;"></i>
         </template>
-        <!-- File: single icon -->
+        <!-- File: rule = blue shield, custom file = per-extension teal icon -->
         <i v-else
-            :class="isRule(node) ? 'fas fa-file-code text-primary' : 'fas fa-file-signature text-success'"
-            style="font-size:.78rem;flex-shrink:0;">
+            :class="fileIcon(node).icon"
+            :style="{ fontSize: '.78rem', flexShrink: 0, color: fileIcon(node).color }">
         </i>
 
         <input v-if="renamingId === node.id" ref="renameInput" class="bse-node-name-input"
@@ -135,6 +142,7 @@ const TreeItem = {
     },
     methods: {
         isRule(node) { return node && String(node.id).startsWith('rule_') },
+        fileIcon(node) { return this.isRule(node) ? RULE_ICON : docIcon(node.name) },
         toggleCollapse() { this.collapsed = !this.collapsed },
 
         // Custom (non-rule) files keep a locked extension while renaming —
@@ -225,11 +233,14 @@ export default {
     props: {
         bundleId:  { type: [String, Number], required: true },
         csrfToken: { type: String, default: '' },
+        focusRuleId: { type: Number, default: null },
+        focusNote:   { type: String, default: '' },
+        focusPath:   { type: String, default: '' },
     },
 
     emits: ['tree-saved', 'tree-ready'],
 
-    expose: ['addRules', 'setPreview'],
+    expose: ['addRules', 'setPreview', 'focusRule'],
 
     template: `
     <div class="bse-wrapper">
@@ -373,8 +384,10 @@ export default {
             <template v-else>
                 <div class="bse-preview-header">
                     <span class="bse-preview-filename">
-                        <i v-if="selectedNode"
-                           :class="selectedNode.type === 'folder' ? 'fas fa-folder text-warning' : 'fas fa-file-code text-primary'"
+                        <i v-if="selectedNode && selectedNode.type === 'folder'" class="fas fa-folder text-warning me-2"></i>
+                        <i v-else-if="selectedNode"
+                           :class="(isRule(selectedNode) ? RULE_ICON : docIcon(selectedNode.name)).icon"
+                           :style="{ color: (isRule(selectedNode) ? RULE_ICON : docIcon(selectedNode.name)).color }"
                            class="me-2"></i>
                         <i v-else class="fas fa-eye text-success me-2"></i>
                         {{ selectedNode ? selectedNode.name : 'Preview: ' + previewName }}
@@ -401,10 +414,12 @@ export default {
                 <!-- Editable custom file -->
                 <smart-editor
                     v-if="selectedNode && selectedNode.type === 'file' && !isRule(selectedNode)"
+                    hardened-preview
+                    :key="selectedNode.id + '|' + selectedNode.name"
                     :model-value="selectedNode.content ?? ''"
                     @update:model-value="onContentChange"
-                    mode="code"
-                    language="text"
+                    :mode="editorModeFor(selectedNode.name).mode"
+                    :language="editorModeFor(selectedNode.name).language"
                     min-height="300px"
                     max-height="300px">
                 </smart-editor>
@@ -423,6 +438,12 @@ export default {
                         <i v-if="saveStatus === 'saved'" class="fas fa-check-circle bse-save-ok ms-1"></i>
                         <i v-else-if="saveStatus === 'error'" class="fas fa-times-circle bse-save-err ms-1"></i>
                     </button>
+                </div>
+
+                <!-- Issue from the Health tab, above the rule it concerns -->
+                <div v-if="focusNote && selectedNode && selectedNode.rule_id === focusRuleId" class="bse-focus-note">
+                    <i class="fa-solid fa-heart-pulse"></i>
+                    <span>{{ focusNote }}</span>
                 </div>
 
                 <!-- Read-only rule node -->
@@ -588,16 +609,26 @@ export default {
         // ── Helpers ────────────────────────────────────────────────
         const isRule = (node) => node && String(node.id).startsWith('rule_')
 
+        // Same rules as the backend (validate_structure): no path separators,
+        // no control chars, not '.'/'..', max 255 chars.
+        const cleanName = (raw) => {
+            const n = String(raw || '').replace(/[\/\\]/g, '_').replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, '').trim()
+            return (n === '.' || n === '..') ? '' : n.slice(0, 240)
+        }
+
         // Highlighting: <code-viewer> is given the raw rule format string
         // directly (:language="rule.format || 'auto'") and resolves it
         // itself via its own LANG_ALIASES map — same convention as the
         // rule detail page — instead of duplicating a second, incomplete
         // format->language table here.
 
+        // Fallback only — rule JSON carries `extension` (Rule.get_extension(),
+        // the backend source of truth) and it's used first in _fileName().
         const _ext = (format) => {
             const map = {
-                yara: '.yar', sigma: '.yaml', nova: '.yaml', suricata: '.rules',
-                zeek: '.zeek', wazuh: '.xml', nse: '.nse', crs: '.conf', kunai: '.kun',
+                yara: '.yar', sigma: '.yml', suricata: '.rules', sagan: '.rules', snort: '.rules',
+                zeek: '.zeek', wazuh: '.xml', nse: '.nse', crs: '.conf', nova: '.nov',
+                splunk: '.yml', elastic: '.toml', kql: '.kql', kunai: '.kun', atr: '.yaml', plum: '.yaml',
             }
             return map[(format || '').toLowerCase()] || '.txt'
         }
@@ -606,7 +637,8 @@ export default {
         // Wazuh titles do, e.g. "Integrity checksum changed.") — appending
         // _ext() straight onto that produced a double dot before the
         // extension ("...changed..xml"). Strip trailing dots first.
-        const _fileName = (rule) => rule.title.replace(/\.+$/, '') + _ext(rule.format)
+        const _fileName = (rule) => (rule.title || '').replace(/\.+$/, '') +
+            (rule.extension ? '.' + rule.extension : _ext(rule.format))
 
         // ── Load / save ────────────────────────────────────────────
         async function loadTree() {
@@ -619,6 +651,58 @@ export default {
             await nextTick()
             treeLoaded.value = true
             emit('tree-ready', [...extractRuleIds(treeData.value)])
+            if (props.focusRuleId) focusRule(props.focusRuleId)
+            else if (props.focusPath) focusFile(props.focusPath)
+        }
+
+        // Custom file by its path in the tree (names joined with '/')
+        function focusFile(path) {
+            const find = (nodes, prefix) => {
+                for (const n of nodes || []) {
+                    const p = prefix ? prefix + '/' + n.name : n.name
+                    if (n.type === 'file' && !isRule(n) && p === path) return n
+                    const hit = find(n.children, p)
+                    if (hit) return hit
+                }
+                return null
+            }
+            const node = find(treeData.value, '')
+            if (!node) {
+                create_message('This file is no longer in the structure', 'warning-subtle')
+                return
+            }
+            _reveal(node)
+        }
+
+        // Select a rule of the tree, open its preview and bring its row
+        // into view (Health tab → "Edit in the bundle").
+        async function focusRule(ruleId) {
+            const find = (nodes) => {
+                for (const n of nodes || []) {
+                    if (n.rule_id === ruleId) return n
+                    const hit = find(n.children)
+                    if (hit) return hit
+                }
+                return null
+            }
+            const node = find(treeData.value)
+            if (!node) {
+                create_message('This rule is not placed in the structure — drop it into a folder from the library', 'warning-subtle')
+                return
+            }
+            _reveal(node)
+        }
+
+        async function _reveal(node) {
+            selectNode(node)
+            await nextTick()
+            const row = document.querySelector(`.bse-tree-item[data-id="${CSS.escape(String(node.id))}"] > .bse-node-row`)
+            if (row) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                row.classList.remove('bse-node-row--flash')
+                void row.offsetWidth
+                row.classList.add('bse-node-row--flash')
+            }
         }
 
         function _timeStr() {
@@ -654,6 +738,7 @@ export default {
                     return true
                 } else {
                     saveStatus.value = 'error'
+                    if (data.message) create_message(data.message, data.toast_class || 'danger-subtle')
                     saveStatusTimer = setTimeout(() => { saveStatus.value = '' }, 4000)
                 }
             } catch {
@@ -700,6 +785,15 @@ export default {
             previewName.value    = ''
             selectedNode.value   = node
             if (node && node.type === 'folder') lastFolder.value = node
+            // Light tree: rule content is fetched on first selection
+            if (node && isRule(node) && node.lazy && node.rule_id) {
+                node.lazy = false
+                node.content = ''
+                fetch(`/bundle/${props.bundleId}/rule_content/${node.rule_id}`)
+                    .then(r => r.json())
+                    .then(d => { if (d.success) { node.content = d.content; node.format = node.format || d.format } })
+                    .catch(() => { node.lazy = true })
+            }
         }
 
         function clearDisplay() {
@@ -735,7 +829,7 @@ export default {
 
         // Add folder
         function confirmAddFolder() {
-            const name = folderText.value.trim()
+            const name = cleanName(folderText.value)
             if (!name) { create_message('Folder name required', 'warning-subtle'); return }
             const target = currentTarget.value || treeData.value
             const node = { id: 'f_' + Date.now(), name, type: 'folder', children: [], content: '' }
@@ -747,7 +841,7 @@ export default {
 
         // Add file
         function confirmAddFile() {
-            const base = fileNameText.value.trim()
+            const base = cleanName(fileNameText.value)
             if (!base) { create_message('File name required', 'warning-subtle'); return }
             const target = currentTarget.value || treeData.value
             const fullName = base.endsWith(fileExt.value) ? base : base + fileExt.value
@@ -774,7 +868,7 @@ export default {
             // rename-confirm, then unmounting the input on the next render
             // fires a native blur which fires rename-confirm again).
             if (!nodeToRename.value || nodeToRename.value.id !== node.id) return
-            const base = (text || '').trim()
+            const base = cleanName(text)
             if (base) {
                 const dot = (node.type === 'file' && !isRule(node)) ? node.name.lastIndexOf('.') : -1
                 const ext = dot > 0 ? node.name.slice(dot) : ''
@@ -886,10 +980,11 @@ export default {
             saving, saveStatus, lastSavedAt, rootDropActive,
             folderText, fileNameText, fileExt, nodeToRename, creationMode,
             isRule, selectNode, clearDisplay, setPreview, prepareTarget,
+            editorModeFor, docIcon, RULE_ICON,
             confirmAddFolder, confirmAddFile, cancelCreation,
             beginRename, confirmRename, cancelRename,
             beginDelete, saveStructure, saveNow, onContentChange,
-            addRules, setPreview,
+            addRules, setPreview, focusRule,
             onExternalDropOnFolder, onRootDragOver, onRootDragLeave, onRootDrop, onTreeSortEnd,
             multiSelected, toggleMultiSelect, clearMultiSelect,
             bulkDeleteArmed, confirmBulkDelete,

@@ -187,6 +187,9 @@
     border-color: rgba(13, 110, 253, .2);
 }
 
+/* Custom (non-rule) files — bold name; the per-extension icon marks them */
+.bse-node-row--doc .bse-node-name { font-weight: 800; }
+
 /* Drop zone highlight */
 .bse-node-row--drop-target {
     background: rgba(25, 135, 84, .12) !important;
@@ -1111,3 +1114,24 @@
 .bse-tree-item > div[v-show] {
     overflow: hidden;
 }
+
+/* Arriving from the bundle Health tab: the flagged rule + its issue */
+@keyframes bse-flash {
+    0%, 60% { background: rgba(255, 193, 7, .28); box-shadow: inset 3px 0 0 #d4a700; }
+    100%    { background: transparent; box-shadow: none; }
+}
+.bse-node-row--flash { animation: bse-flash 2.4s ease-out 1; }
+.bse-focus-note {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin: 8px 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(212, 167, 0, .45);
+    background: rgba(255, 193, 7, .08);
+    color: var(--text-color);
+    font-size: .82rem;
+    line-height: 1.5;
+}
+.bse-focus-note i { color: #d4a700; margin-top: 3px; }

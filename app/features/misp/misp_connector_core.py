@@ -166,6 +166,7 @@ def delete_server(server: MispServer) -> bool:
         db.session.delete(server)
         db.session.commit()
         log_activity('misp.server_delete', f"Deleted MISP server '{name}'",
+                     target_type='misp_server', target_id=sid, target_uuid=suuid,
                      extra={'server_uuid': suuid})
         return True
     except Exception as e:

@@ -40,6 +40,8 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(165))
     api_key = db.Column(db.String(128), index=True)
     is_connected = db.Column(db.Boolean, default=False, index=True)
+    auth_provider = db.Column(db.String(32), default='local', nullable=False, server_default='local')
+    auth_data = db.Column(db.String(128), unique=True, index=True)
 
     is_verified = db.Column(db.Boolean, default=False)
     verification_code = db.Column(db.String(6), nullable=True)
@@ -155,6 +157,7 @@ class User(UserMixin, db.Model):
             "twitter_url": self.twitter_url,
             "created_at": self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
             "last_seen": self.last_seen.strftime('%Y-%m-%d %H:%M') if self.last_seen else None,
+            "auth_provider": self.auth_provider,
         }
 
 class AnonymousUser(AnonymousUserMixin):
@@ -385,6 +388,7 @@ class Rule(db.Model):
         return {
             "id": self.id,
             "format": self.format,
+            "extension": self.get_extension(),
             "title": self.title,
             "license": self.license,
             "description": self.description,
@@ -421,6 +425,8 @@ class Rule(db.Model):
             'yara': 'yar',
             'sigma': 'yml',
             'suricata': 'rules',
+            'sagan': 'rules',
+            'snort': 'rules',
             'zeek': 'zeek',
             'wazuh': 'xml',
             'nse': 'nse',
@@ -428,7 +434,10 @@ class Rule(db.Model):
             'nova': 'nov',
             'splunk': 'yml',
             'elastic': 'toml',
-            'plum': 'yaml'
+            'kql': 'kql',
+            'kunai': 'kun',
+            'atr': 'yaml',
+            'plum': 'yaml',
         }
 
         return extensions.get(format_name, 'txt')
@@ -662,7 +671,7 @@ class RuleFavoriteUser(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     rule_id = db.Column(db.Integer, db.ForeignKey('rule.id'), index=True)
-    created_at = db.Column(db.DateTime, default=datetime.datetime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
 
     # Define the relationships with cascade option
     user = db.relationship('User', backref=db.backref('favorite_rules_assocs', lazy='dynamic', cascade='all, delete-orphan'))
@@ -904,7 +913,7 @@ class RuleEditProposal(db.Model):
     old_content = db.Column(db.Text) 
     message = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
-    status = db.Column(db.String(20), default="pending") # pending, approved, rejected
+    status = db.Column(db.String(20), default="pending") # pending, accepted, rejected, superseded
 
     edit_type = db.Column(db.String(50), nullable=True) # ex: 'typo', 'content_update', 'legal'
     change_score = db.Column(db.Float, nullable=True)   # (0-100)
@@ -987,6 +996,7 @@ class RuleEditProposal(db.Model):
                 'accepted': 'success',
                 'approved': 'success',
                 'rejected': 'danger',
+                'superseded': 'secondary',
             }.get(self.status, 'secondary')
         }
 
@@ -1269,6 +1279,13 @@ class Bundle(db.Model):
     # Set when this bundle was generated via a workspace's "Export as Bundle" action.
     source_workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='SET NULL'), nullable=True, index=True)
 
+    # Private share link: whoever holds /bundle/share/<share_token> (and is
+    # logged in) can view the bundle while it's private. NULL = no link.
+    # Regenerating replaces it, which cuts off every previous holder.
+    # Never serialised in to_json() — only the owner/admin endpoint returns it.
+    share_token = db.Column(db.String(64), nullable=True, unique=True, index=True)
+    share_token_created_at = db.Column(db.DateTime, nullable=True)
+
     user = db.relationship('User', backref=db.backref('user who create bundle', lazy='dynamic', cascade='all, delete-orphan'))
 
     def get_username_by_id(self):
@@ -1280,6 +1297,7 @@ class Bundle(db.Model):
 
     def to_json(self):
         submitter = User.query.get(self.user_id)
+        active_rules = [a.rule for a in self.rules_assoc if a.rule and not a.rule.is_deleted]
         return {
             "id": self.id,
             "author_avatar": submitter.get_avatar_url() if submitter else None,
@@ -1293,8 +1311,8 @@ class Bundle(db.Model):
             "vote_up": self.vote_up,
             "vote_down": self.vote_down,
             "user_name": self.get_rule_user_first_name_by_id(),
-            "list_of_format_of_rules": list(set([assoc.rule.format for assoc in self.rules_assoc])),
-            "number_of_rules": len(self.rules_assoc.all()),
+            "list_of_format_of_rules": list(set([r.format for r in active_rules])),
+            "number_of_rules": len(active_rules),
             "is_verified": self.is_verified,
             "view_count": self.view_count,
             "download_count": self.download_count,
@@ -1322,33 +1340,32 @@ class BundleNode(db.Model):
         "BundleNode", 
         backref=db.backref('parent', remote_side=[id]), 
         cascade="all, delete-orphan",
-        passive_deletes=True
+        passive_deletes=True,
+        # save_workspace inserts nodes depth-first in display order, so id
+        # order == the order the user arranged them in (was unordered)
+        order_by="BundleNode.id",
     )
     
     rule = db.relationship("Rule") 
 
-    EXTENSION_MAP = {
-        'yara': '.yar',
-        'sigma': '.yaml',
-        'suricata': '.rules',
-        'zeek': '.zeek',
-        'wazuh': '.xml',
-        'nse': '.nse',
-        'nova': '.yaml',
-        'crs': '.conf',
-        'plum': '.yaml',
-        'no format': '.txt'
-    }
-
     def to_tree_json(self):
         """Recursively converts nodes to the JSON tree expected by Vue.js"""
+        if self.rule_id and self.rule and self.rule.is_deleted:
+            # Trashed rule: keep the slot visible but never expose its content
+            return {
+                "id": f"rule_{self.rule_id}_{self.id}",
+                "name": "(deleted rule)",
+                "type": "file",
+                "content": "",
+                "children": [],
+                "rule_id": self.rule_id,
+                "format": "",
+                "deleted": True,
+            }
         if self.rule_id and self.rule:
-            # Use lowercase format to match the mapping keys
-            rule_format = self.rule.format.lower() if self.rule.format else 'no format'
-            ext = self.EXTENSION_MAP.get(rule_format, '.txt')
-            
-            # Display name includes the extension in the tree explorer
-            current_name = f"{self.rule.title}{ext}"
+            # Display name includes the extension in the tree explorer.
+            # Trailing dots stripped so "Checksum changed." doesn't become "..xml".
+            current_name = f"{(self.rule.title or '').rstrip('.')}.{self.rule.get_extension()}"
             current_content = self.rule.to_string
             node_id = f"rule_{self.rule_id}_{self.id}"
         else:
@@ -1366,7 +1383,9 @@ class BundleNode(db.Model):
         
         if self.rule_id:
             node_data["rule_id"] = self.rule_id
-            
+            if self.rule:
+                node_data["format"] = self.rule.format or ''
+
         return node_data
     
 
@@ -1386,6 +1405,11 @@ class Tag(db.Model):
     color = db.Column(db.String(50), nullable=True) # Hex color code, e.g., #FF5733
     icon = db.Column(db.String(50), nullable=True) # fontawesome icon name
     source = db.Column(db.String(255), nullable=True) # Taxonomy or Manuel or Other
+    # Browse folder of the tag pickers/filters ("tlp" for "tlp:clear", the
+    # galaxy type for 'misp-galaxy:tool="X"', '' for a plain name). Kept in
+    # sync with `name` by the listeners below, so the pickers can list and
+    # count folders in SQL instead of loading every tag to group them.
+    namespace = db.Column(db.String(255), nullable=True, index=True)
 
     # Metadata for galxie (galaxie -> tag with galaxie_meta not null)
     galaxy_meta = db.Column(db.JSON, nullable=True)
@@ -1421,6 +1445,23 @@ class Tag(db.Model):
             "bundle_count": getattr(self, '_bundle_count', 0),
         }
  
+
+
+def tag_namespace(name) -> str:
+    """Browse folder of a tag name — same rule as the JS pickers' namespaceOf():
+    'misp-galaxy:tool="X"' -> 'tool', 'tlp:clear' -> 'tlp', 'malware' -> ''."""
+    name = name or ''
+    if ':' not in name:
+        return ''
+    if name.startswith('misp-galaxy:') and '=' in name:
+        return name.split(':', 1)[1].split('=', 1)[0][:255]
+    return name.split(':', 1)[0][:255]
+
+
+@db.event.listens_for(Tag, 'before_insert')
+@db.event.listens_for(Tag, 'before_update')
+def _tag_sync_namespace(mapper, connection, target):
+    target.namespace = tag_namespace(target.name)
 
 
 class CommentBundle(db.Model):
@@ -1482,6 +1523,171 @@ class CommentBundle(db.Model):
         
         return data
 
+class BundleHistory(db.Model):
+    """One entry of a bundle's change history (bundle detail page → History).
+
+    Each row stores a compact before/after snapshot of the bundle (name,
+    description, visibility, tags, CVEs, rules, files, folders — see
+    bundle_history.snapshot_bundle) plus the precomputed human-readable
+    `changes` list rendered by the meta-change-list component. Structure
+    autosaves from the editor are coalesced into one row per user per
+    window, so the history isn't one row per keystroke.
+    """
+    __tablename__ = 'bundle_history'
+
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid         = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    bundle_id    = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    # 'created' | 'details' | 'visibility' | 'tags' | 'structure' | 'rules'
+    action       = db.Column(db.String(32), nullable=False, index=True)
+    summary      = db.Column(db.String(512), nullable=True)
+    changes      = db.Column(db.JSON, nullable=True)
+    old_snapshot = db.Column(db.JSON, nullable=True)
+    new_snapshot = db.Column(db.JSON, nullable=True)
+    created_at   = db.Column(db.DateTime, nullable=False,
+                             default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    updated_at   = db.Column(db.DateTime, nullable=False,
+                             default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    user = db.relationship('User')
+    bundle = db.relationship('Bundle', backref=db.backref('history', lazy='dynamic', cascade='all, delete-orphan'))
+
+    def to_json(self, include_descriptions=False):
+        data = {
+            "id": self.id,
+            "uuid": self.uuid,
+            "bundle_id": self.bundle_id,
+            "user_id": self.user_id,
+            "user_name": self.user.first_name if self.user else None,
+            "user_avatar": self.user.get_avatar_url() if self.user else None,
+            "action": self.action,
+            "summary": self.summary,
+            "changes": self.changes or [],
+            "created_at": self.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+            "updated_at": self.updated_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z' if self.updated_at else None,
+            "has_description_diff": bool(self.old_snapshot and self.new_snapshot
+                                         and (self.old_snapshot.get('description') or '') != (self.new_snapshot.get('description') or '')),
+        }
+        if include_descriptions:
+            data["old_description"] = (self.old_snapshot or {}).get('description') or ''
+            data["new_description"] = (self.new_snapshot or {}).get('description') or ''
+        return data
+
+
+class BundleRelease(db.Model):
+    """A published, frozen version of a bundle ("v1.2").
+
+    `snapshot` holds everything needed to reproduce exactly what was
+    released, independently of later edits to the bundle or its rules:
+    bundle metadata, the structure tree, every custom file's content and
+    every rule's content (+ a hash used to detect upstream changes).
+    See bundle_release_core.build_snapshot().
+    """
+    __tablename__ = 'bundle_release'
+    __table_args__ = (db.UniqueConstraint('bundle_id', 'version', name='uq_bundle_release_version'),)
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    bundle_id   = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    version     = db.Column(db.String(40), nullable=False)
+    title       = db.Column(db.String(255), nullable=True)
+    notes       = db.Column(db.Text, nullable=True)          # markdown changelog
+    rule_count  = db.Column(db.Integer, nullable=False, default=0)
+    file_count  = db.Column(db.Integer, nullable=False, default=0)
+    health_score = db.Column(db.Integer, nullable=True)
+    snapshot    = db.Column(db.JSON, nullable=False)
+    created_at  = db.Column(db.DateTime, nullable=False,
+                            default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+
+    user = db.relationship('User')
+    bundle = db.relationship('Bundle', backref=db.backref('releases', lazy='dynamic', cascade='all, delete-orphan'))
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "uuid": self.uuid,
+            "bundle_id": self.bundle_id,
+            "version": self.version,
+            "title": self.title,
+            "notes": self.notes or "",
+            "rule_count": self.rule_count,
+            "file_count": self.file_count,
+            "health_score": self.health_score,
+            "user_id": self.user_id,
+            "user_name": self.user.first_name if self.user else None,
+            "user_avatar": self.user.get_avatar_url() if self.user else None,
+            "created_at": self.created_at.strftime('%Y-%m-%dT%H:%M:%S') + 'Z',
+        }
+
+
+class BundleNote(db.Model):
+    """A community note / known issue on a bundle ("⚠ this bundle doesn't
+    work if…"), written in Markdown.
+
+    Can only be created while the bundle is public (or by its owner / an
+    admin). Reading — including for its own author — follows the bundle's
+    access: while the bundle is private, the author reaches it only through
+    the bundle's share link; once it is public again the note is still
+    theirs (edit, delete, resolve).
+    """
+    __tablename__ = 'bundle_note'
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    bundle_id   = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    title       = db.Column(db.String(200), nullable=False)
+    content     = db.Column(db.Text, nullable=False)                 # markdown
+    severity    = db.Column(db.String(16), nullable=False, default='warning')   # info | warning | critical
+    status      = db.Column(db.String(16), nullable=False, default='open', index=True)  # open | resolved
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    created_at  = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    updated_at  = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    resolved_by = db.relationship('User', foreign_keys=[resolved_by_id])
+    bundle = db.relationship('Bundle', backref=db.backref('notes', lazy='dynamic', cascade='all, delete-orphan'))
+
+    def to_json(self):
+        iso = lambda d: d.strftime('%Y-%m-%dT%H:%M:%S') + 'Z' if d else None
+        return {
+            "id": self.id,
+            "uuid": self.uuid,
+            "bundle_id": self.bundle_id,
+            "user_id": self.user_id,
+            "user_name": self.user.first_name if self.user else None,
+            "user_avatar": self.user.get_avatar_url() if self.user else None,
+            "title": self.title,
+            "content": self.content,
+            "severity": self.severity,
+            "status": self.status,
+            "resolved_by": self.resolved_by.first_name if self.resolved_by else None,
+            "resolved_at": iso(self.resolved_at),
+            "created_at": iso(self.created_at),
+            "updated_at": iso(self.updated_at),
+            "tags": [{"id": t.id, "name": t.name, "color": t.color, "description": t.description}
+                     for t in sorted((a.tag for a in self.tag_assocs if a.tag), key=lambda t: t.name)],
+        }
+
+
+class BundleNoteTag(db.Model):
+    """A tag on a bundle note — restricted to a curated set of taxonomies
+    (false-positive, workflow, detection-engineering…), see
+    bundle.NOTE_TAG_PREFIXES."""
+    __tablename__ = 'bundle_note_tag'
+    __table_args__ = (db.UniqueConstraint('note_id', 'tag_id', name='uq_bundle_note_tag'),)
+
+    id      = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    note_id = db.Column(db.Integer, db.ForeignKey('bundle_note.id', ondelete='CASCADE'), nullable=False, index=True)
+    tag_id  = db.Column(db.Integer, db.ForeignKey('tag.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    note = db.relationship('BundleNote', backref=db.backref('tag_assocs', cascade='all, delete-orphan'))
+    tag  = db.relationship('Tag')
+
+
 class BundleReactionComment(db.Model):
     """ LIKE/DISLIKE/EMOJI reaction on comment in a Bundle """
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -1506,6 +1712,21 @@ class BundleReactionComment(db.Model):
             "is_admin": self.user.is_admin(),
             "comment_id": self.comment_id
         }
+
+class BundleFavoriteUser(db.Model):
+    """A user's favorite bundles (same idea as RuleFavoriteUser)."""
+    __tablename__ = 'bundle_favorite_user'
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    bundle_id  = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    __table_args__ = (db.UniqueConstraint('user_id', 'bundle_id', name='uq_bundle_favorite_user'),)
+
+    user   = db.relationship('User', backref=db.backref('favorite_bundles_assocs', lazy='dynamic',
+                                                        cascade='all, delete-orphan', passive_deletes=True))
+    bundle = db.relationship('Bundle', backref=db.backref('favorited_by_users_assocs', lazy='dynamic',
+                                                          cascade='all, delete-orphan', passive_deletes=True))
+
 
 class BundleVote(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -2007,7 +2228,18 @@ class AdminWorkflow(db.Model):
     def to_json(self):
         task_count = len(self.tasks)
         active_task_count = sum(1 for t in self.tasks if t.is_active)
+        from app.features.admin.task_scheduler.scheduler_engine import workflow_launch_status, workflow_first_task
+        first = workflow_first_task(self)
         return {
+            "launch_status": workflow_launch_status(self),
+            # Feeds the Edit Workflow modal's "Launch date" picker.
+            "first_task": {
+                "uuid": first.uuid, "title": first.title, "is_active": first.is_active,
+                "trigger_mode": first.trigger_mode, "run_once_at": first.to_json()["run_once_at"],
+                "days_of_week": first.days_of_week_list(), "day_of_month": first.day_of_month,
+                "hour": first.hour, "minute": first.minute, "cron_expr": first.cron_expr,
+                "timezone": first.timezone,
+            } if first else None,
             "id": self.id,
             "uuid": self.uuid,
             "title": self.title,
@@ -2087,6 +2319,11 @@ class AdminTaskSchedule(db.Model):
     runs        = db.relationship("AdminTaskRun", backref="schedule", cascade="all, delete-orphan", lazy=True,
                                    order_by="desc(AdminTaskRun.started_at)")
 
+    def _run_once_at_utc_iso(self):
+        from app.features.admin.task_scheduler.scheduler_engine import _once_run_at_utc
+        utc = _once_run_at_utc(self)
+        return utc.strftime('%Y-%m-%dT%H:%M:%SZ') if utc else None
+
     def days_of_week_list(self):
         if not self.days_of_week:
             return []
@@ -2109,7 +2346,8 @@ class AdminTaskSchedule(db.Model):
             "target_payload": self.target_payload,
             "is_active": self.is_active,
             "trigger_mode": self.trigger_mode,
-            "run_once_at": self.run_once_at.strftime('%Y-%m-%dT%H:%M') if self.run_once_at else None,
+            # Absolute UTC instant ('Z') — run_once_at itself is naive, in self.timezone.
+            "run_once_at": self._run_once_at_utc_iso(),
             "days_of_week": self.days_of_week_list(),
             "day_of_month": self.day_of_month,
             "hour": self.hour,
@@ -2645,7 +2883,9 @@ class ActivityLog(db.Model):
     user = db.relationship('User', backref=db.backref('activity_logs', lazy='dynamic'))
 
     def to_json(self):
-        username = "System"
+        # No user + a request IP = an anonymous visitor (view, download…);
+        # no user and no request at all = a genuine system action (cron, job).
+        username = "Anonymous" if self.ip_address else "System"
         try:
             if self.user:
                 username = self.user.get_username()
@@ -2863,6 +3103,14 @@ class PivotickGraphStyle(db.Model):
     id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
     graph_type = db.Column(db.String(20), unique=True, nullable=False, index=True)
     config     = db.Column(db.JSON, nullable=True)
+    # Admin switch (/admin/pivotick): when off, the graph isn't offered at all —
+    # rule/bundle pages show only the MISP event JSON, the ATT&CK page drops
+    # its Graph view. No row = enabled.
+    enabled    = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    # rule/bundle only: which MISP → graph mapping draws it — 'converters'
+    # (pivotick-converters, the default) or 'rulezet' (Rulezet's own mapping,
+    # styled by `config` above). NULL = default.
+    renderer   = db.Column(db.String(20), nullable=True)
     updated_at = db.Column(db.DateTime, nullable=True,
                            default=lambda: datetime.datetime.now(datetime.timezone.utc),
                            onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
@@ -3160,6 +3408,10 @@ class InstanceConfig(db.Model):
     telemetry_enabled = db.Column(db.Boolean, default=True, nullable=False)
     chatbot_enabled   = db.Column(db.Boolean, default=True, nullable=False)
     mascot_enabled    = db.Column(db.Boolean, default=True, nullable=False)
+    # Instance-wide switch for every user-facing email feature (alert emails,
+    # digests...). Even when on, emails only go out if SMTP is actually
+    # configured — see app/core/utils/mail_status.py.
+    email_enabled     = db.Column(db.Boolean, default=True, nullable=False)
     # Ollama server the AI agents talk to — set from the AI admin (Models &
     # Security). NULL falls back to config.py's OLLAMA_URL / OLLAMA_MODEL.
     # A non-local URL is refused by ai_core's locality guard unless
@@ -3178,6 +3430,7 @@ class InstanceConfig(db.Model):
             'telemetry_enabled': self.telemetry_enabled,
             'chatbot_enabled':   self.chatbot_enabled,
             'mascot_enabled':    self.mascot_enabled,
+            'email_enabled':     self.email_enabled,
             'public_url':        self.public_url,
             'version':           self.version,
             'last_started_at':   self.last_started_at.strftime('%Y-%m-%d %H:%M') if self.last_started_at else None,
@@ -3634,6 +3887,10 @@ class NotificationPreference(db.Model):
     # pref_background_jobs above.
     pref_workflow_runs = db.Column(db.Boolean, nullable=False, default=True)
 
+    # Alerts ("tell me when...") — in-app notifications for every alert at
+    # once; each alert still has its own email mode (Alert.email_mode).
+    pref_alerts = db.Column(db.Boolean, nullable=False, default=True)
+
     user = db.relationship('User', backref=db.backref(
         'notification_preference', uselist=False, cascade='all, delete-orphan'))
 
@@ -3654,7 +3911,135 @@ class NotificationPreference(db.Model):
             'blog_published':     self.pref_blog_published,
             'sync_run_finished':  self.pref_sync_run_finished,
             'workflow_runs':      self.pref_workflow_runs,
+            'alerts':             self.pref_alerts,
         }
+
+
+########################################
+#   Alerts ("tell me when...")         #
+########################################
+
+class Alert(db.Model):
+    """A user's saved watch: "tell me when a rule/bundle matching these
+    criteria is published". Evaluated in bulk by the alert sweeper
+    (app/features/alert/alert_core.py::run_sweep), never inline on rule
+    creation — rules are created from ~20 code paths and their tags/CVEs/
+    ATT&CK links are often attached later.
+
+    criteria (JSON): {
+        "cves":         ["CVE-2026-19490", ...],
+        "tags":         ["ransomware", ...],          # tag names
+        "attacks":      ["T1190", ...],               # technique ids
+        "keywords":     ["netscaler", ...],           # title / description / content
+        "formats":      ["yara", "sigma", ...],
+        "users":        [12, 34],                     # rule/bundle owner user ids
+        "github_repos": ["elastic/detection-rules"],  # rule source contains this
+        "cve_any":      false,   # any vulnerability id at all
+        "tag_any":      false,   # any tag except the tlp:/pap: markings
+        "attack_any":   false,   # any ATT&CK technique
+        "github_any":   false    # any rule imported from GitHub
+    }
+    Each "*_any" switch supersedes its specific list.
+    Within one criterion any value matches (OR). match_mode says how the
+    non-empty criteria combine: 'any' (OR) or 'all' (AND)."""
+    __tablename__ = 'alert'
+
+    EMAIL_MODES = ('off', 'instant', 'daily', 'weekly')
+    TARGETS     = ('rule', 'bundle')
+    EVENTS      = ('created', 'updated')
+
+    id                = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid              = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    user_id           = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'),
+                                  nullable=False, index=True)
+    name              = db.Column(db.String(120), nullable=False)
+    is_active         = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    targets           = db.Column(db.JSON, nullable=False, default=lambda: ['rule'])
+    events            = db.Column(db.JSON, nullable=False, default=lambda: ['created'])
+    criteria          = db.Column(db.JSON, nullable=False, default=dict)
+    match_mode        = db.Column(db.String(8), nullable=False, default='any')
+    notify_in_app     = db.Column(db.Boolean, nullable=False, default=True)
+    email_mode        = db.Column(db.String(16), nullable=False, default='off')
+    match_count       = db.Column(db.Integer, nullable=False, default=0)
+    last_triggered_at = db.Column(db.DateTime, nullable=True)
+    last_emailed_at   = db.Column(db.DateTime, nullable=True)
+    created_at        = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
+    updated_at        = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow,
+                                  onupdate=datetime.datetime.utcnow)
+
+    user    = db.relationship('User', backref=db.backref('alerts', lazy='dynamic',
+                                                        cascade='all, delete-orphan'))
+    matches = db.relationship('AlertMatch', backref='alert', lazy='dynamic',
+                              cascade='all, delete-orphan')
+
+    def to_json(self, unseen_count=None):
+        return {
+            'id':                self.id,
+            'uuid':              self.uuid,
+            'name':              self.name,
+            'is_active':         self.is_active,
+            'targets':           self.targets or [],
+            'events':            self.events or [],
+            'criteria':          self.criteria or {},
+            'match_mode':        self.match_mode,
+            'notify_in_app':     self.notify_in_app,
+            'email_mode':        self.email_mode,
+            'match_count':       self.match_count,
+            'unseen_count':      unseen_count,
+            'last_triggered_at': self.last_triggered_at.isoformat() if self.last_triggered_at else None,
+            'created_at':        self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class AlertMatch(db.Model):
+    """One rule/bundle event that matched one alert. The unique constraint
+    makes the sweeper idempotent — re-scanning a window never duplicates.
+    object_version distinguishes successive updates of the same object."""
+    __tablename__ = 'alert_match'
+    __table_args__ = (
+        db.UniqueConstraint('alert_id', 'object_type', 'object_id', 'event', 'object_version',
+                            name='uq_alert_match'),
+    )
+
+    id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    alert_id       = db.Column(db.Integer, db.ForeignKey('alert.id', ondelete='CASCADE'),
+                               nullable=False, index=True)
+    object_type    = db.Column(db.String(16), nullable=False)
+    object_id      = db.Column(db.Integer, nullable=False, index=True)
+    object_version = db.Column(db.String(64), nullable=False, default='')
+    event          = db.Column(db.String(16), nullable=False)
+    matched_on     = db.Column(db.JSON, nullable=True)   # ["cve:CVE-2026-1", "tag:ransomware"]
+    created_at     = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow, index=True)
+    seen_at        = db.Column(db.DateTime, nullable=True)
+    emailed_at     = db.Column(db.DateTime, nullable=True, index=True)
+
+
+class AlertSweepState(db.Model):
+    """Single row: how far the alert sweeper got, so each pass only looks
+    at what changed since the previous one."""
+    __tablename__ = 'alert_sweep_state'
+
+    id                 = db.Column(db.Integer, primary_key=True)
+    last_rule_id       = db.Column(db.Integer, nullable=False, default=0)
+    last_bundle_id     = db.Column(db.Integer, nullable=False, default=0)
+    rules_modified_at  = db.Column(db.DateTime, nullable=True)
+    bundles_updated_at = db.Column(db.DateTime, nullable=True)
+    last_run_at        = db.Column(db.DateTime, nullable=True)
+    last_pruned_at     = db.Column(db.DateTime, nullable=True)   # AlertMatch retention purge
+
+
+class AlertEmailLog(db.Model):
+    """One row per alert email actually sent. It is what the anti-spam
+    quotas count (per user per day, per instance per hour / day — see
+    alert_core.send_due_emails) and an audit trail of what went out."""
+    __tablename__ = 'alert_email_log'
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'),
+                            nullable=False, index=True)
+    sent_at     = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow, index=True)
+    alert_count = db.Column(db.Integer, nullable=False, default=0)
+    match_count = db.Column(db.Integer, nullable=False, default=0)
 
 
 class CustomTheme(db.Model):
@@ -3981,6 +4366,8 @@ class Workspace(db.Model):
                                    cascade='all, delete-orphan', foreign_keys='WorkspaceTagAssociation.workspace_id')
     attack_assocs = db.relationship('WorkspaceAttackAssociation', backref='workspace',
                                      cascade='all, delete-orphan', foreign_keys='WorkspaceAttackAssociation.workspace_id')
+    bundles_assoc = db.relationship('WorkspaceBundle', backref='workspace', lazy='dynamic',
+                                     cascade='all, delete-orphan', foreign_keys='WorkspaceBundle.workspace_id')
 
     def rule_count(self):
         return self.rules_assoc.count()
@@ -4003,6 +4390,7 @@ class Workspace(db.Model):
             'user_id':     self.user_id,
             'owner_name':  self.owner.get_username() if self.owner else None,
             'rule_count':  self.rule_count(),
+            'bundle_count': self.bundles_assoc.count(),
             'created_at':  self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
             'updated_at':  self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
         }
@@ -4026,6 +4414,24 @@ class WorkspaceRule(db.Model):
             'note':         self.note,
             'added_at':     self.added_at.strftime('%Y-%m-%d %H:%M') if self.added_at else None,
         }
+
+
+class WorkspaceBundle(db.Model):
+    """Association table between Workspace and Bundle — a workspace can
+    collect any bundle its owner can see (own, public, or someone else's),
+    independently of the workspace's rules. Bundles exported from the
+    workspace also get a row here (and keep Bundle.source_workspace_id as
+    provenance)."""
+    __tablename__ = 'workspace_bundle'
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False, index=True)
+    bundle_id    = db.Column(db.Integer, db.ForeignKey('bundle.id',    ondelete='CASCADE'), nullable=False, index=True)
+    added_at     = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    note         = db.Column(db.Text, nullable=True)
+    __table_args__ = (db.UniqueConstraint('workspace_id', 'bundle_id', name='uq_workspace_bundle'),)
+
+    bundle = db.relationship('Bundle', foreign_keys=[bundle_id],
+                             backref=db.backref('workspace_links', cascade='all, delete-orphan', passive_deletes=True))
 
 
 class WorkspaceDocument(db.Model):
@@ -4378,6 +4784,72 @@ class AIModelConfig(db.Model):
         }
 
 
+class AIProvider(db.Model):
+    """One AI backend an admin registered on AI admin → Models & Security:
+    a local or remote Ollama, Claude (Anthropic API), ChatGPT (OpenAI API),
+    or any internal OpenAI-compatible server (vLLM, LM Studio, LiteLLM…).
+    Exactly one is active — every agent goes through it (ai_core.py
+    get_active_provider). The first one is seeded from the old Ollama
+    settings, so an instance that never touches this keeps running on
+    Ollama. The API key is stored encrypted (ai_core.encrypt_secret)."""
+    __tablename__ = 'ai_provider'
+
+    id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid           = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    name           = db.Column(db.String(128), nullable=False)
+    kind           = db.Column(db.String(32), nullable=False)   # ollama | anthropic | openai | openai_compatible
+    base_url       = db.Column(db.String(512), nullable=True)
+    api_key_enc    = db.Column(db.Text, nullable=True)
+    # Claude only: sent as the anthropic-workspace-id header, needed when the
+    # API key is organization-level rather than scoped to one workspace.
+    workspace_id   = db.Column(db.String(128), nullable=True)
+    default_model  = db.Column(db.String(128), nullable=True)
+    # Explicit admin consent that rule/user content may be sent to this
+    # endpoint when it is not on the local network (cloud APIs always are).
+    remote_allowed = db.Column(db.Boolean, nullable=False, default=False)
+    is_active      = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    # Spending tracked by Rulezet itself (AIExecutionLog.cost_usd) against a
+    # monthly budget — the providers expose no "remaining credit" API. Prices
+    # in USD per million tokens; empty = built-in Claude price list
+    # (ai_core.CLAUDE_PRICES), unknown for other providers.
+    monthly_budget_usd     = db.Column(db.Float, nullable=True)
+    price_input_per_mtok   = db.Column(db.Float, nullable=True)
+    price_output_per_mtok  = db.Column(db.Float, nullable=True)
+    block_over_budget      = db.Column(db.Boolean, nullable=False, default=False)
+    # Last "Test connection" of the SAVED settings — reset whenever the type,
+    # URL or key change, so a green badge always describes what's stored.
+    last_test_at      = db.Column(db.DateTime, nullable=True)
+    last_test_ok      = db.Column(db.Boolean, nullable=True)
+    last_test_message = db.Column(db.String(300), nullable=True)
+    created_at     = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at     = db.Column(db.DateTime, nullable=True)
+
+    def to_json(self):
+        from app.features.ai.ai_core import describe_secret
+        return {
+            'id':             self.id,
+            'uuid':           self.uuid,
+            'name':           self.name,
+            'kind':           self.kind,
+            'base_url':       self.base_url,
+            'has_api_key':    bool(self.api_key_enc),
+            'api_key_hint':   describe_secret(self.api_key_enc),
+            'workspace_id':   self.workspace_id,
+            'monthly_budget_usd':    self.monthly_budget_usd,
+            'price_input_per_mtok':  self.price_input_per_mtok,
+            'price_output_per_mtok': self.price_output_per_mtok,
+            'block_over_budget':     bool(self.block_over_budget),
+            'default_model':  self.default_model,
+            'remote_allowed': self.remote_allowed,
+            'is_active':      self.is_active,
+            'last_test_at':      self.last_test_at.isoformat() if self.last_test_at else None,
+            'last_test_ok':      self.last_test_ok,
+            'last_test_message': self.last_test_message,
+            'created_at':     self.created_at.isoformat() if self.created_at else None,
+            'updated_at':     self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class AIExecutionLog(db.Model):
     """One row per agent invocation, every agent, success or failure — the
     unified history + security-visibility surface the admin AI hub reads
@@ -4393,12 +4865,18 @@ class AIExecutionLog(db.Model):
     input_summary   = db.Column(db.String(300), nullable=True)  # short, truncated — never full rule content
     content         = db.Column(db.Text, nullable=True)          # the agent's output (report / rule / fix / reply)
     model_used      = db.Column(db.String(128), nullable=True)
-    status          = db.Column(db.String(20), nullable=False)   # success | failed | rate_limited | disabled | busy
+    status          = db.Column(db.String(20), nullable=False)   # success | failed | rate_limited | disabled | busy | budget
     error_message   = db.Column(db.Text, nullable=True)
     is_public       = db.Column(db.Boolean, nullable=False, default=True)  # admin moderation lever
     flagged_reason  = db.Column(db.String(200), nullable=True)   # e.g. 'possible_prompt_injection'
     iteration_count = db.Column(db.Integer, nullable=True)       # for the repair loop (rule generator/fixer)
     latency_ms      = db.Column(db.Integer, nullable=True)
+    # Which AI provider ran it and what it consumed (all calls of the run
+    # summed) — feeds the per-provider monthly budget on Models & Security.
+    provider_id     = db.Column(db.Integer, db.ForeignKey('ai_provider.id', ondelete='SET NULL'), nullable=True, index=True)
+    input_tokens    = db.Column(db.Integer, nullable=True)
+    output_tokens   = db.Column(db.Integer, nullable=True)
+    cost_usd        = db.Column(db.Float, nullable=True)
     created_at      = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
 
     user = db.relationship('User', foreign_keys=[user_id])
@@ -4420,6 +4898,9 @@ class AIExecutionLog(db.Model):
             'flagged_reason':  self.flagged_reason,
             'iteration_count': self.iteration_count,
             'latency_ms':      self.latency_ms,
+            'input_tokens':    self.input_tokens,
+            'output_tokens':   self.output_tokens,
+            'cost_usd':        self.cost_usd,
             'created_at':      self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -4440,6 +4921,9 @@ class AIGeneration(db.Model):
     # (not a Rule) until a human accepts it and it gets imported — there's no
     # rule_id yet at the time it's recorded.
     rule_id    = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=True, index=True)
+    # Set for bundle-scoped agents (bundle_analysis) — a report about a whole
+    # bundle, not one rule. Deleted with the bundle.
+    bundle_id  = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=True, index=True)
     user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     content    = db.Column(db.Text, nullable=False)
     # Structured extras alongside `content` (e.g. rule_analysis's severity/
@@ -4452,6 +4936,8 @@ class AIGeneration(db.Model):
 
     user = db.relationship('User', foreign_keys=[user_id])
     rule = db.relationship('Rule', foreign_keys=[rule_id])
+    bundle = db.relationship('Bundle', foreign_keys=[bundle_id],
+                             backref=db.backref('ai_generations', cascade='all, delete-orphan', passive_deletes=True))
 
     def to_json(self):
         return {
@@ -4459,6 +4945,7 @@ class AIGeneration(db.Model):
             'uuid':       self.uuid,
             'agent_key':  self.agent_key,
             'rule_id':    self.rule_id,
+            'bundle_id':  self.bundle_id,
             'user_id':    self.user_id,
             'content':    self.content if self.is_public else None,
             'meta':       self.meta if self.is_public else None,

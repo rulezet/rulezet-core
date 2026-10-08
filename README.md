@@ -5,8 +5,8 @@
 
 
   <p>
-    <a href="https://github.com/ngsoti/rulezet-core/releases/tag/1.7.2">
-      <img src="https://img.shields.io/badge/release-v1.7.2-blue?style=for-the-badge&logo=github" alt="Release" />
+    <a href="https://github.com/rulezet/rulezet-core/releases/tag/v1.7.4">
+      <img src="https://img.shields.io/badge/release-v1.7.4-blue?style=for-the-badge&logo=github" alt="Release" />
     </a>
     <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License" />
     <img src="https://img.shields.io/badge/platform-cybersecurity-red?style=for-the-badge" alt="Cybersecurity" />

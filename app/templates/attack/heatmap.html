@@ -39,11 +39,11 @@
                         style="font-size:.78rem;font-weight:600;padding:.32rem .75rem;border-radius:7px;border:none;cursor:pointer;transition:background .13s,color .13s;">
                     <i class="fa-solid fa-chart-bar me-1"></i>Charts
                 </button>
-                <button @click="viewMode = 'graph'"
+                {% if pivotick_graph_enabled('attack') %}<button @click="viewMode = 'graph'"
                         :style="viewMode === 'graph' ? 'background:rgba(13,110,253,.1);color:#0d6efd;' : 'background:transparent;color:var(--subtle-text-color);'"
                         style="font-size:.78rem;font-weight:600;padding:.32rem .75rem;border-radius:7px;border:none;cursor:pointer;transition:background .13s,color .13s;">
                     <i class="fa-solid fa-diagram-project me-1"></i>Graph
-                </button>
+                </button>{% endif %}
             </div>
         </div>
         <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">

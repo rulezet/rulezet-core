@@ -15,7 +15,7 @@ from app import mail
 from ... import db
 from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, Connector, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleAttackAssociation, RuleEditProposal, RuleFavoriteUser, RuleTest, RuleUpdateHistory, RuleVote, Tag, User, UserBadge, UserConfig
 from .badges import BADGES
-from ...core.utils.utils import generate_api_key
+from ...core.utils.utils import as_db_id, generate_api_key
 from ..rule import rule_core as RuleModel
 import uuid
 
@@ -56,6 +56,7 @@ def add_user_core(form_dict) -> tuple:
         verification_code=code,
         verification_expiration=expires,
         is_verified=False,
+        auth_provider="local",
         created_at=now,          # set on registration
     )
  
@@ -73,6 +74,24 @@ def add_user_core(form_dict) -> tuple:
         return message, False
  
     return user, True
+
+
+ACCOUNT_TEXT_FIELDS_MAX = {"first_name": 64, "last_name": 64, "email": 64}
+
+
+def account_fields_error(data: dict, with_password: bool) -> str | None:
+    """What's wrong with the name / email / password sent to the account API,
+    or None. Same limits as the web forms (the DB columns are 64 long)."""
+    for field, max_length in ACCOUNT_TEXT_FIELDS_MAX.items():
+        value = data.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return f"{field} is required and must be text"
+        if len(value) > max_length:
+            return f"{field} must be at most {max_length} characters"
+    password = data.get("password")
+    if (with_password or password is not None) and not isinstance(password, str):
+        return "password must be text"
+    return None
 
 
 def resend_verification_code_core(user_id) -> bool:
@@ -155,6 +174,11 @@ def request_password_reset_core(email: str) -> bool:
     user = User.query.filter_by(email=email).first()
     if not user or not user.is_verified:
         return True  # silent — prevent email enumeration
+    if (user.auth_provider or 'local') != 'local':
+        # SSO accounts have no Rulezet password: a reset would create one and
+        # let the account log in without the IdP (and keep access after being
+        # removed from the IdP groups). Silent, like the cases above.
+        return True
     raw_token = secrets.token_urlsafe(32)
     hashed    = hashlib.sha256(raw_token.encode()).hexdigest()
     user.password_reset_token      = hashed
@@ -170,6 +194,11 @@ def reset_password_core(raw_token: str, new_password: str) -> tuple:
     user = User.query.filter_by(password_reset_token=hashed).first()
     if not user:
         return False, "Invalid or expired link."
+    if (user.auth_provider or 'local') != 'local':
+        user.password_reset_token      = None
+        user.password_reset_expiration = None
+        db.session.commit()
+        return False, "This account signs in through single sign-on and has no password."
     now = datetime.datetime.now(timezone.utc).replace(tzinfo=None)
     if not user.password_reset_expiration or now > user.password_reset_expiration:
         user.password_reset_token      = None
@@ -231,6 +260,8 @@ def verify_user_core(id) -> bool:
     user = get_user(id)
     if user:
         user.is_verified = True
+        user.verification_code = None
+        user.verification_expiration = None
         db.session.commit()
         return True
     else:
@@ -246,7 +277,7 @@ def update_last_seen(user_id) -> None:
 
 
 
-def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> tuple:
+def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=False) -> tuple:
     """Edit the user in the DB. Returns (success, pending_email_or_None).
     If the email changed, the new address is NOT applied immediately — caller must
     call request_email_change_core() to send the confirmation link."""
@@ -256,24 +287,24 @@ def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False) -> tupl
 
     user.first_name = form_dict["first_name"]
     user.last_name  = form_dict["last_name"]
-
-    # Detect email change but don't apply it yet
-    new_email = form_dict["email"]
     pending_email = None
-    if new_email != user.email:
-        pending_email = new_email
-    else:
-        user.email = new_email
 
-    if form_dict.get("password"):
+    # SSO accounts have their identity managed externally; disallow email changes.
+    if not is_sso:
+        # Detect email change but don't apply it yet
+        new_email = form_dict["email"]
+        if new_email != user.email:
+            pending_email = new_email
+        else:
+            user.email = new_email
+
+    if form_dict.get("password") and not is_sso:
         user.password = form_dict["password"]
 
-    user.username    = form_dict.get("username") or None
-    user.bio         = form_dict.get("bio") or None
-    user.location    = form_dict.get("location") or None
-    user.website_url = form_dict.get("website_url") or None
-    user.github_url  = form_dict.get("github_url") or None
-    user.twitter_url = form_dict.get("twitter_url") or None
+    # Profile fields: only those sent are changed (the API edit sends none).
+    for field in ("username", "bio", "location", "website_url", "github_url", "twitter_url"):
+        if field in form_dict:
+            setattr(user, field, form_dict[field] or None)
 
     if remove_avatar and user.profile_picture:
         _delete_avatar_file(user.profile_picture)
@@ -326,11 +357,12 @@ def request_email_change_core(user_id: int, new_email: str) -> bool:
     return True
 
 
-def confirm_email_change_core(raw_token: str) -> tuple:
-    """Validate an email-change token and apply the new address. Returns (success, message)."""
+def confirm_email_change_core(raw_token: str, user_id: int) -> tuple:
+    """Validate an email-change token of account `user_id` (the one logged in)
+    and apply the new address. Returns (success, message)."""
     hashed = hashlib.sha256(raw_token.encode()).hexdigest()
     user   = User.query.filter_by(email_change_token=hashed).first()
-    if not user:
+    if not user or user.id != user_id:
         return False, "Invalid or expired link."
     now = datetime.datetime.now(timezone.utc).replace(tzinfo=None)
     if not user.email_change_expiration or now > user.email_change_expiration:
@@ -522,8 +554,10 @@ def get_admin_user()-> id:
     return User.query.filter_by(email='admin@admin.admin').first()
 
 def get_user(id) -> id:
-    """Return the user"""
-    return User.query.get(id)
+    """Return the user, or None — also for an id that can't be one (None,
+    text, out of the database's integer range)."""
+    user_id = as_db_id(id)
+    return db.session.get(User, user_id) if user_id is not None else None
 
 
 def search_users_lite(query: str, limit: int = 5, exclude_id: int = None) -> list[dict]:
@@ -544,7 +578,8 @@ def search_users_lite(query: str, limit: int = 5, exclude_id: int = None) -> lis
         .all()
     )
 
-    exact = User.query.get(int(query)) if query.isdigit() else None
+    exact_id = as_db_id(query)
+    exact = db.session.get(User, exact_id) if exact_id else None
 
     results = []
     seen_ids = set()
@@ -562,8 +597,8 @@ def search_users_lite(query: str, limit: int = 5, exclude_id: int = None) -> lis
     return results
 
 def get_user_rules(user_id: int) -> list:
-    """Return all rules created by the user."""
-    return Rule.query.filter_by(user_id=user_id).all()
+    """Return all the user's rules, trashed ones excluded."""
+    return RuleModel._active().filter_by(user_id=user_id).all()
 
 def get_user_votes_summary(user_id: int) -> dict:
     """

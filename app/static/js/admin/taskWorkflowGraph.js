@@ -1,7 +1,7 @@
 /**
  * TaskWorkflowGraph — lightweight pipeline/DAG visualization for the Admin
  * Task Scheduler, modeled on GitHub Actions' workflow graph: tasks laid out
- * in fixed columns by dependency depth (not force-directed — PivoTick was
+ * in fixed columns by dependency depth (not force-directed — Pivotick was
  * considered but its force-directed layout is unstable/organic, the wrong
  * fit for a left-to-right pipeline where read order matters). Phase 1's
  * dependency model is single-parent only, so this is always a forest of

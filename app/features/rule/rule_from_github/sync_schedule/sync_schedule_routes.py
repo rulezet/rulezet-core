@@ -10,6 +10,7 @@ from flask_login import current_user
 import app.features.rule.rule_core as RuleModel
 from app.core.db_class.db import GithubSyncRun
 from app.core.utils.activity_log import log_activity
+from app.core.utils.utils import json_object
 from app.features.rule.rule_from_github.sync_schedule import sync_schedule_core as SyncScheduleModel
 
 sync_schedule_blueprint = Blueprint(
@@ -53,7 +54,7 @@ def schedule_create():
     if not (current_user.is_admin() or current_user.has_permission('github.manage')):
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
-    data = request.get_json(silent=True) or {}
+    data = json_object()
     schedule, err = SyncScheduleModel.create_schedule(data, current_user)
     if err:
         return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
@@ -75,7 +76,7 @@ def schedule_update(uuid):
     if not (current_user.is_admin() or current_user.has_permission('github.manage')):
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
-    data = request.get_json(silent=True) or {}
+    data = json_object()
     schedule, err = SyncScheduleModel.update_schedule(uuid, data)
     if err:
         status = 404 if err == "Schedule not found." else 400
@@ -115,7 +116,7 @@ def schedule_bulk_delete():
     if not (current_user.is_admin() or current_user.has_permission('github.manage')):
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
-    data = request.get_json(silent=True) or {}
+    data = json_object()
     mode = data.get('mode', 'partial')
     count = SyncScheduleModel.bulk_delete_schedules(
         mode, data.get('filters'), data.get('selected_uuids'), data.get('excluded_uuids')
@@ -137,7 +138,7 @@ def schedule_bulk_set_active():
     if not (current_user.is_admin() or current_user.has_permission('github.manage')):
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
-    data = request.get_json(silent=True) or {}
+    data = json_object()
     mode = data.get('mode', 'partial')
     is_active = bool(data.get('is_active', True))
     count = SyncScheduleModel.bulk_set_active_schedules(

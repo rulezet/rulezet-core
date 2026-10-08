@@ -10,7 +10,12 @@ export default defineComponent({
         navigateOnClick:{ type: Boolean, default: false },
         ruleListBase:   { type: String,  default: '/rule/rules_list' },
         search:         { type: String,  default: '' },
+        // Opt-in (bundle detail page): each rule of the selected technique
+        // gets extra buttons that emit rule-action({ action, rule }) with
+        // action = 'list' | 'structure' — the host decides what they do.
+        ruleActions:    { type: Boolean, default: false },
     },
+    emits: ['rule-action'],
     setup(props) {
         const selected = ref(null); // { tactic, technique }
 
@@ -273,7 +278,7 @@ export default defineComponent({
                         <i class="fa-solid fa-shield-halved me-1 text-primary"></i>
                         {{ selected.technique.count }} rule{{ selected.technique.count === 1 ? '' : 's' }} covering this technique
                     </div>
-                    <div class="am-detail-rules">
+                    <div v-if="!ruleActions" class="am-detail-rules">
                         <a
                             v-for="rule in selected.technique.rules"
                             :key="rule.id"
@@ -283,6 +288,26 @@ export default defineComponent({
                             <i class="fa-solid fa-file-shield me-1 opacity-60" style="font-size:.7rem;"></i>
                             {{ rule.name || 'Rule #' + rule.id }}
                         </a>
+                    </div>
+                    <div v-else class="am-rule-rows">
+                        <div v-for="rule in selected.technique.rules" :key="rule.id" class="am-rule-row">
+                            <i class="fa-solid fa-file-shield am-rule-row-icon"></i>
+                            <span class="am-rule-row-name" :title="rule.name">{{ rule.name || 'Rule #' + rule.id }}</span>
+                            <div class="am-rule-row-actions">
+                                <a :href="'/rule/detail_rule/' + rule.id" target="_blank" rel="noopener"
+                                   class="am-rule-act" title="Open the rule page">
+                                    <i class="fa-solid fa-arrow-up-right-from-square"></i><span>Detail</span>
+                                </a>
+                                <button type="button" class="am-rule-act" title="Show it in the Rules list"
+                                        @click="$emit('rule-action', { action: 'list', rule })">
+                                    <i class="fa-solid fa-list"></i><span>In list</span>
+                                </button>
+                                <button type="button" class="am-rule-act" title="Show where it is in the structure"
+                                        @click="$emit('rule-action', { action: 'structure', rule })">
+                                    <i class="fa-solid fa-folder-tree"></i><span>In structure</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

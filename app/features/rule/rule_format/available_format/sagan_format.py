@@ -114,7 +114,9 @@ class SaganRule(RuleType):
                 content = f.read()
                 parsed_rules = parse_rules(content)
                 for rule in parsed_rules:
-                    if rule.raw:
+                    # A commented-out rule ("# alert …") is disabled by its
+                    # author — suricataparser returns it with enabled=False.
+                    if rule.raw and rule.enabled:
                         rules.append(rule.raw.strip())
         except Exception:
             return []

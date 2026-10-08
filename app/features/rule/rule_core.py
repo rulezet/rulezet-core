@@ -23,6 +23,7 @@ from ... import db
 from ...core.db_class.db import *
 
 from ..account import account_core as AccountModel
+from app.core.utils.utils import bump_version
 
 ###################
 #   Rule action   #
@@ -64,7 +65,10 @@ def search_rules_lite(query: str, limit: int = 5) -> list[dict]:
 
     exact = None
     if is_numeric:
-        exact = _active().filter(Rule.id == int(query)).first()
+        # a number beyond the id column's range can't be an id (and overflows the query)
+        from app.core.utils.utils import as_db_id
+        rule_id = as_db_id(query)
+        exact = _active().filter(Rule.id == rule_id).first() if rule_id else None
     else:
         exact = (
             _active()
@@ -648,6 +652,45 @@ def check_bit_collision_risk(rule_format: str, content: str, exclude_rule_id: in
 
 
 # Create
+def _existing_tag_ids(raw) -> list:
+    """Ids of tags that exist, from untrusted form/API input: a list (or JSON
+    list) of {"id": …} objects or bare ids. Anything else is ignored — a
+    non-numeric id, or the id of a tag that doesn't exist (which PostgreSQL
+    would refuse on the foreign key)."""
+    from app.core.utils.utils import as_db_id
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    if not isinstance(raw, list):
+        return []
+    wanted = []
+    for item in raw:
+        tag_id = as_db_id(item.get('id') if isinstance(item, dict) else item)
+        if tag_id and tag_id not in wanted:
+            wanted.append(tag_id)
+    if not wanted:
+        return []
+    existing = {row.id for row in Tag.query.filter(Tag.id.in_(wanted)).with_entities(Tag.id)}
+    return [i for i in wanted if i in existing]
+
+
+def _parse_vulnerabilities(value) -> list:
+    """Vulnerability ids from a form/API value: a list, a JSON list (the
+    vulnerability picker's hidden field), or the plain "CVE" text field
+    ("CVE-2024-1, CVE-2024-2" — comma / semicolon / space separated)."""
+    if isinstance(value, list):
+        return value
+    if not isinstance(value, str) or value.strip() in ('', 'None', 'null', '[]'):
+        return []
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return [v for v in re.split(r'[\s,;]+', value.strip()) if v]
+
+
 def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, str] | tuple[Rule, str]:
     """
     Add a rule safely with error handling.
@@ -718,20 +761,9 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         # - Python list (from format parsers)
         # - JSON string like '["CVE-2024-1234"]' (from Vue hidden input or detect_cve)
         # - "None" / None / "" (empty)
-        def _resolve_vuln(v):
-            if isinstance(v, list):
-                return v
-            if isinstance(v, str) and v.strip() not in ('', 'None', 'null', '[]'):
-                try:
-                    parsed = json.loads(v)
-                    return parsed if isinstance(parsed, list) else []
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            return []
-
         vuln_list = (
-            _resolve_vuln(form_dict.get("vulnerabilities"))
-            or _resolve_vuln(form_dict.get("cve_id"))
+            _parse_vulnerabilities(form_dict.get("vulnerabilities"))
+            or _parse_vulnerabilities(form_dict.get("cve_id"))
         )
         # strip empty/whitespace-only entries
         vuln_list = [v for v in vuln_list if isinstance(v, str) and v.strip()]
@@ -763,23 +795,26 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         db.session.flush()
         
 
-        tags_list = form_dict.get("tags")
-        if tags_list and isinstance(tags_list, list):
-            for tag_data in tags_list:
-                if not isinstance(tag_data, dict):
-                    continue
-                tag_id = tag_data.get('id')
-                if tag_id:
-                    assoc = RuleTagAssociation(
-                        uuid=str(uuid.uuid4()),
-                        rule_id=new_rule.id,
-                        tag_id=int(tag_id),
-                        user_id=user.id if user else None,
-                        added_at=datetime.datetime.now(tz=datetime.timezone.utc)
-                    )
-                    db.session.add(assoc)
+        for tag_id in _existing_tag_ids(form_dict.get("tags")):
+            db.session.add(RuleTagAssociation(
+                uuid=str(uuid.uuid4()),
+                rule_id=new_rule.id,
+                tag_id=tag_id,
+                user_id=user.id if user else None,
+                added_at=datetime.datetime.now(tz=datetime.timezone.utc)
+            ))
 
         _attach_default_tags(new_rule, user_id)
+
+        # The author's own tags written in the rule (YARA `rule X : a b`,
+        # Sigma `tags:`…) as "Imported" tags — GitHub #70. In a savepoint:
+        # a problem there must never cost the rule itself.
+        try:
+            from app.features.tags.imported_tags_core import attach_imported_tags
+            with db.session.begin_nested():
+                attach_imported_tags(new_rule, user_id)
+        except Exception:
+            pass
 
         db.session.commit()
 
@@ -833,6 +868,14 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
             auto_parse_rule(new_rule.id, user_id)
         except Exception:
             pass
+
+        # YARA: record which rule(s) this one needs to compile (and what those
+        # need in turn) as auto "yara_condition_ref" links — Linked Rules page.
+        try:
+            from app.features.rule.rule_format.available_format.yara_format import sync_yara_dependency_relations
+            sync_yara_dependency_relations(new_rule)
+        except Exception:
+            db.session.rollback()
 
         # Quality score — computed last so it sees the tags/ATT&CK associations
         # attached just above, not a stale pre-attach snapshot.
@@ -917,20 +960,9 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     rule.to_string = form_dict["to_string"]
     rule.author = form_dict["author"]
     rule.original_uuid = form_dict["original_uuid"]
-    def _resolve_vuln(v):
-        if isinstance(v, list):
-            return v
-        if isinstance(v, str) and v.strip() not in ('', 'None', 'null', '[]'):
-            try:
-                parsed = json.loads(v)
-                return parsed if isinstance(parsed, list) else []
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return []
-
     vuln_edit = (
-        _resolve_vuln(form_dict.get("vulnerabilities"))
-        or _resolve_vuln(form_dict.get("cve_id"))
+        _parse_vulnerabilities(form_dict.get("vulnerabilities"))
+        or _parse_vulnerabilities(form_dict.get("cve_id"))
     )
     vuln_edit = [v for v in vuln_edit if isinstance(v, str) and v.strip()]
     rule.cve_id = json.dumps(vuln_edit)
@@ -939,18 +971,7 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
 
     if "tags" in form_dict:
         try:
-            tags_input = form_dict.get("tags")
-            if isinstance(tags_input, str):
-                tags_data_list = json.loads(tags_input)
-            else:
-                tags_data_list = tags_input
-
-            new_tag_ids = set()
-            for t in tags_data_list:
-                if isinstance(t, dict) and t.get('id'):
-                    new_tag_ids.add(int(t.get('id')))
-                elif isinstance(t, (int, str)):
-                    new_tag_ids.add(int(t))
+            new_tag_ids = set(_existing_tag_ids(form_dict.get("tags")))
 
             current_associations = RuleTagAssociation.query.filter_by(rule_id=rule.id).all()
             current_tag_ids = {assoc.tag_id for assoc in current_associations}
@@ -986,6 +1007,14 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
         from app.features.rule.github_repo_core import sync_rule_edit
         new_snapshot = {'format': rule.format, 'license': rule.license, 'cve_id': rule.cve_id, 'branch': rule.branch}
         sync_rule_edit(old_source, rule.source, old_snapshot, new_snapshot)
+    except Exception:
+        db.session.rollback()
+
+    # YARA: record which rule(s) this one needs to compile (and what those
+    # need in turn) as auto "yara_condition_ref" links — Linked Rules page.
+    try:
+        from app.features.rule.rule_format.available_format.yara_format import sync_yara_dependency_relations
+        sync_yara_dependency_relations(rule)
     except Exception:
         db.session.rollback()
 
@@ -1121,16 +1150,16 @@ def get_rules() -> Rule:
     """Get all the rules"""
     return Rule.query.all()
 def get_rules_page(page) -> Rule:
-    """Return all rules by page"""
-    return Rule.query.paginate(page=page, per_page=20, max_per_page=20)
+    """Return all active rules by page"""
+    return _active().paginate(page=page, per_page=20, max_per_page=20)
 
 def get_rules_of_user_with_id(user_id) -> Rule:
     """Get all the rule made by the user (with id)"""
     return Rule.query.filter(Rule.user_id == user_id).all()
 
 def get_rules_of_user_with_id_page(user_id, page, search, sort_by, rule_type) -> Rule:
-    """Get all the page rule made by the user (with id)"""
-    query = Rule.query.filter(Rule.user_id == user_id)
+    """Get all the page rule made by the user (with id) — active rules only"""
+    query = _active().filter(Rule.user_id == user_id)
 
     if search:
         search_lower = f"%{search.lower()}%"
@@ -1169,7 +1198,7 @@ def get_rule(id, include_deleted=False) -> Rule:
 
 def get_rule_type_count(user_id):
     """Return JSON of the different rule types and total"""
-    rules = Rule.query.filter_by(user_id=user_id).all()
+    rules = _active().filter_by(user_id=user_id).all()
     if not rules:
         return jsonify({
             "total": 0,
@@ -1225,7 +1254,7 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
     forbidden = ["none", "null", "unknown", "n/a", "undefined", ""]
 
     if original_uuid and clean_uuid not in forbidden:
-        rule = Rule.query.filter_by(original_uuid=original_uuid).first()
+        rule = _active().filter_by(original_uuid=original_uuid).first()
         if rule:
             return rule, "Rule found in Rulezet with this original_uuid"
 
@@ -1247,7 +1276,7 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
     if filepath_in_the_repo:
         # normalize: use only the filename as fallback
         normalized = os.path.basename(filepath_in_the_repo)
-        rule = Rule.query.filter(
+        rule = _active().filter(
             Rule.source.in_(source_variants)
         ).filter(
             db.or_(
@@ -1260,7 +1289,7 @@ def get_rule_from_a_github(title, filepath_in_the_repo, repo_source, original_uu
             return rule, "Rule found in Rulezet with this github_path"
 
     # check by title + source
-    query = Rule.query.filter(Rule.title == title, Rule.source.in_(source_variants))
+    query = _active().filter(Rule.title == title, Rule.source.in_(source_variants))
     count_title = query.count()
 
     if count_title == 0:
@@ -1437,11 +1466,11 @@ def get_all_rule_sources_by_user():
 
 def get_rules_page_owner(page) -> Rule:
     """Return all owner rules by page where the user_id matches the current logged-in user"""
-    return Rule.query.filter_by(user_id=current_user.id).paginate(page=page, per_page=30, max_per_page=30)
+    return _active().filter_by(user_id=current_user.id).paginate(page=page, per_page=30, max_per_page=30)
 
 def get_total_rules_count_owner() -> int:
-    """Return the total count of rules created by the current logged-in user"""
-    return Rule.query.filter_by(user_id=current_user.id).count()
+    """Return the total count of active rules created by the current logged-in user"""
+    return _active().filter_by(user_id=current_user.id).count()
 
 def give_all_right_to_admin(rules) -> None:
     """give all right for admin for each rule"""
@@ -1483,7 +1512,7 @@ def get_rules_page_favorite(page, id_user, search=None, author=None, sort_by=Non
     """Get paginated favorite rules of a user with optional filters"""
 
     # Base query: select favorite rules for the user
-    query = Rule.query\
+    query = _active()\
         .join(RuleFavoriteUser, Rule.id == RuleFavoriteUser.rule_id)\
         .filter(RuleFavoriteUser.user_id == id_user)
 
@@ -1609,14 +1638,14 @@ def create_proposal_revision(previous_proposal_id, proposed_content, message, ed
     """Create a proposal that continues a prior one (discussion-driven revision).
 
     The prior proposal is left exactly as-is (still "pending"/"rejected") and
-    stays fully decidable — it can still be accepted or rejected on its own
-    merits at any time, independently of however many revisions get attached
-    to it. Any number of revisions can be created from the same proposal.
+    stays decidable until a version of its thread is accepted (the others are
+    then superseded, see decide_proposal). Any number of revisions can be
+    created from the same proposal — a thread can branch.
     """
     previous = RuleEditProposal.query.get(previous_proposal_id)
     if not previous:
         return False, None, "Proposal not found"
-    if previous.status not in ('pending', 'rejected'):
+    if previous.status not in PROPOSAL_REVISABLE_STATUSES:
         return False, None, "Cannot revise a decided proposal"
 
     change_score = calculate_diff_score(previous.proposed_content or "", proposed_content)
@@ -1644,10 +1673,10 @@ def bulk_manage_proposals(action: str, mode: str, selected_ids: list, excluded_i
     Non-admins may only ever affect proposals against rules they own — this
     is enforced at the query level (not just checked-and-skipped per item)
     so "mode=all" for a regular user means "all of my rules' pending
-    proposals", never every pending proposal system-wide.
+    proposals", never every pending proposal system-wide. Each proposal goes
+    through decide_proposal, so accepting one supersedes the rest of its
+    thread — a proposal superseded earlier in the same batch is skipped.
     """
-    import datetime
-
     try:
         if mode == "all":
             query = RuleEditProposal.query.filter_by(status="pending")
@@ -1655,7 +1684,7 @@ def bulk_manage_proposals(action: str, mode: str, selected_ids: list, excluded_i
                 query = query.join(Rule, Rule.id == RuleEditProposal.rule_id).filter(Rule.user_id == reviewed_by_id)
             if excluded_ids:
                 query = query.filter(~RuleEditProposal.id.in_(excluded_ids))
-            proposals = query.all()
+            proposals = query.order_by(RuleEditProposal.timestamp.asc()).all()
         else:
             query = RuleEditProposal.query.filter(
                 RuleEditProposal.id.in_(selected_ids),
@@ -1663,65 +1692,21 @@ def bulk_manage_proposals(action: str, mode: str, selected_ids: list, excluded_i
             )
             if not is_admin:
                 query = query.join(Rule, Rule.id == RuleEditProposal.rule_id).filter(Rule.user_id == reviewed_by_id)
-            proposals = query.all()
+            proposals = query.order_by(RuleEditProposal.timestamp.asc()).all()
 
         if not proposals:
             return {"success": False, "message": "No proposals found."}
 
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        decision = "accepted" if action == "accept" else "rejected"
         count = 0
-
         for proposal in proposals:
-            # Ownership already enforced above at the query level for
-            # non-admins; this just fetches the rule to update its content.
-            rule = get_rule(proposal.rule_id)
-            if not rule:
+            if proposal.status != "pending":
                 continue
-            if not is_admin and rule.user_id != reviewed_by_id:
-                continue
+            ok, _ = decide_proposal(proposal, decision, reviewed_by_id)
+            if ok:
+                count += 1
 
-            proposal.status = "accepted" if action == "accept" else "rejected"
-            proposal.reviewed_by_id = reviewed_by_id
-            proposal.reviewed_at = now
-            if action == "accept":
-                _auto_reject_parent_on_child_accept(proposal)
-
-            if action == "accept":
-                # update the rule content
-                rule.to_string = proposal.proposed_content
-                db.session.add(rule)
-
-                # contribution
-                create_contribution(proposal.user_id, proposal.id)
-
-                # history
-                result = {
-                    "id": rule.id,
-                    "title": rule.title,
-                    "success": True,
-                    "message": "accepted",
-                    "new_content": proposal.proposed_content,
-                    "old_content": proposal.old_content,
-                    "manual_submit": True,
-                }
-                create_rule_history(result)
-
-                # gamification
-                gamification = AccountModel.get_or_create_gamification_profile(proposal.user_id)
-                if gamification:
-                    AccountModel.update_propose_edit_gamification(gamification.id, "add_one_to_accepted")
-            else:
-                # gamification
-                gamification = AccountModel.get_or_create_gamification_profile(proposal.user_id)
-                if gamification:
-                    AccountModel.update_propose_edit_gamification(gamification.id, "add_one_to_rejected")
-
-            db.session.add(proposal)
-            count += 1
-
-        db.session.commit()
-        action_label = "accepted" if action == "accept" else "rejected"
-        return {"success": True, "message": f"{count} proposal(s) {action_label} successfully."}
+        return {"success": True, "message": f"{count} proposal(s) {decision} successfully.", "count": count}
 
     except Exception as e:
         db.session.rollback()
@@ -1765,6 +1750,157 @@ def get_all_rules_edit_propose_page(page, rule_id) -> RuleEditProposal:
         RuleEditProposal.rule_id == rule_id,
         Rule.is_deleted == False,
     ).paginate(page=page, per_page=20, max_per_page=20)
+PROPOSAL_THREADS_PER_PAGE = 10
+
+
+def _proposal_time(proposal):
+    """A proposal's timestamp, comparable whether it was stored naive or aware."""
+    ts = proposal.timestamp or datetime.datetime.min
+    return ts.replace(tzinfo=None)
+
+
+PROPOSAL_THREAD_STATUSES = ("open", "accepted", "closed")
+PROPOSAL_THREAD_SORTS = ("recent", "oldest", "versions")
+# A version can be revised while it is still open or after a plain rejection —
+# never once it (or another version of its thread) was accepted.
+PROPOSAL_REVISABLE_STATUSES = ("pending", "rejected")
+
+
+def _proposal_tree(rule_id):
+    """The proposals of a rule as (thread roots, {parent id: [revisions]})."""
+    proposals = RuleEditProposal.query.filter_by(rule_id=rule_id).all()
+    by_id = {p.id: p for p in proposals}
+    children = {}
+    roots = []
+    for p in proposals:
+        # A revision whose parent is gone (or belongs to another rule) starts its own thread
+        if p.previous_proposal_id in by_id and p.previous_proposal_id != p.id:
+            children.setdefault(p.previous_proposal_id, []).append(p)
+        else:
+            roots.append(p)
+    return roots, children
+
+
+def _build_thread(root, children):
+    """One thread: the root and its revisions in reading order — depth-first,
+    oldest revision first — each with its depth and version number (v1 = the
+    first proposal, then by date)."""
+    ordered, stack, seen = [], [(root, 0)], set()
+    while stack:
+        node, depth = stack.pop()
+        if node.id in seen:          # never loop on corrupted links
+            continue
+        seen.add(node.id)
+        ordered.append((node, depth))
+        for child in sorted(children.get(node.id, []), key=_proposal_time, reverse=True):
+            stack.append((child, depth + 1))
+    versions = {p.id: n for n, p in enumerate(sorted((p for p, _ in ordered), key=_proposal_time), start=1)}
+    statuses = {p.status for p, _ in ordered}
+    return {
+        "root": root,
+        "proposals": [(p, depth, versions[p.id]) for p, depth in ordered],
+        "last_activity": max(_proposal_time(p) for p, _ in ordered),
+        "status": "accepted" if "accepted" in statuses else "open" if "pending" in statuses else "closed",
+    }
+
+
+def get_proposal_thread(proposal):
+    """The thread `proposal` belongs to (see _build_thread)."""
+    roots, children = _proposal_tree(proposal.rule_id)
+    parent_of = {child.id: parent_id for parent_id, kids in children.items() for child in kids}
+    root_id, seen = proposal.id, set()
+    while root_id in parent_of and root_id not in seen:
+        seen.add(root_id)
+        root_id = parent_of[root_id]
+    root = next((r for r in roots if r.id == root_id), proposal)
+    return _build_thread(root, children)
+
+
+def with_thread_positions(proposal_dicts):
+    """Add to each proposal (as to_json() returns it) where it sits in its
+    thread: `thread_root_id`, `thread_version`, `thread_depth` and
+    `thread_size` — so a list can be grouped by thread."""
+    positions = {}
+    for rule_id in {d["rule_id"] for d in proposal_dicts}:
+        roots, children = _proposal_tree(rule_id)
+        for root in roots:
+            thread = _build_thread(root, children)
+            for p, depth, version in thread["proposals"]:
+                positions[p.id] = (root.id, version, depth, len(thread["proposals"]))
+    for d in proposal_dicts:
+        root_id, version, depth, size = positions.get(d["id"], (d["id"], 1, 0, 1))
+        d.update(thread_root_id=root_id, thread_version=version, thread_depth=depth, thread_size=size)
+    return proposal_dicts
+
+
+def can_revise_proposal(user, proposal):
+    """A version is revised by its author, the rule's owner or an admin,
+    while it is still open or was plainly rejected."""
+    if not user or not user.is_authenticated or proposal.status not in PROPOSAL_REVISABLE_STATUSES:
+        return False
+    rule = get_rule(proposal.rule_id)
+    if not rule:
+        return False
+    return user.id in (proposal.user_id, rule.user_id) or user.is_admin()
+
+
+def _thread_matches(thread, *, status=None, edit_type=None, q=None):
+    """Filters of the Proposals page — a thread matches when it has the
+    status, and when one of its proposals has the edit type / the text
+    (in its justification, its author's name or its #id)."""
+    if status and thread["status"] != status:
+        return False
+    proposals = [p for p, _, _ in thread["proposals"]]
+    if edit_type and not any((p.edit_type or "other") == edit_type for p in proposals):
+        return False
+    if q:
+        needle = q.lower().lstrip("#")
+        def text(p):
+            author = f"{p.user.first_name} {p.user.last_name}" if p.user else ""
+            return f"{p.id} {p.message or ''} {author}".lower()
+        if not any(needle in text(p) for p in proposals):
+            return False
+    return True
+
+
+def get_proposal_threads(rule_id, page=1, per_page=PROPOSAL_THREADS_PER_PAGE,
+                         status=None, edit_type=None, q=None, sort="recent"):
+    """The edit proposals of an active rule grouped into threads.
+
+    A thread is a first proposal plus every revision made from it (and from
+    those revisions — revisions can branch). Within a thread the proposals
+    come in reading order: depth-first, oldest revision first, each with its
+    version number (v1 = the first proposal, then by date) and its depth.
+    Threads are filtered (see _thread_matches), sorted — latest activity
+    first ("recent", the default), first proposal first ("oldest") or most
+    versions first ("versions") — and paginated (a thread is never split
+    across pages).
+
+    Returns (threads of the page, total_pages, number of matching threads,
+    {status: number of threads} before filtering); each thread is a dict
+    {root, proposals: [(proposal, depth, version)], last_activity, status},
+    status being "accepted" (a version was merged), "open" (one still
+    pending) or "closed".
+    """
+    rule = _active().filter(Rule.id == rule_id).first()
+    if not rule:
+        return [], 0, 0, {s: 0 for s in PROPOSAL_THREAD_STATUSES}
+    roots, children = _proposal_tree(rule_id)
+    threads = [_build_thread(root, children) for root in roots]
+
+    counts = {s: sum(t["status"] == s for t in threads) for s in PROPOSAL_THREAD_STATUSES}
+    threads = [t for t in threads if _thread_matches(t, status=status, edit_type=edit_type, q=q)]
+    if sort == "oldest":
+        threads.sort(key=lambda t: _proposal_time(t["root"]))
+    elif sort == "versions":
+        threads.sort(key=lambda t: (len(t["proposals"]), t["last_activity"]), reverse=True)
+    else:
+        threads.sort(key=lambda t: t["last_activity"], reverse=True)
+    total_pages = max(1, -(-len(threads) // per_page))
+    page = min(max(page, 1), total_pages)
+    return threads[(page - 1) * per_page: page * per_page], total_pages, len(threads), counts
+
+
 def get_rule_proposal(id) -> RuleEditProposal:
     """Return the rule"""
     return RuleEditProposal.query.get(id)
@@ -1870,42 +2006,96 @@ def set_to_string_rule(rule_id, proposed_content) -> json:
     db.session.commit()
     return {"message": "Rule updated successfully"}, 200
     
-def _auto_reject_parent_on_child_accept(proposal):
-    """When a revision is accepted, its parent proposal is auto-rejected —
-    the parent's own content was never the one that got merged, so leaving
-    it "pending" forever would be confusing. Never overwrites a parent
-    that's already been accepted on its own merits."""
-    if not proposal.previous_proposal_id:
-        return
-    parent = RuleEditProposal.query.get(proposal.previous_proposal_id)
-    if parent and parent.status != 'accepted':
-        parent.status = 'rejected'
+def _supersede_thread(proposal, reviewed_by_id, now):
+    """Once `proposal` is accepted, every other open or rejected version of
+    its thread is closed as "superseded" — its content was never the one
+    merged. Versions already accepted on their own (old data) are left alone.
+    Returns the superseded proposals."""
+    superseded = []
+    for other, _, _ in get_proposal_thread(proposal)["proposals"]:
+        if other.id != proposal.id and other.status in PROPOSAL_REVISABLE_STATUSES:
+            other.status = "superseded"
+            other.reviewed_by_id = reviewed_by_id
+            other.reviewed_at = now
+            superseded.append(other)
+    return superseded
 
 
-def set_status(proposal_id, status, reviewed_by_id=None) -> json:
-    """Set the statue of an edit request"""
-    if status not in ['accepted', 'rejected']:
-        return {'error': 'Statut invalide'}, 400
-    proposal = RuleEditProposal.query.get(proposal_id)
-    if not proposal:
-        return {'error': 'Proposition non trouvée'}, 404
-    proposal.status = status
-    if reviewed_by_id is not None:
-        proposal.reviewed_by_id = reviewed_by_id
-        proposal.reviewed_at = datetime.datetime.now(tz=datetime.timezone.utc)
-    if status == 'accepted':
-        _auto_reject_parent_on_child_accept(proposal)
-    db.session.commit()
-    return {'success': True, 'new_status': status}, 200
+def decide_proposal(proposal, decision, reviewed_by_id, reason=None):
+    """Accept or reject a pending proposal, with an optional reason.
+
+    Accepting applies its content to the rule (history entry, contribution,
+    version bump) and supersedes the rest of its thread. The author and the
+    thread's participants are notified. Returns (True, {"new_version",
+    "superseded"}) or (False, error message).
+    """
+    if decision not in ("accepted", "rejected"):
+        return False, "Invalid decision."
+    if proposal.status != "pending":
+        return False, "This proposal was already decided."
+    rule = get_rule(proposal.rule_id)
+    if not rule:
+        return False, "Rule not found."
+
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    proposal.status = decision
+    proposal.reviewed_by_id = reviewed_by_id
+    proposal.reviewed_at = now
+    proposal.rejection_reason = (reason or None) if decision == "rejected" else None
+    result = {"new_version": None, "superseded": []}
+
+    if decision == "accepted":
+        result["superseded"] = _supersede_thread(proposal, reviewed_by_id, now)
+        previous_content = rule.to_string
+        rule.to_string = proposal.proposed_content
+        rule.last_modif = now
+        current_v = rule.version or "1.0"
+        try:
+            result["new_version"] = bump_version(current_v) or current_v
+        except Exception:
+            result["new_version"] = current_v
+        rule.version = result["new_version"]
+        db.session.commit()
+
+        create_contribution(proposal.user_id, proposal.id)
+        create_rule_history({
+            "id": rule.id,
+            "title": rule.title,
+            "success": True,
+            "message": "accepted",
+            "new_content": proposal.proposed_content,
+            "old_content": previous_content,
+            "manual_submit": True,
+            "analyzed_by_user_id": reviewed_by_id,
+        })
+    else:
+        db.session.commit()
+
+    gamification = AccountModel.get_or_create_gamification_profile(proposal.user_id)
+    if gamification:
+        AccountModel.update_propose_edit_gamification(
+            gamification.id, "add_one_to_accepted" if decision == "accepted" else "add_one_to_rejected")
+
+    try:
+        from app.features.notification.notification_core import (
+            notify_proposal_status_change, notify_proposal_participants)
+        notify_proposal_status_change(proposal, decision, rule.title, reason=proposal.rejection_reason)
+        notify_proposal_participants(
+            proposal, actor_id=reviewed_by_id, exclude={proposal.user_id},
+            title=f'A proposal you follow was {decision}',
+            body=rule.title, pref="pref_proposal_accepted")
+    except Exception as e:
+        print(f"[rule_core] decide_proposal notification error: {e}")
+
+    return True, result
 
 
 def update_proposal_message(proposal_id, new_message):
-    """Update the author justification message of a pending proposal."""
-    proposal = RuleEditProposal.query.get(proposal_id)
+    """Update (or, with an empty message, delete) the author justification of
+    a proposal — whatever its status: it is the author's text, not the edit."""
+    proposal = db.session.get(RuleEditProposal, proposal_id)
     if not proposal:
-        return {'success': False, 'message': 'Proposition non trouvée'}, 404
-    if proposal.status != 'pending':
-        return {'success': False, 'message': 'Cannot edit a decided proposal'}, 400
+        return {'success': False, 'message': 'Proposal not found'}, 404
     proposal.message = new_message
     db.session.commit()
     return {'success': True, 'message': proposal.message}, 200
@@ -3443,38 +3633,53 @@ _DATA_TABLE_SORT_KEYS = {
 _PLACEHOLDER_LICENSES = ('', 'unknown', 'none', 'n/a', 'na', 'noassertion', 'null')
 
 
-def apply_presence_filters(query, has_cve=False, has_tags=False, has_license=False, has_attack=False):
-    """"Has at least one ..." filters, shared by the rule listing and the
-    background jobs (_build_rule_query) so a "select all matching" run
-    covers exactly the rules the admin saw on screen.
+# Marking tags every rule gets by default (_attach_default_tags) — they say
+# nothing about the rule's content, so "has tags" ignores them.
+_MARKING_TAG_PREFIXES = ('tlp:', 'pap:')
 
-    has_tags ignores the tlp:/pap: marking tags — every rule gets
-    tlp:clear + pap:clear by default, so counting them would match the
-    whole catalog."""
+
+def presence_conditions(has_cve=False, has_tags=False, has_license=False, has_attack=False) -> list:
+    """SQL conditions for the "has at least one CVE / tag / license / ATT&CK
+    technique" filters. Shared by the rule listing, the background jobs
+    (_build_rule_query) and the alerts engine, so all three agree on what
+    "has a CVE" means."""
+    conds = []
     if has_cve:
-        query = query.filter(
-            Rule.cve_id.isnot(None),
-            ~Rule.cve_id.in_(['', '[]', 'null', '[""]']),
-        )
+        conds.append(and_(Rule.cve_id.isnot(None), ~Rule.cve_id.in_(['', '[]', 'null', '[""]'])))
     if has_tags:
         tagged_rule_ids = (
             db.session.query(RuleTagAssociation.rule_id)
             .join(Tag, Tag.id == RuleTagAssociation.tag_id)
-            .filter(~db.func.lower(Tag.name).like('tlp:%'),
-                    ~db.func.lower(Tag.name).like('pap:%'))
+            .filter(*[~db.func.lower(Tag.name).like(f'{p}%') for p in _MARKING_TAG_PREFIXES])
         )
-        query = query.filter(Rule.id.in_(tagged_rule_ids))
+        conds.append(Rule.id.in_(tagged_rule_ids))
     if has_license:
-        query = query.filter(
+        conds.append(and_(
             Rule.license.isnot(None),
             ~db.func.lower(db.func.trim(Rule.license)).in_(_PLACEHOLDER_LICENSES),
-        )
+        ))
     if has_attack:
-        query = query.filter(Rule.id.in_(db.session.query(RuleAttackAssociation.rule_id)))
-    return query
+        conds.append(Rule.id.in_(db.session.query(RuleAttackAssociation.rule_id)))
+    return conds
 
 
-def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
+def apply_presence_filters(query, has_cve=False, has_tags=False, has_license=False, has_attack=False):
+    """Applies presence_conditions() to a Rule query (every flag is ANDed)."""
+    conds = presence_conditions(has_cve=has_cve, has_tags=has_tags,
+                                has_license=has_license, has_attack=has_attack)
+    return query.filter(*conds) if conds else query
+
+
+def get_rules_data_table(page=1, per_page=10, **filters):
+    """Generic paginated / searchable / sortable rule listing consumed by the
+    rule-data-table component. Filtering is delegated to filter_rules() so the
+    advanced filter bar (tags, licenses, vulnerabilities, sources, exact
+    match…) works identically everywhere. Returns a pagination object."""
+    per_page = max(1, min(100, per_page))
+    return build_rules_data_table_query(**filters).paginate(page=page, per_page=per_page, error_out=False)
+
+
+def build_rules_data_table_query(search=None, sort=None,
                          direction='asc', source=None, user_id=None,
                          search_field='all', exact_match=False, rule_type=None,
                          author=None, vulnerabilities=None, licenses=None,
@@ -3483,10 +3688,9 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
                          ids=None, has_cve=False, quality_score_min=None, quality_score_max=None,
                          has_ai_analysis=False, has_relations=False, branch=None,
                          has_tags=False, has_license=False, has_attack=False):
-    """Generic paginated / searchable / sortable rule listing consumed by the
-    rule-data-table component. Filtering is delegated to filter_rules() so the
-    advanced filter bar (tags, licenses, vulnerabilities, sources, exact
-    match…) works identically everywhere. Returns a pagination object."""
+    """Unpaginated query behind get_rules_data_table — also used wherever the
+    exact RuleList filter set must be applied server-side (e.g. bundle from
+    filters), so both always agree on which rules "match"."""
     query = filter_rules(
         search=search,
         search_field=search_field or 'all',
@@ -3542,9 +3746,7 @@ def get_rules_data_table(page=1, per_page=10, search=None, sort=None,
         query = query.order_by(None).order_by(
             col.desc() if direction == 'desc' else col.asc()
         )
-
-    per_page = max(1, min(100, per_page))
-    return query.paginate(page=page, per_page=per_page, error_out=False)
+    return query
 
 
 def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
@@ -3734,7 +3936,7 @@ def get_all_rule_by_url_github(url: str = None, current_user_: User = None, bran
     have another branch's rules checked/updated against this branch's clone."""
     query = _active().filter(Rule.source.isnot(None))
 
-    if current_user_.is_admin():
+    if current_user_.is_admin() or current_user_.has_permission('github.manage'):
         if url:
             query = query.filter(Rule.source.ilike(f"%{url}%"))
 
@@ -4347,7 +4549,16 @@ def accept_all_update(rule_udpate_list, on_progress=None, should_stop=None):
             if not history:
                 return False
             if rule.rule_syntax_valid == True:
-                history.message = "accepted"
+                # Apply the new content to the live rule — re-validated, the
+                # same way a single accept (accept_update_history) does.
+                target = get_rule(history.rule_id)
+                validation = verify_rule_syntaxe(target, history.new_content) if target and history.new_content else None
+                if validation and validation.ok:
+                    target.to_string = history.new_content
+                    history.message = "accepted"
+                else:
+                    rule.message = "Rejected successfully because Invalide syntax"
+                    history.message = "rejected"
             else:
                 history.message = "rejected"
             history.success = True
@@ -4613,7 +4824,8 @@ def verify_rule_syntaxe(rule: Any , new_content) -> Optional[ValidationResult]:
     return None
 
 
-def validate_rule_syntax(rule_format: str, content: str) -> Optional[ValidationResult]:
+def validate_rule_syntax(rule_format: str, content: str,
+                         resolve_dependencies: bool = False) -> Optional[ValidationResult]:
     """Run the same per-format syntax check a rule goes through at creation
     time (verify_rule_syntaxe above), without a DB Rule object and without
     ever persisting anything — for a dry-run "would this rule be accepted"
@@ -4631,7 +4843,10 @@ def validate_rule_syntax(rule_format: str, content: str) -> Optional[ValidationR
         try:
             instance = RuleClass()
             if instance.format.lower() == wanted:
-                return instance.validate(content)
+                # No dependency resolution by default: this backs a public,
+                # unauthenticated endpoint — resolving YARA references means
+                # database lookups + one compile per referenced rule, per call.
+                return instance.validate(content, resolve_dependencies=resolve_dependencies)
         except Exception:
             continue
     return None
@@ -5099,6 +5314,39 @@ def get_tags_for_rules_batch(rule_ids: List[int]) -> dict:
     for rule_id, tag in query.all():
         result.setdefault(rule_id, []).append(tag)
     return result
+
+
+TAG_USAGE_CACHE_SECONDS = 60
+
+
+def tag_usage_snapshot(filters: dict = None) -> list:
+    """Every tag used by the rules matching `filters`, with its rule count —
+    the base of the lazy tag-filter views (tags_core.usage_view).
+
+    Computed once per filter state and cached briefly: every view of the
+    panel (folders, a folder's pages, a search) then reads the cache instead
+    of re-aggregating ~1M rule/tag links. Shared by every user — rule counts
+    don't depend on who asks; per-user tag visibility is applied afterwards.
+    count(*) not count(DISTINCT rule_id): a (rule, tag) pair is only ever
+    inserted once, and the DISTINCT made this 5x slower (1.2 s vs 0.25 s).
+    """
+    import json as _json
+    from app import memory_cache
+    from app.features.tags.tags_core import usage_snapshot
+    key = 'tag_usage_snapshot:' + _json.dumps(filters or {}, sort_keys=True, default=str)
+    cached = memory_cache.get(key)
+    if cached is not None:
+        return cached
+    base_ids = filter_rules(**(filters or {})).order_by(None).with_entities(Rule.id).subquery()
+    usage = dict(
+        db.session.query(RuleTagAssociation.tag_id, func.count(RuleTagAssociation.id))
+        .join(base_ids, base_ids.c.id == RuleTagAssociation.rule_id)
+        .group_by(RuleTagAssociation.tag_id)
+        .all()
+    )
+    snapshot = usage_snapshot(usage)
+    memory_cache.set(key, snapshot, timeout=TAG_USAGE_CACHE_SECONDS)
+    return snapshot
 
 
 def get_all_used_tags_with_counts(filters: dict = None):

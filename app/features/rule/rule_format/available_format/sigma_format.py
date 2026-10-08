@@ -1,3 +1,4 @@
+import re
 from typing import Dict, Any, List, Optional
 from app.features.rule.rule_core import get_rule
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult
@@ -24,7 +25,12 @@ class SigmaRule(RuleType):
     Concrete implementation of RuleType for Sigma rules.
     """
 
-    def __init__(self, schema_path: str = "app/features/rule/rule_format/schema_format/sigma_format.json"):
+    # Next to this module, not relative to the working directory — otherwise
+    # the schema check silently disappears when Rulezet isn't started from
+    # the repository root.
+    DEFAULT_SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "schema_format", "sigma_format.json")
+
+    def __init__(self, schema_path: str = DEFAULT_SCHEMA):
         self.schema = self._load_schema(schema_path)
         # Built once per instance and reused — jsonschema.validate(instance, schema)
         # recompiles the whole schema (incl. $ref resolution) on every call, which
@@ -219,6 +225,19 @@ class SigmaRule(RuleType):
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
+
+                # Several YAML documents ("---"): one rule per document —
+                # unless one of them carries an `action` (a Sigma rule
+                # collection: a global / reset part merged into the others),
+                # which only makes sense whole.
+                segments = [s for s in re.split(r'(?m)^---[ \t]*$', content) if s.strip()]
+                if len(segments) > 1:
+                    docs = [yaml.safe_load(s) for s in segments]
+                    if any(isinstance(d, dict) and 'action' in d for d in docs):
+                        return [content]
+                    return [s.strip() + "\n" for s, d in zip(segments, docs)
+                            if isinstance(d, dict) and self.detect(s)]
+
                 parsed = yaml.safe_load(content)
 
                 if parsed is None:

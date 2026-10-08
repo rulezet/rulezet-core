@@ -105,7 +105,14 @@ class Update_class:
         cp = 0
         if self.mode == "by_url":
             cp = 0
-            repo_dir, exists = clone_or_access_repo(self.repo_sources, branch=self.branch, is_generic_source=self.is_generic_source)
+            try:
+                repo_dir, exists = clone_or_access_repo(self.repo_sources, branch=self.branch, is_generic_source=self.is_generic_source)
+            except Exception as e:
+                # Unreachable repo, unknown branch… — report it as this
+                # check's result instead of raising out of the request (500)
+                # or out of a Sync Schedule run (aborting every later repo).
+                self._finalize_with_error(f"Could not access the repository: {e}")
+                return
 
             self.local_repo_path = repo_dir
 
@@ -488,7 +495,7 @@ class Update_class:
 
                             # Use self.local_repo_path instead of self.repo_sources
                             user = db.session.merge(user)
-                            if existing_rule.user_id == user.id or user.is_admin():
+                            if existing_rule.user_id == user.id or user.is_admin() or user.has_permission('github.manage'):
 
                                 # Backfill github_path once matched so the NEXT sync's
                                 # incremental diff can map this rule to its file instead
@@ -576,7 +583,7 @@ class Update_class:
                         if existing_rule:
                             # Case 2.1: Rule EXISTS but the content in the repo is INVALID (Log as Invalid Update Status AND Create History)
                             user = db.session.merge(user)
-                            if existing_rule.user_id == user.id or user.is_admin():
+                            if existing_rule.user_id == user.id or user.is_admin() or user.has_permission('github.manage'):
 
                                 # Backfill github_path even on a failed/invalid update —
                                 # see the matching comment in the Case 1.1 branch above.

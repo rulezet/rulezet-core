@@ -16,6 +16,22 @@ except OSError:
 def empty_split(s, delim=None):
     return [x for x in s.split(delim) if x]
 
+def env_bool(name, default=False):
+    """
+    Parser to replace the obsoleted distutils strtobool parser:
+    - Interpret "1", "true", "yes", "on", "True", "Yes", "On" as True
+    - Interpret "0", "false", "no", "off", "False", "No", "Off" as False
+    """
+    val = os.getenv(name)
+    if val is None:
+        return default
+    val = val.strip().lower()
+    if val in {"1", "true", "yes", "on"}:
+        return True
+    if val in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"Invalid boolean value for {name}: {val}")
+
 class Config:
     load_dotenv()
 
@@ -62,6 +78,12 @@ class Config:
     # (production hardware, 24 physical cores) to give genuine partial
     # parallelism without either request slowing down too much.
     OLLAMA_MAX_CONCURRENT = int(os.environ.get('OLLAMA_MAX_CONCURRENT', 2))
+    # Concurrent calls to a cloud / OpenAI-compatible AI provider (Claude,
+    # ChatGPT, internal gateway) — separate pool from Ollama's.
+    AI_CLOUD_MAX_CONCURRENT = int(os.environ.get('AI_CLOUD_MAX_CONCURRENT', 4))
+    # Encrypts the AI provider API keys stored in the database (falls back to
+    # SECRET_KEY when unset). Keep it out of the DB and its backups.
+    AI_SECRETS_KEY = os.environ.get('AI_SECRETS_KEY')
 
     MAIL_SERVER   = os.environ.get('MAIL_SERVER',   'smtp.gmail.com')
     MAIL_PORT     = int(os.environ.get('MAIL_PORT', 587))
@@ -70,7 +92,22 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', os.environ.get('MAIL_USERNAME', ''))
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
-   
+    # Flask-Mail defaults MAIL_DEBUG to app.debug, which dumps the whole SMTP
+    # dialogue to stdout — including the base64 "AUTH PLAIN" line, i.e. the
+    # SMTP password — on every email sent in development. Opt in explicitly.
+    MAIL_DEBUG    = os.environ.get('MAIL_DEBUG', 'false').lower() == 'true'
+
+    # Alerts anti-spam protocol (app/features/alert/alert_core.py) — every
+    # limit is a ceiling that defers, never drops: held matches go out later.
+    ALERT_SWEEP_INTERVAL          = int(os.environ.get('ALERT_SWEEP_INTERVAL', 300))    # seconds between passes
+    ALERT_MAX_PER_USER            = int(os.environ.get('ALERT_MAX_PER_USER', 100))
+    ALERT_MAX_MATCHES_PER_PASS    = int(os.environ.get('ALERT_MAX_MATCHES_PER_PASS', 500))  # recorded per alert per pass
+    ALERT_NOTIF_COLLAPSE          = int(os.environ.get('ALERT_NOTIF_COLLAPSE', 3))      # > N alerts firing → 1 notification
+    ALERT_EMAILS_PER_USER_PER_DAY = int(os.environ.get('ALERT_EMAILS_PER_USER_PER_DAY', 8))
+    ALERT_EMAILS_PER_HOUR         = int(os.environ.get('ALERT_EMAILS_PER_HOUR', 60))    # whole instance
+    ALERT_EMAILS_PER_DAY          = int(os.environ.get('ALERT_EMAILS_PER_DAY', 400))    # whole instance (Gmail caps at 500)
+    ALERT_MATCH_RETENTION_DAYS    = int(os.environ.get('ALERT_MATCH_RETENTION_DAYS', 90))
+
     YARA_ADDITIONAL_EXTERNAL = empty_split(os.environ.get('YARA_ADDITIONAL_EXTERNAL', ''), ',')
 
     # Flask-Caching. FileSystemCache (was SimpleCache — an in-process dict)
@@ -100,6 +137,23 @@ class Config:
     MEMORY_CACHE_TYPE = os.environ.get('MEMORY_CACHE_TYPE', 'SimpleCache')
     MEMORY_CACHE_THRESHOLD = int(os.environ.get('MEMORY_CACHE_THRESHOLD', 2000))
     CACHE_REDIS_URL = os.environ.get('CACHE_REDIS_URL', '')
+
+    SIGN_UP_ENABLED = env_bool('SIGN_UP_ENABLED', True)
+
+    # =============================================================================
+    # OIDC
+    # =============================================================================
+    # OIDC SSO configuration
+    OIDC_ENABLED = env_bool('OIDC_ENABLED', default=False)
+    OIDC_DISCOVERY_ENDPOINT = os.getenv('OIDC_DISCOVERY_ENDPOINT', '')  # e.g. https://oidc.your-org-oidc.com/.well-known/openid-configuration
+    OIDC_CLIENT_ID = os.getenv('OIDC_CLIENT_ID', 'rulezet')
+    OIDC_CLIENT_SECRET = os.getenv('OIDC_CLIENT_SECRET', '')
+    OIDC_SCOPE = os.getenv('OIDC_SCOPE', 'openid email profile')
+
+    # OIDC group names that map to rulezet roles
+    # RulezetAdmin members → provisioned as Admins, RulezetEditor → provisioned as regular users
+    OIDC_GROUP_ADMIN = os.getenv('OIDC_GROUP_ADMIN', 'RulezetAdmin')
+    OIDC_GROUP_EDITOR = os.getenv('OIDC_GROUP_EDITOR', 'RulezetEditor')
 
 
 class DevelopmentConfig(Config):
@@ -136,7 +190,7 @@ class TestingConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
-    SQLALCHEMY_DATABASE_URI = "postgresql:///rulezet"
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "postgresql:///rulezet")
     SESSION_TYPE = "sqlalchemy"
     SESSION_SQLALCHEMY_TABLE = "flask_sessions"
     SESSION_COOKIE_SECURE   = True

@@ -112,11 +112,13 @@ def _build_rule_query(payload):
     """
     Build a Rule query from the filter payload.
     Mirrors get_rules_page_filter params exactly so the job processes
-    the same rules the user previewed in the UI.
+    the same rules the user previewed in the UI — active rules only, never
+    the trash.
     """
     from sqlalchemy import or_, func
+    from app.features.rule.rule_core import _active
 
-    query = Rule.query
+    query = _active()
 
     # pick mode — only these specific rule IDs, skip all other filters
     if payload.get('rule_ids'):
@@ -261,6 +263,7 @@ def handle_bulk_add_tag_to_rules(job, app):
     tags = Tag.query.filter(Tag.id.in_(tag_ids)).all()
     if not tags:
         raise ValueError("None of the provided tags were found.")
+    tag_ids = [t.id for t in tags]   # only the tags that exist get linked
 
     tag_names = ', '.join(t.name for t in tags)
     rule_query = _build_rule_query(filters)
@@ -1191,6 +1194,7 @@ def handle_connector_pull(job, app):
         _get_or_create_shadow_user, _upsert_rule, _upsert_bundle,
         _extract_tag_family, build_tag_cache,
         _prepare_new_rule, _import_rule_history_new, _sync_tags, _sync_cve_ids, _sync_attacks,
+        structure_rule_uuids, clean_remote_rule, clean_remote_bundle, _remote_count,
     )
     from app.core.utils.activity_log import log_activity
     from sqlalchemy import or_
@@ -1290,29 +1294,23 @@ def handle_connector_pull(job, app):
         atk_list   = [a for a in (pull_filters.get('attacks') or []) if a]
         attacks_qs = ','.join(atk_list) if atk_list else ''
 
+        from urllib.parse import quote as _quote
+
+        def _filter_qs() -> str:
+            """The filters as query-string parameters, each value URL-encoded
+            (commas kept: they separate the values of one filter)."""
+            params = [('cve', cve_qs), ('formats', formats_qs), ('author', authors_qs),
+                      ('license', license_qs)]
+            if tags_qs:
+                params += [('tags', tags_qs), ('tag_mode', tag_mode_qs), ('tag_exclude', tag_excl_qs)]
+            params += [('date_from', date_from_qs), ('date_to', date_to_qs), ('attacks', attacks_qs)]
+            return ''.join(f"&{k}={_quote(v, safe=',:')}" for k, v in params if v)
+
         def _build_rule_url(p: int) -> str:
-            url = f"{base}/api/sync/rules?since={since}&page={p}&per_page={PER_PAGE}"
-            if cve_qs:       url += f"&cve={cve_qs}"
-            if formats_qs:   url += f"&formats={formats_qs}"
-            if authors_qs:   url += f"&author={authors_qs}"
-            if license_qs:   url += f"&license={license_qs}"
-            if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
-            if date_from_qs: url += f"&date_from={date_from_qs}"
-            if date_to_qs:   url += f"&date_to={date_to_qs}"
-            if attacks_qs:   url += f"&attacks={attacks_qs}"
-            return url
+            return f"{base}/api/sync/rules?since={since}&page={p}&per_page={PER_PAGE}{_filter_qs()}"
 
         def _build_preflight_url() -> str:
-            url = f"{base}/api/sync/rules?since={since}&count_only=true"
-            if cve_qs:       url += f"&cve={cve_qs}"
-            if formats_qs:   url += f"&formats={formats_qs}"
-            if authors_qs:   url += f"&author={authors_qs}"
-            if license_qs:   url += f"&license={license_qs}"
-            if tags_qs:      url += f"&tags={tags_qs}&tag_mode={tag_mode_qs}&tag_exclude={tag_excl_qs}"
-            if date_from_qs: url += f"&date_from={date_from_qs}"
-            if date_to_qs:   url += f"&date_to={date_to_qs}"
-            if attacks_qs:   url += f"&attacks={attacks_qs}"
-            return url
+            return f"{base}/api/sync/rules?since={since}&count_only=true{_filter_qs()}"
 
         active_filters = [k for k in [cve_qs, formats_qs, authors_qs, license_qs, tags_qs, date_from_qs, date_to_qs, attacks_qs] if k]
 
@@ -1330,6 +1328,13 @@ def handle_connector_pull(job, app):
             log_job(job, f"Filters active: {' · '.join(parts)}", level='info', event='progress')
 
         # ── Manifest preflight: verify remote supports sync API ────────────────
+        # Capabilities of a remote that predates `sync_api_version` (Rulezet
+        # 1.6.0 → 1.7.x): everything but the bundle folder tree. Also the
+        # fallback when the manifest can't be read.
+        remote_caps = {
+            'sync_rules': True, 'sync_bundles': True, 'rule_filters': True, 'rule_attacks': True,
+            'rule_uuids': True, 'count_only': True, 'bundle_structure': False,
+        }
         try:
             mf_resp = http_requests.get(f"{base}/api/sync/manifest", headers=headers, timeout=8)
             if mf_resp.status_code == 404:
@@ -1351,29 +1356,62 @@ def handle_connector_pull(job, app):
                 return
             mf_data    = mf_resp.json()
             remote_ver = mf_data.get('instance', {}).get('version', 'unknown')
-            log_job(job, f"Remote version: {remote_ver}", level='info', event='progress')
-            caps = mf_data.get('capabilities', {})
-            if do_rules and not caps.get('sync_rules', True):
+            api_ver    = mf_data.get('sync_api_version')
+            caps = mf_data.get('capabilities', {}) or {}
+            if api_ver:
+                # A versioned remote lists everything it supports — absent = unsupported
+                remote_caps = {k: bool(caps.get(k, False)) for k in remote_caps}
+            else:
+                remote_caps.update({k: bool(v) for k, v in caps.items() if k in remote_caps})
+            log_job(job, f"Remote version: {remote_ver} (sync API v{api_ver or 1})", level='info', event='progress')
+            if do_rules and not remote_caps['sync_rules']:
                 log_job(job, "Remote reports sync_rules=false — no rules will be fetched.", level='warning', event='progress')
-            if do_bundles and not caps.get('sync_bundles', True):
+            if do_bundles and not remote_caps['sync_bundles']:
                 log_job(job, "Remote reports sync_bundles=false — no bundles will be fetched.", level='warning', event='progress')
+            if do_bundles and remote_caps['sync_bundles'] and not remote_caps['bundle_structure']:
+                log_job(job, "Remote does not send bundle folder trees (older Rulezet) — "
+                             "pulled bundles get their rules in an \"Unsorted\" folder.",
+                        level='info', event='progress')
         except Exception as mf_exc:
             log_job(job, f"Manifest preflight failed: {mf_exc}", level='warning', event='progress')
+
+        # A filter the remote doesn't understand would be silently ignored and
+        # the whole corpus pulled instead — refuse rather than over-import.
+        unsupported = []
+        if do_rules and not remote_caps['rule_filters'] and any(
+                [cve_qs, formats_qs, authors_qs, license_qs, tags_qs, date_from_qs, date_to_qs]):
+            unsupported.append('rule filters')
+        if do_rules and attacks_qs and not remote_caps['rule_attacks']:
+            unsupported.append('ATT&CK filter')
+        if unsupported:
+            msg = (f"Remote Rulezet does not support: {', '.join(unsupported)}. "
+                   "Remove these filters or ask the remote admin to upgrade.")
+            log_job(job, msg, level='error', event='done')
+            job.status = 'failed'
+            job.error  = msg
+            connector.last_error = msg
+            db.session.commit()
+            return
+        do_rules   = do_rules and remote_caps['sync_rules']
+        do_bundles = do_bundles and remote_caps['sync_bundles']
 
         # ── Pre-flight: fetch totals for progress bar ─────────────────────────
         total_rules_remote   = 0
         total_bundles_remote = 0
         try:
-            if do_rules:
+            if do_rules and remote_caps['count_only']:
                 r = http_requests.get(_build_preflight_url(), headers=headers, timeout=10)
                 if r.status_code == 200:
                     d = r.json()
-                    total_rules_remote = d.get('count', d.get('total', 0))
+                    if isinstance(d, dict):
+                        total_rules_remote = _remote_count(d.get('count', d.get('total', 0))) or 0
             if do_bundles:
                 r = http_requests.get(f"{base}/api/sync/bundles?since={since}&page=1&per_page=1",
                                       headers=headers, timeout=10)
                 if r.status_code == 200:
-                    total_bundles_remote = r.json().get('total', 0)
+                    d = r.json()
+                    if isinstance(d, dict):
+                        total_bundles_remote = _remote_count(d.get('total', 0)) or 0
         except Exception:
             pass
 
@@ -1404,15 +1442,9 @@ def handle_connector_pull(job, app):
                     "ATT&CK technique database is empty — queuing an install now. "
                     "Techniques will be available on the next pull.",
                     level='warning', event='progress')
-            from app.core.db_class.db import BackgroundJob as _BJ
-            atk_job = _BJ(
-                type='update_attack_data',
-                status='pending',
-                payload={},
-                created_by=job.created_by,
-            )
-            db.session.add(atk_job)
-            db.session.commit()
+            from app.features.jobs.jobs_core import create_job
+            create_job(job_type='update_attack_data', payload={},
+                       label='Update MITRE ATT&CK data', created_by=job.created_by, total=1)
             attack_install_triggered = True
 
         MAX_PAGES = 10_000  # safety guard against infinite pagination loops
@@ -1429,6 +1461,7 @@ def handle_connector_pull(job, app):
                 return http_requests.get(_build_rule_url(p), headers=headers, timeout=120)
 
             page          = 1
+            prev_uuids    = None  # uuids of the previous page — a remote repeating itself is stopped
             page_futures  = {}   # page_num → Future
             executor      = ThreadPoolExecutor(max_workers=PREFETCH)
 
@@ -1468,16 +1501,52 @@ def handle_connector_pull(job, app):
                         had_error = True
                         break
 
-                    data  = resp.json()
-                    items = data.get('rules', [])
+                    try:
+                        data = resp.json()
+                    except ValueError:
+                        data = None
+                    items = data.get('rules', []) if isinstance(data, dict) else None
+                    if not isinstance(items, list):
+                        msg = f"Remote answered something that is not a page of rules (page {page})."
+                        log_job(job, msg, level='error', event='progress')
+                        connector.last_error = msg
+                        had_error = True
+                        break
                     if not items and page > 1:
                         break
+
+                    # Untrusted items: malformed ones are skipped, a uuid
+                    # repeated within the page is only imported once.
+                    clean_items, seen = [], set()
+                    for raw in items:
+                        item = clean_remote_rule(raw)
+                        if item is None:
+                            rules_errors += 1
+                        elif item['uuid'] in seen:
+                            rules_skipped += 1
+                        else:
+                            seen.add(item['uuid'])
+                            clean_items.append(item)
+                    invalid = len(items) - len(clean_items)
+                    if invalid:
+                        log_job(job, f"Rules p.{page}: {invalid} malformed or repeated item(s) skipped.",
+                                level='warning', event='progress')
+                    items = clean_items
+
+                    page_uuids = [item['uuid'] for item in items]
+                    if page > 1 and page_uuids and page_uuids == prev_uuids:
+                        msg = (f"Remote served the same rules again on page {page} — stopping "
+                               "(it may ignore the page parameter).")
+                        log_job(job, msg, level='error', event='progress')
+                        connector.last_error = msg
+                        had_error = True
+                        break
+                    prev_uuids = page_uuids
 
                     # Advance the sliding window
                     _enqueue(page + PREFETCH)
 
                     # ── Batch UUID lookup: 1 query for the whole page ─────────
-                    page_uuids = [item['uuid'] for item in items if item.get('uuid')]
                     existing_rules = Rule.query.filter(
                         or_(Rule.remote_rule_uuid.in_(page_uuids),
                             Rule.uuid.in_(page_uuids))
@@ -1508,10 +1577,7 @@ def handle_connector_pull(job, app):
                     new_rules_pending: list = []   # [(remote_item, Rule)]
 
                     for item in items:
-                        remote_uuid = item.get('uuid')
-                        if not remote_uuid:
-                            rules_errors += 1
-                            continue
+                        remote_uuid = item['uuid']
                         pre_match = rule_lookup.get(remote_uuid)
 
                         if pre_match:
@@ -1617,12 +1683,22 @@ def handle_connector_pull(job, app):
                     if resp.status_code != 200:
                         had_error = True; break
                     data  = resp.json()
-                    items = data.get('bundles', [])
+                    items = data.get('bundles', []) if isinstance(data, dict) else None
+                    if not isinstance(items, list):
+                        log_job(job, f"Remote answered something that is not a page of bundles (page {page}).",
+                                level='error', event='progress')
+                        had_error = True; break
                     if not items and page > 1:
                         break
+                    clean_items = [b for b in (clean_remote_bundle(x) for x in items) if b]
+                    if len(clean_items) < len(items):
+                        log_job(job, f"Bundles p.{page}: {len(items) - len(clean_items)} malformed item(s) skipped.",
+                                level='warning', event='progress')
+                    items = clean_items
                     all_bundle_items.extend(items)
                     for item in items:
                         bundle_rule_uuids.update(item.get('rules', []))
+                        bundle_rule_uuids.update(structure_rule_uuids(item.get('structure')))
                     if not data.get('has_more', False):
                         break
                     page += 1
@@ -1633,7 +1709,11 @@ def handle_connector_pull(job, app):
 
             # Phase 2 — when not already pulling all rules, import only the rules
             # referenced by the bundles that don't exist locally yet.
-            if bundle_rule_uuids and not do_rules:
+            if bundle_rule_uuids and not do_rules and not remote_caps['rule_uuids']:
+                log_job(job, "Remote cannot serve rules by uuid — bundles will only link rules "
+                             "that already exist locally. Enable \"sync rules\" to import them.",
+                        level='warning', event='progress')
+            elif bundle_rule_uuids and not do_rules:
                 existing_local = set(
                     r[0] for r in Rule.query.filter(
                         or_(Rule.uuid.in_(bundle_rule_uuids),
@@ -1669,7 +1749,14 @@ def handle_connector_pull(job, app):
                                 log_job(job, f"Failed to fetch bundle rules chunk (HTTP {r.status_code})",
                                         level='warning', event='progress')
                                 continue
-                            chunk_rules = r.json().get('rules', [])
+                            chunk_data  = r.json()
+                            chunk_rules = chunk_data.get('rules', []) if isinstance(chunk_data, dict) else None
+                            if not isinstance(chunk_rules, list):
+                                log_job(job, "Remote answered something that is not a list of rules "
+                                             "for the bundle rules chunk.", level='warning', event='progress')
+                                continue
+                            chunk_rules = list({c['uuid']: c for c in
+                                                (clean_remote_rule(x) for x in chunk_rules) if c}.values())
                             new_rules_pending = []
                             chunk_uuids = [item['uuid'] for item in chunk_rules if item.get('uuid')]
                             existing_chunk = Rule.query.filter(
@@ -1703,6 +1790,13 @@ def handle_connector_pull(job, app):
                                                         tag_cache=tag_cache)
                                     all_missing_tags.update(missed)
                                     _sync_cve_ids(rule, item.get('cve_ids', []))
+                                    unknown_atk = _sync_attacks(rule, item.get('attack_ids', []),
+                                                                effective_user_id,
+                                                                atk_assoc_set=atk_assoc_set)
+                                    if '__empty__' in unknown_atk and not attack_install_triggered:
+                                        attack_install_triggered = True
+                                        log_job(job, "ATT&CK data missing — install job already queued.",
+                                                level='warning', event='progress')
                                     _import_rule_history_new(rule, item.get('update_history', []),
                                                              effective_user_id)
                                 # Not wrapped in its own try/except — same
@@ -1738,7 +1832,9 @@ def handle_connector_pull(job, app):
                         bundles_updated += 1
                     elif result == 'skipped':
                         bundles_skipped += 1
+                    db.session.commit()   # one bundle at a time: a failure only undoes its own
                 except Exception as bundle_exc:
+                    db.session.rollback()
                     log_job(job, f"Error on bundle '{item.get('name', '?')}': {bundle_exc}",
                             level='warning', event='progress')
                 processed = rules_created + rules_updated + rules_skipped + rules_errors + bundles_created + bundles_updated + bundles_skipped
@@ -3373,6 +3469,122 @@ def handle_bulk_tag_platforms(job, app):
                  f'{total_associations} new platform tag(s).', level='success', event='done')
 
 
+@register_handler('import_native_tags')
+def handle_import_native_tags(job, app):
+    """Re-parse existing rules and attach their author's own tags (YARA
+    `rule X : a b` + meta tags, Sigma `tags:`, Kunai `meta.tags`, CRS
+    `tag:'…'`… — see imported_tags_core.FORMAT_TAG_SOURCES) as public
+    "Imported" tags owned by the admin who launched the job (GitHub #70).
+
+    Idempotent — safe to re-run, and re-running repairs past imports: a
+    rule's Imported tags its content no longer yields (older parser, tag
+    removed by the author) are detached, and Imported tags left unused
+    anywhere are deleted at the end. Taxonomy/galaxy/Manual tags are never
+    touched.
+
+    Payload:
+        formats  : list[str] — rule formats to scan (required)
+        rule_ids : 'ALL' | list[int] — optional restriction to some rules
+    """
+    from collections import defaultdict
+    from sqlalchemy import func
+    from app.features.tags.imported_tags_core import (
+        FORMAT_TAG_SOURCES, attach_imported_tags, delete_orphan_imported_tags,
+    )
+
+    payload  = job.payload or {}
+    formats  = [f for f in (payload.get('formats') or []) if f in FORMAT_TAG_SOURCES]
+    rule_ids = payload.get('rule_ids', 'ALL')
+    offset   = payload.get('_resume_offset', 0)
+    user_id  = job.created_by
+
+    if not formats:
+        log_job(job, 'No supported format selected — nothing to do.', level='error', event='error')
+        job.status = 'failed'
+        job.error  = 'No format selected'
+        db.session.commit()
+        return
+
+    q = (Rule.query.filter(Rule.is_deleted == False, func.lower(Rule.format).in_(formats))
+         .order_by(Rule.id.asc()))
+    if rule_ids != 'ALL':
+        q = q.filter(Rule.id.in_(rule_ids or [-1]))
+
+    if job.total == 0:
+        job.total = q.count()
+        db.session.commit()
+        log_job(job, f'Starting — scanning {job.total} rule(s) ({", ".join(formats)}) for their native tags.',
+                level='info', event='start')
+    else:
+        log_job(job, f'Resuming from offset {offset}.', level='info', event='resume')
+
+    tag_cache     = {}     # normalized name -> Tag | None, shared across batches
+    rules_tagged  = 0
+    tags_added    = 0
+    tags_removed  = 0
+    refused       = set()
+    batch_num     = 0
+
+    while True:
+        if _is_cancelled(job):
+            log_job(job, 'Cancelled.', level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+
+        rules = q.offset(offset).limit(FIELD_PARSE_BATCH).all()
+        if not rules:
+            break
+
+        existing = defaultdict(set)
+        for rid, tid in (db.session.query(RuleTagAssociation.rule_id, RuleTagAssociation.tag_id)
+                         .filter(RuleTagAssociation.rule_id.in_([r.id for r in rules]))):
+            existing[rid].add(tid)
+
+        touched = []
+        for rule in rules:
+            try:
+                with db.session.begin_nested():
+                    stats = attach_imported_tags(rule, user_id, cache=tag_cache,
+                                                 existing_tag_ids=existing[rule.id], prune=True)
+            except Exception as exc:
+                # A tag created concurrently (same name) — drop the cache for
+                # this rule's names and move on; the next run picks it up.
+                tag_cache.clear()
+                log_job(job, f'Rule #{rule.id}: skipped ({exc.__class__.__name__}).', level='warning', event='progress')
+                continue
+            refused.update(stats['skipped'])
+            tags_removed += stats['removed']
+            if stats['added'] or stats['removed']:
+                touched.append(rule.id)
+            if stats['added']:
+                rules_tagged += 1
+                tags_added   += stats['added']
+
+        db.session.commit()
+        _refresh_quality_scores(touched)
+        offset  += len(rules)
+        job.done = offset
+        _save_offset(job, offset)
+        db.session.commit()
+
+        batch_num += 1
+        if batch_num % FIELD_PARSE_LOG_EVERY == 0:
+            log_job(job, f'{offset}/{job.total} rules scanned — {rules_tagged} rule(s) tagged, '
+                         f'{tags_added} tag association(s) added.', level='info', event='progress')
+
+    distinct_tags = sum(1 for t in tag_cache.values() if t is not None)
+    orphans = delete_orphan_imported_tags()
+    db.session.commit()
+    if refused:
+        sample = ', '.join(sorted(refused)[:10])
+        log_job(job, f'{len(refused)} tag name(s) left out because a private or disabled tag already '
+                     f'uses that name: {sample}{"…" if len(refused) > 10 else ""}', level='warning', event='progress')
+    log_job(job, f'Done — {offset} rule(s) scanned, {rules_tagged} rule(s) tagged with {tags_added} '
+                 f'tag association(s), {distinct_tags} distinct tag(s) seen; {tags_removed} outdated '
+                 f'association(s) removed, {orphans} unused imported tag(s) deleted.', level='success', event='done')
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # blog_from_cve — auto-generate a blog post from vulnerability data
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4712,6 +4924,11 @@ def handle_rule_analysis(job, app):
     regenerate     = bool(payload.get('regenerate_existing'))
     default_public = payload.get('default_public', True)
     model          = payload.get('model')
+    # Which Rule Analysis script: 'standard' (compact structured breakdown,
+    # rule_analysis_agent.py) or 'deep' (long in-depth report with CVE /
+    # ATT&CK context, rule_deep_analysis_agent.py). Both store
+    # agent_key='rule_analysis' rows, told apart by meta['script'].
+    script         = 'deep' if payload.get('script') == 'deep' else 'standard'
     # Both caps can be lifted from the AI admin ("No limit") for a one-off
     # run over the whole catalog — rules are then streamed in chunks of
     # AI_GENERATE_CHUNK so memory stays flat whatever the backlog size.
@@ -4740,6 +4957,9 @@ def handle_rule_analysis(job, app):
 
     if not regenerate:
         already = db.session.query(AIGeneration.rule_id).filter(AIGeneration.agent_key == 'rule_analysis')
+        if script == 'deep':
+            # A standard report doesn't count — the in-depth one is still missing.
+            already = already.filter(AIGeneration.meta['script'].as_string() == 'deep')
         q = q.filter(~Rule.id.in_(already))
 
     remaining = q.count()
@@ -4755,7 +4975,8 @@ def handle_rule_analysis(job, app):
 
     log_job(job,
             f'Starting — {"all " if batch_size is None else "up to "}{job.total} rule(s) this run '
-            f'({remaining} left in the backlog), model "{model}", '
+            f'({remaining} left in the backlog), {"in-depth report" if script == "deep" else "standard"} script, '
+            f'model "{model}", '
             f'{"no time limit" if max_seconds is None else f"max {max_seconds}s"} …',
             level='info', event='start')
 
@@ -4763,7 +4984,7 @@ def handle_rule_analysis(job, app):
     # alive; on a catalog-wide run it would double the log volume for nothing.
     log_each_rule = job.total <= AI_GENERATE_CHUNK
 
-    agent          = get_agent('rule_analysis')
+    agent          = get_agent('rule_deep_analysis' if script == 'deep' else 'rule_analysis')
     admin_user     = User.query.get(job.created_by)
     started        = _time.monotonic()
     generated      = 0
@@ -4847,16 +5068,41 @@ def handle_rule_analysis(job, app):
                 log_job(job, f'Generating rule #{rule_id} ({processed + 1}/{job.total})…',
                         level='info', event='progress')
 
-            result = agent.run(
-                user=admin_user, rule_id=rule_id,
-                input_summary=f"Rule #{rule_id}: {title or '(untitled)'}",
-                rule_stub=stub, acquire_timeout=acquire_timeout, model=model or None,
-            )
+            if script == 'deep':
+                from app.features.rule.rule_ai_core import build_rule_deep_context
+                if log_each_rule:
+                    log_job(job, f'Rule #{rule_id}: gathering context (ATT&CK, CVE details from '
+                                 f'Vulnerability Lookup, quality checks, linked rules)…',
+                            level='info', event='progress')
+                rule_context, snapshot = build_rule_deep_context(rule_id)
+                result = agent.run(
+                    user=admin_user, rule_id=rule_id,
+                    input_summary=f"Rule #{rule_id}: {title or '(untitled)'}",
+                    rule_context=rule_context or '', rule_content=to_string or '',
+                    has_cves=bool(snapshot and snapshot['cves']),
+                    has_attack=bool(snapshot and snapshot['techniques']),
+                    acquire_timeout=acquire_timeout, model=model or None,
+                    progress=(lambda stage, text, _rid=rule_id: log_job(
+                        job, f'Rule #{_rid}: {text}', level='info', event='progress')) if log_each_rule else None,
+                    should_stop=lambda: _is_cancelled(job),
+                )
+            else:
+                snapshot = None
+                result = agent.run(
+                    user=admin_user, rule_id=rule_id,
+                    input_summary=f"Rule #{rule_id}: {title or '(untitled)'}",
+                    rule_stub=stub, acquire_timeout=acquire_timeout, model=model or None,
+                )
 
             if result.ok:
+                meta = dict(result.meta or {})
+                meta.pop('status', None)
+                meta['script'] = script
+                if snapshot:
+                    meta['snapshot'] = snapshot
                 db.session.add(AIGeneration(
                     uuid=str(uuid_mod.uuid4()), agent_key='rule_analysis', rule_id=rule_id,
-                    user_id=job.created_by, content=result.content, meta=result.meta or None,
+                    user_id=job.created_by, content=result.content, meta=meta,
                     model=result.model_used, is_public=bool(default_public),
                 ))
                 db.session.commit()
@@ -4866,7 +5112,7 @@ def handle_rule_analysis(job, app):
                             level='info', event='progress')
             else:
                 status = result.meta.get('status')
-                if status in ('disabled', 'busy'):
+                if status in ('disabled', 'busy', 'budget'):
                     # Systemic, not per-rule — every remaining rule would fail
                     # identically this run. Stop entirely; nothing to resume,
                     # the next scheduled run just tries again.
@@ -4890,6 +5136,88 @@ def handle_rule_analysis(job, app):
 
     log_job(job, f'Done — {generated} generated, {failed} failed this run.',
             level='success', event='done')
+
+
+# ─── ai_bundle_analysis (bundle_analysis) ───────────────────────────────────
+# One long narrative review of a whole bundle (BundleAnalysisAgent). Runs in
+# the background lane like ai_generate — a detailed report on a 7B model can
+# take several minutes. Progress is logged with event="step:<stage>" so the
+# bundle page can replay it as Rulezy's thinking steps (ai-thinking-steps).
+
+def _bundle_step(job, stage, text, level='info'):
+    log_job(job, text, level=level, event=f'step:{stage}')
+
+
+@register_handler('ai_bundle_analysis')
+def handle_bundle_analysis(job, app):
+    from app.core.db_class.db import AIGeneration, Bundle
+    from app.features.ai.ai_core import get_agent
+    from app.features.bundle.bundle_ai_core import build_bundle_context
+
+    payload   = job.payload or {}
+    bundle_id = payload.get('bundle_id')
+    model     = payload.get('model') or None
+    is_public = bool(payload.get('default_public', True))
+
+    job.total, job.done = 3, 0
+    db.session.commit()
+
+    bundle = db.session.get(Bundle, bundle_id) if bundle_id else None
+    if not bundle:
+        _bundle_step(job, 'failed', 'This bundle no longer exists.', level='error')
+        job.status, job.error = 'failed', 'Bundle not found'
+        db.session.commit()
+        return
+
+    _bundle_step(job, 'reading', f'Reading “{bundle.name}” — rules, structure, documents…')
+    context, snapshot = build_bundle_context(bundle_id)
+    _bundle_step(job, 'searching',
+                 f'Cross-checking {snapshot["rule_count"]} rules against ATT&CK coverage, health checks, '
+                 f'community notes and releases…')
+    job.done = 1
+    db.session.commit()
+
+    if _is_cancelled(job):
+        log_job(job, 'Cancelled.', level='warning', event='cancelled')
+        return
+
+    _bundle_step(job, 'thinking', 'Reading all of that and thinking it through — on a CPU this first read takes a few minutes…')
+    agent = get_agent('bundle_analysis')
+    result = agent.run(
+        user=User.query.get(job.created_by),
+        input_summary=f"Bundle #{bundle.id}: {bundle.name}",
+        bundle_context=context, acquire_timeout=900, model=model,
+        progress=lambda stage, text: _bundle_step(job, stage, text),
+        should_stop=lambda: _is_cancelled(job),
+    )
+    job.done = 2
+    db.session.commit()
+
+    if not result.ok:
+        _bundle_step(job, 'failed', result.error or 'The analysis failed.', level='error')
+        job.status, job.error = 'failed', result.error
+        db.session.commit()
+        return
+
+    _bundle_step(job, 'validating', 'Checking the report and saving it…')
+    meta = dict(result.meta or {})
+    meta.pop('status', None)
+    meta['snapshot'] = snapshot
+    gen = AIGeneration(
+        uuid=str(uuid_mod.uuid4()), agent_key='bundle_analysis', bundle_id=bundle.id,
+        user_id=job.created_by, content=result.content, meta=meta,
+        model=result.model_used, is_public=is_public,
+    )
+    db.session.add(gen)
+    p = dict(job.payload or {})
+    job.done = 3
+    db.session.commit()
+    p['result'] = {'generation_id': gen.id, 'generation_uuid': gen.uuid}
+    job.payload = p
+    db.session.commit()
+
+    _bundle_step(job, 'done', f'Done — {len(result.content):,} characters of analysis with {result.model_used}.',
+                 level='success')
 
 
 # ─── Rule Git Mirror (see docs/design/rule_git_mirror.md) ───────────────────

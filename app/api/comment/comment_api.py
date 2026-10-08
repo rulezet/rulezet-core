@@ -22,6 +22,7 @@ from sqlalchemy import func
 
 from app.core.db_class.db import UnifiedComment, UnifiedCommentReaction
 from app.core.utils.activity_log import log_activity
+from app.core.utils.utils import DB_ID_MAX, as_db_id, json_object
 from app import db
 
 comment_ns = Namespace('comments', description='Unified comment thread API')
@@ -34,9 +35,85 @@ _PER_PAGE_MAX = 50
 _GITHUB_ISSUE_REPO = 'rulezet/rulezet-core'
 
 
+def _can_read_object(object_type, object_id) -> bool:
+    """Whether the current user may see the object a comment thread hangs on
+    — its comments are exactly as visible as the object itself (a private
+    bundle's discussion is not public just because comments are a separate
+    table)."""
+    from app.core.db_class.db import Rule, Bundle, BlogPost, RuleEditProposal
+    object_id = as_db_id(object_id)
+    if not object_id:
+        return False
+    is_admin = current_user.is_authenticated and current_user.is_admin()
+
+    if object_type == 'rule':
+        rule = db.session.get(Rule, object_id)
+        return bool(rule) and not rule.is_deleted
+    if object_type == 'bundle':
+        from app.features.bundle.bundle_core import can_view_bundle
+        return can_view_bundle(db.session.get(Bundle, object_id))
+    if object_type == 'blog_post':
+        post = db.session.get(BlogPost, object_id)
+        if not post:
+            return False
+        if post.is_public and not post.is_draft:
+            return True
+        return is_admin or (current_user.is_authenticated and post.user_id == current_user.id)
+    if object_type == 'proposal':
+        proposal = db.session.get(RuleEditProposal, object_id)
+        return bool(proposal) and _can_read_object('rule', proposal.rule_id)
+    return False
+
+
+def _user_can_read_object(user, object_type, object_id) -> bool:
+    """Whether `user` (not necessarily the caller) can open the object — used
+    to decide who may be notified about its thread. A private bundle's share
+    link holders can't be known server-side, so only its owner and admins."""
+    from app.core.db_class.db import Rule, Bundle, BlogPost, RuleEditProposal
+    is_admin = user.is_admin()
+    if object_type == 'rule':
+        rule = db.session.get(Rule, object_id)
+        return bool(rule) and not rule.is_deleted
+    if object_type == 'proposal':
+        proposal = db.session.get(RuleEditProposal, object_id)
+        return bool(proposal) and _user_can_read_object(user, 'rule', proposal.rule_id)
+    if object_type == 'bundle':
+        bundle = db.session.get(Bundle, object_id)
+        return bool(bundle) and (bool(bundle.access) or bundle.user_id == user.id or is_admin)
+    if object_type == 'blog_post':
+        post = db.session.get(BlogPost, object_id)
+        return bool(post) and ((post.is_public and not post.is_draft) or post.user_id == user.id or is_admin)
+    return False
+
+
+def _text(value):
+    """A text field of the JSON body, stripped and without NUL characters
+    (PostgreSQL refuses them) — None when the value isn't text at all."""
+    if not isinstance(value, str):
+        return None
+    return value.replace('\x00', '').strip()
+
+
+def _int_arg(name, default, low=1, high=DB_ID_MAX):
+    """An integer query parameter clamped to [low, high] (a huge page number
+    would overflow the database) — `default` when absent or not a number."""
+    value = request.args.get(name, type=int)
+    if value is None:
+        return default
+    return max(low, min(value, high))
+
+
 def _get_or_404(uuid):
     c = UnifiedComment.query.filter_by(uuid=uuid).first()
     if not c:
+        comment_ns.abort(404, 'Comment not found')
+    return c
+
+
+def _get_readable_or_404(uuid):
+    """A comment the current user may see (its object is visible to them)."""
+    c = _get_or_404(uuid)
+    if not _can_read_object(c.object_type, c.object_id):
         comment_ns.abort(404, 'Comment not found')
     return c
 
@@ -124,13 +201,18 @@ class CommentList(Resource):
     def get(self):
         """List comments for an object (paginated). Pass parent_id to fetch replies."""
         object_type = request.args.get('object_type', '').strip()
-        object_id   = request.args.get('object_id', type=int)
-        parent_id   = request.args.get('parent_id', type=int, default=None)
-        page        = request.args.get('page', 1, type=int)
-        per_page    = min(request.args.get('per_page', 20, type=int), _PER_PAGE_MAX)
+        object_id   = as_db_id(request.args.get('object_id'))
+        parent_arg  = request.args.get('parent_id')
+        parent_id   = as_db_id(parent_arg) if parent_arg is not None else None
+        page        = _int_arg('page', 1)
+        per_page    = _int_arg('per_page', 20, high=_PER_PAGE_MAX)
 
         if object_type not in _VALID_OBJECT_TYPES or not object_id:
             return {'message': 'object_type and object_id are required'}, 400
+        if parent_arg is not None and not parent_id:
+            return {'message': 'invalid parent_id'}, 400
+        if not _can_read_object(object_type, object_id):
+            return {'message': 'Not found'}, 404
 
         uid = current_user.id if current_user.is_authenticated else None
 
@@ -156,20 +238,24 @@ class CommentList(Resource):
         if not current_user.is_authenticated:
             return {'message': 'Login required'}, 401
 
-        data = request.get_json(silent=True) or {}
-        object_type = data.get('object_type', '').strip()
-        object_id   = data.get('object_id')
-        content     = data.get('content', '').strip()
-        parent_id   = data.get('parent_id')
+        data = json_object()
+        object_type = _text(data.get('object_type'))
+        object_id   = as_db_id(data.get('object_id'))
+        content     = _text(data.get('content'))
+        parent_id   = as_db_id(data.get('parent_id')) if data.get('parent_id') is not None else None
 
         if object_type not in _VALID_OBJECT_TYPES:
             return {'message': f'object_type must be one of {_VALID_OBJECT_TYPES}'}, 400
         if not object_id:
             return {'message': 'object_id is required'}, 400
+        if data.get('parent_id') is not None and not parent_id:
+            return {'message': 'invalid parent_id'}, 400
         if not content:
             return {'message': 'content is required'}, 400
         if len(content) > 10000:
             return {'message': 'comment too long (max 10 000 chars)'}, 400
+        if not _can_read_object(object_type, object_id):
+            return {'message': 'Not found'}, 404
 
         depth   = 0
         root_id = None
@@ -270,7 +356,9 @@ class CommentList(Resource):
                              f"Added comment on blog post id={object_id}",
                              target_type="blog_comment", target_id=comment.id,
                              extra={"post_id": object_id})
-                if blog_post and blog_post.is_public:
+                # Followers only hear about a published post — not a draft
+                # that merely has is_public set.
+                if blog_post and blog_post.is_public and not blog_post.is_draft:
                     link  = f'/blog/post/{blog_post.uuid}?comment={comment.id}'
                     notify_followers_new_comment(current_user.id, blog_post.title, link, is_public=True)
                     if parent_id:
@@ -279,10 +367,14 @@ class CommentList(Resource):
                             notify_comment_reply(parent_comment.created_by, current_user.id, blog_post.title, link)
 
             # ── @mentions — any object type, "@[Display Name](id)" tokens ──
+            # Only existing users who can open the object hear about it — a
+            # notification carries its title and link.
             if link:
-                mentioned_ids = {int(uid) for uid in re.findall(r'@\[[^\]]+\]\((\d+)\)', content)}
-                for uid in mentioned_ids:
-                    if uid != current_user.id:
+                from app.core.db_class.db import User
+                mentioned_ids = {int(uid) for uid in re.findall(r'@\[[^\]\n]{1,200}\]\((\d{1,12})\)', content)}
+                for uid in sorted(mentioned_ids - {current_user.id}):
+                    mentioned = db.session.get(User, uid)
+                    if mentioned and _user_can_read_object(mentioned, object_type, object_id):
                         notify_user_mentioned(uid, current_user.id, title, link)
 
         except Exception as _e:
@@ -316,9 +408,9 @@ class CommentHub(Resource):
             sort=request.args.get('sort', 'last_activity').strip(),
             direction=request.args.get('dir', 'desc').strip(),
             mine=request.args.get('mine', '').strip() in ('1', 'true'),
-            min_comments=max(request.args.get('min_comments', 0, type=int) or 0, 0),
-            page=request.args.get('page', 1, type=int),
-            per_page=min(request.args.get('per_page', 20, type=int), _PER_PAGE_MAX),
+            min_comments=_int_arg('min_comments', 0, low=0),
+            page=_int_arg('page', 1),
+            per_page=_int_arg('per_page', 20, high=_PER_PAGE_MAX),
         )
 
 
@@ -342,18 +434,18 @@ class CommentMyCount(Resource):
 class CommentDetail(Resource):
 
     def put(self, uuid):
-        """Edit a comment's content. Requires authorship or moderation."""
+        """Edit a comment's content. Requires authorship or moderation, and
+        the object the thread hangs on must still be visible to the caller."""
         if not current_user.is_authenticated:
             return {'message': 'Login required'}, 401
 
-        comment = _get_or_404(uuid)
+        comment = _get_readable_or_404(uuid)
         if not _can_edit(comment):
             return {'message': 'Not allowed'}, 403
         if not comment.is_active:
             return {'message': 'Cannot edit a deleted comment'}, 400
 
-        data    = request.get_json(silent=True) or {}
-        content = data.get('content', '').strip()
+        content = _text(json_object().get('content'))
         if not content:
             return {'message': 'content is required'}, 400
         if len(content) > 10000:
@@ -372,7 +464,7 @@ class CommentDetail(Resource):
         if not current_user.is_authenticated:
             return {'message': 'Login required'}, 401
 
-        comment = _get_or_404(uuid)
+        comment = _get_readable_or_404(uuid)
         if not _can_edit(comment):
             return {'message': 'Not allowed'}, 403
         if not comment.is_active:
@@ -409,6 +501,8 @@ class CommentHardDelete(Resource):
 
     def delete(self, uuid):
         """Hard-delete a comment and its entire reply subtree (admin only)."""
+        if not current_user.is_authenticated:
+            return {'message': 'Login required'}, 401
         if not _can_moderate():
             return {'message': 'Admin required'}, 403
 
@@ -446,6 +540,8 @@ class CommentRestore(Resource):
 
     def post(self, uuid):
         """Restore a soft-deleted comment (moderators only)."""
+        if not current_user.is_authenticated:
+            return {'message': 'Login required'}, 401
         if not _can_moderate():
             return {'message': 'Moderation required'}, 403
 
@@ -468,8 +564,8 @@ class CommentResolve(Resource):
 
     def get(self, comment_id):
         """Return a comment's root_id and ordered ancestor chain for deep-link navigation."""
-        c = UnifiedComment.query.get(comment_id)
-        if not c or not c.is_active:
+        c = db.session.get(UnifiedComment, comment_id) if as_db_id(comment_id) else None
+        if not c or not c.is_active or not _can_read_object(c.object_type, c.object_id):
             return {'message': 'Comment not found'}, 404
 
         ancestors = []
@@ -498,12 +594,11 @@ class CommentReact(Resource):
         if not current_user.is_authenticated:
             return {'message': 'Login required'}, 401
 
-        comment = _get_or_404(uuid)
+        comment = _get_readable_or_404(uuid)
         if not comment.is_active:
             return {'message': 'Cannot react to a deleted comment'}, 400
 
-        data     = request.get_json(silent=True) or {}
-        reaction = data.get('reaction', '').strip()
+        reaction = _text(json_object().get('reaction'))
         if reaction not in ('like', 'dislike'):
             return {'message': 'reaction must be "like" or "dislike"'}, 400
 
@@ -550,7 +645,7 @@ class CommentReactors(Resource):
         if reaction not in ('like', 'dislike'):
             return {'message': 'type must be "like" or "dislike"'}, 400
 
-        comment = _get_or_404(uuid)
+        comment = _get_readable_or_404(uuid)
 
         q = (UnifiedCommentReaction.query
              .filter_by(comment_id=comment.id, reaction=reaction)

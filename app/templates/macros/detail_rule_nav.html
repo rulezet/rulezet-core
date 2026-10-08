@@ -44,6 +44,16 @@
         {% endif %}
     </a>
     {% endif %}
+    {# bundle_count comes from the page context (_nav_counts) — the macro is
+       imported "with context", so callers don't have to thread it through. #}
+    <a href="/rule/detail_rule/{{ rule.id }}/bundles"
+       class="dr-nav__item {% if active == 'bundles' %}active{% endif %}">
+        <i class="fa-solid fa-layer-group"></i>
+        <span>Bundles</span>
+        {% if (bundle_count|default(0)) > 0 %}
+        <span class="dr-nav__badge">{{ bundle_count }}</span>
+        {% endif %}
+    </a>
     {% if linked_rules_count > 0 or active == 'linked_rules' %}
     <a href="/rule/detail_rule/{{ rule.id }}/linked_rules"
        class="dr-nav__item {% if active == 'linked_rules' %}active{% endif %}">

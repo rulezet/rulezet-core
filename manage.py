@@ -20,6 +20,7 @@ Commands:
     help        Show this help message
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -129,7 +130,157 @@ def _sync_submodules() -> None:
     )
     if result.returncode != 0:
         run(["git", "submodule", "update", "--remote"])
-    run(["git", "submodule", "update", "app/modules/pivotick"])
+    run(["git", "submodule", "update", "--init", "app/modules/pivotick",
+         "app/modules/pivotick-converters"])
+
+
+# ── Pivotick graph assets (no npm, no Node) ──────────────────────────────────
+# The graphs use two pinned submodules:
+#   app/modules/pivotick             — the Pivotick library (pinned to a release tag)
+#   app/modules/pivotick-converters  — MISP event → Pivotick graph (TypeScript)
+# Neither commits a browser build, and the server must not need npm/Node, so
+# `manage.py pivotick` produces the browser files and they are committed:
+#   - Pivotick: the official pivotick-dist.zip attached to the GitHub release
+#     of the pinned tag (built by Pivotick's own CI) → pivotick.iife.js + css
+#   - converters: compiled once with the standalone esbuild binary (a single
+#     executable, checksum-verified against the npm registry metadata — the
+#     registry is only used as a file host, npm itself is never run)
+# BUILD_STAMP records which submodule versions the committed files come from;
+# update/start-prod rebuild only when the pinned submodules moved.
+
+PIVOTICK_DIR      = ROOT / "app" / "modules" / "pivotick"
+CONVERTERS_DIR    = ROOT / "app" / "modules" / "pivotick-converters"
+PIVOTICK_JS       = ROOT / "app" / "static" / "js" / "pivotick.iife.js"
+PIVOTICK_CSS      = ROOT / "app" / "static" / "css" / "components" / "pivotick.css"
+CONVERTERS_JS     = ROOT / "app" / "static" / "js" / "pivotick" / "pivotick-converters.js"
+BUILD_STAMP       = ROOT / "app" / "static" / "js" / "pivotick" / "build.json"
+ESBUILD_VERSION   = "0.25.10"
+ESBUILD_CACHE     = Path.home() / ".cache" / "rulezet" / f"esbuild-{ESBUILD_VERSION}"
+
+
+def _git_out(args: list[str], cwd: Path) -> str:
+    result = subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _pivotick_refs() -> dict:
+    """Pinned commits of both submodules — what the committed assets must match.
+    Commits, not tags: a shallow submodule clone (install.sh uses --depth 1)
+    often has no tags at all."""
+    return {
+        "pivotick": _git_out(["rev-parse", "HEAD"], PIVOTICK_DIR),
+        "converters": _git_out(["rev-parse", "HEAD"], CONVERTERS_DIR),
+    }
+
+
+def _pivotick_tag() -> str:
+    """Release tag of the pinned Pivotick commit (needed to download its
+    official build) — fetched from origin if the clone has no tags."""
+    tag = _git_out(["describe", "--tags", "--exact-match"], PIVOTICK_DIR)
+    if not tag:
+        subprocess.run(["git", "fetch", "--quiet", "--tags", "origin"], cwd=PIVOTICK_DIR)
+        tag = _git_out(["describe", "--tags", "--exact-match"], PIVOTICK_DIR)
+    return tag
+
+
+def _download(url: str) -> bytes:
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "rulezet-manage"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return resp.read()
+
+
+def _esbuild_binary() -> Path:
+    """Standalone esbuild executable for this OS/arch, cached in ~/.cache."""
+    import base64
+    import hashlib
+    import io
+    import platform
+    import tarfile
+
+    binary = ESBUILD_CACHE / "esbuild"
+    if binary.exists():
+        return binary
+    system = {"Linux": "linux", "Darwin": "darwin"}.get(platform.system())
+    arch = {"x86_64": "x64", "amd64": "x64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower())
+    if not system or not arch:
+        raise RuntimeError(f"no esbuild binary for {platform.system()}/{platform.machine()}")
+    pkg = f"@esbuild/{system}-{arch}"
+    meta = json.loads(_download(f"https://registry.npmjs.org/{pkg}/{ESBUILD_VERSION}"))
+    tarball = _download(meta["dist"]["tarball"])
+    algo, _, expected = meta["dist"]["integrity"].partition("-")
+    if base64.b64encode(hashlib.new(algo, tarball).digest()).decode() != expected:
+        raise RuntimeError("esbuild download failed its integrity check")
+    with tarfile.open(fileobj=io.BytesIO(tarball)) as tar:
+        member = tar.getmember("package/bin/esbuild")
+        data = tar.extractfile(member).read()
+    ESBUILD_CACHE.mkdir(parents=True, exist_ok=True)
+    binary.write_bytes(data)
+    binary.chmod(0o755)
+    return binary
+
+
+def _build_pivotick_assets(refs: dict) -> None:
+    import io
+    import tempfile
+    import zipfile
+
+    tag = _pivotick_tag()
+    if not tag:
+        raise RuntimeError("app/modules/pivotick is not on a release tag — check out one (e.g. v2.0.1)")
+    info(f"Pivotick {tag}: downloading the official release build…")
+    archive = zipfile.ZipFile(io.BytesIO(_download(
+        f"https://github.com/Pivotick/Pivotick/releases/download/{tag}/pivotick-dist.zip")))
+    names = {Path(n).name: n for n in archive.namelist()}
+    for wanted, target in (("pivotick.iife.js", PIVOTICK_JS), ("pivotick.css", PIVOTICK_CSS)):
+        if wanted not in names:
+            raise RuntimeError(f"{wanted} missing from the {tag} release archive")
+        target.write_bytes(archive.read(names[wanted]))
+    ok(f"Pivotick {tag} → {PIVOTICK_JS.relative_to(ROOT)}, {PIVOTICK_CSS.relative_to(ROOT)}")
+
+    commit = refs["converters"]
+    info(f"pivotick-converters {commit[:8]}: compiling with esbuild {ESBUILD_VERSION}…")
+    esbuild = _esbuild_binary()
+    core = CONVERTERS_DIR / "packages" / "core" / "src" / "index.ts"
+    misp = CONVERTERS_DIR / "packages" / "misp" / "src" / "index.ts"
+    with tempfile.TemporaryDirectory() as tmp:
+        entry = Path(tmp) / "entry.ts"
+        # Importing the misp package also registers MispEventImporter in
+        # GraphRegistry (side effect of its index).
+        entry.write_text(
+            f"export {{ GraphRegistry, PIVOTICK_STYLE_OVERRIDES, RECOMMENDED_PIVOTICK_SIMULATION_OPTIONS }} from {json.dumps(str(core))}\n"
+            f"export {{ MispEventImporter, NODE_DEFAULTS }} from {json.dumps(str(misp))}\n"
+        )
+        CONVERTERS_JS.parent.mkdir(parents=True, exist_ok=True)
+        run([str(esbuild), str(entry), "--bundle", "--format=esm", "--target=es2020", "--minify",
+             "--legal-comments=inline", f"--outfile={CONVERTERS_JS}",
+             f"--banner:js=/* pivotick-converters {commit} (MIT) — built by `python3 manage.py pivotick`, do not edit */"])
+    ok(f"pivotick-converters → {CONVERTERS_JS.relative_to(ROOT)}")
+
+    BUILD_STAMP.write_text(json.dumps({**refs, "pivotick_tag": tag}, indent=2) + "\n")
+
+
+def _ensure_pivotick_assets(force: bool = False) -> None:
+    """Rebuild the committed graph assets only if the pinned submodules moved
+    (or on demand). Never fatal on update: the committed files keep working."""
+    refs = _pivotick_refs()
+    try:
+        stamp = json.loads(BUILD_STAMP.read_text())
+    except (OSError, ValueError):
+        stamp = {}
+    if (not force and stamp.get("pivotick") == refs["pivotick"] and stamp.get("converters") == refs["converters"]
+            and PIVOTICK_JS.exists() and CONVERTERS_JS.exists()):
+        ok(f"Pivotick graph assets up to date (Pivotick {stamp.get('pivotick_tag') or refs['pivotick'][:8]}, "
+           f"converters {refs['converters'][:8]})")
+        return
+    try:
+        _build_pivotick_assets(refs)
+    except Exception as exc:
+        if force:
+            error(f"Pivotick assets build failed: {exc}")
+            sys.exit(1)
+        error(f"Could not rebuild the Pivotick graph assets ({exc}) — keeping the committed ones. "
+              "Run `python3 manage.py pivotick` on a machine with internet access.")
 
 
 def _confirm(prompt: str) -> bool:
@@ -287,6 +438,11 @@ def cmd_help() -> None:
 
   {G}update{R}        {D}sync with origin + pip install + ensure ollama + flask db upgrade{R}
                   {D}→ Use this after pulling new code — see start-prod's note on sync{R}
+
+  {G}pivotick{R}      {D}Rebuild the graph assets from app/modules/pivotick (release build){R}
+                  {D}  + app/modules/pivotick-converters (compiled with esbuild) — no npm{R}
+                  {D}→ Run after bumping either submodule, then commit the result{R}
+                  {D}  (update/start-prod rebuild automatically if they moved){R}
 
   {G}backup{R}        {D}Backup PostgreSQL database to backup/dumps/{R}
 
@@ -478,6 +634,7 @@ def cmd_start_prod() -> None:
     info("Syncing Git submodules…")
     _sync_submodules()
     ok("Submodules up to date")
+    _ensure_pivotick_assets()
 
     info("Syncing Python dependencies…")
     run([PIP, "install", "-r", "requirements.txt"])
@@ -564,6 +721,7 @@ def cmd_update() -> None:
     info("Syncing Git submodules…")
     _sync_submodules()
     ok("Submodules up to date")
+    _ensure_pivotick_assets()
 
     info("Syncing Python dependencies…")
     run([PIP, "install", "-r", "requirements.txt"])
@@ -578,6 +736,14 @@ def cmd_update() -> None:
     info("Seeding default data (formats, platform-tag configs)…")
     run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "development"})
     ok("Default data up to date")
+
+
+def cmd_pivotick() -> None:
+    """Rebuild the Pivotick graph assets from the pinned submodules (no npm)."""
+    header("Building Pivotick graph assets")
+    _ensure_pivotick_assets(force=True)
+    ok("Done — commit app/static/js/pivotick.iife.js, app/static/css/components/pivotick.css "
+       "and app/static/js/pivotick/ together with the submodule bump")
 
 
 def cmd_deploy() -> None:
@@ -625,6 +791,7 @@ COMMANDS: dict[str, object] = {
     "db":           cmd_db,
     "db-init":      cmd_db_init,
     "db-reload":    cmd_db_reload,
+    "pivotick":     cmd_pivotick,
     "help":         cmd_help,
 }
 

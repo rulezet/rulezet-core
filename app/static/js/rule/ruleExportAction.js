@@ -77,6 +77,10 @@ const RuleExportAction = {
         currentUserIsAuthenticated: { type: Boolean, default: false },
         // Explicit rule selection — takes precedence over filters when set
         ruleIds: { type: Array, default: null },
+        // Raw /rule/data_table query string from RuleList — when set, the
+        // bundle endpoint applies it verbatim (full filter set) instead of
+        // the legacy per-prop filter dict below.
+        filterQuery: { type: String, default: null },
         // Hide the trigger button (modal opened programmatically by the host)
         showButton: { type: Boolean, default: true },
         modalId: { type: String, default: 'exportActionModal' },
@@ -286,6 +290,9 @@ const RuleExportAction = {
                 if (hasIdSelection.value) {
                     // Explicit selection: export exactly these rules
                     params.append('ids', props.ruleIds.join(','));
+                } else if (props.filterQuery) {
+                    for (const [k, v] of new URLSearchParams(props.filterQuery)) params.append(k, v);
+                    params.append('data_table_filters', '1');
                 } else {
                 params.append('search', props.searchQuery || '');
                 params.append('sort_by', props.sortBy);
@@ -360,7 +367,10 @@ const RuleExportAction = {
 
         <teleport to="body">
             <div class="modal fade" :id="modalId" tabindex="-1" aria-hidden="true" style="z-index: 2000;">
-                <div :class="currentView === 'structure' ? 'modal-dialog' : 'modal-dialog modal-dialog-centered'"
+                <div :class="currentView === 'structure' ? 'modal-dialog'
+                              : (currentView === 'bundle'
+                                  ? 'modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl'   // room for the Markdown description editor
+                                  : 'modal-dialog modal-dialog-centered')"
                      :style="currentView === 'structure'
                         ? ('position:fixed;margin:0;max-width:none;top:' + win.top + 'px;left:' + win.left + 'px;width:' + win.width + 'px;height:' + win.height + 'px;')
                         : ''">
@@ -449,6 +459,7 @@ const RuleExportAction = {
                                         :is-over-limit="isOverLimit"
                                         :max-limit="MAX_LIMIT"
                                         :filters="hasIdSelection ? null : currentFilters"
+                                        :filter-query="hasIdSelection ? null : filterQuery"
                                         :rule-ids="hasIdSelection ? ruleIds : null"
                                         @processing="(val) => isProcessing = val"
                                         @completed="onBundleCompleted"

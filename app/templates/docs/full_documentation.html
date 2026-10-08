@@ -400,7 +400,7 @@
                   <td>A pull-request-style review mechanism: someone proposes a change to a rule they don't own, the owner reviews a diff and approves or rejects it.</td>
                 </tr>
                 <tr><td class="glossary-term">Bundle</td>
-                  <td>A curated, named collection of rules — the detection equivalent of a playlist.</td>
+                  <td>A curated, named collection of rules and supporting files, organised in folders, versioned with releases — the detection equivalent of a playlist.</td>
                 </tr>
                 <tr><td class="glossary-term"><span>Tag / taxonomy / galaxy</span></td>
                   <td>MISP-standard vocabularies reused for classification. A <em>taxonomy</em> is a structured vocabulary (like TLP); a <em>galaxy</em> is a knowledge base of clusters (threat actors, malware families); a <em>tag</em> is the concrete label attached to a rule, coming from either.</td>
@@ -700,9 +700,9 @@
             <div class="why-panel-body">"Give me every rule relevant to threat actor X" or "here's our team's baseline ruleset" are questions people ask constantly — a bundle turns the answer into a single, linkable, versionable object instead of a list you re-assemble from memory every time.</div>
           </div>
 
-          <p class="doc-p">A bundle is a named collection of rules that can be organized into folders (not just a flat list) via a drag-and-drop structure editor — useful when a bundle mirrors the layout of a source repository, or when a large bundle benefits from being grouped by technique, log source, or campaign phase. Like rules, bundles get the full community treatment: voting, view/download counts, and comments.</p>
+          <p class="doc-p">A bundle is a named collection of rules <em>and</em> supporting files, organised into folders by a drag-and-drop structure editor — the way a real detection pack is shipped: rules next to a README, tuning notes, IOC lists or configs. It can mirror the layout of a source repository, or be grouped by technique, log source or campaign phase. Like rules, bundles get the full community treatment: votes, downloads and comments. The description is written in Markdown.</p>
 
-          <p class="doc-p">Access control is the other half of what makes bundles useful: a bundle can be public (anyone can see it) or private (visible only to its owner and admins) — so a "starter kit" can be iterated on privately and published only once it's actually ready.</p>
+          <p class="doc-p">Access control is the other half of what makes bundles useful: a bundle can be public (anyone can see it) or private (visible only to its owner and admins) — so a "starter kit" can be iterated on privately and published only once it's actually ready. A private bundle can still be shown to a specific colleague through a <strong>private share link</strong> (see below).</p>
 
           <div class="usecase-card">
             <div class="usecase-avatar"><i class="fas fa-box-open"></i></div>
@@ -714,18 +714,85 @@
             <div><div class="usecase-role">Maturing privately first</div>
             <div class="usecase-text">A bundle stays private while its rules are still being tuned, and is switched to public only once the team is confident enough to stand behind it publicly.</div></div>
           </div>
+          <div class="usecase-card">
+            <div class="usecase-avatar"><i class="fas fa-tags"></i></div>
+            <div><div class="usecase-role">"We run Ransomware Pack v1.2"</div>
+            <div class="usecase-text">A SOC deploys a frozen release of a bundle, keeps referencing it by version, and — when the bundle moves on — reviews exactly what changed before upgrading.</div></div>
+          </div>
+
+          <h3 class="subsection-title"><i class="fas fa-table-columns"></i> The bundle page</h3>
+          <p class="doc-p">The detail page shows the bundle's header (status, author, dates, Markdown description, tags and CVEs, KPIs, actions) and one panel per aspect of its content. A small <i class="fas fa-circle-question"></i> next to each section title explains it in place.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tab</th><th>What it shows</th></tr></thead>
+              <tbody>
+                <tr><td><span class="mono-badge">Structure</span></td><td>The folder tree exactly as it is downloaded. Rules (blue shield) and files (their own icon, bold name) can be opened in a viewer in front of the page: syntax highlighting per rule format, rendered Markdown, download, previous/next, and "show in structure / rules / files".</td></tr>
+                <tr><td><span class="mono-badge">Rules</span></td><td>The rules of the bundle as a sortable list, each with a shortcut to its place in the structure.</td></tr>
+                <tr><td><span class="mono-badge">Files &amp; Documents</span></td><td>Every non-rule file (README, notes, IOCs, configs) with search, extension filters, pagination and per-file or bulk download — built to stay usable with hundreds of files.</td></tr>
+                <tr><td><span class="mono-badge">ATT&amp;CK</span></td><td>The coverage matrix of the bundle's rules; each technique lists its rules with Detail / In list / In structure shortcuts.</td></tr>
+                <tr><td><span class="mono-badge">Releases</span></td><td>Frozen, versioned releases — see below.</td></tr>
+                <tr><td><span class="mono-badge">Health</span></td><td>Pre-deployment checks — see below.</td></tr>
+                <tr><td><span class="mono-badge">History</span></td><td>Every change to the bundle, with readable diffs.</td></tr>
+                <tr><td><span class="mono-badge">MISP Event</span></td><td>The bundle as a MISP event (graph + JSON); admins can push it to a connected MISP instance.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="subsection-title"><i class="fas fa-tags"></i> Releases — frozen, versioned bundles</h3>
+          <p class="doc-p">A bundle points to <em>live</em> rules: when an author edits a rule, every bundle containing it changes. That is great for discovery and bad for deployment — a SOC needs to know exactly what it deployed. A <strong>release</strong> (<span class="inline-code">v1.2.0</span>) freezes the bundle at publication time: its structure, the exact content of every rule and file, its description, tags and CVEs. Each release has its own UUID.</p>
+          <ul class="doc-list">
+            <li><strong>Publish</strong> (owner or admin): the next version is suggested automatically — patch for tuning, minor when rules were added, major when rules were removed — and the release notes are pre-filled with a changelog generated from the actual differences.</li>
+            <li><strong>Drift</strong>: when the live bundle has moved since the latest release, a banner (and a <span class="inline-code">v1.1.0 +5</span> chip in the header) says how many changes are unreleased.</li>
+            <li><strong>Compare</strong> a release with the current bundle or with another release: rules and files added / updated / removed, with a line-by-line diff for every updated rule.</li>
+            <li><strong>View a version</strong>: the version selector above the tabs switches the whole page to a release (<span class="inline-code">?release=v1.0.0</span> in the URL). Structure, rule contents, files, description, tags, ATT&amp;CK coverage, health and every download then reflect that release, not the live bundle.</li>
+            <li><strong>Download</strong> a release as a ZIP (README, CHANGELOG, release.json, structure, rules) that never changes afterwards.</li>
+          </ul>
+          <div class="callout callout-green">
+            <div class="callout-icon"><i class="fas fa-shield-halved"></i></div>
+            <div class="callout-body"><strong>No conflicts when rules disappear</strong>A release is self-contained. A rule edited, trashed or even permanently deleted after the release is still shown, readable and downloadable from the release — flagged <em>Updated since</em> or <em>Deleted since</em>, with a diff against the current version when it still exists. Nothing in the live bundle can break a published release.</div>
+          </div>
+
+          <h3 class="subsection-title"><i class="fas fa-heart-pulse"></i> Health check</h3>
+          <p class="doc-p">The Health tab answers "is this bundle safe to deploy?" before a sensor finds out the hard way. It returns a score out of 100 and a verdict (<em>Ready to deploy</em>, <em>Review recommended</em>, <em>Blocking issues</em>); every finding says where the problem is and how to fix it, with shortcuts to the rule (and an <em>Edit</em> button for its owner or an admin that opens the rule editor with the issue displayed).</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Check</th><th>Catches</th></tr></thead>
+              <tbody>
+                <tr><td>Syntax</td><td>Rules that fail their format's validator (cached per rule content, so only edited rules are re-validated).</td></tr>
+                <tr><td>Identifier collisions</td><td>Two rules sharing a Suricata/Sagan SID, a YARA rule name, a Wazuh rule id or a Sigma id — a sensor loads only one of them.</td></tr>
+                <tr><td>Missing dependencies</td><td>A flowbit checked but never set, a custom Wazuh parent rule (<span class="inline-code">if_sid</span>) not in the bundle, a Sigma correlation referencing an absent rule, a YARA <span class="inline-code">include</span>. Wazuh parents from the default ruleset (ids &lt; 100000) are not flagged — they ship with every manager.</td></tr>
+                <tr><td>TLP / PAP</td><td>A rule more restricted than the bundle's own marking (e.g. a <span class="inline-code">tlp:red</span> rule in a <span class="inline-code">tlp:clear</span> bundle).</td></tr>
+                <tr><td>Duplicates, quality, licenses, ATT&amp;CK, structure</td><td>Rules placed twice or identical, low quality scores, missing licenses, rules not mapped to ATT&amp;CK, unplaced rules, empty folders or files.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="doc-p">The report is computed when the tab is opened, so it always reflects the latest edits; the owner or an admin can force a full re-validation with <em>Re-run</em>. When a release is being viewed, the checks run on that release.</p>
+
+          <h3 class="subsection-title"><i class="fas fa-clock-rotate-left"></i> History</h3>
+          <p class="doc-p">Every change is recorded as a before/after snapshot and shown as a readable timeline: details, visibility, tags, CVEs, rules added / removed / moved, files added / edited / renamed, folders, share links and releases. Editor autosaves within ten minutes are grouped into one entry, and filling a bundle right after creating it (from a rule filter or a workspace) counts as part of its creation — no entry per rule. Description edits open as a side-by-side diff.</p>
+
+          <h3 class="subsection-title"><i class="fas fa-link"></i> Private share links</h3>
+          <p class="doc-p">The owner or an admin can generate a share link for a private bundle (<span class="inline-code">/bundle/detail/&lt;id&gt;?share=&lt;key&gt;</span>). Anyone holding it who has a Rulezet account can view the bundle read-only — structure, rules, files, releases, downloads, comments and reports — but never edit it. Visitors who aren't logged in are sent to the login page first. <em>Regenerate</em> immediately cuts off everyone holding the previous link; <em>Revoke</em> disables it. The key itself is never exposed in the bundle's data or history.</p>
+
+          <h3 class="subsection-title"><i class="fas fa-download"></i> Downloads</h3>
+          <ul class="doc-list">
+            <li><strong>Everything</strong> — README (summary, description, tags, CVEs, rule list), description.md, bundle.json, the full structure, every rule with its JSON metadata, ATT&amp;CK coverage and the MISP event.</li>
+            <li><strong>Structure</strong> (folder layout), <strong>Rules</strong>, <strong>Files &amp; documents</strong>, <strong>MISP event</strong>, ATT&amp;CK JSON, and the Markdown description.</li>
+            <li>Every rule is exported with its format's extension (<span class="inline-code">.yar</span>, <span class="inline-code">.yml</span>, <span class="inline-code">.rules</span>, <span class="inline-code">.toml</span>, <span class="inline-code">.kql</span>…). While a release is being viewed, every download is the frozen release content.</li>
+          </ul>
 
           <h3 class="subsection-title"><i class="fas fa-list-check"></i> Capabilities</h3>
           <ul class="doc-list">
-            <li>Create, edit, and delete a bundle (owner or admin).</li>
-            <li>Add rules individually or via a bulk rule-selector.</li>
-            <li>Arrange rules into a folder-style structure tree.</li>
-            <li>An "official" verified badge, presumably admin-granted, for particularly trusted bundles.</li>
+            <li>Create, edit, and delete a bundle (owner or admin); Markdown description.</li>
+            <li>Add rules individually, via the rule library (drag &amp; drop) or from a rule-list filter / a workspace.</li>
+            <li>Arrange rules and files into a folder-style structure tree; custom files open in the matching editor mode (Markdown, JSON, YAML…).</li>
+            <li>Versioned releases, health check, change history, private share links.</li>
+            <li>An "official" verified badge for particularly trusted bundles.</li>
           </ul>
 
           <div class="callout callout-amber">
             <div class="callout-icon"><i class="fas fa-triangle-exclamation"></i></div>
-            <div class="callout-body"><strong>Worth confirming operationally</strong>If a rule referenced inside a bundle's structure is later permanently removed from the platform entirely, the bundle's folder tree should not be left pointing at a dangling reference — this is exactly the kind of edge case worth testing deliberately rather than assuming away.</div>
+            <div class="callout-body"><strong>Community content</strong>Rules and files in a bundle are user-submitted and not reviewed by Rulezet. Markdown is rendered sanitised (no scripts, no images loaded, no links back into Rulezet), bundle structures are size-limited and ZIP entries are sanitised — but downloaded content can still be dangerous once it's on a machine. Inspect it before running or deploying, preferably in an isolated environment.</div>
           </div>
 
           <figure class="shot-media" data-shot-id="shot-8">
@@ -1519,6 +1586,8 @@
                 <tr><td class="glossary-term">API</td><td>Application Programming Interface — the way external software talks to Rulezet directly, without a browser (chapter 26).</td></tr>
                 <tr><td class="glossary-term">ATT&amp;CK</td><td>A MITRE framework cataloguing known adversary behaviors as a standard, referenceable set of techniques (chapter 14).</td></tr>
                 <tr><td class="glossary-term">Bundle</td><td>A named, curated collection of rules (chapter 11).</td></tr>
+                <tr><td class="glossary-term">Bundle release</td><td>A frozen, versioned copy of a bundle (e.g. v1.2.0) — its content never changes after publication (chapter 11).</td></tr>
+                <tr><td class="glossary-term">Health check</td><td>Automatic pre-deployment checks on a bundle: syntax, ID collisions, missing dependencies, TLP/PAP consistency (chapter 11).</td></tr>
                 <tr><td class="glossary-term">CIRCL</td><td>Computer Incident Response Center Luxembourg — the organization that builds and operates Rulezet (chapter 1).</td></tr>
                 <tr><td class="glossary-term">CRS</td><td>Core Rule Set — a detection rule format used with web application firewalls.</td></tr>
                 <tr><td class="glossary-term">CVE</td><td>Common Vulnerabilities and Exposures — the standard identifier scheme for publicly known vulnerabilities.</td></tr>

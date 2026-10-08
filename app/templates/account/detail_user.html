@@ -146,6 +146,11 @@
                                 <i class="fa-solid fa-user-plus me-1"></i>Follow
                             </button>
                             <span id="follow-count-{{ user.id }}" class="ud-follow-count"></span>
+                            <a href="/alert/new?users={{ user.id }}&target=both&name={{ ('New from ' ~ (user.username or user.first_name)) | urlencode }}"
+                               class="btn btn-sm btn-outline-primary rounded-pill px-3 ms-1"
+                               title="Get an alert when {{ user.username or user.first_name }} publishes a rule or bundle">
+                                <i class="fa-solid fa-bell me-1"></i>Watch
+                            </a>
                         </div>
                         {% endif %}
 
@@ -261,6 +266,25 @@
                                 {% else %}
                                 <span class="ud-profile-badge ud-profile-badge--user">
                                     <i class="fas fa-user me-1"></i>User
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ud-info-cell">
+                        <div class="ud-info-cell-icon" style="background:rgba({% if user.auth_provider == 'local' %}13,110,253{% else %}111,66,193{% endif %},.1);color:{% if user.auth_provider == 'local' %}#0d6efd{% else %}#6f42c1{% endif %};">
+                            <i class="fas fa-key"></i>
+                        </div>
+                        <div class="ud-info-cell-body">
+                            <div class="ud-info-cell-label">Sign-in Method</div>
+                            <div class="ud-info-cell-value">
+                                {% if user.auth_provider == 'local' %}
+                                <span class="ud-profile-badge ud-profile-badge--user">
+                                    <i class="fas fa-key me-1"></i>Local Account
+                                </span>
+                                {% else %}
+                                <span class="ud-profile-badge ud-profile-badge--sso">
+                                    <i class="fas fa-shield-halved me-1"></i>Single Sign-On ({{ user.auth_provider|upper }})
                                 </span>
                                 {% endif %}
                             </div>

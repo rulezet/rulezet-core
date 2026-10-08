@@ -20,6 +20,7 @@ python3 -m venv env
 echo -e "${CYAN}📂 Initialising git submodules...${RESET}"
 git submodule update --init --recursive --depth 1 app/modules/rulezet-cast
 git submodule update --init --recursive --depth 1 app/modules/pivotick
+git submodule update --init --depth 1 app/modules/pivotick-converters
 git submodule update --init --recursive --depth 1 app/modules/rulezet-validation
 
 echo -e "${CYAN}📦 Install the Python dependencies...${RESET}"

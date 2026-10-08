@@ -56,7 +56,7 @@ def update():
     return jsonify({'message': msg, 'config': config.to_json()}), 200
 
 
-# ── PivoTick background gallery ───────────────────────────────────────────────
+# ── Pivotick background gallery ───────────────────────────────────────────────
 
 @config_blueprint.route('/config/pivotick_backgrounds', methods=['GET'])
 @login_required

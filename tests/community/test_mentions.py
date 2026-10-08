@@ -9,6 +9,9 @@ from app.core.db_class.db import Notification, Rule, User
 
 
 def _login(client, email, password):
+    # Log out first: /account/login sends an already-logged-in user straight
+    # back without switching account.
+    client.get("/account/logout")
     return client.post("/account/login", data={
         "email": email, "password": password, "remember_me": False,
     }, follow_redirects=True)

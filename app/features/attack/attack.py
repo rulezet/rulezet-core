@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request, render_template, abort
 from flask_login import login_required, current_user
 from app import cache, memory_cache
+from app.core.utils.utils import as_db_id, json_object
 from . import attack_core as AttackModel
 from ..jobs import jobs_core as JobModel
 
@@ -18,7 +19,8 @@ def list_techniques():
 @attack_blueprint.route('/techniques/search')
 def search_techniques():
     q = request.args.get('q', '')
-    limit = min(int(request.args.get('limit', 20)), 50)
+    limit = request.args.get('limit', 20, type=int) or 20   # not a number → default
+    limit = max(1, min(limit, 50))
     return jsonify(AttackModel.search_techniques(q, limit))
 
 
@@ -77,26 +79,34 @@ def techniques_usage():
 
 # ── Per-rule associations ─────────────────────────────────────────────────────
 
+def _active_rule(rule_id):
+    """The active rule `rule_id`, or None — also for an id no database row
+    can have (an out-of-range number would crash the lookup)."""
+    from app.features.rule import rule_core as RuleModel
+    return RuleModel.get_rule(rule_id) if as_db_id(rule_id) else None
+
+
 @attack_blueprint.route('/rule/<int:rule_id>')
 def get_rule_techniques(rule_id):
+    if not _active_rule(rule_id):
+        return jsonify({'error': 'Rule not found'}), 404
     return jsonify(AttackModel.get_techniques_for_rule(rule_id))
 
 
 @attack_blueprint.route('/rule/<int:rule_id>/add', methods=['POST'])
 @login_required
 def add_to_rule(rule_id):
-    from ...core.db_class.db import Rule
     from app.core.utils.activity_log import log_activity
     from app.features.rule import rule_core as RuleModel
-    rule = Rule.query.get(rule_id)
-    if not rule or rule.is_deleted:
+    rule = _active_rule(rule_id)
+    if not rule:
         return jsonify({'error': 'Rule not found'}), 404
     is_owner_or_admin = rule.user_id == current_user.id or current_user.is_admin()
     if not is_owner_or_admin and not current_user.has_permission('rule.tag_any'):
         return jsonify({'error': 'Forbidden'}), 403
 
-    technique_id = (request.json or {}).get('technique_id', '')
-    if not technique_id:
+    technique_id = json_object().get('technique_id')
+    if not isinstance(technique_id, str) or not technique_id.strip():
         return jsonify({'error': 'technique_id required'}), 400
 
     old_snapshot = RuleModel.rule_metadata_snapshot(rule)
@@ -126,11 +136,10 @@ def add_to_rule(rule_id):
 @attack_blueprint.route('/rule/<int:rule_id>/remove/<technique_id>', methods=['DELETE'])
 @login_required
 def remove_from_rule(rule_id, technique_id):
-    from ...core.db_class.db import Rule
     from app.core.utils.activity_log import log_activity
     from app.features.rule import rule_core as RuleModel
-    rule = Rule.query.get(rule_id)
-    if not rule or rule.is_deleted:
+    rule = _active_rule(rule_id)
+    if not rule:
         return jsonify({'error': 'Rule not found'}), 404
     is_owner_or_admin = rule.user_id == current_user.id or current_user.is_admin()
     if not is_owner_or_admin and not current_user.has_permission('rule.tag_any'):
@@ -157,8 +166,15 @@ def remove_from_rule(rule_id, technique_id):
 
 # ── Heatmap & technique detail ────────────────────────────────────────────────
 
+def _heatmap_cache_key():
+    # The page shows or hides its Graph view per the admin switch
+    # (/admin/pivotick) — a flip must not wait for this cache to expire.
+    from app.features.pivotick.pivotick_core import is_graph_enabled
+    return f"view/attack/heatmap/graph-{'on' if is_graph_enabled('attack') else 'off'}"
+
+
 @attack_blueprint.route('/heatmap')
-@cache.cached(timeout=60 * 60 * 6)
+@cache.cached(timeout=60 * 60 * 6, key_prefix=_heatmap_cache_key)
 def heatmap():
     return render_template('attack/heatmap.html')
 
@@ -305,8 +321,8 @@ def admin_techniques():
     from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
     from sqlalchemy import func, asc, desc, cast, Text
 
-    search          = request.args.get('search', '').strip()
-    tactic          = request.args.get('tactic', '').strip()
+    search          = request.args.get('search', '').strip()[:AttackModel.MAX_SEARCH_LENGTH + 1]
+    tactic          = request.args.get('tactic', '').strip()[:AttackModel.MAX_SEARCH_LENGTH + 1]
     show_deprecated = request.args.get('show_deprecated', 'false').lower() == 'true'
     sort_by         = request.args.get('sort_by', 'technique_id')
     sort_dir        = request.args.get('sort_dir', 'asc').lower()
@@ -317,7 +333,7 @@ def admin_techniques():
         page, per_page = 1, 50
 
     count_subq = (
-        db.session.query(
+        AttackModel.active_assocs(
             RuleAttackAssociation.technique_id,
             func.count(RuleAttackAssociation.id).label('cnt'),
         )
@@ -398,10 +414,12 @@ def trigger_update():
 def trigger_parse():
     if not current_user.is_admin():
         return jsonify({'error': 'Forbidden'}), 403
-    data = request.json or {}
+    fmt = json_object().get('format') or None
+    if fmt is not None and not isinstance(fmt, str):
+        return jsonify({'error': 'format must be a rule format name'}), 400
     job = JobModel.create_job(
         job_type='bulk_parse_attack_rules',
-        payload={'format': data.get('format')},
+        payload={'format': fmt},
         label='Auto-parse ATT&CK techniques from rules',
         created_by=current_user.id,
         total=0,

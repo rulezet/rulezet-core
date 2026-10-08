@@ -1,9 +1,10 @@
 from flask_restx import Namespace, Resource
-from flask import jsonify, request, url_for
-from flask_login import  current_user, login_required
+from flask import request, url_for
+from flask_login import current_user
 from wtforms.validators import Email, ValidationError
 
-from app.core.utils.utils import get_user_from_api
+from app.core.utils.decorators import api_required
+from app.core.utils.utils import as_db_id
 
 from app.core.db_class.db import User
 from app.features.account import account_core as AccountModel
@@ -16,22 +17,19 @@ account_private_ns = Namespace(
 
 @account_private_ns.route('/edit')
 class EditUser(Resource):
-    @login_required
+    @api_required
     def post(self):
         data = request.get_json(silent=True)
-        if not data:
+        if data is None:
             data = request.args.to_dict()
-        user = get_user_from_api(request.headers)
-        if not user:
-            return {"message": "Access denied"}, 403
-        
+        if not isinstance(data, dict):
+            return {"message": "The body must be a JSON object"}, 400
+        error = AccountModel.account_fields_error(data, with_password=False)
+        if error:
+            return {"message": error}, 400
         first_name = data.get("first_name")
         last_name = data.get("last_name")
         email = data.get("email")
-
-        for field_name, value in [("first_name", first_name), ("last_name", last_name), ("email", email)]:
-            if not value:
-                return {"message": f"{field_name} is required"}, 400
 
         try:
             Email(message="Invalid email format")(None, type("DummyField", (), {"data": email})())
@@ -76,34 +74,39 @@ class EditUser(Resource):
                 "last_name": last_name
             }
 
-        AccountModel.edit_user_core(form_dict, current_user.id)
+        is_sso = (current_user.auth_provider or 'local') != 'local'
+        _, pending_email = AccountModel.edit_user_core(form_dict, current_user.id, is_sso=is_sso)
+        if pending_email:
+            AccountModel.request_email_change_core(current_user.id, pending_email)
+            return {"message": "User updated successfully. A confirmation link was sent to the new "
+                               "email address, which applies once confirmed."}, 200
 
         return {"message": "User updated successfully"}, 200
 
 @account_private_ns.route("/favorite/get_rules_page_favorite")
 class GetRulesPageFavorite(Resource):
-    @login_required
+    @api_required
     def get(self):
         page = request.args.get('page', 1, type=int)
         
         rules = RuleModel.get_rules_page_favorite(page, current_user.id)
 
-        if rules:
-            return jsonify({
-                "rule": [rule.to_json() for rule in rules],
-                "total_pages": rules.pages
-            })
-        return jsonify({"message": "No Rule"}), 403
+        return {
+            "rule": [rule.to_json() for rule in rules],
+            "total_pages": rules.pages
+        }
     
 @account_private_ns.route("/favorite/delete_rule")
 class RemoveRuleFavorite(Resource):
-    @login_required 
+    @api_required
     def post(self):
-        rule_id = request.args.get('id', 1, type=int)
+        rule_id = as_db_id(request.args.get('id'))
+        if rule_id is None:
+            return {"success": False, "message": "Missing or invalid rule id"}, 400
         
         rep = AccountModel.remove_favorite(current_user.id, rule_id)
 
         if rep:
-            return jsonify({"success": True, "message": "Rule deleted!"})
-        return jsonify({"success": False, "message": "Access denied"}), 403
+            return {"success": True, "message": "Rule deleted!"}
+        return {"success": False, "message": "Access denied"}, 403
     

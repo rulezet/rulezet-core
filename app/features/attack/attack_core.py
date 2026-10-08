@@ -91,9 +91,14 @@ def get_techniques_for_rule(rule_id: int) -> list:
     return [a.to_json() for a in assocs]
 
 
+# Longest text a technique id / name / tactic can match (name is 300 chars):
+# anything longer can't match, and isn't sent to the database as a pattern.
+MAX_SEARCH_LENGTH = 300
+
+
 def search_techniques(q: str, limit: int = 20) -> list:
     q = q.strip()
-    if not q:
+    if not q or len(q) > MAX_SEARCH_LENGTH:
         return []
     like = f"%{q}%"
     rows = (
@@ -113,17 +118,32 @@ def search_techniques(q: str, limit: int = 20) -> list:
 
 
 def get_all_techniques(tactic: str = None) -> list:
+    if tactic and len(tactic) > MAX_SEARCH_LENGTH:
+        return []
     q = AttackTechnique.query.filter(~AttackTechnique.deprecated)
     if tactic:
-        q = q.filter(AttackTechnique.tactic_keys.contains([tactic]))
+        # tactic_keys is a JSON list: match the quoted key in its text form
+        # (works on PostgreSQL JSON and SQLite alike, any position in the list).
+        from sqlalchemy import cast, Text
+        q = q.filter(cast(AttackTechnique.tactic_keys, Text).like(f'%"{tactic}"%'))
     return [t.to_json() for t in q.order_by(AttackTechnique.technique_id).all()]
+
+
+def active_assocs(*columns):
+    """Query over the technique mappings of active rules only — a rule in
+    the trash keeps its mappings (for a restore) but must not count."""
+    return (
+        db.session.query(*columns)
+        .join(Rule, Rule.id == RuleAttackAssociation.rule_id)
+        .filter(Rule.is_deleted == False)
+    )
 
 
 def get_stats() -> dict:
     total      = AttackTechnique.query.count()
     deprecated = AttackTechnique.query.filter_by(deprecated=True).count()
-    assocs     = RuleAttackAssociation.query.count()
-    rules_covered = db.session.query(RuleAttackAssociation.rule_id).distinct().count()
+    assocs     = active_assocs(RuleAttackAssociation.id).count()
+    rules_covered = active_assocs(RuleAttackAssociation.rule_id).distinct().count()
     last_update = (
         db.session.query(db.func.max(AttackTechnique.updated_at)).scalar()
     )
@@ -677,7 +697,7 @@ def get_analytics_data() -> dict:
 
     # Top 20 techniques by rule count
     top_rows = (
-        db.session.query(
+        active_assocs(
             RuleAttackAssociation.technique_id,
             func.count(RuleAttackAssociation.id).label('cnt'),
         )
@@ -701,7 +721,7 @@ def get_analytics_data() -> dict:
     all_techs = AttackTechnique.query.filter(AttackTechnique.deprecated == False).all()
     covered_ids = {
         r.technique_id
-        for r in db.session.query(RuleAttackAssociation.technique_id).distinct().all()
+        for r in active_assocs(RuleAttackAssociation.technique_id).distinct().all()
     }
 
     tactic_stats = {}
@@ -715,7 +735,7 @@ def get_analytics_data() -> dict:
 
     # Rule counts per tactic — aggregate in Python to avoid GROUP BY on JSON column
     assoc_counts = (
-        db.session.query(
+        active_assocs(
             RuleAttackAssociation.technique_id,
             func.count(RuleAttackAssociation.id).label('cnt'),
         )
@@ -760,7 +780,7 @@ def get_coverage_gaps() -> list:
 
     covered_ids = {
         r.technique_id
-        for r in db.session.query(RuleAttackAssociation.technique_id).distinct().all()
+        for r in active_assocs(RuleAttackAssociation.technique_id).distinct().all()
     }
 
     all_techs = (
