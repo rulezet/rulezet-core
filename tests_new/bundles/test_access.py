@@ -20,6 +20,7 @@ from app.core.db_class.db import (
     BundleTagAssociation, BundleVote, Tag,
 )
 from app.features.bundle import bundle_core as BundleModel
+from app.features.bundle import bundle_layout_core as BundleLayoutModel
 from tests_new.helpers.access import FORBIDDEN, LOGIN, OK, assert_outcome, matrix
 from tests_new.helpers.bundles import (
     add_rules, edit_bundle_form, file, folder, make_bundle, make_note, make_release, make_tag, new_bundle_form,
@@ -620,3 +621,22 @@ def test_delete_release(role, expected, clients, users):
 
     assert_outcome(response, expected)
     assert (reload(release) is None) is (expected is OK)
+
+
+# ── Structure editor layout (per user) ────────────────────────────────────────
+
+LAYOUT_ROUTES = [
+    ("GET", "/bundle/editor_layout"),
+    ("POST", "/bundle/editor_layout"),
+    ("POST", "/bundle/editor_layout/reset"),
+]
+
+
+@pytest.mark.parametrize("method, url", LAYOUT_ROUTES)
+@pytest.mark.parametrize("role, expected", matrix(LOGGED_IN))
+def test_editor_layout(method, url, role, expected, clients):
+    body = {"panels": BundleLayoutModel.DEFAULT_LAYOUT["panels"]} if method == "POST" else None
+
+    response = clients[role].open(url, method=method, json=body)
+
+    assert_outcome(response, expected)

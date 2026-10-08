@@ -10,8 +10,10 @@ import pytest
 
 from app.core.db_class.db import (
     Bundle, BundleNode, BundleNote, BundleRelease, BundleRuleAssociation, BundleTagAssociation, BundleVote,
+    UserConfig,
 )
 from app.features.bundle import bundle_core as BundleModel
+from app.features.bundle import bundle_layout_core as BundleLayoutModel
 from tests_new.helpers.bundles import (
     add_rules, edit_bundle_form, file, folder, make_bundle, make_note, make_release, make_tag, new_bundle_form,
     rule_node, share,
@@ -602,3 +604,52 @@ def test_api_odd_share_keys_grant_nothing(key, app, users):
                                      headers={**api_headers(users.user), "X-Share-Key": key})
 
     assert response.status_code == 403
+
+
+# ── Structure editor layout ───────────────────────────────────────────────────
+
+def _panels(**changes):
+    return [dict(p, **changes.get(p["id"], {})) for p in BundleLayoutModel.DEFAULT_LAYOUT["panels"]]
+
+
+BAD_LAYOUTS = [
+    pytest.param({"panels": "explorer"}, id="panels-not-a-list"),
+    pytest.param({"panels": []}, id="no-panel"),
+    pytest.param({"panels": _panels()[:3]}, id="a-panel-missing"),
+    pytest.param({"panels": _panels() + [_panels()[0]]}, id="a-panel-twice"),
+    pytest.param({"panels": _panels() + [{"id": "evil", "x": 0, "y": 0, "w": 1, "h": 1}]}, id="unknown-panel"),
+    pytest.param({"panels": _panels(explorer={"x": 10, "w": 5})}, id="wider-than-the-grid"),
+    pytest.param({"panels": _panels(explorer={"w": 0})}, id="zero-width"),
+    pytest.param({"panels": _panels(explorer={"y": -1})}, id="negative-row"),
+    pytest.param({"panels": _panels(explorer={"h": 10**9})}, id="huge-height"),
+    pytest.param({"panels": _panels(explorer={"x": "0"})}, id="position-as-text"),
+    pytest.param({"panels": _panels(explorer={"w": True})}, id="size-as-boolean"),
+    pytest.param({"panels": _panels(explorer={"hidden": "yes"})}, id="hidden-as-text"),
+    pytest.param({"panels": _panels(**{p: {"hidden": True} for p in BundleLayoutModel.PANEL_IDS})}, id="all-hidden"),
+    pytest.param({"panels": _panels(library={"mode": "popup"})}, id="unknown-mode"),
+    pytest.param({"panels": _panels(explorer={"mode": "drawer"})}, id="drawer-not-allowed-for-this-panel"),
+    pytest.param({"panels": _panels(library={"minimized": "no"})}, id="minimized-as-text"),
+    pytest.param({"panels": _panels(library={"mode": "window", "win": [10, 10]})}, id="window-not-an-object"),
+    pytest.param({"panels": _panels(library={"mode": "window", "win": {"x": -5, "y": 0, "w": 500, "h": 400}})},
+                 id="window-off-screen"),
+    pytest.param({"panels": _panels(library={"mode": "window", "win": {"x": 0, "y": 0, "w": 10, "h": 400}})},
+                 id="window-too-small"),
+    pytest.param({"panels": _panels(library={"mode": "window", "win": {"x": 0, "y": 0, "w": 500}})},
+                 id="window-size-missing"),
+]
+
+
+@pytest.mark.parametrize("layout", BAD_LAYOUTS)
+def test_save_an_invalid_editor_layout_stores_nothing(layout, clients, users):
+    response = clients["user"].post("/bundle/editor_layout", json=layout)
+
+    assert response.status_code == 400
+    config = UserConfig.query.filter_by(user_id=users.user.id).first()
+    assert "bundle_editor_layout" not in ((config.meta or {}) if config else {})
+
+
+@pytest.mark.parametrize("body", BROKEN_BODIES)
+def test_save_editor_layout_with_a_broken_body_is_refused(body, clients):
+    response = _send(clients["user"], "POST", "/bundle/editor_layout", body)
+
+    assert response.status_code == 400

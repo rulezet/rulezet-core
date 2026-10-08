@@ -10,9 +10,10 @@ import zipfile
 from app import db
 from app.core.db_class.db import (
     Bundle, BundleFavoriteUser, BundleHistory, BundleNode, BundleNote, BundleRelease, BundleRuleAssociation,
-    BundleTagAssociation, BundleVote,
+    BundleTagAssociation, BundleVote, UserConfig,
 )
 from app.features.bundle import bundle_core as BundleModel
+from app.features.bundle import bundle_layout_core as BundleLayoutModel
 from tests_new.helpers.bundles import (
     add_rules, edit_bundle_form, file, folder, make_bundle, make_note, make_release, make_tag, new_bundle_form,
     rule_node, share,
@@ -220,6 +221,15 @@ def test_edit_bundle_changes_its_details_and_records_history(clients, users):
     assert (edited.name, edited.description) == ("New name", "New description")
     assert json.loads(edited.vulnerability_identifiers) == ["CVE-2024-1111"]
     assert count(BundleHistory, bundle_id=bundle.id, action="details") == 1
+
+
+def test_edit_bundle_comes_back_on_the_settings_tab(clients, users):
+    bundle = make_bundle(users.owner)
+
+    response = clients["owner"].post(f"/bundle/edit/{bundle.id}", data=edit_bundle_form(bundle, name="Renamed"))
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/bundle/edit/{bundle.id}?tab=settings")
 
 
 def test_edit_bundle_unticking_public_makes_it_private(clients, users):
@@ -681,3 +691,63 @@ def test_download_misp_is_a_misp_event(clients, users):
 
     assert response.status_code == 200 and response.mimetype == "application/json"
     assert bundle.name in json.dumps(json.loads(response.data))
+
+
+# ── Structure editor layout (per user) ────────────────────────────────────────
+
+def _layout(**changes):
+    """The default layout with some panels changed: {panel_id: {field: value}}."""
+    panels = [dict(p, **changes.get(p["id"], {})) for p in BundleLayoutModel.DEFAULT_LAYOUT["panels"]]
+    return {"panels": panels}
+
+
+def _stored_layout(user):
+    config = UserConfig.query.filter_by(user_id=user.id).first()
+    return (config.meta or {}).get("bundle_editor_layout") if config else None
+
+
+def test_editor_layout_is_the_default_until_saved(clients):
+    response = clients["user"].get("/bundle/editor_layout")
+
+    assert response.get_json() == BundleLayoutModel.DEFAULT_LAYOUT
+
+
+def test_save_editor_layout_stores_it_for_the_user(clients, users):
+    layout = _layout(library={"x": 0, "y": 0, "w": 12, "h": 10}, explorer={"y": 10}, overview={"hidden": False})
+
+    response = clients["user"].post("/bundle/editor_layout", json=layout)
+
+    assert response.status_code == 200
+    assert _stored_layout(users.user) == layout
+    assert clients["user"].get("/bundle/editor_layout").get_json() == layout
+
+
+def test_save_editor_layout_keeps_floating_panels(clients, users):
+    """A panel shown as a window keeps its position and size; the library can be a drawer."""
+    window = {"x": 900, "y": 120, "w": 640, "h": 600}
+    layout = _layout(preview={"mode": "window", "win": window, "minimized": True},
+                     library={"mode": "drawer", "win": {"x": 0, "y": 0, "w": 560, "h": 800}})
+
+    clients["user"].post("/bundle/editor_layout", json=layout)
+
+    stored = {p["id"]: p for p in _stored_layout(users.user)["panels"]}
+    assert (stored["preview"]["mode"], stored["preview"]["win"], stored["preview"]["minimized"]) == ("window", window, True)
+    assert stored["library"]["mode"] == "drawer"
+
+
+def test_editor_layout_belongs_to_one_user(clients, users):
+    clients["owner"].post("/bundle/editor_layout", json=_layout(preview={"hidden": True}))
+
+    response = clients["user"].get("/bundle/editor_layout")
+
+    assert response.get_json() == BundleLayoutModel.DEFAULT_LAYOUT
+    assert _stored_layout(users.user) is None
+
+
+def test_reset_editor_layout_forgets_it(clients, users):
+    clients["user"].post("/bundle/editor_layout", json=_layout(preview={"hidden": True}))
+
+    response = clients["user"].post("/bundle/editor_layout/reset")
+
+    assert response.get_json() == BundleLayoutModel.DEFAULT_LAYOUT
+    assert _stored_layout(users.user) is None
