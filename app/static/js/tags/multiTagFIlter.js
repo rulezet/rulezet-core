@@ -74,9 +74,10 @@ const MultiTagFilter = {
         const isNameSelected = (name) =>
             selectedTagNames.value.some(n => n.toLowerCase() === name.toLowerCase());
 
-        // Vue.watch(() => props.modelValue, (val) => { selectedTagNames.value = [...val]; });
+        // Follow the parent in both directions — including an emptied list
+        // (a "Reset" / "Clear all" outside this component).
         Vue.watch(() => props.modelValue, (val) => {
-            if (val && val.length > 0) selectedTagNames.value = [...val];
+            selectedTagNames.value = [...(val || [])];
         });
 
         function url(params) {
@@ -236,15 +237,15 @@ const MultiTagFilter = {
         };
     },
     template: `
-        <div class="dropdown multi-tag-filter w-100">
+        <div class="dropdown multi-tag-filter mf-dropdown w-100">
 
             <!-- Trigger pill -->
-            <div class="form-control d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle"
-                 data-bs-toggle="dropdown" data-bs-auto-close="outside" @click="ensureLoaded"
+            <div class="form-control mf-trigger d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle"
+                 data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}' @click="ensureLoaded"
                  style="cursor:pointer; min-height:48px; border-radius:12px;">
                 <i class="fa-solid fa-tags text-primary opacity-75 ms-1 me-1"></i>
                 <span v-if="selectedTagsObjects.length === 0" class="text-muted small fw-bold">[[ placeholder ]]</span>
-                <span v-for="tag in selectedTagsObjects" :key="tag.name" class="tag-split shadow-sm m-0">
+                <span v-for="tag in selectedTagsObjects.slice(0, 2)" :key="tag.name" class="tag-split shadow-sm m-0">
                     <span v-if="tag.icon" class="tag-left" v-html="mapIcon(tag.icon)"></span>
                     <span class="tag-right" :style="{ backgroundColor: tag.color || '#6c757d' }">
                         <span :style="{ color: getTextColor(tag.color || '#6c757d') }" class="me-2" style="font-size:0.75rem">
@@ -254,12 +255,12 @@ const MultiTagFilter = {
                            :style="{ color: getTextColor(tag.color || '#6c757d'), cursor: 'pointer' }"></i>
                     </span>
                 </span>
+                <span v-if="selectedTagsObjects.length > 2" class="mf-more" :title="selectedTagsObjects.slice(2).map(n => n.name).join(', ')">+[[ selectedTagsObjects.length - 2 ]]</span>
                 <i class="fa-solid fa-chevron-down ms-auto me-1 text-muted small"></i>
             </div>
 
             <!-- Dropdown panel -->
-            <div class="dropdown-menu shadow-lg border-0 w-100 p-3 mt-2"
-                 style="max-height:600px; border-radius:15px; z-index:1060; min-width:350px;">
+            <div class="dropdown-menu mf-menu shadow-lg border-0 p-3 mt-2">
 
                 <!-- Search -->
                 <div class="d-flex align-items-center mb-2">

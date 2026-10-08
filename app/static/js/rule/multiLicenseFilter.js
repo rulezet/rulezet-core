@@ -121,15 +121,15 @@ const MultiLicenseFilter = {
         };
     },
     template: `
-    <div class="dropdown multi-license-filter w-100">
-        <div class="form-control d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle" 
-             data-bs-toggle="dropdown" data-bs-auto-close="outside" 
+    <div class="dropdown multi-license-filter mf-dropdown w-100">
+        <div class="form-control mf-trigger d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle"
+             data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}'
              style="cursor: pointer; min-height: 48px; border-radius: 12px;">
             
             <i class="fa-solid fa-scale-balanced text-info opacity-75 ms-1 me-1"></i>
             <span v-if="selectedNames.length === 0" class="text-muted small fw-bold">[[ placeholder ]]</span>
 
-            <span v-for="name in selectedNames" :key="name" 
+            <span v-for="name in selectedNames.slice(0, 2)" :key="name" 
                   class="d-flex align-items-center rounded-2 shadow-sm animate__animated animate__fadeInSmall" 
                   :class="getLicenseColor(name)" style="font-size: 0.75rem; overflow: hidden;">
                 <div class="px-2 py-1 bg-black bg-opacity-10 border-end border-white border-opacity-10">
@@ -140,11 +140,11 @@ const MultiLicenseFilter = {
                     <i class="fa-solid fa-circle-xmark opacity-75 ms-1 hover-scale" @click.stop="toggleLicense(name)" style="cursor: pointer;"></i>
                 </div>
             </span>
+            <span v-if="selectedNames.length > 2" class="mf-more" :title="selectedNames.slice(2).join(', ')">+[[ selectedNames.length - 2 ]]</span>
             <i class="fa-solid fa-chevron-down ms-auto me-1 text-muted small"></i>
         </div>
 
-        <div class="dropdown-menu shadow-lg border-0 w-100 p-3 mt-2 animate__animated animate__fadeIn" 
-             style="max-height: 550px; border-radius: 15px; z-index: 1060; min-width: 350px;">
+        <div class="dropdown-menu mf-menu shadow-lg border-0 p-3 mt-2 animate__animated animate__fadeIn">
             
             <div class="d-flex align-items-center mb-3">
                 <button v-if="activePrefix && !searchCtx" @click="activePrefix = null" 

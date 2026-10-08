@@ -3259,3 +3259,50 @@ button.dr-nav__item {
     margin-left: .2rem;
     font-weight: 700;
 }
+
+/* ── Multi-select filter dropdowns (sources, tags, CVE, licenses, ATT&CK, people) ──
+   Used on every rule list. The menu has a fixed width (it used to follow the
+   trigger, which grows with each selected chip) and is positioned with
+   Popper's "fixed" strategy (data-bs-popper-config on the trigger), so a
+   parent with overflow:hidden — a panel, a card — can no longer clip it and
+   hide its scrollbar. The trigger shows two chips, then "+N". */
+.mf-trigger {
+    cursor: pointer;
+    flex-wrap: nowrap !important;
+    overflow: hidden;
+}
+/* Selected chips stay on one line: long names (source URLs…) are cut with "…" */
+.mf-trigger > span:not(.mf-more) {
+    min-width: 0;
+    max-width: 45%;
+    flex-shrink: 1;
+}
+.mf-trigger > span:not(.mf-more) > div { min-width: 0; }
+.mf-trigger > span:not(.mf-more) .fw-bold,
+.mf-trigger > span:not(.mf-more) > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.mf-more { flex-shrink: 0; }
+.mf-menu {
+    width: 380px;
+    max-width: calc(100vw - 24px);
+    max-height: min(600px, 75vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 15px;
+    z-index: 1060;
+}
+.mf-more {
+    display: inline-flex;
+    align-items: center;
+    padding: .2rem .5rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 700;
+    color: var(--text-color);
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+}

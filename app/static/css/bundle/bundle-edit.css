@@ -1,0 +1,184 @@
+/* ═══════════════════════════════════════════════════════════════════
+   bundle-edit.css — /bundle/edit/<id>: Bundle Settings and Tags tabs.
+   The Structure tab's components live in bundle-editor.css.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Tag count on the "Tags" tab */
+.be-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(13,110,253,.12);
+    color: #0d6efd;
+    font-size: .68rem;
+    font-weight: 700;
+}
+
+/* Cards use the rule detail page's section cards (.h-card, from
+   css/rule/base/detail_rule_section_card.css); their help sits behind a "?" */
+.be-help-tip {
+    display: inline-flex;
+    color: var(--subtle-text-color);
+    opacity: .6;
+    font-size: .78rem;
+    cursor: help;
+}
+.be-help-tip:hover,
+.be-help-tip:focus { opacity: 1; color: #0d6efd; outline: none; }
+
+/* ── Form bits ───────────────────────────────────────────────────── */
+.be-label {
+    display: inline-block;
+    margin-bottom: .4rem;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--subtle-text-color);
+}
+.be-help {
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+}
+.be-switch-row {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    padding: .9rem 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+}
+@media (min-width: 992px) {
+    .be-sticky { position: sticky; top: 1rem; }
+}
+
+/* ── Tags tab ────────────────────────────────────────────────────── */
+.be-selected-tags {
+    margin-bottom: 1.25rem;
+    padding: .9rem 1rem;
+    border-radius: 10px;
+    border: 1px dashed var(--border-color);
+    background: var(--light-bg-color);
+}
+.be-selected-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: .6rem;
+}
+.be-count {
+    margin-left: 4px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+.be-unsaved {
+    font-size: .75rem;
+    font-weight: 600;
+    color: #d4a700;
+}
+.be-unsaved i { font-size: .45rem; vertical-align: middle; }
+.be-link-btn {
+    border: none;
+    background: none;
+    padding: 0;
+    font-size: .78rem;
+    color: #dc3545;
+    cursor: pointer;
+}
+.be-link-btn:hover { text-decoration: underline; }
+.be-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+.be-tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 3px 4px 3px 10px;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0,0,0,.08);
+}
+.be-tag-chip--static { padding-right: 10px; }
+.be-tag-chip i { font-size: .7rem; }
+.be-tag-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0,0,0,.12);
+    color: inherit;
+    font-size: .6rem;
+    cursor: pointer;
+}
+.be-tag-chip-remove:hover { background: rgba(0,0,0,.25); }
+.be-empty-hint {
+    font-size: .82rem;
+    color: var(--subtle-text-color);
+}
+
+.be-search { position: relative; }
+.be-search > i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--subtle-text-color);
+    font-size: .8rem;
+    pointer-events: none;
+}
+.be-search .form-control { padding-left: 34px; }
+
+.be-table { --bs-table-bg: transparent; color: var(--text-color); }
+.be-table thead th {
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--subtle-text-color);
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+.be-table td { border-color: var(--border-color); }
+.be-table tbody tr { cursor: pointer; }
+.be-table tbody tr:hover td { background: rgba(13,110,253,.04); }
+.be-table tbody tr.be-row--selected td { background: rgba(13,110,253,.08); }
+.be-col-check { width: 40px; }
+.be-col-date {
+    width: 140px;
+    font-size: .78rem;
+    color: var(--subtle-text-color);
+    white-space: nowrap;
+}
+.be-desc {
+    display: inline-block;
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+    font-size: .82rem;
+    color: var(--subtle-text-color);
+}
+.be-empty-row {
+    padding: 2.5rem 1rem !important;
+    text-align: center;
+    color: var(--subtle-text-color);
+    cursor: default;
+}

@@ -77,17 +77,17 @@ export default {
 
         <!-- ── Header ── -->
         <div class="brs-header">
-            <div class="brs-header-top">
-                <div>
-                    <div class="brs-title"><i class="fas fa-database me-2"></i>Rule Library</div>
-                    <div class="brs-subtitle">
-                        <i class="fas fa-hand-pointer me-1"></i>Click to preview &amp; select ·
-                        <i class="fas fa-grip-vertical me-1"></i>Drag to a folder ·
-                        <i class="fas fa-plus me-1"></i>Add directly
-                    </div>
-                </div>
-                <div class="d-flex gap-2 align-items-center">
-                    <!-- View toggle -->
+            <div class="bse-head">
+                <div class="bse-head__accent bse-head__accent--green"></div>
+                <span class="bse-head__title"><i class="fas fa-database"></i>Rule library</span>
+                <span v-if="!loading" class="bse-pill bse-pill--blue" title="Rules matching the filters">
+                    {{ displayTotal }} rule{{ displayTotal === 1 ? '' : 's' }}
+                </span>
+                <span class="bse-head__help" tabindex="0"
+                      title="Click a rule to preview and select it · Drag it onto a folder of the explorer · + adds it to the selected folder">
+                    <i class="fas fa-circle-question"></i>
+                </span>
+                <div class="bse-head__actions">
                     <div class="brs-view-toggle">
                         <button class="brs-view-btn" :class="{ 'brs-view-btn--active': viewMode === 'card' }"
                                 @click="setView('card')" title="Card view">
@@ -103,40 +103,35 @@ export default {
 
             <!-- Toolbar row -->
             <div class="brs-toolbar">
-                <!-- Search -->
                 <div class="brs-search">
                     <i class="brs-search-icon fas fa-search"></i>
                     <input class="brs-search-input" type="text" placeholder="Search rules…"
                            v-model="search" @input="onSearchInput" />
-                    <button v-if="search" class="brs-search-clear" @click="clearSearch">
+                    <button v-if="search" class="brs-search-clear" @click="clearSearch" title="Clear search">
                         <i class="fas fa-xmark"></i>
                     </button>
                 </div>
 
-                <!-- Format -->
-                <select class="brs-select" v-model="ruleType" @change="onFilterChange">
+                <select class="brs-select" v-model="ruleType" @change="onFilterChange" aria-label="Format">
                     <option value="">All formats</option>
                     <option v-for="f in rulesFormats" :key="f.id" :value="f.name">
                         {{ f.name.toUpperCase() }}
                     </option>
                 </select>
 
-                <!-- Mine only -->
                 <button v-if="currentUserId" class="brs-btn"
                         :class="{ 'brs-btn--active': mineOnly }"
                         @click="mineOnly = !mineOnly; onFilterChange()"
                         title="Show only my rules">
-                    <i class="fas fa-user"></i>
-                    Mine only
+                    <i class="fas fa-user"></i>Mine
                 </button>
 
-                <!-- Filters toggle -->
                 <button v-if="showFilters" class="brs-btn"
                         :class="{ 'brs-btn--active': filtersOpen }"
-                        @click="filtersOpen = !filtersOpen">
-                    <i class="fas fa-sliders"></i>
+                        @click="filtersOpen = !filtersOpen"
+                        :title="filtersOpen ? 'Hide the filters' : 'More filters'">
+                    <i class="fas fa-sliders"></i>Filters
                     <span v-if="activeFilterCount > 0" class="brs-filter-badge">{{ activeFilterCount }}</span>
-                    Filters
                 </button>
 
                 <!-- Column picker (table mode only) -->
@@ -154,67 +149,98 @@ export default {
                         </label>
                     </div>
                 </div>
-
-                <span class="text-muted small ms-1" v-if="!loading">
-                    <strong>{{ displayTotal }}</strong> rule<span v-if="displayTotal !== 1">s</span>
-                </span>
             </div>
         </div>
 
-        <!-- ── Filter panel ── -->
+        <!-- ── Active filters — one compact row, always visible, so the
+             filters in use never push the rules out of sight ── -->
+        <div v-if="activeChips.length" class="brs-active-bar">
+            <div class="brs-active-chips">
+                <span v-for="c in activeChips" :key="c.key" class="brs-chip" :title="c.title">
+                    <i :class="c.icon"></i>
+                    <span class="brs-chip-text">{{ c.label }}</span>
+                    <button class="brs-chip-remove" @click="c.remove()" :title="'Remove ' + c.title">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </span>
+            </div>
+            <button class="brs-active-clear" @click="resetFilters" title="Remove every filter">
+                <i class="fas fa-rotate-left"></i>Clear
+            </button>
+        </div>
+
+        <!-- ── Filter panel — capped height, scrolls on its own ── -->
         <div v-if="showFilters && filtersOpen" class="brs-filter-panel">
             <div class="brs-fp-row">
-                <select class="brs-fp-select" v-model="searchField" @change="onFilterChange">
+                <select class="brs-fp-select" v-model="searchField" @change="onFilterChange" aria-label="Search in">
                     <option value="all">All fields</option>
                     <option value="title">Title only</option>
                     <option value="content">Content only</option>
                 </select>
-                <label class="d-flex align-items-center gap-1 small" style="cursor:pointer;">
-                    <input type="checkbox" v-model="exactMatch" @change="onFilterChange">
-                    Exact match
+                <label class="brs-fp-switch">
+                    <input type="checkbox" v-model="exactMatch" @change="onFilterChange">Exact match
                 </label>
-                <button v-if="activeFilterCount > 0" class="brs-fp-reset" @click="resetFilters">
-                    <i class="fas fa-rotate-left"></i> Reset
+                <label class="brs-fp-switch" title="Only rules linked to at least one other rule">
+                    <input type="checkbox" v-model="hasRelationsOnly" @change="onFilterChange">
+                    <i class="fa-solid fa-diagram-project"></i>Linked
+                </label>
+                <label class="brs-fp-switch" title="Only rules with at least one CVE">
+                    <input type="checkbox" v-model="hasCveOnly" @change="onFilterChange">
+                    <i class="fa-solid fa-shield-virus"></i>Has CVE
+                </label>
+                <label class="brs-fp-switch" title="Only rules mapped to at least one ATT&amp;CK technique">
+                    <input type="checkbox" v-model="hasAttackOnly" @change="onFilterChange">
+                    <i class="fa-solid fa-crosshairs"></i>Has ATT&amp;CK
+                </label>
+                <button class="brs-fp-done" @click="filtersOpen = false" title="Hide the filters">
+                    <i class="fas fa-chevron-up"></i>Hide
                 </button>
             </div>
-            <div class="brs-fp-row brs-fp-multi">
-                <div v-if="!isHidden('sources')" class="brs-fp-multi-item">
+            <div class="brs-fp-grid">
+                <div v-if="!isHidden('sources')" class="brs-fp-field">
+                    <span class="brs-fp-label"><i class="fa-solid fa-code-branch"></i>Sources</span>
                     <multi-source-filter v-model="selectedSources"
                         api-endpoint="/rule/get_rules_sources_usage"
-                        placeholder="Sources…"
+                        placeholder="Any source"
                         :filter-context="filterContext"
                         @change="onFilterChange" />
                 </div>
-                <div v-if="!isHidden('vulnerabilities')" class="brs-fp-multi-item">
-                    <multi-vulnerability-filter v-model="selectedVulns"
-                        api-endpoint="/rule/get_all_rules_vulnerabilities_usage"
-                        placeholder="CVE…"
-                        :filter-context="filterContext"
-                        @change="onFilterChange" />
-                </div>
-                <div v-if="!isHidden('licenses')" class="brs-fp-multi-item">
-                    <multi-license-filter v-model="selectedLicenses"
-                        api-endpoint="/rule/get_rules_licenses_usage"
-                        placeholder="Licenses…"
-                        :filter-context="filterContext"
-                        @change="onFilterChange" />
-                </div>
-                <div v-if="!isHidden('tags')" class="brs-fp-multi-item">
+                <div v-if="!isHidden('tags')" class="brs-fp-field">
+                    <span class="brs-fp-label"><i class="fa-solid fa-tags"></i>Tags</span>
                     <multi-tag-filter v-model="selectedTags"
                         api-endpoint="/rule/get_all_tags_usage"
-                        placeholder="Tags…"
+                        placeholder="Any tag"
                         target-type="rule"
                         :filter-context="filterContext"
                         @change="onFilterChange" />
                 </div>
-                <div v-if="!isHidden('attacks')" class="brs-fp-multi-item">
+                <div v-if="!isHidden('vulnerabilities')" class="brs-fp-field">
+                    <span class="brs-fp-label"><i class="fa-solid fa-shield-virus"></i>Vulnerabilities</span>
+                    <multi-vulnerability-filter v-model="selectedVulns"
+                        api-endpoint="/rule/get_all_rules_vulnerabilities_usage"
+                        placeholder="Any CVE"
+                        :filter-context="filterContext"
+                        @change="onFilterChange" />
+                </div>
+                <div v-if="!isHidden('attacks')" class="brs-fp-field">
+                    <span class="brs-fp-label"><i class="fa-solid fa-crosshairs"></i>ATT&amp;CK</span>
                     <multi-attack-filter v-model="selectedAttacks"
                         placeholder="T1059, Command…"
                         :filter-context="filterContext"
                         @change="onFilterChange" />
                 </div>
-                <div v-if="!isHidden('person')" class="brs-fp-multi-item">
+                <div v-if="!isHidden('licenses')" class="brs-fp-field">
+                    <span class="brs-fp-label"><i class="fa-solid fa-scale-balanced"></i>Licenses</span>
+                    <multi-license-filter v-model="selectedLicenses"
+                        api-endpoint="/rule/get_rules_licenses_usage"
+                        placeholder="Any license"
+                        :filter-context="filterContext"
+                        @change="onFilterChange" />
+                </div>
+                <div v-if="!isHidden('person')" class="brs-fp-field">
+                    <span class="brs-fp-label"><i class="fa-solid fa-user-pen"></i>People</span>
                     <multi-person-filter v-model="personFilter"
+                        :filter-context="filterContext"
                         @change="p => { personFilter = p; onFilterChange() }" />
                 </div>
             </div>
@@ -250,7 +276,7 @@ export default {
                     <div class="brs-rule-card-accent"></div>
                     <div class="brs-rule-card-body">
                         <!-- Drag handle -->
-                        <span class="brs-rule-drag-handle" title="Glisser vers un dossier">
+                        <span class="brs-rule-drag-handle" title="Drag onto a folder">
                             <i class="fas fa-grip-vertical"></i>
                         </span>
 
@@ -484,6 +510,9 @@ export default {
         const rulesFormats    = ref([])
         const filtersOpen     = ref(false)
         const mineOnly        = ref(false)
+        const hasRelationsOnly = ref(false)
+        const hasCveOnly      = ref(false)
+        const hasAttackOnly   = ref(false)
 
         // Every OTHER active filter, as a query string — passed to each
         // multi-filter component so its counts stay scoped to what's
@@ -505,6 +534,9 @@ export default {
                 const pKey = personFilter.value.mode === 'editor' ? 'editors' : 'authors'
                 p.set(pKey, personFilter.value.values.join(','))
             }
+            if (hasRelationsOnly.value)        p.set('has_relations', 'true')
+            if (hasCveOnly.value)              p.set('has_cve', 'true')
+            if (hasAttackOnly.value)           p.set('has_attack', 'true')
             if (props.pinnedIds && props.pinnedIds.length) p.set('ids', props.pinnedIds.join(','))
             return p.toString()
         })
@@ -562,6 +594,9 @@ export default {
             (exactMatch.value ? 1 : 0) +
             (searchField.value !== 'all' ? 1 : 0) +
             (mineOnly.value ? 1 : 0) +
+            (hasRelationsOnly.value ? 1 : 0) +
+            (hasCveOnly.value ? 1 : 0) +
+            (hasAttackOnly.value ? 1 : 0) +
             selectedTags.value.length +
             selectedSources.value.length +
             selectedLicenses.value.length +
@@ -569,6 +604,37 @@ export default {
             selectedAttacks.value.length +
             personFilter.value.values.length
         )
+
+        // Every active filter as a removable chip (see the "active filters"
+        // row in the template). Search text isn't one — it has its own ✕.
+        const activeChips = computed(() => {
+            const chips = []
+            const add = (key, icon, label, title, remove) =>
+                chips.push({ key, icon, label, title, remove: () => { remove(); onFilterChange() } })
+            const without = (listRef, v) => () => { listRef.value = listRef.value.filter(x => x !== v) }
+            if (ruleType.value) add('format', 'fas fa-file-code', ruleType.value.toUpperCase(), 'Format',
+                () => { ruleType.value = '' })
+            if (mineOnly.value) add('mine', 'fas fa-user', 'Mine', 'Only my rules', () => { mineOnly.value = false })
+            if (searchField.value !== 'all') add('field', 'fas fa-magnifying-glass',
+                searchField.value === 'title' ? 'Title only' : 'Content only', 'Search in', () => { searchField.value = 'all' })
+            if (exactMatch.value) add('exact', 'fas fa-equals', 'Exact match', 'Exact match', () => { exactMatch.value = false })
+            if (hasRelationsOnly.value) add('linked', 'fa-solid fa-diagram-project', 'Linked', 'Linked rules only',
+                () => { hasRelationsOnly.value = false })
+            if (hasCveOnly.value) add('has_cve', 'fa-solid fa-shield-virus', 'Has CVE', 'Has a CVE', () => { hasCveOnly.value = false })
+            if (hasAttackOnly.value) add('has_attack', 'fa-solid fa-crosshairs', 'Has ATT&CK', 'Has an ATT&CK technique',
+                () => { hasAttackOnly.value = false })
+            for (const v of selectedSources.value)  add('src:' + v, 'fa-solid fa-code-branch', v, 'Source', without(selectedSources, v))
+            for (const v of selectedTags.value)     add('tag:' + v, 'fa-solid fa-tag', v, 'Tag', without(selectedTags, v))
+            for (const v of selectedVulns.value)    add('cve:' + v, 'fa-solid fa-shield-virus', v, 'Vulnerability', without(selectedVulns, v))
+            for (const v of selectedAttacks.value)  add('att:' + v, 'fa-solid fa-crosshairs', v, 'ATT&CK', without(selectedAttacks, v))
+            for (const v of selectedLicenses.value) add('lic:' + v, 'fa-solid fa-scale-balanced', v, 'License', without(selectedLicenses, v))
+            for (const v of personFilter.value.values) {
+                const role = personFilter.value.mode === 'editor' ? 'Editor' : 'Author'
+                add('person:' + v, 'fa-solid fa-user-pen', v, role,
+                    () => { personFilter.value = { ...personFilter.value, values: personFilter.value.values.filter(x => x !== v) } })
+            }
+            return chips
+        })
 
         // ── Selection ──────────────────────────────────────────────
         const selectedIds  = reactive(new Set())
@@ -658,6 +724,9 @@ export default {
                 if (ruleType.value)                 params.set('rule_type', ruleType.value)
                 if (sortField.value)                { params.set('sort', sortField.value); params.set('dir', sortDir.value) }
                 if (mineOnly.value && props.currentUserId) params.set('user_id', props.currentUserId)
+                if (hasRelationsOnly.value)         params.set('has_relations', 'true')
+                if (hasCveOnly.value)               params.set('has_cve', 'true')
+                if (hasAttackOnly.value)            params.set('has_attack', 'true')
                 if (selectedTags.value.length)      params.set('tags', selectedTags.value.join(','))
                 if (selectedSources.value.length)   params.set('sources', selectedSources.value.join(','))
                 if (selectedLicenses.value.length)  params.set('licenses', selectedLicenses.value.join(','))
@@ -706,6 +775,9 @@ export default {
             searchField.value      = 'all'
             exactMatch.value       = false
             mineOnly.value         = false
+            hasRelationsOnly.value = false
+            hasCveOnly.value       = false
+            hasAttackOnly.value    = false
             sortField.value        = ''
             sortDir.value          = 'asc'
             selectedTags.value     = []
@@ -803,6 +875,7 @@ export default {
             items, total, totalPages, loading, viewMode, draggingId,
             page, perPage, perPageModel,
             search, searchField, exactMatch, ruleType, filtersOpen, mineOnly,
+            hasRelationsOnly, hasCveOnly, hasAttackOnly, activeChips,
             sortField, sortDir, toggleSort, sortIcon,
             allColumns, visibleCols, colPickerOpen, toggleCol,
             selectedTags, selectedSources, selectedLicenses, selectedVulns, selectedAttacks, personFilter,

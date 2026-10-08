@@ -7,7 +7,10 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard/jsdelivr_gridstack.min.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-edit.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 {% endblock %}
 
@@ -68,18 +71,27 @@
         </a>
     </div>
     {% endif %}
+    {# Each tab has its own URL: /bundle/edit/<id>?tab=structure|settings|tags
+       (a failed settings submit comes back on the settings tab) #}
+    {% set _tabs = ['structure', 'settings', 'tags'] %}
+    {% set active_tab = 'settings' if request.method == 'POST'
+                        else (request.args.get('tab') if request.args.get('tab') in _tabs else 'structure') %}
     <nav class="dr-nav" id="editTabs" role="tablist">
-        <a class="dr-nav__item active" data-bs-toggle="tab" href="#structure-pane" role="tab">
+        <a class="dr-nav__item {{ 'active' if active_tab == 'structure' }}" data-bs-toggle="tab" data-tab="structure"
+           href="?tab=structure" data-bs-target="#structure-pane" role="tab">
             <i class="fa-solid fa-sitemap"></i>
             <span>Edit Structure</span>
         </a>
-        <a class="dr-nav__item" data-bs-toggle="tab" href="#settings-pane" role="tab">
+        <a class="dr-nav__item {{ 'active' if active_tab == 'settings' }}" data-bs-toggle="tab" data-tab="settings"
+           href="?tab=settings" data-bs-target="#settings-pane" role="tab">
             <i class="fa-solid fa-cog"></i>
             <span>Bundle Settings</span>
         </a>
-        <a class="dr-nav__item" data-bs-toggle="tab" href="#tags-pane" role="tab">
+        <a class="dr-nav__item {{ 'active' if active_tab == 'tags' }}" data-bs-toggle="tab" data-tab="tags"
+           href="?tab=tags" data-bs-target="#tags-pane" role="tab">
             <i class="fa-solid fa-tags"></i>
             <span>Tags</span>
+            <span v-if="savedTagIds.length" class="be-tab-count">[[ savedTagIds.length ]]</span>
         </a>
     </nav>
 
@@ -88,225 +100,221 @@
         <!-- ══════════════════════════════════════════════
              TAB 1 — Edit Structure
              ══════════════════════════════════════════════ -->
-        <div class="tab-pane fade show active" id="structure-pane" role="tabpanel">
-            <div>
+        <div class="tab-pane fade {{ 'show active' if active_tab == 'structure' }}" id="structure-pane" role="tabpanel">
+            <bundle-structure-editor
+                ref="structureEditor"
+                layout-url="/bundle/editor_layout"
+                :focus-rule-id="focusRuleId"
+                :focus-note="focusNote"
+                :focus-path="focusPath"
+                :bundle-id="bundleId"
+                :csrf-token="csrfToken"
+                @tree-ready="onTreeReady"
+                @tree-saved="onTreeSaved">
 
-                <!-- BundleStructureEditor with BundleRuleSelector in the rule-selector slot -->
-                <bundle-structure-editor
-                    ref="structureEditor"
-                    :focus-rule-id="focusRuleId"
-                    :focus-note="focusNote"
-                    :focus-path="focusPath"
-                    :bundle-id="bundleId"
-                    :csrf-token="csrfToken"
-                    @tree-ready="onTreeReady"
-                    @tree-saved="onTreeSaved">
+                <template #rule-selector>
+                    <bundle-rule-selector
+                        fetch-url="/rule/data_table"
+                        :initial-per-page="12"
+                        :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
+                        :exclude-ids="bundleRuleIds"
+                        @add-rules="onAddRules"
+                        @preview-rule="onPreviewRule">
+                    </bundle-rule-selector>
+                </template>
 
-                    <template #rule-selector>
-                        <bundle-rule-selector
-                            fetch-url="/rule/data_table"
-                            :initial-per-page="12"
-                            :current-user-id="{{ current_user.id if current_user.is_authenticated else 'null' }}"
-                            :exclude-ids="bundleRuleIds"
-                            @add-rules="onAddRules"
-                            @preview-rule="onPreviewRule">
-                        </bundle-rule-selector>
-                    </template>
-
-                </bundle-structure-editor>
-
-            </div>
+            </bundle-structure-editor>
         </div>
 
         <!-- ══════════════════════════════════════════════
              TAB 2 — Bundle Settings
              ══════════════════════════════════════════════ -->
-        <div class="tab-pane fade" id="settings-pane" role="tabpanel">
-            <div class="card border-0 shadow-sm p-4 mb-4" style="border-radius:12px;border:1px solid var(--border-color)!important;">
-                <h5 class="fw-bold mb-4 d-flex align-items-center gap-2">
-                    <i class="fas fa-info-circle text-primary"></i>General Bundle Details
-                </h5>
-                <form method="POST" action="">
-                    {{ form.hidden_tag() }}
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-muted small text-uppercase">Bundle Name</label>
-                        {{ form.name(class="form-control form-control-lg shadow-sm", placeholder="e.g. Ransomware Detection Bundle") }}
-                        {% for e in form.name.errors %}
-                        <div class="text-danger small mt-1">{{ e }}</div>
-                        {% endfor %}
-                    </div>
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-muted small text-uppercase">Description</label>
-                        <smart-editor name="description" mode="markdown" hardened-preview :model-value="initialDescription"
-                            placeholder="Describe the purpose or content of the bundle… Markdown is supported."
-                            min-height="240px" max-height="560px"></smart-editor>
-                        <div class="form-text"><i class="fa-brands fa-markdown me-1"></i>Markdown supported — headings, lists, links, code…</div>
-                        {% for e in form.description.errors %}
-                        <div class="text-danger small mt-1">{{ e }}</div>
-                        {% endfor %}
-                    </div>
-                    <div class="mb-4">
-                        <vulnerability-input v-model="detectedVulnerabilities"
-                            target-type="bundle" :target-id="bundleId">
-                        </vulnerability-input>
-                        <input type="hidden" name="vulnerabilities" :value="JSON.stringify(detectedVulnerabilities)">
-                    </div>
-                    <div class="form-check form-switch mb-5 p-3 bg-light rounded shadow-sm border">
-                        <div class="ms-4">
-                            {{ form.public(class="form-check-input", id="publicSwitch") }}
-                            <label class="form-check-label fw-bold" for="publicSwitch">Public Access</label>
-                            <p class="text-muted small mb-0">Allow other users to view and export this bundle.</p>
+        <div class="tab-pane fade {{ 'show active' if active_tab == 'settings' }}" id="settings-pane" role="tabpanel">
+            <form method="POST" action="{{ url_for('bundle.edit', bundle_id=bundle.id, tab='settings') }}">
+                {{ form.hidden_tag() }}
+                <div class="row g-4">
+
+                    <div class="col-lg-8">
+                        <div class="h-card">
+                            <div class="h-card__header">
+                                <div class="h-card__accent"></div>
+                                <span class="h-card__title"><i class="fa-solid fa-circle-info me-1"></i>General</span>
+                                <span class="be-help-tip" tabindex="0" title="The name and description shown on the bundle page and in the bundle list"><i class="fa-solid fa-circle-question"></i></span>
+                            </div>
+                            <div class="h-card__body">
+
+                                <div class="mb-4">
+                                    <label class="be-label" for="{{ form.name.id }}">Bundle name <span class="text-danger">*</span></label>
+                                    {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""), placeholder="e.g. Ransomware Detection Bundle", maxlength=255) }}
+                                    {% for e in form.name.errors %}
+                                    <div class="invalid-feedback d-block">{{ e }}</div>
+                                    {% endfor %}
+                                </div>
+
+                                <div>
+                                    <label class="be-label">Description <span class="text-danger">*</span></label>
+                                    <smart-editor name="description" mode="markdown" hardened-preview :model-value="initialDescription"
+                                        placeholder="Describe the purpose or content of the bundle… Markdown is supported."
+                                        min-height="240px" max-height="560px"></smart-editor>
+                                    <div class="form-text"><i class="fa-brands fa-markdown me-1"></i>Markdown supported — headings, lists, links, code…</div>
+                                    {% for e in form.description.errors %}
+                                    <div class="invalid-feedback d-block">{{ e }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="h-card">
+                            <div class="h-card__header">
+                                <div class="h-card__accent h-card__accent--orange"></div>
+                                <span class="h-card__title"><i class="fa-solid fa-shield-virus me-1"></i>Vulnerabilities</span>
+                                <span class="be-help-tip" tabindex="0" title="CVEs and other vulnerability ids this bundle detects"><i class="fa-solid fa-circle-question"></i></span>
+                            </div>
+                            <div class="h-card__body">
+                                <vulnerability-input v-model="detectedVulnerabilities"
+                                    target-type="bundle" :target-id="bundleId">
+                                </vulnerability-input>
+                                <input type="hidden" name="vulnerabilities" :value="JSON.stringify(detectedVulnerabilities)">
+                            </div>
                         </div>
                     </div>
-                    <div class="text-end">
-                        <button type="submit" class="btn btn-primary px-5 fw-bold shadow">
-                            <i class="fas fa-check-circle me-2"></i>Update Bundle
-                        </button>
+
+                    <div class="col-lg-4">
+                        <div class="be-sticky">
+                            <div class="h-card">
+                                <div class="h-card__header">
+                                    <div class="h-card__accent h-card__accent--green"></div>
+                                    <span class="h-card__title"><i class="fa-solid fa-eye me-1"></i>Visibility</span>
+                                    <span class="be-help-tip" tabindex="0" title="Who can see this bundle"><i class="fa-solid fa-circle-question"></i></span>
+                                </div>
+                                <div class="h-card__body">
+                                    <div class="be-switch-row">
+                                        <div class="form-check form-switch mb-0">
+                                            {{ form.public(class="form-check-input", id="publicSwitch", role="switch") }}
+                                            <label class="form-check-label fw-semibold" for="publicSwitch">Public</label>
+                                        </div>
+                                        <p class="be-help mb-0">
+                                            Public: everyone can view and export it.<br>
+                                            Private: only you and the admins — you can still share it with a private link from the bundle page.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="h-card">
+                                <div class="h-card__body d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary fw-semibold">
+                                        <i class="fa-solid fa-check me-2"></i>Save changes
+                                    </button>
+                                    <a href="{{ url_for('bundle.detail', bundle_id=bundle.id) }}" class="btn btn-outline-secondary">
+                                        <i class="fa-solid fa-arrow-left me-2"></i>Back to the bundle
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </form>
-            </div>
+
+                </div>
+            </form>
         </div>
 
         <!-- ══════════════════════════════════════════════
-             TAB 3 — Add Tags
+             TAB 3 — Tags
              ══════════════════════════════════════════════ -->
-        <div class="tab-pane fade" id="tags-pane" role="tabpanel">
-            <div class="card border-0 shadow-sm p-4 mb-4" style="border-radius:12px;border:1px solid var(--border-color)!important;">
-
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h5 class="fw-bold mb-0 d-flex align-items-center gap-2">
-                        <i class="fas fa-tags text-primary"></i>Manage Tags
-                        <span class="badge bg-secondary ms-1" style="font-size:.55em;">[[ total_tags ]]</span>
-                    </h5>
-                    <div class="d-flex align-items-center gap-3">
-                        <button class="btn btn-primary shadow-sm fw-bold rounded-pill px-4"
-                                data-bs-toggle="modal" data-bs-target="#add_tag_modal_">
-                            <i class="fas fa-plus me-2"></i>Add New Tag
-                        </button>
-                        <tag-create-modal @tag-created="handleRefreshList" csrf="{{ csrf_token() }}">
-                        </tag-create-modal>
-                        <button class="btn btn-success shadow-sm fw-bold" @click="saveTags"
-                                :disabled="save_loading_tags">
-                            <i :class="save_loading_tags ? 'fas fa-spinner fa-spin' : 'fas fa-save'" class="me-2"></i>
-                            [[ save_loading_tags ? 'Saving…' : 'Save Tags' ]]
-                        </button>
+        <div class="tab-pane fade {{ 'show active' if active_tab == 'tags' }}" id="tags-pane" role="tabpanel">
+            <div class="h-card">
+                <div class="h-card__header">
+                    <div class="h-card__accent"></div>
+                    <span class="h-card__title"><i class="fa-solid fa-tags me-1"></i>Tags</span>
+                    <span class="be-help-tip" tabindex="0" title="Tags help others find this bundle · Pick them in the list, then save"><i class="fa-solid fa-circle-question"></i></span>
+                    <div class="d-flex flex-wrap align-items-center gap-2 ms-auto">
+                            <button class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                                    data-bs-toggle="modal" data-bs-target="#add_tag_modal_">
+                                <i class="fa-solid fa-plus me-1"></i>New tag
+                            </button>
+                            <button class="btn btn-sm btn-success rounded-pill px-3" @click="saveTags"
+                                    :disabled="save_loading_tags || !tagsDirty">
+                                <i :class="save_loading_tags ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-floppy-disk'" class="me-1"></i>
+                                [[ save_loading_tags ? 'Saving…' : 'Save tags' ]]
+                            </button>
+                        </div>
                     </div>
-                </div>
+                <div class="h-card__body">
+                    <tag-create-modal @tag-created="handleRefreshList" csrf="{{ csrf_token() }}"></tag-create-modal>
 
-                <!-- Selected tags display -->
-                <div class="mb-4" v-if="allSelectedTagsObjects.length > 0">
-                    <label class="form-label text-muted small fw-bold text-uppercase">
-                        Currently Selected Tags
-                    </label>
-                    <div class="d-flex flex-wrap gap-2 p-3 bg-light rounded-3"
-                         style="border:2px dashed #dee2e6;">
-                        <span v-for="tag in allSelectedTagsObjects.slice(0, 20)" :key="'s-' + tag.id"
-                              class="badge d-flex align-items-center px-3 py-2 shadow-sm"
-                              :style="{ backgroundColor: tag.color, color: getContrastYIQ(tag.color) }">
-                            <i :class="['fas', tag.icon || 'fa-tag', 'me-2']"></i>
-                            [[ tag.name ]]
-                            <i class="fas fa-times-circle ms-2" @click.stop="toggleSelection(tag.id)"
-                               style="cursor:pointer;opacity:.75;"></i>
-                        </span>
-                        <span v-if="allSelectedTagsObjects.length > 20" class="text-muted small fw-bold align-self-center">
-                            … and [[ allSelectedTagsObjects.length - 20 ]] more
-                        </span>
+                    <!-- Selected tags -->
+                    <div class="be-selected-tags">
+                        <div class="be-selected-head">
+                            <span class="be-label mb-0">Selected <span class="be-count">[[ selectedTags.length ]]</span></span>
+                            <span v-if="tagsDirty" class="be-unsaved"><i class="fa-solid fa-circle me-1"></i>Unsaved changes</span>
+                            <button v-if="selectedTags.length" class="be-link-btn ms-auto" @click="clearSelection">Remove all</button>
+                        </div>
+                        <div v-if="allSelectedTagsObjects.length" class="be-chip-list">
+                            <span v-for="tag in allSelectedTagsObjects" :key="'s-' + tag.id" class="be-tag-chip"
+                                  :style="{ backgroundColor: tag.color, color: getContrastYIQ(tag.color) }">
+                                <i :class="['fas', tag.icon || 'fa-tag']"></i>
+                                [[ tag.name ]]
+                                <button class="be-tag-chip-remove" @click.stop="toggleSelection(tag.id)" :title="'Remove ' + tag.name">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </span>
+                        </div>
+                        <div v-else class="be-empty-hint">No tag yet — pick some in the list below.</div>
                     </div>
-                </div>
 
-                <!-- Search -->
-                <div class="input-group mb-3">
-                    <span class="input-group-text bg-white border-end-0">
-                        <i class="fas fa-search text-muted"></i>
-                    </span>
-                    <input type="text" v-model="searchQueryTags" @input="fetchTags(1)"
-                           class="form-control border-start-0" placeholder="Search tags by name…">
-                </div>
+                    <!-- Search -->
+                    <div class="be-search mb-3">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" v-model="searchQueryTags" @input="onTagSearch"
+                               class="form-control" placeholder="Search tags by name…" aria-label="Search tags">
+                    </div>
 
-                <!-- Selected count alert -->
-                <div v-if="selectedTags.length > 0"
-                     class="alert alert-primary d-flex justify-content-between align-items-center py-2">
-                    <span><i class="fas fa-check-circle me-2"></i>
-                        <strong>[[ selectedTags.length ]]</strong> tag(s) selected</span>
-                    <button class="btn btn-sm btn-outline-primary" @click="clearSelection">Clear All</button>
-                </div>
-
-                <!-- Tags table -->
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light text-secondary">
-                            <tr>
-                                <th style="width:40px;"></th>
-                                <th>Tag</th>
-                                <th>Description</th>
-                                <th>Created At</th>
-                                <th class="text-end">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template v-if="load_tags">
-                                <tr v-for="tag in tags" :key="tag.id" @click="toggleSelection(tag)"
-                                    style="cursor:pointer;">
-                                    <td>
-                                        <input type="checkbox" class="form-check-input" :value="tag.id"
-                                               v-model="selectedTags" @click.stop="toggleSelection(tag)">
-                                    </td>
-                                    <td>
-                                        <span class="badge px-3 py-2 shadow-sm border"
-                                              :style="{ backgroundColor: tag.color, color: getContrastYIQ(tag.color) }">
-                                            <i :class="['fas', tag.icon || 'fa-tag', 'me-1']"></i>
-                                            [[ tag.name ]]
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <small class="text-muted d-inline-block text-truncate"
-                                               style="max-width:400px;" :title="tag.description">
-                                            [[ tag.description ]]
-                                        </small>
-                                    </td>
-                                    <td><small class="text-muted">[[ tag.created_at ]]</small></td>
-                                    <td class="text-end">
-                                        <span v-if="tag.is_active" class="badge rounded-pill bg-success">Active</span>
-                                        <span v-else class="badge rounded-pill bg-light text-muted">Inactive</span>
-                                    </td>
-                                </tr>
-                                <tr v-if="tags.length === 0">
-                                    <td colspan="5" class="text-center py-5 text-muted">No tags found.</td>
-                                </tr>
-                            </template>
-                            <template v-else>
+                    <!-- Available tags -->
+                    <div class="table-responsive">
+                        <table class="table be-table align-middle mb-0">
+                            <thead>
                                 <tr>
-                                    <td colspan="5" class="text-center py-5">
-                                        <i class="fas fa-spinner fa-spin fa-2x text-primary mb-2"></i>
-                                        <p class="text-muted">Loading tags…</p>
+                                    <th class="be-col-check"></th>
+                                    <th>Tag</th>
+                                    <th>Description</th>
+                                    <th class="be-col-date">Created</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template v-if="load_tags">
+                                    <tr v-for="tag in tags" :key="tag.id" @click="toggleSelection(tag)"
+                                        :class="{ 'be-row--selected': selectedTags.includes(tag.id) }">
+                                        <td class="be-col-check">
+                                            <input type="checkbox" class="form-check-input" :checked="selectedTags.includes(tag.id)"
+                                                   @click.stop="toggleSelection(tag)" :aria-label="'Select ' + tag.name">
+                                        </td>
+                                        <td>
+                                            <span class="be-tag-chip be-tag-chip--static"
+                                                  :style="{ backgroundColor: tag.color, color: getContrastYIQ(tag.color) }">
+                                                <i :class="['fas', tag.icon || 'fa-tag']"></i>[[ tag.name ]]
+                                            </span>
+                                        </td>
+                                        <td><span class="be-desc" :title="tag.description">[[ tag.description || '—' ]]</span></td>
+                                        <td class="be-col-date">[[ tag.created_at ]]</td>
+                                    </tr>
+                                    <tr v-if="tags.length === 0">
+                                        <td colspan="4" class="be-empty-row">No tags found.</td>
+                                    </tr>
+                                </template>
+                                <tr v-else>
+                                    <td colspan="4" class="be-empty-row">
+                                        <span class="spinner-border spinner-border-sm text-primary me-2"></span>Loading tags…
                                     </td>
                                 </tr>
-                            </template>
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div v-if="total_pages_tags > 1" class="d-flex justify-content-center mt-3">
+                        <pagination-component :current-page="current_page_tags" :total-pages="total_pages_tags"
+                                              @change-page="fetchTags"></pagination-component>
+                    </div>
                 </div>
-
-                <!-- Tags pagination -->
-                <nav v-if="total_pages_tags > 1" class="d-flex justify-content-center mt-3">
-                    <ul class="pagination">
-                        <li class="page-item" :class="{ disabled: current_page_tags === 1 }">
-                            <button class="page-link" @click="fetchTags(current_page_tags - 1)">
-                                <i class="fas fa-angle-left"></i>
-                            </button>
-                        </li>
-                        <li class="page-item" v-for="pg in visiblePagesTags" :key="pg"
-                            :class="{ active: pg === current_page_tags, disabled: pg === '...' }">
-                            <button class="page-link" v-if="pg !== '...'" @click="fetchTags(pg)">[[ pg ]]</button>
-                            <span class="page-link" v-else>…</span>
-                        </li>
-                        <li class="page-item" :class="{ disabled: current_page_tags === total_pages_tags }">
-                            <button class="page-link" @click="fetchTags(current_page_tags + 1)">
-                                <i class="fas fa-angle-right"></i>
-                            </button>
-                        </li>
-                    </ul>
-                </nav>
-
             </div>
         </div>
 
@@ -355,6 +363,7 @@
 <!-- UMD bundles: must run synchronously BEFORE the ES module below -->
 <script src="{{ url_for('static', filename='js/bundle/jsdelivr_sortablejs.js') }}"></script>
 <script src="{{ url_for('static', filename='js/bundle/jsdelivr_vuedraggable.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard/jsdelivr_gridstack.js') }}"></script>
 <script type="module">
 import { create_message }    from '/static/js/toaster.js'
 import BundleStructureEditor from '/static/js/bundle/BundleStructureEditor.js'
@@ -362,6 +371,7 @@ import BundleRuleSelector    from '/static/js/bundle/BundleRuleSelector.js'
 import VulnerabilityInput    from '/static/js/vulnerability/vulnerabilityInput.js'
 import TagCreateModal        from '/static/js/tags/tagCreateModal.js'
 import SmartEditor           from '/static/js/components/smart-editor.js'
+import PaginationComponent   from '/static/js/rule/paginationComponent.js'
 
 const { createApp, ref, computed, onMounted } = Vue
 const _BUNDLE_ID = {{ bundle.id | tojson }}
@@ -379,6 +389,7 @@ createApp({
         'vulnerability-input':     VulnerabilityInput,
         'tag-create-modal':        TagCreateModal,
         'smart-editor':            SmartEditor,
+        'pagination-component':    PaginationComponent,
     },
 
     setup() {
@@ -490,6 +501,17 @@ createApp({
         const sort_order           = ref('asc')
         const selectedTags         = ref([])
         const allSelectedTagsObjects = ref([])
+        const savedTagIds          = ref([])   // what the server has — for the "unsaved" marker
+        const tagsDirty = computed(() => {
+            if (selectedTags.value.length !== savedTagIds.value.length) return true
+            const saved = new Set(savedTagIds.value)
+            return selectedTags.value.some(id => !saved.has(id))
+        })
+        let tagSearchTimer = null
+        function onTagSearch() {
+            clearTimeout(tagSearchTimer)
+            tagSearchTimer = setTimeout(() => fetchTags(1), 300)
+        }
 
         async function fetchTags(page) {
             load_tags.value = false
@@ -516,6 +538,7 @@ createApp({
                 const data = await res.json()
                 if (data.success) {
                     selectedTags.value          = data.tags.map(t => t.id)
+                    savedTagIds.value           = data.tags.map(t => t.id)
                     allSelectedTagsObjects.value = data.tags
                 }
             } catch {}
@@ -553,15 +576,6 @@ createApp({
             return ((r * 299 + g * 587 + b * 114) / 1000) >= 128 ? '#000' : '#fff'
         }
 
-        const visiblePagesTags = computed(() => {
-            const pages = [], total = total_pages_tags.value, cur = current_page_tags.value
-            if (total <= 7) { for (let i = 1; i <= total; i++) pages.push(i) }
-            else if (cur <= 4) { pages.push(1, 2, 3, 4, 5, '...', total) }
-            else if (cur >= total - 3) { pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total) }
-            else { pages.push(1, '...', cur - 1, cur, cur + 1, '...', total) }
-            return pages
-        })
-
         async function saveTags() {
             if (save_loading_tags.value) return
             save_loading_tags.value = true
@@ -572,6 +586,7 @@ createApp({
                     body:    JSON.stringify({ tag_ids: selectedTags.value }),
                 })
                 const data = await res.json()
+                if (data.success) savedTagIds.value = [...selectedTags.value]
                 create_message(
                     data.success ? 'Tags saved.' : (data.message || 'Error saving tags.'),
                     data.success ? 'success-subtle' : 'danger-subtle'
@@ -595,7 +610,35 @@ createApp({
         const detectedVulnerabilities = ref([])
 
         // ── Init ───────────────────────────────────────────────────
+        // ── Tabs: each one has its URL (?tab=…) ────────────────────
+        // The server renders the right tab active; switching tabs keeps
+        // the address bar in step so a reload or a shared link lands on
+        // the same tab. An old #settings / #tags link still works.
+        function initTabUrls() {
+            const legacy = { '#structure-pane': 'structure', '#settings-pane': 'settings', '#tags-pane': 'tags',
+                             '#structure': 'structure', '#settings': 'settings', '#tags': 'tags' }[location.hash]
+            if (legacy) {
+                const link = document.querySelector(`#editTabs [data-tab="${legacy}"]`)
+                if (link) bootstrap.Tab.getOrCreateInstance(link).show()
+            }
+            document.querySelectorAll('#editTabs [data-bs-toggle="tab"]').forEach(link => {
+                link.addEventListener('shown.bs.tab', () => {
+                    const url = new URL(location.href)
+                    url.searchParams.set('tab', link.dataset.tab)
+                    url.hash = ''
+                    history.replaceState(null, '', url)
+                })
+            })
+            if (legacy) {
+                const url = new URL(location.href)
+                url.searchParams.set('tab', legacy)
+                url.hash = ''
+                history.replaceState(null, '', url)
+            }
+        }
+
         onMounted(async () => {
+            initTabUrls()
             fetchTags(1)
             initBundleTags()
         })
@@ -606,9 +649,9 @@ createApp({
             linkedRulesModalOpen, pendingAdd, cancelAddRules, confirmAddRulesWithLinked,
             tags, total_tags, total_pages_tags, current_page_tags,
             save_loading_tags, load_tags, searchQueryTags, sort_order,
-            selectedTags, allSelectedTagsObjects,
+            selectedTags, allSelectedTagsObjects, savedTagIds, tagsDirty, onTagSearch,
             fetchTags, initBundleTags, toggleSelection, clearSelection,
-            getContrastYIQ, visiblePagesTags, saveTags, handleRefreshList,
+            getContrastYIQ, saveTags, handleRefreshList,
             detectedVulnerabilities, initialDescription: _BUNDLE_DESCRIPTION,
             focusRuleId: _FOCUS_RULE_ID, focusNote: _FOCUS_NOTE, focusPath: _FOCUS_PATH,
         }

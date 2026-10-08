@@ -103,11 +103,11 @@ const MultiPersonFilter = {
     },
 
     template: `
-    <div class="dropdown multi-person-filter w-100">
+    <div class="dropdown multi-person-filter mf-dropdown w-100">
 
         <!-- ── Trigger ── -->
-        <div class="form-control d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle"
-             data-bs-toggle="dropdown" data-bs-auto-close="outside"
+        <div class="form-control mf-trigger d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle"
+             data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}'
              style="cursor:pointer;min-height:48px;border-radius:12px;">
 
             <i class="fa-solid fa-person-circle-check text-warning opacity-75 ms-1 me-1"></i>
@@ -115,7 +115,7 @@ const MultiPersonFilter = {
                 Filter by [[ mode === 'editor' ? 'editor' : 'author' ]]…
             </span>
 
-            <span v-for="name in selected" :key="name"
+            <span v-for="name in selected.slice(0, 2)" :key="name"
                   class="d-flex align-items-center rounded-2 shadow-sm bg-warning text-dark"
                   style="font-size:0.75rem;overflow:hidden;">
                 <div class="px-2 py-1 bg-black bg-opacity-10 border-end border-dark border-opacity-10">
@@ -126,12 +126,12 @@ const MultiPersonFilter = {
                     <i class="fa-solid fa-circle-xmark opacity-75 ms-1" @click.stop="toggle(name)" style="cursor:pointer;"></i>
                 </div>
             </span>
+            <span v-if="selected.length > 2" class="mf-more" :title="selected.slice(2).join(', ')">+[[ selected.length - 2 ]]</span>
             <i class="fa-solid fa-chevron-down ms-auto me-1 text-muted small"></i>
         </div>
 
         <!-- ── Dropdown panel ── -->
-        <div class="dropdown-menu shadow-lg border-0 w-100 p-3 mt-2"
-             style="max-height:520px;border-radius:15px;z-index:1060;min-width:320px;">
+        <div class="dropdown-menu mf-menu shadow-lg border-0 p-3 mt-2">
 
             <!-- Mode toggle -->
             <div class="d-flex gap-1 mb-3 p-1 rounded-3" style="background:var(--light-bg-color);">

@@ -2,9 +2,10 @@ from flask import Blueprint, abort, flash, jsonify, redirect, render_template , 
 from flask_login import current_user, login_required
 
 from app.features.bundle.bundle_form import AddNewBundleForm, EditBundleForm
-from app.core.utils.utils import as_db_id, form_to_dict, json_object, safe_referrer, internal_error
+from app.core.utils.utils import as_db_id, form_to_dict, json_object, internal_error
 from app.features.misp.bundle.misp_object import get_bundle_misp_event
 from . import bundle_core as BundleModel
+from . import bundle_layout_core as BundleLayoutModel
 from .bundle_history_core import track_bundle_change, get_bundle_history_page, get_bundle_history_entry, diff_snapshots as diff_bundle_snapshots
 from ..rule import rule_core as RuleModel
 from ..account import account_core as AccountModel
@@ -143,7 +144,7 @@ def edit(bundle_id) :
                          target_type="bundle", target_id=bundle_id, target_uuid=bundle.uuid,
                          is_public=bool(bundle.access))
             flash("Bundle modified with success!", "success")
-            return redirect(safe_referrer())
+            return redirect(url_for('bundle.edit', bundle_id=bundle_id, tab='settings'))
         else:
             form.description.data = bundle.description
             form.name.data = bundle.name 
@@ -153,6 +154,29 @@ def edit(bundle_id) :
     else:
         return render_template("access_denied.html"), 403
     
+# ── Structure editor layout (per user, like the dashboard) ─────────────────
+@bundle_blueprint.route("/editor_layout", methods=['GET'])
+@login_required
+def get_editor_layout():
+    return jsonify(BundleLayoutModel.get_layout())
+
+
+@bundle_blueprint.route("/editor_layout", methods=['POST'])
+@login_required
+def save_editor_layout():
+    data = request.get_json(silent=True)
+    ok, msg = BundleLayoutModel.save_layout(data)
+    if not ok:
+        return jsonify({'success': False, 'message': msg, 'toast_class': 'danger-subtle'}), 400
+    return jsonify({'success': True, 'message': msg})
+
+
+@bundle_blueprint.route("/editor_layout/reset", methods=['POST'])
+@login_required
+def reset_editor_layout():
+    return jsonify(BundleLayoutModel.reset_layout())
+
+
 @bundle_blueprint.route("/detail/<int:bundle_id>", methods=['GET'])
 def detail(bundle_id) :     
     """Go to detail of a bundle"""    

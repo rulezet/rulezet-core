@@ -149,15 +149,15 @@ const MultiAttackFilter = {
         };
     },
     template: `
-<div class="dropdown multi-tag-filter w-100">
+<div class="dropdown multi-tag-filter mf-dropdown w-100">
 
     <!-- ── Trigger pill ─────────────────────────────────────────────── -->
-    <div class="form-control d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle"
-         data-bs-toggle="dropdown" data-bs-auto-close="outside"
+    <div class="form-control mf-trigger d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle"
+         data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}'
          style="cursor:pointer; min-height:48px; border-radius:12px;">
         <i class="fa-solid fa-crosshairs opacity-75 ms-1 me-1" style="color:#e67e22;"></i>
         <span v-if="selectedObjects.length === 0" class="text-muted small fw-bold">[[ placeholder ]]</span>
-        <span v-for="t in selectedObjects" :key="t.id"
+        <span v-for="t in selectedObjects.slice(0, 2)" :key="t.id"
               class="badge rounded-pill d-inline-flex align-items-center gap-1"
               :style="{ background: chipBg(t.tactic_keys), color: chipColor(t.tactic_keys), border: '1px solid ' + chipColor(t.tactic_keys) + '44', fontSize: '.72rem', padding: '.22rem .55rem' }">
             <span style="font-family:monospace; font-weight:700;">[[ t.id ]]</span>
@@ -165,12 +165,12 @@ const MultiAttackFilter = {
             <span style="max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">[[ t.name ]]</span>
             <i class="fa-solid fa-circle-xmark ms-1 opacity-75" @click.stop="toggle(t.id)" style="cursor:pointer;"></i>
         </span>
+        <span v-if="selectedObjects.length > 2" class="mf-more" :title="selectedObjects.slice(2).map(n => n.id).join(', ')">+[[ selectedObjects.length - 2 ]]</span>
         <i class="fa-solid fa-chevron-down ms-auto me-1 text-muted small"></i>
     </div>
 
     <!-- ── Dropdown panel ───────────────────────────────────────────── -->
-    <div class="dropdown-menu shadow-lg border-0 w-100 p-3 mt-2"
-         style="max-height:600px; border-radius:15px; z-index:1060; min-width:380px;">
+    <div class="dropdown-menu mf-menu shadow-lg border-0 p-3 mt-2">
 
         <!-- Search -->
         <div class="d-flex align-items-center mb-2">
