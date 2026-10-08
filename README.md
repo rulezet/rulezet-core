@@ -38,8 +38,6 @@ Rulezet is available as an online service at [https://rulezet.org/](https://rule
 | Workers | Python `threading` — daemon background job queue |
 | Similarity | TF-IDF + FAISS + rapidfuzz |
 
----Here is the updated documentation in English, harmonized with your `manage.py` structure.
-
 ---
 
 ## Installation
