@@ -1353,6 +1353,7 @@
             { icon: 'fa-image',      label: 'Cover image',    value: data.cover_image_url ? 'Yes' : 'None' },
             { icon: 'fa-link',       label: 'External links', value: (data.external_links || []).length },
             { icon: 'fa-tag',        label: 'Tags',           value: (data.tags || []).length },
+            { icon: 'fa-diagram-project', label: 'Graph',     value: data.graph ? `${(data.graph.nodes || []).length} nodes` : 'None' },
         ]
         document.getElementById('prev-stats').innerHTML = stats.map(s => `
             <div class="col-6 col-md-3"><div class="rounded-3 p-2 text-center" style="background:var(--light-bg-color);border:1px solid var(--border-color);">
@@ -1415,6 +1416,10 @@
         ;(d.external_links || []).forEach(l => { if (l.url && !existingUrls.has(l.url)) newLinks.push({ url: l.url, label: l.label || '' }) })
         ;(d.attachments   || []).forEach(a => { if (a.url && !existingUrls.has(a.url)) newLinks.push({ url: a.url, label: a.name || 'Attachment' }) })
         vm.form.external_links = newLinks
+        // Pivograph map (blog exports since the graph feature)
+        if (d.graph && vm.loadGraphDoc(d.graph)) {
+            vm.form.graph_view = d.graph_view === 'simple' ? 'simple' : 'full'
+        }
 
         // ── Resolve rule/bundle UUIDs and tag names → local records ────────
         const refRules   = d.referenced_rules   || []

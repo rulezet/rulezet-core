@@ -171,6 +171,13 @@ export function useBlogGraph({ editUuid, hasGraph, postTitle, notify }) {
         reader.readAsText(file)
     }
 
+    // A Pivograph document coming from a blog JSON import ("Load from JSON").
+    function loadGraphDoc(doc) {
+        if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return false
+        setGraph(editable(doc))
+        return true
+    }
+
     function removeGraph() {
         if (!confirm('Remove the graph from this post?')) return
         graph.value = null
@@ -233,7 +240,7 @@ export function useBlogGraph({ editUuid, hasGraph, postTitle, notify }) {
     return {
         graph, graphDirty, graphStats: stats, graphLoading: loading, graphEditorOpen: editorOpen, graphEditorFrame: editorFrame,
         loadGraph: loadExisting, createBlankGraph: createBlank, startGraphFromTemplate: startFromTemplate,
-        importGraphFile: importFile, removeGraph, downloadGraph: download,
+        importGraphFile: importFile, loadGraphDoc, removeGraph, downloadGraph: download,
         openGraphEditor: openEditor, applyGraphEditor: applyEditor, closeGraphEditor: closeEditor,
         graphPayload: payloadPart, graphSaved: markSaved,
     }

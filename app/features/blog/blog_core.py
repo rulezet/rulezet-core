@@ -316,6 +316,9 @@ def export_post_json(post: BlogPost, base_url: str) -> dict:
         ],
         'referenced_rules':   rule_refs,
         'referenced_bundles': bundle_refs,
+        # Pivograph map of the post (null when none) and how readers see it
+        'graph':              post.graph,
+        'graph_view':         post.graph_view or 'full',
     }
 
 
