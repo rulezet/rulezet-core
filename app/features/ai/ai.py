@@ -855,6 +855,42 @@ def _get_ollama_loaded_models():
     return True, models
 
 
+# ─── Analysis requests (users asking for a rule / bundle analysis) ──────────
+
+@ai_blueprint.route('/admin/requests/<any(rule, bundle):target_type>/data', methods=['GET'])
+def admin_analysis_requests_data(target_type):
+    from app.features.ai import ai_request_core as AIRequest
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    status = request.args.get('status', '', type=str)
+    q = (request.args.get('q') or '').strip()[:200]
+    result, counts = AIRequest.list_requests(target_type, page, per_page, status=status, q=q)
+    return jsonify({"items": [r.to_json() for r in result.items], "total": result.total,
+                    "pages": result.pages or 1, "page": page, "counts": counts})
+
+
+@ai_blueprint.route('/admin/requests/<any(rule, bundle):target_type>/decide', methods=['POST'])
+def admin_analysis_requests_decide(target_type):
+    """{action: accept|reject, ids: [..] | all: true (+ q), model, default_public, note}"""
+    from app.features.ai import ai_request_core as AIRequest
+    data = request.get_json(silent=True) or {}
+    note = data.get('note')
+    if note is not None and not isinstance(note, str):
+        return jsonify({"message": "The note must be a text.", "toast_class": "danger"}), 400
+    ok, message, extra = AIRequest.decide(
+        target_type, data.get('action'), current_user,
+        ids=data.get('ids') if isinstance(data.get('ids'), list) else None,
+        all_pending=bool(data.get('all')), q=str(data.get('q') or '')[:200],
+        model=str(data.get('model') or '')[:200] or None,
+        default_public=bool(data.get('default_public', True)), note=note,
+    )
+    if not ok:
+        return jsonify({"message": message, "toast_class": "danger"}), 400
+    log_activity(f"ai.analysis_request_{'accept' if data.get('action') == 'accept' else 'reject'}",
+                 f"{message} ({target_type})", extra={"jobs": extra.get("jobs")}, is_public=False)
+    return jsonify({"success": True, "message": message, "toast_class": "success", **extra})
+
+
 @ai_blueprint.route('/admin/system_status', methods=['GET'])
 def system_status():
     import psutil

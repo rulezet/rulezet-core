@@ -1,0 +1,61 @@
+/*
+ * ai_requests.css — AIRequestsTable (js/ai/aiRequestsTable.js), the users'
+ * analysis requests on the Rule / Bundle Analysis admin pages. Table chrome
+ * (.dt-*) comes from components/dataTable.css.
+ */
+
+.air-chips { display: flex; gap: .4rem; flex-wrap: wrap; }
+.air-chip {
+    display: inline-flex; align-items: center; gap: .4rem;
+    border: 1px solid var(--border-color); background: var(--card-bg-color); color: var(--text-color);
+    border-radius: 99px; padding: .3rem .85rem; font-size: .8rem; font-weight: 600; cursor: pointer;
+}
+.air-chip:hover { border-color: #0d6efd; color: #0d6efd; }
+.air-chip.is-active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.air-chip-count {
+    font-size: .7rem; border-radius: 99px; padding: 0 .45rem;
+    background: var(--light-bg-color); color: var(--subtle-text-color);
+}
+.air-chip.is-active .air-chip-count { background: rgba(255, 255, 255, .25); color: #fff; }
+
+.air-row--pending td:first-child { border-left: 3px solid #fd7e14; }
+.air-target { min-width: 220px; max-width: 360px; }
+.air-target-link { font-weight: 700; color: var(--text-color); text-decoration: none; word-break: break-word; }
+.air-target-link:hover { color: #0d6efd; text-decoration: underline; }
+.air-format {
+    margin-left: .4rem; font-size: .64rem; font-weight: 700; text-transform: uppercase;
+    padding: .1rem .45rem; border-radius: 99px; background: #212529; color: #fff;
+}
+.air-script {
+    display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap;
+    font-size: .74rem; font-weight: 600; padding: .18rem .6rem; border-radius: 99px;
+    background: rgba(13, 110, 253, .1); color: #0d6efd;
+}
+.air-message {
+    max-width: 280px; font-size: .8rem; color: var(--subtle-text-color);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.air-status {
+    font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: .2rem .6rem; border-radius: 99px; border: 1px solid transparent; white-space: nowrap;
+}
+.air-status--pending  { color: #fd7e14; background: rgba(253, 126, 20, .12); border-color: rgba(253, 126, 20, .3); }
+.air-status--accepted { color: #198754; background: rgba(25, 135, 84, .12);  border-color: rgba(25, 135, 84, .3); }
+.air-status--rejected { color: #dc3545; background: rgba(220, 53, 69, .12);  border-color: rgba(220, 53, 69, .3); }
+.air-decided {
+    font-size: .7rem; color: var(--subtle-text-color); margin-top: .15rem;
+    max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.air-btn-accept:hover { background: rgba(25, 135, 84, .12) !important; color: #198754 !important; }
+.air-bulk-accept { color: #198754; border-color: rgba(25, 135, 84, .4); }
+.air-bulk-accept:hover { background: rgba(25, 135, 84, .12); }
+
+.air-dialog-backdrop {
+    position: fixed; inset: 0; z-index: 1060; background: rgba(0, 0, 0, .45);
+    display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.air-dialog {
+    width: 100%; max-width: 520px; background: var(--card-bg-color); color: var(--text-color);
+    border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
+    padding: 1.5rem;
+}

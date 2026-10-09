@@ -4946,6 +4946,63 @@ class AIExecutionLog(db.Model):
         }
 
 
+class AIAnalysisRequest(db.Model):
+    """A user's request for an AI analysis of a rule or a bundle, made from
+    its AI Analysis section by someone who can't launch one (not an admin /
+    AI Operator for a rule, not an admin / AI Manager for a bundle). AI
+    managers review them on the Rule / Bundle Analysis admin pages — an
+    accepted request queues the analysis job (see ai_request_core)."""
+    __tablename__ = 'ai_analysis_request'
+
+    id            = db.Column(db.Integer, primary_key=True)
+    uuid          = db.Column(db.String(36), unique=True, nullable=False, index=True,
+                              default=lambda: str(_uuid_mod.uuid4()))
+    target_type   = db.Column(db.String(10), nullable=False, index=True)     # rule | bundle
+    rule_id       = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=True, index=True)
+    bundle_id     = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='CASCADE'), nullable=True, index=True)
+    script        = db.Column(db.String(20), nullable=False, default='standard')  # standard | deep (rule), full (bundle)
+    message       = db.Column(db.Text, nullable=True)
+    user_id       = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    status        = db.Column(db.String(16), nullable=False, default='pending', index=True)  # pending | accepted | rejected
+    created_at    = db.Column(db.DateTime, nullable=False, index=True,
+                              default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    decided_by_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    decided_at    = db.Column(db.DateTime, nullable=True)
+    decision_note = db.Column(db.Text, nullable=True)
+    job_uuid      = db.Column(db.String(36), nullable=True)
+
+    user       = db.relationship('User', foreign_keys=[user_id])
+    decided_by = db.relationship('User', foreign_keys=[decided_by_id])
+    rule       = db.relationship('Rule', foreign_keys=[rule_id])
+    bundle     = db.relationship('Bundle', foreign_keys=[bundle_id])
+
+    def to_json(self):
+        name = lambda u: (f"{u.first_name} {u.last_name}".strip() or u.email) if u else None
+        target = self.rule if self.target_type == 'rule' else self.bundle
+        return {
+            'id': self.id,
+            'uuid': self.uuid,
+            'target_type': self.target_type,
+            'target_id': self.rule_id if self.target_type == 'rule' else self.bundle_id,
+            'target_title': (target.title if self.target_type == 'rule' else target.name) if target else None,
+            'target_format': target.format if self.target_type == 'rule' and target else None,
+            'target_url': (f"/rule/detail_rule/{self.rule_id}/ai_analysis" if self.target_type == 'rule'
+                           else f"/bundle/detail/{self.bundle_id}#ai"),
+            'script': self.script,
+            'message': self.message,
+            'user_id': self.user_id,
+            'user_name': name(self.user),
+            'user_avatar': self.user.get_avatar_url() if self.user else None,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'decided_by_id': self.decided_by_id,
+            'decided_by_name': name(self.decided_by),
+            'decided_at': self.decided_at.isoformat() if self.decided_at else None,
+            'decision_note': self.decision_note,
+            'job_uuid': self.job_uuid,
+        }
+
+
 class AIGeneration(db.Model):
     """Display history for agents whose output is meant to be browsed/
     regenerated/compared per rule (rule analysis reports now, generator/

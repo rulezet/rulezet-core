@@ -72,6 +72,9 @@ _TYPE_ICON = {
     'workflow_run_finished':    'fa-solid fa-code-branch',
     'workflow_run_failed':      'fa-solid fa-circle-xmark',
     'alert_match':              'fa-solid fa-bell',
+    'ai_analysis_requested':    'fa-solid fa-robot',
+    'ai_analysis_accepted':     'fa-solid fa-wand-magic-sparkles',
+    'ai_analysis_rejected':     'fa-solid fa-circle-xmark',
 }
 
 

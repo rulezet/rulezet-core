@@ -1,0 +1,36 @@
+/*
+ * ai-analysis-request.css — AIAnalysisRequest (js/components/ai-analysis-request.js),
+ * the "Request an analysis" box of a rule / bundle AI Analysis section.
+ */
+
+.aiq { margin-top: 1rem; text-align: left; display: flex; flex-direction: column; gap: .75rem; }
+.aiq-pending {
+    display: flex; gap: .6rem; align-items: flex-start;
+    font-size: .82rem; padding: .6rem .85rem; border-radius: 10px;
+    background: rgba(253, 126, 20, .08); border: 1px solid rgba(253, 126, 20, .3); color: var(--text-color);
+}
+.aiq-pending > i { color: #fd7e14; margin-top: .2rem; }
+.aiq-cta {
+    display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap;
+    font-size: .85rem; padding: .7rem .9rem; border-radius: 10px;
+    background: rgba(13, 110, 253, .05); border: 1px solid rgba(13, 110, 253, .25); color: var(--text-color);
+}
+.aiq-cta > span i { color: #0d6efd; }
+.aiq-form {
+    padding: .9rem 1rem; border-radius: 12px;
+    background: var(--light-bg-color); border: 1px solid var(--border-color);
+}
+.aiq-form-title { font-weight: 700; font-size: .88rem; margin-bottom: .6rem; }
+.aiq-scripts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .5rem; margin-bottom: .6rem; }
+.aiq-script {
+    display: flex; gap: .55rem; align-items: flex-start; cursor: pointer;
+    padding: .6rem .7rem; border-radius: 10px; border: 1px solid var(--border-color); background: var(--card-bg-color);
+}
+.aiq-script.is-active { border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13, 110, 253, .15); }
+.aiq-script-icon {
+    width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(13, 110, 253, .1); color: #0d6efd; font-size: .8rem;
+}
+.aiq-script-title { display: block; font-weight: 700; font-size: .82rem; }
+.aiq-script-desc { display: block; font-size: .74rem; color: var(--subtle-text-color); }

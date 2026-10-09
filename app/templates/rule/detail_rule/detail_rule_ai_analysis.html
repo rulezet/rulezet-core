@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-analysis-request.css') }}">
 <style>
 [v-cloak] { display: none; }
 .ai-summary-content { font-size: .92rem; line-height: 1.7; }
@@ -314,6 +315,9 @@
                 <i class="fa-solid fa-magnifying-glass-chart mb-2" style="font-size:2rem;color:#0d6efd;"></i>
                 {% endif %}
                 <p class="mb-0 fst-italic" style="color: var(--subtle-text-color);">"I haven't had a chance to look at this one yet."</p>
+                <!-- Can't launch it? Ask the AI managers (log in first when anonymous) -->
+                <ai-analysis-request :endpoint="'/rule/detail_rule/' + rule_id + '/ai_analysis/request'"
+                    :csrf-token="csrf_token" :scripts="SCRIPTS" noun="rule"></ai-analysis-request>
             </div>
         </template>
 
@@ -348,6 +352,7 @@
 <script type="module">
     const { createApp, ref, onMounted } = Vue;
     import { create_message } from '/static/js/toaster.js';
+    import AIAnalysisRequest from '/static/js/components/ai-analysis-request.js';
 
     const CAN_GENERATE = {{ (current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.use'))) | tojson }};
 
@@ -383,6 +388,7 @@
 
     createApp({
         delimiters: ['[[', ']]'],
+        components: { 'ai-analysis-request': AIAnalysisRequest },
         setup() {
             const loading      = ref(true);
             const history      = ref([]);
@@ -519,7 +525,7 @@
             });
 
             return {
-                RULE_TITLE_SHORT, loading, history, latest, regenerating, copied,
+                RULE_TITLE_SHORT, rule_id, csrf_token, loading, history, latest, regenerating, copied,
                 featureEnabled, models, selectedModel, defaultPublic,
                 SCRIPTS, selectedScript, scriptLabel,
                 renderMarkdown, regenerate, toggleVisibility, deleteAnalysis,

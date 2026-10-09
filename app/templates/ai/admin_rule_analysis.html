@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/table/data-table.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ai/ai_requests.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
@@ -45,6 +46,24 @@
   <agent-config-card agent-key="rule_analysis" :csrf-token="csrfToken" @notify="onNotify"></agent-config-card>
 
   <system-status-card compact :csrf-token="csrfToken" :poll-ms="6000"></system-status-card>
+
+  <!-- Users' requests for an analysis (from a rule's AI Analysis section) -->
+  <div id="requests" class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <div style="width:3px;height:14px;background:#fd7e14;border-radius:2px;flex-shrink:0;"></div>
+        <span class="fw-bold" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--subtle-text-color);">
+          <i class="fa-solid fa-inbox me-1"></i>Analysis requests
+        </span>
+        <small style="color:var(--subtle-text-color);font-size:.78rem;">
+          — users who can't run an analysis ask for one from the rule's AI Analysis section. Accept to queue it
+          (selected requests or all of them at once), reject to decline; the requesters are notified.
+        </small>
+      </div>
+      <ai-requests-table target-type="rule" :csrf-token="csrfToken"></ai-requests-table>
+    </div>
+  </div>
+
 
   <!-- Trigger card -->
   <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -193,6 +212,7 @@
 
 <script type="module">
 import { create_message }  from '/static/js/toaster.js'
+import AIRequestsTable from '/static/js/ai/aiRequestsTable.js'
 import UserChip             from '/static/js/components/UserChip.js'
 import DataTable             from '/static/js/components/table/data-table.js'
 import AnsiTerminal          from '/static/js/components/ansi-terminal.js'
@@ -211,7 +231,7 @@ function csrf() {
 createApp({
     delimiters: ['[[', ']]'],
     components: {
-        'user-chip': UserChip, 'data-table': DataTable, 'ansi-terminal': AnsiTerminal,
+        'ai-requests-table': AIRequestsTable, 'user-chip': UserChip, 'data-table': DataTable, 'ansi-terminal': AnsiTerminal,
         'agent-config-card': AgentConfigCard, 'system-status-card': SystemStatusCard, 'rule-list': RuleList,
         'tags-displays-list': TagsDisplaysList, 'vulnerability-displays-list': VulnerabilityDisplaysList,
     },

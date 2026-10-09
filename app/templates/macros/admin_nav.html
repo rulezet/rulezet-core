@@ -55,6 +55,9 @@
        class="dr-nav__item {% if active == 'ai' %}active{% endif %}">
         <i class="fa-solid fa-robot"></i>
         <span>AI</span>
+        {% if ai_pending_requests() %}
+        <span class="dr-nav__badge" title="AI analysis requests waiting">{{ ai_pending_requests() }}</span>
+        {% endif %}
     </a>
 
     <a href="/admin/roles/list"

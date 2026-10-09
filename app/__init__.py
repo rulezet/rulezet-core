@@ -287,6 +287,29 @@ def create_app(start_worker=True):
 
     app.jinja_env.globals['admin_jobs_running_count'] = admin_jobs_running_count
 
+    def ai_pending_requests(target_type=None):
+        """Pending AI analysis requests (users asking for a rule / bundle
+        analysis) — the badges of the AI menus, for admins and AI managers
+        only. `target_type` 'rule' / 'bundle', or None for both. Counted
+        once per request."""
+        from flask import g
+        from flask_login import current_user as _cu
+        if not (_cu.is_authenticated and (_cu.is_admin() or _cu.has_permission('ai.manage'))):
+            return 0
+        if not hasattr(g, '_ai_pending_requests'):
+            try:
+                from app.core.db_class.db import AIAnalysisRequest
+                rows = (db.session.query(AIAnalysisRequest.target_type, db.func.count(AIAnalysisRequest.id))
+                        .filter(AIAnalysisRequest.status == 'pending')
+                        .group_by(AIAnalysisRequest.target_type).all())
+                g._ai_pending_requests = dict(rows)
+            except Exception:
+                g._ai_pending_requests = {}
+        counts = g._ai_pending_requests
+        return counts.get(target_type, 0) if target_type else sum(counts.values())
+
+    app.jinja_env.globals['ai_pending_requests'] = ai_pending_requests
+
     def pending_update_info():
         """Admin-only: {version, url} of a newer GitHub release than this
         instance's local `version` file, or None — used by base.html to show

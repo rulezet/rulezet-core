@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-notes.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-ai-analysis.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-analysis-request.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
@@ -866,6 +867,7 @@
     import BundleNotesPanel from '/static/js/bundle/BundleNotesPanel.js';
     import BundleAIAnalysisPanel from '/static/js/bundle/BundleAIAnalysisPanel.js';
     const CAN_MANAGE_AI = {{ (current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.manage'))) | tojson }};
+    const IS_AUTHENTICATED = {{ current_user.is_authenticated | tojson }};
     import { flattenFiles, isRuleNode, docIcon, extOf, RULE_ICON, downloadFromUrl, downloadText, renderSafeMarkdown } from '/static/js/bundle/bundleFileTypes.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
     import { initBundleGraph } from '/static/js/bundle/bundleMispGraph.js';
@@ -1833,10 +1835,11 @@
                 nextTick(() => document.querySelector('.bd-zone')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
             }
             const healthSummary = ref(null);
-            // AI Analysis tab: AI managers always see it (to launch one);
-            // everyone else only once a public report exists.
+            // AI Analysis tab: AI managers always see it (to launch one),
+            // logged-in users too (to request one); anonymous visitors only
+            // once a public report exists.
             const aiSummary = ref(null);
-            const showAiTab = computed(() => CAN_MANAGE_AI || !!(aiSummary.value && aiSummary.value.count));
+            const showAiTab = computed(() => CAN_MANAGE_AI || IS_AUTHENTICATED || !!(aiSummary.value && aiSummary.value.count));
             fetch(`/bundle/${bundle_id}/ai_analysis/list`).then(r => r.ok ? r.json() : null)
                 .then(d => { if (d) aiSummary.value = { count: (d.items || []).length, latest: (d.items || [])[0] || null }; })
                 .catch(() => {});

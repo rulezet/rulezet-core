@@ -16,6 +16,11 @@ import { create_message } from '/static/js/toaster.js'
 import { renderSafeMarkdown } from '/static/js/bundle/bundleFileTypes.js'
 import { MASCOT_ENABLED } from '/static/js/components/mascot.js'
 import AIThinkingSteps from '/static/js/components/ai-thinking-steps.js'
+import AIAnalysisRequest from '/static/js/components/ai-analysis-request.js'
+
+// What a visitor who can't launch a review may request (one type for bundles)
+const REQUEST_SCRIPTS = [{ key: 'full', label: 'Full bundle review', icon: 'fa-layer-group',
+    desc: 'Purpose, structure, coverage and blind spots, operational readiness, deployment guidance and a verdict.' }]
 
 const { ref, computed, watch, onUnmounted } = Vue
 
@@ -50,7 +55,7 @@ function splitSections(md) {
 
 export default {
     name: 'BundleAIAnalysisPanel',
-    components: { 'ai-thinking-steps': AIThinkingSteps },
+    components: { 'ai-thinking-steps': AIThinkingSteps, 'ai-analysis-request': AIAnalysisRequest },
     props: {
         bundleId:  { type: [Number, String], required: true },
         csrfToken: { type: String, default: '' },
@@ -232,7 +237,7 @@ export default {
         const wordCount = (md) => String(md || '').split(/\s+/).filter(Boolean).length
 
         return {
-            mascot, RULEZY, loaded, loading, history, selected, latest, sections, rendering, copied,
+            mascot, RULEZY, REQUEST_SCRIPTS, loaded, loading, history, selected, latest, sections, rendering, copied,
             featureEnabled, models, selectedModel, makePublic, launching, launch,
             job, running, steps, verdictMeta, scrollTo, copyReport, downloadUrl,
             toggleVisibility, remove, fmtDate, wordCount,
@@ -291,6 +296,8 @@ export default {
             </div>
             <i v-else class="fa-solid fa-robot mb-2" style="font-size:2rem;color:#0d6efd;"></i>
             <p class="mb-0 fst-italic">"No review of this bundle yet."</p>
+            <ai-analysis-request v-if="!canManage" :endpoint="'/bundle/' + bundleId + '/ai_analysis/request'"
+                :csrf-token="csrfToken" :scripts="REQUEST_SCRIPTS" noun="bundle"></ai-analysis-request>
         </div>
 
         <!-- ── Report ── -->

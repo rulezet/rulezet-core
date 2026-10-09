@@ -1241,6 +1241,42 @@ def detail_rule_ai_analysis_list(rule_id):
     return jsonify({'items': out})
 
 
+@rule_blueprint.route("/detail_rule/<int:rule_id>/ai_analysis/request", methods=['GET', 'POST'])
+def detail_rule_ai_analysis_request(rule_id):
+    """GET: can the viewer launch / request an analysis, and the requests
+    already waiting. POST {script, message}: ask the AI managers for an
+    analysis (logged-in users who can't launch one themselves)."""
+    from app.features.ai import ai_request_core as AIRequest
+    rule = RuleModel.get_rule(rule_id)
+    if not rule or rule.is_deleted:
+        return jsonify({"message": "Rule not found."}), 404
+    can_launch = AIRequest.can_launch(current_user, 'rule')
+    if request.method == 'GET':
+        uid = current_user.id if current_user.is_authenticated else None
+        return jsonify({
+            "can_launch": can_launch,
+            "can_request": current_user.is_authenticated and not can_launch,
+            "pending": [{"script": r.script, "created_at": r.created_at.isoformat(), "mine": r.user_id == uid,
+                         "user_name": r.to_json()["user_name"]} for r in AIRequest.pending_for('rule', rule.id)],
+        })
+    if not current_user.is_authenticated:
+        return jsonify({"message": "Log in to request an analysis."}), 401
+    if can_launch:
+        return jsonify({"message": "You can launch the analysis yourself."}), 400
+    data = json_object()
+    ok, result, created = AIRequest.create_request('rule', rule.id, current_user,
+                                                   script=data.get('script'), message=data.get('message'))
+    if not ok:
+        return jsonify({"message": result, "toast_class": "danger"}), 400
+    if created:
+        log_activity("rule.ai_analysis_request", f"Requested an AI analysis ({result.script}) of rule '{rule.title}'",
+                     target_type="rule", target_id=rule.id, target_uuid=rule.uuid, is_public=False)
+    return jsonify({"success": True, "created": created, "request": result.to_json(),
+                    "message": "Request sent — the AI managers have been notified." if created
+                               else "This analysis was already requested — it is waiting for an AI manager.",
+                    "toast_class": "success"}), 201 if created else 200
+
+
 @rule_blueprint.route("/ai_analysis/models", methods=['GET'])
 @login_required
 def ai_analysis_models():

@@ -2593,6 +2593,42 @@ def bundle_ai_analysis_list(bundle_id):
     return jsonify({"items": [_analysis_json(g) for g in items], "can_manage": _is_ai_manager()})
 
 
+@bundle_blueprint.route("/<int:bundle_id>/ai_analysis/request", methods=['GET', 'POST'])
+def bundle_ai_analysis_request(bundle_id):
+    """GET: can the viewer launch / request a review, and the requests
+    already waiting. POST {message}: ask the AI managers for a review
+    (logged-in users who can't launch one themselves)."""
+    from app.features.ai import ai_request_core as AIRequest
+    bundle, err = _viewable_bundle_or_error(bundle_id)
+    if err:
+        return err
+    can_launch = AIRequest.can_launch(current_user, 'bundle')
+    if request.method == 'GET':
+        uid = current_user.id if current_user.is_authenticated else None
+        return jsonify({
+            "can_launch": can_launch,
+            "can_request": current_user.is_authenticated and not can_launch,
+            "pending": [{"script": r.script, "created_at": r.created_at.isoformat(), "mine": r.user_id == uid,
+                         "user_name": r.to_json()["user_name"]} for r in AIRequest.pending_for('bundle', bundle.id)],
+        })
+    if not current_user.is_authenticated:
+        return jsonify({"message": "Log in to request an analysis."}), 401
+    if can_launch:
+        return jsonify({"message": "You can launch the analysis yourself."}), 400
+    data = request.get_json(silent=True) or {}
+    ok, result, created = AIRequest.create_request('bundle', bundle.id, current_user,
+                                                   script='full', message=data.get('message'))
+    if not ok:
+        return jsonify({"message": result, "toast_class": "danger"}), 400
+    if created:
+        log_activity('bundle.ai_analysis_request', f"Requested an AI review of bundle '{bundle.name}'",
+                     target_type='bundle', target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
+    return jsonify({"success": True, "created": created, "request": result.to_json(),
+                    "message": "Request sent — the AI managers have been notified." if created
+                               else "A review was already requested — it is waiting for an AI manager.",
+                    "toast_class": "success"}), 201 if created else 200
+
+
 @bundle_blueprint.route("/ai_analysis/models", methods=['GET'])
 @login_required
 def bundle_ai_analysis_models():
