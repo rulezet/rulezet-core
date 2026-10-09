@@ -43,6 +43,7 @@ const STAGE_META = {
     reading:    { icon: 'fa-magnifying-glass',    tone: 'blue',   image: RULEZY + 'db.png' },
     thinking:   { icon: 'fa-brain',               tone: 'purple', image: RULEZY + 'reflexion.png' },
     writing:    { icon: 'fa-pen-fancy',           tone: 'blue' },
+    retry:      { icon: 'fa-rotate-right',        tone: 'blue' },
     validating: { icon: 'fa-check-double',        tone: 'blue',   image: RULEZY + 'rule-fixer.png' },
     searching:  { icon: 'fa-database',            tone: 'blue',   image: RULEZY + 'lookup.png' },
     done:       { icon: 'fa-circle-check',        tone: 'green',  image: RULEZY + 'armcross.png' },

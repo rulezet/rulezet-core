@@ -363,6 +363,20 @@ def missing_sdk(kind):
     return None
 
 
+def stream_section(client, messages, progress=None, **kw):
+    """client.chat_stream() for one section of a long report, retried once
+    when the model answers nothing — a one-off blank must not throw away the
+    sections already written. `progress(stage, text)` hears about the retry."""
+    try:
+        return client.chat_stream(messages, **kw)
+    except AgentInvalidResponse as e:
+        if not str(e).startswith('Empty response'):
+            raise
+        if progress:
+            progress('retry', f'{e} Retrying this section once…')
+        return client.chat_stream(messages, **kw)
+
+
 def make_client(provider, model='', timeout=120, num_ctx=8192, num_predict=2048, temperature=0.3):
     """The client for one provider — all expose the same chat() /
     chat_stream() / list_models() surface, so agents never care which
@@ -641,6 +655,9 @@ class OllamaClient:
                 "messages": messages,
                 "stream": True,
                 "keep_alive": self.keep_alive,
+                # Same as chat(): without it a reasoning model (qwen3…) can spend
+                # the whole num_predict in thinking and stream an empty answer.
+                "think": False,
                 "options": {
                     "num_ctx": self.num_ctx,
                     "num_predict": num_predict or self.num_predict,
@@ -651,10 +668,19 @@ class OllamaClient:
                 payload["format"] = json_schema if json_schema is not None else "json"
             idle = idle_timeout or self.timeout
             parts = []
+            thinking_chars = 0
+            done = {}
             last_check = time.monotonic()
             try:
-                with http_requests.post(f"{self.base_url}/api/chat", json=payload,
-                                        timeout=(10, idle), stream=True) as resp:
+                resp = http_requests.post(f"{self.base_url}/api/chat", json=payload,
+                                          timeout=(10, idle), stream=True)
+                if resp.status_code == 400 and 'think' in resp.text.lower():
+                    # Older Ollama builds reject the "think" field outright.
+                    resp.close()
+                    payload.pop("think")
+                    resp = http_requests.post(f"{self.base_url}/api/chat", json=payload,
+                                              timeout=(10, idle), stream=True)
+                with resp:
                     resp.raise_for_status()
                     for line in resp.iter_lines():
                         if not line:
@@ -662,8 +688,11 @@ class OllamaClient:
                         chunk = _json.loads(line)
                         if chunk.get('error'):
                             raise AgentInvalidResponse(f"Ollama error: {chunk['error']}")
-                        parts.append((chunk.get('message') or {}).get('content', ''))
+                        message = chunk.get('message') or {}
+                        parts.append(message.get('content') or '')
+                        thinking_chars += len(message.get('thinking') or '')
                         if chunk.get('done'):
+                            done = chunk
                             break
                         if should_stop and time.monotonic() - last_check > 5:
                             last_check = time.monotonic()
@@ -677,7 +706,29 @@ class OllamaClient:
                 )
             raw = ''.join(parts)
             if not raw.strip():
-                raise AgentInvalidResponse("Empty response from model.")
+                reason = done.get('done_reason') or ('none, the stream ended early' if not done else 'unknown')
+                prompt_tokens = done.get('prompt_eval_count')
+                limit = num_predict or self.num_predict
+                details = [f"stop reason: {reason}"]
+                if prompt_tokens:
+                    details.append(f"prompt {prompt_tokens} tokens / context {self.num_ctx}")
+                if done.get('eval_count') is not None:
+                    details.append(f"{done['eval_count']} tokens generated / limit {limit}")
+                if thinking_chars:
+                    details.append(f"{thinking_chars} chars of thinking, no answer")
+                if thinking_chars or reason == 'length':
+                    hint = (" — the model spent its whole output limit before answering"
+                            + (" (thinking)" if thinking_chars else "")
+                            + "; raise num_predict in this agent's config or use a non-thinking model")
+                elif prompt_tokens and prompt_tokens >= self.num_ctx * 0.95:
+                    hint = (" — the prompt filled the context window, so the model had no room left;"
+                            " raise num_ctx in this agent's config")
+                elif not done:
+                    hint = " — Ollama closed the stream without finishing (crash, restart or out of memory?)"
+                else:
+                    hint = " — the model chose to stop at once; usually a one-off, retrying may work"
+                raise AgentInvalidResponse(
+                    f"Empty response from model {self.model} ({', '.join(details)}){hint}.")
             return raw
 
         return _call_with_governor(_do_call, acquire_timeout)

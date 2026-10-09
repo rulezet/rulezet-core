@@ -35,6 +35,7 @@ from app.features.ai.ai_core import (
     AgentResult,
     AIAgent,
     UNTRUSTED_DATA_PREAMBLE,
+    stream_section,
     strip_control_chars,
 )
 
@@ -243,10 +244,10 @@ class RuleDeepAnalysisAgent(AIAgent):
                 raise AgentInvalidResponse("Cancelled.")
             label = f"{title} — {sub}" if sub else title
             progress('writing', f'Writing “{label}” ({i}/{len(plan)})…')
-            text = client.chat_stream(
-                prefix + [{"role": "user", "content": _digest(written) + request}],
+            text = stream_section(
+                client, prefix + [{"role": "user", "content": _digest(written) + request}],
                 json_schema=False, acquire_timeout=acquire_timeout,
-                num_predict=per_section_tokens, should_stop=should_stop,
+                num_predict=per_section_tokens, should_stop=should_stop, progress=progress,
             )
             text = _clean_section(text, title)
             if len(text) > MAX_SECTION_CHARS:

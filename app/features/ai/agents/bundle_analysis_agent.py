@@ -26,6 +26,7 @@ from app.features.ai.ai_core import (
     AgentResult,
     AIAgent,
     UNTRUSTED_DATA_PREAMBLE,
+    stream_section,
     strip_control_chars,
 )
 
@@ -142,8 +143,9 @@ class BundleAnalysisAgent(AIAgent):
             progress('writing', f'Writing “{title}” ({i}/{len(SECTIONS)})…')
             messages.append({"role": "user", "content": (
                 f"Section: {title}\n{brief}\nAim for about {words} words. Section body only.")})
-            text = client.chat_stream(messages, json_schema=False, acquire_timeout=acquire_timeout,
-                                      num_predict=per_section_tokens, should_stop=should_stop)
+            text = stream_section(client, messages, json_schema=False, acquire_timeout=acquire_timeout,
+                                     num_predict=per_section_tokens, should_stop=should_stop,
+                                     progress=progress)
             text = _clean_section(text, title)
             if len(text) > MAX_SECTION_CHARS:
                 raise AgentInvalidResponse(f"Section “{title}” ran away ({len(text)} chars) — likely a repetition loop.")

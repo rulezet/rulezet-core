@@ -5009,7 +5009,9 @@ def handle_rule_analysis(job, app):
             job.total = total_rules * sections
             job.done  = processed * sections + int(m.group(1)) - 1
             db.session.commit()
-        if log_each_rule:
+        if stage == 'retry':        # an empty answer: always say why, whatever the batch size
+            log_job(job, f'Rule #{rule_id}: {text}', level='warning', event='progress')
+        elif log_each_rule:
             log_job(job, f'Rule #{rule_id}: {text}', level='info', event='progress')
 
     while processed < total_rules:
@@ -5218,7 +5220,8 @@ def handle_bundle_analysis(job, app):
         user=User.query.get(job.created_by),
         input_summary=f"Bundle #{bundle.id}: {bundle.name}",
         bundle_context=context, acquire_timeout=900, model=model,
-        progress=lambda stage, text: _bundle_step(job, stage, text),
+        progress=lambda stage, text: _bundle_step(job, stage, text,
+                                                   level='warning' if stage == 'retry' else 'info'),
         should_stop=lambda: _is_cancelled(job),
     )
     job.done = 2
