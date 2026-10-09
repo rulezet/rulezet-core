@@ -4964,17 +4964,20 @@ def handle_rule_analysis(job, app):
 
     remaining = q.count()
 
-    job.total = remaining if batch_size is None else min(remaining, batch_size)
+    # Rules to handle this run. job.total / job.done may count report sections
+    # instead (in-depth script, see _section_progress) — always loop on this.
+    total_rules = remaining if batch_size is None else min(remaining, batch_size)
+    job.total = total_rules
     job.done  = 0
     db.session.commit()
 
-    if job.total == 0:
+    if total_rules == 0:
         log_job(job, 'Nothing to do — every targeted rule already has an analysis.',
                 level='info', event='done')
         return
 
     log_job(job,
-            f'Starting — {"all " if batch_size is None else "up to "}{job.total} rule(s) this run '
+            f'Starting — {"all " if batch_size is None else "up to "}{total_rules} rule(s) this run '
             f'({remaining} left in the backlog), {"in-depth report" if script == "deep" else "standard"} script, '
             f'model "{model}", '
             f'{"no time limit" if max_seconds is None else f"max {max_seconds}s"} …',
@@ -4982,7 +4985,7 @@ def handle_rule_analysis(job, app):
 
     # A per-rule "Generating…" line only helps a small ad-hoc batch look
     # alive; on a catalog-wide run it would double the log volume for nothing.
-    log_each_rule = job.total <= AI_GENERATE_CHUNK
+    log_each_rule = total_rules <= AI_GENERATE_CHUNK
 
     agent          = get_agent('rule_deep_analysis' if script == 'deep' else 'rule_analysis')
     admin_user     = User.query.get(job.created_by)
@@ -4993,9 +4996,24 @@ def handle_rule_analysis(job, app):
     rules_since_log = 0
     last_id        = 0
     acquire_timeout = max_seconds if max_seconds is not None else 600
+    sections       = 1     # sections per in-depth report, known once the first one starts
 
-    while processed < job.total:
-        chunk_limit = min(AI_GENERATE_CHUNK, job.total - processed)
+    def _section_progress(rule_id, stage, text):
+        # The in-depth report is written section by section ("Writing “X” (3/14)…"):
+        # report that on the job, so one rule shows 3/14 = 21 % instead of
+        # sitting at 0/1 for several minutes.
+        nonlocal sections
+        m = re.search(r'\((\d+)/(\d+)\)…?$', text) if stage == 'writing' else None
+        if m:
+            sections  = max(1, int(m.group(2)))
+            job.total = total_rules * sections
+            job.done  = processed * sections + int(m.group(1)) - 1
+            db.session.commit()
+        if log_each_rule:
+            log_job(job, f'Rule #{rule_id}: {text}', level='info', event='progress')
+
+    while processed < total_rules:
+        chunk_limit = min(AI_GENERATE_CHUNK, total_rules - processed)
         # Keyset pagination on Rule.id: rules analysed in earlier chunks are
         # past last_id, so the "already analysed" filter never shifts pages.
         rows = (
@@ -5038,10 +5056,9 @@ def handle_rule_analysis(job, app):
             if max_seconds is not None and _time.monotonic() - started > max_seconds:
                 log_job(job,
                         f'Time budget ({max_seconds}s) reached — stopping early, '
-                        f'{job.total - processed} rule(s) left for the next scheduled run.',
+                        f'{total_rules - processed} rule(s) left for the next scheduled run.',
                         level='info', event='progress')
-                log_job(job, f'Done — {generated} generated, {failed} failed this run.',
-                        level='success', event='done')
+                _ai_generate_finish(job, generated, failed)
                 return
 
             rule_id, title, fmt, description, to_string, cve_id_raw = row
@@ -5065,7 +5082,7 @@ def handle_rule_analysis(job, app):
             # common case for an ad-hoc admin trigger) shows no progress at all
             # until the very first rule completes, which reads as hung.
             if log_each_rule:
-                log_job(job, f'Generating rule #{rule_id} ({processed + 1}/{job.total})…',
+                log_job(job, f'Generating rule #{rule_id} ({processed + 1}/{total_rules})…',
                         level='info', event='progress')
 
             if script == 'deep':
@@ -5082,8 +5099,7 @@ def handle_rule_analysis(job, app):
                     has_cves=bool(snapshot and snapshot['cves']),
                     has_attack=bool(snapshot and snapshot['techniques']),
                     acquire_timeout=acquire_timeout, model=model or None,
-                    progress=(lambda stage, text, _rid=rule_id: log_job(
-                        job, f'Rule #{_rid}: {text}', level='info', event='progress')) if log_each_rule else None,
+                    progress=lambda stage, text, _rid=rule_id: _section_progress(_rid, stage, text),
                     should_stop=lambda: _is_cancelled(job),
                 )
             else:
@@ -5125,17 +5141,32 @@ def handle_rule_analysis(job, app):
                 log_job(job, f'Rule #{rule_id}: {result.error}', level='warning', event='rule_failed')
 
             processed += 1
-            job.done = processed
+            job.total = total_rules * sections
+            job.done  = processed * sections
             db.session.commit()
 
             rules_since_log += 1
             if rules_since_log >= (AI_GENERATE_LOG_EVERY if log_each_rule else AI_GENERATE_LOG_EVERY_BULK):
                 rules_since_log = 0
-                log_job(job, f'{processed}/{job.total} rule(s) processed — {generated} generated, {failed} failed.',
+                log_job(job, f'{processed}/{total_rules} rule(s) processed — {generated} generated, {failed} failed.',
                         level='info', event='progress')
 
+    _ai_generate_finish(job, generated, failed)
+
+
+def _ai_generate_finish(job, generated, failed):
+    # Nothing generated and something failed = the run failed: the worker
+    # would otherwise mark it "done", which hid crashes such as an empty
+    # model response. A partial run stays done, with a warning.
+    if failed and not generated:
+        log_job(job, f'Failed — {failed} rule(s) failed, nothing generated this run.',
+                level='error', event='error')
+        job.status = 'failed'
+        job.error  = f'{failed} rule(s) failed, nothing generated — see the log.'
+        db.session.commit()
+        return
     log_job(job, f'Done — {generated} generated, {failed} failed this run.',
-            level='success', event='done')
+            level='warning' if failed else 'success', event='done')
 
 
 # ─── ai_bundle_analysis (bundle_analysis) ───────────────────────────────────
