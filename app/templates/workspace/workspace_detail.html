@@ -368,10 +368,12 @@
                     </span>
                     <div class="d-flex gap-2">
                         <!-- Import file from PC -->
-                        <label class="btn btn-sm btn-outline-secondary rounded-pill px-3 mb-0" style="cursor:pointer;">
-                            <i class="fa-solid fa-file-import me-1"></i>Import File
-                            <input type="file" accept=".txt,.md,.markdown,.log,.yaml,.yml,.json,.csv" class="d-none"
-                                   @change="importFile($event)">
+                        <label class="btn btn-sm btn-outline-secondary rounded-pill px-3 mb-0"
+                               :class="{ disabled: uploading }" style="cursor:pointer;"
+                               title="Text files become editable documents; images, PDF and office files are attached as files">
+                            <i class="fa-solid me-1" :class="uploading ? 'fa-circle-notch fa-spin' : 'fa-file-import'"></i>Import File
+                            <input type="file" :accept="docAllowedExtensions.concat(uploadAllowedExtensions).join(',')" class="d-none"
+                                   :disabled="uploading" @change="importFile($event)">
                         </label>
                         <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" @click="createDocument()">
                             <i class="fa-solid fa-plus me-1"></i>New Document
@@ -379,16 +381,23 @@
                     </div>
                 </div>
 
+                <div class="wd-import-hint mb-3">
+                    <div><i class="fa-solid fa-file-lines me-1"></i><strong>Text</strong> (editable document, max [[ docMaxKb ]] KB):
+                        <span class="font-monospace">[[ docAllowedExtensions.join(' ') ]]</span></div>
+                    <div><i class="fa-solid fa-paperclip me-1"></i><strong>Files</strong> (images, PDF, office — max [[ uploadMaxMb ]] MB):
+                        <span class="font-monospace">[[ uploadAllowedExtensions.join(' ') ]]</span></div>
+                    <div class="text-danger-emphasis"><i class="fa-solid fa-ban me-1"></i>Refused: videos, audio, executables, scripts, HTML/SVG, archives, office files with macros.</div>
+                </div>
                 <div v-if="docsLoading" class="text-center py-4 text-muted">
                     <i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading…
                 </div>
 
-                <div v-else-if="documents.length === 0" class="wd-empty-state">
+                <div v-else-if="documents.length === 0 && files.length === 0" class="wd-empty-state">
                     <i class="fa-regular fa-file-lines"></i>
-                    <p>No documents yet. Create one or import a file to take notes about this workspace.</p>
+                    <p>No documents yet. Create one, or import a text file, an image, a PDF or an office file.</p>
                 </div>
 
-                <div v-else class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+                <div v-else-if="documents.length" class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
                     <div v-for="doc in documents" :key="doc.id" class="col">
                         <div class="wd-doc-card" :class="{ 'wd-doc-card--editing': editingDoc && editingDoc.id === doc.id }"
                              @click="openDocument(doc)">
@@ -413,6 +422,39 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Attached files (images / PDF / office) -->
+                <template v-if="files.length">
+                    <div class="fw-semibold text-muted small text-uppercase mt-4 mb-3" style="letter-spacing:.04em;">
+                        <i class="fa-solid fa-paperclip me-1"></i>Files ([[ files.length ]])
+                    </div>
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+                        <div v-for="f in files" :key="f.uuid" class="col">
+                            <div class="wd-doc-card" @click="openFile(f)">
+                                <div v-if="f.is_image" class="wd-file-thumb">
+                                    <img :src="f.url" :alt="f.original_name" loading="lazy">
+                                </div>
+                                <div v-else class="wd-doc-card__icon">
+                                    <i class="fa-solid" :class="fileIcon(f)"></i>
+                                </div>
+                                <div class="wd-doc-card__info">
+                                    <div class="wd-doc-card__title">[[ f.original_name ]]</div>
+                                    <div class="wd-doc-card__meta">
+                                        [[ formatSize(f.size_bytes) ]] · <i class="fa-regular fa-clock mx-1"></i>[[ f.created_at || '–' ]]
+                                    </div>
+                                </div>
+                                <div class="wd-doc-card__actions">
+                                    <a class="wd-doc-card__action-btn" :href="f.url + '?download=1'" @click.stop title="Download">
+                                        <i class="fa-solid fa-download"></i>
+                                    </a>
+                                    <button class="wd-doc-card__action-btn wd-doc-card__action-btn--del" @click.stop="deleteFile(f)" title="Delete">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
     </div>
@@ -920,6 +962,7 @@
                                 v-model="fileNameModal.ext"
                                 style="max-width:110px;height:45px;">
                             <option>.md</option>
+                            <option>.markdown</option>
                             <option>.txt</option>
                             <option>.yaml</option>
                             <option>.yml</option>
@@ -1175,6 +1218,12 @@
     const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }}
     const isAdmin       = {{ current_user.is_admin() | tojson }}
     const csrfToken     = '{{ csrf_token() }}'
+    // Document import limits — enforced server-side (workspace_core.validate_document_fields).
+    const DOC_ALLOWED_EXTENSIONS = {{ doc_allowed_extensions | list | tojson }}
+    const DOC_MAX_BYTES          = {{ doc_max_bytes }}
+    // Binary attachments (images / PDF / office) — workspace_core.validate_upload().
+    const UPLOAD_ALLOWED_EXTENSIONS = {{ upload_allowed_extensions | tojson }}
+    const UPLOAD_MAX_BYTES          = {{ upload_max_bytes }}
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -1624,8 +1673,7 @@
             let _fileNameModal = null
 
             function _splitFilename(name) {
-                const known = ['.yaml', '.yml', '.json', '.log', '.csv', '.sh', '.md', '.txt', '.markdown']
-                for (const ext of known) {
+                for (const ext of DOC_ALLOWED_EXTENSIONS) {
                     if (name.toLowerCase().endsWith(ext)) {
                         return { basename: name.slice(0, -ext.length), ext }
                     }
@@ -1641,18 +1689,37 @@
                 Vue.nextTick(() => fileNameInput.value?.focus())
             }
 
-            function importFile(event) {
+            // The picker's `accept` is only a hint ("All files" bypasses it): check
+            // extension, size and that the bytes really are UTF-8 text before
+            // reading. The server re-checks all of this.
+            async function importFile(event) {
                 const file = event.target.files[0]
+                event.target.value = ''
                 if (!file) return
-                const reader = new FileReader()
-                reader.onload = (e) => {
-                    const { basename, ext } = _splitFilename(file.name)
-                    fileNameModal.value = { mode: 'import', basename, ext, pendingContent: e.target.result, doc: null }
-                    _fileNameModal.show()
-                    Vue.nextTick(() => fileNameInput.value?.focus())
-                    event.target.value = ''
+                const dot = file.name.lastIndexOf('.')
+                const ext = dot > 0 ? file.name.slice(dot).toLowerCase() : ''
+                if (UPLOAD_ALLOWED_EXTENSIONS.includes(ext)) return uploadFile(file)
+                if (!DOC_ALLOWED_EXTENSIONS.includes(ext)) {
+                    create_message(`"${file.name}" can't be imported: "${ext || 'no extension'}" is not an allowed file type.`, 'danger')
+                    return
                 }
-                reader.readAsText(file)
+                if (file.size > DOC_MAX_BYTES) {
+                    create_message(`"${file.name}" is too large (max ${docMaxKb} KB).`, 'danger')
+                    return
+                }
+                let text
+                try {
+                    const bytes = new Uint8Array(await file.arrayBuffer())
+                    if (bytes.includes(0)) throw new Error('binary')
+                    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+                } catch {
+                    create_message(`"${file.name}" is not a text file (binary content) and can't be imported.`, 'danger')
+                    return
+                }
+                const { basename, ext: knownExt } = _splitFilename(file.name)
+                fileNameModal.value = { mode: 'import', basename, ext: knownExt, pendingContent: text, doc: null }
+                _fileNameModal.show()
+                Vue.nextTick(() => fileNameInput.value?.focus())
             }
 
             function openRenameModal(doc) {
@@ -1682,6 +1749,8 @@
                             if (editingDoc.value?.id === data.document.id) editingDoc.value = { ...data.document }
                             _fileNameModal.hide()
                             create_message('File renamed', 'success')
+                        } else {
+                            create_message(data.message || 'Failed to rename file', 'danger')
                         }
                     } catch { create_message('Failed to rename file', 'danger') }
                 } else {
@@ -1696,6 +1765,8 @@
                             documents.value.unshift(data.document)
                             _fileNameModal.hide()
                             openDocument(data.document)
+                        } else {
+                            create_message(data.message || 'Failed to create file', 'danger')
                         }
                     } catch { create_message('Failed to create file', 'danger') }
                 }
@@ -1742,6 +1813,8 @@
                         if (idx !== -1) documents.value[idx] = data.document
                         editingDoc.value = { ...data.document }
                         _lastSavedAt.value = new Date()
+                    } else {
+                        create_message(data.message || 'Failed to save document', 'danger')
                     }
                 } catch { create_message('Failed to save document', 'danger') }
                 finally { _saving = false }
@@ -1767,6 +1840,72 @@
                         create_message('Document deleted', 'success')
                     }
                 } catch { create_message('Failed to delete document', 'danger') }
+            }
+
+            // ── Files (images / PDF / office, stored server-side) ────────
+            const files     = ref([])
+            const uploading = ref(false)
+
+            async function loadFiles() {
+                try {
+                    const r = await fetch(`/workspace/${wsUuid}/files`)
+                    files.value = await r.json()
+                } catch {}
+            }
+
+            async function uploadFile(file) {
+                if (file.size > UPLOAD_MAX_BYTES) {
+                    create_message(`"${file.name}" is too large (max ${Math.round(UPLOAD_MAX_BYTES / 1048576)} MB).`, 'danger')
+                    return
+                }
+                const body = new FormData()
+                body.append('file', file)
+                uploading.value = true
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}/files`, {
+                        method: 'POST', headers: { 'X-CSRFToken': csrf }, body,
+                    })
+                    const data = await r.json()
+                    if (data.success) {
+                        files.value.unshift(data.file)
+                        create_message(`"${data.file.original_name}" uploaded`, 'success')
+                    } else {
+                        create_message(data.message || 'Upload failed', 'danger')
+                    }
+                } catch { create_message('Upload failed', 'danger') }
+                finally { uploading.value = false }
+            }
+
+            function openFile(f) { window.open(f.url, '_blank', 'noopener') }
+
+            async function deleteFile(f) {
+                if (!confirm(`Delete "${f.original_name}"?`)) return
+                try {
+                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
+                    const r = await fetch(`/workspace/${wsUuid}/files/${f.uuid}`, {
+                        method: 'DELETE', headers: { 'X-CSRFToken': csrf },
+                    })
+                    if ((await r.json()).success) {
+                        files.value = files.value.filter(x => x.uuid !== f.uuid)
+                        create_message('File deleted', 'success')
+                    }
+                } catch { create_message('Failed to delete file', 'danger') }
+            }
+
+            function fileIcon(f) {
+                const m = f.mime_type
+                if (m === 'application/pdf') return 'fa-file-pdf'
+                if (m.includes('wordprocessing') || m.includes('opendocument.text')) return 'fa-file-word'
+                if (m.includes('spreadsheet')) return 'fa-file-excel'
+                if (m.includes('presentation')) return 'fa-file-powerpoint'
+                return 'fa-file'
+            }
+
+            function formatSize(n) {
+                if (n < 1024) return `${n} B`
+                if (n < 1048576) return `${(n / 1024).toFixed(0)} KB`
+                return `${(n / 1048576).toFixed(1)} MB`
             }
 
             // ── Links ─────────────────────────────────────────────────────
@@ -2110,6 +2249,7 @@
                 loadKpis()
                 loadWorkspaceMeta()
                 loadDocuments()
+                loadFiles()
                 loadLinks()
                 fetchAssociatedBundles()
             })
@@ -2130,6 +2270,9 @@
                 documents, docsLoading, editingDoc, fileNameModal, fileNameInput,
                 saveStatus, scheduleSave,
                 loadDocuments, createDocument, importFile, openRenameModal, confirmFileName,
+                docAllowedExtensions: DOC_ALLOWED_EXTENSIONS, docMaxKb: Math.round(DOC_MAX_BYTES / 1024),
+                uploadAllowedExtensions: UPLOAD_ALLOWED_EXTENSIONS, uploadMaxMb: Math.round(UPLOAD_MAX_BYTES / 1048576),
+                files, uploading, openFile, deleteFile, fileIcon, formatSize,
                 openDocument, saveDocument, closeDocument, deleteDocument,
                 links, linksLoading, newLink,
                 loadLinks, addLink, deleteLink,

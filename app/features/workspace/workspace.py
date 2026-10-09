@@ -159,7 +159,11 @@ def workspace_detail(ws_uuid):
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         from flask import abort
         abort(404)
-    return render_template('workspace/workspace_detail.html', workspace=ws)
+    return render_template('workspace/workspace_detail.html', workspace=ws,
+                           doc_allowed_extensions=WsModel.DOC_ALLOWED_EXTENSIONS,
+                           doc_max_bytes=WsModel.DOC_MAX_BYTES,
+                           upload_allowed_extensions=list(WsModel.UPLOAD_ALLOWED_TYPES),
+                           upload_max_bytes=WsModel.UPLOAD_MAX_BYTES)
 
 
 @workspace_blueprint.route('/<ws_uuid>/documents', methods=['GET'])
@@ -179,14 +183,12 @@ def create_document(ws_uuid):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'success': False}), 403
-    data = request.get_json(force=True)
+    fields, error = WsModel.validate_document_fields(request.get_json(silent=True))
+    if error:
+        return jsonify({'success': False, 'message': error}), 400
     from app.core.db_class.db import WorkspaceDocument
     from app import db
-    doc = WorkspaceDocument(
-        workspace_id=ws.id,
-        title=data.get('title', 'Untitled'),
-        content=data.get('content', ''),
-    )
+    doc = WorkspaceDocument(workspace_id=ws.id, **fields)
     db.session.add(doc)
     db.session.commit()
     return jsonify({'success': True, 'document': doc.to_json()}), 201
@@ -203,11 +205,11 @@ def update_document(ws_uuid, doc_id):
     doc = WorkspaceDocument.query.filter_by(id=doc_id, workspace_id=ws.id).first()
     if not doc:
         return jsonify({'success': False}), 404
-    data = request.get_json(force=True)
-    if 'title' in data:
-        doc.title = data['title']
-    if 'content' in data:
-        doc.content = data['content']
+    fields, error = WsModel.validate_document_fields(request.get_json(silent=True), partial=True)
+    if error:
+        return jsonify({'success': False, 'message': error}), 400
+    for key, value in fields.items():
+        setattr(doc, key, value)
     db.session.commit()
     return jsonify({'success': True, 'document': doc.to_json()})
 
@@ -225,6 +227,75 @@ def delete_document(ws_uuid, doc_id):
         return jsonify({'success': False}), 404
     db.session.delete(doc)
     db.session.commit()
+    return jsonify({'success': True})
+
+
+def _owned_workspace(ws_uuid):
+    """The workspace if the current user owns it (or is admin), else None."""
+    ws = WsModel.get_workspace_by_uuid(ws_uuid)
+    if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
+        return None
+    return ws
+
+
+@workspace_blueprint.route('/<ws_uuid>/files', methods=['GET'])
+@login_required
+def list_files(ws_uuid):
+    ws = _owned_workspace(ws_uuid)
+    if not ws:
+        return jsonify([])
+    return jsonify([f.to_json(ws.uuid) for f in WsModel.get_workspace_files(ws)])
+
+
+@workspace_blueprint.route('/<ws_uuid>/files', methods=['POST'])
+@login_required
+def upload_file(ws_uuid):
+    ws = _owned_workspace(ws_uuid)
+    if not ws:
+        return jsonify({'success': False}), 403
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'success': False, 'message': 'No file provided.'}), 400
+    data = f.read(WsModel.UPLOAD_MAX_BYTES + 1)
+    wf, error = WsModel.save_workspace_file(ws, f.filename, data, current_user.id)
+    if error:
+        return jsonify({'success': False, 'message': error}), 400
+    log_activity("workspace.file_upload", f"Uploaded '{wf.original_name}' to workspace '{ws.name}'",
+                 extra={"workspace_uuid": ws.uuid, "file_uuid": wf.uuid}, is_public=False)
+    return jsonify({'success': True, 'file': wf.to_json(ws.uuid)}), 201
+
+
+@workspace_blueprint.route('/<ws_uuid>/files/<file_uuid>', methods=['GET'])
+@login_required
+def get_file(ws_uuid, file_uuid):
+    from flask import abort, send_file
+    import os
+    ws = _owned_workspace(ws_uuid)
+    wf = WsModel.get_workspace_file(ws, file_uuid) if ws else None
+    if not wf:
+        abort(404)
+    path = WsModel.workspace_file_path(ws, wf)
+    if not os.path.exists(path):
+        abort(404)
+    # Images and PDFs open in the browser, office files download. The MIME
+    # type is ours (from the extension whitelist), and nosniff stops the
+    # browser from second-guessing it.
+    inline = wf.mime_type in WsModel.UPLOAD_INLINE_MIME and request.args.get('download') != '1'
+    resp = send_file(path, mimetype=wf.mime_type, as_attachment=not inline, download_name=wf.original_name)
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    return resp
+
+
+@workspace_blueprint.route('/<ws_uuid>/files/<file_uuid>', methods=['DELETE'])
+@login_required
+def delete_file(ws_uuid, file_uuid):
+    ws = _owned_workspace(ws_uuid)
+    if not ws:
+        return jsonify({'success': False}), 403
+    wf = WsModel.get_workspace_file(ws, file_uuid)
+    if not wf:
+        return jsonify({'success': False}), 404
+    WsModel.delete_workspace_file(ws, wf)
     return jsonify({'success': True})
 
 

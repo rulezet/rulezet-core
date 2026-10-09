@@ -4454,6 +4454,37 @@ class WorkspaceDocument(db.Model):
         }
 
 
+class WorkspaceFile(db.Model):
+    """A binary file (image, PDF, office document) attached to a workspace.
+
+    Stored on disk under app/uploads/workspace/ (never under static/: only
+    the workspace owner or an admin may read it, through the workspace
+    blueprint). Allowed types and checks: workspace_core.validate_upload().
+    """
+    __tablename__ = 'workspace_file'
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid          = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    workspace_id  = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='CASCADE'), nullable=False, index=True)
+    original_name = db.Column(db.String(255), nullable=False)
+    stored_name   = db.Column(db.String(255), nullable=False)
+    mime_type     = db.Column(db.String(128), nullable=False)
+    size_bytes    = db.Column(db.Integer, nullable=False)
+    uploaded_by   = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    created_at    = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    def to_json(self, ws_uuid: str):
+        return {
+            'id':            self.id,
+            'uuid':          self.uuid,
+            'original_name': self.original_name,
+            'mime_type':     self.mime_type,
+            'size_bytes':    self.size_bytes,
+            'is_image':      self.mime_type.startswith('image/'),
+            'created_at':    self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'url':           f'/workspace/{ws_uuid}/files/{self.uuid}',
+        }
+
+
 class WorkspaceLink(db.Model):
     __tablename__ = 'workspace_link'
     id           = db.Column(db.Integer, primary_key=True, autoincrement=True)

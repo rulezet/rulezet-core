@@ -477,3 +477,23 @@
 }
 .wd-bundle-pick > .wd-bundle-card__icon { flex: 0 0 32px; }
 .wd-bundle-pick > .wd-bundle-chip { flex: 0 0 auto; }
+
+/* ── Documents tab: import help + attached file thumbnails ── */
+.wd-import-hint {
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+}
+.wd-file-thumb {
+    flex-shrink: 0;
+    width: 44px; height: 44px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: #fff;
+}
+.wd-file-thumb img { width: 100%; height: 100%; object-fit: cover; }
