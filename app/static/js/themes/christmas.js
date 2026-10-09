@@ -82,17 +82,32 @@
     }
 
     // Night: now and then a shooting star crosses the top of the sky (behind the page, like the stars).
-    function shootingStar() {
+    function spawnShootingStar() {
         const sky = document.querySelector('.xmas-stars');
-        if (sky && !document.hidden) {
-            const s = document.createElement('span');
-            s.className = 'xmas-shooting-star';
-            s.style.left = `${10 + Math.random() * 60}%`;
-            s.style.top = `${4 + Math.random() * 30}%`;
-            s.addEventListener('animationend', () => s.remove());
-            sky.appendChild(s);
-        }
+        if (!sky) return;
+        const s = document.createElement('span');
+        s.className = 'xmas-shooting-star';
+        s.style.left = `${10 + Math.random() * 60}%`;
+        s.style.top = `${4 + Math.random() * 30}%`;
+        s.addEventListener('animationend', () => s.remove());
+        sky.appendChild(s);
+    }
+
+    function shootingStar() {
+        if (!document.hidden) spawnShootingStar();
         shootingTimer = setTimeout(shootingStar, (25 + Math.random() * 35) * 1000);
+    }
+
+    // Corner button (night only): a shooting star right now, somewhere in the sky.
+    function shootingStarSwitch() {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'xmas-snow-switch xmas-star-switch';
+        btn.title = 'Make a wish — a shooting star';
+        btn.setAttribute('aria-label', 'Launch a shooting star');
+        btn.innerHTML = '<i class="fa-solid fa-star"></i>';
+        btn.addEventListener('click', spawnShootingStar);
+        return btn;
     }
 
     function hat() {
@@ -338,6 +353,7 @@
         document.body.appendChild(snowSwitch(snowEl));
         if (theme === 'christmas-night') {
             document.body.appendChild(stars());
+            document.body.appendChild(shootingStarSwitch());
             shootingTimer = setTimeout(shootingStar, (8 + Math.random() * 12) * 1000);   // a first one soon
         }
         // Landscape band right above the footer, in the page flow (pushes the footer down).
@@ -351,7 +367,7 @@
         clearTimeout(weatherTimer);
         clearTimeout(garlandTimer);
         clearTimeout(shootingTimer);
-        document.querySelectorAll('.xmas-garland, .xmas-hat, .xmas-snow, .xmas-snow-switch, .xmas-garland-switch, .xmas-stars, .xmas-land').forEach((el) => el.remove());
+        document.querySelectorAll('.xmas-garland, .xmas-hat, .xmas-snow, .xmas-snow-switch, .xmas-garland-switch, .xmas-star-switch, .xmas-stars, .xmas-land').forEach((el) => el.remove());
         document.querySelectorAll('.xmas-logo').forEach((el) => el.classList.remove('xmas-logo'));
         mounted = null;
     }

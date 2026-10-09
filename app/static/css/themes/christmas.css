@@ -233,4 +233,7 @@ html[data-theme="christmas"] .xmas-land { opacity: 1; }
 /* Garland pattern switch, just left of the snow one (christmas.js garlandSwitch) */
 .xmas-snow-switch.xmas-garland-switch { right: 130px; }
 .xmas-garland-switch:hover, .xmas-garland-switch:focus-visible { color: #ffc93c; }
+/* Shooting star on demand (night), left of the garland switch */
+.xmas-snow-switch.xmas-star-switch { right: 168px; }
+.xmas-star-switch:hover, .xmas-star-switch:focus-visible { color: #fff3b0; }
 @media (prefers-reduced-motion: reduce) { .xmas-snow-switch { display: none; } }
