@@ -196,7 +196,7 @@ const LANG_ALIASES = {
     wazuh: 'xml',     // Wazuh rules are XML
     zeek: 'text',
     crs: 'text',
-    nova: 'text',
+    nova: 'yara',     // NOVA rules use a YARA-like syntax (no dedicated grammar yet)
     kql: 'sql',       // KQL syntax is SQL-like
     elastic: 'toml',  // Elastic Security rules are TOML — see hljs-toml.js
     sagan: 'suricata',// Sagan shares Suricata's exact header/option grammar (issue #61)
