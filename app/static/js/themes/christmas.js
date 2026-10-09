@@ -43,12 +43,42 @@
         return el;
     }
 
+    const PATTERN_NAMES = { twinkle: 'Twinkle', wave: 'Wave', tones: 'Light and dark', alternate: 'Every other bulb', breathe: 'Breathing' };
+
+    function setGarlandPattern(pattern) {
+        garlandPattern = pattern;
+        document.querySelectorAll('.xmas-garland').forEach((g) => { g.dataset.pattern = pattern; });
+        document.querySelectorAll('.xmas-garland-switch').forEach((b) => {
+            b.title = `Garland: ${PATTERN_NAMES[pattern]} — click for the next pattern`;
+            b.setAttribute('aria-label', b.title);
+        });
+    }
+
+    function scheduleGarland() {
+        clearTimeout(garlandTimer);
+        garlandTimer = setTimeout(cycleGarland, (45 + Math.random() * 30) * 1000);
+    }
+
     // Change the garland's pattern every 45–75 s (never the same one twice in a row).
     function cycleGarland() {
         const next = GARLAND_PATTERNS.filter((p) => p !== garlandPattern);
-        garlandPattern = next[Math.floor(Math.random() * next.length)];
-        document.querySelectorAll('.xmas-garland').forEach((g) => { g.dataset.pattern = garlandPattern; });
-        garlandTimer = setTimeout(cycleGarland, (45 + Math.random() * 30) * 1000);
+        setGarlandPattern(next[Math.floor(Math.random() * next.length)]);
+        scheduleGarland();
+    }
+
+    // Corner button next to the snow one: the next pattern, now (the automatic
+    // change then waits a full period again).
+    function garlandSwitch() {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'xmas-snow-switch xmas-garland-switch';
+        btn.innerHTML = '<i class="fa-solid fa-lightbulb"></i>';
+        btn.addEventListener('click', () => {
+            const i = GARLAND_PATTERNS.indexOf(garlandPattern);
+            setGarlandPattern(GARLAND_PATTERNS[(i + 1) % GARLAND_PATTERNS.length]);
+            scheduleGarland();
+        });
+        return btn;
     }
 
     // Night: now and then a shooting star crosses the top of the sky (behind the page, like the stars).
@@ -294,8 +324,12 @@
 
     function mount(theme) {
         const nav = document.querySelector('.main-navbar');
-        if (nav) nav.appendChild(garland(nav));
-        garlandTimer = setTimeout(cycleGarland, (45 + Math.random() * 30) * 1000);
+        if (nav) {
+            nav.appendChild(garland(nav));
+            document.body.appendChild(garlandSwitch());
+            setGarlandPattern(garlandPattern);          // the button's title
+            scheduleGarland();
+        }
         const logo = document.querySelector('.main-navbar .navbar-brand');
         if (logo) { logo.classList.add('xmas-logo'); logo.appendChild(hat()); }
         const snowEl = snow();
@@ -317,7 +351,7 @@
         clearTimeout(weatherTimer);
         clearTimeout(garlandTimer);
         clearTimeout(shootingTimer);
-        document.querySelectorAll('.xmas-garland, .xmas-hat, .xmas-snow, .xmas-snow-switch, .xmas-stars, .xmas-land').forEach((el) => el.remove());
+        document.querySelectorAll('.xmas-garland, .xmas-hat, .xmas-snow, .xmas-snow-switch, .xmas-garland-switch, .xmas-stars, .xmas-land').forEach((el) => el.remove());
         document.querySelectorAll('.xmas-logo').forEach((el) => el.classList.remove('xmas-logo'));
         mounted = null;
     }

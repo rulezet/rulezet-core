@@ -230,4 +230,7 @@ html[data-theme="christmas"] .xmas-land { opacity: 1; }
     background: currentColor;
     transform: rotate(-45deg);
 }
+/* Garland pattern switch, just left of the snow one (christmas.js garlandSwitch) */
+.xmas-snow-switch.xmas-garland-switch { right: 130px; }
+.xmas-garland-switch:hover, .xmas-garland-switch:focus-visible { color: #ffc93c; }
 @media (prefers-reduced-motion: reduce) { .xmas-snow-switch { display: none; } }
