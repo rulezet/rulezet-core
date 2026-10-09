@@ -21,6 +21,37 @@
     background: currentColor;
     box-shadow: 0 0 8px 2px currentColor;
     animation: xmas-twinkle 2.4s ease-in-out infinite;
+    animation-delay: var(--r, 0s);
+    transition: opacity 1.5s ease;
+}
+/* Patterns (christmas.js cycleGarland), each kept 45–75 s; all slow and soft. */
+.xmas-garland[data-pattern="wave"] .xmas-bulb {          /* light runs left → right */
+    animation: xmas-wave 3.2s ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * 110ms);
+}
+.xmas-garland[data-pattern="tones"] .xmas-bulb {         /* light bulbs, then dark ones */
+    animation: xmas-tone 7s ease-in-out infinite;
+}
+.xmas-garland[data-pattern="tones"] .xmas-bulb[data-tone="dark"] { animation-delay: -3.5s; }
+.xmas-garland[data-pattern="alternate"] .xmas-bulb {     /* every other bulb */
+    animation: xmas-tone 5s ease-in-out infinite;
+}
+.xmas-garland[data-pattern="alternate"] .xmas-bulb:nth-of-type(even) { animation-delay: -2.5s; }
+.xmas-garland[data-pattern="breathe"] .xmas-bulb {       /* all together, slowly */
+    animation: xmas-breathe 5s ease-in-out infinite;
+}
+@keyframes xmas-wave {
+    0%, 100% { opacity: .35; box-shadow: 0 0 2px 0 currentColor; }
+    18%      { opacity: 1;   box-shadow: 0 0 10px 3px currentColor; }
+    40%      { opacity: .35; box-shadow: 0 0 2px 0 currentColor; }
+}
+@keyframes xmas-tone {
+    0%, 100% { opacity: 1;   box-shadow: 0 0 9px 2px currentColor; }
+    50%      { opacity: .25; box-shadow: 0 0 1px 0 currentColor; }
+}
+@keyframes xmas-breathe {
+    0%, 100% { opacity: .55; box-shadow: 0 0 4px 1px currentColor; }
+    50%      { opacity: 1;   box-shadow: 0 0 11px 3px currentColor; }
 }
 .xmas-bulb::before {   /* the socket */
     content: ""; position: absolute; top: -4px; left: 2px;
@@ -89,6 +120,25 @@ html[data-theme="christmas-night"] body { background-color: transparent !importa
 }
 @keyframes xmas-star { 0%, 100% { opacity: .12; } 50% { opacity: .65; } }
 
+/* A shooting star now and then (christmas.js shootingStar): a short bright
+   streak crossing the sky diagonally, fading out. */
+.xmas-shooting-star {
+    position: absolute;
+    width: 110px; height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .95));
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, .8));
+    transform: rotate(20deg) translateX(0);
+    transform-origin: right center;
+    opacity: 0;
+    animation: xmas-shoot 1.3s ease-out 1 forwards;
+}
+@keyframes xmas-shoot {
+    0%   { opacity: 0;  transform: rotate(20deg) translateX(0)     scaleX(.3); }
+    15%  { opacity: 1; }
+    100% { opacity: 0;  transform: rotate(20deg) translateX(320px) scaleX(1); }
+}
+
 /* Distant snowy landscape with fir trees and a small campfire (an SVG built
    by christmas.js), as a band of its own right above the footer: it shows
    when scrolling to the very bottom of a page and pushes the footer down. */
@@ -129,7 +179,8 @@ html[data-theme="christmas"] .xmas-land { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .xmas-bulb, .xmas-star, .xmas-sky-star, .xmas-camp__glow, .xmas-camp__flame { animation: none; }
+    .xmas-bulb, .xmas-garland[data-pattern] .xmas-bulb, .xmas-star, .xmas-sky-star, .xmas-camp__glow, .xmas-camp__flame { animation: none; }
+    .xmas-shooting-star { display: none; }
     .xmas-camp__smoke { display: none; }
     .xmas-snow { display: none; }
 }

@@ -6,6 +6,12 @@
 (function () {
     const html = document.documentElement;
     const COLORS = ['red', 'gold', 'green', 'blue', 'pink'];
+    const LIGHT_COLORS = new Set(['gold', 'blue', 'pink']);    // the "light" bulbs, vs red and green
+    // Garland patterns, one at a time, each kept for a while (christmas.css):
+    // random twinkle, a wave from left to right, light then dark bulbs, every
+    // other bulb, all breathing together. None flashes.
+    const GARLAND_PATTERNS = ['twinkle', 'wave', 'tones', 'alternate', 'breathe'];
+    let garlandTimer = null, shootingTimer = null, garlandPattern = 'twinkle';
     const SPACING = 46;          // px between two bulbs (one scallop of the wire)
     const THEMES = ['christmas', 'christmas-night'];
     let mounted = null, resizeTimer = null;     // the theme currently decorated
@@ -25,12 +31,38 @@
         el.innerHTML = `<svg class="xmas-garland__wire" viewBox="0 0 ${width} 26" preserveAspectRatio="none"><path d="${d}"/></svg>`;
         for (let i = 0; i < count; i++) {
             const b = document.createElement('span');
-            b.className = `xmas-bulb xmas-bulb--${COLORS[i % COLORS.length]}`;
+            const color = COLORS[i % COLORS.length];
+            b.className = `xmas-bulb xmas-bulb--${color}`;
+            b.dataset.tone = LIGHT_COLORS.has(color) ? 'light' : 'dark';
             b.style.left = `${i * step + step / 2}px`;
-            b.style.animationDelay = `${((i * 7) % 11) * 0.22}s`;
+            b.style.setProperty('--i', i);                               // position, for the wave
+            b.style.setProperty('--r', `${((i * 7) % 11) * 0.22}s`);     // scattered, for the twinkle
             el.appendChild(b);
         }
+        el.dataset.pattern = garlandPattern;
         return el;
+    }
+
+    // Change the garland's pattern every 45–75 s (never the same one twice in a row).
+    function cycleGarland() {
+        const next = GARLAND_PATTERNS.filter((p) => p !== garlandPattern);
+        garlandPattern = next[Math.floor(Math.random() * next.length)];
+        document.querySelectorAll('.xmas-garland').forEach((g) => { g.dataset.pattern = garlandPattern; });
+        garlandTimer = setTimeout(cycleGarland, (45 + Math.random() * 30) * 1000);
+    }
+
+    // Night: now and then a shooting star crosses the top of the sky (behind the page, like the stars).
+    function shootingStar() {
+        const sky = document.querySelector('.xmas-stars');
+        if (sky && !document.hidden) {
+            const s = document.createElement('span');
+            s.className = 'xmas-shooting-star';
+            s.style.left = `${10 + Math.random() * 60}%`;
+            s.style.top = `${4 + Math.random() * 30}%`;
+            s.addEventListener('animationend', () => s.remove());
+            sky.appendChild(s);
+        }
+        shootingTimer = setTimeout(shootingStar, (25 + Math.random() * 35) * 1000);
     }
 
     function hat() {
@@ -263,13 +295,17 @@
     function mount(theme) {
         const nav = document.querySelector('.main-navbar');
         if (nav) nav.appendChild(garland(nav));
+        garlandTimer = setTimeout(cycleGarland, (45 + Math.random() * 30) * 1000);
         const logo = document.querySelector('.main-navbar .navbar-brand');
         if (logo) { logo.classList.add('xmas-logo'); logo.appendChild(hat()); }
         const snowEl = snow();
         document.body.appendChild(snowEl);
         weather(snowEl);
         document.body.appendChild(snowSwitch(snowEl));
-        if (theme === 'christmas-night') document.body.appendChild(stars());
+        if (theme === 'christmas-night') {
+            document.body.appendChild(stars());
+            shootingTimer = setTimeout(shootingStar, (8 + Math.random() * 12) * 1000);   // a first one soon
+        }
         // Landscape band right above the footer, in the page flow (pushes the footer down).
         const footer = document.querySelector('.rulezet-footer');
         if (footer) footer.parentNode.insertBefore(landscape(theme), footer);
@@ -279,6 +315,8 @@
 
     function unmount() {
         clearTimeout(weatherTimer);
+        clearTimeout(garlandTimer);
+        clearTimeout(shootingTimer);
         document.querySelectorAll('.xmas-garland, .xmas-hat, .xmas-snow, .xmas-snow-switch, .xmas-stars, .xmas-land').forEach((el) => el.remove());
         document.querySelectorAll('.xmas-logo').forEach((el) => el.classList.remove('xmas-logo'));
         mounted = null;
