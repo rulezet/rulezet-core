@@ -1,4 +1,4 @@
-import{b as z}from"./index-JwQxvkUN.js";import{reportModel as T,formatDate as v,lowerFirst as y,plural as d,capitalize as L,article as H,detailKey as A}from"./report-9ZQE3pry.js";const N="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap",F=`
+import{b as z}from"./index-DbXQuvk3.js";import{reportModel as T,formatDate as v,lowerFirst as y,plural as d,capitalize as L,article as H,detailKey as A}from"./report-BLLkIAe-.js";const N="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap",F=`
 /* No page margin: the browser then prints no header or footer of its own
    (address, date, page title). The margins are the table's repeated head and
    foot rows below, and the body's side padding. */
