@@ -4,11 +4,9 @@
 
          <!-- ── Logo ── -->
          <a href="/" class="navbar-brand d-flex align-items-center transition-transform logo">
-            <img src="{{ url_for('static', filename='image/logo.png') }}" 
+            {# Always the coloured logo; on dark themes it is lit from behind (sidebar.css). #}
+            <img src="{{ url_for('static', filename='image/logo.png') }}"
                   class="logo-light" height="75" alt="RULEZET Logo">
-            
-            <img src="{{ url_for('static', filename='image/logo_dark.png') }}" 
-                  class="logo-dark" height="75" alt="RULEZET Logo">
          </a>
 
          <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse"

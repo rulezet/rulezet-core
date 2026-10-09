@@ -32,18 +32,34 @@
 /* ══════════════════════════════════════
    LOGO
 ══════════════════════════════════════ */
-.logo-dark { display: none !important; }
-
-body.dark-mode .logo-light { display: none !important; }
-body.dark-mode .logo-dark  { display: block !important; }
+/* The coloured logo everywhere — never an all-white version. On dark themes a
+   light shines from behind it (::before) and a thin halo follows its shapes,
+   so the navy "RULEZET" stays readable. */
+.navbar-brand.logo { position: relative; isolation: isolate; }
+body.dark-mode .navbar-brand.logo::before {
+    content: "";
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 92px; height: 92px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, .55) 0%, rgba(147, 197, 253, .32) 38%, rgba(59, 130, 246, .12) 58%, transparent 72%);
+    z-index: -1;
+    pointer-events: none;
+    animation: logo-backlight 3s infinite ease-in-out;
+}
+@keyframes logo-backlight {
+    0%, 100% { opacity: .8;  transform: translate(-50%, -50%) scale(.94); }
+    50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.04); }
+}
 
 @keyframes logo-glow {
     0%, 100% { filter: drop-shadow(0 0 5px rgba(13, 110, 253, 0.25)); }
     50%       { filter: drop-shadow(0 0 14px rgba(13, 110, 253, 0.50)); }
 }
 @keyframes logo-glow-dark {
-    0%, 100% { filter: drop-shadow(0 0 5px rgba(96, 165, 250, 0.25)); }
-    50%       { filter: drop-shadow(0 0 18px rgba(96, 165, 250, 0.55)); }
+    0%, 100% { filter: drop-shadow(0 0 1px rgba(255, 255, 255, .85)) drop-shadow(0 0 6px rgba(147, 197, 253, .35)); }
+    50%       { filter: drop-shadow(0 0 1px rgba(255, 255, 255, .95)) drop-shadow(0 0 14px rgba(147, 197, 253, .6)); }
 }
 
 .navbar-brand.logo img { animation: logo-glow 3s infinite ease-in-out; }
@@ -51,6 +67,12 @@ body.dark-mode .navbar-brand.logo img { animation: logo-glow-dark 3s infinite ea
 
 .navbar-brand.logo:hover img {
     filter: drop-shadow(0 0 16px rgba(13, 110, 253, 0.65)) !important;
+}
+body.dark-mode .navbar-brand.logo:hover img {
+    filter: drop-shadow(0 0 1px rgba(255, 255, 255, .95)) drop-shadow(0 0 18px rgba(147, 197, 253, .7)) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+    .navbar-brand.logo img, body.dark-mode .navbar-brand.logo::before { animation: none; }
 }
 
 /* ══════════════════════════════════════
