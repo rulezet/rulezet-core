@@ -340,3 +340,28 @@
 .blog-step-fade-leave-to {
     opacity: 0;
 }
+
+/* ── Graph (Pivograph map) in the post editor and on the post page ── */
+.blog-graph-empty { text-align: center; padding: 1.5rem 1rem; border: 1px dashed var(--border-color); border-radius: 12px; color: var(--subtle-text-color); font-size: .88rem; }
+.blog-graph-empty > i { font-size: 1.8rem; opacity: .35; display: block; margin-bottom: .6rem; }
+.blog-graph-summary { display: flex; flex-wrap: wrap; align-items: center; gap: .9rem; padding: .85rem 1rem; border-radius: 12px; background: var(--light-bg-color); border: 1px solid var(--border-color); }
+.blog-graph-summary__icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #0d6efd; background: rgba(13, 110, 253, .1); flex-shrink: 0; }
+.blog-graph-editor { position: fixed; inset: 0; z-index: 1080; display: flex; flex-direction: column; background: var(--bg-color); }
+.blog-graph-editor__bar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .6rem 1rem; border-bottom: 1px solid var(--border-color); background: var(--card-bg-color); color: var(--text-color); }
+.blog-graph-editor__frame { flex: 1; width: 100%; border: 0; }
+.blog-graph-viewer { display: block; width: 100%; height: 70vh; min-height: 420px; border: 0; border-radius: 12px; background: var(--card-bg-color); }
+.blog-graph-viewer--simple { border-radius: 12px; height: 60vh; min-height: 360px; background: var(--card-bg-color); }
+.blog-graph-simple { position: relative; }
+.blog-graph-simple__actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; opacity: .55; transition: opacity .15s ease; }
+.blog-graph-simple:hover .blog-graph-simple__actions { opacity: 1; }
+.blog-graph-simple__btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: .8rem; color: var(--text-color); text-decoration: none;
+    background: var(--card-bg-color); border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
+}
+.blog-graph-simple__btn:hover { color: #0d6efd; border-color: #0d6efd; }
+.blog-graph-view { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 99px; background: var(--card-bg-color); border: 1px solid var(--border-color); }
+.blog-graph-view__opt { border: 0; background: transparent; padding: 3px 12px; border-radius: 99px; font-size: .76rem; font-weight: 600; color: var(--subtle-text-color); }
+.blog-graph-view__opt.active { background: #0d6efd; color: #fff; }

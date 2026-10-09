@@ -3,7 +3,7 @@ import os
 import uuid as _uuid_mod
 
 import requests
-from flask import Blueprint, abort, jsonify, render_template, request, send_file, url_for
+from flask import Blueprint, abort, current_app, jsonify, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 
@@ -93,6 +93,55 @@ def detail_shared(post_uuid, key):
         abort(403)
     BlogModel.add_view(post)
     return render_template('blog/detail_blog.html', post=post, shared=True)
+
+
+# ── Graph (Pivograph map attached to a post) ───────────────────────────────────
+
+@blog_blueprint.route('/post/<string:post_uuid>/graph.json')
+def post_graph(post_uuid):
+    """The post's Pivograph map, for the viewer on the post page and as a
+    download (?download=1). Same access as the post page: public post, its
+    author or an admin, or the post's share key (?key=)."""
+    import json as _json
+    post = BlogModel.get_post_by_uuid(post_uuid)
+    if not post or post.graph is None:
+        abort(404)
+    if not post.is_public:
+        allowed = current_user.is_authenticated and (current_user.id == post.user_id or current_user.is_admin())
+        if not allowed and not (post.share_key and request.args.get('key') == post.share_key):
+            abort(403)
+    resp = current_app.response_class(_json.dumps(post.graph, indent=2), mimetype='application/json')
+    if request.args.get('download') == '1':
+        resp.headers['Content-Disposition'] = f'attachment; filename="{_safe_filename(post.title, post.uuid[:8], "graph.json")}"'
+    return resp
+
+
+@blog_blueprint.route('/admin/graph_template/<string:name>')
+@login_required
+def admin_graph_template(name):
+    """Starting points for a post's graph, taken from Pivograph's own examples
+    (app/modules/pivograph/examples). Returned editable: Pivograph locks its
+    bundled examples (by meta.source or title), so both are changed."""
+    import json as _json, os as _os
+    err = _admin_required()
+    if err:
+        return err
+    templates = {'rulezet': ('rulezet.json', 'Rulezet and its integrations')}
+    if name not in templates:
+        abort(404)
+    filename, title = templates[name]
+    path = _os.path.join(current_app.root_path, 'modules', 'pivograph', 'examples', filename)
+    try:
+        with open(path, encoding='utf-8') as fp:
+            doc = _json.load(fp)
+    except (OSError, ValueError):
+        return jsonify({'success': False, 'message': 'Template not available on this instance.'}), 404
+    meta = dict(doc.get('meta') or {})
+    meta.pop('source', None)
+    meta['readOnly'] = False
+    meta['title'] = title
+    doc['meta'] = meta
+    return jsonify({'success': True, 'graph': doc})
 
 
 # ── Admin page routes ──────────────────────────────────────────────────────────

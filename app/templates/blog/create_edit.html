@@ -446,6 +446,84 @@
 
         </div>
 
+        <!-- ── Graph (Pivograph map) — full width ───────────────────────── -->
+        <div class="card border-0 shadow-sm rounded-3 mb-3">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <div class="blog-card-accent"></div>
+                    <span class="blog-card-header-label"><i class="fa-solid fa-diagram-project me-1"></i>Graph</span>
+                    <span class="text-muted" style="font-size:.78rem;">— a Pivograph map shown on the post and downloadable as JSON</span>
+                    <span v-if="graphDirty" class="badge rounded-pill bg-warning-subtle text-warning-emphasis ms-auto" style="font-size:.68rem;">Unsaved changes</span>
+                </div>
+
+                <div v-if="graphLoading" class="text-muted" style="font-size:.85rem;">
+                    <span class="spinner-border spinner-border-sm me-2"></span>Loading the graph…
+                </div>
+
+                <div v-else-if="!graph" class="blog-graph-empty">
+                    <i class="fa-solid fa-diagram-project"></i>
+                    <p class="mb-3">No graph yet. Draw one with Pivograph, start from a template, or import a Pivograph JSON file.</p>
+                    <div class="d-flex flex-wrap justify-content-center gap-2">
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" @click="createBlankGraph">
+                            <i class="fa-solid fa-plus me-1"></i>Create a graph
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" @click="startGraphFromTemplate('rulezet')">
+                            <i class="fa-solid fa-shield-halved me-1"></i>Start from: Rulezet ecosystem
+                        </button>
+                        <label class="btn btn-sm btn-outline-secondary rounded-pill px-3 mb-0" style="cursor:pointer;">
+                            <i class="fa-solid fa-file-import me-1"></i>Import JSON
+                            <input type="file" class="d-none" accept=".json,application/json" @change="importGraphFile">
+                        </label>
+                    </div>
+                </div>
+
+                <div v-else class="blog-graph-summary">
+                    <div class="blog-graph-summary__icon"><i class="fa-solid fa-diagram-project"></i></div>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="fw-semibold text-truncate">[[ graphStats.title ]]</div>
+                        <div class="text-muted" style="font-size:.78rem;">[[ graphStats.nodes ]] nodes · [[ graphStats.edges ]] edges</div>
+                    </div>
+                    <div class="blog-graph-view" role="radiogroup" aria-label="How readers see the graph">
+                        <span class="text-muted me-1" style="font-size:.72rem;">Display</span>
+                        <button type="button" :class="['blog-graph-view__opt', { active: form.graph_view !== 'simple' }]" @click="form.graph_view = 'full'"
+                                title="Pivograph with its side panel and tools">Full</button>
+                        <button type="button" :class="['blog-graph-view__opt', { active: form.graph_view === 'simple' }]" @click="form.graph_view = 'simple'"
+                                title="Just the graph: pan, zoom, drag">Simple</button>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" @click="openGraphEditor">
+                            <i class="fa-solid fa-pen me-1"></i>Edit
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="downloadGraph">
+                            <i class="fa-solid fa-download me-1"></i>JSON
+                        </button>
+                        <label class="btn btn-sm btn-outline-secondary rounded-pill px-3 mb-0" style="cursor:pointer;" title="Replace with a JSON file">
+                            <i class="fa-solid fa-file-import me-1"></i>Replace
+                            <input type="file" class="d-none" accept=".json,application/json" @change="importGraphFile">
+                        </label>
+                        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" @click="removeGraph">
+                            <i class="fa-solid fa-trash me-1"></i>Remove
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Full-screen Pivograph editor -->
+        <div v-if="graphEditorOpen" class="blog-graph-editor" role="dialog" aria-modal="true" aria-label="Graph editor">
+            <div class="blog-graph-editor__bar">
+                <span class="fw-semibold"><i class="fa-solid fa-diagram-project me-2 text-primary"></i>Graph editor</span>
+                <span class="text-muted d-none d-md-inline" style="font-size:.78rem;">Pivograph — use its Add and Graph menus; Apply keeps your changes in the post.</span>
+                <div class="ms-auto d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="closeGraphEditor">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-4" @click="applyGraphEditor">
+                        <i class="fa-solid fa-check me-1"></i>Apply
+                    </button>
+                </div>
+            </div>
+            <iframe ref="graphEditorFrame" class="blog-graph-editor__frame" title="Pivograph graph editor" allow="fullscreen"></iframe>
+        </div>
+
         <!-- ── Attached Rules — full width ─────────────────────────────── -->
         <div class="card border-0 shadow-sm rounded-3 mb-3">
             <div class="card-body p-4">
@@ -756,6 +834,7 @@
     import VulnerabilityInput  from '/static/js/vulnerability/vulnerabilityInput.js'
     import RuleList            from '/static/js/rule/ruleList.js'
     import BundleList          from '/static/js/bundle/bundleList.js'
+    import { useBlogGraph }    from '/static/js/blog/blogGraph.js'
 
     const { createApp, ref, computed, onMounted, onUnmounted } = Vue
 
@@ -784,9 +863,11 @@
         rule_ids:        {{ post.rules | map(attribute='rule_id') | list | tojson }},
         bundle_ids:      {{ post.bundles | map(attribute='bundle_id') | list | tojson }},
         files:           {{ files_json | tojson }},
+        has_graph:       {{ (post.graph is not none) | tojson }},
+        graph_view:      {{ (post.graph_view or 'full') | tojson }},
     }
     {% else %}
-    const INIT_DATA = { title:'', excerpt:'', content:'', is_public:false, is_draft:true, cve_ids:[], cover_image_url:'', external_links:[], tags:[], technique_ids:[], rule_ids:[], bundle_ids:[], files:[] }
+    const INIT_DATA = { title:'', excerpt:'', content:'', is_public:false, is_draft:true, cve_ids:[], cover_image_url:'', external_links:[], tags:[], technique_ids:[], rule_ids:[], bundle_ids:[], files:[], has_graph:false, graph_view:'full' }
     {% endif %}
 
     createApp({
@@ -811,8 +892,14 @@
                 external_links:  INIT_DATA.external_links.map(l => ({ ...l })),
                 rule_ids:        [...INIT_DATA.rule_ids],
                 bundle_ids:      [...INIT_DATA.bundle_ids],
+                graph_view:      INIT_DATA.graph_view,
             })
             const attachedFiles    = ref([...INIT_DATA.files])
+            // Pivograph map of the post (js/blog/blogGraph.js)
+            const blogGraph = useBlogGraph({
+                editUuid: EDIT_UUID, hasGraph: INIT_DATA.has_graph,
+                postTitle: () => form.value.title, notify: create_message,
+            })
             const isUploading      = ref(false)
             const coverMode        = ref('url')
             const isCoverUploading = ref(false)
@@ -957,6 +1044,7 @@
 
             onMounted(() => {
                 if (IS_EDIT) prefillAttached()
+                blogGraph.loadGraph()
                 const jobUuid = new URLSearchParams(window.location.search).get('generating')
                 if (jobUuid) startGenerationPoll(jobUuid)
             })
@@ -1065,6 +1153,7 @@
                     uuid:          EDIT_UUID || undefined,
                     tag_names:     selectedTags.value.map(t => t.name),
                     technique_ids: selectedAttacks.value.map(a => a.technique_id),
+                    ...blogGraph.graphPayload(),          // only when the graph changed
                 }
                 try {
                     const res  = await fetch('/blog/admin/save', {
@@ -1074,6 +1163,7 @@
                     })
                     const data = await res.json()
                     if (res.ok) {
+                        blogGraph.graphSaved()
                         const now = new Date()
                         lastSavedAt.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
                         if (!silent) create_message(data.message || 'Saved.', 'success-subtle')
@@ -1197,6 +1287,7 @@
             }
 
             return {
+                ...blogGraph,
                 isGenerating,
                 form, selectedTags, selectedAttacks,
                 isSaving, lastSavedAt, shareUrl, isRegenerating,

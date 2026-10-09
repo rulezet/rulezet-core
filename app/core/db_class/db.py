@@ -4525,6 +4525,12 @@ class BlogPost(db.Model):
     cve_ids          = db.Column(db.JSON, nullable=True)
     cover_image_url  = db.Column(db.String(500), nullable=True)
     external_links   = db.Column(db.JSON, nullable=True)
+    # A Pivograph map attached to the post (github.com/ecrou-exact/project-graph
+    # document format), edited in the post editor, shown and downloadable on the
+    # post page. Validated by blog_core.clean_graph.
+    graph            = db.Column(db.JSON, nullable=True)
+    # How readers see it: 'full' (Pivograph with its panels) or 'simple' (just the graph).
+    graph_view       = db.Column(db.String(16), nullable=False, default='full', server_default='full')
     created_at   = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
     updated_at   = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
     published_at = db.Column(db.DateTime, nullable=True)
@@ -4550,6 +4556,8 @@ class BlogPost(db.Model):
             'has_share_key':    bool(self.share_key),
             'cover_image_url':  self.cover_image_url,
             'external_links':   self.external_links or [],
+            'has_graph':        self.graph is not None,
+            'graph_view':       self.graph_view or 'full',
             'files':            [f.to_json() for f in self.files],
             'view_count':    self.view_count,
             'cve_ids':       self.cve_ids or [],

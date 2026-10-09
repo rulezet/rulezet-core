@@ -351,6 +351,37 @@
             </div>
         </div>
 
+        <!-- Graph (Pivograph map, read-only) -->
+        <div v-if="post.has_graph" class="card border-0 shadow-sm rounded-3 mb-4" id="post-graph">
+            <!-- Simple: just the graph, two small buttons over it -->
+            <div v-if="post.graph_view === 'simple'" class="blog-graph-simple">
+                <iframe ref="graphFrame" class="blog-graph-viewer blog-graph-viewer--simple" title="Graph of this post (Pivograph)" allow="fullscreen" loading="lazy"></iframe>
+                <div class="blog-graph-simple__actions">
+                    <button type="button" class="blog-graph-simple__btn" @click="graphFullscreen" title="Full screen"><i class="fa-solid fa-expand"></i></button>
+                    <a :href="graphUrl + (graphUrl.includes('?') ? '&' : '?') + 'download=1'" class="blog-graph-simple__btn" title="Download the graph (JSON)"><i class="fa-solid fa-download"></i></a>
+                </div>
+            </div>
+            <div v-else class="card-body p-4">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <i class="fa-solid fa-diagram-project text-primary"></i>
+                    <h6 class="fw-bold mb-0">Graph</h6>
+                    <span class="text-muted" style="font-size:.78rem;">Explore it: zoom, drag, click a node for its details.</span>
+                    <div class="ms-auto d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="graphFullscreen" title="Full screen">
+                            <i class="fa-solid fa-expand"></i>
+                        </button>
+                        <a :href="graphUrl + (graphUrl.includes('?') ? '&' : '?') + 'download=1'" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                            <i class="fa-solid fa-download me-1"></i>Download JSON
+                        </a>
+                    </div>
+                </div>
+                <iframe ref="graphFrame" class="blog-graph-viewer" title="Graph of this post (Pivograph)" allow="fullscreen" loading="lazy"></iframe>
+                <div class="text-muted mt-2" style="font-size:.72rem;">
+                    Pivograph JSON format — open it in <a href="https://ecrou-exact.github.io/project-graph/" target="_blank" rel="noopener noreferrer">Pivograph</a> or any tool that reads it.
+                </div>
+            </div>
+        </div>
+
         <!-- Attached Rules -->
         <div v-if="post.rule_ids && post.rule_ids.length" class="card border-0 shadow-sm rounded-3 mb-4">
             <div class="card-body p-4">
@@ -513,6 +544,7 @@
     import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
     import { sanitizeHtml }          from '/static/js/sanitize.js'
+    import { mountGraphViewer }      from '/static/js/blog/blogGraph.js'
     const { createApp, ref, computed, watch, onMounted, onUnmounted } = Vue
 
     // Vendored locally instead of the unpinned/no-SRI jsdelivr CDN copy this
@@ -576,6 +608,19 @@
                     : await sanitizeHtml(marked.parse(content))
             }, { immediate: true })
 
+            // ── Graph (Pivograph map) ──
+            const graphFrame = ref(null)
+            const graphUrl = `/blog/post/${POST_UUID}/graph.json` + ({{ shared | tojson }} ? `?key={{ post.share_key if shared else '' }}` : '')
+            function showGraph() {
+                // the card renders once post.has_graph is set
+                setTimeout(() => {
+                    if (graphFrame.value) mountGraphViewer(graphFrame.value, graphUrl, {
+                        view: post.value.graph_view, onError: (m) => create_message(m, 'danger-subtle'),
+                    })
+                }, 0)
+            }
+            function graphFullscreen() { graphFrame.value?.requestFullscreen?.() }
+
             async function fetchPost() {
                 isLoading.value = true
                 try {
@@ -587,6 +632,7 @@
                     const data = await res.json()
                     if (res.ok) {
                         post.value = data
+                        if (data.has_graph) showGraph()
                     } else {
                         create_message(data.error || 'Failed to load post.', 'danger-subtle')
                     }
@@ -721,6 +767,7 @@
             }
 
             return {
+                graphFrame, graphUrl, graphFullscreen,
                 post, isLoading, ruleListUrl, bundleListUrl,
                 renderedContent, shareUrl, currentShareUrl, isRegenerating,
                 showSharePanel, copied, lightboxOpen, fileIcon,

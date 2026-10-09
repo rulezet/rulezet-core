@@ -91,6 +91,29 @@ def _sync_attacks(post: BlogPost, technique_ids: list) -> None:
 
 # ── CRUD ───────────────────────────────────────────────────────────────────────
 
+GRAPH_MAX_BYTES = 5 * 1024 * 1024     # embedded images (data: URLs) count
+GRAPH_MAX_NODES = 3000
+GRAPH_MAX_EDGES = 10000
+
+
+def clean_graph(graph):
+    """Check a Pivograph document sent with a post (None removes the graph).
+    Returns it unchanged, or raises ValueError with a message for the editor."""
+    import json as _json
+    if graph is None:
+        return None
+    if not isinstance(graph, dict):
+        raise ValueError("The graph must be a Pivograph JSON document.")
+    nodes, edges = graph.get('nodes', []), graph.get('edges', [])
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        raise ValueError("The graph's nodes and edges must be lists.")
+    if len(nodes) > GRAPH_MAX_NODES or len(edges) > GRAPH_MAX_EDGES:
+        raise ValueError(f"The graph is too big (max {GRAPH_MAX_NODES} nodes, {GRAPH_MAX_EDGES} edges).")
+    if len(_json.dumps(graph)) > GRAPH_MAX_BYTES:
+        raise ValueError(f"The graph is too big (max {GRAPH_MAX_BYTES // (1024 * 1024)} MB with its images).")
+    return graph
+
+
 def create_post(data: dict, user_id: int) -> BlogPost:
     """Create a new BlogPost from the submitted data dict."""
     title = (data.get('title') or '').strip()
@@ -114,6 +137,8 @@ def create_post(data: dict, user_id: int) -> BlogPost:
         cve_ids=data.get('cve_ids') or [],
         cover_image_url=(data.get('cover_image_url') or '').strip() or None,
         external_links=data.get('external_links') or [],
+        graph=clean_graph(data.get('graph')),
+        graph_view='simple' if data.get('graph_view') == 'simple' else 'full',
         created_at=datetime.datetime.utcnow(),
         updated_at=datetime.datetime.utcnow(),
         published_at=datetime.datetime.utcnow() if is_public else None,
@@ -149,6 +174,10 @@ def update_post(post: BlogPost, data: dict) -> BlogPost:
     post.cve_ids         = data.get('cve_ids') or []
     post.cover_image_url = (data.get('cover_image_url') or '').strip() or None
     post.external_links  = data.get('external_links') or []
+    if 'graph' in data:                      # absent = unchanged, null = removed
+        post.graph = clean_graph(data['graph'])
+    if 'graph_view' in data:
+        post.graph_view = 'simple' if data['graph_view'] == 'simple' else 'full'
     post.updated_at      = datetime.datetime.utcnow()
 
     if is_public and not was_public:
