@@ -96,6 +96,10 @@
 .sc-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: .75rem; color: var(--subtle-text-color); pointer-events: none; }
 .sc-search input { padding-left: 28px; border-radius: 8px; }
 .sc-sort { width: auto; margin-left: auto; border-radius: 8px; font-size: .78rem; }
+.sc-toolbar__row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; width: 100%; }
+.sc-author { width: auto; max-width: 220px; border-radius: 8px; font-size: .78rem; }
+.sc-reset { border: 0; background: none; padding: 0 .25rem; font-size: .76rem; font-weight: 600; color: #dc3545; }
+.sc-reset:hover { text-decoration: underline; }
 
 /* Reported environments: values filter the list */
 .sc-env__row { cursor: pointer; margin: 0 -.4rem; padding: .2rem .4rem; border-radius: 6px; transition: background .12s ease; }

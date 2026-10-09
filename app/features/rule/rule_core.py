@@ -5566,14 +5566,15 @@ def get_similar_rule(rule_id: int = None, number: int = None):
 
 def get_scopes(rule_id: int, current_user_id: int = None, page: int = 1, per_page: int = 20,
                works_filter: str = 'all', search: str = '', criterion: tuple = None,
-               notes_only: bool = False, sort: str = 'newest'):
+               notes_only: bool = False, sort: str = 'newest', author_id: int = None):
     """Scope declarations of a rule, one page at a time.
 
     Returns a dict: the page of declarations (newest first) matching
     `works_filter` ('all' | 'ok' | 'ko'), `search` (author name, notes or
     criterion value, case-insensitive), `criterion` ((key, value) the
-    declaration must list), `notes_only`, sorted by `sort` ('newest' |
-    'oldest'); the pagination info, the works /
+    declaration must list), `notes_only`, `author_id` (one member's
+    declarations), sorted by `sort` ('newest' | 'oldest'); the pagination
+    info, the members who declared (with their number of declarations), the works /
     doesn't-work counts and the reported environments — those two over every
     declaration, whatever the filter — and the current user's own declaration.
     """
@@ -5591,11 +5592,22 @@ def get_scopes(rule_id: int, current_user_id: int = None, page: int = 1, per_pag
             v = groups.setdefault(e['key'], {}).setdefault(e['value'], {'value': e['value'], 'ok': 0, 'ko': 0})
             v['ok' if s.works else 'ko'] += 1
     environments = [
-        {'key': key, 'values': sorted(values.values(), key=lambda v: -(v['ok'] + v['ko']))[:6]}
+        {'key': key, 'values': sorted(values.values(), key=lambda v: -(v['ok'] + v['ko']))}
         for key, values in groups.items()
     ]
 
+    # Members who declared, most declarations first.
+    authors = {}
+    for s in all_scopes:
+        a = authors.setdefault(s.user_id, {'user_id': s.user_id,
+                                           'username': s.user.get_username() if s.user else 'Unknown',
+                                           'avatar': s.user.get_avatar_url() if s.user else None, 'count': 0})
+        a['count'] += 1
+    authors = sorted(authors.values(), key=lambda a: (-a['count'], a['username'].lower()))
+
     matching = all_scopes
+    if author_id:
+        matching = [s for s in matching if s.user_id == author_id]
     if works_filter in ('ok', 'ko'):
         matching = [s for s in matching if s.works == (works_filter == 'ok')]
     if criterion and criterion[0] and criterion[1]:
@@ -5620,11 +5632,9 @@ def get_scopes(rule_id: int, current_user_id: int = None, page: int = 1, per_pag
     page = max(1, min(page, total_pages))
     page_items = matching[(page - 1) * per_page: page * per_page]
 
-    my_scope = None
-    if current_user_id:
-        mine = next((s for s in all_scopes if s.user_id == current_user_id), None)
-        if mine:
-            my_scope = mine.to_json()
+    # The current user's own declarations (all of them: the page checks a new
+    # one isn't an exact duplicate before sending it).
+    my_scopes = [s.to_json() for s in all_scopes if current_user_id and s.user_id == current_user_id]
 
     return {
         'scopes':       [s.to_json() for s in page_items],
@@ -5634,33 +5644,53 @@ def get_scopes(rule_id: int, current_user_id: int = None, page: int = 1, per_pag
         'works_count':  works_count,
         'nworks_count': nworks_count,
         'environments': environments,
-        'my_scope':     my_scope,
+        'my_scopes':    my_scopes,
+        'authors':      authors,
     }
 
 
-def upsert_scope(rule_id: int, user_id: int, works: bool, entries: list, comment: str):
-    """Create or update a user's scope declaration for a rule. Returns (scope_json, is_new)."""
-    existing = RuleScope.query.filter_by(rule_id=rule_id, user_id=user_id).first()
-    is_new = existing is None
-    if is_new:
-        existing = RuleScope(
-            uuid=str(uuid.uuid4()),
-            rule_id=rule_id,
-            user_id=user_id,
-        )
-        db.session.add(existing)
-    existing.works   = works
-    existing.entries = entries
-    existing.comment = comment or None
-    existing.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
+def scope_signature(works: bool, entries: list, comment: str) -> tuple:
+    """What makes two declarations "the same": status, the set of criteria
+    (order, case and surrounding spaces ignored) and the notes (trimmed)."""
+    crit = sorted(((e.get('key') or '').strip().lower(), (e.get('value') or '').strip().lower())
+                  for e in (entries or []) if isinstance(e, dict))
+    return bool(works), tuple(crit), (comment or '').strip()
+
+
+def save_scope(rule_id: int, user_id: int, works: bool, entries: list, comment: str, scope_id: int = None):
+    """Create a scope declaration, or update the user's declaration `scope_id`.
+
+    A user can declare several scopes for a rule, but never twice exactly the
+    same one (see scope_signature). Returns (scope_json, is_new, error) where
+    error is None, 'duplicate' or 'not_found'.
+    """
+    signature = scope_signature(works, entries, comment)
+    mine = RuleScope.query.filter_by(rule_id=rule_id, user_id=user_id).all()
+    if any(s.id != scope_id and scope_signature(s.works, s.entries, s.comment) == signature for s in mine):
+        return None, False, 'duplicate'
+
+    if scope_id is not None:
+        scope = next((s for s in mine if s.id == scope_id), None)
+        if not scope:
+            return None, False, 'not_found'
+        is_new = False
+    else:
+        scope = RuleScope(uuid=str(uuid.uuid4()), rule_id=rule_id, user_id=user_id)
+        db.session.add(scope)
+        is_new = True
+    scope.works   = works
+    scope.entries = entries
+    scope.comment = comment or None
+    scope.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
     db.session.commit()
-    return existing.to_json(), is_new
+    return scope.to_json(), is_new, None
 
 
-def delete_scope(rule_id: int, user_id: int):
-    """Delete a user's scope declaration. Returns True if found and deleted."""
-    scope = RuleScope.query.filter_by(rule_id=rule_id, user_id=user_id).first()
-    if not scope:
+def delete_scope(rule_id: int, scope_id: int, user):
+    """Delete scope declaration `scope_id` of a rule — its author or an admin.
+    Returns True if deleted, False if not found or not allowed."""
+    scope = RuleScope.query.filter_by(id=scope_id, rule_id=rule_id).first()
+    if not scope or (scope.user_id != user.id and not user.is_admin()):
         return False
     db.session.delete(scope)
     db.session.commit()

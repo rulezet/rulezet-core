@@ -6334,6 +6334,8 @@ def get_scope_list(rule_id):
         criterion=(request.args.get('crit_key', ''), request.args.get('crit_value', '')),
         notes_only=request.args.get('notes') == '1',
         sort=request.args.get('sort', 'newest'),
+        author_id=(current_user_id if request.args.get('mine') == '1'
+                   else request.args.get('author', type=int)),
     )
     return jsonify({'success': True, **data}), 200
 
@@ -6347,7 +6349,7 @@ def scope_upsert(rule_id):
     data    = request.get_json() or {}
     works   = bool(data.get('works', True))
     entries = data.get('entries', [])
-    comment = (data.get('comment') or '').strip()[:2000]   # Markdown, rendered client-side (sanitized)
+    comment = (data.get('comment') or '').strip()[:10000]   # Markdown, rendered client-side (sanitized)
     if not isinstance(entries, list):
         return jsonify({'success': False, 'message': 'entries must be a list'}), 400
     # Environment criteria: {key, value} strings only, bounded; empty values dropped.
@@ -6361,7 +6363,14 @@ def scope_upsert(rule_id):
         key, value = key.strip()[:40], value.strip()[:100]
         if key and value:
             clean_entries.append({'key': key, 'value': value})
-    scope_json, is_new = RuleModel.upsert_scope(rule_id, current_user.id, works, clean_entries, comment)
+    scope_id = data.get('scope_id')
+    if scope_id is not None and not isinstance(scope_id, int):
+        return jsonify({'success': False, 'message': 'Invalid declaration id'}), 400
+    scope_json, is_new, error = RuleModel.save_scope(rule_id, current_user.id, works, clean_entries, comment, scope_id)
+    if error == 'duplicate':
+        return jsonify({'success': False, 'message': 'You already declared exactly this scope for this rule.'}), 409
+    if error == 'not_found':
+        return jsonify({'success': False, 'message': 'Declaration not found'}), 404
     action = 'rule.scope_add' if is_new else 'rule.scope_update'
     label  = 'Declared' if is_new else 'Updated'
     log_activity(action, f"{label} scope for rule '{rule.title}' — works={works}",
@@ -6369,13 +6378,14 @@ def scope_upsert(rule_id):
     return jsonify({'success': True, 'scope': scope_json}), 200
 
 
-@rule_blueprint.route('/scope/<int:rule_id>', methods=['DELETE'])
+@rule_blueprint.route('/scope/<int:rule_id>/<int:scope_id>', methods=['DELETE'])
 @login_required
-def scope_delete(rule_id):
+def scope_delete(rule_id, scope_id):
+    """Delete one scope declaration — its author or an admin."""
     rule = RuleModel.get_rule(rule_id)
     if not rule:
         return jsonify({'success': False, 'message': 'Rule not found'}), 404
-    deleted = RuleModel.delete_scope(rule_id, current_user.id)
+    deleted = RuleModel.delete_scope(rule_id, scope_id, current_user)
     if not deleted:
         return jsonify({'success': False, 'message': 'No declaration found'}), 404
     log_activity('rule.scope_delete', f"Removed scope declaration for rule '{rule.title}'",

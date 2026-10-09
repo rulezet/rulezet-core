@@ -3125,13 +3125,15 @@ class PivotickGraphStyle(db.Model):
 
 
 class RuleScope(db.Model):
-    """One scope declaration per user per rule — captures the environment where a rule works (or not)."""
+    """A user's declaration of the environment where a rule works (or not). A user
+    can declare several per rule, never twice exactly the same one
+    (rule_core.save_scope / scope_signature)."""
     __tablename__ = 'rule_scope'
 
     id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
     uuid       = db.Column(db.String(36), unique=True, nullable=False, index=True)
     rule_id    = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=False, index=True)
-    user_id    = db.Column(db.Integer, db.ForeignKey('user.id',  ondelete='CASCADE'), nullable=False)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id',  ondelete='CASCADE'), nullable=False, index=True)
 
     works      = db.Column(db.Boolean, nullable=False, default=True)   # True = "works for me"
     entries    = db.Column(db.JSON,    nullable=False, default=list)    # [{"key": "os", "value": "linux"}, …]
@@ -3141,10 +3143,6 @@ class RuleScope(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc),
                            onupdate=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
-
-    __table_args__ = (
-        db.UniqueConstraint('rule_id', 'user_id', name='uq_rule_scope_user'),
-    )
 
     rule = db.relationship('Rule', backref=db.backref('scope_declarations', lazy='dynamic',
                                                        cascade='all, delete-orphan'))
@@ -3156,6 +3154,7 @@ class RuleScope(db.Model):
             'uuid':       self.uuid,
             'user_id':    self.user_id,
             'username':   self.user.get_username() if self.user else 'Unknown',
+            'avatar':     self.user.get_avatar_url() if self.user else None,
             'works':      self.works,
             'entries':    self.entries or [],
             'comment':    self.comment or '',

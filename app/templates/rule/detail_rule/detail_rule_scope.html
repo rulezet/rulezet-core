@@ -78,7 +78,7 @@
                 <div class="h-card__body">
                     <div v-for="group in environments" :key="group.key" class="sc-env">
                         <div class="sc-env__key">[[ group.label ]]</div>
-                        <div v-for="v in group.values" :key="v.value" class="sc-env__row"
+                        <div v-for="v in group.values.slice(0, 6)" :key="v.value" class="sc-env__row"
                              :class="{ 'is-active': crit && crit.key === group.key && crit.value === v.value }"
                              @click="setCriterion(group.key, v.value)" title="Show only these declarations">
                             <span class="sc-env__value">[[ v.value ]]</span>
@@ -99,7 +99,7 @@
             <div v-if="showScopeForm" class="h-card sc-form" id="scope-form">
                 <div class="h-card__header">
                     <div class="h-card__accent"></div>
-                    <span class="h-card__title"><i class="fa-solid fa-pen me-1"></i>[[ myScope ? 'Edit my declaration' : 'Declare my scope' ]]</span>
+                    <span class="h-card__title"><i class="fa-solid fa-pen me-1"></i>[[ scopeForm.id ? 'Edit my declaration' : 'New declaration' ]]</span>
                 </div>
                 <div class="h-card__body">
                     <label class="sc-label">Does this rule work in your environment?</label>
@@ -137,16 +137,16 @@
                     <label class="sc-label">Notes <span class="sc-muted fw-normal">— optional, Markdown supported</span></label>
                     <markdown-composer v-model="scopeForm.comment" :rows="5"
                                        placeholder="e.g. Fires on our legacy AD where NTLMv1 is still enabled; tuned the threshold to 5…"></markdown-composer>
-                    <div class="sc-muted text-end mt-1" :class="{ 'text-danger': (scopeForm.comment || '').length > 2000 }">
-                        [[ (scopeForm.comment || '').length ]] / 2000
+                    <div class="sc-muted text-end mt-1" :class="{ 'text-danger': (scopeForm.comment || '').length > 10000 }">
+                        [[ (scopeForm.comment || '').length ]] / 10 000
                     </div>
 
                     <div class="d-flex flex-wrap gap-2 mt-3">
-                        <button @click="submitScope" class="btn btn-sm btn-primary rounded-pill px-4" :disabled="saving || (scopeForm.comment || '').length > 2000">
+                        <button @click="submitScope" class="btn btn-sm btn-primary rounded-pill px-4" :disabled="saving || (scopeForm.comment || '').length > 10000">
                             <i class="fa-solid me-1" :class="saving ? 'fa-circle-notch fa-spin' : 'fa-floppy-disk'"></i>Save
                         </button>
                         <button @click="showScopeForm = false" class="btn btn-sm btn-outline-secondary rounded-pill px-4">Cancel</button>
-                        <button v-if="myScope" @click="deleteScope" class="btn btn-sm btn-outline-danger rounded-pill px-3 ms-auto">
+                        <button v-if="scopeForm.id" @click="deleteScope(scopeForm)" class="btn btn-sm btn-outline-danger rounded-pill px-3 ms-auto">
                             <i class="fa-solid fa-trash me-1"></i>Remove my declaration
                         </button>
                     </div>
@@ -163,8 +163,8 @@
                             [[ f.label ]] <span class="opacity-75">[[ f.count() ]]</span>
                         </span>
                         {% if current_user.is_authenticated %}
-                        <button v-if="!myScope && !showScopeForm" @click="openForm" class="btn btn-sm btn-primary rounded-pill px-3 ms-2">
-                            <i class="fa-solid fa-plus me-1"></i>Declare my scope
+                        <button v-if="!showScopeForm" @click="openForm" class="btn btn-sm btn-primary rounded-pill px-3 ms-2">
+                            <i class="fa-solid fa-plus me-1"></i>[[ myScopes.length ? 'Add a declaration' : 'Declare my scope' ]]
                         </button>
                         {% endif %}
                     </div>
@@ -180,10 +180,34 @@
                     <span v-if="crit" class="h-filter-chip active" @click="crit = null" title="Remove this filter">
                         [[ keyLabel(crit.key) ]]: [[ crit.value ]] <i class="fa-solid fa-xmark"></i>
                     </span>
+                    {% if current_user.is_authenticated %}
+                    <span :class="['h-filter-chip', { active: mineOnly }]" @click="mineOnly = !mineOnly" title="Only my declarations">
+                        <i class="fa-solid fa-user"></i>Mine only
+                    </span>
+                    {% endif %}
                     <select v-model="sort" class="form-select form-select-sm sc-sort" aria-label="Sort">
                         <option value="newest">Newest first</option>
                         <option value="oldest">Oldest first</option>
                     </select>
+                    <div class="sc-toolbar__row">
+                        <!-- Member who declared -->
+                        <select v-model="author" class="form-select form-select-sm sc-author" :disabled="mineOnly" aria-label="Member">
+                            <option :value="null">All members ([[ authors.length ]])</option>
+                            <option v-for="a in authors" :key="a.user_id" :value="a.user_id">[[ a.username ]] · [[ a.count ]]</option>
+                        </select>
+                        <!-- Environment: criterion, then one of the values declared for it -->
+                        <select v-model="critKey" class="form-select form-select-sm sc-author" aria-label="Criterion">
+                            <option :value="null">Any environment</option>
+                            <option v-for="g in environments" :key="g.key" :value="g.key">[[ g.label ]]</option>
+                        </select>
+                        <select v-if="critKey" v-model="critValue" class="form-select form-select-sm sc-author" aria-label="Value">
+                            <option :value="null">Any [[ keyLabel(critKey).toLowerCase() ]]</option>
+                            <option v-for="v in valuesFor(critKey)" :key="v.value" :value="v.value">[[ v.value ]] · [[ v.ok + v.ko ]]</option>
+                        </select>
+                        <button v-if="hasFilters" type="button" class="sc-reset" @click="resetFilters">
+                            <i class="fa-solid fa-rotate-left me-1"></i>Reset filters
+                        </button>
+                    </div>
                 </div>
                 <div class="h-card__body">
                     {% if not current_user.is_authenticated %}
@@ -201,18 +225,20 @@
                         <p class="sc-muted mb-0">[[ total ]] declaration[[ total > 1 ? 's' : '' ]][[ hasFilters ? ' match' : '' ]] · page [[ page ]] of [[ totalPages ]]</p>
                         <article v-for="s in scopeList" :key="s.id" :class="['sc-item', s.works ? 'sc-item--ok' : 'sc-item--ko']">
                             <div class="sc-item__head">
-                                <user-chip :user-id="s.user_id" :username="s.username" size="sm" :show-name="true"></user-chip>
+                                <user-chip :user-id="s.user_id" :username="s.username" :avatar="s.avatar" size="sm" :show-name="true"></user-chip>
                                 <span :class="['sc-status', s.works ? 'sc-status--ok' : 'sc-status--ko']">
                                     <i :class="s.works ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>[[ s.works ? 'Works' : "Doesn't work" ]]
                                 </span>
                                 <span v-if="s.user_id === currentUserId" class="sc-you">You</span>
                                 <span v-if="nameMatches(s)" class="sc-name-hit" title="The search matches this member's name"><i class="fa-solid fa-magnifying-glass"></i> name matches</span>
                                 <span class="sc-muted ms-auto" :title="'Declared ' + s.created_at">[[ s.updated_at ]]</span>
-                                <span v-if="s.user_id === currentUserId" class="sc-actions">
-                                    <button type="button" class="sc-icon-btn sc-icon-btn--edit" @click="editMyScope" :disabled="showScopeForm" title="Edit my declaration">
+                                <span v-if="s.user_id === currentUserId || isAdmin" class="sc-actions">
+                                    <button v-if="s.user_id === currentUserId" type="button" class="sc-icon-btn sc-icon-btn--edit"
+                                            @click="editScope(s)" :disabled="showScopeForm" title="Edit this declaration">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
-                                    <button type="button" class="sc-icon-btn" @click="deleteScope" title="Delete my declaration">
+                                    <button type="button" class="sc-icon-btn" @click="deleteScope(s)"
+                                            :title="s.user_id === currentUserId ? 'Delete this declaration' : 'Delete (admin)'">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </span>
@@ -254,6 +280,7 @@
     const rule_id = {{ rule.id }};
     const csrf_token = '{{ csrf_token() }}';
     const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
+    const isAdmin = {{ (current_user.is_authenticated and current_user.is_admin()) | tojson }};
     const RULE_TITLE = {{ rule.title | tojson }};
     const RULE_TITLE_SHORT = RULE_TITLE.length > 40 ? RULE_TITLE.slice(0, 40) + '…' : RULE_TITLE;
 
@@ -274,13 +301,13 @@
             ];
 
             const scopeList        = ref([]);
-            const myScope          = ref(null);
+            const myScopes         = ref([]);       // all of the current user's declarations
             const scopeWorksCount  = ref(0);
             const scopeNworksCount = ref(0);
             const scopeLoading     = ref(false);
             const showScopeForm    = ref(false);
             const saving           = ref(false);
-            const scopeForm        = ref({ works: true, entries: [], comment: '' });
+            const scopeForm        = ref({ id: null, works: true, entries: [], comment: '' });
             const filter           = ref('all');
             const rendered         = ref({});      // scope id -> sanitized HTML of its notes
             // Server-side pagination / filters (GET /rule/get_scopes/<id>)
@@ -292,7 +319,11 @@
             const notesOnly        = ref(false);
             const sort             = ref('newest');
             const serverEnvs       = ref([]);
-            const hasFilters = computed(() => filter.value !== 'all' || !!q.value.trim() || !!crit.value || notesOnly.value);
+            const authors          = ref([]);      // members who declared: { user_id, username, avatar, count }
+            const author           = ref(null);    // one member's declarations
+            const mineOnly         = ref(false);
+            const hasFilters = computed(() => filter.value !== 'all' || !!q.value.trim() || !!crit.value || notesOnly.value
+                                              || mineOnly.value || author.value !== null);
 
             const totalCount = computed(() => scopeWorksCount.value + scopeNworksCount.value);
             const worksPct   = computed(() => totalCount.value ? Math.round(scopeWorksCount.value * 100 / totalCount.value) : 0);
@@ -313,6 +344,24 @@
                     .map(g => ({ ...g, label: keyLabel(g.key) }))
                     .sort((a, b) => (order.indexOf(a.key) + 1 || 99) - (order.indexOf(b.key) + 1 || 99));
             });
+
+            // Environment menus (criterion, then value) — the same filter as clicking a value
+            // in "Reported environments".
+            const critKey = computed({
+                get: () => crit.value?.key ?? pendingKey.value,
+                set: (k) => { pendingKey.value = k; crit.value = null; },
+            });
+            const pendingKey = ref(null);                // criterion chosen, value not yet
+            const critValue = computed({
+                get: () => crit.value?.value ?? null,
+                set: (v) => { crit.value = v === null ? null : { key: critKey.value, value: v }; },
+            });
+            const valuesFor = (key) => serverEnvs.value.find(g => g.key === key)?.values || [];
+
+            function resetFilters() {
+                filter.value = 'all'; q.value = ''; crit.value = null; pendingKey.value = null;
+                notesOnly.value = false; mineOnly.value = false; author.value = null;
+            }
 
             function setCriterion(key, value) {
                 crit.value = (crit.value && crit.value.key === key && crit.value.value === value) ? null : { key, value };
@@ -382,6 +431,8 @@
                 if (q.value.trim()) params.set('q', q.value.trim());
                 if (notesOnly.value) params.set('notes', '1');
                 if (crit.value) { params.set('crit_key', crit.value.key); params.set('crit_value', crit.value.value); }
+                if (mineOnly.value) params.set('mine', '1');
+                else if (author.value !== null) params.set('author', author.value);
                 try {
                     const res  = await fetch(`/rule/get_scopes/${rule_id}?${params}`);
                     const data = await res.json();
@@ -394,7 +445,8 @@
                         scopeWorksCount.value  = data.works_count;
                         scopeNworksCount.value = data.nworks_count;
                         serverEnvs.value       = data.environments || [];
-                        myScope.value          = data.my_scope;
+                        authors.value          = data.authors || [];
+                        myScopes.value         = data.my_scopes || [];
                         renderNotes();
                     }
                 } finally {
@@ -409,7 +461,7 @@
             }
 
             // Any filter change starts again from page 1; the search waits for a pause in typing.
-            Vue.watch([filter, crit, notesOnly, sort], () => { page.value = 1; fetchScopes(); });
+            Vue.watch([filter, crit, notesOnly, sort, author, mineOnly], () => { page.value = 1; fetchScopes(); });
             let searchTimer = null;
             Vue.watch(q, () => {
                 clearTimeout(searchTimer);
@@ -421,26 +473,44 @@
             }
 
             function openForm() {
-                scopeForm.value = { works: true, entries: [{ key: 'os', value: '' }], comment: '' };
+                scopeForm.value = { id: null, works: true, entries: [{ key: 'os', value: '' }], comment: '' };
                 showScopeForm.value = true;
                 scrollToForm();
             }
 
-            function editMyScope() {
-                if (!myScope.value) return;
+            function editScope(scope) {
                 scopeForm.value = {
-                    works:   myScope.value.works,
-                    entries: JSON.parse(JSON.stringify(myScope.value.entries)),
-                    comment: myScope.value.comment || '',
+                    id:      scope.id,
+                    works:   scope.works,
+                    entries: JSON.parse(JSON.stringify(scope.entries)),
+                    comment: scope.comment || '',
                 };
                 showScopeForm.value = true;
                 scrollToForm();
             }
 
+            // Same rule as the server (rule_core.scope_signature): status, set of
+            // criteria (order / case / spaces ignored) and trimmed notes.
+            function signature(works, entries, comment) {
+                const crit = (entries || [])
+                    .map(e => `${(e.key || '').trim().toLowerCase()}\u0000${(e.value || '').trim().toLowerCase()}`)
+                    .sort();
+                return JSON.stringify([!!works, crit, (comment || '').trim()]);
+            }
+
             async function submitScope() {
                 saving.value = true;
                 try {
-                    const payload = { ...scopeForm.value, entries: scopeForm.value.entries.filter(e => (e.value || '').trim()) };
+                    const entries = scopeForm.value.entries.filter(e => (e.value || '').trim());
+                    const sig = signature(scopeForm.value.works, entries, scopeForm.value.comment);
+                    if (myScopes.value.some(m => m.id !== scopeForm.value.id && signature(m.works, m.entries, m.comment) === sig)) {
+                        create_message('You already declared exactly this scope — change the status, a criterion or the notes.', 'warning-subtle');
+                        return;
+                    }
+                    const payload = {
+                        works: scopeForm.value.works, entries, comment: scopeForm.value.comment,
+                        scope_id: scopeForm.value.id || null,
+                    };
                     const res  = await fetch(`/rule/scope/${rule_id}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
@@ -461,9 +531,9 @@
                 }
             }
 
-            async function deleteScope() {
-                if (!confirm('Remove your scope declaration?')) return;
-                const res = await fetch(`/rule/scope/${rule_id}`, {
+            async function deleteScope(scope) {
+                if (!scope?.id || !confirm('Delete this scope declaration?')) return;
+                const res = await fetch(`/rule/scope/${rule_id}/${scope.id}`, {
                     method: 'DELETE',
                     headers: { 'X-CSRFToken': csrf_token },
                 });
@@ -479,10 +549,11 @@
 
             return {
                 RULE_TITLE_SHORT, SCOPE_KEYS, FILTERS, currentUserId,
-                scopeList, myScope, scopeWorksCount, scopeNworksCount, totalCount, worksPct,
+                scopeList, myScopes, isAdmin, scopeWorksCount, scopeNworksCount, totalCount, worksPct,
                 scopeLoading, showScopeForm, saving, scopeForm, filter, rendered, environments,
-                page, totalPages, total, q, crit, notesOnly, sort, hasFilters,
-                keyLabel, scopeKeyOptions, openForm, editMyScope, submitScope, deleteScope, setCriterion, goToPage,
+                page, totalPages, total, q, crit, notesOnly, sort, hasFilters, authors, author, mineOnly,
+                critKey, critValue, valuesFor, resetFilters,
+                keyLabel, scopeKeyOptions, openForm, editScope, submitScope, deleteScope, setCriterion, goToPage,
                 highlightText, nameMatches, overflowing, expanded,
             };
         }
