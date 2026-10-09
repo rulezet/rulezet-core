@@ -484,6 +484,12 @@ def edit_user():
         form_dict     = form_to_dict(form)
         avatar_file   = form.profile_picture.data
         remove_avatar = request.form.get("remove_avatar") == "1"
+        built_avatar = None
+        avatar_mode = request.form.get("avatar_mode")
+        if avatar_mode in ("rulezy", "icon"):
+            choice = request.form.get("rulezy_pose" if avatar_mode == "rulezy" else "avatar_icon", "")
+            built_avatar = (avatar_mode, choice, request.form.get("avatar_bg", ""),
+                            request.form.get("avatar_border", "none"))
         # Only include password if change_password is checked, and never for SSO accounts
         if not form.change_password.data or is_sso:
             form_dict.pop("password", None)
@@ -494,6 +500,7 @@ def edit_user():
             avatar_file=avatar_file,
             remove_avatar=remove_avatar,
             is_sso=is_sso,
+            built_avatar=built_avatar,
         )
         if success:
             log_activity("user.edit_profile", "Updated profile",
@@ -525,7 +532,28 @@ def edit_user():
         form.github_url.data  = current_user.github_url
         form.twitter_url.data = current_user.twitter_url
 
-    return render_template("account/edit_user.html", form=form, is_sso=is_sso)
+    return render_template("account/edit_user.html", form=form, is_sso=is_sso,
+                           rulezy_poses=AccountModel.get_rulezy_poses(),
+                           avatar_icons=AccountModel.get_avatar_icons(),
+                           avatar_backgrounds=AccountModel.AVATAR_BACKGROUNDS,
+                           avatar_borders=AccountModel.AVATAR_BORDERS)
+
+
+@account_blueprint.route('/avatar_preview.png', methods=['GET'])
+@login_required
+def avatar_preview():
+    """Preview of a built avatar (Rulezy pose or icon, background, outline),
+    exactly as it would be saved — used by the picker on /account/edit.
+    Read-only, nothing stored."""
+    from flask import Response, abort
+    size = 128 if request.args.get('size') == 'small' else 256
+    data = AccountModel.render_built_avatar(request.args.get('kind', ''), request.args.get('choice', ''),
+                                            request.args.get('bg', ''), request.args.get('border', 'none'), size)
+    if data is None:
+        abort(404)
+    resp = Response(data, mimetype='image/png')
+    resp.headers['Cache-Control'] = 'private, max-age=86400'
+    return resp
 
 
 @account_blueprint.route('/regenerate_api_key', methods=['POST'])

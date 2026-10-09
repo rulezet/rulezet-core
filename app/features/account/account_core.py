@@ -1,3 +1,5 @@
+import io
+import functools
 import os
 import secrets
 import hashlib
@@ -22,6 +24,152 @@ import uuid
 
 AVATAR_UPLOAD_FOLDER = os.path.join("app", "static", "uploads", "avatars")
 ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+
+# ── Built avatars (Rulezy pose or Font Awesome icon) ───────────────────
+# Instead of uploading a picture, a user can build one on /account/edit: a
+# Rulezy pose (static/images/rulezy/<pose>.png) or a Font Awesome icon, on a
+# background, with an optional coloured outline. The result is rendered once
+# into a PNG in AVATAR_UPLOAD_FOLDER, so it is stored and shown exactly like
+# an uploaded avatar everywhere. Every choice is whitelisted here.
+RULEZY_IMAGE_FOLDER = os.path.join("app", "static", "images", "rulezy")
+FONTAWESOME_DIR = os.path.join("app", "static", "fontawesome-6.3.0")
+AVATAR_BACKGROUNDS = {
+    # key: (label, top colour, bottom colour) — a vertical gradient
+    "blue":   ("Blue",   "#4d94ff", "#0a58ca"),
+    "sky":    ("Sky",    "#bfe3ff", "#6bb6ff"),
+    "teal":   ("Teal",   "#5fd3c4", "#0f8a7a"),
+    "green":  ("Green",  "#7fd88f", "#2b8a3e"),
+    "purple": ("Purple", "#b197fc", "#6741d9"),
+    "pink":   ("Pink",   "#ffb3d9", "#e64980"),
+    "orange": ("Orange", "#ffc078", "#f76707"),
+    "red":    ("Red",    "#ff8787", "#c92a2a"),
+    "gold":   ("Gold",   "#ffe066", "#f59f00"),
+    "slate":  ("Slate",  "#adb5bd", "#495057"),
+    "night":  ("Night",  "#364fc7", "#0b1026"),
+    "white":  ("White",  "#ffffff", "#e9ecef"),
+}
+AVATAR_BORDERS = {
+    # key: (label, colour) — None = no outline
+    "none":   ("None",   None),
+    "blue":   ("Blue",   "#0d6efd"),
+    "white":  ("White",  "#ffffff"),
+    "gold":   ("Gold",   "#f5b301"),
+    "green":  ("Green",  "#2b8a3e"),
+    "red":    ("Red",    "#e03131"),
+    "purple": ("Purple", "#7048e8"),
+    "dark":   ("Dark",   "#1e293b"),
+}
+AVATAR_ICONS = [
+    'shield-halved', 'user-shield', 'shield-virus', 'user-secret', 'user-ninja', 'user-astronaut', 'user-tie',
+    'bug', 'virus', 'biohazard', 'radiation', 'skull', 'skull-crossbones', 'bomb', 'mask',
+    'terminal', 'code', 'microchip', 'server', 'database', 'network-wired', 'wifi', 'satellite-dish', 'globe',
+    'lock', 'key', 'fingerprint', 'eye', 'magnifying-glass', 'brain', 'atom', 'flask', 'robot', 'rocket',
+    'meteor', 'bolt', 'fire', 'ghost', 'dragon', 'cat', 'dog', 'paw', 'crow', 'spider', 'fish', 'otter',
+    'hippo', 'frog', 'chess-knight', 'hat-wizard', 'crown', 'gem', 'star', 'heart', 'moon', 'sun', 'cloud',
+    'snowflake', 'tree', 'leaf', 'mountain', 'anchor', 'compass', 'feather', 'puzzle-piece', 'gamepad',
+    'dice', 'music', 'headphones', 'camera', 'graduation-cap', 'hat-cowboy', 'mug-hot', 'pizza-slice',
+    'burger', 'ice-cream',
+]
+
+
+def get_rulezy_poses() -> list:
+    """Pose names available for Rulezy avatars (file stems in RULEZY_IMAGE_FOLDER)."""
+    try:
+        return sorted(f[:-4] for f in os.listdir(RULEZY_IMAGE_FOLDER) if f.lower().endswith(".png"))
+    except OSError:
+        return []
+
+
+@functools.lru_cache(maxsize=1)
+def _fontawesome_codepoints() -> dict:
+    """icon name -> character, read from Font Awesome's own CSS."""
+    import re
+    try:
+        with open(os.path.join(FONTAWESOME_DIR, "css", "fontawesome.css"), encoding="utf-8") as fp:
+            css = fp.read()
+    except OSError:
+        return {}
+    pairs = re.findall(r'\.fa-([a-z0-9-]+)::before\s*\{\s*content:\s*"\\([0-9a-f]+)"', css)
+    return {name: chr(int(code, 16)) for name, code in pairs}
+
+
+def get_avatar_icons() -> list:
+    """The offered icons that the bundled Font Awesome actually has."""
+    known = _fontawesome_codepoints()
+    return [name for name in AVATAR_ICONS if name in known]
+
+
+def _hex_rgb(color: str) -> tuple:
+    color = color.lstrip("#")
+    return tuple(int(color[i:i + 2], 16) for i in (0, 2, 4))
+
+
+@functools.lru_cache(maxsize=512)
+def render_built_avatar(kind: str, choice: str, background: str, border: str = "none", size: int = 256):
+    """PNG bytes of a built avatar — kind "rulezy" (choice = pose) or "icon"
+    (choice = Font Awesome icon name) — on a gradient `background`, with an
+    optional `border` ring. None for anything not offered. Cached: the
+    choices are a small finite set."""
+    from PIL import Image, ImageDraw, ImageFont
+    if background not in AVATAR_BACKGROUNDS or border not in AVATAR_BORDERS:
+        return None
+    if kind == "rulezy" and choice not in get_rulezy_poses():
+        return None
+    if kind == "icon" and choice not in get_avatar_icons():
+        return None
+    if kind not in ("rulezy", "icon"):
+        return None
+
+    _, top, bottom = AVATAR_BACKGROUNDS[background]
+    (r1, g1, b1), (r2, g2, b2) = _hex_rgb(top), _hex_rgb(bottom)
+    canvas = Image.new("RGBA", (size, size))
+    for y in range(size):
+        t = y / (size - 1)
+        canvas.paste((round(r1 + (r2 - r1) * t), round(g1 + (g2 - g1) * t), round(b1 + (b2 - b1) * t), 255),
+                     (0, y, size, y + 1))
+
+    if kind == "rulezy":
+        mascot = Image.open(os.path.join(RULEZY_IMAGE_FOLDER, f"{choice}.png")).convert("RGBA")
+        box = mascot.getchannel("A").getbbox()
+        if box:
+            mascot = mascot.crop(box)
+        # ~78% of the avatar, up or down (the sources are ~190 px: sharp at 256).
+        scale = (size * 0.78) / max(mascot.width, mascot.height)
+        mascot = mascot.resize((max(1, round(mascot.width * scale)), max(1, round(mascot.height * scale))), Image.LANCZOS)
+        canvas.alpha_composite(mascot, ((size - mascot.width) // 2, size - mascot.height - int(size * 0.06)))
+    else:
+        glyph = _fontawesome_codepoints()[choice]
+        font = ImageFont.truetype(os.path.join(FONTAWESOME_DIR, "webfonts", "fa-solid-900.ttf"), int(size * 0.46))
+        colour = (30, 41, 59, 255) if background in ("white", "sky", "gold") else (255, 255, 255, 255)
+        layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        left, top_, right, bottom_ = draw.textbbox((0, 0), glyph, font=font)
+        draw.text(((size - (right - left)) / 2 - left, (size - (bottom_ - top_)) / 2 - top_), glyph, font=font, fill=colour)
+        canvas.alpha_composite(layer)
+
+    ring = AVATAR_BORDERS[border][1]
+    if ring:
+        # Drawn on the inscribed circle: avatars are shown cropped round.
+        width = max(2, round(size * 0.055))
+        ImageDraw.Draw(canvas).ellipse((width / 2, width / 2, size - 1 - width / 2, size - 1 - width / 2),
+                                       outline=_hex_rgb(ring) + (255,), width=width)
+
+    out = io.BytesIO()
+    canvas.convert("RGB").save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
+def generate_built_avatar(kind: str, choice: str, background: str, border: str = "none"):
+    """Save a built avatar into AVATAR_UPLOAD_FOLDER and return its filename
+    (None if any choice isn't one of those offered)."""
+    data = render_built_avatar(kind, choice, background, border)
+    if data is None:
+        return None
+    os.makedirs(AVATAR_UPLOAD_FOLDER, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.png"
+    with open(os.path.join(AVATAR_UPLOAD_FOLDER, filename), "wb") as fp:
+        fp.write(data)
+    return filename
 MAX_AVATAR_SIZE_MB = 2
 
 
@@ -277,7 +425,7 @@ def update_last_seen(user_id) -> None:
 
 
 
-def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=False) -> tuple:
+def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=False, built_avatar=None) -> tuple:
     """Edit the user in the DB. Returns (success, pending_email_or_None).
     If the email changed, the new address is NOT applied immediately — caller must
     call request_email_change_core() to send the confirmation link."""
@@ -309,6 +457,13 @@ def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=
     if remove_avatar and user.profile_picture:
         _delete_avatar_file(user.profile_picture)
         user.profile_picture = None
+    elif built_avatar:
+        # (kind, choice, background, border) picked in the avatar builder
+        filename = generate_built_avatar(*built_avatar)
+        if filename:
+            if user.profile_picture:
+                _delete_avatar_file(user.profile_picture)
+            user.profile_picture = filename
     elif avatar_file and avatar_file.filename:
         ext = avatar_file.filename.rsplit(".", 1)[-1].lower()
         if ext in ALLOWED_AVATAR_EXTENSIONS:

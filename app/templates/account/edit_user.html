@@ -3,6 +3,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/account/auth.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/avatar_picker.css') }}">
 <style>
 .edit-wrapper {
   display: flex;
@@ -73,6 +74,7 @@
         {{form.user_id}}
       {% endif %}
       <input type="hidden" name="remove_avatar" id="removeAvatarFlag" value="0">
+      <input type="hidden" name="avatar_mode" id="avatarMode" value="upload">
 
       <!-- ===== Avatar ===== -->
       <div class="edit-section-label"><i class="fa-solid fa-image"></i>Profile picture</div>
@@ -91,17 +93,88 @@
             </div>
           {% endif %}
         </div>
-        <div class="d-flex flex-column gap-2">
-          {{ form.profile_picture(class_="form-control", id="avatarInput", style="max-width:300px;") }}
-          <small style="color:var(--subtle-text-color);font-size:.8rem;">JPG, PNG, GIF or WebP · max 2 MB</small>
-          {% if form.profile_picture.errors %}
-            <div class="field-error">{{ form.profile_picture.errors[0] }}</div>
-          {% endif %}
+        <div class="d-flex flex-column gap-2 flex-grow-1">
+          <div class="avp-tabs" role="tablist">
+            <button type="button" class="avp-tab active" data-avatar-mode="upload" role="tab" aria-selected="true">
+              <i class="fa-solid fa-upload me-1"></i>Upload a picture
+            </button>
+            <button type="button" class="avp-tab" data-avatar-mode="rulezy" role="tab" aria-selected="false">
+              <i class="fa-solid fa-robot me-1"></i>Rulezy
+            </button>
+            <button type="button" class="avp-tab" data-avatar-mode="icon" role="tab" aria-selected="false">
+              <i class="fa-solid fa-icons me-1"></i>Icon
+            </button>
+          </div>
+          <div data-avatar-pane="upload" class="d-flex flex-column gap-2">
+            {{ form.profile_picture(class_="form-control", id="avatarInput", style="max-width:300px;") }}
+            <small style="color:var(--subtle-text-color);font-size:.8rem;">JPG, PNG, GIF or WebP · max 2 MB</small>
+            {% if form.profile_picture.errors %}
+              <div class="field-error">{{ form.profile_picture.errors[0] }}</div>
+            {% endif %}
+          </div>
           {% if current_user.profile_picture %}
             <button type="button" id="removeAvatarBtn" class="btn btn-sm btn-outline-danger" style="width:fit-content;">
               <i class="fa-solid fa-trash me-1"></i>Remove picture
             </button>
           {% endif %}
+        </div>
+      </div>
+
+      <!-- Avatar builder (Rulezy pose or Font Awesome icon + background + outline),
+           rendered server-side into the avatar: account_core.render_built_avatar -->
+      <div data-avatar-pane="builder" class="avp-builder d-none">
+        <div class="avp-builder__preview">
+          <div class="avp-preview avp-preview--empty" id="builderPreview">
+            <img src="" alt="Avatar preview" class="d-none">
+            <span data-empty-text>Pick a pose</span>
+          </div>
+          <small>Preview</small>
+        </div>
+        <div class="flex-grow-1 min-w-0">
+          <div data-builder-kind="rulezy">
+            <div class="avp-label">Pose</div>
+            <div class="avp-poses">
+              {% for pose in rulezy_poses %}
+              <label class="avp-pose" title="{{ pose }}">
+                <input type="radio" name="rulezy_pose" value="{{ pose }}">
+                <img src="{{ url_for('account.avatar_preview', kind='rulezy', choice=pose, bg='white', size='small') }}" alt="{{ pose }}" loading="lazy">
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div data-builder-kind="icon" class="d-none">
+            <div class="avp-label d-flex align-items-center justify-content-between gap-2">
+              <span>Icon</span>
+              <input type="search" class="form-control form-control-sm avp-icon-search" id="avatarIconSearch" placeholder="Search an icon…" autocomplete="off">
+            </div>
+            <div class="avp-icons">
+              {% for icon in avatar_icons %}
+              <label class="avp-icon" title="{{ icon }}" data-icon-name="{{ icon }}">
+                <input type="radio" name="avatar_icon" value="{{ icon }}">
+                <span><i class="fa-solid fa-{{ icon }}"></i></span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="avp-label">Background</div>
+          <div class="avp-bgs">
+            {% for key, bg in avatar_backgrounds.items() %}
+            <label class="avp-bg" title="{{ bg[0] }}">
+              <input type="radio" name="avatar_bg" value="{{ key }}">
+              <span style="--top: {{ bg[1] }}; --bottom: {{ bg[2] }};"></span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="avp-label">Outline</div>
+          <div class="avp-bgs">
+            {% for key, border in avatar_borders.items() %}
+            <label class="avp-bg avp-border" title="{{ border[0] }}">
+              <input type="radio" name="avatar_border" value="{{ key }}" {% if key == 'none' %}checked{% endif %}>
+              {% if border[1] %}<span style="--ring: {{ border[1] }};"></span>{% else %}<span class="avp-border--none"><i class="fa-solid fa-ban"></i></span>{% endif %}
+            </label>
+            {% endfor %}
+          </div>
+          <small class="avp-hint">It replaces your profile picture when you click <strong>Save</strong> — until you pick a pose or an icon, your current picture stays.</small>
         </div>
       </div>
 
@@ -366,6 +439,7 @@ createApp({
 
 // Avatar live preview
 document.getElementById('avatarInput').addEventListener('change', function () {
+    if (window.setAvatarMode) window.setAvatarMode('upload');
     const file = this.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -420,4 +494,5 @@ document.addEventListener('DOMContentLoaded', function() {
         })
     })
 </script>
+<script type="module" src="{{ url_for('static', filename='js/account/avatarPicker.js') }}"></script>
 {% endblock %}
