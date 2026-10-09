@@ -193,7 +193,7 @@ createApp({
             if (name && name !== file.name) await renameFile(file, name);
         }
 
-        const TREE_ACTIONS = [{ key: 'delete', label: 'Delete', icon: 'fa-trash' }];
+        const TREE_ACTIONS = [{ key: 'delete', label: 'Delete', icon: 'fa-solid fa-trash' }];   // FileTree takes the full icon class
         function onTreeAction({ action, node }) {
             if (action !== 'delete' || !node.file) return;
             if (tab.value === 'library') return deleteFile('library', node.file);
