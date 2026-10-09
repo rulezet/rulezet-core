@@ -359,6 +359,14 @@ body.dark-mode .hero-orb-2 {
                         <a href="/rule/create_rule" class="btn-home-outline" style="padding:.62rem 1.5rem;font-size:.88rem;">
                             <i class="fa-solid fa-plus"></i>Add a Rule
                         </a>
+                        {% if current_user.is_authenticated %}
+                        {# Seasonal (end of year): switches to the Christmas theme and back — js/themes/holidayToggle.js #}
+                        {% set _holiday_on = user_config and (user_config.theme or '').startswith('christmas') %}
+                        <button type="button" class="holiday-toggle" id="holidayToggle"
+                                title="A seasonal theme for the end of the year — click again to go back to yours">
+                            <i class="fa-solid fa-tree"></i><span data-holiday-label>{{ 'Back to your theme' if _holiday_on else 'Holiday theme' }}</span><span class="holiday-toggle__new">New</span>
+                        </button>
+                        {% endif %}
                     </div>
 
                     <div class="hero-formats">
@@ -647,6 +655,7 @@ body.dark-mode .hero-orb-2 {
 {% endblock %}
 
 {% block script %}
+<script src="{{ url_for('static', filename='js/themes/holidayToggle.js') }}"></script>
 <script type="module">
     const { createApp, ref, onMounted } = Vue
     import { message_list, create_message } from '/static/js/toaster.js'

@@ -166,6 +166,8 @@
                             <div class="settings-theme-label">
                                 <i :class="'fas ' + option.icon"></i>
                                 <span>[[ option.label ]]</span>
+                                <span v-if="option.value.startsWith('christmas')" class="settings-seasonal-badge"
+                                      title="A seasonal theme for the end of the year — it will be removed afterwards">Seasonal</span>
                                 <i v-if="theme === option.value" class="fas fa-circle-check ms-auto text-primary"></i>
                             </div>
                         </div>
@@ -1525,7 +1527,7 @@
             })
 
             // Named built-in themes (CSS in theme.css — no css_vars needed for preview)
-            const BUILTIN_NAMED_KEYS = new Set(['ocean', 'forest', 'midnight', 'sunset'])
+            const BUILTIN_NAMED_KEYS = new Set(['ocean', 'forest', 'midnight', 'christmas', 'christmas-night'])
 
             const named_theme_options = computed(() => theme_options.filter(t => t.is_named))
             const custom_theme_options = computed(() => theme_options.filter(t => t.is_custom))

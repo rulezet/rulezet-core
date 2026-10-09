@@ -25,24 +25,24 @@ html[data-theme="ocean"] body {
     --rule-name-color: #1565c0;
 }
 
-/* ── Forest — sage green light ──────────────────────────────── */
+/* ── Forest — neutral light, green accents ──────────────────── */
 html[data-theme="forest"],
 html[data-theme="forest"] body {
-    --bg-color: #eef5ee;
-    --card-bg-color: #f7fbf7;
-    --light-bg-color: #daeeda;
-    --code-bg-color: #e5f2e5;
-    --card-header-bg-color: #cce6cc;
-    --navbar-bg-color: #f7fbf7;
-    --bar-bg-color: #daeeda;
-    --text-color: #102210;
-    --subtle-text-color: #3d7040;
-    --navbar-text-color: #102210;
-    --border-color: rgba(40, 130, 50, 0.18);
-    --selected-color: rgba(40, 130, 50, 0.12);
-    --page-selected-color: #288232;
-    --sidebar-color: #092b0b;
-    --rule-name-color: #1b6e22;
+    --bg-color: #f6f8f6;
+    --card-bg-color: #fbfcfb;
+    --light-bg-color: #eef2ee;
+    --code-bg-color: #f4f7f4;
+    --card-header-bg-color: #dcebdd;
+    --navbar-bg-color: #ffffff;
+    --bar-bg-color: #e6ece6;
+    --text-color: #1e1e1e;
+    --subtle-text-color: #5f6f63;
+    --navbar-text-color: #000000;
+    --border-color: #dfe5df;
+    --selected-color: rgba(46, 125, 50, 0.12);
+    --page-selected-color: #2e7d32;
+    --sidebar-color: rgb(15, 23, 42);
+    --rule-name-color: #2e7d32;
 }
 
 /* Forest overrides Bootstrap's own "primary" blue with the theme's green —
@@ -104,24 +104,4 @@ html[data-theme="midnight"] body {
     --page-selected-color: #5082dc;
     --sidebar-color: #040810;
     --rule-name-color: #6aa0f0;
-}
-
-/* ── Sunset — amber warm dark ───────────────────────────────── */
-html[data-theme="sunset"],
-html[data-theme="sunset"] body {
-    --bg-color: #1c1008;
-    --card-bg-color: #281808;
-    --light-bg-color: #362010;
-    --code-bg-color: #140c05;
-    --card-header-bg-color: #362010;
-    --navbar-bg-color: #201408;
-    --bar-bg-color: #281808;
-    --text-color: #f5dfc0;
-    --subtle-text-color: #b87840;
-    --navbar-text-color: #f5dfc0;
-    --border-color: rgba(220, 120, 30, 0.18);
-    --selected-color: rgba(220, 120, 30, 0.20);
-    --page-selected-color: #e07820;
-    --sidebar-color: #0e0804;
-    --rule-name-color: #f09040;
 }

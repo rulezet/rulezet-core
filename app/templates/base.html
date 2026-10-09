@@ -36,6 +36,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/variables.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/theme.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/custom-themes.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/christmas.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/core.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/base/sidebar.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/components/global-search.css') }}">
@@ -252,6 +253,7 @@
     </script>
     {% endblock %}
 
+    <script src="{{ url_for('static', filename='js/themes/christmas.js') }}" defer></script>
     {% block script %}
     {% endblock %}
 

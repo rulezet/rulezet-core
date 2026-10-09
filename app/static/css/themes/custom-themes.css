@@ -21,21 +21,21 @@ html[data-theme="ocean"] body {
 
 html[data-theme="forest"],
 html[data-theme="forest"] body {
-    --bg-color: #eef5ee;
-    --card-bg-color: #f7fbf7;
-    --light-bg-color: #daeeda;
-    --code-bg-color: #e5f2e5;
-    --card-header-bg-color: #cce6cc;
-    --navbar-bg-color: #f7fbf7;
-    --bar-bg-color: #daeeda;
-    --text-color: #102210;
-    --subtle-text-color: #3d7040;
-    --navbar-text-color: #102210;
-    --border-color: rgba(40, 130, 50, 0.18);
-    --selected-color: rgba(40, 130, 50, 0.12);
-    --page-selected-color: #288232;
-    --sidebar-color: #092b0b;
-    --rule-name-color: #1b6e22;
+    --bg-color: #f6f8f6;
+    --card-bg-color: #fbfcfb;
+    --light-bg-color: #eef2ee;
+    --code-bg-color: #f4f7f4;
+    --card-header-bg-color: #dcebdd;
+    --navbar-bg-color: #ffffff;
+    --bar-bg-color: #e6ece6;
+    --text-color: #1e1e1e;
+    --subtle-text-color: #5f6f63;
+    --navbar-text-color: #000000;
+    --border-color: #dfe5df;
+    --selected-color: rgba(46, 125, 50, 0.12);
+    --page-selected-color: #2e7d32;
+    --sidebar-color: rgb(15, 23, 42);
+    --rule-name-color: #2e7d32;
 }
 
 html[data-theme="midnight"],
@@ -57,21 +57,40 @@ html[data-theme="midnight"] body {
     --rule-name-color: #6aa0f0;
 }
 
-html[data-theme="sunset"],
-html[data-theme="sunset"] body {
-    --bg-color: #1c1008;
-    --card-bg-color: #281808;
-    --light-bg-color: #362010;
-    --code-bg-color: #140c05;
-    --card-header-bg-color: #362010;
-    --navbar-bg-color: #201408;
-    --bar-bg-color: #281808;
-    --text-color: #f5dfc0;
-    --subtle-text-color: #b87840;
-    --navbar-text-color: #f5dfc0;
-    --border-color: rgba(220, 120, 30, 0.18);
-    --selected-color: rgba(220, 120, 30, 0.20);
-    --page-selected-color: #e07820;
-    --sidebar-color: #0e0804;
-    --rule-name-color: #f09040;
+html[data-theme="christmas"],
+html[data-theme="christmas"] body {
+    --bg-color: #faf7f3;
+    --card-bg-color: #fdfbf8;
+    --light-bg-color: #f3eee8;
+    --code-bg-color: #f9f6f1;
+    --card-header-bg-color: rgb(207, 226, 255);
+    --navbar-bg-color: #ffffff;
+    --bar-bg-color: #ebe5dd;
+    --text-color: #1e1e1e;
+    --subtle-text-color: #6c757d;
+    --navbar-text-color: #000000;
+    --border-color: #e5ddd3;
+    --selected-color: rgb(207, 226, 255);
+    --page-selected-color: #c62828;
+    --sidebar-color: rgb(15, 23, 42);
+    --rule-name-color: rgb(10, 88, 202);
+}
+
+html[data-theme="christmas-night"],
+html[data-theme="christmas-night"] body {
+    --bg-color: #10151f;
+    --card-bg-color: #1a2130;
+    --light-bg-color: #242e42;
+    --code-bg-color: #0a0e16;
+    --card-header-bg-color: #212a3c;
+    --navbar-bg-color: #0b0f17;
+    --bar-bg-color: #0a0e16;
+    --text-color: #e9edf5;
+    --subtle-text-color: #93a1b8;
+    --navbar-text-color: #e9edf5;
+    --border-color: #2b3549;
+    --selected-color: rgba(91, 157, 255, 0.16);
+    --page-selected-color: #e05555;
+    --sidebar-color: #0b0f17;
+    --rule-name-color: #5b9dff;
 }

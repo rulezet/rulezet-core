@@ -1,0 +1,186 @@
+/* Christmas themes decorations (js/themes/christmas.js adds the elements only
+   while html[data-theme] is "christmas" or "christmas-night"): a twinkling
+   garland under the navbar, a Santa hat on the logo, light snowfall; at
+   night also discreet stars and a distant snowy landscape with fir trees. Colours of the page itself
+   come from the theme's CSS vars (custom-themes.css), barely changed. */
+
+/* ── Garland ─────────────────────────────────────────────────────────── */
+.xmas-garland {
+    position: absolute; left: 0; right: 0; bottom: -22px;
+    height: 26px;
+    pointer-events: none;
+    z-index: 2;
+}
+.xmas-garland__wire { position: absolute; inset: 0; width: 100%; height: 100%; }
+.xmas-garland__wire path { fill: none; stroke: #2f4f2f; stroke-width: 1.6; opacity: .75; }
+.xmas-bulb {
+    position: absolute; top: 9px;
+    width: 9px; height: 13px;
+    margin-left: -4.5px;
+    border-radius: 50% 50% 45% 45%;
+    background: currentColor;
+    box-shadow: 0 0 8px 2px currentColor;
+    animation: xmas-twinkle 2.4s ease-in-out infinite;
+}
+.xmas-bulb::before {   /* the socket */
+    content: ""; position: absolute; top: -4px; left: 2px;
+    width: 5px; height: 5px; border-radius: 1px;
+    background: #4b5a4b;
+}
+.xmas-bulb--red    { color: #ff3b3b; }
+.xmas-bulb--gold   { color: #ffc93c; }
+.xmas-bulb--green  { color: #3ddc84; }
+.xmas-bulb--blue   { color: #4aa8ff; }
+.xmas-bulb--pink   { color: #ff6fcf; }
+@keyframes xmas-twinkle {
+    0%, 100% { opacity: 1;   box-shadow: 0 0 9px 2px currentColor; }
+    50%      { opacity: .35; box-shadow: 0 0 2px 0 currentColor; }
+}
+
+/* ── Santa hat on the logo ───────────────────────────────────────────── */
+.xmas-logo { position: relative; }
+.xmas-hat {
+    position: absolute; top: 0; left: 36px;
+    width: 34px; height: 30px;
+    transform: rotate(14deg);
+    pointer-events: none;
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .2));
+}
+
+/* ── Snow ────────────────────────────────────────────────────────────── */
+.xmas-snow {
+    position: fixed; inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 1040;            /* above the page, under Bootstrap modals (1055) */
+}
+.xmas-flake {
+    position: absolute; top: -12px;
+    color: #b9d4ee;
+    text-shadow: 0 0 3px rgba(255, 255, 255, .9);
+    user-select: none;
+    animation: xmas-fall linear infinite, xmas-sway ease-in-out infinite alternate;
+}
+/* Snow comes and goes (christmas.js weather()): fades out for a calm spell,
+   flakes beyond the current intensity are hidden. */
+.xmas-snow { transition: opacity 6s ease; }
+.xmas-snow--calm { opacity: 0; }
+.xmas-snow--paused .xmas-flake { animation-play-state: paused; }
+.xmas-snow--off { display: none; }      /* turned off with the corner switch */
+.xmas-flake { transition: opacity 4s ease; }
+.xmas-flake.xmas-flake--off { opacity: 0 !important; }
+@keyframes xmas-fall { to { transform: translateY(105vh); } }
+@keyframes xmas-sway { from { margin-left: -14px; } to { margin-left: 14px; } }
+
+html[data-theme="christmas-night"] .xmas-flake { color: #fff; text-shadow: 0 0 4px rgba(255, 255, 255, .6); }
+html[data-theme="christmas-night"] .xmas-garland__wire path { stroke: #7a9a7a; }
+
+/* ── Night: the stars live BEHIND the page (z-index -1). For that
+   the page background is carried by <html> (theme.js already paints it)
+   instead of <body>: cards, navbar and buttons then cover them, and they
+   only show through the empty space around the content. ─────────────── */
+html[data-theme="christmas-night"] { background-color: var(--bg-color); }
+html[data-theme="christmas-night"] body { background-color: transparent !important; }
+
+/* Discreet stars (top of the screen only) */
+.xmas-stars { position: fixed; left: 0; right: 0; top: 0; height: 55vh; pointer-events: none; z-index: -1; }
+.xmas-star {
+    position: absolute;
+    width: 2px; height: 2px; border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 3px 1px rgba(255, 255, 255, .5);
+    animation: xmas-star 4s ease-in-out infinite;
+}
+@keyframes xmas-star { 0%, 100% { opacity: .12; } 50% { opacity: .65; } }
+
+/* Distant snowy landscape with fir trees and a small campfire (an SVG built
+   by christmas.js), as a band of its own right above the footer: it shows
+   when scrolling to the very bottom of a page and pushes the footer down. */
+.xmas-land {
+    position: relative;
+    height: 200px;
+    margin-top: 2.5rem;
+    margin-bottom: -1px;      /* no hairline between the band and the footer */
+    pointer-events: none;
+    opacity: .8;
+}
+.xmas-land svg { display: block; width: 100%; height: 100%; }
+/* Pages sized to fill the screen (error pages and login/register:
+   min-height: calc(100vh - 130px) in error.css / auth.css) leave room for the band (200px + 2.5rem margin), so the
+   footer stays at the bottom of the screen instead of below it. */
+html[data-theme^="christmas"] .error-page,
+html[data-theme^="christmas"] .auth-wrapper { min-height: calc(100vh - 130px - 200px - 2.5rem); }
+/* Night: a few stars in the band's sky */
+.xmas-sky-star { opacity: .5; animation: xmas-star 4.5s ease-in-out infinite; }
+/* Day: the snowy band is light already — no need to fade it */
+html[data-theme="christmas"] .xmas-land { opacity: 1; }
+/* The little campfire inside the landscape: brighter than the rest so it
+   reads through the landscape's opacity, still tiny. */
+.xmas-camp__glow { opacity: .5; animation: xmas-camp-glow 1.6s ease-in-out infinite alternate; }
+.xmas-camp__flame { transform-box: fill-box; transform-origin: 50% 100%; animation: xmas-camp-flicker .9s ease-in-out infinite alternate; }
+.xmas-camp__flame--in { animation-duration: .6s; animation-delay: -.3s; }
+.xmas-camp__smoke { transform-box: fill-box; transform-origin: center; opacity: 0; animation: xmas-camp-smoke 6.4s ease-out infinite; }
+@keyframes xmas-camp-flicker {
+    0%   { transform: scale(1, 1) skewX(0deg); }
+    50%  { transform: scale(.9, 1.12) skewX(4deg); }
+    100% { transform: scale(1.06, .92) skewX(-4deg); }
+}
+@keyframes xmas-camp-glow { from { opacity: .4; } to { opacity: .7; } }
+@keyframes xmas-camp-smoke {
+    0%   { opacity: 0;   transform: translate(0, 0) scale(.6); }
+    15%  { opacity: .5; }
+    100% { opacity: 0;   transform: translate(14px, -70px) scale(3.2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .xmas-bulb, .xmas-star, .xmas-sky-star, .xmas-camp__glow, .xmas-camp__flame { animation: none; }
+    .xmas-camp__smoke { display: none; }
+    .xmas-snow { display: none; }
+}
+
+/* ── Home: "Holiday theme" switch next to the hero buttons, quieter than
+   them (js/themes/holidayToggle.js) ───────────────────────────────────── */
+.holiday-toggle {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .45rem 1rem;
+    border-radius: 50px;
+    border: 1px dashed var(--border-color);
+    background: transparent;
+    font-size: .8rem; font-weight: 600;
+    color: var(--subtle-text-color);
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.holiday-toggle:hover { color: #2b8a3e; border-color: #2b8a3e; background: rgba(43, 138, 62, .06); }
+.holiday-toggle .fa-tree { color: #2b8a3e; }
+.holiday-toggle__new {
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: .6rem; font-weight: 700; line-height: 1.6;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: #fff; background: #c62828;
+}
+
+/* ── Corner switch to turn the snow off ───────────────────────────────── */
+.xmas-snow-switch {
+    /* bottom-right, left of the "back to top" rocket (the chatbot is bottom-left) */
+    position: fixed; right: 92px; bottom: 41px;
+    z-index: 1041;
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; border-radius: 50%;
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .1);
+    opacity: .55;
+    transition: opacity .15s ease, color .15s ease;
+}
+.xmas-snow-switch:hover, .xmas-snow-switch:focus-visible { opacity: 1; color: #4aa8ff; }
+.xmas-snow-switch.is-off::after {            /* a slash across the flake */
+    content: ""; position: absolute;
+    width: 16px; height: 1.5px; border-radius: 1px;
+    background: currentColor;
+    transform: rotate(-45deg);
+}
+@media (prefers-reduced-motion: reduce) { .xmas-snow-switch { display: none; } }

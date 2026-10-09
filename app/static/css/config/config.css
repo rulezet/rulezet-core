@@ -208,14 +208,14 @@ body.dark-mode .settings-card-icon {
 
 /* Forest — sage green light */
 .theme-preview--forest {
-    --tp-navbar:   #f7fbf7;
-    --tp-body:     #eef5ee;
-    --tp-surface:  #f7fbf7;
-    --tp-brand:    #1b6e22;
-    --tp-border:   rgba(40,130,50,.16);
-    --tp-line:     rgba(40,130,50,.12);
-    --tp-text-dim: rgba(16,34,16,.22);
-    --tp-sidebar:  #092b0b;
+    --tp-navbar:   #ffffff;
+    --tp-body:     #f6f8f6;
+    --tp-surface:  #fbfcfb;
+    --tp-brand:    #2e7d32;
+    --tp-border:   #dfe5df;
+    --tp-line:     #e6ece6;
+    --tp-text-dim: rgba(0,0,0,.18);
+    --tp-sidebar:  rgb(15,23,42);
 }
 
 /* Midnight — deep blue dark */
@@ -230,16 +230,40 @@ body.dark-mode .settings-card-icon {
     --tp-sidebar:  #040810;
 }
 
-/* Sunset — amber warm dark */
-.theme-preview--sunset {
-    --tp-navbar:   #201408;
-    --tp-body:     #1c1008;
-    --tp-surface:  #281808;
-    --tp-brand:    #f09040;
-    --tp-border:   rgba(220,120,30,.18);
-    --tp-line:     rgba(220,120,30,.15);
+/* Christmas (seasonal) — light, warm */
+.theme-preview--christmas {
+    --tp-navbar:   #ffffff;
+    --tp-body:     #faf7f3;
+    --tp-surface:  #fdfbf8;
+    --tp-brand:    #c62828;
+    --tp-border:   #e5ddd3;
+    --tp-line:     #ebe5dd;
+    --tp-text-dim: rgba(0,0,0,.18);
+    --tp-sidebar:  rgb(15,23,42);
+}
+
+/* Christmas Night (seasonal) — the site's dark palette */
+.theme-preview--christmas-night {
+    --tp-navbar:   #0b0f17;
+    --tp-body:     #10151f;
+    --tp-surface:  #1a2130;
+    --tp-brand:    #e05555;
+    --tp-border:   #2b3549;
+    --tp-line:     #242e42;
     --tp-text-dim: rgba(255,255,255,.22);
-    --tp-sidebar:  #0e0804;
+    --tp-sidebar:  #0b0f17;
+}
+
+/* "Seasonal" badge on the Christmas theme cards */
+.settings-seasonal-badge {
+    margin-left: .35rem;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: .62rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: #b02a37;
+    background: rgba(220, 53, 69, .1);
+    border: 1px solid rgba(220, 53, 69, .25);
 }
 
 /* Custom (admin-created — CSS tokens injected via Vue :style) */

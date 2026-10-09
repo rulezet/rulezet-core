@@ -12,17 +12,18 @@
   - localStorage['theme']      = resolved theme (for backward compat)
 */
 
-var _DARK_THEMES   = ['dark', 'midnight', 'sunset'];
+var _DARK_THEMES   = ['dark', 'midnight', 'christmas-night'];
 var _CUSTOM_THEMES = [];
-var _NAMED_KEYS    = ['ocean', 'forest', 'midnight', 'sunset'];
+var _NAMED_KEYS    = ['ocean', 'forest', 'midnight', 'christmas', 'christmas-night'];
 var _rawPref       = 'system';
 var _BG_COLORS = {
     light:    '#f7f7f7',
     dark:     '#10151f',
     ocean:    '#edf4fb',
-    forest:   '#eef5ee',
+    forest:   '#f6f8f6',
     midnight: '#080d18',
-    sunset:   '#1c1008',
+    christmas: '#faf7f3',
+    'christmas-night': '#10151f',
 };
 
 // Extend with server-injected custom themes (window.__CUSTOM_THEMES__ set in base.html)

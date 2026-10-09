@@ -34,12 +34,13 @@ _OCEAN_VARS = {
     '--page-selected-color': '#1878b4', '--sidebar-color': '#0a2c45', '--rule-name-color': '#1565c0',
 }
 _FOREST_VARS = {
-    '--bg-color': '#eef5ee', '--card-bg-color': '#f7fbf7', '--light-bg-color': '#daeeda',
-    '--code-bg-color': '#e5f2e5', '--card-header-bg-color': '#cce6cc',
-    '--navbar-bg-color': '#f7fbf7', '--bar-bg-color': '#daeeda',
-    '--text-color': '#102210', '--subtle-text-color': '#3d7040', '--navbar-text-color': '#102210',
-    '--border-color': 'rgba(40, 130, 50, 0.18)', '--selected-color': 'rgba(40, 130, 50, 0.12)',
-    '--page-selected-color': '#288232', '--sidebar-color': '#092b0b', '--rule-name-color': '#1b6e22',
+    # Neutral light page; green only on accents (selection, links, headers).
+    '--bg-color': '#f6f8f6', '--card-bg-color': '#fbfcfb', '--light-bg-color': '#eef2ee',
+    '--code-bg-color': '#f4f7f4', '--card-header-bg-color': '#dcebdd',
+    '--navbar-bg-color': '#ffffff', '--bar-bg-color': '#e6ece6',
+    '--text-color': '#1e1e1e', '--subtle-text-color': '#5f6f63', '--navbar-text-color': '#000000',
+    '--border-color': '#dfe5df', '--selected-color': 'rgba(46, 125, 50, 0.12)',
+    '--page-selected-color': '#2e7d32', '--sidebar-color': 'rgb(15, 23, 42)', '--rule-name-color': '#2e7d32',
 }
 _MIDNIGHT_VARS = {
     '--bg-color': '#080d18', '--card-bg-color': '#0f1729', '--light-bg-color': '#151f38',
@@ -49,27 +50,56 @@ _MIDNIGHT_VARS = {
     '--border-color': 'rgba(80, 130, 220, 0.14)', '--selected-color': 'rgba(80, 130, 220, 0.18)',
     '--page-selected-color': '#5082dc', '--sidebar-color': '#040810', '--rule-name-color': '#6aa0f0',
 }
-_SUNSET_VARS = {
-    '--bg-color': '#1c1008', '--card-bg-color': '#281808', '--light-bg-color': '#362010',
-    '--code-bg-color': '#140c05', '--card-header-bg-color': '#362010',
-    '--navbar-bg-color': '#201408', '--bar-bg-color': '#281808',
-    '--text-color': '#f5dfc0', '--subtle-text-color': '#b87840', '--navbar-text-color': '#f5dfc0',
-    '--border-color': 'rgba(220, 120, 30, 0.18)', '--selected-color': 'rgba(220, 120, 30, 0.20)',
-    '--page-selected-color': '#e07820', '--sidebar-color': '#0e0804', '--rule-name-color': '#f09040',
+
+# Christmas: the light palette, barely warmed up — the theme is about the
+# decorations (garland, snow, Santa hat), drawn by themes/christmas.css + .js
+# whenever html[data-theme="christmas"] is set.
+_CHRISTMAS_VARS = {
+    '--bg-color': '#faf7f3', '--card-bg-color': '#fdfbf8', '--light-bg-color': '#f3eee8',
+    '--code-bg-color': '#f9f6f1', '--card-header-bg-color': 'rgb(207, 226, 255)',
+    '--navbar-bg-color': '#ffffff', '--bar-bg-color': '#ebe5dd',
+    '--text-color': '#1e1e1e', '--subtle-text-color': '#6c757d', '--navbar-text-color': '#000000',
+    '--border-color': '#e5ddd3', '--selected-color': 'rgb(207, 226, 255)',
+    '--page-selected-color': '#c62828', '--sidebar-color': 'rgb(15, 23, 42)', '--rule-name-color': 'rgb(10, 88, 202)',
+}
+
+# Christmas Night: the site's dark palette, same decorations plus discreet
+# stars and a small campfire (themes/christmas.css + .js).
+_CHRISTMAS_NIGHT_VARS = {
+    '--bg-color': '#10151f', '--card-bg-color': '#1a2130', '--light-bg-color': '#242e42',
+    '--code-bg-color': '#0a0e16', '--card-header-bg-color': '#212a3c',
+    '--navbar-bg-color': '#0b0f17', '--bar-bg-color': '#0a0e16',
+    '--text-color': '#e9edf5', '--subtle-text-color': '#93a1b8', '--navbar-text-color': '#e9edf5',
+    '--border-color': '#2b3549', '--selected-color': 'rgba(91, 157, 255, 0.16)',
+    '--page-selected-color': '#e05555', '--sidebar-color': '#0b0f17', '--rule-name-color': '#5b9dff',
 }
 
 BUILTIN_NAMED_THEMES = {
     'ocean':    {'label': 'Ocean',    'icon': 'fa-water',      'is_dark': False, 'css_vars': _OCEAN_VARS},
     'forest':   {'label': 'Forest',   'icon': 'fa-tree',       'is_dark': False, 'css_vars': _FOREST_VARS},
     'midnight': {'label': 'Midnight', 'icon': 'fa-moon',       'is_dark': True,  'css_vars': _MIDNIGHT_VARS},
-    'sunset':   {'label': 'Sunset',   'icon': 'fa-fire',       'is_dark': True,  'css_vars': _SUNSET_VARS},
+    'christmas': {'label': 'Christmas', 'icon': 'fa-snowflake', 'is_dark': False, 'css_vars': _CHRISTMAS_VARS},
+    'christmas-night': {'label': 'Christmas Night', 'icon': 'fa-fire-flame-curved', 'is_dark': True,
+                        'css_vars': _CHRISTMAS_NIGHT_VARS},
 }
+
+
+# Named themes that were removed: their DB row is deactivated and users who
+# had picked one are moved to the theme given here.
+RETIRED_NAMED_THEMES = {'sunset': 'dark'}
 
 
 def seed_default_themes():
     """Create/backfill built-in named themes in the DB and regenerate CSS."""
     try:
         changed = False
+        for css_key, replacement in RETIRED_NAMED_THEMES.items():
+            retired = CustomTheme.query.filter_by(css_key=css_key, is_active=True).first()
+            if retired:
+                retired.is_active = False
+                changed = True
+            moved = UserConfig.query.filter_by(theme=css_key).update({'theme': replacement})
+            changed = changed or bool(moved)
         for css_key, meta in BUILTIN_NAMED_THEMES.items():
             theme = CustomTheme.query.filter_by(css_key=css_key).first()
             if not theme:
