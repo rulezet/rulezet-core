@@ -51,7 +51,28 @@ def global_search() -> jsonify:
 ###################
 @home_blueprint.route("/why_choose_rulezet")
 def why():
-    return render_template("why.html")
+    """"Why Rulezet" page: what the platform does, feature by feature, with
+    links to each page and to its documentation chapter. The hero counters
+    are platform-wide and cached like the home page's."""
+    stats = None
+    try:
+        stats = cache.get('why_platform_stats')
+    except Exception:
+        stats = None
+    if stats is None:
+        from app.core.db_class.db import Rule, Bundle, User, FormatRule
+        from sqlalchemy import func
+        stats = {
+            'rules':   Rule.query.filter_by(is_deleted=False).count(),
+            'formats': FormatRule.query.filter(func.lower(FormatRule.name) != 'no format').count(),
+            'bundles': Bundle.query.count(),
+            'users':   User.query.count(),
+        }
+        try:
+            cache.set('why_platform_stats', stats, timeout=60 * 60 * 6)
+        except Exception:
+            pass
+    return render_template("why.html", stats=stats, version=get_version())
 
 
 @home_blueprint.route("/starfield")
