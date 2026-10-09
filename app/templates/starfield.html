@@ -1,418 +1,207 @@
 {% extends 'base.html' %}
-{% block title %}Starfield{% endblock %}
+{% block title %}Starfield — Zero-Day Campaign{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/starfield-game.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/starfield/starfield.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="sf-wrapper" id="sf-app">
-
-    <div class="sf-titlebar">
-        <div>
-            <h1>Starfield</h1>
-            <p>You are the detection rule. Everything out there is malware. Arrow keys / WASD to fly, Space to fire.</p>
-        </div>
-    </div>
-
-    <div class="sf-stage" id="sf-stage"
-         style="background-image:url('{{ url_for('static', filename='images/game/space_game_web.jpg') }}');">
-
+{#
+  Starfield — a hidden Rulezet game (not linked anywhere). You are a
+  detection rule fighting malware across five worlds. Everything runs in
+  app/static/js/starfield/ (ES modules); this template only holds the
+  canvas and the HTML screens drawn on top of it.
+#}
+<div class="sf-wrapper">
+    <div class="sf-stage" id="sf-stage" data-bg="{{ url_for('static', filename='images/game/space_game_web.jpg') }}">
         <canvas class="sf-canvas" id="sf-canvas"></canvas>
 
-        <div class="sf-hud" id="sf-hud" style="display:none;">
-            <div class="sf-hud-left">
-                <div class="sf-hud-score">SCORE <span id="sf-score">0</span></div>
-                <div class="sf-hud-level">SECTOR <span id="sf-level">1</span> / 5</div>
-                <div class="sf-hud-buffs" id="sf-hud-buffs"></div>
+        <div class="sf-topbtns">
+            <button class="sf-icon" id="sf-btn-mute" title="Sound on / off"><i class="fa-solid fa-volume-high"></i></button>
+            <button class="sf-icon" id="sf-btn-full" title="Fullscreen"><i class="fa-solid fa-expand"></i></button>
+        </div>
+
+        <!-- ═════════════ TITLE ═════════════ -->
+        <div class="sf-screen sf-screen--title" id="sf-title">
+            <div class="sf-logo">
+                <div class="sf-logo-kicker">a Rulezet detour</div>
+                <h1>STARFIELD</h1>
+                <div class="sf-logo-sub">ZERO-DAY CAMPAIGN</div>
             </div>
-        </div>
-
-        <!-- Lives — bottom right, drawn as hearts to match the heart power-up -->
-        <div class="sf-lives-corner" id="sf-lives-corner" style="display:none;">
-            <div class="sf-hud-lives-label">LIVES &times;<span id="sf-lives-num">3</span></div>
-            <div class="sf-hud-lives" id="sf-lives"></div>
-        </div>
-
-        <!-- Boss health bar — only shown during the level 5 fight -->
-        <div class="sf-boss-bar" id="sf-boss-bar" style="display:none;">
-            <span class="sf-boss-label">ZERO-DAY</span>
-            <div class="sf-boss-track"><div class="sf-boss-fill" id="sf-boss-fill"></div></div>
-        </div>
-
-        <div class="sf-topright" style="position:absolute;top:12px;right:12px;z-index:6;">
-            <button class="sf-iconbtn" id="sf-mute" title="Mute / unmute">
-                <i class="fa-solid fa-volume-high"></i>
-            </button>
-            <button class="sf-iconbtn" id="sf-pause-btn" title="Pause" style="display:none;">
-                <i class="fa-solid fa-pause"></i>
-            </button>
-            <button class="sf-iconbtn" id="sf-fullscreen-btn" title="Fullscreen">
-                <i class="fa-solid fa-expand"></i>
-            </button>
-        </div>
-
-        <!-- Splash / title screen — the very first thing you see -->
-        <div class="sf-overlay sf-overlay--splash" id="sf-splash">
-            <div class="sf-splash-title">
-                <span class="sf-splash-star">&#10022;</span> STARFIELD <span class="sf-splash-star">&#10022;</span>
+            <div class="sf-menu">
+                <button class="sf-btn sf-btn--primary" id="sf-btn-continue"><i class="fa-solid fa-play"></i> <span>Continue campaign</span></button>
+                <button class="sf-btn" id="sf-btn-new"><i class="fa-solid fa-flag"></i> New campaign</button>
+                <button class="sf-btn" id="sf-btn-endless"><i class="fa-solid fa-infinity"></i> Threat hunt <small>(endless)</small></button>
+                <button class="sf-btn" id="sf-btn-hangar"><i class="fa-solid fa-screwdriver-wrench"></i> Hangar</button>
+                <div class="sf-menu-row">
+                    <button class="sf-btn sf-btn--small" id="sf-btn-help"><i class="fa-solid fa-book"></i> How to play</button>
+                    <button class="sf-btn sf-btn--small" id="sf-btn-settings"><i class="fa-solid fa-sliders"></i> Settings</button>
+                </div>
             </div>
-            <div class="sf-splash-tag">a Rulezet detour</div>
-            <button class="sf-btn sf-btn--splash" id="sf-splash-start-btn">
-                <i class="fa-solid fa-power-off"></i> Start
-            </button>
+            <div class="sf-title-stats" id="sf-title-stats"></div>
         </div>
 
-        <!-- Start menu -->
-        <div class="sf-overlay" id="sf-menu" style="display:none;">
+        <!-- ═════════════ DIFFICULTY ═════════════ -->
+        <div class="sf-screen sf-screen--dim" id="sf-difficulty">
             <div class="sf-panel sf-panel--wide">
-                <h2>STARFIELD</h2>
-                <p class="sf-sub">
-                    Forget the ship metaphor — you ARE a detection rule, deployed straight
-                    into the graph. Every red blob out there is a live malware sample;
-                    the amber ones are threat-actor beacons actively hunting you down.
-                    Clear 5 sectors and take down the zero-day waiting at the end.
-                </p>
+                <h2>Choose your clearance</h2>
+                <p class="sf-sub">You can change it later in the settings. A new campaign resets the map, not the hangar.</p>
+                <div class="sf-cards" id="sf-diff-cards"></div>
+                <button class="sf-btn sf-btn--ghost" data-back><i class="fa-solid fa-arrow-left"></i> Back</button>
+            </div>
+        </div>
 
-                <div class="sf-skin-label">Choose your rule engine</div>
-                <div class="sf-skin-row" id="sf-skin-row"></div>
+        <!-- ═════════════ MAP HUD ═════════════ -->
+        <div class="sf-maphud" id="sf-maphud">
+            <div class="sf-maphud-top">
+                <div>
+                    <div class="sf-world-sub" id="sf-world-sub">World 1</div>
+                    <div class="sf-world-name" id="sf-world-name">Phishing Shallows</div>
+                    <div class="sf-world-story" id="sf-world-story"></div>
+                </div>
+                <div class="sf-maphud-stats">
+                    <span title="Stars in this world"><i class="fa-solid fa-star"></i> <b id="sf-map-wstars">0</b>/15</span>
+                    <span title="Bytes to spend in the hangar"><i class="fa-solid fa-microchip"></i> <b id="sf-map-bytes">0</b></span>
+                    <button class="sf-btn sf-btn--small" id="sf-map-hangar"><i class="fa-solid fa-screwdriver-wrench"></i> Hangar</button>
+                    <button class="sf-btn sf-btn--small sf-btn--ghost" id="sf-map-menu"><i class="fa-solid fa-house"></i></button>
+                </div>
+            </div>
+            <div class="sf-levelcard" id="sf-levelcard">
+                <div class="sf-levelcard-head">
+                    <span class="sf-kind" id="sf-lc-kind">WAVES</span>
+                    <span class="sf-lc-stars" id="sf-lc-stars"></span>
+                </div>
+                <div class="sf-lc-name" id="sf-lc-name">Initial access</div>
+                <div class="sf-lc-desc" id="sf-lc-desc"></div>
+                <div class="sf-lc-best" id="sf-lc-best"></div>
+                <button class="sf-btn sf-btn--primary" id="sf-lc-play"><i class="fa-solid fa-rocket"></i> Deploy</button>
+            </div>
+            <div class="sf-maphint"><kbd>&larr;</kbd><kbd>&rarr;</kbd> travel &nbsp; <kbd>Enter</kbd> deploy &nbsp; <kbd>H</kbd> hangar &nbsp; <kbd>Esc</kbd> menu &nbsp;·&nbsp; 10 stars in a world open its secret honeypot</div>
+        </div>
 
-                <div class="sf-skin-label">Start from sector <span class="sf-skin-label-hint">(unlocks as you clear sectors — resets on reload)</span></div>
-                <div class="sf-level-row" id="sf-level-row"></div>
+        <!-- ═════════════ LEVEL HUD ═════════════ -->
+        <div class="sf-hud" id="sf-hud">
+            <div class="sf-hud-left">
+                <div class="sf-hp" id="sf-hud-hp"></div>
+                <div class="sf-hud-row">
+                    <span class="sf-bombs" id="sf-hud-bombs"></span>
+                    <span class="sf-dash" title="Dash (Shift)"><i class="fa-solid fa-person-running"></i><span class="sf-meter"><span id="sf-hud-dash"></span></span></span>
+                </div>
+                <div class="sf-buffs" id="sf-hud-buffs"></div>
+            </div>
+            <div class="sf-hud-center">
+                <div class="sf-objective" id="sf-hud-obj">—</div>
+                <div class="sf-meter sf-meter--wide" id="sf-hud-objbar"><span id="sf-hud-objfill"></span></div>
+                <div class="sf-bossbar" id="sf-hud-boss">
+                    <div class="sf-bossname" id="sf-hud-bossname"></div>
+                    <div class="sf-meter sf-meter--boss"><span id="sf-hud-bossfill"></span></div>
+                </div>
+            </div>
+            <div class="sf-hud-right">
+                <div class="sf-score" id="sf-hud-score">0</div>
+                <div class="sf-combo" id="sf-hud-combo"></div>
+                <div class="sf-bytes"><i class="fa-solid fa-microchip"></i> <span id="sf-hud-bytes">0</span></div>
+            </div>
+            <div class="sf-weapons" id="sf-hud-weapons"></div>
+        </div>
 
-                <button class="sf-btn" id="sf-start-btn"><i class="fa-solid fa-rocket"></i> Deploy</button>
-                <div class="sf-keys">
-                    <span><kbd>&#8592;</kbd><kbd>&#8594;</kbd> turn</span>
-                    <span><kbd>&#8593;</kbd> thrust</span>
-                    <span><kbd>space</kbd> fire</span>
-                    <span><kbd>p</kbd> pause</span>
+        <!-- Level intro card -->
+        <div class="sf-screen sf-screen--clear" id="sf-intro">
+            <div class="sf-intro">
+                <div class="sf-intro-kicker" id="sf-intro-kicker">WORLD 1 — LEVEL 1</div>
+                <div class="sf-intro-name" id="sf-intro-name">Initial access</div>
+                <div class="sf-intro-desc" id="sf-intro-desc"></div>
+                <div class="sf-intro-keys" id="sf-intro-keys"></div>
+            </div>
+        </div>
+
+        <!-- ═════════════ PAUSE ═════════════ -->
+        <div class="sf-screen sf-screen--dim" id="sf-pause">
+            <div class="sf-panel">
+                <h2>Paused</h2>
+                <p class="sf-sub" id="sf-pause-obj"></p>
+                <button class="sf-btn sf-btn--primary" id="sf-pause-resume"><i class="fa-solid fa-play"></i> Resume</button>
+                <button class="sf-btn" id="sf-pause-restart"><i class="fa-solid fa-rotate-right"></i> Restart</button>
+                <button class="sf-btn sf-btn--ghost" id="sf-pause-quit"><i class="fa-solid fa-map"></i> Abandon</button>
+            </div>
+        </div>
+
+        <!-- ═════════════ RESULTS ═════════════ -->
+        <div class="sf-screen sf-screen--dim" id="sf-results">
+            <div class="sf-panel sf-panel--wide">
+                <h2 id="sf-res-title">Level cleared</h2>
+                <div class="sf-res-stars" id="sf-res-stars"></div>
+                <ul class="sf-res-crit" id="sf-res-crit"></ul>
+                <div class="sf-res-grid" id="sf-res-grid"></div>
+                <div class="sf-res-unlocks" id="sf-res-unlocks"></div>
+                <div class="sf-panel-actions">
+                    <button class="sf-btn sf-btn--primary" id="sf-res-next"><i class="fa-solid fa-forward"></i> Next level</button>
+                    <button class="sf-btn" id="sf-res-retry"><i class="fa-solid fa-rotate-right"></i> Retry</button>
+                    <button class="sf-btn sf-btn--ghost" id="sf-res-map"><i class="fa-solid fa-map"></i> Map</button>
                 </div>
             </div>
         </div>
 
-        <!-- Level intro card — big sector number + story blurb -->
-        <div class="sf-overlay" id="sf-levelintro" style="display:none;">
-            <div class="sf-intro">
-                <div class="sf-intro-eyebrow" id="sf-intro-eyebrow">SECTOR</div>
-                <div class="sf-intro-number" id="sf-intro-number">1</div>
-                <p class="sf-intro-story" id="sf-intro-story"></p>
+        <!-- ═════════════ ENDLESS GAME OVER ═════════════ -->
+        <div class="sf-screen sf-screen--dim" id="sf-endless">
+            <div class="sf-panel sf-panel--wide">
+                <h2>Hunt over</h2>
+                <div class="sf-res-grid" id="sf-end-grid"></div>
+                <table class="sf-table" id="sf-end-table"></table>
+                <div class="sf-panel-actions">
+                    <button class="sf-btn sf-btn--primary" id="sf-end-retry"><i class="fa-solid fa-rotate-right"></i> Hunt again</button>
+                    <button class="sf-btn sf-btn--ghost" id="sf-end-menu"><i class="fa-solid fa-house"></i> Menu</button>
+                </div>
             </div>
         </div>
 
-        <!-- 3-2-1-GO countdown -->
-        <div class="sf-overlay sf-overlay--transparent" id="sf-countdown" style="display:none;">
-            <div class="sf-countdown-number" id="sf-countdown-number">3</div>
+        <!-- ═════════════ HANGAR ═════════════ -->
+        <div class="sf-screen sf-screen--dim" id="sf-hangar">
+            <div class="sf-panel sf-panel--xl">
+                <div class="sf-panel-head">
+                    <h2><i class="fa-solid fa-screwdriver-wrench"></i> Hangar</h2>
+                    <div class="sf-wallet"><i class="fa-solid fa-microchip"></i> <b id="sf-hangar-bytes">0</b> bytes</div>
+                </div>
+                <div class="sf-tabs" id="sf-hangar-tabs">
+                    <button class="sf-tab active" data-tab="upgrades">Upgrades</button>
+                    <button class="sf-tab" data-tab="weapons">Weapons</button>
+                    <button class="sf-tab" data-tab="skins">Rule engine</button>
+                </div>
+                <div class="sf-hangar-body" id="sf-hangar-body"></div>
+                <button class="sf-btn sf-btn--ghost" data-back><i class="fa-solid fa-arrow-left"></i> Back</button>
+            </div>
         </div>
 
-        <!-- Pause menu -->
-        <div class="sf-overlay" id="sf-pause" style="display:none;">
+        <!-- ═════════════ HELP ═════════════ -->
+        <div class="sf-screen sf-screen--dim" id="sf-help">
+            <div class="sf-panel sf-panel--xl">
+                <div class="sf-panel-head"><h2><i class="fa-solid fa-book"></i> How to play</h2></div>
+                <div class="sf-tabs" id="sf-help-tabs">
+                    <button class="sf-tab active" data-tab="controls">Controls</button>
+                    <button class="sf-tab" data-tab="bestiary">Bestiary</button>
+                    <button class="sf-tab" data-tab="objectives">Objectives &amp; stars</button>
+                </div>
+                <div class="sf-hangar-body" id="sf-help-body"></div>
+                <button class="sf-btn sf-btn--ghost" data-back><i class="fa-solid fa-arrow-left"></i> Back</button>
+            </div>
+        </div>
+
+        <!-- ═════════════ SETTINGS ═════════════ -->
+        <div class="sf-screen sf-screen--dim" id="sf-settings">
             <div class="sf-panel">
-                <h2>Paused</h2>
-                <p class="sf-sub">Take a breath. The malware will wait. Probably.</p>
-                <button class="sf-btn" id="sf-resume-btn"><i class="fa-solid fa-play"></i> Resume</button>
-                <button class="sf-btn sf-btn--ghost" id="sf-quit-btn"><i class="fa-solid fa-house"></i> Back to menu</button>
+                <h2><i class="fa-solid fa-sliders"></i> Settings</h2>
+                <div class="sf-settings" id="sf-settings-list"></div>
+                <button class="sf-btn sf-btn--danger" id="sf-reset"><i class="fa-solid fa-trash"></i> Reset all progress</button>
+                <button class="sf-btn sf-btn--ghost" data-back><i class="fa-solid fa-arrow-left"></i> Back</button>
             </div>
         </div>
 
-        <!-- Game over -->
-        <div class="sf-overlay" id="sf-gameover" style="display:none;">
-            <div class="sf-panel">
-                <h2>Rule disabled</h2>
-                <div class="sf-score-line">Final score — <strong id="sf-final-score">0</strong></div>
-                <p class="sf-sub" id="sf-final-sector">Reached sector 1.</p>
-                <button class="sf-btn" id="sf-retry-btn"><i class="fa-solid fa-rotate-right"></i> Try again</button>
-                <button class="sf-btn sf-btn--ghost" id="sf-menu-btn"><i class="fa-solid fa-house"></i> Back to menu</button>
-            </div>
-        </div>
-
-        <!-- Victory — screen freezes behind this, confetti/fireworks on top -->
-        <div class="sf-overlay" id="sf-victory" style="display:none;">
-            <div class="sf-fx" id="sf-fx"></div>
-            <div class="sf-panel">
-                <h2>Zero-day neutralized</h2>
-                <p class="sf-sub">Detection confirmed across all 5 sectors. The graph is quiet again — for now.</p>
-                <div class="sf-score-line">Final score — <strong id="sf-victory-score">0</strong></div>
-                <button class="sf-btn" id="sf-victory-retry-btn"><i class="fa-solid fa-rotate-right"></i> Play again</button>
-                <button class="sf-btn sf-btn--ghost" id="sf-victory-menu-btn"><i class="fa-solid fa-house"></i> Back to menu</button>
-            </div>
-        </div>
-
+        <div class="sf-toast" id="sf-toast"></div>
     </div>
+    <p class="sf-footnote" id="sf-footnote"></p>
 </div>
 {% endblock %}
 
 {% block script %}
-<script src="{{ url_for('static', filename='js/starfield-game.js') }}"></script>
-<script>
-(function () {
-    const canvas     = document.getElementById('sf-canvas');
-    const hud        = document.getElementById('sf-hud');
-    const splash     = document.getElementById('sf-splash');
-    const menu       = document.getElementById('sf-menu');
-    const introEl    = document.getElementById('sf-levelintro');
-    const countdownEl = document.getElementById('sf-countdown');
-    const pauseEl    = document.getElementById('sf-pause');
-    const overEl     = document.getElementById('sf-gameover');
-    const victoryEl  = document.getElementById('sf-victory');
-    const pauseBtn   = document.getElementById('sf-pause-btn');
-    const muteBtn    = document.getElementById('sf-mute');
-    const bossBar    = document.getElementById('sf-boss-bar');
-    const bossFill   = document.getElementById('sf-boss-fill');
-    const buffsRow   = document.getElementById('sf-hud-buffs');
-    const livesCorner = document.getElementById('sf-lives-corner');
-
-    // ── Ship skin picker ─────────────────────────────────────────────
-    const skinRow = document.getElementById('sf-skin-row');
-    let selectedSkin = STARFIELD_SKINS.find(s => s.id === localStorage.getItem('rz-starfield-skin')) || STARFIELD_SKINS[0];
-
-    function renderSkins() {
-        skinRow.innerHTML = '';
-        STARFIELD_SKINS.forEach(skin => {
-            const el = document.createElement('button');
-            el.type = 'button';
-            el.className = 'sf-skin-swatch' + (skin.id === selectedSkin.id ? ' active' : '');
-            el.style.setProperty('--hull', skin.hull);
-            el.style.setProperty('--glow', skin.glow);
-            el.innerHTML = '<i class="fa-solid fa-rocket"></i><span>' + skin.name + '</span>';
-            el.addEventListener('click', () => {
-                selectedSkin = skin;
-                localStorage.setItem('rz-starfield-skin', skin.id);
-                renderSkins();
-            });
-            skinRow.appendChild(el);
-        });
-    }
-    renderSkins();
-
-    // ── Level select — session-only in-memory progress, never persisted.
-    // A reload genuinely loses it, exactly as requested.
-    let highestLevelReached = 1;
-    let selectedLevel = 1;
-    let lastReachedLevel = 1; // used to offer "retry at this sector" after death
-    const levelRow = document.getElementById('sf-level-row');
-
-    function renderLevels() {
-        levelRow.innerHTML = '';
-        for (let lvl = 1; lvl <= 5; lvl++) {
-            const unlocked = lvl <= highestLevelReached;
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'sf-level-chip'
-                + (lvl === selectedLevel ? ' active' : '')
-                + (unlocked ? '' : ' locked');
-            btn.disabled = !unlocked;
-            btn.title = lvl === 5 ? 'Boss sector' : ('Sector ' + lvl);
-            btn.innerHTML = !unlocked
-                ? '<i class="fa-solid fa-lock"></i>'
-                : (lvl === 5 ? '<i class="fa-solid fa-skull-crossbones"></i>' : lvl);
-            btn.addEventListener('click', () => {
-                if (!unlocked) return;
-                selectedLevel = lvl;
-                renderLevels();
-            });
-            levelRow.appendChild(btn);
-        }
-    }
-    renderLevels();
-
-    const BUFF_META = {
-        rapid:  { icon: 'fa-bolt',           label: 'RAPID FIRE', max: 480 },
-        shield: { icon: 'fa-shield-halved',  label: 'SHIELD',     max: 420 },
-    };
-
-    function renderBuffs(buffs) {
-        buffsRow.innerHTML = '';
-        Object.keys(BUFF_META).forEach(key => {
-            const frames = buffs[key] || 0;
-            if (frames <= 0) return;
-            const meta = BUFF_META[key];
-            const pct = Math.max(0, Math.min(100, (frames / meta.max) * 100));
-            const chip = document.createElement('div');
-            chip.className = 'sf-buff-chip';
-            chip.innerHTML = '<i class="fa-solid ' + meta.icon + '"></i>'
-                + '<span>' + meta.label + '</span>'
-                + '<div class="sf-buff-track"><div class="sf-buff-fill" style="width:' + pct + '%"></div></div>';
-            buffsRow.appendChild(chip);
-        });
-    }
-
-    const game = StarfieldGame(canvas, {
-        onScoreChange: function (score, lives, level) {
-            document.getElementById('sf-score').textContent = score;
-            document.getElementById('sf-level').textContent = level;
-            document.getElementById('sf-lives-num').textContent = lives;
-            const livesEl = document.getElementById('sf-lives');
-            livesEl.innerHTML = '';
-            for (let i = 0; i < lives; i++) {
-                const icon = document.createElement('i');
-                icon.className = 'fa-solid fa-heart';
-                livesEl.appendChild(icon);
-            }
-            bossBar.style.display = (level >= 5) ? 'flex' : 'none';
-            if (level > highestLevelReached) highestLevelReached = level;
-            lastReachedLevel = level;
-        },
-        onBuffs: function (buffs) {
-            renderBuffs(buffs);
-        },
-        onBoss: function (hp, maxHp) {
-            bossBar.style.display = 'flex';
-            bossFill.style.width = Math.max(0, (hp / maxHp) * 100) + '%';
-        },
-        onLevelIntro: function (level, story, isBoss) {
-            hideAllOverlays();
-            document.getElementById('sf-intro-eyebrow').textContent = isBoss ? 'FINAL SECTOR' : 'SECTOR';
-            document.getElementById('sf-intro-number').textContent = isBoss ? '' : level;
-            document.getElementById('sf-intro-number').innerHTML = isBoss
-                ? '<i class="fa-solid fa-skull-crossbones"></i>'
-                : level;
-            document.getElementById('sf-intro-story').textContent = story;
-            introEl.style.display = 'flex';
-        },
-        onCountdown: function (value) {
-            if (value === null) { countdownEl.style.display = 'none'; return; }
-            hideAllOverlays();
-            const el = document.getElementById('sf-countdown-number');
-            el.textContent = value;
-            el.className = '';
-            void el.offsetWidth; // restart the pop animation on every tick
-            el.classList.add(value === 'GO!' ? 'sf-countdown-go' : 'sf-countdown-tick');
-            countdownEl.style.display = 'flex';
-        },
-        onPause: function () {
-            pauseEl.style.display = 'flex';
-        },
-        onResume: function () {
-            pauseEl.style.display = 'none';
-        },
-        onGameOver: function (score, level) {
-            document.getElementById('sf-final-score').textContent = score;
-            document.getElementById('sf-final-sector').textContent = 'Reached sector ' + level + ' of 5.';
-            document.getElementById('sf-retry-btn').innerHTML =
-                '<i class="fa-solid fa-rotate-right"></i> Retry sector ' + level;
-            hideAllOverlays();
-            hud.style.display = 'none';
-            livesCorner.style.display = 'none';
-            bossBar.style.display = 'none';
-            pauseBtn.style.display = 'none';
-            overEl.style.display = 'flex';
-        },
-        onVictory: function (score) {
-            document.getElementById('sf-victory-score').textContent = score;
-            hideAllOverlays();
-            hud.style.display = 'none';
-            livesCorner.style.display = 'none';
-            bossBar.style.display = 'none';
-            pauseBtn.style.display = 'none';
-            victoryEl.style.display = 'flex';
-            launchFireworks();
-        },
-    });
-
-    function hideAllOverlays() {
-        splash.style.display = 'none';
-        menu.style.display = 'none';
-        introEl.style.display = 'none';
-        countdownEl.style.display = 'none';
-        pauseEl.style.display = 'none';
-        overEl.style.display = 'none';
-        victoryEl.style.display = 'none';
-    }
-
-    function beginGame(level) {
-        StarfieldSound.ensure();
-        hideAllOverlays();
-        hud.style.display = 'flex';
-        livesCorner.style.display = 'flex';
-        pauseBtn.style.display = 'flex';
-        game.start(selectedSkin, level || 1);
-    }
-
-    document.getElementById('sf-splash-start-btn').addEventListener('click', function () {
-        StarfieldSound.ensure();
-        splash.style.display = 'none';
-        menu.style.display = 'flex';
-    });
-
-    document.getElementById('sf-start-btn').addEventListener('click', () => beginGame(selectedLevel));
-    // Game over retries right where you died; victory always offers a fresh
-    // run from sector 1 since you already cleared everything once.
-    document.getElementById('sf-retry-btn').addEventListener('click', () => beginGame(lastReachedLevel));
-    document.getElementById('sf-victory-retry-btn').addEventListener('click', () => beginGame(1));
-
-    function backToMenu() {
-        hideAllOverlays();
-        hud.style.display = 'none';
-        livesCorner.style.display = 'none';
-        bossBar.style.display = 'none';
-        pauseBtn.style.display = 'none';
-        menu.style.display = 'flex';
-        renderLevels();
-        game.stop();
-    }
-    document.getElementById('sf-menu-btn').addEventListener('click', backToMenu);
-    document.getElementById('sf-victory-menu-btn').addEventListener('click', backToMenu);
-    document.getElementById('sf-quit-btn').addEventListener('click', backToMenu);
-
-    document.getElementById('sf-resume-btn').addEventListener('click', function () {
-        pauseEl.style.display = 'none';
-        game.resume();
-    });
-
-    pauseBtn.addEventListener('click', function () {
-        if (game.isPaused()) { pauseEl.style.display = 'none'; game.resume(); }
-        else { pauseEl.style.display = 'flex'; }
-    });
-
-    muteBtn.addEventListener('click', function () {
-        const nowMuted = !StarfieldSound.isMuted();
-        StarfieldSound.setMuted(nowMuted);
-        muteBtn.innerHTML = '<i class="fa-solid ' + (nowMuted ? 'fa-volume-xmark' : 'fa-volume-high') + '"></i>';
-    });
-
-    // ── Fullscreen ────────────────────────────────────────────────────
-    const stageEl = document.getElementById('sf-stage');
-    const fullscreenBtn = document.getElementById('sf-fullscreen-btn');
-    fullscreenBtn.addEventListener('click', function () {
-        if (!document.fullscreenElement) {
-            stageEl.requestFullscreen?.();
-        } else {
-            document.exitFullscreen?.();
-        }
-    });
-    document.addEventListener('fullscreenchange', function () {
-        const isFull = document.fullscreenElement === stageEl;
-        fullscreenBtn.innerHTML = '<i class="fa-solid ' + (isFull ? 'fa-compress' : 'fa-expand') + '"></i>';
-        fullscreenBtn.title = isFull ? 'Exit fullscreen' : 'Fullscreen';
-    });
-
-    // ── Victory confetti + fireworks — pure CSS animation, the canvas
-    // itself stays frozen behind it (the game loop already halts on victory).
-    const FX_COLORS = ['#6ea8ff', '#ffd447', '#ff6b8f', '#4be08a', '#a06bff', '#ff8f6b'];
-    function launchFireworks() {
-        const fx = document.getElementById('sf-fx');
-        fx.innerHTML = '';
-
-        for (let i = 0; i < 60; i++) {
-            const piece = document.createElement('div');
-            piece.className = 'sf-confetti';
-            piece.style.left = Math.random() * 100 + '%';
-            piece.style.background = FX_COLORS[i % FX_COLORS.length];
-            piece.style.animationDelay = (Math.random() * 1.2) + 's';
-            piece.style.animationDuration = (2.4 + Math.random() * 1.8) + 's';
-            fx.appendChild(piece);
-        }
-
-        for (let i = 0; i < 5; i++) {
-            const burst = document.createElement('div');
-            burst.className = 'sf-firework';
-            burst.style.left = (15 + Math.random() * 70) + '%';
-            burst.style.top = (15 + Math.random() * 45) + '%';
-            burst.style.animationDelay = (i * 0.35) + 's';
-            burst.style.setProperty('--fx-color', FX_COLORS[i % FX_COLORS.length]);
-            fx.appendChild(burst);
-        }
-    }
-})();
-</script>
+<script type="module" src="{{ url_for('static', filename='js/starfield/main.js') }}"></script>
 {% endblock %}
