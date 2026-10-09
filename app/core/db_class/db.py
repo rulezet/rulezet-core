@@ -920,7 +920,7 @@ class RuleEditProposal(db.Model):
     
     reviewed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
-    rejection_reason = db.Column(db.Text, nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)   # the reviewer's note — on a rejection or an acceptance
 
     # Set when this proposal continues a prior one. The prior proposal stays
     # fully independent and decidable — it is never auto-closed by this link.
@@ -972,6 +972,7 @@ class RuleEditProposal(db.Model):
             'reviewed_by_name': f"{self.reviewer.first_name} {self.reviewer.last_name}" if self.reviewer else None,
             'reviewed_by_avatar': self.reviewer.get_avatar_url() if self.reviewer else None,
             'rejection_reason': self.rejection_reason,
+            'decision_reason': self.rejection_reason,
             'previous_proposal_id': self.previous_proposal_id,
             'previous_proposal': self._revision_link(self.previous_proposal),
             'revisions': [self._revision_link(r) for r in self.revisions.order_by(RuleEditProposal.timestamp.asc())],

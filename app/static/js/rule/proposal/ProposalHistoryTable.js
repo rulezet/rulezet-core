@@ -579,6 +579,8 @@ const ProposalHistoryTable = {
                                 </td>
                                 <td v-if="!hiddenColumns.has('status')" class="dt-td">
                                     <span class="prp-status" :class="'prp-status--' + statusKey(p)">[[ statusKey(p) ]]</span>
+                                    <button v-if="p.rejection_reason" type="button" class="prp-note-btn" @click="toggleExpand(p)"
+                                        :title="'Reviewer’s note: ' + p.rejection_reason"><i class="fa-regular fa-note-sticky"></i></button>
                                 </td>
                                 <td v-if="!hiddenColumns.has('date')" class="dt-td text-nowrap">
                                     <span class="prp-date" :title="fullDate(p.timestamp)">[[ relativeDate(p.timestamp) ]]</span>
@@ -606,7 +608,9 @@ const ProposalHistoryTable = {
                                     <div class="row g-3">
                                         <div class="col-lg-7">
                                             <template v-if="p.rejection_reason">
-                                                <div class="prp-detail-label text-danger">Reason given by the reviewer</div>
+                                                <div class="prp-detail-label" :class="p.status === 'accepted' ? 'text-success' : 'text-danger'">
+                                                    Reviewer's note<template v-if="p.reviewed_by_name"> — [[ p.reviewed_by_name ]]</template>
+                                                </div>
                                                 <p class="prp-detail-text">[[ p.rejection_reason ]]</p>
                                             </template>
                                             <div class="d-flex flex-wrap gap-2">
@@ -694,11 +698,10 @@ const ProposalHistoryTable = {
                         The other open versions of this thread are closed as <strong>superseded</strong>.
                     </p>
                     <p v-else class="small mb-3">The author is notified. They can still revise the proposal afterwards.</p>
-                    <template v-if="decision.value === 'rejected'">
-                        <label class="form-label small fw-semibold">Reason (optional, shown to the author)</label>
-                        <textarea v-model="decision.reason" class="form-control mb-3" rows="3" maxlength="2000"
-                            placeholder="Why is this change not merged?"></textarea>
-                    </template>
+                    <label class="form-label small fw-semibold">Note for the author (optional)</label>
+                    <textarea v-model="decision.reason" class="form-control mb-1" rows="3" maxlength="2000"
+                        :placeholder="decision.value === 'accepted' ? 'Thanks — merged with…' : 'Why is this change not merged?'"></textarea>
+                    <div class="small text-muted mb-3">Shown on the proposal, in its conversation and in the author's notification.</div>
                     <div class="d-flex justify-content-end gap-2">
                         <button class="btn btn-outline-secondary rounded-pill px-3" @click="decision.open = false">Cancel</button>
                         <button class="btn rounded-pill px-4" :class="decision.value === 'accepted' ? 'btn-success' : 'btn-danger'"

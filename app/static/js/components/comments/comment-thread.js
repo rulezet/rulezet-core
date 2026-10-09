@@ -965,6 +965,7 @@ const CommentThread = {
                 <span v-else class="cm-event-text">[[ item.text ]]</span>
                 <span v-if="item.status" class="cm-event-status" :class="'cm-event-status--' + item.status">[[ item.status ]]</span>
                 <span class="cm-event-date">[[ fmt_date(item.created_at) ]]</span>
+                <div v-if="item.reason" class="cm-event-reason">[[ item.reason ]]</div>
             </div>
         </template>
     </div>

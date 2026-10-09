@@ -2646,7 +2646,7 @@ def _build_proposal_system_events(proposal) -> list:
             "text": {"accepted": "accepted this proposal",
                      "rejected": "rejected this proposal",
                      "superseded": "accepted another version of this thread — this one is superseded"}[proposal.status],
-            "reason": proposal.rejection_reason if proposal.status == "rejected" else None,
+            "reason": proposal.rejection_reason if proposal.status in ("accepted", "rejected") else None,
             "actor_id": proposal.reviewed_by_id,
             "actor_name": (f"{proposal.reviewer.first_name} {proposal.reviewer.last_name}"
                            if proposal.reviewer else "Unknown"),

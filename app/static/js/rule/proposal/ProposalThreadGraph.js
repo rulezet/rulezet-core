@@ -405,6 +405,7 @@ const ProposalThreadGraph = {
                     <template v-else-if="statusKey(row.v) === 'accepted'">
                         <i class="fa-solid fa-code-merge"></i>Merged<template v-if="row.v.reviewed_by_name"> by [[ row.v.reviewed_by_name ]]</template>
                         <template v-if="row.v.reviewed_at"> · [[ date(row.v.reviewed_at) ]]</template>
+                        <span v-if="row.v.rejection_reason" class="ptg-reason" :title="row.v.rejection_reason">— “[[ row.v.rejection_reason ]]”</span>
                     </template>
                     <template v-else-if="statusKey(row.v) === 'superseded'"><i class="fa-solid fa-ban"></i>Closed — another version of the thread was merged</template>
                     <template v-else>

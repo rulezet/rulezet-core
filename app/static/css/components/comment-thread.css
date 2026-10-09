@@ -173,6 +173,21 @@
     color: var(--cm-text-main);
 }
 
+/* A decision's note (reviewer's reason), under the event line */
+.cm-event:has(.cm-event-reason) { flex-wrap: wrap; }
+.cm-event-reason {
+    flex-basis: 100%;
+    margin-left: 2rem;
+    padding: .45rem .75rem;
+    font-size: .82rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--cm-text-main);
+    background: var(--light-bg-color);
+    border-left: 3px solid var(--border-color);
+    border-radius: 0 8px 8px 0;
+}
+
 .cm-event-link {
     color: var(--cm-brand);
     text-decoration: none;

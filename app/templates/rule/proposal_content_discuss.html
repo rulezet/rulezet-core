@@ -301,12 +301,15 @@
                 </template>
             </div>
 
-            <!-- Rejection reason -->
-            <div v-if="proposal.status === 'rejected' && proposal.rejection_reason" class="rejection-alert">
-                <div class="fw-semibold mb-1" style="color:#dc3545;font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;">
-                    <i class="fa-solid fa-circle-xmark me-1"></i>Rejection reason
+            <!-- The reviewer's note — on a rejection or an acceptance -->
+            <div v-if="['accepted', 'rejected'].includes(proposal.status) && proposal.rejection_reason"
+                 class="rejection-alert" :class="{ 'rejection-alert--accepted': proposal.status === 'accepted' }">
+                <div class="rejection-alert__title">
+                    <i class="fa-solid me-1" :class="proposal.status === 'accepted' ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
+                    [[ proposal.status === 'accepted' ? 'Accepted' : 'Rejected' ]]<template v-if="proposal.reviewed_by_name"> by [[ proposal.reviewed_by_name ]]</template>
+                    <template v-if="proposal.reviewed_at"> · [[ formatDate(proposal.reviewed_at) ]]</template>
                 </div>
-                [[ proposal.rejection_reason ]]
+                <div style="white-space:pre-wrap;">[[ proposal.rejection_reason ]]</div>
             </div>
 
         </div>
@@ -406,7 +409,7 @@
             </div>
             <div class="proposal-decision-box__reason">
                 <textarea v-model="decisionReason" class="form-control" rows="2" maxlength="2000"
-                          placeholder="Reason for rejecting (optional) — shown to the author and in their notification"></textarea>
+                          placeholder="Note for the author (optional), for an acceptance or a rejection — shown on the proposal, in the conversation and in their notification"></textarea>
             </div>
         </div>
         {% endif %}
@@ -688,7 +691,7 @@
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
                         body: JSON.stringify({
                             ruleId: RULE_ID, ruleproposalId: PROPOSAL_ID, decision,
-                            reason: decision === 'rejected' ? decisionReason.value : '',
+                            reason: decisionReason.value,
                         }),
                     });
                     if (res.ok) {

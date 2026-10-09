@@ -191,6 +191,14 @@ mark.prp-highlight {
 .prp-status--rejected   { color: #dc3545; background: rgba(220, 53, 69, .12);  border-color: rgba(220, 53, 69, .3); }
 .prp-status--superseded { color: #6f42c1; background: rgba(111, 66, 193, .12); border-color: rgba(111, 66, 193, .3); }
 
+.prp-note-btn {
+    border: none;
+    background: transparent;
+    color: var(--subtle-text-color);
+    padding: 0 .3rem;
+    font-size: .8rem;
+}
+.prp-note-btn:hover { color: #0d6efd; }
 .prp-btn-accept:hover { background: rgba(25, 135, 84, .12) !important; color: #198754 !important; }
 .prp-bulk-accept { color: #198754; border-color: rgba(25, 135, 84, .4); }
 .prp-bulk-accept:hover { background: rgba(25, 135, 84, .12); }

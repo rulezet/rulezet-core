@@ -128,6 +128,20 @@
     font-size: 0.85rem;
     color: var(--text-color);
 }
+.rejection-alert__title {
+    font-weight: 600;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #dc3545;
+    margin-bottom: .25rem;
+}
+.rejection-alert--accepted {
+    background: rgba(25, 135, 84, .08);
+    border-color: rgba(25, 135, 84, .3);
+    border-left-color: #198754;
+}
+.rejection-alert--accepted .rejection-alert__title { color: #198754; }
 
 /* ── GitHub-style "ready to decide" bar (bottom of the conversation) ── */
 .proposal-decision-box {

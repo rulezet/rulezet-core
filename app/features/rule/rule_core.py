@@ -2152,7 +2152,9 @@ def decide_proposal(proposal, decision, reviewed_by_id, reason=None):
     proposal.status = decision
     proposal.reviewed_by_id = reviewed_by_id
     proposal.reviewed_at = now
-    proposal.rejection_reason = (reason or None) if decision == "rejected" else None
+    # the reviewer's note, for an acceptance as for a rejection (the column
+    # kept its historical name)
+    proposal.rejection_reason = reason or None
     result = {"new_version": None, "superseded": []}
 
     if decision == "accepted":
