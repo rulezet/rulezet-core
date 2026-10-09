@@ -683,7 +683,8 @@ def create_from_cve():
     cve_label = ', '.join(cve_ids[:3]) + ('…' if len(cve_ids) > 3 else '')
     post = BlogModel.create_post({
         'title':     f'[Generating] {cve_label}',
-        'content':   '',
+        # placeholder (the content is required) — replaced by the blog_from_cve job
+        'content':   f'*This post is being generated from {cve_label}…*',
         'is_draft':  True,
         'is_public': False,
     }, user_id=current_user.id)

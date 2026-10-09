@@ -279,7 +279,7 @@
             <div class="card-body p-4">
                 <div class="d-flex align-items-center gap-2 mb-3">
                     <div class="blog-card-accent"></div>
-                    <span class="blog-card-header-label"><i class="fa-solid fa-align-left me-1"></i>Content</span>
+                    <span class="blog-card-header-label"><i class="fa-solid fa-align-left me-1"></i>Content <span class="text-danger" title="Required">*</span></span>
                     <span class="text-muted" style="font-size:.78rem;">(Markdown supported)</span>
                 </div>
                 <smart-editor
@@ -1145,6 +1145,10 @@
             async function savePost(silent = false, { redirect = true } = {}) {
                 if (!form.value.title.trim()) {
                     if (!silent) create_message('Title is required.', 'warning-subtle')
+                    return null
+                }
+                if (!form.value.content.trim()) {
+                    if (!silent) create_message('Content is required — write the post before saving.', 'warning-subtle')
                     return null
                 }
                 isSaving.value = true

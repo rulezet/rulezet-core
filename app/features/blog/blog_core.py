@@ -150,6 +150,8 @@ def create_post(data: dict, user_id: int) -> BlogPost:
     title = (data.get('title') or '').strip()
     if not title:
         raise ValueError("Title is required.")
+    if not (data.get('content') or '').strip():
+        raise ValueError("Content is required.")
 
     is_draft  = bool(data.get('is_draft', False))
     is_public = bool(data.get('is_public', False)) and not is_draft
@@ -193,6 +195,8 @@ def update_post(post: BlogPost, data: dict) -> BlogPost:
     title = (data.get('title') or '').strip()
     if not title:
         raise ValueError("Title is required.")
+    if not (data.get('content') or '').strip():
+        raise ValueError("Content is required.")
 
     was_public = post.is_public
     is_draft   = bool(data.get('is_draft', False))

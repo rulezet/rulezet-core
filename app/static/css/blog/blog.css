@@ -369,3 +369,12 @@
 .blog-graph-dl .dropdown-item { display: flex; align-items: center; gap: .55rem; }
 .blog-graph-dl .dropdown-item i { width: 16px; text-align: center; color: #0d6efd; }
 .blog-graph-dl .dropdown-item span { margin-left: auto; font-size: .72rem; color: var(--subtle-text-color); }
+
+/* Post with an empty body (older posts — the content is now required) */
+.blog-content-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5rem;
+    min-height: 180px; margin-top: 1rem; padding: 2rem 1rem;
+    border: 1px dashed var(--border-color); border-radius: 12px;
+    color: var(--subtle-text-color); font-size: .9rem;
+}
+.blog-content-empty i { font-size: 1.6rem; opacity: .4; }

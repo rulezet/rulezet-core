@@ -260,9 +260,11 @@
                     </span>
                     <!-- Download dropdown — public posts only -->
                     <div v-if="post.is_public && !post.is_draft" class="ms-auto dropdown">
+                        <!-- fixed strategy: the card clips its overflow, a short post would hide the menu -->
                         <button class="btn btn-sm rounded-pill dropdown-toggle"
                                 style="background:transparent;border:1px solid #6c757d55;color:var(--subtle-text-color);font-size:.78rem;"
-                                type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                                data-bs-popper-config='{"strategy":"fixed"}'>
                             <i class="fa-solid fa-download me-1"></i>Download
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="border-radius:12px;min-width:200px;padding:6px;">
@@ -347,7 +349,11 @@
                 </div>
 
                 <!-- Markdown content -->
-                <div class="blog-content" v-html="renderedContent"></div>
+                <div v-if="renderedContent" class="blog-content" v-html="renderedContent"></div>
+                <div v-else class="blog-content-empty">
+                    <i class="fa-regular fa-file-lines"></i>
+                    <span>This post has no content yet.</span>
+                </div>
             </div>
         </div>
 
