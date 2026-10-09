@@ -81,7 +81,7 @@
         return btn;
     }
 
-    // Night: now and then a shooting star crosses the top of the sky (behind the page, like the stars).
+    // Night: every 10–25 s a shooting star crosses the top of the sky (behind the page, like the stars).
     function spawnShootingStar() {
         const sky = document.querySelector('.xmas-stars');
         if (!sky) return;
@@ -95,7 +95,7 @@
 
     function shootingStar() {
         if (!document.hidden) spawnShootingStar();
-        shootingTimer = setTimeout(shootingStar, (25 + Math.random() * 35) * 1000);
+        shootingTimer = setTimeout(shootingStar, (10 + Math.random() * 15) * 1000);   // every 10–25 s
     }
 
     // Corner button (night only): a shooting star right now, somewhere in the sky.
@@ -354,7 +354,7 @@
         if (theme === 'christmas-night') {
             document.body.appendChild(stars());
             document.body.appendChild(shootingStarSwitch());
-            shootingTimer = setTimeout(shootingStar, (8 + Math.random() * 12) * 1000);   // a first one soon
+            shootingTimer = setTimeout(shootingStar, (4 + Math.random() * 6) * 1000);    // a first one soon
         }
         // Landscape band right above the footer, in the page flow (pushes the footer down).
         const footer = document.querySelector('.rulezet-footer');
