@@ -121,6 +121,10 @@ def seed_default_themes():
         if changed:
             db.session.commit()
             regenerate_custom_themes_css()
+        elif not os.path.exists(os.path.join(current_app.root_path, 'static', 'css', 'themes', 'custom-themes.css')):
+            # Generated from the database, not versioned (it differs per instance
+            # and would block `git pull`): write it on the first start.
+            regenerate_custom_themes_css()
     except Exception:
         db.session.rollback()
 

@@ -149,3 +149,4 @@
 .md-edit__slider b { min-width: 34px; text-align: right; font-size: .78rem; }
 .md-edit__result .md-drawer__preview { height: 220px; margin-top: .4rem; }
 .md-edit__name { max-width: 190px; }
+.md-badge--local { color: #b45309; background: rgba(245, 158, 11, .14); }

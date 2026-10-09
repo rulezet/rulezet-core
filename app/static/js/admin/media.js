@@ -244,6 +244,14 @@ createApp({
 
         const deleteCurrent = () => deleteFile(current.value.kind, current.value.file);
 
+        // Back to the version shipped with the code (this instance's change dropped).
+        const showDeleted = ref(false);
+        async function restoreOriginal(rel) {
+            const data = await postJson('/admin/media/library/restore', { root: root.value, rel });
+            create_message(data.message || (data.success ? 'Restored' : 'Error'), data.success ? 'success-subtle' : 'danger-subtle');
+            if (data.success) { current.value = null; loadLibrary(); }
+        }
+
         // Add an image: choose its folder (an existing one, or a new one), then the file.
         const adding = ref(false);                 // false | true | 'busy'
         const addFolder = ref('');
@@ -324,7 +332,7 @@ createApp({
             LIBRARY_ROOTS, tab, root, folder, q, loading, library, uploads, category, orphansOnly, current, renameTo,
             uploadFolder, treeRef, libraryTree, uploadsTree, onTreeSelect, TREE_ACTIONS, onTreeAction, deleteFile,
             armed, clickDelete, editingRel, editName, startInlineRename, saveInlineRename,
-            adding, addFolder, addNewFolder, addFile, openAdd, lightbox, lightboxActual, lightboxSrc, closeLightbox,
+            adding, addFolder, addNewFolder, addFile, openAdd, showDeleted, restoreOriginal, lightbox, lightboxActual, lightboxSrc, closeLightbox,
             EDITABLE, SQUARE_MODES, editOpts, editPreview, editPreviewSize, editBusy, copyName, defaultCopyName, previewEdit, saveEdit,
             libraryFiles, currentCategory, uploadFiles, folderOptions, countIn, deleteHint,
             setTab, setRoot, open, pathOf, copyPath, replaceCurrent, renameCurrent, deleteCurrent, uploadToLibrary, size, fileIcon,

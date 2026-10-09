@@ -175,21 +175,89 @@ def library_references(root, rel):
 
 
 # ── library ──────────────────────────────────────────────────────────────────
+# The library's files are versioned with the code: editing them on a server
+# would block its `git pull` and be wiped by `manage.py update` (hard reset).
+# So the shipped files are never touched. What an admin changes lives in an
+# untracked overlay, app/media_overrides/<root>/ (gitignored, like uploads):
+# replaced and added images are written there, and deleting a shipped image
+# only records it in <root>/.deleted.json. /static/images and /static/image are
+# served overlay first (serve_library_file) — URLs don't change.
+
+DELETED_FILE = '.deleted.json'
+
+
+def override_dir(root):
+    library_dir(root)                                    # validates root
+    d = os.path.join(current_app.root_path, 'media_overrides', root)
+    os.makedirs(d, exist_ok=True)
+    return os.path.realpath(d)
+
+
+def _deleted(root):
+    import json
+    try:
+        with open(os.path.join(override_dir(root), DELETED_FILE), encoding='utf-8') as fp:
+            return set(json.load(fp))
+    except (OSError, ValueError):
+        return set()
+
+
+def _save_deleted(root, rels):
+    import json
+    with open(os.path.join(override_dir(root), DELETED_FILE), 'w', encoding='utf-8') as fp:
+        json.dump(sorted(rels), fp, indent=1)
+
+
+def _check_rel(root, rel):
+    """`rel` normalised, and known to stay inside the library (no "..")."""
+    safe_path(library_dir(root), rel, must_exist=False)
+    return rel.replace('\\', '/').strip('/')
+
+
+def resolve_library(root, rel):
+    """The file actually served for /static/<root>/<rel>: the overlay's copy,
+    else the shipped one — None when it doesn't exist or was deleted."""
+    rel = _check_rel(root, rel)
+    over = safe_path(override_dir(root), rel, must_exist=False)
+    if os.path.isfile(over):
+        return over
+    if rel in _deleted(root):
+        return None
+    shipped = safe_path(library_dir(root), rel, must_exist=False)
+    return shipped if os.path.isfile(shipped) else None
+
+
+def _status(root, rel):
+    """'changed' (overlay copy of a shipped file), 'added' (only in the overlay) or ''."""
+    over = os.path.isfile(safe_path(override_dir(root), rel, must_exist=False))
+    shipped = os.path.isfile(safe_path(library_dir(root), rel, must_exist=False))
+    return 'changed' if over and shipped else ('added' if over else '')
+
 
 def list_library(root, with_refs=True):
-    base = library_dir(root)
+    base, over = library_dir(root), override_dir(root)
+    deleted = _deleted(root)
+    rels = {os.path.relpath(p, base).replace(os.sep, '/') for p in _walk(base)}
+    rels -= deleted
+    rels |= {os.path.relpath(p, over).replace(os.sep, '/') for p in _walk(over)}
     files = []
-    for path in _walk(base):
-        info = _file_info(path, base, LIBRARY_ROOTS[root][2])
+    for rel in sorted(rels):
+        path = resolve_library(root, rel)
+        if not path:
+            continue
+        # the folder it is served from (shipped library or overlay) — rel stays the same
+        info = _file_info(path, base if path.startswith(base + os.sep) else over, LIBRARY_ROOTS[root][2])
         if not info['is_image']:
             continue
+        info['status'] = _status(root, rel)
         if with_refs:
             refs = library_references(root, info['rel'])
             info['refs'] = refs
             info['ref_count'] = len(refs['code']) + len(refs['posts'])
         files.append(info)
     folders = sorted({f['folder'] for f in files})
-    return {'root': root, 'label': LIBRARY_ROOTS[root][0], 'folders': folders, 'files': files}
+    return {'root': root, 'label': LIBRARY_ROOTS[root][0], 'folders': folders, 'files': files,
+            'deleted': sorted(deleted)}
 
 
 def _check_image(data, ext):
@@ -222,11 +290,13 @@ def _check_image(data, ext):
 
 
 def replace_file(path, data):
-    """Overwrite `path` with `data`, same name and type (checked)."""
+    """Overwrite `path` with `data`, same name and type (checked) — for files
+    outside git (uploads, the overlay)."""
     ext = os.path.splitext(path)[1].lower()
     if ext not in IMAGE_EXTENSIONS:
         raise ValueError('Only images can be replaced here.')
     _check_image(data, ext)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + '.tmp-replace'
     with open(tmp, 'wb') as fp:
         fp.write(data)
@@ -234,55 +304,86 @@ def replace_file(path, data):
     invalidate_scan()
 
 
+def _write_overlay(root, rel, data):
+    """Store `data` as the served /static/<root>/<rel> (in the overlay)."""
+    ext = os.path.splitext(rel)[1].lower()
+    if ext not in IMAGE_EXTENSIONS:
+        raise ValueError('Only images can be stored here.')
+    _check_image(data, ext)
+    path = safe_path(override_dir(root), rel, must_exist=False)
+    replace_file(path, data)
+    deleted = _deleted(root)
+    if rel in deleted:                                   # bringing a deleted name back
+        _save_deleted(root, deleted - {rel})
+    return path
+
+
+def replace_library(root, rel, data):
+    """Replace a library image, same name — stored in the overlay."""
+    rel = _check_rel(root, rel)
+    if not resolve_library(root, rel):
+        raise ValueError('File not found.')
+    _write_overlay(root, rel, data)
+
+
 _FOLDER_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,40}$')
 
 
 def upload_library(root, folder, filename, data, create_folder=False):
     """Add an image to `folder` of a library ('' = its root). With
-    `create_folder`, the folder (simple names, one or more levels) is made."""
-    base = library_dir(root)
+    `create_folder`, a new folder (simple names, one or more levels) is allowed."""
     folder = (folder or '').strip().strip('/')
     if folder and not all(_FOLDER_RE.match(part) for part in folder.split('/')):
         raise ValueError('Folder names: letters, digits, "-" and "_" only.')
-    target_dir = base if not folder else os.path.dirname(safe_path(base, f'{folder}/x', must_exist=False))
-    if os.path.commonpath([target_dir, base]) != base:
-        raise ValueError('Unknown folder.')
-    if not os.path.isdir(target_dir):
-        if not create_folder:
+    if folder and not create_folder:
+        known = {f['folder'] for f in list_library(root, with_refs=False)['files']}
+        if folder not in known:
             raise ValueError('Unknown folder.')
-        os.makedirs(target_dir)
     name = os.path.basename(filename or '')
     ext = os.path.splitext(name)[1].lower()
     if not _NAME_RE.match(name) or ext not in IMAGE_EXTENSIONS:
         raise ValueError('Use a simple file name ending with an image extension (png, jpg, gif, webp, svg…).')
-    path = os.path.join(target_dir, name)
-    if os.path.exists(path):
+    rel = f'{folder}/{name}' if folder else name
+    _check_rel(root, rel)
+    if resolve_library(root, rel):
         raise ValueError('A file with this name already exists here — use Replace to change it.')
-    _check_image(data, ext)
-    with open(path, 'wb') as fp:
-        fp.write(data)
-    invalidate_scan()
-    return _file_info(path, base, LIBRARY_ROOTS[root][2])
+    path = _write_overlay(root, rel, data)
+    return _file_info(path, override_dir(root), LIBRARY_ROOTS[root][2])
+
+
+def _remove_from_library(root, rel):
+    """No longer serve /static/<root>/<rel>: drop the overlay copy, and mark a
+    shipped file as deleted (it stays in git, untouched)."""
+    over = safe_path(override_dir(root), rel, must_exist=False)
+    if os.path.isfile(over):
+        os.remove(over)
+    if os.path.isfile(safe_path(library_dir(root), rel, must_exist=False)):
+        _save_deleted(root, _deleted(root) | {rel})
 
 
 def rename_library(root, rel, new_name):
     """Rename a library image (same folder, same extension). Blog covers that
     used it follow; code references are the caller's to update (listed)."""
     from app.core.db_class.db import BlogPost
-    base = library_dir(root)
-    path = safe_path(base, rel)
-    ext = os.path.splitext(path)[1].lower()
+    rel = _check_rel(root, rel)
+    path = resolve_library(root, rel)
+    if not path:
+        raise ValueError('File not found.')
+    ext = os.path.splitext(rel)[1].lower()
     new_name = (new_name or '').strip()
     if not new_name.lower().endswith(ext):
         new_name += ext
     if not _NAME_RE.match(new_name) or os.path.splitext(new_name)[1].lower() != ext:
         raise ValueError(f'Use a simple file name, keeping the {ext} extension.')
-    new_path = os.path.join(os.path.dirname(path), new_name)
-    if os.path.exists(new_path):
+    folder = os.path.dirname(rel)
+    new_rel = f'{folder}/{new_name}' if folder else new_name
+    if resolve_library(root, new_rel):
         raise ValueError('A file with this name already exists here.')
     refs = library_references(root, rel)
-    os.rename(path, new_path)
-    new_rel = os.path.relpath(new_path, base).replace(os.sep, '/')
+    with open(path, 'rb') as fp:
+        data = fp.read()
+    _write_overlay(root, new_rel, data)
+    _remove_from_library(root, rel)
     old_url, new_url = f'{LIBRARY_ROOTS[root][2]}/{rel}', f'{LIBRARY_ROOTS[root][2]}/{new_rel}'
     for post in BlogPost.query.filter(BlogPost.cover_image_url.like(f'{old_url}%')).all():
         post.cover_image_url = new_url
@@ -294,16 +395,54 @@ def rename_library(root, rel, new_name):
 def delete_library(root, rel):
     """Delete a library image. Blog covers that used it are cleared."""
     from app.core.db_class.db import BlogPost
-    base = library_dir(root)
-    path = safe_path(base, rel)
+    rel = _check_rel(root, rel)
+    if not resolve_library(root, rel):
+        raise ValueError('File not found.')
     refs = library_references(root, rel)
     url = f'{LIBRARY_ROOTS[root][2]}/{rel}'
     for post in BlogPost.query.filter(BlogPost.cover_image_url.like(f'{url}%')).all():
         post.cover_image_url = None
     db.session.commit()
-    os.remove(path)
+    _remove_from_library(root, rel)
     invalidate_scan()
     return {'code_refs': refs['code'], 'posts_cleared': len(refs['posts'])}
+
+
+def restore_library(root, rel):
+    """Back to the shipped version: drop the overlay copy and un-delete."""
+    rel = _check_rel(root, rel)
+    if not os.path.isfile(safe_path(library_dir(root), rel, must_exist=False)):
+        raise ValueError('There is no original version of this file (it was added here).')
+    over = safe_path(override_dir(root), rel, must_exist=False)
+    if os.path.isfile(over):
+        os.remove(over)
+    _save_deleted(root, _deleted(root) - {rel})
+    invalidate_scan()
+
+
+def save_processed_library(root, rel, png, mode, name=None):
+    """Store an edited image (a PNG): over the original (same name, a PNG) or
+    as a new .png next to it — both in the overlay."""
+    rel = _check_rel(root, rel)
+    if mode == 'replace':
+        if os.path.splitext(rel)[1].lower() != '.png':
+            raise ValueError('Only a PNG can be replaced by the edited image (it is a PNG) — save a copy instead.')
+        path = _write_overlay(root, rel, png)
+        return _file_info(path, override_dir(root), LIBRARY_ROOTS[root][2])
+    if mode != 'copy':
+        raise ValueError('Unknown save mode.')
+    stem = os.path.splitext(name or os.path.basename(rel))[0].strip() or 'image'
+    if not name:
+        stem += '-edited'
+    new_name = stem + '.png'
+    if not _NAME_RE.match(new_name):
+        raise ValueError('Use a simple file name.')
+    folder = os.path.dirname(rel)
+    new_rel = f'{folder}/{new_name}' if folder else new_name
+    if resolve_library(root, new_rel):
+        raise ValueError(f'{new_name} already exists here — choose another name.')
+    path = _write_overlay(root, new_rel, png)
+    return _file_info(path, override_dir(root), LIBRARY_ROOTS[root][2])
 
 
 # ── uploads ──────────────────────────────────────────────────────────────────

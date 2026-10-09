@@ -63,3 +63,8 @@ app/modules/misp-taxonomies
 /data/
 # GitHub rule imports (cloned repos)
 /app/rule_from_github/
+
+# Site images changed from Admin › Media on this instance (never in git — see media_core.py)
+app/media_overrides/
+# Generated at start-up from the themes in the database (config_core.regenerate_custom_themes_css)
+app/static/css/themes/custom-themes.css

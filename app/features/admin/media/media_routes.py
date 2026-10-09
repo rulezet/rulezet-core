@@ -51,7 +51,7 @@ def library_replace():
     root, rel = request.form.get('root', ''), request.form.get('rel', '')
     try:
         _name, data = _upload_data()
-        MediaModel.replace_file(MediaModel.safe_path(MediaModel.library_dir(root), rel), data)
+        MediaModel.replace_library(root, rel, data)
     except ValueError as exc:
         return _error(exc)
     log_activity('admin.media_replace', f"Replaced site image {root}/{rel}", is_public=False)
@@ -80,6 +80,19 @@ def library_rename():
         return _error(exc)
     log_activity('admin.media_rename', f"Renamed site image {root}/{rel} → {result['rel']}", is_public=False)
     return jsonify({'success': True, **result})
+
+
+@media_blueprint.route('/admin/media/library/restore', methods=['POST'])
+def library_restore():
+    """Back to the version shipped with the code (drops this instance's change)."""
+    data = request.get_json(silent=True) or {}
+    root, rel = data.get('root', ''), data.get('rel', '')
+    try:
+        MediaModel.restore_library(root, rel)
+    except ValueError as exc:
+        return _error(exc)
+    log_activity('admin.media_restore', f"Restored the original site image {root}/{rel}", is_public=False)
+    return jsonify({'success': True, 'message': 'Original restored.'})
 
 
 @media_blueprint.route('/admin/media/library/delete', methods=['POST'])
@@ -147,8 +160,10 @@ def _edit_target(data):
         base = MediaModel.upload_dir(category)
         return base, MediaModel.safe_path(base, data.get('rel', '')), MediaModel.UPLOAD_CATEGORIES[category][3], 'uploads'
     root = data.get('root', '')
-    base = MediaModel.library_dir(root)
-    return base, MediaModel.safe_path(base, data.get('rel', '')), MediaModel.LIBRARY_ROOTS[root][2], 'library'
+    path = MediaModel.resolve_library(root, data.get('rel', ''))     # the served version
+    if not path:
+        raise ValueError('File not found.')
+    return MediaModel.library_dir(root), path, MediaModel.LIBRARY_ROOTS[root][2], 'library'
 
 
 def _edit_options(data):
@@ -178,9 +193,41 @@ def edit_save():
         if scope == 'uploads' and mode != 'replace':
             raise ValueError('Uploaded files can only be replaced (nothing would point at a copy).')
         png = MediaModel.process_image(path, **_edit_options(data))
-        info = MediaModel.save_processed(base, path, url_prefix, png, mode, data.get('name') or None)
+        if scope == 'library':
+            info = MediaModel.save_processed_library(data.get('root', ''), data.get('rel', ''), png, mode, data.get('name') or None)
+        else:
+            info = MediaModel.save_processed(base, path, url_prefix, png, mode, data.get('name') or None)
     except (ValueError, OSError) as exc:
         return _error(exc)
     log_activity('admin.media_edit', f"Edited image {data.get('root') or data.get('category')}/{data.get('rel')} ({mode})", is_public=False)
     return jsonify({'success': True, 'file': info,
                     'message': 'Original replaced.' if mode == 'replace' else f"Saved as {info['name']}."})
+
+
+# ── public: serve the site images, this instance's changes first ────────────
+# Separate blueprint (no admin guard): everyone loads these images. More
+# specific than Flask's /static/<path>, so it takes /static/images/… and
+# /static/image/…; everything else under /static stays Flask's.
+
+media_static_blueprint = Blueprint('media_static', __name__)
+
+
+@media_static_blueprint.route('/static/images/<path:filename>')
+def static_images(filename):
+    return _serve_library('images', filename)
+
+
+@media_static_blueprint.route('/static/image/<path:filename>')
+def static_image(filename):
+    return _serve_library('image', filename)
+
+
+def _serve_library(root, filename):
+    from flask import current_app
+    try:
+        path = MediaModel.resolve_library(root, filename)
+    except ValueError:
+        path = None
+    if not path:
+        abort(404)
+    return send_file(path, max_age=current_app.get_send_file_max_age(path), conditional=True)

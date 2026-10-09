@@ -70,9 +70,26 @@
             <div class="md-search"><i class="fa-solid fa-magnifying-glass"></i>
                 <input type="search" v-model="q" class="form-control form-control-sm" placeholder="Search a file…">
             </div>
+            <span v-if="library.deleted && library.deleted.length" :class="['md-chip', { active: showDeleted }]" @click="showDeleted = !showDeleted"
+                  title="Original images deleted on this instance (they stay in git)">
+                <i class="fa-solid fa-trash-can-arrow-up"></i>Deleted here <b>[[ library.deleted.length ]]</b>
+            </span>
             <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" @click="openAdd">
                 <i class="fa-solid fa-plus me-1"></i>Add image
             </button>
+        </div>
+
+        <!-- Originals deleted on this instance: bring one back -->
+        <div v-if="showDeleted && library.deleted.length" class="md-add">
+            <div class="w-100">
+                <div class="md-label">Deleted on this instance — still in git</div>
+                <div class="d-flex flex-wrap gap-2">
+                    <span v-for="rel in library.deleted" :key="rel" class="md-chip">
+                        <span class="font-monospace">[[ rel ]]</span>
+                        <button type="button" class="btn btn-sm btn-link p-0 ms-1" @click="restoreOriginal(rel)">Restore</button>
+                    </span>
+                </div>
+            </div>
         </div>
 
         <!-- Add an image: pick the folder (or make a new one), then the file -->
@@ -121,9 +138,14 @@
                         <span v-if="f.width">[[ f.width ]]×[[ f.height ]]</span>
                         <span>[[ size(f.size) ]]</span>
                     </div>
-                    <span :class="['md-badge', f.ref_count ? 'md-badge--used' : 'md-badge--unused']">
-                        [[ f.ref_count ? 'used ×' + f.ref_count : 'not referenced' ]]
-                    </span>
+                    <div class="d-flex flex-wrap gap-1">
+                        <span :class="['md-badge', f.ref_count ? 'md-badge--used' : 'md-badge--unused']">
+                            [[ f.ref_count ? 'used ×' + f.ref_count : 'not referenced' ]]
+                        </span>
+                        <span v-if="f.status" class="md-badge md-badge--local" :title="f.status === 'changed'
+                              ? 'Changed on this instance — the original stays in git (Restore original to go back)'
+                              : 'Added on this instance — not in git'">[[ f.status === 'changed' ? 'changed here' : 'added here' ]]</span>
+                    </div>
                 </div>
             </article>
         </div>
@@ -215,6 +237,11 @@
                     <i class="fa-solid fa-arrows-rotate me-1"></i>Replace
                     <input type="file" class="d-none" :accept="current.file.ext" @change="replaceCurrent">
                 </label>
+                <button v-if="current.kind === 'library' && current.file.status === 'changed'" type="button"
+                        class="btn btn-sm btn-outline-secondary rounded-pill" @click="restoreOriginal(current.file.rel)"
+                        title="Back to the version shipped with the code">
+                    <i class="fa-solid fa-clock-rotate-left me-1"></i>Restore original
+                </button>
                 <button type="button" class="btn btn-sm btn-outline-danger rounded-pill" @click="deleteCurrent">
                     <i class="fa-solid fa-trash me-1"></i>Delete
                 </button>
