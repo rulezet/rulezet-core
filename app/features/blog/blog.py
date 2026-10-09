@@ -116,6 +116,25 @@ def post_graph(post_uuid):
     return resp
 
 
+@blog_blueprint.route('/post/<string:post_uuid>/graph.png')
+def post_graph_image(post_uuid):
+    """PNG of the post's graph (made in the editor when the post is saved).
+    Same access as the post page and graph.json."""
+    import os as _os
+    post = BlogModel.get_post_by_uuid(post_uuid)
+    if not post or post.graph is None:
+        abort(404)
+    if not post.is_public:
+        allowed = current_user.is_authenticated and (current_user.id == post.user_id or current_user.is_admin())
+        if not allowed and not (post.share_key and request.args.get('key') == post.share_key):
+            abort(403)
+    path = BlogModel.graph_image_path(post)
+    if not _os.path.exists(path):
+        abort(404)
+    return send_file(path, mimetype='image/png', as_attachment=request.args.get('download') == '1',
+                     download_name=_safe_filename(post.title, post.uuid[:8], 'graph.png'))
+
+
 @blog_blueprint.route('/admin/graph_template/<string:name>')
 @login_required
 def admin_graph_template(name):
@@ -391,7 +410,31 @@ def _build_render_context(post, base_url: str) -> dict:
         'rule_refs':       rule_refs,
         'bundle_refs':     bundle_refs,
         'generated_at':    _dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC'),
+        **_graph_render_context(post, base_url),
     }
+
+
+def _graph_render_context(post, base_url: str) -> dict:
+    """The post's graph for the PDF / Markdown exports: its PNG (embedded as a
+    data: URI in the PDF, linked in the Markdown) and where to get the JSON."""
+    import base64 as _b64, os as _os
+    if post.graph is None:
+        return {'graph': None}
+    path = BlogModel.graph_image_path(post)
+    has_image = _os.path.exists(path)
+    data_uri = None
+    if has_image:
+        with open(path, 'rb') as fp:
+            data_uri = 'data:image/png;base64,' + _b64.b64encode(fp.read()).decode()
+    meta = post.graph.get('meta') or {}
+    return {'graph': {
+        'title':     meta.get('title') or 'Graph',
+        'nodes':     len(post.graph.get('nodes') or []),
+        'edges':     len(post.graph.get('edges') or []),
+        'image_uri': data_uri,
+        'image_url': f'{base_url}/blog/post/{post.uuid}/graph.png' if has_image else None,
+        'json_url':  f'{base_url}/blog/post/{post.uuid}/graph.json?download=1',
+    }}
 
 
 @blog_blueprint.route('/post/<string:post_uuid>/download/pdf')
@@ -482,6 +525,15 @@ def download_post_markdown(post_uuid):
         lines += ['', '## Referenced Detection Rules', '']
         for r in ctx["rule_refs"]:
             lines.append(f'- **{r["title"]}** ({r["format"]}) — [{base_url}/rule/detail_rule/{r["rule_id"]}]({base_url}/rule/detail_rule/{r["rule_id"]})')
+
+    if ctx.get("graph"):
+        g = ctx["graph"]
+        lines += ['', '## Graph', '']
+        if g["image_url"]:
+            lines.append(f'![{g["title"]}]({g["image_url"]})')
+            lines.append('')
+        lines.append(f'*{g["title"]}* — {g["nodes"]} nodes, {g["edges"]} edges. '
+                     f'Pivograph JSON: [{g["json_url"]}]({g["json_url"]})')
 
     if ctx["bundle_refs"]:
         lines += ['', '## Referenced Bundles', '']

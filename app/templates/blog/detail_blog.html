@@ -358,7 +358,20 @@
                 <iframe ref="graphFrame" class="blog-graph-viewer blog-graph-viewer--simple" title="Graph of this post (Pivograph)" allow="fullscreen" loading="lazy"></iframe>
                 <div class="blog-graph-simple__actions">
                     <button type="button" class="blog-graph-simple__btn" @click="graphFullscreen" title="Full screen"><i class="fa-solid fa-expand"></i></button>
-                    <a :href="graphUrl + (graphUrl.includes('?') ? '&' : '?') + 'download=1'" class="blog-graph-simple__btn" title="Download the graph (JSON)"><i class="fa-solid fa-download"></i></a>
+                    <div class="dropdown">
+                        <button type="button" class="blog-graph-simple__btn" data-bs-toggle="dropdown" aria-expanded="false" title="Download the graph">
+                            <i class="fa-solid fa-download"></i>
+                        </button>
+                        <ul class="dropdown-menu shadow-sm blog-graph-dl">
+                            <li><h6 class="dropdown-header">Download the graph</h6></li>
+                            <li><a class="dropdown-item" :href="graphUrl + (graphUrl.includes('?') ? '&' : '?') + 'download=1'"><i class="fa-solid fa-file-code"></i>JSON <span>Pivograph document</span></a></li>
+                            <li><button type="button" class="dropdown-item" @click="exportGraph('png')"><i class="fa-solid fa-image"></i>Image <span>PNG</span></button></li>
+                            <li><button type="button" class="dropdown-item" @click="exportGraph('pivotick')"><i class="fa-solid fa-diagram-project"></i>Pivotick data <span>for Pivotick alone</span></button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><button type="button" class="dropdown-item" @click="exportGraph('md')"><i class="fa-brands fa-markdown"></i>Report <span>Markdown</span></button></li>
+                            <li><button type="button" class="dropdown-item" @click="exportGraph('pdf')"><i class="fa-solid fa-file-pdf"></i>Report <span>PDF (print)</span></button></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
             <div v-else class="card-body p-4">
@@ -370,9 +383,20 @@
                         <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="graphFullscreen" title="Full screen">
                             <i class="fa-solid fa-expand"></i>
                         </button>
-                        <a :href="graphUrl + (graphUrl.includes('?') ? '&' : '?') + 'download=1'" class="btn btn-sm btn-outline-primary rounded-pill px-3">
-                            <i class="fa-solid fa-download me-1"></i>Download JSON
-                        </a>
+                        <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-bs-toggle="dropdown" aria-expanded="false" title="Download the graph">
+                            <i class="fa-solid fa-download"></i><span class="ms-1">Download</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm blog-graph-dl">
+                            <li><h6 class="dropdown-header">Download the graph</h6></li>
+                            <li><a class="dropdown-item" :href="graphUrl + (graphUrl.includes('?') ? '&' : '?') + 'download=1'"><i class="fa-solid fa-file-code"></i>JSON <span>Pivograph document</span></a></li>
+                            <li><button type="button" class="dropdown-item" @click="exportGraph('png')"><i class="fa-solid fa-image"></i>Image <span>PNG</span></button></li>
+                            <li><button type="button" class="dropdown-item" @click="exportGraph('pivotick')"><i class="fa-solid fa-diagram-project"></i>Pivotick data <span>for Pivotick alone</span></button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><button type="button" class="dropdown-item" @click="exportGraph('md')"><i class="fa-brands fa-markdown"></i>Report <span>Markdown</span></button></li>
+                            <li><button type="button" class="dropdown-item" @click="exportGraph('pdf')"><i class="fa-solid fa-file-pdf"></i>Report <span>PDF (print)</span></button></li>
+                        </ul>
+                    </div>
                     </div>
                 </div>
                 <iframe ref="graphFrame" class="blog-graph-viewer" title="Graph of this post (Pivograph)" allow="fullscreen" loading="lazy"></iframe>
@@ -620,6 +644,8 @@
                 }, 0)
             }
             function graphFullscreen() { graphFrame.value?.requestFullscreen?.() }
+            // Pivograph's own exports, run in the frame (blogGraph.js mountGraphViewer)
+            function exportGraph(format) { graphFrame.value?._exportGraph?.(format) }
 
             async function fetchPost() {
                 isLoading.value = true
@@ -767,7 +793,7 @@
             }
 
             return {
-                graphFrame, graphUrl, graphFullscreen,
+                graphFrame, graphUrl, graphFullscreen, exportGraph,
                 post, isLoading, ruleListUrl, bundleListUrl,
                 renderedContent, shareUrl, currentShareUrl, isRegenerating,
                 showSharePanel, copied, lightboxOpen, fileIcon,

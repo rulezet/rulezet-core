@@ -352,7 +352,7 @@
 .blog-graph-viewer { display: block; width: 100%; height: 70vh; min-height: 420px; border: 0; border-radius: 12px; background: var(--card-bg-color); }
 .blog-graph-viewer--simple { border-radius: 12px; height: 60vh; min-height: 360px; background: var(--card-bg-color); }
 .blog-graph-simple { position: relative; }
-.blog-graph-simple__actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; opacity: .55; transition: opacity .15s ease; }
+.blog-graph-simple__actions { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; opacity: .55; transition: opacity .15s ease; }
 .blog-graph-simple:hover .blog-graph-simple__actions { opacity: 1; }
 .blog-graph-simple__btn {
     width: 32px; height: 32px; border-radius: 8px;
@@ -365,3 +365,7 @@
 .blog-graph-view { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 99px; background: var(--card-bg-color); border: 1px solid var(--border-color); }
 .blog-graph-view__opt { border: 0; background: transparent; padding: 3px 12px; border-radius: 99px; font-size: .76rem; font-weight: 600; color: var(--subtle-text-color); }
 .blog-graph-view__opt.active { background: #0d6efd; color: #fff; }
+.blog-graph-dl { min-width: 240px; font-size: .84rem; }
+.blog-graph-dl .dropdown-item { display: flex; align-items: center; gap: .55rem; }
+.blog-graph-dl .dropdown-item i { width: 16px; text-align: center; color: #0d6efd; }
+.blog-graph-dl .dropdown-item span { margin-left: auto; font-size: .72rem; color: var(--subtle-text-color); }

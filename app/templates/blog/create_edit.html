@@ -1153,7 +1153,7 @@
                     uuid:          EDIT_UUID || undefined,
                     tag_names:     selectedTags.value.map(t => t.name),
                     technique_ids: selectedAttacks.value.map(a => a.technique_id),
-                    ...blogGraph.graphPayload(),          // only when the graph changed
+                    ...(await blogGraph.graphPayload()),  // only when the graph changed (+ its PNG)
                 }
                 try {
                     const res  = await fetch('/blog/admin/save', {

@@ -305,6 +305,17 @@ body {
 </div>
 {% endif %}
 
+<!-- Graph (Pivograph map) -->
+{% if graph %}
+<div class="section">
+    <div class="section-title">Graph — {{ graph.title }}</div>
+    {% if graph.image_uri %}
+    <img src="{{ graph.image_uri }}" alt="{{ graph.title }}" style="width:100%;max-height:170mm;object-fit:contain;border:1px solid #e5e7eb;border-radius:6px;">
+    {% endif %}
+    <div class="card-url" style="margin-top:6px;">{{ graph.nodes }} nodes · {{ graph.edges }} edges — Pivograph JSON: {{ graph.json_url }}</div>
+</div>
+{% endif %}
+
 <!-- Referenced rules -->
 {% if rule_refs %}
 <div class="section">

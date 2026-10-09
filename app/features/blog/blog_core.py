@@ -114,6 +114,37 @@ def clean_graph(graph):
     return graph
 
 
+def graph_image_path(post) -> str:
+    """Where the PNG of a post's graph (for its PDF / Markdown exports) is kept."""
+    import os as _os
+    from flask import current_app
+    d = _os.path.join(current_app.root_path, 'uploads', 'blog')
+    _os.makedirs(d, exist_ok=True)
+    return _os.path.join(d, f'graph-{post.uuid}.png')
+
+
+def store_graph_image(post, data_url):
+    """Save the PNG sent with the graph (a data:image/png URL), or remove it
+    (None). Anything that isn't a PNG under 8 MB is ignored."""
+    import base64 as _b64, binascii as _binascii, os as _os
+    path = graph_image_path(post)
+    if not data_url:
+        if _os.path.exists(path):
+            _os.remove(path)
+        return
+    prefix = 'data:image/png;base64,'
+    if not isinstance(data_url, str) or not data_url.startswith(prefix) or len(data_url) > 11_000_000:
+        return
+    try:
+        png = _b64.b64decode(data_url[len(prefix):], validate=True)
+    except (_binascii.Error, ValueError):
+        return
+    if not png.startswith(b'\x89PNG\r\n\x1a\n'):
+        return
+    with open(path, 'wb') as fp:
+        fp.write(png)
+
+
 def create_post(data: dict, user_id: int) -> BlogPost:
     """Create a new BlogPost from the submitted data dict."""
     title = (data.get('title') or '').strip()
@@ -145,6 +176,8 @@ def create_post(data: dict, user_id: int) -> BlogPost:
     )
     db.session.add(post)
     db.session.flush()  # get post.id before associations
+    if post.graph is not None:
+        store_graph_image(post, data.get('graph_image'))
 
     _sync_tags(post, data.get('tag_names') or [])
     _sync_rules(post, data.get('rule_ids') or [])
@@ -176,6 +209,7 @@ def update_post(post: BlogPost, data: dict) -> BlogPost:
     post.external_links  = data.get('external_links') or []
     if 'graph' in data:                      # absent = unchanged, null = removed
         post.graph = clean_graph(data['graph'])
+        store_graph_image(post, data.get('graph_image') if post.graph is not None else None)
     if 'graph_view' in data:
         post.graph_view = 'simple' if data['graph_view'] == 'simple' else 'full'
     post.updated_at      = datetime.datetime.utcnow()
@@ -199,6 +233,7 @@ def delete_post(post_id: int) -> bool:
         return False
     try:
         purge_unified_comments('blog_post', post_id)
+        store_graph_image(post, None)        # its graph picture, if any
         db.session.delete(post)
         db.session.commit()
         return True

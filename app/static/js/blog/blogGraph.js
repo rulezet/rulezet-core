@@ -76,6 +76,41 @@ function editable(doc) {
     return { ...doc, meta }
 }
 
+// A PNG of `doc` as Pivograph draws it — light theme on white, for the post's
+// PDF / Markdown exports. Rendered in a hidden frame; null if it can't be made.
+export function captureSnapshot(doc, { timeoutMs = 10000, settleMs = 1500 } = {}) {
+    return new Promise((resolve) => {
+        const frame = document.createElement('iframe')
+        frame.setAttribute('aria-hidden', 'true')
+        frame.tabIndex = -1
+        Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: '1400px', height: '900px', border: '0', opacity: '0', pointerEvents: 'none' })
+        let done = false
+        const finish = (image) => {
+            if (done) return
+            done = true
+            clearTimeout(timer)
+            window.removeEventListener('message', onSnapshot)
+            stop()
+            frame.remove()
+            resolve(image || null)
+        }
+        const timer = setTimeout(() => finish(null), timeoutMs)
+        const onSnapshot = (event) => {
+            if (event.source === frame.contentWindow && event.data?.type === 'pivograph:snapshot') finish(event.data.image)
+        }
+        window.addEventListener('message', onSnapshot)
+        const stop = connect(frame, () => ({ ...doc, meta: { ...(doc.meta || {}), readOnly: true } }), (msg) => {
+            if (msg.type === 'pivograph:loaded') {
+                // let the layout settle before taking the picture
+                setTimeout(() => frame.contentWindow?.postMessage({ type: 'pivograph:snapshot' }, window.location.origin), settleMs)
+            }
+            if (msg.type === 'pivograph:error') finish(null)
+        })
+        document.body.appendChild(frame)
+        frame.src = `${PIVOGRAPH_URL}?embed=1&sidebar=0&mode=viewer&theme=light&bg=%23ffffff`
+    })
+}
+
 export function graphStats(doc) {
     return { nodes: (doc?.nodes || []).length, edges: (doc?.edges || []).length, title: doc?.meta?.title || 'Untitled graph' }
 }
@@ -184,8 +219,15 @@ export function useBlogGraph({ editUuid, hasGraph, postTitle, notify }) {
         editorOpen.value = false
     }
 
-    // What savePost sends: the graph only when it changed (null removes it).
-    function payloadPart() { return graphDirty.value ? { graph: graph.value } : {} }
+    // What savePost sends: the graph only when it changed (null removes it),
+    // with a PNG of it for the post's PDF / Markdown exports.
+    async function payloadPart() {
+        if (!graphDirty.value) return {}
+        if (!graph.value) return { graph: null }
+        const image = await captureSnapshot(graph.value)
+        if (!image) notify('The graph was saved, but its picture for the PDF / Markdown exports could not be made.', 'warning-subtle')
+        return { graph: graph.value, graph_image: image }
+    }
     function markSaved() { graphDirty.value = false }
 
     return {
@@ -211,6 +253,8 @@ export async function mountGraphViewer(frame, graphUrl, { view = 'full', surface
     const readOnly = { ...doc, meta: { ...(doc.meta || {}), readOnly: true } }
     connect(frame, () => readOnly, (msg) => { if (msg.type === 'pivograph:error') onError(msg.message) })
     followTheme(frame, surface)
+    // Pivograph's own exports, run in the frame: pivotick, png, md, pdf (report).
+    frame._exportGraph = (format) => frame.contentWindow?.postMessage({ type: 'pivograph:export', format }, window.location.origin)
     const simple = view === 'simple' ? '&sidebar=0&mode=viewer' : ''
     frame.src = `${PIVOGRAPH_URL}?embed=1${simple}&${themeParams(currentTheme(surface))}`
 }
