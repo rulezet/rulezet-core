@@ -382,3 +382,104 @@ def delete_upload(category, rel):
 
 def replace_upload(category, rel, data):
     replace_file(safe_path(upload_dir(category), rel), data)
+
+
+# ── edit an image: remove a flat background, make it square ─────────────────
+# Done here, locally (no external service): the background is the flat colour
+# found on the image's border, removed only where it touches the border (so a
+# white inside a logo stays), with soft edges. The result is always a PNG.
+
+EDITABLE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+OUTPUT_SIZES = (None, 128, 256, 512, 1024)
+
+
+def _remove_background(im, tolerance):
+    import numpy as np
+    from scipy import ndimage
+    rgba = np.array(im.convert('RGBA')).astype(np.int16)
+    rgb, alpha = rgba[..., :3], rgba[..., 3]
+    border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
+    bg = np.median(border, axis=0)                                   # the border's colour
+    dist = np.sqrt(((rgb - bg) ** 2).sum(axis=-1))                   # 0 … ~441
+    limit = 4 + tolerance * 2.2                                      # tolerance 0–100
+    near = dist <= limit * 1.6                                       # background + its soft edge
+    labels, _n = ndimage.label(near)
+    edge_labels = np.unique(np.concatenate([labels[0], labels[-1], labels[:, 0], labels[:, -1]]))
+    touching = np.isin(labels, edge_labels[edge_labels != 0])        # only what reaches the border
+    new_alpha = alpha.astype(np.float32)
+    core = touching & (dist <= limit)
+    soft = touching & (dist > limit)
+    new_alpha[core] = 0
+    # soft edge: fade between limit and 1.6 × limit
+    new_alpha[soft] = np.minimum(new_alpha[soft], (dist[soft] - limit) / (limit * 0.6) * 255)
+    rgba[..., 3] = new_alpha.clip(0, 255)
+    from PIL import Image
+    return Image.fromarray(rgba.astype(np.uint8), 'RGBA')
+
+
+def process_image(path, remove_bg=False, tolerance=18, square='none', padding=6, size=None):
+    """PNG bytes of `path` edited: background removed and/or made square
+    ('fit': trimmed to its content, then centred on a transparent square with
+    `padding` % margin; 'crop': the centre square), optionally resized."""
+    from PIL import Image
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in EDITABLE_EXTENSIONS:
+        raise ValueError('Only PNG, JPG, GIF, WebP and BMP images can be edited.')
+    tolerance = max(0, min(100, int(tolerance)))
+    padding = max(0, min(30, int(padding)))
+    size = int(size) if size else None
+    if size not in OUTPUT_SIZES:
+        raise ValueError('Unknown size.')
+    with Image.open(path) as src:
+        im = src.convert('RGBA')
+    if remove_bg:
+        im = _remove_background(im, tolerance)
+    if square == 'fit':
+        box = im.getchannel('A').point(lambda a: 255 if a > 8 else 0).getbbox()
+        if box:
+            im = im.crop(box)
+        side = max(im.size)
+        side = int(round(side / (1 - 2 * padding / 100))) if padding else side
+        canvas = Image.new('RGBA', (side, side), (0, 0, 0, 0))
+        canvas.alpha_composite(im, ((side - im.width) // 2, (side - im.height) // 2))
+        im = canvas
+    elif square == 'crop':
+        side = min(im.size)
+        left, top = (im.width - side) // 2, (im.height - side) // 2
+        im = im.crop((left, top, left + side, top + side))
+    elif square != 'none':
+        raise ValueError('Unknown square mode.')
+    if size:
+        if im.width == im.height:
+            im = im.resize((size, size), Image.LANCZOS)
+        else:
+            im.thumbnail((size, size), Image.LANCZOS)
+    out = BytesIO()
+    im.save(out, 'PNG', optimize=True)
+    return out.getvalue()
+
+
+def save_processed(base, path, url_prefix, png, mode, name=None):
+    """Store an edited image: 'replace' the original (a PNG, same name) or a
+    'copy' next to it (a new .png). Returns the file's info."""
+    if mode == 'replace':
+        if os.path.splitext(path)[1].lower() != '.png':
+            raise ValueError('Only a PNG can be replaced by the edited image (it is a PNG) — save a copy instead.')
+        replace_file(path, png)
+        return _file_info(path, base, url_prefix)
+    if mode != 'copy':
+        raise ValueError('Unknown save mode.')
+    stem = os.path.splitext(name or os.path.basename(path))[0].strip() or 'image'
+    if not name:
+        stem += '-edited'
+    new_name = stem + '.png'
+    if not _NAME_RE.match(new_name):
+        raise ValueError('Use a simple file name.')
+    new_path = os.path.join(os.path.dirname(path), new_name)
+    if os.path.exists(new_path):
+        raise ValueError(f'{new_name} already exists here — choose another name.')
+    _check_image(png, '.png')
+    with open(new_path, 'wb') as fp:
+        fp.write(png)
+    invalidate_scan()
+    return _file_info(new_path, base, url_prefix)

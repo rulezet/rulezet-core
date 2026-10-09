@@ -69,6 +69,23 @@ createApp({
         const renameTo = ref('');
         const uploadFolder = ref(null);        // a sub-folder of the category (workspace, vendor…)
         const treeRef = ref(null);
+        const lightbox = ref(false);           // full screen view of the open image
+        const lightboxSrc = ref(null);         // … or of the edited preview
+        const closeLightbox = () => { lightbox.value = false; lightboxSrc.value = null; lightboxActual.value = false; };
+
+        // Edit: remove a flat background / make square (media_core.process_image), previewed first.
+        const EDITABLE = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
+        const SQUARE_MODES = [
+            { key: 'none', label: 'No', title: 'Keep the proportions' },
+            { key: 'fit', label: 'Fit', title: 'Trim to the content, centre it on a transparent square — nothing is cut' },
+            { key: 'crop', label: 'Crop', title: 'Cut the centre square' },
+        ];
+        const editOpts = ref({ remove_bg: true, tolerance: 18, square: 'fit', padding: 6, size: 0 });
+        const editPreview = ref(null);
+        const editPreviewSize = ref(0);
+        const editBusy = ref(false);
+        const copyName = ref('');
+        const lightboxActual = ref(false);     // actual size instead of fit to screen
 
         const match = (f) => {
             const term = q.value.trim().toLowerCase();
@@ -136,6 +153,9 @@ createApp({
         function setRoot(r) { root.value = r; folder.value = null; loadLibrary(); }
 
         function open(kind, file) {
+            closeLightbox();
+            editPreview.value = null;
+            copyName.value = '';
             current.value = { kind, file };
             renameTo.value = file.name;
             const path = kind === 'library' ? `lib:${file.rel}` : `up:${category.value}/${file.rel}`;
@@ -265,14 +285,47 @@ createApp({
         }
 
         // Escape closes the drawer.
-        window.addEventListener('keydown', (e) => { if (e.key === 'Escape') current.value = null; });
+        // Escape closes the full screen view first, then the drawer.
+        window.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (lightbox.value || lightboxSrc.value) { closeLightbox(); return; }
+            current.value = null;
+        });
+
+        const editTarget = () => {
+            const c = current.value;
+            return c.kind === 'library'
+                ? { scope: 'library', root: root.value, rel: c.file.rel }
+                : { scope: 'uploads', category: category.value, rel: c.file.rel };
+        };
+        const defaultCopyName = computed(() => current.value
+            ? current.value.file.name.replace(/\.[^.]+$/, '') + '-edited.png' : '');
+        async function previewEdit() {
+            editBusy.value = true;
+            try {
+                const data = await postJson('/admin/media/edit/preview', { ...editTarget(), ...editOpts.value });
+                if (!data.success) return create_message(data.message || 'Error', 'danger-subtle');
+                editPreview.value = data.image;
+                editPreviewSize.value = data.size;
+            } finally { editBusy.value = false; }
+        }
+        async function saveEdit(mode) {
+            editBusy.value = true;
+            try {
+                const data = await postJson('/admin/media/edit/save',
+                    { ...editTarget(), ...editOpts.value, mode, name: mode === 'copy' ? (copyName.value.trim() || defaultCopyName.value) : null });
+                create_message(data.message || (data.success ? 'Saved' : 'Error'), data.success ? 'success-subtle' : 'danger-subtle');
+                if (data.success) { current.value = null; reload(); }
+            } finally { editBusy.value = false; }
+        }
         onMounted(reload);
 
         return {
             LIBRARY_ROOTS, tab, root, folder, q, loading, library, uploads, category, orphansOnly, current, renameTo,
             uploadFolder, treeRef, libraryTree, uploadsTree, onTreeSelect, TREE_ACTIONS, onTreeAction, deleteFile,
             armed, clickDelete, editingRel, editName, startInlineRename, saveInlineRename,
-            adding, addFolder, addNewFolder, addFile, openAdd,
+            adding, addFolder, addNewFolder, addFile, openAdd, lightbox, lightboxActual, lightboxSrc, closeLightbox,
+            EDITABLE, SQUARE_MODES, editOpts, editPreview, editPreviewSize, editBusy, copyName, defaultCopyName, previewEdit, saveEdit,
             libraryFiles, currentCategory, uploadFiles, folderOptions, countIn, deleteHint,
             setTab, setRoot, open, pathOf, copyPath, replaceCurrent, renameCurrent, deleteCurrent, uploadToLibrary, size, fileIcon,
         };

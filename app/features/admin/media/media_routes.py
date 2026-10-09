@@ -136,3 +136,51 @@ def upload_delete():
         return _error(exc)
     log_activity('admin.media_delete', f"Deleted uploaded file {category}/{rel}", is_public=False)
     return jsonify({'success': True})
+
+
+# ── edit an image (remove a flat background, make it square) ────────────────
+
+def _edit_target(data):
+    """(base dir, file path, public url prefix, scope) of the image to edit."""
+    if data.get('scope') == 'uploads':
+        category = data.get('category', '')
+        base = MediaModel.upload_dir(category)
+        return base, MediaModel.safe_path(base, data.get('rel', '')), MediaModel.UPLOAD_CATEGORIES[category][3], 'uploads'
+    root = data.get('root', '')
+    base = MediaModel.library_dir(root)
+    return base, MediaModel.safe_path(base, data.get('rel', '')), MediaModel.LIBRARY_ROOTS[root][2], 'library'
+
+
+def _edit_options(data):
+    return dict(remove_bg=bool(data.get('remove_bg')), tolerance=data.get('tolerance', 18),
+                square=data.get('square', 'none'), padding=data.get('padding', 6), size=data.get('size') or None)
+
+
+@media_blueprint.route('/admin/media/edit/preview', methods=['POST'])
+def edit_preview():
+    """The edited image, not stored — for the preview in the drawer."""
+    import base64
+    data = request.get_json(silent=True) or {}
+    try:
+        _base, path, _url, _scope = _edit_target(data)
+        png = MediaModel.process_image(path, **_edit_options(data))
+    except (ValueError, OSError) as exc:
+        return _error(exc)
+    return jsonify({'success': True, 'image': 'data:image/png;base64,' + base64.b64encode(png).decode(), 'size': len(png)})
+
+
+@media_blueprint.route('/admin/media/edit/save', methods=['POST'])
+def edit_save():
+    data = request.get_json(silent=True) or {}
+    try:
+        base, path, url_prefix, scope = _edit_target(data)
+        mode = data.get('mode', 'copy')
+        if scope == 'uploads' and mode != 'replace':
+            raise ValueError('Uploaded files can only be replaced (nothing would point at a copy).')
+        png = MediaModel.process_image(path, **_edit_options(data))
+        info = MediaModel.save_processed(base, path, url_prefix, png, mode, data.get('name') or None)
+    except (ValueError, OSError) as exc:
+        return _error(exc)
+    log_activity('admin.media_edit', f"Edited image {data.get('root') or data.get('category')}/{data.get('rel')} ({mode})", is_public=False)
+    return jsonify({'success': True, 'file': info,
+                    'message': 'Original replaced.' if mode == 'replace' else f"Saved as {info['name']}."})

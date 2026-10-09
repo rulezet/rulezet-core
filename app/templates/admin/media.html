@@ -181,8 +181,10 @@
                 <strong class="text-truncate">[[ current.file.name ]]</strong>
                 <button type="button" class="btn-close ms-auto" @click="current = null" aria-label="Close"></button>
             </div>
-            <div class="md-drawer__preview">
+            <div class="md-drawer__preview" :class="{ 'md-drawer__preview--zoomable': current.file.is_image }"
+                 @click="current.file.is_image && (lightbox = true)" :title="current.file.is_image ? 'Click to view full screen' : ''">
                 <img v-if="current.file.is_image" :src="current.file.url" :alt="current.file.name">
+                <span v-if="current.file.is_image" class="md-drawer__zoom"><i class="fa-solid fa-expand"></i></span>
                 <i v-else :class="['fa-solid', fileIcon(current.file), 'md-card__fileicon']"></i>
             </div>
             <dl class="md-facts">
@@ -219,6 +221,62 @@
             </div>
             <small class="text-muted md-hint">[[ deleteHint ]]</small>
 
+            <!-- Edit: remove a flat background, make it square (done on the server, previewed first) -->
+            <div v-if="EDITABLE.includes(current.file.ext)" class="md-edit">
+                <div class="md-label">Edit image</div>
+                <label class="md-edit__row">
+                    <input type="checkbox" v-model="editOpts.remove_bg">
+                    <span>Remove background <small class="text-muted">— the flat colour on the edges</small></span>
+                </label>
+                <div v-if="editOpts.remove_bg" class="md-edit__row md-edit__slider">
+                    <span>Tolerance</span>
+                    <input type="range" min="0" max="100" v-model.number="editOpts.tolerance">
+                    <b>[[ editOpts.tolerance ]]</b>
+                </div>
+                <div class="md-edit__row">
+                    <span>Square</span>
+                    <div class="md-seg">
+                        <button v-for="o in SQUARE_MODES" :key="o.key" type="button" :class="['md-seg__btn', { active: editOpts.square === o.key }]"
+                                @click="editOpts.square = o.key" :title="o.title">[[ o.label ]]</button>
+                    </div>
+                </div>
+                <div v-if="editOpts.square === 'fit'" class="md-edit__row md-edit__slider">
+                    <span>Margin</span>
+                    <input type="range" min="0" max="30" v-model.number="editOpts.padding">
+                    <b>[[ editOpts.padding ]]%</b>
+                </div>
+                <div class="md-edit__row">
+                    <span>Size</span>
+                    <select v-model.number="editOpts.size" class="form-select form-select-sm" style="max-width:140px;">
+                        <option :value="0">Keep</option>
+                        <option v-for="s in [128, 256, 512, 1024]" :key="s" :value="s">[[ s ]] px</option>
+                    </select>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" @click="previewEdit" :disabled="editBusy">
+                    <i class="fa-solid me-1" :class="editBusy ? 'fa-circle-notch fa-spin' : 'fa-eye'"></i>Preview
+                </button>
+
+                <div v-if="editPreview" class="md-edit__result">
+                    <div class="md-drawer__preview md-drawer__preview--zoomable" @click="lightboxSrc = editPreview" title="Click to view full screen">
+                        <img :src="editPreview" alt="Edited image">
+                    </div>
+                    <small class="text-muted">PNG · [[ size(editPreviewSize) ]]</small>
+                    <div class="md-actions mt-2">
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill" @click="saveEdit('replace')"
+                                :disabled="editBusy || current.file.ext !== '.png'"
+                                :title="current.file.ext === '.png' ? 'Same name — nothing that points at it breaks' : 'Only a PNG can be replaced by the PNG result'">
+                            <i class="fa-solid fa-arrows-rotate me-1"></i>Replace original
+                        </button>
+                        <template v-if="current.kind === 'library'">
+                            <input type="text" class="form-control form-control-sm md-edit__name" v-model="copyName" :placeholder="defaultCopyName">
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" @click="saveEdit('copy')" :disabled="editBusy">
+                                <i class="fa-solid fa-copy me-1"></i>Save as copy
+                            </button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
             <div v-if="current.kind === 'library'" class="md-rename">
                 <div class="md-label">Rename</div>
                 <div class="input-group input-group-sm">
@@ -229,6 +287,18 @@
             </div>
 
         </aside>
+    </div>
+
+    <!-- Full screen view of the image (click the preview in the drawer) -->
+    <div v-if="(lightbox || lightboxSrc) && current" class="md-lightbox" role="dialog" aria-modal="true" :aria-label="current.file.name" @click.self="closeLightbox">
+        <div class="md-lightbox__bar">
+            <span class="text-truncate">[[ current.file.name ]]<span v-if="current.file.width" class="ms-2 opacity-75">[[ current.file.width ]]×[[ current.file.height ]]</span></span>
+            <span class="ms-auto opacity-75 d-none d-md-inline">Click the image: [[ lightboxActual ? 'fit to screen' : 'actual size' ]]</span>
+            <button type="button" class="md-lightbox__close" @click="closeLightbox" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="md-lightbox__stage" :class="{ actual: lightboxActual }" @click.self="closeLightbox">
+            <img :src="lightboxSrc || current.file.url" :alt="current.file.name" @click="lightboxActual = !lightboxActual">
+        </div>
     </div>
 </div>
 {% endblock %}
