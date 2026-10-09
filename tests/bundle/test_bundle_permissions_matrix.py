@@ -13,6 +13,9 @@ NOT_BUNDLE_SCOPED = {
     "/bundle/get_bundle_list_rule_part_of", "/bundle/get_all_tags_usage", "/bundle/get_all_vulnerabilities_usage",
     "/bundle/get_bundle_creators_usage", "/bundle/my-bundles", "/bundle/create_from_rule",
     "/bundle/attacks_usage",          # global technique counts for the list filter — no per-bundle data
+    # The structure editor's panel layout of the CURRENT user (bundle_layout_core):
+    # not tied to any bundle, so any logged-in user reads / saves / resets their own.
+    "/bundle/editor_layout", "/bundle/editor_layout/reset",
 }
 OK_CODES = {302, 400, 401, 403, 404, 405}
 
