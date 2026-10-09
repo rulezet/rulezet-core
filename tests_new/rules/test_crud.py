@@ -440,9 +440,10 @@ def test_proposals_are_grouped_into_threads_in_reading_order(clients, users):
     # latest activity first: the thread of `first` (30 min) before `alone` (5 min)
     assert [t["id"] for t in data["threads"]] == [first.id, alone.id]
     thread = data["threads"][0]
-    # depth-first, oldest revision first; version numbers follow the dates
+    # depth-first, oldest revision first; the version number is the level in
+    # the tree — both revisions of `first` are v2
     assert [(p["id"], p["depth"], p["version"]) for p in thread["proposals"]] == [
-        (first.id, 0, 1), (revision.id, 1, 2), (of_revision.id, 2, 4), (branch.id, 1, 3)]
+        (first.id, 0, 1), (revision.id, 1, 2), (of_revision.id, 2, 3), (branch.id, 1, 2)]
     assert thread["status"] == "accepted" and data["threads"][1]["status"] == "open"
     assert (data["total_proposals"], data["total_threads"]) == (5, 2)
 
