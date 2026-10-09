@@ -80,6 +80,7 @@ ALLOWED_WRITES_ON_PUBLIC = {
     ("POST", "/bundle/add_comment"),                    # legacy comments
     ("POST", "/bundle/add_reaction"),
     ("POST", "/bundle/favorite/<int:bundle_id>"),       # star it (the user's own favorites list)
+    ("POST", "/bundle/<int:bundle_id>/ai_analysis/request"),  # ask the AI managers for a review
 }
 
 
