@@ -1,7 +1,8 @@
 /**
- * audio.js — procedural sound effects and music (Web Audio API). No audio
- * files: every sound is synthesised, so there is nothing to license. Safe
- * where Web Audio is missing (every call becomes a no-op).
+ * audio.js — procedural sound effects and a looping background track (Web
+ * Audio API). Sound effects are synthesised; the music is a CC0 file (see
+ * static/audio/starfield/CREDITS.md). Safe where Web Audio is missing
+ * (every call becomes a no-op).
  */
 
 let ctx = null;
@@ -28,7 +29,7 @@ function ensure() {
         comp.connect(ctx.destination);
         master = ctx.createGain(); master.gain.value = muted ? 0 : 1; master.connect(comp);
         sfxGain = ctx.createGain(); sfxGain.gain.value = 1.6; sfxGain.connect(master);
-        musicGain = ctx.createGain(); musicGain.gain.value = 1.1; musicGain.connect(master);
+        musicGain = ctx.createGain(); musicGain.gain.value = musicOn ? MUSIC_VOL : 0.0001; musicGain.connect(master);
     }
     if (ctx.state === 'suspended') ctx.resume();
     return ctx;
@@ -110,64 +111,58 @@ export const Sfx = {
     bossRoar() { noise({ dur: 1.5, freq: 400, sweep: 60, vol: 0.5, q: 4 }); tone({ type: 'sawtooth', f0: 70, f1: 40, dur: 1.4, vol: 0.3 }); },
 };
 
-// ── Music: a tiny step sequencer. One scale / tempo per world, a darker,
-// faster pattern for bosses, a calm one for the map. ─────────────────────
-const SCALES = {
-    map:    { root: 220, steps: [0, 3, 7, 10, 12, 10, 7, 3], bpm: 92, bass: [0, 0, 5, 3] },
-    w0:     { root: 196, steps: [0, 4, 7, 11, 12, 11, 7, 4], bpm: 118, bass: [0, 0, 5, 7] },
-    w1:     { root: 174.6, steps: [0, 3, 7, 8, 12, 8, 7, 3], bpm: 124, bass: [0, 8, 5, 3] },
-    w2:     { root: 164.8, steps: [0, 1, 5, 7, 8, 7, 5, 1], bpm: 132, bass: [0, 0, 1, 5] },
-    w3:     { root: 146.8, steps: [0, 3, 6, 10, 12, 10, 6, 3], bpm: 128, bass: [0, 6, 3, 0] },
-    w4:     { root: 130.8, steps: [0, 2, 3, 7, 8, 7, 3, 2], bpm: 140, bass: [0, 1, 0, 6] },
-    boss:   { root: 110, steps: [0, 1, 6, 7, 12, 7, 6, 1], bpm: 150, bass: [0, 0, 1, 1] },
-    final:  { root: 98, steps: [0, 3, 6, 9, 12, 9, 6, 3], bpm: 158, bass: [0, 6, 0, 1] },
-};
+// ── Music: one calm looping track (CC0, see static/audio/starfield/CREDITS.md)
+// played through musicGain so mute / the music switch / tab sleep all apply.
+const MUSIC_URL = new URL('../../audio/starfield/outer_space.mp3', import.meta.url).href;
+const MUSIC_VOL = 0.45;
+let musicBuf = null;
+let musicLoading = null;
+let musicSrc = null;
+let wanted = false;
 
-let timer = null;
-let step = 0;
-let nextTime = 0;
-let theme = null;
-
-function semis(root, s) { return root * Math.pow(2, s / 12); }
-
-function schedule() {
-    const c = ensure(); if (!c || !theme) return;
-    const spb = 60 / theme.bpm / 2;               // eighth notes
-    // Back from a hidden tab the timer ran late: skip the missed notes
-    // instead of creating hundreds of them at once (that froze the page).
-    if (nextTime < c.currentTime) nextTime = c.currentTime + 0.05;
-    let guard = 0;
-    while (nextTime < c.currentTime + 0.2 && guard++ < 8) {
-        const t0 = nextTime - c.currentTime;
-        if (!muted && musicOn) {
-            const n = theme.steps[step % theme.steps.length];
-            const oct = (Math.floor(step / 8) % 2) ? 12 : 0;
-            tone({ type: 'square', f0: semis(theme.root * 2, n + oct), dur: spb * 0.9, vol: 0.05, delay: t0, out: musicGain });
-            if (step % 4 === 0) {
-                const b = theme.bass[(step / 4) % theme.bass.length];
-                tone({ type: 'triangle', f0: semis(theme.root / 2, b), dur: spb * 3.5, vol: 0.18, delay: t0, out: musicGain });
-            }
-            if (step % 4 === 0) tone({ type: 'sine', f0: 140, f1: 40, dur: 0.12, vol: 0.25, delay: t0, out: musicGain });
-            if (theme.bpm >= 140 && step % 2 === 1) noise({ dur: 0.04, freq: 8000, vol: 0.03, delay: t0 });
-        }
-        nextTime += spb;
-        step++;
+function loadMusic(c) {
+    if (!musicLoading) {
+        musicLoading = fetch(MUSIC_URL)
+            .then(r => r.arrayBuffer())
+            .then(data => new Promise((ok, ko) => c.decodeAudioData(data, ok, ko)))
+            .then(buf => { musicBuf = buf; return buf; })
+            .catch(() => null);         // no music, the game still runs
     }
+    return musicLoading;
+}
+
+function startLoop() {
+    const c = ensure(); if (!c || !wanted || musicSrc) return;
+    loadMusic(c).then(buf => {
+        if (!buf || !wanted || musicSrc) return;
+        musicSrc = c.createBufferSource();
+        musicSrc.buffer = buf; musicSrc.loop = true;
+        musicSrc.connect(musicGain);
+        // soft fade-in instead of the track slamming in
+        musicGain.gain.setValueAtTime(0.0001, c.currentTime);
+        musicGain.gain.exponentialRampToValueAtTime(musicOn ? MUSIC_VOL : 0.0001, c.currentTime + 2);
+        musicSrc.start();
+    });
 }
 
 export const Music = {
+    // The same track plays on the map, in levels and against bosses: the
+    // name is kept so callers don't change, and switching never restarts it.
     play(name) {
+        wanted = true;
         if (!unlocked) { pendingTheme = name; return; }
-        const c = ensure(); if (!c) return;
-        const next = SCALES[name] || SCALES.map;
-        if (theme === next && timer) return;
-        theme = next; step = 0; nextTime = c.currentTime + 0.05;
-        if (!timer) timer = setInterval(schedule, 50);
+        startLoop();
     },
-    stop() { if (timer) clearInterval(timer); timer = null; theme = null; pendingTheme = null; },
+    stop() {
+        wanted = false; pendingTheme = null;
+        if (musicSrc) { try { musicSrc.stop(); } catch { /* already stopped */ } musicSrc = null; }
+    },
     /** Suspend the whole audio engine while the tab is hidden */
     sleep(hidden) { if (!ctx) return; try { hidden ? ctx.suspend() : ctx.resume(); } catch { /* ignore */ } },
-    setEnabled(v) { musicOn = v; },
+    setEnabled(v) {
+        musicOn = v;
+        if (musicGain && ctx) musicGain.gain.setTargetAtTime(v ? MUSIC_VOL : 0.0001, ctx.currentTime, 0.2);
+    },
 };
 
 export const Audio = {

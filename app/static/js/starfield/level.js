@@ -11,6 +11,9 @@ import { makeEnemy, updateEnemy, drawEnemy, onEnemyDeath, hittable, deflects } f
 import { makeBoss } from './bosses.js';
 import { circle, poly, glyph, glow, hexA, text, drawShip } from './render.js';
 import { Sfx } from './audio.js';
+import { tr } from './i18n.js';
+
+const IPS_R = 150;                     // Suricata's IPS Drop field radius
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -60,6 +63,8 @@ export function createLevel(def, env) {
         speed: 4.3 * (1 + 0.06 * lv('speed')), dmgMul: 1 + 0.15 * lv('damage'),
         rateMul: 1 - 0.08 * lv('rate'), dashMax: Math.round(75 * (1 - 0.12 * lv('dash'))),
         magnet: 80 + 55 * lv('magnet'),
+        // ship super power: starts charged, then recharges on its own
+        specialCd: 0, specialMax: Math.round((env.skin.special?.cd || 15) * 60), specialT: 0,
     };
 
     // ── API used by enemies.js / bosses.js ─────────────────────────────
@@ -80,10 +85,18 @@ export function createLevel(def, env) {
     L.say = (str, color = '#fff') => { if (str) L.messages.push({ kind: 'line', str, color, t: 0, life: 200 }); };
     L.float = (x, y, str, color = '#fff') => { L.floaters.push({ x, y, str, color, t: 0, life: 50 }); };
     L.addScore = n => { L.score += n; };
+    /** End of a round (wave cleared, boss phase, beacon down, swarm survived): every heart back */
+    L.restoreHearts = () => {
+        const full = Math.max(3, P.maxHp);
+        if (P.hp >= full || L.finished) return;
+        P.hp = full;
+        L.float(P.x, P.y - 30, tr('HEARTS RESTORED'), '#ff5b8a');
+        Sfx.powerup();
+    };
     L.drainBytes = (e, n) => {
         if (L.levelBytes <= 0) return;
         L.levelBytes = Math.max(0, L.levelBytes - n);
-        L.float(e.x, e.y - 20, `-${n} byte`, '#ffd166');
+        L.float(e.x, e.y - 20, tr('-{n} byte', { n }), '#ffd166');
     };
     L.explosion = (x, y, radius, color, hurtsPlayer) => {
         burst(x, y, 26, color, 6);
@@ -197,18 +210,47 @@ export function createLevel(def, env) {
         L.announce('QUARANTINE', '#ffffff');
     }
 
+    function special() {
+        const sp = env.skin.special;
+        if (!sp || P.specialCd > 0) { if (sp) Sfx.deny(); return; }
+        P.specialCd = P.specialMax;
+        const c = env.skin.glow;
+        const dmg = P.dmgMul * (P.buffs.overclock > 0 ? 2 : 1);
+        if (sp.id === 'sweep') {
+            for (let i = 0; i < 24; i++) {
+                const a = P.angle + i * TAU / 24;
+                L.bullets.push({ x: P.x, y: P.y, vx: Math.cos(a) * 12, vy: Math.sin(a) * 12, r: 5, dmg: 3 * dmg, life: 80,
+                    pierce: true, homing: false, color: c, hitIds: new Set(), id: 'rail' });
+            }
+            L.particles.push({ kind: 'ring', x: P.x, y: P.y, r: 10, max: 260, life: 24, t: 0, color: c });
+        } else if (sp.id === 'inspect') {
+            for (let i = 0; i < 10; i++) {
+                const a = P.angle + (i - 4.5) * 0.35;
+                L.bullets.push({ x: P.x, y: P.y, vx: Math.cos(a) * 6, vy: Math.sin(a) * 6, r: 5, dmg: 2.5 * dmg, life: 160,
+                    pierce: false, homing: true, color: c, hitIds: null, id: 'seeker' });
+            }
+        } else {
+            P.specialT = Math.round((sp.dur || 5) * 60);
+            if (sp.id === 'correlate') L.slow = true;
+        }
+        P.inv = Math.max(P.inv, 30);
+        burst(P.x, P.y, 24, c, 5);
+        L.announce(sp.name.toUpperCase(), c);
+        Sfx.powerup();
+    }
+
     function hurt() {
         if (P.inv > 0 || L.finished) return;
         if (P.buffs.shield > 0) { P.buffs.shield = 0; P.inv = 60; Sfx.shieldBreak(); burst(P.x, P.y, 20, '#6ea8ff'); return; }
         P.hp--; L.hits++; P.inv = 100; L.combo = 0; L.comboT = 0;
         L.shake(16); Sfx.hurt(); burst(P.x, P.y, 30, '#ff5d73', 5);
-        if (P.hp <= 0) lose('Rule disabled');
+        if (P.hp <= 0) lose(tr('Rule disabled'));
     }
 
     function damageSensor(n) {
         const s = L.sensor; if (!s || s.hp <= 0) return;
         s.hp -= n; s.flash = 6;
-        if (s.hp <= 0) { L.explosion(s.x, s.y, 120, '#5be7ff', false); lose('Sensor lost'); }
+        if (s.hp <= 0) { L.explosion(s.x, s.y, 120, '#5be7ff', false); lose(tr('Sensor lost')); }
     }
 
     // ── Enemies dying, drops ─────────────────────────────────────────
@@ -239,6 +281,7 @@ export function createLevel(def, env) {
             const r = Math.random();
             dropPickup(r < 0.28 ? 'heal' : r < 0.52 ? 'rapid' : r < 0.72 ? 'shield' : r < 0.86 ? 'overclock' : 'bomb', e.x, e.y);
         }
+        if (e.type === 'beacon' && kind === 'beacons') L.restoreHearts();
         if (!e.silent) onEnemyDeath(e, L);
     }
 
@@ -260,7 +303,7 @@ export function createLevel(def, env) {
     // ── Objectives ───────────────────────────────────────────────────
     function startWave(n) {
         L.wave = n; L.waveQueue = buildWave(n); L.waveSpawnT = 0;
-        L.announce(kind === 'endless' ? `WAVE ${n}` : `WAVE ${n} / ${def.waves}`, theme.hue);
+        L.announce(kind === 'endless' ? tr('WAVE {n}', { n }) : tr('WAVE {n} / {m}', { n, m: def.waves }), theme.hue);
         Sfx.levelUp();
     }
 
@@ -276,7 +319,10 @@ export function createLevel(def, env) {
                 }
                 const bossAlive = L.boss && L.boss.hp > 0;
                 if (L.wave > 0 && !L.waveQueue.length && !alive.length && !bossAlive) {
-                    if (L.waveDelay === 0) L.waveDelay = 100;
+                    if (L.waveDelay === 0) {
+                        L.waveDelay = 100;
+                        L.restoreHearts();
+                    }
                     if (--L.waveDelay === 0) {
                         if (kind === 'waves' && L.wave >= def.waves) return win();
                         const next = L.wave + 1;
@@ -284,14 +330,14 @@ export function createLevel(def, env) {
                             L.wave = next;
                             const bi = ((next / 5) - 1) % BOSSES.length;
                             L.boss = makeBoss(bi, L, 0.45 + next * 0.03);
-                            L.announce(`WAVE ${next} — ${BOSSES[bi].name}`, BOSSES[bi].color);
+                            L.announce(tr('WAVE {n} — {name}', { n: next, name: BOSSES[bi].name }), BOSSES[bi].color);
                             Sfx.warning();
                         } else startWave(next);
                     }
                 }
                 L.objective = kind === 'waves'
-                    ? { label: `Wave ${Math.max(1, L.wave)} / ${def.waves}`, progress: (Math.max(0, L.wave - 1) + (L.waveQueue.length || alive.length ? 0 : 1)) / def.waves }
-                    : { label: `Wave ${Math.max(1, L.wave)}`, progress: null };
+                    ? { label: tr('Wave {n} / {m}', { n: Math.max(1, L.wave), m: def.waves }), progress: (Math.max(0, L.wave - 1) + (L.waveQueue.length || alive.length ? 0 : 1)) / def.waves }
+                    : { label: tr('Wave {n}', { n: Math.max(1, L.wave) }), progress: null };
                 if (kind === 'endless') { L.tier = Math.min(30, L.wave * 0.8); }
                 break;
             }
@@ -306,14 +352,15 @@ export function createLevel(def, env) {
                     else spawnOne();
                 }
                 if (kind !== 'honeypot' && L.t % 900 === 450) {          // a swarm every 15 s
+                    L.restoreHearts();                                 // the previous 15 s were a round
                     L.say('Incoming swarm!', theme.hue);
                     for (let i = 0; i < 4 + world; i++) spawnOne(L.pool.includes('drone') ? 'drone' : 'wormlet');
                 }
                 const total = def.duration;
                 const secs = Math.ceil(Math.max(0, L.timer) / 60);
                 L.objective = {
-                    label: kind === 'protect' ? `Scan ${Math.round(100 * (1 - L.timer / total))}% — sensor ${Math.max(0, Math.ceil(L.sensor.hp))}/${L.sensor.maxHp}`
-                         : kind === 'honeypot' ? `Honeypot — ${secs}s — ${L.levelBytes} bytes` : `Survive — ${secs}s`,
+                    label: kind === 'protect' ? tr('Scan {n}% — sensor {hp}/{max}', { n: Math.round(100 * (1 - L.timer / total)), hp: Math.max(0, Math.ceil(L.sensor.hp)), max: L.sensor.maxHp })
+                         : kind === 'honeypot' ? tr('Honeypot — {n}s — {b} bytes', { n: secs, b: L.levelBytes }) : tr('Survive — {n}s', { n: secs }),
                     progress: 1 - L.timer / total,
                 };
                 if (L.timer <= 0) {
@@ -325,7 +372,7 @@ export function createLevel(def, env) {
             case 'beacons': {
                 if (L.t > 120 && L.t % Math.round(Math.max(60, 150 - L.tier * 4) / L.diff.spawn) === 0 && alive.length < 6 + L.tier * 0.4) spawnOne();
                 const left = alive.filter(e => e.type === 'beacon').length;
-                L.objective = { label: `C2 beacons — ${def.beacons - left} / ${def.beacons} down`, progress: (def.beacons - left) / def.beacons };
+                L.objective = { label: tr('C2 beacons — {n} / {m} down', { n: def.beacons - left, m: def.beacons }), progress: (def.beacons - left) / def.beacons };
                 if (L.t > 120 && left === 0) win();
                 break;
             }
@@ -335,7 +382,7 @@ export function createLevel(def, env) {
                 if (b.hp <= 0 && !L.endingT) {
                     L.endingT = 150; L.ebullets.length = 0; L.beams.length = 0; L.zones.length = 0;
                     for (const e of L.enemies) e.dead = true;
-                    L.announce(`${b.name} NEUTRALIZED`, b.def.color);
+                    L.announce(tr('{name} NEUTRALIZED', { name: b.name }), b.def.color);
                     Sfx.bossRoar();
                 }
                 if (L.endingT) {
@@ -348,14 +395,14 @@ export function createLevel(def, env) {
     }
 
     function stars() {
-        const crit = [{ label: 'Complete the level', ok: true }];
+        const crit = [{ label: tr('Complete the level'), ok: true }];
         const secs = L.t / 60;
         const maxHits = kind === 'boss' ? 3 : 2;
-        crit.push({ label: `Take ${maxHits} hits or fewer`, ok: L.hits <= maxHits });
-        if (kind === 'survive') crit.push({ label: 'Take no hit at all', ok: L.hits === 0 });
-        else if (kind === 'protect') crit.push({ label: 'Sensor above 70%', ok: L.sensor.hp >= L.sensor.maxHp * 0.7 });
-        else if (kind === 'honeypot') { const goal = 120 + world * 30; crit.push({ label: `Collect ${goal} bytes`, ok: L.levelBytes >= goal }); }
-        else crit.push({ label: `Finish under ${def.par}s`, ok: secs <= def.par });
+        crit.push({ label: tr('Take {n} hits or fewer', { n: maxHits }), ok: L.hits <= maxHits });
+        if (kind === 'survive') crit.push({ label: tr('Take no hit at all'), ok: L.hits === 0 });
+        else if (kind === 'protect') crit.push({ label: tr('Sensor above 70%'), ok: L.sensor.hp >= L.sensor.maxHp * 0.7 });
+        else if (kind === 'honeypot') { const goal = 120 + world * 30; crit.push({ label: tr('Collect {n} bytes', { n: goal }), ok: L.levelBytes >= goal }); }
+        else crit.push({ label: tr('Finish under {n}s', { n: def.par }), ok: secs <= def.par });
         return { crit, stars: crit.filter(c => c.ok).length };
     }
 
@@ -388,11 +435,11 @@ export function createLevel(def, env) {
         const padAim = st.pad && (Math.abs(st.pad.rx) > 0.2 || Math.abs(st.pad.ry) > 0.2);
         let mx = 0, my = 0;
         if (scheme === 'classic') {
-            const turn = (input.any('ArrowLeft', 'KeyA') ? -1 : 0) + (input.any('ArrowRight', 'KeyD') ? 1 : 0) + (st.pad ? st.pad.lx : 0);
+            const turn = (input.act('left') ? -1 : 0) + (input.act('right') ? 1 : 0) + (st.pad ? st.pad.lx : 0);
             P.angle += clamp(turn, -1, 1) * 0.075;
             if (padAim) P.angle = Math.atan2(st.pad.ry, st.pad.rx);
-            const thrust = (input.any('ArrowUp', 'KeyW') || (st.pad && st.pad.ly < -0.4)) ? 1 : 0;
-            const brake = input.any('ArrowDown', 'KeyS') || (st.pad && st.pad.ly > 0.4);
+            const thrust = (input.act('up') || (st.pad && st.pad.ly < -0.4)) ? 1 : 0;
+            const brake = input.act('down') || (st.pad && st.pad.ly > 0.4);
             if (P.dashT > 0) P.dashT--;
             else {
                 P.vx += Math.cos(P.angle) * thrust * 0.36;
@@ -437,17 +484,20 @@ export function createLevel(def, env) {
         P.y = clamp(P.y + P.vy, 16, H - 16);
 
         // actions
-        const wantFire = (scheme === 'twin' && st.mouseDown) || input.any('Space', 'KeyJ') || (st.pad && st.pad.fire);
+        const wantFire = (scheme === 'twin' && st.mouseDown) || input.act('fire') || (st.pad && st.pad.fire);
         if (wantFire) fire();
-        if (input.hit('ShiftLeft', 'ShiftRight', 'KeyK') || (scheme === 'twin' && input.hit('Mouse2')) || (st.pad && st.pad.dash)) dash(mx, my);
-        if (input.hit('KeyE', 'KeyB') || (st.pad && st.pad.bomb)) bomb();
+        if (input.actHit('dash') || (scheme === 'twin' && input.hit('Mouse2')) || (st.pad && st.pad.dash)) dash(mx, my);
+        if (input.actHit('bomb') || (st.pad && st.pad.bomb)) bomb();
+        if (input.actHit('special') || (st.pad && st.pad.special)) special();
         weapons.forEach((wp, i) => { if (input.hit(`Digit${WEAPONS.indexOf(wp) + 1}`)) P.weapon = i; });
-        if (input.hit('KeyQ') || st.wheel > 0 || (st.pad && st.pad.next)) P.weapon = (P.weapon + 1) % weapons.length;
+        if (input.actHit('weapon') || st.wheel > 0 || (st.pad && st.pad.next)) P.weapon = (P.weapon + 1) % weapons.length;
         if (st.wheel < 0 || (st.pad && st.pad.prev)) P.weapon = (P.weapon - 1 + weapons.length) % weapons.length;
 
         if (P.cool > 0) P.cool--;
         if (P.inv > 0) P.inv--;
         if (P.dashCd > 0) P.dashCd--;
+        if (P.specialCd > 0) P.specialCd--;
+        if (P.specialT > 0 && --P.specialT === 0) L.slow = false;
         if (P.disarmed > 0) P.disarmed--;
         for (const k in P.buffs) if (P.buffs[k] > 0) P.buffs[k]--;
         if (L.comboT > 0 && --L.comboT === 0) L.combo = 0;
@@ -493,6 +543,7 @@ export function createLevel(def, env) {
         L.bullets = L.bullets.filter(b => b.life > 0);
 
         // enemies
+        const ips = P.specialT > 0 && env.skin.special?.id === 'ips';
         for (const e of L.enemies) {
             if (e.dead) continue;
             updateEnemy(e, L);
@@ -507,6 +558,9 @@ export function createLevel(def, env) {
                 if (e.t % 30 === 0) damageSensor(1);
                 e.vx -= (L.sensor.x - e.x) * 0.01; e.vy -= (L.sensor.y - e.y) * 0.01;
             }
+        }
+        if (ips && L.t % 10 === 0) {
+            for (const e of L.enemies) if (!e.dead && hittable(e) && dist2(e.x, e.y, P.x, P.y) < (IPS_R + e.r) ** 2) damageEnemy(e, 0.8 * P.dmgMul);
         }
         L.enemies = L.enemies.filter(e => !e.dead);
 
@@ -530,10 +584,12 @@ export function createLevel(def, env) {
             if (env.callbacks.onBoss) env.callbacks.onBoss(null);
         } else if (L.boss && env.callbacks.onBoss) env.callbacks.onBoss(L.boss);
 
-        // enemy bullets
+        // enemy bullets (half speed under Sigma's Correlation, dropped in Suricata's IPS field)
+        const bs = L.slow ? 0.5 : 1;
         for (const b of L.ebullets) {
-            b.x += b.vx; b.y += b.vy; b.life--;
+            b.x += b.vx * bs; b.y += b.vy * bs; b.life--;
             if (b.x < -40 || b.x > W + 40 || b.y < -40 || b.y > H + 40) b.life = 0;
+            if (ips && dist2(b.x, b.y, P.x, P.y) < IPS_R * IPS_R) { b.life = 0; if (Math.random() < 0.3) burst(b.x, b.y, 2, env.skin.glow, 1); }
             if (b.life <= 0) continue;
             if (dist2(b.x, b.y, P.x, P.y) < (b.r + P.r - 3) ** 2) {
                 b.life = 0;
@@ -689,7 +745,12 @@ export function createLevel(def, env) {
             if (P.buffs.shield > 0) circle(ctx, P.x, P.y, 26 + Math.sin(L.t * 0.2) * 2, hexA('#6ea8ff', 0.12), hexA('#6ea8ff', 0.8), 2);
             if (P.disarmed > 0) glyph(ctx, 'lock', P.x, P.y - 28, 14, '#ff7a3c');
             if (P.buffs.overclock > 0) glow(ctx, P.x, P.y, 40, '#ff6bd8', 0.3);
+            if (P.specialT > 0 && env.skin.special?.id === 'ips') {
+                const fade = Math.min(1, P.specialT / 30);
+                circle(ctx, P.x, P.y, IPS_R + Math.sin(L.t * 0.15) * 4, hexA(env.skin.glow, 0.08 * fade), hexA(env.skin.glow, 0.7 * fade), 2);
+            }
         }
+        if (L.slow) { ctx.fillStyle = hexA(env.skin.glow, 0.05); ctx.fillRect(0, 0, W, H); }
 
         for (const p of L.particles) {
             const k = 1 - p.t / p.life;
@@ -726,6 +787,7 @@ export function createLevel(def, env) {
         hp: P.hp, maxHp: P.maxHp, bombs: P.bombs, score: L.score, bytes: L.levelBytes,
         combo: L.combo >= 5 ? Math.min(8, 1 + Math.floor(L.combo / 5)) : 1, comboT: L.comboT,
         weapon: currentWeapon().id, weapons: weapons.map(w => w.id), dash: 1 - P.dashCd / P.dashMax,
+        special: 1 - P.specialCd / P.specialMax, specialActive: P.specialT > 0,
         buffs: { ...P.buffs }, disarmed: P.disarmed, objective: L.objective,
     });
 

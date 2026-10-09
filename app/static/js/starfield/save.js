@@ -3,9 +3,13 @@
  * Every access is wrapped: a private window or blocked storage just means
  * the progress lives for the session.
  */
-import { levelKey, WORLDS, WEAPONS } from './data.js';
+import { levelKey, WORLDS, WEAPONS, DEFAULT_KEYS } from './data.js';
 
 const KEY = 'rz-starfield-v2';
+
+export function defaultKeys() {
+    return Object.fromEntries(Object.entries(DEFAULT_KEYS).map(([k, v]) => [k, [...v]]));
+}
 
 function fresh() {
     return {
@@ -18,7 +22,7 @@ function fresh() {
         skin: 'yara',
         difficulty: 'hunter',
         endless: [],               // [{score, wave, date}] top 10
-        settings: { muted: false, music: true, shake: true, assist: false, controls: 'classic' },
+        settings: { muted: false, music: true, shake: true, assist: false, controls: 'classic', keys: defaultKeys() },
         pos: { world: 0, node: 0 }, // where the ship stands on the map
         stats: { kills: 0, deaths: 0, played: 0 },
         seenIntro: false,
@@ -33,6 +37,7 @@ export function load() {
         if (raw) data = Object.assign(fresh(), JSON.parse(raw));
     } catch { data = fresh(); }
     data.settings = Object.assign(fresh().settings, data.settings || {});
+    data.settings.keys = Object.assign(defaultKeys(), data.settings.keys || {});
     return data;
 }
 

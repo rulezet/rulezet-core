@@ -44,6 +44,7 @@ function checkPhase(b, L) {
     if (p !== b.phase) {
         b.phase = p;
         L.announce(p === 2 ? 'PHASE 2' : 'FINAL PHASE', b.def.color);
+        L.restoreHearts();
         L.shake(14); Sfx.bossRoar();
         if (b.lines[p - 1]) L.say(b.lines[p - 1], b.def.color);
         if (b.onPhase) b.onPhase(p);

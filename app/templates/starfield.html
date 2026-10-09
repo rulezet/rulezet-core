@@ -39,6 +39,7 @@
                 </div>
             </div>
             <div class="sf-title-stats" id="sf-title-stats"></div>
+            <div class="sf-shoutout" id="sf-shoutout" hidden><i class="fa-solid fa-rocket"></i> Éclate-toi Mat !</div>
         </div>
 
         <!-- ═════════════ DIFFICULTY ═════════════ -->
@@ -85,7 +86,8 @@
                 <div class="sf-hp" id="sf-hud-hp"></div>
                 <div class="sf-hud-row">
                     <span class="sf-bombs" id="sf-hud-bombs"></span>
-                    <span class="sf-dash" title="Dash (Shift)"><i class="fa-solid fa-person-running"></i><span class="sf-meter"><span id="sf-hud-dash"></span></span></span>
+                    <span class="sf-dash" title="Dash (Shift)"><i class="fa-solid fa-person-running"></i><span class="sf-meter"><span id="sf-hud-dash"></span></span><kbd id="sf-hud-dash-key">Shift</kbd></span>
+                    <span class="sf-special" id="sf-hud-special-wrap"><i class="fa-solid" id="sf-hud-special-icon"></i><span class="sf-meter"><span id="sf-hud-special"></span></span><kbd id="sf-hud-special-key">F</kbd></span>
                 </div>
                 <div class="sf-buffs" id="sf-hud-buffs"></div>
             </div>
@@ -121,6 +123,7 @@
                 <h2>Paused</h2>
                 <p class="sf-sub" id="sf-pause-obj"></p>
                 <button class="sf-btn sf-btn--primary" id="sf-pause-resume"><i class="fa-solid fa-play"></i> Resume</button>
+                <button class="sf-btn" id="sf-pause-settings"><i class="fa-solid fa-sliders"></i> Settings &amp; keys</button>
                 <button class="sf-btn" id="sf-pause-restart"><i class="fa-solid fa-rotate-right"></i> Restart</button>
                 <button class="sf-btn sf-btn--ghost" id="sf-pause-quit"><i class="fa-solid fa-map"></i> Abandon</button>
             </div>

@@ -7,6 +7,8 @@
  * The arena is a fixed 1280×720 logical space, scaled to the canvas.
  */
 
+import { tr } from './i18n.js';
+
 export const W = 1280;
 export const H = 720;
 export const TAU = Math.PI * 2;
@@ -21,13 +23,44 @@ export const FA = {
     eye: '', satellite: '', biohazard: '', key: '', sun: '',
 };
 
-// ── Ship skins — you ARE a detection rule; palettes named after formats ──
+// ── Ships — you ARE a detection rule. Each format has its own super power
+// (F / gamepad Y), always available, recharging on its own (cd in seconds).
 export const SKINS = [
-    { id: 'yara',     name: 'YARA',     hull: '#dce6ff', glow: '#6ea8ff', flame: '#ffb35c' },
-    { id: 'suricata', name: 'Suricata', hull: '#ffe3d8', glow: '#ff7a5c', flame: '#ffe16a' },
-    { id: 'sigma',    name: 'Sigma',    hull: '#dcffe6', glow: '#4be08a', flame: '#6af0ff' },
-    { id: 'zeek',     name: 'Zeek',     hull: '#e8dcff', glow: '#a06bff', flame: '#ff6bd8' },
+    { id: 'yara',     name: 'YARA',     hull: '#dce6ff', glow: '#6ea8ff', flame: '#ffb35c',
+      special: { id: 'sweep', name: 'Signature Sweep', icon: 'fa-fingerprint', cd: 14,
+                 desc: 'A ring of 24 piercing shots in every direction.' } },
+    { id: 'suricata', name: 'Suricata', hull: '#ffe3d8', glow: '#ff7a5c', flame: '#ffe16a',
+      special: { id: 'ips', name: 'IPS Drop', icon: 'fa-shield-halved', cd: 18, dur: 5,
+                 desc: 'For 5 s, a field around the ship drops every enemy bullet and burns what touches it.' } },
+    { id: 'sigma',    name: 'Sigma',    hull: '#dcffe6', glow: '#4be08a', flame: '#6af0ff',
+      special: { id: 'correlate', name: 'Correlation', icon: 'fa-hourglass-half', cd: 20, dur: 6,
+                 desc: 'For 6 s, malware and their bullets move at half speed.' } },
+    { id: 'zeek',     name: 'Zeek',     hull: '#e8dcff', glow: '#a06bff', flame: '#ff6bd8',
+      special: { id: 'inspect', name: 'Deep Inspection', icon: 'fa-satellite-dish', cd: 15,
+                 desc: 'Launches a swarm of 10 homing probes.' } },
 ];
+
+// ── Keyboard actions — two configurable keys each (Settings → Keys).
+// 1..4 (weapons) and Esc (pause / cancel) stay fixed.
+export const KEY_ACTIONS = [
+    { id: 'up', label: 'Thrust / move up' },
+    { id: 'down', label: 'Brake / move down' },
+    { id: 'left', label: 'Turn / move left' },
+    { id: 'right', label: 'Turn / move right' },
+    { id: 'fire', label: 'Fire' },
+    { id: 'dash', label: 'Dash' },
+    { id: 'bomb', label: 'Quarantine bomb' },
+    { id: 'special', label: 'Ship power' },
+    { id: 'weapon', label: 'Next weapon' },
+    { id: 'pause', label: 'Pause' },
+    { id: 'mute', label: 'Sound on / off' },
+];
+export const DEFAULT_KEYS = {
+    up: ['ArrowUp', 'KeyW'], down: ['ArrowDown', 'KeyS'], left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'],
+    fire: ['Space', 'KeyJ'], dash: ['ShiftLeft', 'KeyK'], bomb: ['KeyE', 'KeyB'], special: ['KeyF', 'KeyL'],
+    weapon: ['KeyQ', null], pause: ['KeyP', null], mute: ['KeyM', null],
+};
+export const RESERVED_KEYS = ['Escape', 'Digit1', 'Digit2', 'Digit3', 'Digit4'];
 
 // ── Weapons — 1..4 to switch. Unlocked by beating the world bosses. ──────
 export const WEAPONS = [
@@ -145,27 +178,27 @@ export function levelDef(world, index) {
     const tier = world * 4 + index;                 // 0..19 overall difficulty
     if (index === 4) {
         return { world, index, kind: 'boss', name: BOSSES[w.boss].name, boss: w.boss, par: 120 + world * 15,
-                 desc: 'Boss fight.' };
+                 desc: tr('Boss fight.') };
     }
     if (index === 5) {
-        return { world, index, kind: 'honeypot', name: 'Honeypot', par: 45, duration: 45 * 60, tier,
-                 desc: 'Bonus level — bait the malware, collect every byte you can in 45 seconds.' };
+        return { world, index, kind: 'honeypot', name: tr('Honeypot'), par: 45, duration: 45 * 60, tier,
+                 desc: tr('Bonus level — bait the malware, collect every byte you can in 45 seconds.') };
     }
     const kind = OBJECTIVES[index];
     const base = { world, index, kind, tier, pool: w.pool };
     switch (kind) {
         case 'waves':
-            return { ...base, name: 'Initial access', waves: 4 + Math.floor(world / 2), par: 70 + world * 10,
-                     desc: 'Clear every wave of malware.' };
+            return { ...base, name: tr('Initial access'), waves: 4 + Math.floor(world / 2), par: 70 + world * 10,
+                     desc: tr('Clear every wave of malware.') };
         case 'survive':
-            return { ...base, name: 'Hold the line', duration: (45 + world * 5) * 60, par: 0,
-                     desc: `Survive ${45 + world * 5} seconds of continuous infection.` };
+            return { ...base, name: tr('Hold the line'), duration: (45 + world * 5) * 60, par: 0,
+                     desc: tr('Survive {n} seconds of continuous infection.', { n: 45 + world * 5 }) };
         case 'beacons':
-            return { ...base, name: 'Cut the C2', beacons: 3 + Math.min(2, world), par: 75 + world * 10,
-                     desc: 'Destroy the command-and-control beacons — they keep calling reinforcements.' };
+            return { ...base, name: tr('Cut the C2'), beacons: 3 + Math.min(2, world), par: 75 + world * 10,
+                     desc: tr('Destroy the command-and-control beacons — they keep calling reinforcements.') };
         case 'protect':
-            return { ...base, name: 'Guard the sensor', duration: (40 + world * 5) * 60, par: 0,
-                     desc: 'Keep the network sensor alive until the scan completes.' };
+            return { ...base, name: tr('Guard the sensor'), duration: (40 + world * 5) * 60, par: 0,
+                     desc: tr('Keep the network sensor alive until the scan completes.') };
     }
 }
 

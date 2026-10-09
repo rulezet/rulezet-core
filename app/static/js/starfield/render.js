@@ -3,6 +3,7 @@
  * glowing shapes, the parallax star background and the world nebulas.
  */
 import { W, H, TAU, FA } from './data.js';
+import { tr } from './i18n.js';
 
 const FA_FONT = "'Font Awesome 6 Free'";
 let faReady = false;
@@ -60,6 +61,7 @@ export function hexA(hex, a) {
 }
 
 export function text(ctx, str, x, y, { size = 16, color = '#fff', align = 'center', weight = 800, alpha = 1, font = 'system-ui, sans-serif', baseline = 'middle' } = {}) {
+    str = tr(str);
     ctx.save();
     ctx.globalAlpha *= alpha;
     ctx.font = `${weight} ${size}px ${font}`;

@@ -4,7 +4,11 @@
  */
 import { W, H } from './data.js';
 
+/** Left / right Shift, Ctrl, Alt count as one key */
+export const normalizeKey = code => code.replace(/^(Shift|Control|Alt|Meta)Right$/, '$1Left');
+
 export function createInput(canvas) {
+    let keymap = {};                    // action → [code, code]
     const keys = new Set();
     const pressed = new Set();          // keys pressed since last frame
     const state = {
@@ -22,13 +26,15 @@ export function createInput(canvas) {
     const isButton = e => e.target && e.target.tagName === 'BUTTON';
     function onKeyDown(e) {
         if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
-        if (state.capture && (GAME_KEYS.has(e.code) || (e.code === 'Enter' && isButton(e)))) e.preventDefault();
+        const code = normalizeKey(e.code);
+        if (state.capture && (GAME_KEYS.has(code) || isBound(code) || (code === 'Enter' && isButton(e)))) e.preventDefault();
         if (state.capture && isButton(e)) e.target.blur();
-        if (!keys.has(e.code)) pressed.add(e.code);
-        keys.add(e.code);
+        if (!keys.has(code)) pressed.add(code);
+        keys.add(code);
     }
+    const isBound = code => Object.values(keymap).some(k => k.includes(code));
     function onKeyUp(e) {
-        keys.delete(e.code);
+        keys.delete(normalizeKey(e.code));
         if (state.capture && (GAME_KEYS.has(e.code) || e.code === 'Enter')) e.preventDefault();
     }
 
@@ -68,7 +74,7 @@ export function createInput(canvas) {
         state.pad = {
             lx: dz(p.axes[0] || 0), ly: dz(p.axes[1] || 0), rx: dz(p.axes[2] || 0), ry: dz(p.axes[3] || 0),
             fire: !!b[7],                                  // RT
-            dash: b[0] && !was(0), bomb: b[1] && !was(1),
+            dash: b[0] && !was(0), bomb: b[1] && !was(1), special: b[3] && !was(3),
             next: b[5] && !was(5), prev: b[4] && !was(4),
             pause: b[9] && !was(9), confirm: b[0] && !was(0), back: b[1] && !was(1),
             up: b[12] && !was(12), down: b[13] && !was(13), left: b[14] && !was(14), right: b[15] && !was(15),
@@ -81,16 +87,21 @@ export function createInput(canvas) {
         down: (code) => keys.has(code),
         any: (...codes) => codes.some(c => keys.has(c)),
         hit: (...codes) => codes.some(c => pressed.has(c)),
+        /** Configurable actions (Settings → Keys) */
+        setKeys(map) { keymap = map || {}; },
+        act: (a) => (keymap[a] || []).some(c => c && keys.has(c)),
+        actHit: (a) => (keymap[a] || []).some(c => c && pressed.has(c)),
         frame() { state.mouseActive++; pollPad(); },
         endFrame() { pressed.clear(); state.wheel = 0; },
         setCapture(v) { state.capture = v; },
         /** Movement vector from WASD / arrows / left stick */
         move() {
             let x = 0, y = 0;
-            if (keys.has('KeyA') || keys.has('ArrowLeft')) x -= 1;
-            if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
-            if (keys.has('KeyW') || keys.has('ArrowUp')) y -= 1;
-            if (keys.has('KeyS') || keys.has('ArrowDown')) y += 1;
+            const on = a => (keymap[a] || []).some(c => c && keys.has(c));
+            if (on('left')) x -= 1;
+            if (on('right')) x += 1;
+            if (on('up')) y -= 1;
+            if (on('down')) y += 1;
             if (state.pad) { x += state.pad.lx; y += state.pad.ly; }
             const l = Math.hypot(x, y);
             return l > 1 ? [x / l, y / l] : [x, y];
