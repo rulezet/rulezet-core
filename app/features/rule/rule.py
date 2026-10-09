@@ -227,6 +227,22 @@ def rules_list() -> render_template:
     return render_template("rule/rules_list.html", url_filters=url_filters)
 
 
+@rule_blueprint.route("/formats", methods=['GET'])
+def rule_formats() -> render_template:
+    """Public page describing every rule format, with a link to its official site."""
+    import os
+    graph_available = os.path.exists(os.path.join(current_app.static_folder, 'pivograph', 'index.html'))
+    return render_template("rule/formats.html", formats=RuleModel.get_formats_overview(),
+                           graph_available=graph_available)
+
+
+@rule_blueprint.route("/formats/graph.json", methods=['GET'])
+def rule_formats_graph():
+    """Pivograph document for the graph view of /rule/formats (see format_graph.py)."""
+    from app.features.rule.rule_format.format_graph import build_formats_graph
+    return jsonify(build_formats_graph(RuleModel.get_formats_overview(), request.host_url))
+
+
 @rule_blueprint.route("/feed/suricata.rules", methods=['GET'])
 @cache.cached(timeout=60 * 60)
 def suricata_feed():

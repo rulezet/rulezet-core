@@ -3288,6 +3288,33 @@ def get_all_rule_format_with_count():
     return result
 
 
+def get_formats_overview():
+    """Every known format with its catalog description (format_catalog.py) and
+    its number of active rules — for the public "Rule formats" page. Formats
+    are those registered in FormatRule plus any format still used by a rule;
+    sorted by rule count, 'no format' last."""
+    from app.features.rule.rule_format.format_catalog import get_format_info
+    counts = dict(
+        _active()
+        .with_entities(func.lower(func.trim(Rule.format)), func.count(Rule.id))
+        .group_by(func.lower(func.trim(Rule.format)))
+        .all()
+    )
+    executable = {
+        (f.name or '').strip().lower(): f.can_be_execute
+        for f in FormatRule.query.all()
+    }
+    names = {n for n in set(executable) | set(counts) if n}
+    formats = []
+    for name in names:
+        info = get_format_info(name)
+        info['rule_count'] = counts.get(name, 0)
+        info['can_be_execute'] = bool(executable.get(name, False))
+        formats.append(info)
+    formats.sort(key=lambda f: (f['key'] == 'no format', -f['rule_count'], f['key']))
+    return formats
+
+
 def get_all_rule_format_page(page):
     """Get all rule format in page (20 per pages)"""
     return FormatRule.query.paginate(page=page, per_page=20, error_out=False)

@@ -1,7 +1,8 @@
 /**
  * formatChip.js — a rule's format badge that opens a small menu, like the
  * CVE chips (vulnerabilityDisplayList.js): filter the list you're on by that
- * format, or open every rule of that format. Menu styles: .vdl-* in
+ * format, open every rule of that format, or read what the format is
+ * (/rule/formats#<format>, with a link to its official site). Menu styles: .vdl-* in
  * css/rule/ruleList.css.
  *
  * Props:
@@ -24,6 +25,8 @@ export default {
     computed: {
         label()   { return (this.format || '?').toUpperCase(); },
         listUrl() { return `/rule/rules_list?rule_type=${encodeURIComponent(this.format || '')}`; },
+        // Anchor = card id on the formats page (lowercase, spaces → dashes).
+        infoUrl() { return `/rule/formats#${encodeURIComponent(this.format.trim().toLowerCase().replace(/ /g, '-'))}`; },
     },
     template: `
 <span v-if="!format" class="badge rounded-pill bg-dark pt-1 shadow-sm">?</span>
@@ -45,6 +48,11 @@ export default {
         <li>
             <a class="vdl-menu-item" :href="listUrl">
                 <i class="fas fa-list"></i> View all [[ label ]] rules
+            </a>
+        </li>
+        <li>
+            <a class="vdl-menu-item" :href="infoUrl">
+                <i class="fas fa-circle-info"></i> More details about [[ label ]]
             </a>
         </li>
     </ul>

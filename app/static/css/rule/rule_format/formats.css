@@ -1,0 +1,115 @@
+/* Public "Rule formats" page (templates/rule/formats.html). */
+
+.fmt-count-badge { font-size: .8rem; vertical-align: middle; }
+
+.fmt-search { position: relative; max-width: 480px; }
+.fmt-search i {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--subtle-text-color); pointer-events: none;
+}
+.fmt-search input { padding-left: 38px; border-radius: 10px; }
+
+.fmt-card {
+    position: relative;
+    overflow: hidden;
+    background: var(--card-bg-color);
+    scroll-margin-top: 90px;
+}
+
+/* Arrived from a format chip's "More details" (/rule/formats#yara). */
+.fmt-card:target {
+    outline: 2px solid #0d6efd;
+    outline-offset: 2px;
+    animation: fmt-target-pulse 1.6s ease-out 1;
+}
+@keyframes fmt-target-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(13, 110, 253, .45); }
+    100% { box-shadow: 0 0 0 18px rgba(13, 110, 253, 0); }
+}
+
+.fmt-icon {
+    flex-shrink: 0;
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    color: #fff;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+}
+
+/* Project logo — on a white tile so dark/transparent logos stay readable in dark mode. */
+.fmt-logo {
+    flex-shrink: 0;
+    width: 52px; height: 52px;
+    border-radius: 10px;
+    padding: 5px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    display: flex; align-items: center; justify-content: center;
+}
+.fmt-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+.fmt-meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+}
+
+.fmt-desc { font-size: .9rem; color: var(--text-color); line-height: 1.5; }
+
+.fmt-facts {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--light-bg-color);
+    font-size: .85rem;
+}
+.fmt-fact-label {
+    margin-right: 6px;
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--subtle-text-color);
+}
+
+/* Cards | Graph switch: .dr-nav from detail_rule_nav.css, on <button>s. */
+.fmt-view-btn { background: transparent; cursor: pointer; }
+
+/* Graph view (Pivograph in an iframe) */
+.fmt-graph-card { background: var(--card-bg-color); }
+.fmt-graph-legend {
+    display: flex; flex-wrap: wrap; gap: 6px 18px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+}
+#fmt-graph-frame { display: block; width: 100%; height: 75vh; min-height: 480px; border: 0; }
+
+/* Ranking by number of rules (cards are sorted by rule count). */
+.fmt-rank {
+    position: absolute; top: 14px; right: 14px;
+    min-width: 34px; padding: 3px 9px;
+    border-radius: 999px;
+    font-size: .8rem; font-weight: 700; text-align: center;
+    color: var(--subtle-text-color);
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+}
+.fmt-rank--1 { color: #fff; background: linear-gradient(135deg, #f7c948, #d4a017); border-color: transparent; }
+.fmt-rank--2 { color: #fff; background: linear-gradient(135deg, #c0c6cc, #8e979f); border-color: transparent; }
+.fmt-rank--3 { color: #fff; background: linear-gradient(135deg, #d99a6c, #a8653a); border-color: transparent; }
+
+/* Cards reveal: each card fades up in turn (--i = its position, set in the
+   template; the stagger is capped so the last cards don't wait too long). */
+.fmt-col { animation: fmt-reveal .55s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(min(var(--i, 0), 12) * 60ms); }
+@keyframes fmt-reveal {
+    from { opacity: 0; transform: translateY(18px) scale(.98); }
+    to   { opacity: 1; transform: none; }
+}
+/* Played again when coming back from the graph view (class toggled in formats.js). */
+#fmt-grid.fmt-replay .fmt-col { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+    .fmt-col { animation: none; }
+}

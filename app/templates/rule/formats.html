@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Rule Formats — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rule_format/formats.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-5 pb-5">
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-layer-group banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Rule Formats</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-layer-group"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Rule Formats <span class="badge bg-primary-subtle text-primary ms-2 fmt-count-badge">{{ formats|length }}</span></h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+            Every detection-rule format hosted on Rulezet: what it is for, who maintains it, and where to find its official documentation.
+        </p>
+    </div>
+
+    {# Same menu as the rule detail page (.dr-nav, detail_rule_nav.css). #}
+    <nav class="dr-nav" role="tablist" aria-label="View">
+        <button type="button" class="dr-nav__item fmt-view-btn active border-0" data-view="cards" role="tab" aria-selected="true">
+            <i class="fa-solid fa-grip"></i><span>Cards</span>
+        </button>
+        <button type="button" class="dr-nav__item fmt-view-btn border-0" data-view="graph" role="tab" aria-selected="false">
+            <i class="fa-solid fa-diagram-project"></i><span>Graph</span>
+        </button>
+    </nav>
+
+    <div class="fmt-search mb-4" id="fmt-search-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="search" id="fmt-search-input" class="form-control" placeholder="Search a format, a category, a maintainer…" autocomplete="off">
+    </div>
+
+    <div id="fmt-graph-view" class="d-none mb-5">
+        {% if graph_available %}
+        <div class="card border-0 shadow-sm rounded-3 overflow-hidden fmt-graph-card">
+            <div class="fmt-graph-legend">
+                <span><i class="fa-solid fa-circle text-primary me-1"></i>Rulezet hosts the format</span>
+                <span><i class="fa-solid fa-minus me-1" style="color:#adb5bd;"></i>Export available for every format (JSON, MISP, STIX)</span>
+                <span><i class="fa-solid fa-minus me-1" style="color:#0f9d8a;"></i>Format-specific conversion</span>
+            </div>
+            <iframe id="fmt-graph-frame" title="Graph of the rule formats and their exports" allow="fullscreen"
+                    data-src="{{ url_for('static', filename='pivograph/index.html') }}?embed=1"
+                    data-graph="{{ url_for('rule.rule_formats_graph') }}"></iframe>
+        </div>
+        {% else %}
+        <div class="card border-0 shadow-sm rounded-3"><div class="card-body p-4 text-muted">
+            <i class="fa-solid fa-circle-info me-1"></i>The graph view isn't built on this instance —
+            run <code>python3 manage.py pivograph</code>.
+        </div></div>
+        {% endif %}
+    </div>
+
+    <div class="row g-4" id="fmt-grid">
+        {% for f in formats %}
+        <div class="col-12 col-md-6 col-xl-4 fmt-col" style="--i: {{ loop.index0 }};"
+             data-search="{{ (f.key ~ ' ' ~ f.title ~ ' ' ~ f.category ~ ' ' ~ (f.maintainer or '') ~ ' ' ~ f.extensions|join(' '))|lower }}">
+            <div class="card border-0 shadow-sm rounded-3 h-100 fmt-card" id="{{ f.key|replace(' ', '-') }}">
+                <div class="premium-accent-line"></div>
+                {% if f.key != 'no format' %}
+                <span class="fmt-rank{% if loop.index <= 3 %} fmt-rank--{{ loop.index }}{% endif %}"
+                      title="#{{ loop.index }} by number of rules">#{{ loop.index }}</span>
+                {% endif %}
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-start gap-3 mb-3 pe-5">
+                        {% if f.logo %}
+                        <div class="fmt-logo"><img src="{{ url_for('static', filename='images/formats/' ~ f.logo) }}" alt="{{ f.title }} logo" loading="lazy"></div>
+                        {% else %}
+                        <div class="fmt-icon"><i class="{{ f.icon_style or 'fa-solid' }} {{ f.icon }}"></i></div>
+                        {% endif %}
+                        <div class="flex-grow-1 min-w-0">
+                            <h5 class="fw-bold mb-1">{{ f.title }}</h5>
+                            <div class="fmt-meta">
+                                <span class="badge rounded-pill bg-dark">{{ f.key|upper }}</span>
+                                <span>{{ f.category }}</span>
+                                {% if f.maintainer %}<span>· {{ f.maintainer }}</span>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="fmt-desc mb-3">{{ f.description }}</p>
+
+                    <div class="fmt-facts mb-3">
+                        <div>
+                            <span class="fmt-fact-label">Rules</span>
+                            <span class="fw-semibold">{{ "{:,}".format(f.rule_count) }}</span>
+                        </div>
+                        {% if f.extensions %}
+                        <div>
+                            <span class="fmt-fact-label">Files</span>
+                            {% for ext in f.extensions %}<code>{{ ext }}</code>{% if not loop.last %} {% endif %}{% endfor %}
+                        </div>
+                        {% endif %}
+                        {% if f.can_be_execute %}
+                        <div>
+                            <span class="badge bg-success-subtle text-success"><i class="fa-solid fa-flask me-1"></i>Testable on Rulezet</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mt-auto d-flex flex-wrap gap-2">
+                        <a href="/rule/rules_list?rule_type={{ f.key|urlencode }}" class="btn btn-sm btn-primary">
+                            <i class="fa-solid fa-list me-1"></i>View rules
+                        </a>
+                        {% if f.official_url %}
+                        <a href="{{ f.official_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">
+                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Official site
+                        </a>
+                        {% endif %}
+                        {% if f.docs_url %}
+                        <a href="{{ f.docs_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary">
+                            <i class="fa-solid fa-book me-1"></i>Docs
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <p id="fmt-empty" class="text-center text-muted py-5 d-none">No format matches your search.</p>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module" src="{{ url_for('static', filename='js/rule/formats.js') }}"></script>
+{% endblock %}

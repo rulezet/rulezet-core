@@ -24,3 +24,7 @@
 	path = app/modules/pivotick-converters
 	url = https://github.com/Pivotick/pivotick-converters.git
 	ignore = dirty
+[submodule "app/modules/pivograph"]
+	path = app/modules/pivograph
+	url = https://github.com/ecrou-exact/project-graph.git
+	ignore = dirty

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Build a graph of a project's connections from a JSON file, with Pivotick." />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <title>Pivograph</title>
+    <script type="module" crossorigin src="./assets/index-BRoOuKPh.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-B1qEXnaQ.css">
+  </head>
+  <body>
+    <header class="pg-header">
+      <a class="pg-brand" href="docs/" title="Pivograph home">
+        <img src="favicon.svg" alt="" width="22" height="22" />
+        <strong>Pivograph</strong>
+      </a>
+      <input id="doc-title" class="pg-title-input" aria-label="Graph title" placeholder="Graph title" />
+      <div id="readonly-badge" class="pg-readonly" hidden></div>
+      <!-- Three menus, built by main.js: Add (node, edge), Graph (new, open, import), Export. -->
+      <div id="header-actions" class="pg-actions" role="toolbar" aria-label="Graph actions"></div>
+      <span class="pg-sep"></span>
+      <!-- Search of the documentation (docs/search.js, imported by main.js). -->
+      <form class="site-search" action="docs/guide.html" role="search" data-site-search data-index="docs/search.json" data-base="docs/guide.html">
+        <input type="search" name="q" placeholder="Search the docs" aria-label="Search the documentation" autocomplete="off" role="combobox" aria-controls="app-search-results" aria-expanded="false" aria-autocomplete="list" />
+        <div class="search-results" id="app-search-results" role="listbox" aria-label="Sections of the guide" hidden></div>
+      </form>
+      <!-- Same navigation as the documentation site, so app and docs read as one site. -->
+      <nav class="pg-site-nav" aria-label="Site">
+        <a href="docs/">Home</a>
+        <a href="docs/guide.html">Guide</a>
+        <a href="https://github.com/ecrou-exact/project-graph">GitHub</a>
+      </nav>
+    </header>
+
+    <main class="pg-layout">
+      <aside class="pg-sidebar">
+        <div id="tabs" class="pg-tabs" role="tablist"></div>
+        <div id="search-row" class="pg-search">
+          <input id="search" type="search" placeholder="Filter…" aria-label="Filter" />
+        </div>
+        <div id="panel" class="pg-panel"></div>
+        <footer class="pg-sidebar-footer">
+          <span id="pivotick-version"></span>
+          <span id="footer-hint" class="pg-muted">Double-click an item to edit it</span>
+        </footer>
+      </aside>
+      <div id="sidebar-resizer" class="pg-resizer" role="separator" aria-orientation="vertical" aria-label="Resize the side panel" tabindex="0"></div>
+      <section class="pg-graph-wrap">
+        <section id="graph" class="pg-graph" aria-label="Graph"></section>
+        <button id="btn-pills" class="pg-btn pg-graph-toggle" aria-pressed="true" title="Show or hide the tag pills on the graph">#&nbsp;Tags on graph</button>
+      </section>
+    </main>
+
+  </body>
+</html>

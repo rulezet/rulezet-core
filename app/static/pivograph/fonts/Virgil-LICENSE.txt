@@ -1,0 +1,3 @@
+Virgil — the hand-drawn font of Excalidraw (https://github.com/excalidraw/virgil).
+Licensed under the SIL Open Font License, Version 1.1: https://openfontlicense.org
+Used by Pivograph as the "hand" label font.
