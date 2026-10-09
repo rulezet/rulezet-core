@@ -171,6 +171,19 @@ const MultiAttackFilter = {
 
     <!-- ── Dropdown panel ───────────────────────────────────────────── -->
     <div class="dropdown-menu mf-menu shadow-lg border-0 p-3 mt-2">
+        <!-- Everything selected, each removable (the trigger only shows two) -->
+        <div v-if="selectedObjects.length" class="mf-selected">
+            <div class="mf-selected__head">
+                <span>Selected · [[ selectedObjects.length ]]</span>
+                <button type="button" class="mf-selected__clear" @click.stop="clearAll">Clear all</button>
+            </div>
+            <div class="mf-selected__list">
+                <span v-for="t in selectedObjects" :key="t.id" class="mf-selected__chip" :title="t.id">
+                    <span class="mf-selected__label">[[ t.id + ' · ' + t.name ]]</span>
+                    <button type="button" class="mf-selected__x" @click.stop="toggle(t.id)" :aria-label="'Remove ' + t.id"><i class="fa-solid fa-xmark"></i></button>
+                </span>
+            </div>
+        </div>
 
         <!-- Search -->
         <div class="d-flex align-items-center mb-2">

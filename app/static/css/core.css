@@ -3278,13 +3278,55 @@ button.dr-nav__item {
     flex-shrink: 1;
 }
 .mf-trigger > span:not(.mf-more) > div { min-width: 0; }
+.mf-trigger > span:not(.mf-more) > div { display: flex; align-items: center; }
 .mf-trigger > span:not(.mf-more) .fw-bold,
-.mf-trigger > span:not(.mf-more) > span {
+.mf-trigger > span:not(.mf-more) > span:not(.tag-right) {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* Tag chips: only the label shrinks — the remove cross always stays visible */
+.mf-trigger .tag-right { display: inline-flex; align-items: center; min-width: 0; }
+.mf-trigger .tag-right > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mf-trigger .fa-circle-xmark { flex-shrink: 0; }
+
+/* "Selected" section at the top of a multi-select filter's menu */
+.mf-selected {
+    margin-bottom: .75rem; padding: .6rem .65rem;
+    border-radius: 10px;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+}
+.mf-selected__head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: .45rem;
+    font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--subtle-text-color);
+}
+.mf-selected__clear { border: 0; background: none; padding: 0; font-size: .72rem; font-weight: 600; color: #dc3545; text-transform: none; letter-spacing: 0; }
+.mf-selected__clear:hover { text-decoration: underline; }
+.mf-selected__list { display: flex; flex-wrap: wrap; gap: .35rem; max-height: 132px; overflow-y: auto; }
+.mf-selected__chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    max-width: 100%;
+    padding: .15rem .25rem .15rem .55rem;
+    border-radius: 99px;
+    font-size: .74rem; font-weight: 600;
+    color: var(--text-color);
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+}
+.mf-selected__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mf-selected__x {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0; border: 0; border-radius: 50%;
+    font-size: .62rem;
+    color: var(--subtle-text-color); background: transparent;
+}
+.mf-selected__x:hover { color: #fff; background: #dc3545; }
 .mf-more { flex-shrink: 0; }
 .mf-menu {
     width: 380px;

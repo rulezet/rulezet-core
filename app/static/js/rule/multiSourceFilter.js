@@ -139,6 +139,32 @@ const MultiSourceFilter = {
         </div>
 
         <div class="dropdown-menu mf-menu shadow-lg border-0 p-3 mt-2 animate__animated animate__fadeIn">
+
+            <!-- Everything selected, each removable (the trigger only shows two) -->
+
+            <div v-if="selectedNames.length" class="mf-selected">
+
+                <div class="mf-selected__head">
+
+                    <span>Selected · [[ selectedNames.length ]]</span>
+
+                    <button type="button" class="mf-selected__clear" @click.stop="clearAll">Clear all</button>
+
+                </div>
+
+                <div class="mf-selected__list">
+
+                    <span v-for="name in selectedNames" :key="name" class="mf-selected__chip" :title="name">
+
+                        <span class="mf-selected__label">[[ shortName(name) ]]</span>
+
+                        <button type="button" class="mf-selected__x" @click.stop="toggleSource(name)" :aria-label="'Remove ' + name"><i class="fa-solid fa-xmark"></i></button>
+
+                    </span>
+
+                </div>
+
+            </div>
             
             <div class="d-flex align-items-center mb-3">
                 <button v-if="activePrefix && !searchCtx" @click="activePrefix = null" 

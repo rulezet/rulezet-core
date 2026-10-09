@@ -180,8 +180,10 @@ const MultiTagFilter = {
             isLoading.value = false;
         }
 
-        // Counts depend on every other active filter: drop what was loaded,
-        // reload lazily (now if the panel shows a folder list).
+        // Counts depend on every other active filter: drop what was loaded and
+        // reload — right away if the panel is open (otherwise it would show its
+        // spinner forever: the request in flight was just cancelled), else on
+        // the next opening (ensureLoaded).
         function resetLoaded() {
             requestId++;
             namespaces.value = null;
@@ -190,7 +192,21 @@ const MultiTagFilter = {
             isLoading.value = false;
             isSearching.value = false;
             activeNamespace.value = null;
+            if (isOpen.value) {
+                fetchNamespaces();
+                if (tagSearchQuery.value.trim()) runSearch(tagSearchQuery.value.trim());
+            }
         }
+
+        // Is the dropdown panel open? (Bootstrap's own events on the root element.)
+        const root = Vue.ref(null);
+        const isOpen = Vue.ref(false);
+        Vue.onMounted(() => {
+            const el = root.value;
+            if (!el) return;
+            el.addEventListener('shown.bs.dropdown', () => { isOpen.value = true; ensureLoaded(); });
+            el.addEventListener('hidden.bs.dropdown', () => { isOpen.value = false; });
+        });
 
         Vue.watch(tagSearchQuery, (val) => {
             clearTimeout(searchTimer);
@@ -224,7 +240,7 @@ const MultiTagFilter = {
         Vue.watch(selectedTagNames, resolveSelected, { deep: true });
 
         return {
-            tagSearchQuery, selectedTagNames, activeNamespace, activeSource, isLoading, isSearching,
+            root, tagSearchQuery, selectedTagNames, activeNamespace, activeSource, isLoading, isSearching,
             sourceOptions, namespaces, folderTags, folderTotal, folderHasMore, searchResults, selectedTagsObjects,
             isNameSelected, toggleTag, tagLabel, setSource,
             ensureLoaded, openFolder, closeFolder, loadFolderPage,
@@ -237,7 +253,7 @@ const MultiTagFilter = {
         };
     },
     template: `
-        <div class="dropdown multi-tag-filter mf-dropdown w-100">
+        <div class="dropdown multi-tag-filter mf-dropdown w-100" ref="root">
 
             <!-- Trigger pill -->
             <div class="form-control mf-trigger d-flex flex-wrap gap-2 align-items-center p-2 shadow-sm border-secondary-subtle"
@@ -261,6 +277,19 @@ const MultiTagFilter = {
 
             <!-- Dropdown panel -->
             <div class="dropdown-menu mf-menu shadow-lg border-0 p-3 mt-2">
+                <!-- Everything selected, each removable (the trigger only shows two) -->
+                <div v-if="selectedTagsObjects.length" class="mf-selected">
+                    <div class="mf-selected__head">
+                        <span>Selected · [[ selectedTagsObjects.length ]]</span>
+                        <button type="button" class="mf-selected__clear" @click.stop="clearAll">Clear all</button>
+                    </div>
+                    <div class="mf-selected__list">
+                        <span v-for="tag in selectedTagsObjects" :key="tag.name" class="mf-selected__chip" :title="tag.name">
+                            <span class="mf-selected__label">[[ tagLabel(tag.name) ]]</span>
+                            <button type="button" class="mf-selected__x" @click.stop="toggleTag(tag.name)" :aria-label="'Remove ' + tag.name"><i class="fa-solid fa-xmark"></i></button>
+                        </span>
+                    </div>
+                </div>
 
                 <!-- Search -->
                 <div class="d-flex align-items-center mb-2">
