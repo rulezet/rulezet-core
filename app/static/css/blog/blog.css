@@ -378,3 +378,14 @@
     color: var(--subtle-text-color); font-size: .9rem;
 }
 .blog-content-empty i { font-size: 1.6rem; opacity: .4; }
+
+/* Cover picker: the site's images (create_edit.html, "Library") */
+.blog-cover-library { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; max-height: 220px; overflow-y: auto; padding: 2px; }
+.blog-cover-library__item {
+    aspect-ratio: 1; padding: 4px; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--light-bg-color); border: 2px solid var(--border-color);
+}
+.blog-cover-library__item img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.blog-cover-library__item:hover { border-color: rgba(13, 110, 253, .5); }
+.blog-cover-library__item.active { border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13, 110, 253, .18); }

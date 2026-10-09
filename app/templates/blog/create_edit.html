@@ -208,6 +208,12 @@
                                         :style="coverMode === 'upload' ? 'background:#0d6efd;color:#fff;' : 'background:transparent;color:var(--subtle-text-color);'">
                                     Upload
                                 </button>
+                                <button type="button" @click="openCoverLibrary"
+                                        class="btn btn-sm border-0 px-3 py-1"
+                                        :style="coverMode === 'library' ? 'background:#0d6efd;color:#fff;' : 'background:transparent;color:var(--subtle-text-color);'"
+                                        title="One of the site's images (/static/images, managed in Admin › Media)">
+                                    Library
+                                </button>
                             </div>
                         </div>
 
@@ -216,6 +222,26 @@
                                    style="background:var(--light-bg-color);color:var(--text-color);border-color:var(--border-color);"
                                    placeholder="https://example.com/image.jpg" v-model="form.cover_image_url"
                                    @change="IS_EDIT && autoSave()">
+                        </div>
+
+                        <!-- Library: the site's images (static/images) -->
+                        <div v-else-if="coverMode === 'library'">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <input type="search" class="form-control form-control-sm" v-model="coverLibraryQuery" placeholder="Search an image…"
+                                       style="background:var(--light-bg-color);color:var(--text-color);border-color:var(--border-color);">
+                                <a href="/admin/media" target="_blank" rel="noopener" class="text-muted small text-nowrap" title="Manage the images">
+                                    <i class="fa-solid fa-images"></i>
+                                </a>
+                            </div>
+                            <div v-if="coverLibraryLoading" class="text-muted small py-2"><span class="spinner-border spinner-border-sm me-1"></span>Loading…</div>
+                            <div v-else class="blog-cover-library">
+                                <button v-for="img in coverLibraryFiltered" :key="img.rel" type="button"
+                                        :class="['blog-cover-library__item', { active: form.cover_image_url === img.path }]"
+                                        :title="img.rel" @click="pickLibraryCover(img)">
+                                    <img :src="img.url" :alt="img.name" loading="lazy">
+                                </button>
+                                <div v-if="!coverLibraryFiltered.length" class="text-muted small py-2">No image.</div>
+                            </div>
                         </div>
 
                         <div v-else>
@@ -1120,6 +1146,29 @@
                 if (IS_EDIT) autoSave()
             }
 
+            // ── Cover from the site's images (static/images, Admin › Media) ──
+            const coverLibrary        = ref(null)
+            const coverLibraryLoading = ref(false)
+            const coverLibraryQuery   = ref('')
+            const coverLibraryFiltered = computed(() => {
+                const q = coverLibraryQuery.value.trim().toLowerCase()
+                return (coverLibrary.value || []).filter(f => !q || f.rel.toLowerCase().includes(q))
+            })
+            async function openCoverLibrary() {
+                coverMode.value = 'library'
+                if (coverLibrary.value) return
+                coverLibraryLoading.value = true
+                try {
+                    const data = await (await fetch('/admin/media/library.json?root=images&refs=0')).json()
+                    coverLibrary.value = (data.files || []).map(f => ({ ...f, path: f.url.split('?')[0] }))
+                } catch { create_message('Could not load the site images.', 'danger-subtle') }
+                finally { coverLibraryLoading.value = false }
+            }
+            function pickLibraryCover(img) {
+                form.value.cover_image_url = img.path
+                if (IS_EDIT) autoSave()
+            }
+
             async function deleteFile(fileUuid) {
                 try {
                     const res  = await fetch(`/blog/admin/file/delete/${fileUuid}`, {
@@ -1301,6 +1350,7 @@
                 currentUserId, isAdmin, csrfToken, IS_EDIT,
                 attachedFiles, isUploading, uploadFile, deleteFile,
                 coverMode, isCoverUploading, uploadCover, removeCover,
+                coverLibraryLoading, coverLibraryQuery, coverLibraryFiltered, openCoverLibrary, pickLibraryCover,
                 addLink, removeLink,
                 handleRulesSend, removeRule, clearAllRules,
                 handleBundlesSend, removeBundle, clearAllBundles,
