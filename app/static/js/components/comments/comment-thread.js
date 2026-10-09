@@ -1001,3 +1001,6 @@ const CommentThread = {
 }
 
 export default CommentThread
+// The Write / Preview Markdown editor on its own, for other forms that take
+// Markdown (e.g. the rule Scope page).
+export { MarkdownComposer }

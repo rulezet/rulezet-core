@@ -5564,17 +5564,78 @@ def get_similar_rule(rule_id: int = None, number: int = None):
 
 # ── Rule Scope ─────────────────────────────────────────────────────────────────
 
-def get_scopes(rule_id: int, current_user_id: int = None):
-    """Return all scope declarations for a rule plus works/nworks counts and the current user's scope."""
-    scopes = RuleScope.query.filter_by(rule_id=rule_id).order_by(RuleScope.created_at.desc()).all()
-    works_count  = sum(1 for s in scopes if s.works)
-    nworks_count = len(scopes) - works_count
+def get_scopes(rule_id: int, current_user_id: int = None, page: int = 1, per_page: int = 20,
+               works_filter: str = 'all', search: str = '', criterion: tuple = None,
+               notes_only: bool = False, sort: str = 'newest'):
+    """Scope declarations of a rule, one page at a time.
+
+    Returns a dict: the page of declarations (newest first) matching
+    `works_filter` ('all' | 'ok' | 'ko'), `search` (author name, notes or
+    criterion value, case-insensitive), `criterion` ((key, value) the
+    declaration must list), `notes_only`, sorted by `sort` ('newest' |
+    'oldest'); the pagination info, the works /
+    doesn't-work counts and the reported environments — those two over every
+    declaration, whatever the filter — and the current user's own declaration.
+    """
+    all_scopes = (RuleScope.query.filter_by(rule_id=rule_id)
+                  .order_by(RuleScope.created_at.desc(), RuleScope.id.desc()).all())
+    works_count  = sum(1 for s in all_scopes if s.works)
+    nworks_count = len(all_scopes) - works_count
+
+    # Reported environments: per criterion, per value, how many say works / doesn't.
+    groups = {}
+    for s in all_scopes:
+        for e in (s.entries or []):
+            if not isinstance(e, dict) or not e.get('key') or not e.get('value'):
+                continue
+            v = groups.setdefault(e['key'], {}).setdefault(e['value'], {'value': e['value'], 'ok': 0, 'ko': 0})
+            v['ok' if s.works else 'ko'] += 1
+    environments = [
+        {'key': key, 'values': sorted(values.values(), key=lambda v: -(v['ok'] + v['ko']))[:6]}
+        for key, values in groups.items()
+    ]
+
+    matching = all_scopes
+    if works_filter in ('ok', 'ko'):
+        matching = [s for s in matching if s.works == (works_filter == 'ok')]
+    if criterion and criterion[0] and criterion[1]:
+        ck, cv = criterion
+        matching = [s for s in matching
+                    if any(isinstance(e, dict) and e.get('key') == ck and e.get('value') == cv for e in (s.entries or []))]
+    if notes_only:
+        matching = [s for s in matching if (s.comment or '').strip()]
+    q = (search or '').strip().lower()
+    if q:
+        def _hit(s):
+            name = (s.user.get_username() if s.user else '') or ''
+            values = ' '.join(str(e.get('value', '')) for e in (s.entries or []) if isinstance(e, dict))
+            return q in name.lower() or q in (s.comment or '').lower() or q in values.lower()
+        matching = [s for s in matching if _hit(s)]
+
+    if sort == 'oldest':
+        matching = list(reversed(matching))
+    per_page = max(1, min(per_page, 100))
+    total = len(matching)
+    total_pages = max(1, -(-total // per_page))
+    page = max(1, min(page, total_pages))
+    page_items = matching[(page - 1) * per_page: page * per_page]
+
     my_scope = None
     if current_user_id:
-        my = RuleScope.query.filter_by(rule_id=rule_id, user_id=current_user_id).first()
-        if my:
-            my_scope = my.to_json()
-    return [s.to_json() for s in scopes], works_count, nworks_count, my_scope
+        mine = next((s for s in all_scopes if s.user_id == current_user_id), None)
+        if mine:
+            my_scope = mine.to_json()
+
+    return {
+        'scopes':       [s.to_json() for s in page_items],
+        'total':        total,
+        'page':         page,
+        'total_pages':  total_pages,
+        'works_count':  works_count,
+        'nworks_count': nworks_count,
+        'environments': environments,
+        'my_scope':     my_scope,
+    }
 
 
 def upsert_scope(rule_id: int, user_id: int, works: bool, entries: list, comment: str):

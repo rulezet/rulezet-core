@@ -6325,14 +6325,17 @@ def bulk_tag():
 @rule_blueprint.route('/get_scopes/<int:rule_id>', methods=['GET'])
 def get_scope_list(rule_id):
     current_user_id = current_user.id if current_user.is_authenticated else None
-    scopes, works_count, nworks_count, my_scope = RuleModel.get_scopes(rule_id, current_user_id)
-    return jsonify({
-        'success':      True,
-        'scopes':       scopes,
-        'works_count':  works_count,
-        'nworks_count': nworks_count,
-        'my_scope':     my_scope,
-    }), 200
+    data = RuleModel.get_scopes(
+        rule_id, current_user_id,
+        page=request.args.get('page', 1, type=int),
+        per_page=request.args.get('per_page', 20, type=int),
+        works_filter=request.args.get('filter', 'all'),
+        search=(request.args.get('q', '') or '')[:100],
+        criterion=(request.args.get('crit_key', ''), request.args.get('crit_value', '')),
+        notes_only=request.args.get('notes') == '1',
+        sort=request.args.get('sort', 'newest'),
+    )
+    return jsonify({'success': True, **data}), 200
 
 
 @rule_blueprint.route('/scope/<int:rule_id>', methods=['POST'])
@@ -6344,10 +6347,21 @@ def scope_upsert(rule_id):
     data    = request.get_json() or {}
     works   = bool(data.get('works', True))
     entries = data.get('entries', [])
-    comment = (data.get('comment') or '').strip()[:500]
+    comment = (data.get('comment') or '').strip()[:2000]   # Markdown, rendered client-side (sanitized)
     if not isinstance(entries, list):
         return jsonify({'success': False, 'message': 'entries must be a list'}), 400
-    scope_json, is_new = RuleModel.upsert_scope(rule_id, current_user.id, works, entries, comment)
+    # Environment criteria: {key, value} strings only, bounded; empty values dropped.
+    clean_entries = []
+    for e in entries[:20]:
+        if not isinstance(e, dict):
+            continue
+        key, value = e.get('key'), e.get('value')
+        if not isinstance(key, str) or not isinstance(value, str):
+            continue
+        key, value = key.strip()[:40], value.strip()[:100]
+        if key and value:
+            clean_entries.append({'key': key, 'value': value})
+    scope_json, is_new = RuleModel.upsert_scope(rule_id, current_user.id, works, clean_entries, comment)
     action = 'rule.scope_add' if is_new else 'rule.scope_update'
     label  = 'Declared' if is_new else 'Updated'
     log_activity(action, f"{label} scope for rule '{rule.title}' — works={works}",

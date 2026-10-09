@@ -3136,9 +3136,11 @@ class RuleScope(db.Model):
     works      = db.Column(db.Boolean, nullable=False, default=True)   # True = "works for me"
     entries    = db.Column(db.JSON,    nullable=False, default=list)    # [{"key": "os", "value": "linux"}, …]
     comment    = db.Column(db.Text,    nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc))
-    updated_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc),
-                           onupdate=datetime.datetime.now(tz=datetime.timezone.utc))
+    # Callables: evaluated on each insert / update (a bare datetime.now(...)
+    # here would be computed once at import, giving every row the same date).
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc),
+                           onupdate=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
 
     __table_args__ = (
         db.UniqueConstraint('rule_id', 'user_id', name='uq_rule_scope_user'),
