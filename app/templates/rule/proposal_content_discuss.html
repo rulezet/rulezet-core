@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_discuss.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_thread_graph.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -46,8 +47,8 @@
                     <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
                         <h2 class="fw-bold mb-0">Edit Proposal</h2>
                         <span v-if="proposal.thread.length > 1" class="pstatus-badge" style="background:var(--light-bg-color);color:var(--text-color);border:1px solid var(--border-color);"
-                              title="Version of this proposal within its thread">
-                            v[[ proposal.version ]] / [[ proposal.thread.length ]]
+                              title="Level of this proposal in its thread (v1 = the first proposal, v2 = a revision of it…)">
+                            v[[ proposal.version ]] · [[ proposal.thread.length ]] in thread
                         </span>
                         <span class="pstatus-badge" :class="'pstatus-' + displayStatus"
                               :style="proposal.status === 'accepted' ? 'font-size:1rem;padding:.5rem 1.1rem;box-shadow:0 3px 10px rgba(25,135,84,.4);' : ''"
@@ -311,25 +312,19 @@
         </div>
 
         <!-- ── Thread: every version of this proposal ── -->
-        <div v-if="proposal.thread.length > 1" class="card border-0 shadow-sm rounded-3 mb-4">
+        <div v-if="proposal.thread && proposal.thread.length" class="card border-0 shadow-sm rounded-3 mb-4">
             <div class="card-body p-4">
                 <div class="section-divider">
                     <div class="section-divider__line"></div>
-                    <span class="section-divider__label"><i class="fa-solid fa-code-branch me-1"></i>Thread — [[ proposal.thread.length ]] versions</span>
+                    <span class="section-divider__label"><i class="fa-solid fa-code-branch me-1"></i>Thread — [[ proposal.thread.length ]] version[[ proposal.thread.length === 1 ? '' : 's' ]]</span>
                 </div>
-                <div class="pd-thread">
-                    <a v-for="v in proposal.thread" :key="v.id" :href="v.discuss_url"
-                       class="pd-thread__version" :class="{ 'pd-thread__version--current': v.id === proposal.id }"
-                       :title="'#' + v.id + ' by ' + v.user_name + ' — ' + v.status">
-                        <span class="pd-thread__dot" :class="'pd-thread__dot--' + v.status"></span>
-                        <span class="pd-thread__num">v[[ v.version ]]</span>
-                        <span>[[ v.user_name ]]</span>
-                        <span v-if="v.previous_proposal_id" class="pd-thread__parent">revises v[[ versionOf(v.previous_proposal_id) ]]</span>
-                    </a>
-                </div>
+                <proposal-thread-graph :versions="proposal.thread" :current-id="proposal.id"
+                    :current-user-id="CURRENT_USER_ID || null"
+                    :rule-url="'/rule/detail_rule/' + proposal.rule_id + '/history'"></proposal-thread-graph>
                 <div class="proposal-decision-box__note mt-2">
                     <template v-if="proposal.thread_status === 'accepted'">A version of this thread was accepted: the thread is closed, the other versions are superseded.</template>
-                    <template v-else>Accepting one version closes the thread: its other open or rejected versions become superseded.</template>
+                    <template v-else-if="proposal.thread.length > 1">Accepting one version closes the thread: its other open or rejected versions become superseded.</template>
+                    <template v-else>No revision yet — revising this proposal adds a new branch here, starting from v[[ proposal.version ]].</template>
                 </div>
             </div>
         </div>
@@ -416,6 +411,22 @@
         </div>
         {% endif %}
 
+        <!-- Revise from the bottom of the conversation — no scrolling back up -->
+        <div v-if="proposal.can_revise" class="proposal-decision-box proposal-revise-box mt-4">
+            <div class="proposal-decision-box__icon"><i class="fa-solid fa-code-branch"></i></div>
+            <div class="flex-grow-1 min-width-0">
+                <div class="proposal-decision-box__title">Improve this proposal</div>
+                <div class="proposal-decision-box__subtitle">
+                    Take the feedback into account: a revision starts from v[[ proposal.version ]] and becomes a new
+                    version of this thread, on its own branch.
+                </div>
+            </div>
+            <a :href="'/rule/detail_rule/' + proposal.rule_id + '/propose_edit?from_proposal=' + proposal.id"
+               class="btn btn-primary rounded-pill px-4 flex-shrink-0">
+                <i class="fa-solid fa-code-branch me-1"></i>Revise v[[ proposal.version ]]
+            </a>
+        </div>
+
     </div>
 
 </div>
@@ -428,6 +439,7 @@
     import UserChip      from '/static/js/components/UserChip.js';
     import DiffViewer    from '/static/js/components/diff-viewer.js';
     import CommentThread from '/static/js/components/comments/comment-thread.js';
+    import ProposalThreadGraph from '/static/js/rule/proposal/ProposalThreadGraph.js';
     import ReportModal   from '/static/js/components/ReportModal.js';
     import SmartEditor   from '/static/js/components/smart-editor.js';
     import { renderMarkdown } from '/static/js/sanitize.js';
@@ -455,6 +467,7 @@
             'user-chip':      UserChip,
             'diff-viewer':    DiffViewer,
             'comment-thread': CommentThread,
+            'proposal-thread-graph': ProposalThreadGraph,
             'report-modal':   ReportModal,
             'smart-editor':   SmartEditor,
         },
@@ -712,7 +725,7 @@
                 compareBase, compareTarget, compareOptions, versionOf, contentOf, labelOf,
                 startEditMessage, cancelEditMessage, saveMessage, deleteMessage,
                 editTypeMeta, truncate, formatDate, scoreColor,
-                toggleFavorite, decideProposal,
+                toggleFavorite, decideProposal, CURRENT_USER_ID,
             };
         }
     }).mount('#main-container');

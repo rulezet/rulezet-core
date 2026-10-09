@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_thread_graph.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_threads.css') }}">
 {% endblock %}
 {% import 'macros/detail_rule_nav.html' as nav with context %}
@@ -64,7 +65,7 @@
                 <div class="h-card__accent"></div>
                 <span class="h-card__title"><i class="fa-solid fa-code-pull-request me-1"></i>Edit proposals</span>
                 <help-tip title="Edit proposals"
-                          text="Anyone with an account can suggest a change to this rule; the rule's owner or an admin accepts (merges) or rejects it.&#10;When a proposal is revised, the revision joins it in the same thread — so a thread is one change and all its versions: v1 is the first proposal, v2, v3… the revisions, by date."></help-tip>
+                          text="Anyone with an account can suggest a change to this rule; the rule's owner or an admin accepts (merges) or rejects it.&#10;When a proposal is revised, the revision joins it in the same thread — so a thread is one change and all its versions: v1 is the first proposal, v2 a revision of it, v3 a revision of a v2… — two revisions of the same version share a number, each on its own branch."></help-tip>
 
                 <!-- Summary badges -->
                 <div class="d-flex gap-2 ms-2">
@@ -168,9 +169,14 @@
 
                         <ol v-else class="pt-timeline">
                             <li v-for="p in thread.proposals" :key="p.id"
-                                class="pt-step" :class="'pt-step--' + p.status"
-                                :style="{ '--pt-depth': p.depth }">
-                                <span class="pt-step__dot" :class="'pt-step__dot--' + displayStatus(p)"></span>
+                                class="pt-step ptg" :class="'pt-step--' + p.status">
+                                <!-- branch lines, as in the thread graph: one column per version -->
+                                <span class="ptg-lanes" :style="{ width: 'calc(var(--ptg-cell) * ' + thread._lanes.width + ')' }">
+                                    <span v-for="(cell, c) in thread._lanes.cells[p.id]" :key="c" class="ptg-cell">
+                                        <span v-for="(s, i) in cell.segs" :key="i" class="ptg-seg" :class="['ptg-seg--' + s.k, laneColour(s.c)]"></span>
+                                        <span v-if="cell.dot" class="ptg-dot" :class="[laneColour(cell.dot.colour), 'ptg-dot--' + displayStatus(p)]"></span>
+                                    </span>
+                                </span>
 
                                 <a :href="'/rule/proposal_content_discuss?id=' + p.id" class="pt-step__card">
                                     <div class="pt-step__head">
@@ -241,6 +247,7 @@
     const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
     import { renderMarkdown } from '/static/js/sanitize.js';
     import HelpTip from '/static/js/components/help-tip.js';
+    import { layoutThread } from '/static/js/rule/proposal/ProposalThreadGraph.js';
 
     const rule_id = {{ rule.id }};
     const RULE_TITLE = {{ rule.title | tojson }};
@@ -380,6 +387,11 @@
                         for (const p of thread.proposals) {
                             if (p.message) p._renderedMessage = await renderMarkdown(p.message);
                         }
+                        // Branch lines: the same lanes as the thread graph,
+                        // rows in the graph's order (= the reading order).
+                        const { rows, width } = layoutThread(thread.proposals, { withRule: false });
+                        thread.proposals = rows.map(r => r.v);
+                        thread._lanes = { width, cells: Object.fromEntries(rows.map(r => [r.v.id, r.cells])) };
                     }
                     threads.value = data.threads || [];
                     total_proposals.value = data.total_proposals || 0;
@@ -408,6 +420,7 @@
                 STATUS_FILTERS, EDIT_TYPE_META, filters, filtersActive, statusCount, setStatus, resetFilters,
                 isOpen, toggle, setAll, chronological, latest, plain,
                 fetchThreads, formatDate, scoreColor, editTypeMeta, displayStatus, stepAction, threadTitle, threadOutcome,
+                laneColour: c => (c === 'rule' ? 'ptg-c-rule' : 'ptg-c-' + (c % 8)),
             };
         }
     }).mount('#main-container');

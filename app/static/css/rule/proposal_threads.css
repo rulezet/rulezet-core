@@ -80,25 +80,15 @@
     padding: .5rem 1.25rem .75rem;
 }
 .pt-step {
-    position: relative;
-    padding-left: 2.25rem;
-    /* a revision that branches off an earlier version sits under it */
-    margin-left: calc(var(--pt-depth, 0) * 1.5rem);
+    /* branch lines on the left (.ptg-lanes, proposal_thread_graph.css), the card on the right */
+    display: flex;
+    flex-direction: row;          /* .ptg (the graph's lane variables) is a column */
+    align-items: stretch;
+    --ptg-dot-y: 1.75rem;
 }
-/* the rail joining one version to the next */
-.pt-step::before {
-    content: "";
-    position: absolute;
-    left: .7rem;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: var(--border-color);
-}
-.pt-step:first-child::before { top: 1.4rem; }
-.pt-step:last-child::before  { bottom: calc(100% - 1.4rem); }
-.pt-step:only-child::before  { display: none; }
+.pt-step .ptg-lanes { flex-shrink: 0; }
 
+/* status dot of the collapsed version chain (.pt-chain) */
 .pt-step__dot {
     position: absolute;
     left: .3rem;
@@ -117,6 +107,9 @@
 
 .pt-step__card {
     display: block;
+    flex: 1;
+    min-width: 0;
+    margin-left: .5rem !important;
     margin: .45rem 0;
     padding: .7rem .9rem;
     border: 1px solid var(--border-color);

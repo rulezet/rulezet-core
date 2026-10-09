@@ -1,102 +1,202 @@
 {% extends 'base.html' %}
 {% block title %}Rule Proposals — Rulezet{% endblock %}
 {% block head %}
-<link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/proposal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_thread_graph.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4" id="main-container" v-cloak>
+<div class="container my-4" id="main-container" v-cloak>
 
-    <div class="explorer-banner mb-5">
-        <i class="fa-solid fa-code-branch banner-watermark"></i>
-        <nav aria-label="breadcrumb" class="mb-3">
-            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+    <!-- ── Banner ── -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-code-pull-request banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">Proposals</li>
             </ol>
         </nav>
-        <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon">
-                <i class="fa-solid fa-code-branch"></i>
-            </div>
-            <div>
-                <h2 class="fw-bold mb-1">Rule Change Proposals</h2>
+        <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+            <div class="banner-icon"><i class="fa-solid fa-code-pull-request"></i></div>
+            <div class="flex-grow-1">
+                <h2 class="fw-bold mb-1">Edit Proposals</h2>
                 <div class="banner-accent"></div>
             </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-outline-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#howItWorksModal">
+                    <i class="fa-solid fa-circle-question me-1"></i>How it works
+                </button>
+                <a href="/rule/rules_list" class="btn btn-primary rounded-pill px-4 shadow-sm">
+                    <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
+                </a>
+            </div>
         </div>
-        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-            Manage and review proposed edits to existing rules.
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            Like a pull request for detection rules: anyone can suggest a change to a rule, its owner reviews
+            the diff, discusses it and merges it as a new version — credited to the contributor.
         </p>
     </div>
 
-    <ul class="nav nav-underline justify-content-center w-100 mb-4" role="tablist">
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link active fw-bold px-4" data-bs-toggle="tab" href="#pane-all" role="tab"
-                style="color: var(--text-color);">
-                <i class="fas fa-list me-2"></i>All Proposals
-                <span v-if="pendingCount > 0" class="badge rounded-pill ms-1"
-                    style="font-size: 0.6rem; background: #dc3545; color: white; vertical-align: top; margin-top: 2px;">
-                    [[ pendingCount ]]
-                </span>
-            </a>
-        </li>
-        <li class="nav-item flex-fill text-center">
-            <a class="nav-link fw-bold px-4" data-bs-toggle="tab" href="#pane-mine" role="tab"
-                style="color: var(--text-color);">
-                <i class="fas fa-user me-2"></i>My Submissions
-            </a>
-        </li>
-    </ul>
-
-    <div class="tab-content">
-
-        <!-- ── Tab 1 : Pending ── -->
-        <div class="tab-pane fade show active" id="pane-all" role="tabpanel">
-            <div class="card card-body shadow-sm border-0">
-                <proposal-history-table :csrf-token="'{{ csrf_token() }}'"
-                    api-endpoint="/rule/get_rules_propose_edit_history_page" submit-endpoint="/rule/manage_proposals"
-                    :show-manage="true" @view-diff="loadDiffInModal" @decision-made="fetchPendingCount">
-                </proposal-history-table>
+    <!-- ── KPIs ── -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="ud-kpi-card ud-kpi-card--orange">
+                <div class="ud-kpi-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ stats.review.pending ]]</div>
+                    <div class="ud-kpi-label">Waiting for your review</div>
+                </div>
             </div>
         </div>
-
-        <!-- ── My submissions ── -->
-        <div class="tab-pane fade" id="pane-mine" role="tabpanel">
-            <div class="card card-body shadow-sm border-0">
-                <proposal-history-table :csrf-token="'{{ csrf_token() }}'" api-endpoint="/rule/get_my_proposals"
-                    :show-manage="false" @view-diff="loadDiffInModal">
-                </proposal-history-table>
+        <div class="col-6 col-lg-3">
+            <div class="ud-kpi-card ud-kpi-card--green">
+                <div class="ud-kpi-icon"><i class="fa-solid fa-code-merge"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ stats.review.accepted ]]<span class="fs-6 text-muted fw-normal"> / [[ stats.review.total ]]</span></div>
+                    <div class="ud-kpi-label">Merged on {{ 'Rulezet' if current_user.is_admin() else 'your rules' }}</div>
+                </div>
             </div>
         </div>
-
+        <div class="col-6 col-lg-3">
+            <div class="ud-kpi-card ud-kpi-card--blue">
+                <div class="ud-kpi-icon"><i class="fa-solid fa-paper-plane"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ stats.mine.total ]]</div>
+                    <div class="ud-kpi-label">Submitted by you</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="ud-kpi-card ud-kpi-card--purple">
+                <div class="ud-kpi-icon"><i class="fa-solid fa-trophy"></i></div>
+                <div class="ud-kpi-body">
+                    <div class="ud-kpi-value">[[ acceptanceRate ]]</div>
+                    <div class="ud-kpi-label">Your acceptance rate</div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Diff Modal -->
+    <!-- ── Tables ── -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-3 p-md-4">
+            <div class="prp-tabs" role="tablist">
+                <button type="button" class="prp-tab" :class="{ 'is-active': tab === 'review' }" role="tab" @click="setTab('review')">
+                    <i class="fa-solid fa-inbox"></i>Review queue
+                    <span class="prp-tab-count" :class="{ 'prp-tab-count--alert': stats.review.pending > 0 }">[[ stats.review.pending ]]</span>
+                </button>
+                <button type="button" class="prp-tab" :class="{ 'is-active': tab === 'mine' }" role="tab" @click="setTab('mine')">
+                    <i class="fa-solid fa-user-pen"></i>My submissions
+                    <span class="prp-tab-count">[[ stats.mine.total ]]</span>
+                </button>
+            </div>
+
+            <div class="ud-section-header mb-3">
+                <i class="fas ud-section-icon" :class="tab === 'review' ? 'fa-inbox' : 'fa-user-pen'"></i>
+                <div>
+                    <div class="ud-section-title">[[ tab === 'review' ? 'Review queue' : 'My submissions' ]]</div>
+                    <div class="ud-section-sub" v-if="tab === 'review'">
+                        {% if current_user.is_admin() %}Every proposal on Rulezet (you are an administrator).{% else %}Proposals made by others on the rules you own.{% endif %}
+                        Select pending proposals to accept or reject them in bulk.
+                    </div>
+                    <div class="ud-section-sub" v-else>The changes you suggested on other people's rules, and what became of them.</div>
+                </div>
+            </div>
+
+            <proposal-history-table v-if="tab === 'review'" key="review" mode="review"
+                :csrf-token="csrfToken" api-endpoint="/rule/get_rules_propose_edit_history_page"
+                :status-counts="stats.review" :current-user-id="currentUserId" @view-diff="openDiff" @decision-made="fetchStats">
+            </proposal-history-table>
+            <proposal-history-table v-else key="mine" mode="mine"
+                :csrf-token="csrfToken" api-endpoint="/rule/get_my_proposals"
+                :status-counts="stats.mine" :current-user-id="currentUserId" @view-diff="openDiff">
+            </proposal-history-table>
+        </div>
+    </div>
+
+    <!-- ── Diff modal ── -->
     <div class="modal fade" id="fullscreenDiffModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-code-branch me-2 text-primary"></i>
-                        Changes for: [[ selectedRuleName ]]
+                    <h5 class="modal-title text-truncate">
+                        <i class="fas fa-code-compare me-2 text-primary"></i>
+                        Proposal #[[ diff.id ]] — [[ diff.ruleName ]]
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-0">
-                    <diff-viewer
-                        :key="diffKey"
-                        :initial-left="diffOldContent"
-                        :initial-right="diffNewContent"
-                        left-label="Current rule"
-                        right-label="Proposed change"
-                        mode="read">
+                    <diff-viewer :key="diff.key" :initial-left="diff.old" :initial-right="diff.new"
+                        left-label="Rule at submission" right-label="Proposed change" mode="read">
                     </diff-viewer>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a :href="'/rule/detail_rule/' + diff.ruleId" class="btn btn-outline-secondary rounded-pill px-3">
+                        <i class="fas fa-arrow-up-right-from-square me-1"></i>Open rule
+                    </a>
+                    <a :href="'/rule/proposal_content_discuss?id=' + diff.id" class="btn btn-primary rounded-pill px-4">
+                        <i class="fas fa-comments me-1"></i>Open discussion
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── How it works modal ── -->
+    <div class="modal fade" id="howItWorksModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-code-pull-request me-2 text-primary"></i>How edit proposals work</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="prp-steps mb-4">
+                        <div class="prp-step">
+                            <div class="prp-step-num">1</div>
+                            <div class="prp-step-title">Find a rule</div>
+                            <p class="prp-step-text">Open any rule and go to its <strong>Suggest an edit</strong> tab.</p>
+                        </div>
+                        <div class="prp-step">
+                            <div class="prp-step-num">2</div>
+                            <div class="prp-step-title">Propose your change</div>
+                            <p class="prp-step-text">Edit the content, pick a type (typo, security fix…) and explain why. The syntax is checked before it is sent.</p>
+                        </div>
+                        <div class="prp-step">
+                            <div class="prp-step-num">3</div>
+                            <div class="prp-step-title">Discuss &amp; revise</div>
+                            <p class="prp-step-text">The owner is notified. Everyone can comment on the diff; a proposal can be revised into a new version (v2, v3…).</p>
+                        </div>
+                        <div class="prp-step">
+                            <div class="prp-step-num">4</div>
+                            <div class="prp-step-title">Merge</div>
+                            <p class="prp-step-text">The owner (or an admin) accepts: the rule gets a new version, credited to you in its history.</p>
+                        </div>
+                    </div>
+
+                    <div class="rounded-3 border p-3" style="background:var(--light-bg-color);">
+                        <div class="fw-bold small text-uppercase text-muted mb-2">Statuses</div>
+                        <div class="prp-status-legend">
+                            <div><span class="prp-status prp-status--pending">pending</span>Waiting for the rule owner's review.</div>
+                            <div><span class="prp-status prp-status--accepted">accepted</span>Merged into the rule as a new version.</div>
+                            <div><span class="prp-status prp-status--rejected">rejected</span>Declined — the reason, if any, is shown in the details. It can still be revised.</div>
+                            <div><span class="prp-status prp-status--superseded">superseded</span>Closed automatically: another version of the same thread was accepted.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="/docs/full#ch9" class="btn btn-outline-primary rounded-pill px-3">
+                        <i class="fa-solid fa-book me-1"></i>Documentation
+                    </a>
+                    <a href="/rule/rules_list" class="btn btn-primary rounded-pill px-4">
+                        <i class="fa-solid fa-pen-to-square me-1"></i>Suggest an edit
+                    </a>
                 </div>
             </div>
         </div>
@@ -107,8 +207,7 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref } = Vue;
-    import { message_list } from '/static/js/toaster.js';
+    const { createApp, ref, reactive, computed } = Vue;
     import ProposalHistoryTable from '/static/js/rule/proposal/ProposalHistoryTable.js';
     import DiffViewer from '/static/js/components/diff-viewer.js';
 
@@ -119,29 +218,41 @@
             'diff-viewer': DiffViewer,
         },
         setup() {
-            const selectedRuleName = ref('');
-            const diffOldContent   = ref('');
-            const diffNewContent   = ref('');
-            const diffKey          = ref(0);
-            const pendingCount     = ref(0);
+            const csrfToken = '{{ csrf_token() }}';
+            const currentUserId = {{ current_user.id }};
+            const empty = () => ({ pending: 0, accepted: 0, rejected: 0, superseded: 0, total: 0 });
+            const stats = reactive({ review: empty(), mine: empty() });
 
-            async function fetchPendingCount() {
-                const res = await fetch('/rule/get_rules_propose_edit_page?page=1');
-                if (res.ok) {
-                    const data = await res.json();
-                    pendingCount.value = data.total_count || 0;
-                }
-            }
-            fetchPendingCount();
-
-            function loadDiffInModal(rule) {
-                selectedRuleName.value = rule.rule_name;
-                diffOldContent.value   = rule.old_content || '';
-                diffNewContent.value   = rule.proposed_content || '';
-                diffKey.value++;
+            const tabs = ['review', 'mine'];
+            const tab = ref(tabs.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'review');
+            function setTab(value) {
+                tab.value = value;
+                history.replaceState(null, '', '#' + value);
             }
 
-            return { message_list, selectedRuleName, loadDiffInModal, pendingCount, fetchPendingCount, diffOldContent, diffNewContent, diffKey };
+            async function fetchStats() {
+                try {
+                    const res = await fetch('/rule/get_proposal_stats');
+                    if (res.ok) Object.assign(stats, await res.json());
+                } catch { /* KPIs stay at 0 */ }
+            }
+            fetchStats();
+
+            const acceptanceRate = computed(() => {
+                const decided = stats.mine.accepted + stats.mine.rejected;
+                return decided ? Math.round(stats.mine.accepted / decided * 100) + '%' : '—';
+            });
+
+            const diff = reactive({ id: null, ruleId: null, ruleName: '', old: '', new: '', key: 0 });
+            function openDiff(p) {
+                Object.assign(diff, {
+                    id: p.id, ruleId: p.rule_id, ruleName: p.rule_name,
+                    old: p.old_content || '', new: p.proposed_content || '', key: diff.key + 1,
+                });
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('fullscreenDiffModal')).show();
+            }
+
+            return { csrfToken, currentUserId, stats, tab, setTab, fetchStats, acceptanceRate, diff, openDiff };
         }
     }).mount('#main-container');
 </script>

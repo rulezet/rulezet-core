@@ -196,6 +196,17 @@
                     <button type="button" class="btn-close btn-close-sm ms-auto" style="font-size:.6rem;filter:invert(27%) sepia(99%) saturate(1200%) hue-rotate(330deg);" @click="submitError = null"></button>
                 </div>
 
+                <!-- Live check: never twice the same content in a thread -->
+                <div v-if="duplicateOf && proposalContent !== originalContent" class="d-flex align-items-start gap-2 mb-3 px-3 py-2 rounded-3"
+                     style="background:rgba(253,126,20,.08);border:1px solid rgba(253,126,20,.35);font-size:.83rem;color:#c25e00;">
+                    <i class="fa-solid fa-clone mt-1 flex-shrink-0"></i>
+                    <span>
+                        This content already exists in the thread — <strong>[[ duplicateOf.label ]]</strong>.
+                        <a v-if="duplicateOf.url" :href="duplicateOf.url" class="ms-1">Open it</a>
+                        <br><span class="opacity-75">Each version must bring something new (formatting is ignored).</span>
+                    </span>
+                </div>
+
                 <smart-editor
                     v-model="proposalContent"
                     mode="code"
@@ -253,7 +264,7 @@
                style="background:transparent;border:1px solid var(--border-color);color:var(--subtle-text-color);">
                 <i class="fa-solid fa-arrow-left me-1"></i>View all proposals
             </a>
-            <button type="button" @click="submitProposal" :disabled="submitting"
+            <button type="button" @click="submitProposal" :disabled="submitting || !!duplicateOf"
                     class="btn btn-primary rounded-pill px-4 shadow-sm fw-bold">
                 <span v-if="submitting" class="spinner-border spinner-border-sm me-1"></span>
                 <i v-else class="fas fa-paper-plane me-1"></i>
@@ -278,7 +289,7 @@
 import SmartEditor from '/static/js/components/smart-editor.js';
 import DiffViewer  from '/static/js/components/diff-viewer.js';
 import { create_message } from '/static/js/toaster.js';
-const { createApp, ref, onMounted } = Vue;
+const { createApp, ref, computed, onMounted } = Vue;
 
 const RULE_ID     = {{ rule.id }};
 const RULE_TITLE  = {{ rule.title | tojson }};
@@ -318,6 +329,17 @@ createApp({
 
         const fromProposalId = ref(FROM_PROPOSAL_ID ? parseInt(FROM_PROPOSAL_ID) : null);
         const fromVersion    = ref(null);
+        // Revising: every content already in the thread (any branch) plus
+        // the rule when the thread started and the rule now — a revision
+        // equal to one of them is refused by the server too.
+        const knownContents  = ref([]);
+        const normalize = t => (t || '').replace(/\s+/g, '');
+        const duplicateOf = computed(() => {
+            if (!fromProposalId.value) return null;
+            const n = normalize(proposalContent.value);
+            if (!n) return null;
+            return knownContents.value.find(k => k.norm === n) || null;
+        });
 
         onMounted(async () => {
             try {
@@ -326,6 +348,15 @@ createApp({
                     const data = await res.json();
                     if (data.proposal) {
                         fromVersion.value     = data.proposal.version || null;
+                        knownContents.value = [
+                            ...(data.proposal.thread || []).map(v => ({
+                                norm: normalize(v.proposed_content),
+                                label: `identical to v${v.version} (proposal #${v.id})` + (v.id === fromProposalId.value ? ' — the version you are revising' : ''),
+                                url: v.discuss_url,
+                            })),
+                            { norm: normalize(data.proposal.thread_base_content), label: 'identical to the rule as it was when this thread started', url: null },
+                            { norm: normalize(data.proposal.rule_content), label: 'identical to the current rule', url: null },
+                        ].filter(k => k.norm);
                         proposalContent.value = data.proposal.proposed_content || '';
                         originalContent.value = data.proposal.proposed_content || '';
                         ruleFormat.value       = data.proposal.rule_format || RULE_FORMAT;
@@ -387,7 +418,7 @@ createApp({
             proposalContent, originalContent, ruleFormat,
             showOriginal, showDiff, editType, editTypes,
             proposalMessage, messageMode, messageModes,
-            submitting, submitError, submitProposal,
+            submitting, submitError, submitProposal, duplicateOf,
         };
     }
 }).mount('#pe-app');

@@ -1,0 +1,206 @@
+/*
+ * proposal_thread_graph.css — ProposalThreadGraph
+ * (js/rule/proposal/ProposalThreadGraph.js): a proposal thread drawn like a
+ * git graph, one column and one colour per branch. Every lane cell stacks
+ * line segments (.ptg-seg--vtop/vbot/vfull/hleft/hright/hfull) that stretch
+ * the full row height, so rows of any height stay connected.
+ */
+
+.ptg {
+    --ptg-cell: 24px;
+    --ptg-dot-y: 18px;
+    --ptg-w: 2px;
+    display: flex;
+    flex-direction: column;
+}
+.ptg--compact { --ptg-dot-y: 15px; --ptg-cell: 22px; }
+
+/* ── Branch palette (lane colours) ── */
+.ptg-c-rule { --lane: #6c757d; }
+.ptg-c-0 { --lane: #0d6efd; }
+.ptg-c-1 { --lane: #d63384; }
+.ptg-c-2 { --lane: #20c997; }
+.ptg-c-3 { --lane: #fd7e14; }
+.ptg-c-4 { --lane: #6f42c1; }
+.ptg-c-5 { --lane: #0dcaf0; }
+.ptg-c-6 { --lane: #ffc107; }
+.ptg-c-7 { --lane: #198754; }
+
+/* ── Legend ── */
+.ptg-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+    margin-bottom: .75rem;
+}
+.ptg-branch-chip {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .4rem;
+    font-size: .74rem;
+    color: var(--text-color);
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--lane);
+    border-radius: 8px;
+    padding: .3rem .65rem;
+    cursor: pointer;
+    transition: opacity .12s, box-shadow .12s;
+}
+.ptg-branch-chip:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
+.ptg-branch-chip.is-focus { box-shadow: 0 0 0 2px var(--lane); }
+.ptg-branch-chip.is-dim { opacity: .5; }
+.ptg-branch-swatch { width: 10px; height: 10px; border-radius: 50%; background: var(--lane); }
+.ptg-branch-info { color: var(--subtle-text-color); }
+.ptg-expand-all {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin-left: auto;
+    border: 1px solid rgba(13, 110, 253, .3);
+    background: var(--card-bg-color);
+    color: #0d6efd;
+    border-radius: 99px;
+    padding: .25rem .8rem;
+    font-size: .74rem;
+    font-weight: 600;
+}
+.ptg-expand-all:hover { background: rgba(13, 110, 253, .08); }
+
+/* ── Rows and lanes ── */
+.ptg-row { display: flex; align-items: stretch; transition: opacity .15s; }
+.ptg-row.is-faded { opacity: .38; }
+.ptg-row.is-faded:hover { opacity: 1; }
+.ptg-lanes { display: flex; flex-shrink: 0; }
+.ptg-cell { position: relative; width: var(--ptg-cell); flex-shrink: 0; }
+
+.ptg-seg { position: absolute; background: var(--lane); }
+.ptg-seg--vfull,
+.ptg-seg--vtop,
+.ptg-seg--vbot { left: 50%; width: var(--ptg-w); margin-left: calc(var(--ptg-w) / -2); }
+.ptg-seg--vfull { top: 0; bottom: 0; }
+.ptg-seg--vtop  { top: 0; height: var(--ptg-dot-y); }
+.ptg-seg--vbot  { top: var(--ptg-dot-y); bottom: 0; }
+.ptg-seg--hleft,
+.ptg-seg--hright,
+.ptg-seg--hfull { top: var(--ptg-dot-y); height: var(--ptg-w); margin-top: calc(var(--ptg-w) / -2); }
+.ptg-seg--hleft  { left: 0; right: 50%; }
+.ptg-seg--hright { left: 50%; right: 0; }
+.ptg-seg--hfull  { left: 0; right: 0; }
+.ptg-seg.is-dashed {
+    background: repeating-linear-gradient(to bottom, var(--lane) 0 4px, transparent 4px 8px);
+}
+
+/* Dots: filled with the status colour, ringed with the branch colour */
+.ptg-dot {
+    position: absolute;
+    z-index: 1;
+    left: 50%;
+    top: var(--ptg-dot-y);
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border-radius: 50%;
+    border: 3px solid var(--lane);
+    background: var(--card-bg-color);
+}
+.ptg-dot--pending    { background: #fd7e14; }
+.ptg-dot--accepted   { background: #198754; }
+.ptg-dot--rejected   { background: #dc3545; }
+.ptg-dot--superseded { background: #adb5bd; }
+.ptg-dot--rule {
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border-width: 2px;
+    color: var(--lane);
+    font-size: .58rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ptg-row.is-current .ptg-dot:not(.ptg-dot--rule) {
+    width: 18px;
+    height: 18px;
+    margin: -9px 0 0 -9px;
+    box-shadow: 0 0 0 4px rgba(13, 110, 253, .25);
+}
+
+/* ── Cards ── */
+.ptg-card {
+    flex: 1;
+    min-width: 0;
+    margin: 3px 0 3px 6px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+.ptg-card:hover { background: var(--light-bg-color); border-color: var(--border-color); }
+.ptg-row.is-current .ptg-card {
+    cursor: default;
+    background: rgba(13, 110, 253, .06);
+    border-color: rgba(13, 110, 253, .35);
+}
+.ptg-card--rule { cursor: default; }
+.ptg-card--rule.is-link { cursor: pointer; }
+.ptg-card--rule:not(.is-link):hover { background: transparent; border-color: transparent; }
+.ptg-merged-title { color: #198754; }
+.ptg-card--gap {
+    font-size: .76rem;
+    color: var(--subtle-text-color);
+    font-style: italic;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+.ptg-gap-link { color: #0d6efd; font-weight: 600; font-style: normal; margin-left: .35rem; }
+
+.ptg-head { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; font-size: .8rem; }
+.ptg-version { font-weight: 800; color: var(--text-color); }
+.ptg-status {
+    font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: .12rem .5rem; border-radius: 99px; border: 1px solid transparent;
+}
+.ptg-status--pending    { color: #fd7e14; background: rgba(253, 126, 20, .12); border-color: rgba(253, 126, 20, .3); }
+.ptg-status--accepted   { color: #198754; background: rgba(25, 135, 84, .12);  border-color: rgba(25, 135, 84, .3); }
+.ptg-status--rejected   { color: #dc3545; background: rgba(220, 53, 69, .12);  border-color: rgba(220, 53, 69, .3); }
+.ptg-status--superseded { color: #6f42c1; background: rgba(111, 66, 193, .12); border-color: rgba(111, 66, 193, .3); }
+
+.ptg-here {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: .12rem .55rem; border-radius: 99px;
+    background: #0d6efd; color: #fff;
+}
+.ptg-tag {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .66rem; font-weight: 700; padding: .1rem .5rem; border-radius: 6px;
+}
+.ptg-tag--branch { color: var(--lane); border: 1px solid var(--lane); background: var(--card-bg-color); }
+.ptg-tag--you    { background: rgba(13, 110, 253, .12); color: #0d6efd; }
+.ptg-meta { color: var(--subtle-text-color); font-size: .74rem; }
+.ptg-author { font-weight: 600; color: var(--text-color); }
+.ptg-id { font-family: var(--bs-font-monospace); }
+
+.ptg-message {
+    font-size: .78rem; color: var(--subtle-text-color); margin-top: .15rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ptg-event {
+    display: flex; align-items: baseline; gap: .35rem;
+    font-size: .73rem; font-weight: 600; margin-top: .2rem; min-width: 0;
+}
+.ptg-event i { font-size: .68rem; }
+.ptg-event--pending    { color: #fd7e14; }
+.ptg-event--accepted   { color: #198754; }
+.ptg-event--rejected   { color: #dc3545; }
+.ptg-event--superseded { color: var(--subtle-text-color); }
+.ptg-reason {
+    font-weight: 400; font-style: italic; color: var(--subtle-text-color);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ptg--compact .ptg-event { margin-top: .1rem; }
+.ptg-extra { margin-top: .35rem; cursor: default; }
+.ptg-dot--gap { background: var(--card-bg-color); border-style: dashed; }

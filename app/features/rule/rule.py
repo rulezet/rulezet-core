@@ -1964,33 +1964,63 @@ def get_rules_propose_edit_page() -> jsonify:
         "total_count": result.total,
     })
 
+def _proposal_list_args():
+    """Filters of the Proposals page tables, from the query string."""
+    return dict(
+        search=(request.args.get('search') or '').strip()[:200],
+        status=request.args.get('status', '', type=str),
+        edit_type=(request.args.get('edit_type') or '').strip()[:50],
+        sort=request.args.get('sort', 'recent', type=str),
+        per_page=request.args.get('per_page', 10, type=int),
+    )
+
+def _proposal_threads_response(page, **scope):
+    """The Proposals page grouped by thread (?group=thread)."""
+    rows, total_pages, total_threads, pending = RuleModel.get_proposal_list_threads(
+        page, **scope, **_proposal_list_args())
+    return jsonify({
+        "rules_list": rows,
+        "total_pages_old": total_pages,
+        "total_items": total_threads,
+        "total_count": pending,
+        "grouped": True,
+    })
+
 @rule_blueprint.route('/get_my_proposals', methods=['GET'])
 @login_required
 def get_my_proposals() -> jsonify:
     """Get proposals submitted by current user"""
     page = request.args.get('page', 1, type=int)
-    search = request.args.get('search', '', type=str)
-    status = request.args.get('status', '', type=str)
-
-    result = RuleModel.get_my_proposals_page(page, current_user.id, search=search, status=status)
+    if request.args.get('group') == 'thread':
+        return _proposal_threads_response(page, user_id=current_user.id)
+    result = RuleModel.get_my_proposals_page(page, current_user.id, **_proposal_list_args())
     return jsonify({
         "rules_list": RuleModel.with_thread_positions([r.to_json() for r in result]),
         "total_pages_old": result.pages,
+        "total_items": result.total,
     })
 
 @rule_blueprint.route('/get_rules_propose_edit_history_page', methods=['GET'])
 @login_required
 def get_rules_propose_edit_history_page() -> jsonify:
     page = request.args.get('page', 1, type=int)
-    search = request.args.get('search', '', type=str)
-    status = request.args.get('status', '', type=str)
-
-    result , total_pending = RuleModel.get_rules_propose_edit_history_page(page, search=search, status=status, user_id=current_user.id, is_admin=current_user.is_admin())
+    if request.args.get('group') == 'thread':
+        return _proposal_threads_response(
+            page, owned_by=None if current_user.is_admin() else current_user.id)
+    result, total_pending = RuleModel.get_rules_propose_edit_history_page(
+        page, user_id=current_user.id, is_admin=current_user.is_admin(), **_proposal_list_args())
     return jsonify({
         "rules_list": RuleModel.with_thread_positions([r.to_json() for r in result]),
         "total_pages_old": result.pages,
+        "total_items": result.total,
         "total_count": total_pending
     })
+
+@rule_blueprint.route('/get_proposal_stats', methods=['GET'])
+@login_required
+def get_proposal_stats() -> jsonify:
+    """Proposals per status, in the review queue and among the user's own."""
+    return jsonify(RuleModel.get_proposal_stats(current_user.id, current_user.is_admin()))
 
 @rule_blueprint.route("/get_rules_propose_page", methods=['GET'])
 def get_rules_propose_page() -> jsonify:
@@ -2074,6 +2104,11 @@ def propose_edit(rule_id) -> redirect:
 
     if current_normalized == proposed_normalized:
         return _err("Proposed content is the same as the current content (ignoring formatting).")
+
+    open_duplicate = RuleModel.find_open_duplicate(rule_id, proposed_content)
+    if open_duplicate:
+        return _err(f"An open proposal (#{open_duplicate.id}) already proposes this exact content — "
+                    f"comment on it or revise it instead.", 409)
 
     rule_dict = rule.to_json()
     rule_dict['to_string'] = proposed_content
@@ -2161,10 +2196,14 @@ def propose_revision(proposal_id) -> redirect:
     if not rule:
         return _err("Rule not found.", 404)
 
-    current_normalized  = "".join((previous.proposed_content or "").split())
-    proposed_normalized = "".join(proposed_content.split())
-    if current_normalized == proposed_normalized:
-        return _err("Proposed content is the same as the proposal it revises (ignoring formatting).")
+    # Never twice the same content in a thread: compared (ignoring
+    # formatting) with every version on every branch, the rule when the
+    # thread started, and the rule as it is now.
+    duplicate = RuleModel.find_thread_duplicate(previous, proposed_content)
+    if duplicate:
+        return _err(f"This revision changes nothing new. {duplicate}")
+    if "".join((rule.to_string or "").split()) == "".join(proposed_content.split()):
+        return _err("This revision changes nothing new. It is identical to the current rule.")
 
     rule_dict = rule.to_json()
     rule_dict['to_string'] = proposed_content
@@ -2300,6 +2339,8 @@ def manage_proposals() -> jsonify:
         excluded_ids=excluded_ids,
         reviewed_by_id=current_user.id,
         is_admin=current_user.is_admin(),
+        search=str(data.get("search") or "").strip()[:200],
+        edit_type=str(data.get("edit_type") or "").strip()[:50],
     )
 
     if result["success"]:
@@ -2491,6 +2532,7 @@ def get_history_rule():
 @login_required
 def get_proposal() -> jsonify:
     """Get the detail porposal"""
+    from app.core.db_class.db import UnifiedComment
     proposalId = as_db_id(request.args.get('id'))
     proposal = RuleModel.get_rule_proposal(proposalId) if proposalId else None
     if not proposal or not RuleModel.get_rule(proposal.rule_id):
@@ -2514,6 +2556,7 @@ def get_proposal() -> jsonify:
 
     thread = RuleModel.get_proposal_thread(proposal)
     d['thread_status'] = thread['status']
+    d['thread_base_content'] = thread['root'].old_content
     d['thread'] = [{
         'id': p.id,
         'version': version,
@@ -2526,6 +2569,12 @@ def get_proposal() -> jsonify:
         'timestamp': p.timestamp.isoformat() if p.timestamp else None,
         'discuss_url': f"/rule/proposal_content_discuss?id={p.id}",
         'proposed_content': p.proposed_content,
+        'message': p.message,
+        'edit_type': p.edit_type,
+        'reviewed_at': p.reviewed_at.isoformat() if p.reviewed_at else None,
+        'reviewed_by_name': f"{p.reviewer.first_name} {p.reviewer.last_name}" if p.reviewer else None,
+        'rejection_reason': p.rejection_reason,
+        'comment_count': UnifiedComment.query.filter_by(object_type='proposal', object_id=p.id, is_active=True).count(),
     } for p, depth, version in thread['proposals']]
     d['version'] = next(v['version'] for v in d['thread'] if v['id'] == proposal.id)
     d['rule_content'] = rule_obj.to_string if rule_obj else None

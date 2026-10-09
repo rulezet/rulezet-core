@@ -177,44 +177,6 @@
 .md-body a { color:#0d6efd; }
 .md-body blockquote { border-left:3px solid #0d6efd; margin:0; padding:.4rem .8rem; color:var(--subtle-text-color); font-style:italic; background:var(--light-bg-color); border-radius:0 6px 6px 0; }
 
-/* ── Thread navigator (the versions of this proposal's thread) ── */
-.pd-thread {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5rem;
-}
-.pd-thread__version {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    padding: .35rem .75rem;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    background: var(--card-bg-color);
-    color: var(--text-color);
-    font-size: .8rem;
-    text-decoration: none;
-}
-.pd-thread__version:hover { border-color: #0d6efd; color: var(--text-color); }
-.pd-thread__version--current {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 2px rgba(13, 110, 253, .25);
-    font-weight: 700;
-}
-.pd-thread__num { font-weight: 700; }
-.pd-thread__parent { color: var(--subtle-text-color); font-size: .72rem; }
-.pd-thread__dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: var(--subtle-text-color);
-}
-.pd-thread__dot--pending    { background: #ffc107; }
-.pd-thread__dot--accepted   { background: #198754; }
-.pd-thread__dot--rejected   { background: #dc3545; }
-.pd-thread__dot--superseded { background: #6f42c1; }
-
 /* ── Diff: what is compared with what ── */
 .pd-compare {
     display: flex;
@@ -231,3 +193,11 @@
 .proposal-decision-box__reason { flex-basis: 100%; }
 .proposal-decision-box__reason textarea { font-size: .85rem; }
 .proposal-decision-box__note { font-size: .78rem; color: var(--subtle-text-color); }
+
+/* "Revise" bar at the bottom of the conversation — same shape as the decision bar */
+.proposal-revise-box {
+    background: rgba(111, 66, 193, .05);
+    border-color: rgba(111, 66, 193, .25);
+    border-left-color: #6f42c1;
+}
+.proposal-revise-box .proposal-decision-box__icon { background: #6f42c1; }

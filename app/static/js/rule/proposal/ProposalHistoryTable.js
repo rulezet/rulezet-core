@@ -1,604 +1,715 @@
 import PaginationComponent from '/static/js/rule/paginationComponent.js';
+import UserChip from '/static/js/components/UserChip.js';
+import ProposalThreadGraph from '/static/js/rule/proposal/ProposalThreadGraph.js';
 import { create_message } from '/static/js/toaster.js';
+import { renderMarkdown, hardenUserHtml } from '/static/js/sanitize.js';
+
+const { ref, reactive, computed, watch, onMounted } = Vue;
+
+/**
+ * ProposalHistoryTable — edit proposals table of the Proposals page
+ * (/rule/rule_propose_edit): the review queue and "My submissions".
+ *
+ * Same chrome as GithubProposalTable / DuplicateTable (.dt-* from
+ * components/dataTable.css): toolbar (search, filters, sort, table/card
+ * toggle, column picker), selection + floating bulk bar, per-page footer.
+ * Unlike them it fetches its own pages — search, filters and sort run
+ * server side, across every result.
+ */
+
+export const EDIT_TYPES = [
+    { value: 'content_update', label: 'Content update',  icon: 'fa-solid fa-code' },
+    { value: 'typo',           label: 'Typo / syntax',   icon: 'fa-solid fa-spell-check' },
+    { value: 'security',       label: 'Security fix',    icon: 'fa-solid fa-shield-halved' },
+    { value: 'documentation',  label: 'Documentation',   icon: 'fa-solid fa-book' },
+    { value: 'legal',          label: 'Legal / license', icon: 'fa-solid fa-scale-balanced' },
+    { value: 'other',          label: 'Other',           icon: 'fa-solid fa-ellipsis' },
+];
+
+const STATUSES = [
+    { value: '',           label: 'All' },
+    { value: 'pending',    label: 'Pending' },
+    { value: 'accepted',   label: 'Accepted' },
+    { value: 'rejected',   label: 'Rejected' },
+    { value: 'superseded', label: 'Superseded' },
+];
+
+const SORTS = [
+    { value: 'recent', label: 'Newest first' },
+    { value: 'oldest', label: 'Oldest first' },
+    { value: 'score',  label: 'Biggest change' },
+    { value: 'rule',   label: 'Rule name (A→Z)' },
+];
+
+const COLUMNS = [
+    { key: 'author',   label: 'Author',    hideable: true },
+    { key: 'type',     label: 'Type',      hideable: true },
+    { key: 'change',   label: 'Change',    hideable: true },
+    { key: 'comments', label: 'Comments',  hideable: true },
+    { key: 'status',   label: 'Status',    hideable: false },
+    { key: 'date',     label: 'Submitted', hideable: true },
+    { key: 'reviewer', label: 'Reviewed by', hideable: true },
+];
+
+function readPrefs(key) {
+    try { return JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch { return {}; }
+}
+function writePrefs(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
+}
 
 const ProposalHistoryTable = {
+    name: 'ProposalHistoryTable',
+    delimiters: ['[[', ']]'],
+    components: { 'pagination-component': PaginationComponent, UserChip, ProposalThreadGraph },
     props: {
-        csrfToken: { type: String, required: true },
-        apiEndpoint: { type: String, default: '/rule/get_rules_propose_edit_history_page' },
+        csrfToken:      { type: String, required: true },
+        apiEndpoint:    { type: String, required: true },
         submitEndpoint: { type: String, default: '/rule/manage_proposals' },
-        showManage: { type: Boolean, default: false },
-        showDiffButton: { type: Boolean, default: true }
+        // review: proposals on the user's rules (all of them for an admin),
+        // with accept / reject; mine: the user's own submissions.
+        mode:           { type: String, default: 'review' },
+        statusCounts:   { type: Object, default: () => ({}) },
+        currentUserId:  { type: Number, default: null },
     },
     emits: ['view-diff', 'decision-made'],
-    delimiters: ['[[', ']]'],
-    components: { 'pagination-component': PaginationComponent },
-    data() {
-        return {
-            proposals: [],
-            groupedProposals: [],
-            expandedRules: new Set(),
-            expandedProposals: new Set(),
-            totalPages: 1,
-            currentPage: 1,
-            totalCount: 0,
-            transitioning: false,
-            initialLoad: true,
-            loading: false,
-            searchQuery: '',
-            statusFilter: '',
-            searchTimer: null,
-            // available statuses based on actual data
-            availableStatuses: new Set(),
-            selectedIds: new Set(),
-            excludedIds: new Set(),
-            isAllSelectedMode: false,
-        };
-    },
-    computed: {
-        selectedCount() {
-            if (this.isAllSelectedMode) return this.totalCount - this.excludedIds.size;
-            return this.selectedIds.size;
-        },
-        allPendingOnPage() {
-            return this.proposals.filter(p => p.status === 'pending');
-        },
-        isPageFullySelected() {
-            if (this.allPendingOnPage.length === 0) return false;
-            return this.allPendingOnPage.every(p => this.isChecked(p.id));
-        },
-        hasPendingTotal() {
-            return this.groupedProposals.some(g => g.counts.pending > 0);
-        },
-        statusOptions() {
-            const all = [
-                { value: 'pending', label: 'Pending' },
-                { value: 'accepted', label: 'Accepted' },
-                { value: 'rejected', label: 'Rejected' },
-                { value: 'superseded', label: 'Superseded' },
-            ];
-            return all.filter(opt => this.availableStatuses.has(opt.value));
-        }
-    },
-    methods: {
-        async fetchProposals(page = 1) {
-            // soft transition — don't flash empty state, just fade
-            if (!this.initialLoad) {
-                this.transitioning = true;
-                await new Promise(r => setTimeout(r, 150));
-            }
-            this.loading = true;
+    setup(props, { emit }) {
+        const canManage = props.mode === 'review';
+        const prefsKey = `rz-proposals-v2-${props.mode}`;
+        const prefs = readPrefs(prefsKey);
+
+        const items = ref([]);
+        const loading = ref(false);
+        const loaded = ref(false);
+        const page = ref(1);
+        const totalPages = ref(1);
+        const totalItems = ref(0);
+        const pendingTotal = ref(0);
+
+        const search = ref('');
+        const status = ref(canManage ? 'pending' : '');
+        const editType = ref('');
+        const sort = ref('recent');
+        const perPage = ref(prefs.perPage || 20);
+        const viewMode = ref(prefs.viewMode || 'thread');   // thread | table | card
+        const hiddenColumns = reactive(new Set(prefs.hidden || (props.mode === 'mine' ? ['author'] : ['reviewer'])));
+        const showColPicker = ref(false);
+        const expanded = reactive(new Set());
+
+        const visibleColumns = computed(() => COLUMNS.filter(c => !hiddenColumns.has(c.key)));
+        const colspan = computed(() => visibleColumns.value.length + 3);
+
+        watch([perPage, viewMode, () => [...hiddenColumns]], () => {
+            writePrefs(prefsKey, { perPage: perPage.value, viewMode: viewMode.value, hidden: [...hiddenColumns] });
+        });
+
+        // ── Fetch ─────────────────────────────────────────────────────────
+        let fetchSeq = 0;
+        async function fetchPage(p = 1) {
+            const seq = ++fetchSeq;
+            loading.value = true;
             try {
                 const params = new URLSearchParams({
-                    page,
-                    search: this.searchQuery,
-                    status: this.statusFilter,
+                    page: p, per_page: perPage.value, search: search.value.trim(),
+                    group: viewMode.value === 'thread' ? 'thread' : '',
+                    status: status.value, edit_type: editType.value, sort: sort.value,
                 });
-                const res = await fetch(`${this.apiEndpoint}?${params.toString()}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    this.proposals = data.rules_list || data.rules_pendings_list || [];
-                    this.totalPages = data.total_pages_old || data.total_pages_pending || 1;
-                    this.totalCount = data.total_count || 0;
-                    this.currentPage = page;
-                    this.groupProposals();
-                    this.expandedRules = new Set();
-                    this.expandedProposals = new Set();
-                    // update available statuses from all loaded data
-                    this.proposals.forEach(p => this.availableStatuses.add(p.status));
-                }
+                const res = await fetch(`${props.apiEndpoint}?${params}`);
+                if (!res.ok) throw new Error(res.status);
+                const data = await res.json();
+                if (seq !== fetchSeq) return;
+                items.value = data.rules_list || [];
+                totalPages.value = data.total_pages_old || 1;
+                totalItems.value = data.total_items ?? items.value.length;
+                pendingTotal.value = data.total_count ?? 0;
+                page.value = p;
+                expanded.clear();
+                openMessages.clear();
+                overflowing.clear();
+                items.value.forEach(renderMessage);
             } catch (err) {
-                console.error("Fetch error:", err);
+                if (seq === fetchSeq) create_message('Could not load the proposals.', 'danger-subtle');
             } finally {
-                this.loading = false;
-                this.transitioning = false;
-                this.initialLoad = false;
+                if (seq === fetchSeq) { loading.value = false; loaded.value = true; }
             }
-        },
+        }
 
-        groupProposals() {
+        let searchTimer = null;
+        watch(search, () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => { clearSelection(); fetchPage(1); }, 350);
+        });
+        watch([status, editType, sort, perPage], () => { clearSelection(); fetchPage(1); });
+        // The thread view pages by thread, the others by proposal.
+        watch(() => viewMode.value === 'thread', () => { clearSelection(); fetchPage(1); });
+
+        // Thread view: the page's proposals (already in thread order, see
+        // get_proposal_list_threads) grouped by thread.
+        const threads = computed(() => {
             const map = new Map();
-            for (const p of this.proposals) {
-                if (!map.has(p.rule_id)) {
-                    map.set(p.rule_id, {
-                        rule_id: p.rule_id,
-                        rule_name: p.rule_name,
-                        proposals: [],
-                        counts: { pending: 0, accepted: 0, rejected: 0, superseded: 0 }
-                    });
-                }
-                const group = map.get(p.rule_id);
-                group.proposals.push(p);
-                if (p.status in group.counts) group.counts[p.status]++;
+            for (const p of items.value) {
+                const key = p.thread_root_id || p.id;
+                if (!map.has(key)) map.set(key, { id: key, rule_id: p.rule_id, rule_name: p.rule_name,
+                    status: p.thread_status || 'open', versions: [], pending: 0, last: 0 });
+                const t = map.get(key);
+                t.versions.push({ ...p, version: p.thread_version || 1, discuss_url: discussUrl(p) });
+                if (p.status === 'pending') t.pending++;
+                t.last = Math.max(t.last, new Date(p.timestamp).getTime());
             }
-            // Within a rule, the versions of a thread (a proposal and its
-            // revisions) follow each other, oldest first, under a thread header.
-            for (const group of map.values()) {
-                group.proposals.sort((a, b) =>
-                    (a.thread_root_id - b.thread_root_id) || (a.thread_version - b.thread_version));
-                group.proposals.forEach((p, i) => {
-                    p._threadStart = i === 0 || group.proposals[i - 1].thread_root_id !== p.thread_root_id;
-                });
-            }
-            this.groupedProposals = Array.from(map.values());
-        },
+            return [...map.values()];
+        });
 
-        onSearchInput() {
-            clearTimeout(this.searchTimer);
-            this.searchTimer = setTimeout(() => this.fetchProposals(1), 350);
-        },
+        function setStatus(value) { status.value = value; }
+        function resetFilters() {
+            search.value = ''; editType.value = ''; status.value = ''; sort.value = 'recent';
+        }
+        const hasFilters = computed(() => !!(search.value.trim() || editType.value || status.value));
 
-        toggleRule(ruleId) {
-            const s = new Set(this.expandedRules);
-            s.has(ruleId) ? s.delete(ruleId) : s.add(ruleId);
-            this.expandedRules = s;
-        },
-
-        toggleProposal(id) {
-            const s = new Set(this.expandedProposals);
-            s.has(id) ? s.delete(id) : s.add(id);
-            this.expandedProposals = s;
-        },
-
-        isChecked(id) {
-            if (this.isAllSelectedMode) return !this.excludedIds.has(id);
-            return this.selectedIds.has(id);
-        },
-
-        updateSelection(id, checked) {
-            if (this.isAllSelectedMode) {
-                checked ? this.excludedIds.delete(id) : this.excludedIds.add(id);
-            } else {
-                checked ? this.selectedIds.add(id) : this.selectedIds.delete(id);
-            }
-        },
-
-        toggleAllOnPage(checked) {
-            this.allPendingOnPage.forEach(p => this.updateSelection(p.id, checked));
-        },
-
-        selectAll() {
-            if (!this.hasPendingTotal || this.loading) return;
-            this.isAllSelectedMode = true;
-            this.selectedIds.clear();
-            this.excludedIds.clear();
-        },
-
-        clearSelection() {
-            this.isAllSelectedMode = false;
-            this.selectedIds.clear();
-            this.excludedIds.clear();
-        },
-
-        async submitBulk(action) {
-            if (this.selectedCount === 0) return;
-            this.loading = true;
+        // ── Display helpers ───────────────────────────────────────────────
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        function highlight(text) {
+            const str = escapeHtml(text);
+            const term = search.value.trim().replace(/^#/, '');
+            if (!term) return str;
+            const escaped = escapeHtml(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return str.replace(new RegExp(`(${escaped})`, 'gi'), m => `<mark class="prp-highlight">${m}</mark>`);
+        }
+        function typeOf(value) {
+            return EDIT_TYPES.find(t => t.value === (value || 'other')) || { value, label: value, icon: 'fa-solid fa-tag' };
+        }
+        // Closed because another version of its thread was accepted — older
+        // rows were stored as "rejected" with an accepted revision.
+        function statusKey(p) {
+            if (p.status === 'superseded'
+                || (p.status === 'rejected' && (p.revisions || []).some(r => r.status === 'accepted'))) return 'superseded';
+            return p.status;
+        }
+        function formatDate(ts) {
+            if (!ts) return '—';
+            return new Date(ts).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        function fullDate(ts) {
+            return ts ? new Date(ts).toLocaleString('en-GB') : '';
+        }
+        function relativeDate(ts) {
+            if (!ts) return '—';
+            const s = (Date.now() - new Date(ts).getTime()) / 1000;
+            if (s < 60) return 'just now';
+            if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+            if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+            if (s < 86400 * 30) return `${Math.floor(s / 86400)} d ago`;
+            return formatDate(ts);
+        }
+        function scoreValue(p) {
+            return p.change_score == null ? null : Math.round(p.change_score);
+        }
+        function discussUrl(p) { return `/rule/proposal_content_discuss?id=${p.id}`; }
+        // Justifications are markdown, rendered in the row and clamped to a
+        // few lines with a fade and a "See more" toggle (as bundle
+        // descriptions) — the toggle only shows when the text overflows.
+        const renderedMessages = reactive({});
+        const openMessages = reactive(new Set());
+        const overflowing = reactive(new Set());
+        async function renderMessage(p) {
+            if (!p.message || renderedMessages[p.id] !== undefined) return;
             try {
-                const res = await fetch(this.submitEndpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': this.csrfToken
-                    },
-                    body: JSON.stringify({
-                        action,
-                        mode: this.isAllSelectedMode ? 'all' : 'partial',
-                        selected_ids: Array.from(this.selectedIds),
-                        excluded_ids: Array.from(this.excludedIds),
-                    })
-                });
-                const result = await res.json();
-                create_message(result.message, result.toast_class);
-                if (res.ok) {
-                    this.clearSelection();
-                    this.fetchProposals(this.currentPage);
-                    this.$emit('decision-made'); 
-                }
-            } catch (err) {
-                create_message("An error occurred.", "danger-subtle");
-            } finally {
-                this.loading = false;
+                renderedMessages[p.id] = hardenUserHtml(await renderMarkdown(p.message));
+            } catch {
+                renderedMessages[p.id] = null;   // falls back to plain text
             }
-        },
-
-        async handleDecision(proposalId, decision, ruleId) {
-            try {
-                const res = await fetch(`/rule/validate_proposal?ruleId=${ruleId}&decision=${decision}&ruleproposalId=${proposalId}`);
-                const result = await res.json();
-                if (res.status === 200) {
-                    this.fetchProposals(this.currentPage);
-                    this.$emit('decision-made');  
-                }
-                create_message(result.message, result.toast_class);
-            } catch (err) {
-                create_message("An error occurred.", "danger-subtle");
-            }
-        },
-        // Closed because another version of its thread was accepted (see
-        // decide_proposal) — older rows were stored as "rejected" with an
-        // accepted revision, they read as superseded too.
-        isSuperseded(prop) {
-            return prop.status === 'superseded'
-                || (prop.status === 'rejected' && (prop.revisions || []).some(r => r.status === 'accepted'));
-        },
-
-        statusClass(prop) {
-            if (this.isSuperseded(prop)) return {};
-            return {
-                'bg-secondary': prop.status === 'pending',
-                'bg-success': prop.status === 'accepted',
-                'bg-danger': prop.status === 'rejected',
-            };
-        },
-
-        statusStyle(prop) {
-            if (this.isSuperseded(prop)) return { background: '#6f42c1', color: '#fff' };
-            // Accepted = the final outcome of the whole discussion — stands
-            // out visually from pending/rejected/superseded siblings.
-            if (prop.status === 'accepted') return { fontSize: '.85em', padding: '.4em .8em', boxShadow: '0 2px 8px rgba(25,135,84,.35)' };
-            return {};
-        },
-
-        statusLabel(prop) {
-            if (this.isSuperseded(prop)) return 'superseded';
-            return prop.status === 'accepted' ? 'accepted — final' : prop.status;
-        },
-
-        viewDiff(proposal) { this.$emit('view-diff', proposal); },
-
-        // Lineage chips must not trigger the row's own expand/collapse toggle.
-        goToProposal(id, event) {
-            if (event) event.stopPropagation();
-            window.location.href = '/rule/proposal_content_discuss?id=' + id;
-        },
-
-        formatDate(ts) {
-            if (!ts) return 'N/A';
-            return new Date(ts).toLocaleDateString('en-GB', {
-                day: '2-digit', month: 'short', year: 'numeric'
+        }
+        function messageHtml(p) {
+            return renderedMessages[p.id] || `<p style="white-space:pre-wrap">${escapeHtml(p.message)}</p>`;
+        }
+        function measureMessage(id, el) {
+            if (!el || openMessages.has(id)) return;
+            requestAnimationFrame(() => {
+                const over = el.scrollHeight > el.clientHeight + 4;
+                if (over !== overflowing.has(id)) over ? overflowing.add(id) : overflowing.delete(id);
             });
         }
+        function toggleMessage(id) { openMessages.has(id) ? openMessages.delete(id) : openMessages.add(id); }
+        function toggleExpand(p) { expanded.has(p.id) ? expanded.delete(p.id) : expanded.add(p.id); }
+        function toggleColumn(key) { hiddenColumns.has(key) ? hiddenColumns.delete(key) : hiddenColumns.add(key); }
+        function viewDiff(p) { emit('view-diff', p); }
+
+        // ── Selection (pending proposals only) ────────────────────────────
+        const selectedIds = reactive(new Set());
+        const excludedIds = reactive(new Set());
+        const allMode = ref(false);
+
+        const pendingOnPage = computed(() => items.value.filter(p => p.status === 'pending' && p.in_filter !== false));
+        function isSelected(p) { return allMode.value ? p.status === 'pending' && !excludedIds.has(p.id) : selectedIds.has(p.id); }
+        function toggleItem(p) {
+            if (p.status !== 'pending') return;
+            if (allMode.value) excludedIds.has(p.id) ? excludedIds.delete(p.id) : excludedIds.add(p.id);
+            else selectedIds.has(p.id) ? selectedIds.delete(p.id) : selectedIds.add(p.id);
+        }
+        const allOnPageSelected = computed(() => pendingOnPage.value.length > 0 && pendingOnPage.value.every(isSelected));
+        const someOnPageSelected = computed(() => !allOnPageSelected.value && pendingOnPage.value.some(isSelected));
+        function togglePageSelection() {
+            const select = !allOnPageSelected.value;
+            pendingOnPage.value.forEach(p => { if (isSelected(p) !== select) toggleItem(p); });
+        }
+        function selectAllResults() { allMode.value = true; selectedIds.clear(); excludedIds.clear(); }
+        function clearSelection() { allMode.value = false; selectedIds.clear(); excludedIds.clear(); }
+        const selectedCount = computed(() => allMode.value ? Math.max(pendingTotal.value - excludedIds.size, 0) : selectedIds.size);
+        const showSelectAllBanner = computed(() =>
+            canManage && !allMode.value && allOnPageSelected.value && pendingTotal.value > pendingOnPage.value.length);
+
+        async function submitBulk(action) {
+            if (!selectedCount.value) return;
+            const verb = action === 'accept' ? 'Accept' : 'Reject';
+            if (!confirm(`${verb} ${selectedCount.value} proposal(s)?` +
+                (action === 'accept' ? ' The rules will be updated with the proposed content.' : ''))) return;
+            loading.value = true;
+            try {
+                const res = await fetch(props.submitEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
+                    body: JSON.stringify({
+                        action, mode: allMode.value ? 'all' : 'partial',
+                        selected_ids: [...selectedIds], excluded_ids: [...excludedIds],
+                        search: search.value.trim(), edit_type: editType.value,
+                    }),
+                });
+                const result = await res.json();
+                create_message(result.message, result.toast_class);
+                if (res.ok) {
+                    clearSelection();
+                    emit('decision-made');
+                }
+            } catch {
+                create_message('An error occurred.', 'danger-subtle');
+            } finally {
+                fetchPage(page.value);
+            }
+        }
+
+        // ── Single decision (dialog with an optional reason) ──────────────
+        const decision = reactive({ open: false, proposal: null, value: '', reason: '', busy: false });
+        function openDecision(p, value) {
+            Object.assign(decision, { open: true, proposal: p, value, reason: '', busy: false });
+        }
+        async function confirmDecision() {
+            const p = decision.proposal;
+            decision.busy = true;
+            try {
+                const res = await fetch('/rule/validate_proposal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
+                    body: JSON.stringify({ ruleId: p.rule_id, ruleproposalId: p.id, decision: decision.value, reason: decision.reason }),
+                });
+                const result = await res.json();
+                create_message(res.ok && decision.value === 'accepted'
+                    ? `Proposal #${p.id} accepted — "${p.rule_name}" updated to v${result.new_version}.`
+                    : result.message, result.toast_class);
+                if (res.ok) {
+                    decision.open = false;
+                    emit('decision-made');
+                    fetchPage(page.value);
+                }
+            } catch {
+                create_message('An error occurred.', 'danger-subtle');
+            } finally {
+                decision.busy = false;
+            }
+        }
+
+        onMounted(() => fetchPage(1));
+
+        return {
+            canManage, items, loading, loaded, page, totalPages, totalItems, pendingTotal,
+            search, status, editType, sort, perPage, viewMode, hiddenColumns, showColPicker, expanded, threads,
+            columns: COLUMNS, visibleColumns, colspan, editTypes: EDIT_TYPES, statuses: STATUSES, sorts: SORTS,
+            fetchPage, setStatus, resetFilters, hasFilters,
+            highlight, typeOf, messageHtml, measureMessage, toggleMessage, openMessages, overflowing, statusKey, formatDate, fullDate, relativeDate, scoreValue, discussUrl,
+            toggleExpand, toggleColumn, viewDiff,
+            isSelected, toggleItem, allOnPageSelected, someOnPageSelected, togglePageSelection, pendingOnPage,
+            selectAllResults, clearSelection, selectedCount, showSelectAllBanner, allMode, submitBulk,
+            decision, openDecision, confirmDecision,
+        };
     },
-    mounted() { this.fetchProposals(1); },
     template: `
-    <div class="proposal-history-container" v-cloak>
+    <div class="dt-wrapper prp-table">
 
-        <!-- Bulk toolbar -->
-        <transition name="fade">
-            <div v-if="showManage && selectedCount > 0"
-                class="d-flex align-items-center justify-content-between p-3 mb-4 rounded-3 shadow-sm"
-                style=" border: 1px solid var(--border-color);">
-                <div class="d-flex align-items-center gap-3">
-                    <span class="fw-bold">
-                        <i class="fas fa-check-square me-2 text-primary"></i>
-                        [[ selectedCount ]] proposal(s) selected
-                        <span v-if="isAllSelectedMode" class="badge bg-primary ms-1">All results</span>
-                    </span>
-                    <button class="btn btn-sm btn-outline-secondary rounded-pill" @click="clearSelection">
-                        <i class="fas fa-times me-1"></i> Clear
+        <!-- Status chips -->
+        <div class="prp-status-chips mb-3">
+            <button v-for="s in statuses" :key="s.value" type="button"
+                class="prp-chip" :class="['prp-chip--' + (s.value || 'all'), { 'is-active': status === s.value }]"
+                @click="setStatus(s.value)">
+                [[ s.label ]]
+                <span v-if="s.value ? statusCounts[s.value] != null : statusCounts.total != null" class="prp-chip-count">
+                    [[ s.value ? statusCounts[s.value] : statusCounts.total ]]
+                </span>
+            </button>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="dt-toolbar">
+            <div class="dt-toolbar-left">
+                <div class="dt-search">
+                    <i class="fas fa-search dt-search-icon"></i>
+                    <input class="dt-search-input prp-search" type="text" v-model="search"
+                        placeholder="Search rule, author, message or #id…" aria-label="Search proposals" />
+                    <button v-if="search" class="dt-search-clear" @click="search = ''" aria-label="Clear search">
+                        <i class="fas fa-xmark"></i>
                     </button>
                 </div>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-success rounded-pill px-3"
-                        :disabled="loading" @click="submitBulk('accept')">
-                        <i class="fas fa-check me-1"></i> Accept [[ selectedCount ]]
-                    </button>
-                    <button class="btn btn-sm btn-danger rounded-pill px-3"
-                        :disabled="loading" @click="submitBulk('reject')">
-                        <i class="fas fa-times me-1"></i> Reject [[ selectedCount ]]
-                    </button>
-                </div>
-            </div>
-        </transition>
-
-        <!-- Search & filter bar -->
-        <div class="d-flex gap-3 mb-4 flex-wrap align-items-end">
-            <div class="flex-grow-1">
-                <label class="small fw-bold text-muted mb-1 text-uppercase">Search</label>
-                <div class="input-group input-group-sm shadow-sm" style="border-radius: 10px; overflow: hidden;">
-                    <span class="input-group-text border-0 bg-light">
-                        <div v-if="loading" class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                        <i v-else class="fas fa-search text-muted"></i>
-                    </span>
-                    <input type="text" v-model="searchQuery" @input="onSearchInput"
-                        class="form-control border-0 bg-light"
-                        placeholder="Search by rule name or contributor..."
-                        style="height: 36px;">
-                    <span v-if="searchQuery" @click="searchQuery = ''; fetchProposals(1)"
-                        class="input-group-text border-0 bg-light text-muted" style="cursor: pointer;">
-                        <i class="fas fa-times"></i>
-                    </span>
-                </div>
-            </div>
-
-            <!-- Status filters — only show statuses present in data -->
-            <div v-if="statusOptions.length > 0">
-                <label class="small fw-bold text-muted mb-1 text-uppercase">Status</label>
-                <div class="d-flex gap-1 flex-wrap">
-                    <button
-                        @click="statusFilter = ''; fetchProposals(1)"
-                        class="btn btn-sm rounded-pill px-3"
-                        :class="statusFilter === '' ? 'btn-dark' : 'btn-outline-secondary'">
-                        All
-                    </button>
-                    <button v-for="opt in statusOptions" :key="opt.value"
-                        @click="statusFilter = opt.value; fetchProposals(1)"
-                        class="btn btn-sm rounded-pill px-3"
-                        :class="statusFilter === opt.value ? 'btn-dark' : 'btn-outline-secondary'">
-                        [[ opt.label ]]
-                    </button>
-                </div>
-            </div>
-
-            <div v-if="showManage && hasPendingTotal" class="ms-auto">
-                <label class="small fw-bold text-muted mb-1 text-uppercase d-block">&nbsp;</label>
-                <button class="btn btn-sm btn-outline-primary rounded-pill px-3"
-                    @click="selectAll"
-                    :disabled="!hasPendingTotal || loading">
-                    <i class="fas fa-check-double me-1"></i> All results
+                <select v-model="editType" class="dt-toolbar-btn prp-select" aria-label="Filter by type">
+                    <option value="">All types</option>
+                    <option v-for="t in editTypes" :key="t.value" :value="t.value">[[ t.label ]]</option>
+                </select>
+                <select v-model="sort" class="dt-toolbar-btn prp-select" aria-label="Sort">
+                    <option v-for="s in sorts" :key="s.value" :value="s.value">[[ s.label ]]</option>
+                </select>
+                <button v-if="hasFilters" class="dt-toolbar-btn" @click="resetFilters" title="Reset filters">
+                    <i class="fas fa-filter-circle-xmark me-1"></i>Reset
                 </button>
+            </div>
+
+            <div class="dt-toolbar-right">
+                <button class="dt-toolbar-btn" @click="fetchPage(page)" title="Refresh" :disabled="loading">
+                    <i class="fas fa-rotate" :class="{ 'fa-spin': loading }"></i>
+                </button>
+                <div class="dt-view-toggle" title="Switch view">
+                    <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'thread' }"
+                        @click="viewMode = 'thread'" aria-label="Thread view" title="Threads — versions grouped with their branches"><i class="fas fa-code-branch"></i></button>
+                    <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'table' }"
+                        @click="viewMode = 'table'" aria-label="Table view"><i class="fas fa-table-cells-large"></i></button>
+                    <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'card' }"
+                        @click="viewMode = 'card'" aria-label="Card view"><i class="fas fa-grip"></i></button>
+                </div>
+                <div v-if="viewMode === 'table'" class="dt-col-picker-wrap">
+                    <button class="dt-toolbar-btn" :class="{ 'dt-toolbar-btn--active': showColPicker }"
+                        @click="showColPicker = !showColPicker" title="Show/hide columns"><i class="fas fa-sliders"></i></button>
+                    <div v-if="showColPicker" class="dt-col-picker-dropdown">
+                        <label v-for="col in columns.filter(c => c.hideable)" :key="col.key" class="dt-col-picker-item">
+                            <input type="checkbox" :checked="!hiddenColumns.has(col.key)" @change="toggleColumn(col.key)" />
+                            [[ col.label ]]
+                        </label>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Table wrapper with opacity transition instead of mount/unmount -->
-        <div :style="{ opacity: transitioning ? 0 : 1, transition: 'opacity 0.15s ease' }">
+        <div v-if="showSelectAllBanner" class="dt-select-all-banner">
+            All [[ pendingOnPage.length ]] pending proposals on this page are selected.
+            <button class="dt-select-all-btn" @click="selectAllResults">Select all [[ pendingTotal ]] pending proposals matching the filters</button>
+        </div>
+        <div v-else-if="allMode" class="dt-select-all-banner">
+            All [[ selectedCount ]] pending proposals matching the filters are selected.
+            <button class="dt-select-all-btn" @click="clearSelection">Clear selection</button>
+        </div>
 
-            <!-- Initial loading skeleton -->
-            <div v-if="initialLoad && loading"
-                class="custom-table-wrapper border rounded-4 overflow-hidden mb-4 shadow-sm">
-                <table class="table align-middle mb-0 custom-table">
-                    <thead>
-                        <tr class="text-muted small fw-bold text-uppercase"
-                          >
-                            <th style="width: 40px;"></th>
-                            <th v-if="showManage" style="width: 40px;"></th>
-                            <th>Rule</th>
-                            <th class="text-center">Total</th>
-                            <th class="text-center"><span class="badge bg-success">Accepted</span></th>
-                            <th class="text-center"><span class="badge bg-danger">Rejected</span></th>
-                            <th class="text-center"><span class="badge bg-secondary">Pending</span></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="i in 5" :key="i">
-                            <td><div class="skeleton-line" style="width: 20px;"></div></td>
-                            <td v-if="showManage"><div class="skeleton-line" style="width: 16px;"></div></td>
-                            <td>
-                                <div class="skeleton-line mb-1" style="width: 55%;"></div>
-                                <div class="skeleton-line" style="width: 25%;"></div>
-                            </td>
-                            <td class="text-center"><div class="skeleton-line mx-auto" style="width: 24px;"></div></td>
-                            <td class="text-center"><div class="skeleton-line mx-auto" style="width: 24px;"></div></td>
-                            <td class="text-center"><div class="skeleton-line mx-auto" style="width: 24px;"></div></td>
-                            <td class="text-center"><div class="skeleton-line mx-auto" style="width: 24px;"></div></td>
-                        </tr>
-                    </tbody>
-                </table>
+        <div class="prp-body" :class="{ 'is-loading': loading && loaded }">
+            <div v-if="loading" class="dt-loading-overlay" aria-live="polite"><div class="dt-spinner"></div></div>
+
+            <!-- ══════════ THREAD VIEW ══════════ -->
+            <div v-if="viewMode === 'thread'" class="prp-threads">
+                <div v-if="canManage && pendingOnPage.length" class="prp-threads-select">
+                    <label class="d-inline-flex align-items-center gap-2">
+                        <input type="checkbox" class="dt-checkbox" :checked="allOnPageSelected"
+                            :indeterminate="someOnPageSelected" @change="togglePageSelection" />
+                        Select the [[ pendingOnPage.length ]] pending proposal[[ pendingOnPage.length === 1 ? '' : 's' ]] on this page
+                    </label>
+                </div>
+                <div v-if="!loaded" v-for="i in 3" :key="'tsk' + i" class="prp-thread"><div class="prp-skeleton" style="height:60px"></div></div>
+                <div v-if="loaded && !threads.length" class="dt-empty">
+                    <div class="dt-empty-icon"><i class="fas fa-code-branch"></i></div>
+                    <p class="dt-empty-text">No proposals found</p>
+                    <button v-if="hasFilters" class="btn btn-sm btn-outline-primary rounded-pill px-3 mt-3" @click="resetFilters">
+                        <i class="fas fa-filter-circle-xmark me-1"></i>Reset filters
+                    </button>
+                </div>
+                <div v-for="t in threads" :key="'t' + t.id" class="prp-thread" :class="'prp-thread--' + t.status">
+                    <div class="prp-thread-head">
+                        <div class="min-w-0">
+                            <a :href="'/rule/detail_rule/' + t.rule_id" class="prp-rule-link" v-html="highlight(t.rule_name)"></a>
+                            <div class="prp-thread-sub">
+                                <i class="fas fa-code-branch me-1"></i>Thread #[[ t.id ]] · [[ t.versions.length ]] version[[ t.versions.length === 1 ? '' : 's' ]]
+                                · last activity [[ relativeDate(t.last) ]]
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            <span v-if="t.pending" class="prp-status prp-status--pending">[[ t.pending ]] pending</span>
+                            <span class="prp-thread-state" :class="'prp-thread-state--' + t.status">
+                                <i class="fas" :class="t.status === 'accepted' ? 'fa-code-merge' : t.status === 'open' ? 'fa-code-pull-request' : 'fa-circle-xmark'"></i>
+                                [[ t.status === 'accepted' ? 'Merged' : t.status === 'open' ? 'Open' : 'Closed' ]]
+                            </span>
+                        </div>
+                    </div>
+                    <proposal-thread-graph :versions="t.versions" :current-user-id="currentUserId" compact
+                        :rule-url="'/rule/detail_rule/' + t.rule_id + '/history'">
+                        <template #row="{ v }">
+                            <div class="prp-graph-actions">
+                                <input v-if="canManage && v.status === 'pending' && v.in_filter !== false" type="checkbox" class="dt-checkbox"
+                                    :checked="isSelected(v)" @change="toggleItem(v)" title="Select" />
+                                <span class="prp-type"><i :class="typeOf(v.edit_type).icon"></i>[[ typeOf(v.edit_type).label ]]</span>
+                                <span v-if="v.comment_count" class="prp-comments"><i class="fa-regular fa-comment"></i> [[ v.comment_count ]]</span>
+                                <span class="ms-auto d-inline-flex gap-1">
+                                    <button class="dt-action-btn" title="View diff" @click="viewDiff(v)"><i class="fas fa-code-compare"></i></button>
+                                    <a class="dt-action-btn" :href="v.discuss_url" title="Open discussion"><i class="fas fa-comments"></i></a>
+                                    <template v-if="canManage && v.status === 'pending'">
+                                        <button class="dt-action-btn prp-btn-accept" title="Accept" @click="openDecision(v, 'accepted')"><i class="fas fa-check"></i></button>
+                                        <button class="dt-action-btn dt-action-btn--danger" title="Reject" @click="openDecision(v, 'rejected')"><i class="fas fa-xmark"></i></button>
+                                    </template>
+                                </span>
+                            </div>
+                        </template>
+                    </proposal-thread-graph>
+                </div>
             </div>
 
-            <!-- Empty state -->
-            <div v-else-if="!loading && groupedProposals.length === 0"
-                class="text-center py-5 rounded-4 border">
-                <i class="fas fa-inbox fa-3x mb-3 text-muted opacity-25"></i>
-                <h5 class="fw-bold">No proposals found</h5>
-                <p class="text-muted small">Try adjusting your filters.</p>
+            <!-- ══════════ CARD VIEW ══════════ -->
+            <div v-else-if="viewMode === 'card'" class="dt-card-grid">
+                <div v-if="loaded && !items.length" style="grid-column: 1 / -1;">
+                    <div class="dt-empty">
+                        <div class="dt-empty-icon"><i class="fas fa-inbox"></i></div>
+                        <p class="dt-empty-text">No proposals found</p>
+                    </div>
+                </div>
+                <div v-for="p in items" :key="'card-' + p.id" class="dt-card prp-card"
+                    :class="['prp-card--' + statusKey(p), { 'dt-card--selected': isSelected(p) }]">
+                    <div class="dt-card-header">
+                        <input v-if="canManage" type="checkbox" class="dt-checkbox dt-card-checkbox"
+                            :checked="isSelected(p)" :disabled="p.status !== 'pending'" @change="toggleItem(p)" />
+                        <a :href="discussUrl(p)" class="dt-card-title prp-rule-link" v-html="highlight(p.rule_name)"></a>
+                        <span class="prp-status" :class="'prp-status--' + statusKey(p)">[[ statusKey(p) ]]</span>
+                    </div>
+                    <div class="dt-card-body">
+                        <div class="prp-meta mb-2">
+                            <span class="prp-id">#[[ p.id ]]</span>
+                            <span v-if="p.thread_size > 1" class="prp-version">v[[ p.thread_version ]]</span>
+                            <span class="prp-type"><i :class="typeOf(p.edit_type).icon"></i>[[ typeOf(p.edit_type).label ]]</span>
+                        </div>
+                        <div v-if="p.message" class="prp-msg mb-2" :class="{ 'is-open': openMessages.has(p.id), 'is-clipped': overflowing.has(p.id) && !openMessages.has(p.id) }">
+                                        <div class="prp-msg-body prp-md" :ref="el => measureMessage(p.id, el)" v-html="messageHtml(p)"></div>
+                                        <button v-if="overflowing.has(p.id)" type="button" class="prp-msg-more" @click="toggleMessage(p.id)">
+                                            <i class="fa-solid me-1" :class="openMessages.has(p.id) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>[[ openMessages.has(p.id) ? 'See less' : 'See more' ]]
+                                        </button>
+                                    </div>
+                                    <div v-else class="prp-message"><em>No justification given.</em></div>
+                        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                            <user-chip :user-id="p.user_id" :username="p.user_name" :avatar="p.user_avatar" size="xs"></user-chip>
+                            <span class="prp-date" :title="fullDate(p.timestamp)">[[ relativeDate(p.timestamp) ]]</span>
+                        </div>
+                    </div>
+                    <div class="dt-card-footer">
+                        <button class="dt-action-btn" title="View diff" @click="viewDiff(p)"><i class="fas fa-code-compare"></i></button>
+                        <a class="dt-action-btn" :href="discussUrl(p)" title="Open discussion"><i class="fas fa-comments"></i></a>
+                        <template v-if="canManage && p.status === 'pending'">
+                            <button class="dt-action-btn prp-btn-accept" title="Accept" @click="openDecision(p, 'accepted')"><i class="fas fa-check"></i></button>
+                            <button class="dt-action-btn dt-action-btn--danger" title="Reject" @click="openDecision(p, 'rejected')"><i class="fas fa-xmark"></i></button>
+                        </template>
+                    </div>
+                </div>
             </div>
 
-            <!-- Table -->
-            <div v-else class="custom-table-wrapper border rounded-4 overflow-hidden shadow-sm mb-4">
-                <table class="table align-middle mb-0">
-                    <thead>
-                        <tr class="bg-light text-muted small fw-bold"
-                           >
-                            <th style="width: 40px;"></th>
-                            <th v-if="showManage" style="width: 40px;" class="text-center">
-                                <input type="checkbox"
-                                    :checked="isPageFullySelected"
-                                    :disabled="allPendingOnPage.length === 0"
-                                    @change="toggleAllOnPage($event.target.checked)">
+            <!-- ══════════ TABLE VIEW ══════════ -->
+            <div v-else class="dt-table-wrap">
+                <table class="dt-table" role="grid">
+                    <thead class="dt-thead">
+                        <tr>
+                            <th class="dt-th dt-th--checkbox">
+                                <input v-if="canManage" type="checkbox" class="dt-checkbox"
+                                    :checked="allOnPageSelected" :indeterminate="someOnPageSelected"
+                                    :disabled="!pendingOnPage.length" @change="togglePageSelection" aria-label="Select page" />
                             </th>
-                            <th>Rule</th>
-                            <th class="text-center">Total</th>
-                            <th class="text-center"><span class="badge bg-success">Accepted</span></th>
-                            <th class="text-center"><span class="badge bg-danger">Rejected</span></th>
-                            <th class="text-center"><span class="badge bg-secondary">Pending</span></th>
+                            <th class="dt-th">Proposal</th>
+                            <th v-for="col in visibleColumns" :key="col.key" class="dt-th">[[ col.label ]]</th>
+                            <th class="dt-th dt-th--actions">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <template v-for="group in groupedProposals" :key="group.rule_id">
+                        <tr v-if="loaded && !items.length">
+                            <td :colspan="colspan">
+                                <div class="dt-empty">
+                                    <div class="dt-empty-icon"><i class="fas fa-inbox"></i></div>
+                                    <p class="dt-empty-text">No proposals found</p>
+                                    <button v-if="hasFilters" class="btn btn-sm btn-outline-primary rounded-pill px-3 mt-3" @click="resetFilters">
+                                        <i class="fas fa-filter-circle-xmark me-1"></i>Reset filters
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-if="!loaded" v-for="i in 5" :key="'sk' + i" class="dt-row">
+                            <td :colspan="colspan" class="dt-td"><div class="prp-skeleton"></div></td>
+                        </tr>
 
-                            <!-- Group row -->
-                            <!-- Group row -->
-<tr @click="toggleRule(group.rule_id)" style="cursor: pointer;"
-    :class="[
-        expandedRules.has(group.rule_id) ? 'table-active' : '',
-        group.counts.pending > 0 ? 'row-pending' : ''
-    ]">
-                                <td class="text-center">
-                                    <i class="fas text-muted"
-                                        :class="expandedRules.has(group.rule_id) ? 'fa-chevron-down' : 'fa-chevron-right'">
-                                    </i>
+                        <template v-for="p in items" :key="p.id">
+                            <tr class="dt-row prp-row" :class="['prp-row--' + statusKey(p), { 'dt-row--selected': isSelected(p), 'dt-row--expanded': expanded.has(p.id) }]">
+                                <td class="dt-td dt-td--checkbox">
+                                    <input v-if="canManage && p.status === 'pending'" type="checkbox" class="dt-checkbox"
+                                        :checked="isSelected(p)" @change="toggleItem(p)" />
                                 </td>
-                               <td v-if="showManage" class="text-center" @click.stop>
-                                    <input v-if="group.counts.pending > 0"
-                                        type="checkbox"
-                                        :checked="group.proposals.filter(p => p.status === 'pending').length > 0 &&
-                                                group.proposals.filter(p => p.status === 'pending').every(p => isChecked(p.id))"
-                                        @change="group.proposals.filter(p => p.status === 'pending').forEach(p => updateSelection(p.id, $event.target.checked))">
-                                    <span v-else class="text-muted small">—</span>
+                                <td class="dt-td prp-name-cell">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <a :href="discussUrl(p)" class="prp-rule-link" v-html="highlight(p.rule_name)"></a>
+                                        <span class="prp-id">#[[ p.id ]]</span>
+                                        <span v-if="p.thread_size > 1" class="prp-version" title="Level in its thread (v1 = the first proposal, v2 = a revision of it…)">v[[ p.thread_version ]]</span>
+                                    </div>
+                                    <div v-if="p.message" class="prp-msg mt-1" :class="{ 'is-open': openMessages.has(p.id), 'is-clipped': overflowing.has(p.id) && !openMessages.has(p.id) }">
+                                        <div class="prp-msg-body prp-md" :ref="el => measureMessage(p.id, el)" v-html="messageHtml(p)"></div>
+                                        <button v-if="overflowing.has(p.id)" type="button" class="prp-msg-more" @click="toggleMessage(p.id)">
+                                            <i class="fa-solid me-1" :class="openMessages.has(p.id) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>[[ openMessages.has(p.id) ? 'See less' : 'See more' ]]
+                                        </button>
+                                    </div>
+                                    <div v-else class="prp-message"><em>No justification given.</em></div>
                                 </td>
-                                <td>
-                                    <div class="fw-bold">[[ group.rule_name ]]</div>
-                                    <div class="x-small text-muted font-monospace">Rule #[[ group.rule_id ]]</div>
+                                <td v-if="!hiddenColumns.has('author')" class="dt-td">
+                                    <user-chip :user-id="p.user_id" :username="p.user_name" :avatar="p.user_avatar" size="xs"></user-chip>
                                 </td>
-                                <td class="text-center fw-bold">[[ group.proposals.length ]]</td>
-                                <td class="text-center">
-                                    <span v-if="group.counts.accepted > 0" class="fw-bold text-success">
-                                        [[ group.counts.accepted ]]
-                                    </span>
+                                <td v-if="!hiddenColumns.has('type')" class="dt-td">
+                                    <span class="prp-type"><i :class="typeOf(p.edit_type).icon"></i>[[ typeOf(p.edit_type).label ]]</span>
+                                </td>
+                                <td v-if="!hiddenColumns.has('change')" class="dt-td">
+                                    <div v-if="scoreValue(p) != null" class="prp-score" :title="'Similarity with the current rule: ' + scoreValue(p) + '%'">
+                                        <div class="prp-score-bar"><div :style="{ width: scoreValue(p) + '%' }"></div></div>
+                                        <span>[[ scoreValue(p) ]]%</span>
+                                    </div>
                                     <span v-else class="text-muted">—</span>
                                 </td>
-                                <td class="text-center">
-                                    <span v-if="group.counts.rejected > 0" class="fw-bold text-danger">
-                                        [[ group.counts.rejected ]]
-                                    </span>
+                                <td v-if="!hiddenColumns.has('comments')" class="dt-td">
+                                    <a :href="discussUrl(p)" class="prp-comments" :class="{ 'is-empty': !p.comment_count }">
+                                        <i class="fa-regular fa-comment"></i> [[ p.comment_count || 0 ]]
+                                    </a>
+                                </td>
+                                <td v-if="!hiddenColumns.has('status')" class="dt-td">
+                                    <span class="prp-status" :class="'prp-status--' + statusKey(p)">[[ statusKey(p) ]]</span>
+                                </td>
+                                <td v-if="!hiddenColumns.has('date')" class="dt-td text-nowrap">
+                                    <span class="prp-date" :title="fullDate(p.timestamp)">[[ relativeDate(p.timestamp) ]]</span>
+                                </td>
+                                <td v-if="!hiddenColumns.has('reviewer')" class="dt-td">
+                                    <user-chip v-if="p.reviewed_by_id" :user-id="p.reviewed_by_id" :username="p.reviewed_by_name" :avatar="p.reviewed_by_avatar" size="xs"></user-chip>
                                     <span v-else class="text-muted">—</span>
                                 </td>
-                                <td class="text-center">
-                                    <span v-if="group.counts.pending > 0" class="fw-bold text-secondary">
-                                        [[ group.counts.pending ]]
-                                    </span>
-                                    <span v-else class="text-muted">—</span>
+                                <td class="dt-td dt-td--actions">
+                                    <div class="dt-actions">
+                                        <button class="dt-action-btn" title="View diff" @click="viewDiff(p)"><i class="fas fa-code-compare"></i></button>
+                                        <template v-if="canManage && p.status === 'pending'">
+                                            <button class="dt-action-btn prp-btn-accept" title="Accept" @click="openDecision(p, 'accepted')"><i class="fas fa-check"></i></button>
+                                            <button class="dt-action-btn dt-action-btn--danger" title="Reject" @click="openDecision(p, 'rejected')"><i class="fas fa-xmark"></i></button>
+                                        </template>
+                                        <button class="dt-action-btn dt-action-btn--expand" :class="{ 'is-expanded': expanded.has(p.id) }"
+                                            title="Details" @click="toggleExpand(p)"><i class="fas fa-chevron-down dt-expand-chevron"></i></button>
+                                    </div>
                                 </td>
                             </tr>
 
-                            <!-- Proposals inside group -->
-                            <template v-if="expandedRules.has(group.rule_id)">
-                                <template v-for="prop in group.proposals" :key="prop.id">
-                                <tr v-if="prop._threadStart && prop.thread_size > 1" class="pht-thread-row">
-                                    <td></td>
-                                    <td v-if="showManage"></td>
-                                    <td :colspan="showManage ? 5 : 6" class="py-1 ps-3">
-                                        <i class="fas fa-code-branch me-1"></i>Thread of proposal
-                                        <a :href="'/rule/proposal_content_discuss?id=' + prop.thread_root_id" @click.stop>#[[ prop.thread_root_id ]]</a>
-                                        · [[ prop.thread_size ]] versions
-                                    </td>
-                                </tr>
-                                <tr :class="isChecked(prop.id) ? 'table-primary-subtle' : ''"
-                                    style="border-left: 3px solid var(--bs-primary);">
-                                    <td></td>
-                                    <td v-if="showManage" class="text-center" @click.stop>
-                                        <input v-if="prop.status === 'pending'"
-                                            type="checkbox"
-                                            :checked="isChecked(prop.id)"
-                                            @change="updateSelection(prop.id, $event.target.checked)">
-                                        <span v-else class="text-muted x-small">—</span>
-                                    </td>
-                                    <td :colspan="showManage ? 5 : 6" class="py-2 ps-3">
-
-                                        <!-- Summary row -->
-                                        <div class="d-flex align-items-center gap-2 flex-wrap mb-1"
-                                             :style="{ paddingLeft: (prop.thread_depth || 0) * 1.25 + 'rem' }">
-                                            <span v-if="prop.thread_size > 1" class="pht-version" title="Version within its thread">v[[ prop.thread_version ]]</span>
-                                            <button class="btn btn-link btn-sm p-0 text-dark"
-                                                @click.stop="toggleProposal(prop.id)">
-                                                <i class="fas"
-                                                    :class="expandedProposals.has(prop.id) ? 'fa-chevron-down' : 'fa-chevron-right'">
-                                                </i>
-                                            </button>
-                                            <span class="badge rounded-pill" :class="statusClass(prop)" :style="statusStyle(prop)"
-                                                  :title="isSuperseded(prop) ? 'Closed automatically: another version of its thread was accepted.' : ''">
-                                                [[ statusLabel(prop) ]]
-                                            </span>
-                                            <span v-if="prop.revisions && prop.revisions.length && !isSuperseded(prop)" class="badge rounded-pill"
-                                                  style="background:rgba(111,66,193,.12);color:#6f42c1;cursor:pointer;"
-                                                  @click.stop="goToProposal(prop.revisions[0].id, $event)"
-                                                  title="A revision of this proposal exists">
-                                                <i class="fas fa-code-branch me-1"></i>Revised
-                                            </span>
-                                            <span v-if="prop.previous_proposal" class="badge rounded-pill"
-                                                  style="background:rgba(13,110,253,.12);color:#0d6efd;cursor:pointer;"
-                                                  @click.stop="goToProposal(prop.previous_proposal.id, $event)"
-                                                  title="This proposal is a revision of another one">
-                                                <i class="fas fa-code-branch me-1"></i>Revision of #[[ prop.previous_proposal.id ]]
-                                            </span>
-                                            <span class="small fw-semibold">
-                                                <i class="fas fa-user me-1 text-muted"></i>[[ prop.user_name ]]
-                                            </span>
-                                            <span class="x-small text-muted">
-                                                <i class="fas fa-calendar me-1"></i>[[ formatDate(prop.timestamp) ]]
-                                            </span>
-                                            <span class="badge bg-light text-dark border small">
-                                                [[ prop.edit_type ]]
-                                            </span>
-                                            <span class="small fw-bold"
-                                                :class="prop.change_score > 80 ? 'text-success' : 'text-primary'">
-                                                [[ prop.change_score ]]%
-                                            </span>
-                                        </div>
-
-                                        <!-- Expanded detail -->
-                                        <div v-if="expandedProposals.has(prop.id)"
-                                            class="mt-2 ps-4 pb-2 border-top pt-2">
-                                            <div class="row g-3">
-                                                <div class="col-md-7">
-                                                    <p class="small mb-2">
-                                                        <span class="fw-bold text-muted text-uppercase"
-                                                            style="font-size: 0.7rem;">Message</span><br>
-                                                        [[ prop.message || 'No message provided.' ]]
-                                                    </p>
-                                                    <p v-if="prop.rejection_reason" class="small mb-2 text-danger">
-                                                        <span class="fw-bold text-uppercase"
-                                                            style="font-size: 0.7rem;">Rejection reason</span><br>
-                                                        [[ prop.rejection_reason ]]
-                                                    </p>
-                                                    <p v-if="prop.reviewed_at" class="x-small text-muted mb-0">
-                                                        Reviewed on [[ formatDate(prop.reviewed_at) ]]
-                                                    </p>
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <p class="x-small text-muted mb-1">
-                                                        Proposal <span class="font-monospace">#[[ prop.id ]]</span>
-                                                    </p>
-                                                    <p class="x-small text-muted mb-3">
-                                                        [[ prop.comments ? prop.comments.length : 0 ]] comment(s)
-                                                    </p>
-                                                    <div class="d-flex gap-2 flex-wrap align-items-center">
-                                                        <a :href="'/rule/proposal_content_discuss?id=' + prop.id"
-                                                            class="btn btn-sm rounded-pill px-3 fw-semibold"
-                                                            style="background: var(--light-bg-color); color: var(--text-color); border: 1px solid var(--border-color);">
-                                                            <i class="fas fa-comments me-1 opacity-75"></i> Discuss
-                                                        </a>
-
-                                                        <button v-if="showDiffButton"
-                                                            class="btn btn-sm rounded-pill px-3 fw-semibold"
-                                                            style="background: var(--light-bg-color); color: var(--text-color); border: 1px solid var(--border-color);"
-                                                            type="button"
-                                                            data-bs-toggle="modal"
-                                                            data-bs-target="#fullscreenDiffModal"
-                                                            @click.stop="viewDiff(prop)">
-                                                            <i class="fas fa-code-compare me-1 opacity-75"></i> Diff
-                                                        </button>
-
-                                                        <a :href="'/rule/detail_rule/' + prop.rule_id"
-                                                            class="btn btn-sm rounded-pill px-3 fw-semibold"
-                                                            style="background: var(--light-bg-color); color: var(--text-color); border: 1px solid var(--border-color);">
-                                                            <i class="fas fa-arrow-up-right-from-square me-1 opacity-75"></i> Rule
-                                                        </a>
-
-                                                        <template v-if="showManage && prop.status === 'pending'">
-                                                            <div class="vr mx-1" style="opacity: 0.2;"></div>
-                                                            <button class="btn btn-sm rounded-pill px-3 fw-semibold"
-                                                                style="background: rgba(25,135,84,0.1); color: #198754; border: 1px solid rgba(25,135,84,0.25);"
-                                                                @click.stop="handleDecision(prop.id, 'accepted', prop.rule_id)">
-                                                                <i class="fas fa-check me-1"></i> Accept
-                                                            </button>
-                                                            <button class="btn btn-sm rounded-pill px-3 fw-semibold"
-                                                                style="background: rgba(220,53,69,0.1); color: #dc3545; border: 1px solid rgba(220,53,69,0.25);"
-                                                                @click.stop="handleDecision(prop.id, 'rejected', prop.rule_id)">
-                                                                <i class="fas fa-times me-1"></i> Reject
-                                                            </button>
-                                                        </template>
-                                                    </div>
-                                                </div>
+                            <!-- Expanded details -->
+                            <tr v-if="expanded.has(p.id)" class="prp-detail-row">
+                                <td :colspan="colspan" class="dt-expand-cell">
+                                    <div class="row g-3">
+                                        <div class="col-lg-7">
+                                            <template v-if="p.rejection_reason">
+                                                <div class="prp-detail-label text-danger">Reason given by the reviewer</div>
+                                                <p class="prp-detail-text">[[ p.rejection_reason ]]</p>
+                                            </template>
+                                            <div class="d-flex flex-wrap gap-2">
+                                                <a v-if="p.previous_proposal" :href="p.previous_proposal.discuss_url" class="prp-lineage">
+                                                    <i class="fas fa-code-branch"></i>Revision of #[[ p.previous_proposal.id ]]
+                                                </a>
+                                                <a v-for="r in (p.revisions || [])" :key="r.id" :href="r.discuss_url" class="prp-lineage prp-lineage--next">
+                                                    <i class="fas fa-code-branch"></i>Revised in #[[ r.id ]] ([[ r.status ]])
+                                                </a>
                                             </div>
                                         </div>
-                                    </td>
-                                </tr>
-                                </template>
-                            </template>
-
+                                        <div class="col-lg-5">
+                                            <div class="dt-expand-grid mb-3">
+                                                <div class="dt-expand-field"><label>Submitted</label><span>[[ fullDate(p.timestamp) ]]</span></div>
+                                                <div class="dt-expand-field"><label>Reviewed</label><span>[[ p.reviewed_at ? fullDate(p.reviewed_at) : 'Not yet' ]]</span></div>
+                                                <div class="dt-expand-field"><label>Rule</label><span><a :href="'/rule/detail_rule/' + p.rule_id">#[[ p.rule_id ]]</a></span></div>
+                                                <div v-if="p.thread_size > 1" class="dt-expand-field"><label>Thread</label>
+                                                    <span><a :href="'/rule/proposal_content_discuss?id=' + p.thread_root_id">#[[ p.thread_root_id ]]</a> · [[ p.thread_size ]] versions</span></div>
+                                            </div>
+                                            <div class="d-flex gap-2 flex-wrap">
+                                                <a :href="discussUrl(p)" class="btn btn-sm btn-primary rounded-pill px-3">
+                                                    <i class="fas fa-comments me-1"></i>Open discussion
+                                                </a>
+                                                <button class="btn btn-sm btn-outline-primary rounded-pill px-3" @click="viewDiff(p)">
+                                                    <i class="fas fa-code-compare me-1"></i>View diff
+                                                </button>
+                                                <a :href="'/rule/detail_rule/' + p.rule_id" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                                                    <i class="fas fa-arrow-up-right-from-square me-1"></i>Rule
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
                         </template>
                     </tbody>
                 </table>
             </div>
-
-            <pagination-component
-                :current-page="currentPage"
-                :total-pages="totalPages"
-                @change-page="fetchProposals">
-            </pagination-component>
-
         </div>
+
+        <div class="dt-footer">
+            <div class="dt-per-page">
+                <span>Per page</span>
+                <select v-model.number="perPage" aria-label="Items per page">
+                    <option v-for="n in [10, 20, 50, 100]" :key="n" :value="n">[[ n ]]</option>
+                </select>
+            </div>
+            <div class="dt-footer-center">
+                <pagination-component v-if="totalPages > 1" :current-page="page" :total-pages="totalPages" @change-page="fetchPage"></pagination-component>
+            </div>
+            <div class="dt-footer-info">[[ totalItems ]] [[ viewMode === 'thread' ? 'thread' : 'proposal' ]][[ totalItems === 1 ? '' : 's' ]]</div>
+        </div>
+
+        <!-- Bulk bar -->
+        <transition name="dt-bulk-slide">
+            <div v-if="canManage && selectedCount > 0" class="dt-bulk-bar">
+                <span class="dt-bulk-count">[[ selectedCount ]] selected</span>
+                <div class="dt-bulk-actions">
+                    <button class="dt-bulk-btn prp-bulk-accept" :disabled="loading" @click="submitBulk('accept')">
+                        <i class="fas fa-check"></i> Accept
+                    </button>
+                    <button class="dt-bulk-btn dt-bulk-btn--danger" :disabled="loading" @click="submitBulk('reject')">
+                        <i class="fas fa-xmark"></i> Reject
+                    </button>
+                </div>
+                <button class="dt-bulk-clear" @click="clearSelection"><i class="fas fa-xmark"></i> Clear</button>
+            </div>
+        </transition>
+
+        <!-- Decision dialog -->
+        <teleport to="body">
+            <div v-if="decision.open" class="prp-dialog-backdrop" @click.self="decision.open = false">
+                <div class="prp-dialog" role="dialog" aria-modal="true">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="prp-dialog-icon" :class="decision.value === 'accepted' ? 'is-accept' : 'is-reject'">
+                            <i class="fas" :class="decision.value === 'accepted' ? 'fa-check' : 'fa-xmark'"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">[[ decision.value === 'accepted' ? 'Accept' : 'Reject' ]] proposal #[[ decision.proposal.id ]]</h5>
+                            <div class="small text-muted">[[ decision.proposal.rule_name ]] · by [[ decision.proposal.user_name ]]</div>
+                        </div>
+                    </div>
+                    <p v-if="decision.value === 'accepted'" class="small mb-3">
+                        The rule content is replaced by the proposed one and its version is bumped.
+                        The other open versions of this thread are closed as <strong>superseded</strong>.
+                    </p>
+                    <p v-else class="small mb-3">The author is notified. They can still revise the proposal afterwards.</p>
+                    <template v-if="decision.value === 'rejected'">
+                        <label class="form-label small fw-semibold">Reason (optional, shown to the author)</label>
+                        <textarea v-model="decision.reason" class="form-control mb-3" rows="3" maxlength="2000"
+                            placeholder="Why is this change not merged?"></textarea>
+                    </template>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button class="btn btn-outline-secondary rounded-pill px-3" @click="decision.open = false">Cancel</button>
+                        <button class="btn rounded-pill px-4" :class="decision.value === 'accepted' ? 'btn-success' : 'btn-danger'"
+                            :disabled="decision.busy" @click="confirmDecision">
+                            <span v-if="decision.busy" class="spinner-border spinner-border-sm me-1"></span>
+                            [[ decision.value === 'accepted' ? 'Accept & update rule' : 'Reject proposal' ]]
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </teleport>
     </div>
     `
 };

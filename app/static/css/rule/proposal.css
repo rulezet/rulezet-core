@@ -1,72 +1,363 @@
-.skeleton-line {
-    height: 12px;
-    border-radius: 6px;
-    background: linear-gradient(
-        90deg,
-        var(--light-bg-color) 25%,
-        var(--border-color) 50%,
-        var(--light-bg-color) 75%
-    );
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.2s infinite;
-}
+/*
+ * proposal.css — Proposals page (/rule/rule_propose_edit) and its
+ * ProposalHistoryTable. Table / card / toolbar / bulk-bar chrome (.dt-*) is
+ * shared and lives in components/dataTable.css; KPI cards and section
+ * headers come from account/user_detail.css.
+ */
 
-@keyframes skeleton-shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+/* ── Tabs ── */
+.prp-tabs {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1.25rem;
 }
-
-
-.proposal-history-container .btn {
-    transition: filter 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
-}
-
-.proposal-history-container .btn:hover {
-    filter: brightness(0.92);
-    transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12) !important;
-}
-
-.proposal-history-container .btn:active {
-    transform: translateY(0px);
-    filter: brightness(0.85);
-    box-shadow: none !important;
-}
-
-/* pending row highlight */
-.proposal-history-container tbody tr.row-pending {
-    background-color: rgba(255, 193, 7, 0.06);
-}
-
-body.dark-mode .proposal-history-container tbody tr.row-pending {
-    background-color: rgba(255, 193, 7, 0.08);
-}
-
-.proposal-history-container tbody tr.row-pending:hover {
-    background-color: rgba(255, 193, 7, 0.12);
-}
-
-body.dark-mode .proposal-history-container tbody tr.row-pending:hover {
-    background-color: rgba(255, 193, 7, 0.15);
-}
-
-/* left accent bar */
-.proposal-history-container tbody tr.row-pending {
-    border-left: 3px solid rgba(255, 193, 7, 0.6) !important;
-}
-/* ── Review queue: versions grouped by thread ── */
-.pht-thread-row td {
-    font-size: .75rem;
-    font-weight: 600;
+.prp-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    border: none;
+    background: transparent;
     color: var(--subtle-text-color);
-    background: var(--light-bg-color);
-    border-left: 3px solid #6f42c1;
+    font-weight: 600;
+    font-size: .9rem;
+    padding: .65rem 1rem;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
 }
-.pht-version {
+.prp-tab:hover { color: var(--text-color); }
+.prp-tab.is-active { color: #0d6efd; border-bottom-color: #0d6efd; }
+.prp-tab-count {
     font-size: .7rem;
     font-weight: 700;
-    padding: .1rem .45rem;
+    border-radius: 99px;
+    padding: .1rem .5rem;
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+}
+.prp-tab.is-active .prp-tab-count { background: rgba(13, 110, 253, .12); color: #0d6efd; }
+.prp-tab-count--alert { background: #dc3545 !important; color: #fff !important; }
+
+/* ── Status chips ── */
+.prp-status-chips { display: flex; gap: .4rem; flex-wrap: wrap; }
+.prp-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    border-radius: 99px;
+    padding: .3rem .85rem;
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+}
+.prp-chip:hover { border-color: #0d6efd; color: #0d6efd; }
+.prp-chip.is-active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.prp-chip-count {
+    font-size: .7rem;
+    border-radius: 99px;
+    padding: 0 .45rem;
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+}
+.prp-chip.is-active .prp-chip-count { background: rgba(255, 255, 255, .25); color: #fff; }
+
+/* ── Toolbar ── */
+.prp-search { min-width: 280px; }
+.prp-select { padding: .4rem .6rem; }
+
+.prp-body { position: relative; min-height: 120px; }
+.prp-body.is-loading .dt-table-wrap,
+.prp-body.is-loading .dt-card-grid { opacity: .55; transition: opacity .15s; }
+
+mark.prp-highlight {
+    background: rgba(253, 126, 20, .35);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+/* ── Proposal cell ── */
+.prp-name-cell { min-width: 280px; max-width: 460px; }
+.prp-rule-link {
+    font-weight: 700;
+    color: var(--text-color);
+    text-decoration: none;
+    word-break: break-word;
+}
+.prp-rule-link:hover { color: #0d6efd; text-decoration: underline; }
+.prp-id {
+    font-family: var(--bs-font-monospace);
+    font-size: .72rem;
+    color: var(--subtle-text-color);
+}
+.prp-version {
+    font-size: .68rem;
+    font-weight: 700;
+    padding: .05rem .45rem;
     border-radius: 6px;
     background: rgba(111, 66, 193, .12);
     color: #6f42c1;
 }
+.prp-message {
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+    word-break: break-word;
+}
+
+/* Justification (markdown) clamped to a few lines with a fade, "See more"
+   expands it — same pattern as bundle descriptions (.bd-desc--collapsed) */
+.prp-msg-body { max-height: 4.2rem; overflow: hidden; font-size: .8rem; color: var(--subtle-text-color); }
+.prp-card .prp-msg-body { max-height: 6.5rem; }
+.prp-msg.is-open .prp-msg-body { max-height: none; }
+.prp-msg.is-clipped .prp-msg-body {
+    -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent);
+            mask-image: linear-gradient(to bottom, #000 45%, transparent);
+}
+.prp-msg-body.prp-md { line-height: 1.5; }
+.prp-msg-body.prp-md p { margin-bottom: .3rem; }
+.prp-msg-body.prp-md h1, .prp-msg-body.prp-md h2, .prp-msg-body.prp-md h3, .prp-msg-body.prp-md h4 {
+    font-size: .85rem; margin: .2rem 0;
+}
+.prp-msg-more {
+    margin-top: .3rem;
+    border: 1px solid rgba(13, 110, 253, .3);
+    background: var(--card-bg-color);
+    border-radius: 999px;
+    padding: 2px 12px;
+    color: #0d6efd;
+    font-weight: 600;
+    font-size: .72rem;
+}
+.prp-msg-more:hover { background: rgba(13, 110, 253, .08); }
+.prp-meta { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+
+/* Pending rows carry a left accent so the queue reads at a glance */
+.prp-row td:first-child { border-left: 3px solid transparent; }
+.prp-row--pending td:first-child { border-left-color: #fd7e14; }
+
+/* ── Type / score / comments ── */
+.prp-type {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .74rem;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: .18rem .6rem;
+    border-radius: 99px;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+.prp-type i { color: #0d6efd; font-size: .7rem; }
+
+.prp-score { display: flex; align-items: center; gap: .45rem; font-size: .75rem; font-weight: 600; }
+.prp-score-bar {
+    width: 56px;
+    height: 6px;
+    border-radius: 99px;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+.prp-score-bar > div { height: 100%; background: linear-gradient(90deg, #0d6efd, #0a58ca); }
+
+.prp-comments { font-size: .8rem; font-weight: 600; color: #0d6efd; text-decoration: none; white-space: nowrap; }
+.prp-comments.is-empty { color: var(--subtle-text-color); font-weight: 400; }
+.prp-date { font-size: .78rem; color: var(--subtle-text-color); }
+
+/* ── Status badges ── */
+.prp-status {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    font-size: .66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    padding: .22rem .7rem;
+    border-radius: 99px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+.prp-status--pending    { color: #fd7e14; background: rgba(253, 126, 20, .12); border-color: rgba(253, 126, 20, .3); }
+.prp-status--accepted   { color: #198754; background: rgba(25, 135, 84, .12);  border-color: rgba(25, 135, 84, .3); }
+.prp-status--rejected   { color: #dc3545; background: rgba(220, 53, 69, .12);  border-color: rgba(220, 53, 69, .3); }
+.prp-status--superseded { color: #6f42c1; background: rgba(111, 66, 193, .12); border-color: rgba(111, 66, 193, .3); }
+
+.prp-btn-accept:hover { background: rgba(25, 135, 84, .12) !important; color: #198754 !important; }
+.prp-bulk-accept { color: #198754; border-color: rgba(25, 135, 84, .4); }
+.prp-bulk-accept:hover { background: rgba(25, 135, 84, .12); }
+
+/* ── Expanded row ── */
+.prp-detail-label {
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--subtle-text-color);
+    margin-bottom: .2rem;
+}
+.prp-detail-text { font-size: .85rem; white-space: pre-wrap; word-break: break-word; margin-bottom: .8rem; }
+
+/* Rendered justification (markdown) — same look as .md-body on the discussion page */
+.prp-md { font-size: .85rem; line-height: 1.65; color: var(--text-color); word-break: break-word; }
+.prp-md > :last-child { margin-bottom: 0; }
+.prp-md h1, .prp-md h2, .prp-md h3, .prp-md h4 { font-size: 1rem; font-weight: 700; margin: .6rem 0 .3rem; }
+.prp-md p { margin: 0 0 .5rem; }
+.prp-md ul, .prp-md ol { padding-left: 1.4rem; margin-bottom: .5rem; }
+.prp-md a { color: #0d6efd; }
+.prp-md code { font-size: .78rem; background: var(--light-bg-color); border: 1px solid var(--border-color); border-radius: 4px; padding: .1rem .3rem; }
+.prp-md pre { background: var(--light-bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: .65rem .9rem; overflow-x: auto; margin: .4rem 0; max-height: 260px; }
+.prp-md pre code { background: none; border: none; padding: 0; }
+.prp-md blockquote { border-left: 3px solid #0d6efd; margin: 0 0 .5rem; padding: .35rem .8rem; color: var(--subtle-text-color); background: var(--light-bg-color); border-radius: 0 6px 6px 0; }
+.prp-md table { font-size: .8rem; border-collapse: collapse; margin-bottom: .5rem; }
+.prp-md th, .prp-md td { border: 1px solid var(--border-color); padding: .25rem .5rem; }
+.prp-lineage {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .74rem;
+    font-weight: 600;
+    padding: .2rem .65rem;
+    border-radius: 99px;
+    text-decoration: none;
+    background: rgba(13, 110, 253, .1);
+    color: #0d6efd;
+}
+.prp-lineage--next { background: rgba(111, 66, 193, .1); color: #6f42c1; }
+
+/* ── Card view ── */
+.prp-card { border-top: 3px solid var(--border-color); }
+.prp-card--pending    { border-top-color: #fd7e14; }
+.prp-card--accepted   { border-top-color: #198754; }
+.prp-card--rejected   { border-top-color: #dc3545; }
+.prp-card--superseded { border-top-color: #6f42c1; }
+.prp-card .dt-card-title { flex: 1; min-width: 0; }
+
+/* ── Loading skeleton ── */
+.prp-skeleton {
+    height: 14px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--light-bg-color) 25%, var(--border-color) 50%, var(--light-bg-color) 75%);
+    background-size: 200% 100%;
+    animation: prp-shimmer 1.2s infinite;
+}
+@keyframes prp-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── Decision dialog ── */
+.prp-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1060;
+    background: rgba(0, 0, 0, .45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.prp-dialog {
+    width: 100%;
+    max-width: 520px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
+    padding: 1.5rem;
+}
+.prp-dialog-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+.prp-dialog-icon.is-accept { background: rgba(25, 135, 84, .12); color: #198754; }
+.prp-dialog-icon.is-reject { background: rgba(220, 53, 69, .12); color: #dc3545; }
+
+/* ── "How it works" steps ── */
+.prp-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; }
+.prp-step {
+    position: relative;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem;
+    background: var(--light-bg-color);
+}
+.prp-step-num {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #0d6efd;
+    color: #fff;
+    font-weight: 700;
+    font-size: .85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: .6rem;
+}
+.prp-step-title { font-weight: 700; font-size: .9rem; margin-bottom: .25rem; }
+.prp-step-text { font-size: .8rem; color: var(--subtle-text-color); margin: 0; }
+.prp-status-legend { display: flex; flex-direction: column; gap: .5rem; font-size: .82rem; }
+.prp-status-legend .prp-status { min-width: 96px; justify-content: center; margin-right: .6rem; }
+
+@media (max-width: 576px) {
+    .prp-search { min-width: 0; width: 100%; }
+}
+
+/* ── Thread view: one card per thread, versions on a branch graph ── */
+.prp-threads { display: flex; flex-direction: column; gap: .85rem; }
+.prp-threads-select {
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+    padding: .1rem .25rem;
+}
+.prp-thread {
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--card-bg-color);
+    padding: .85rem 1rem .6rem;
+}
+.prp-thread--open     { border-left-color: #fd7e14; }
+.prp-thread--accepted { border-left-color: #198754; }
+.prp-thread--closed   { border-left-color: #dc3545; }
+.prp-thread-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+    padding-bottom: .55rem;
+    margin-bottom: .4rem;
+    border-bottom: 1px solid var(--border-color);
+}
+.prp-thread-head .min-w-0 { min-width: 0; }
+.prp-thread-sub { font-size: .74rem; color: var(--subtle-text-color); margin-top: .1rem; }
+.prp-thread-state {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .7rem;
+    font-weight: 700;
+    padding: .22rem .7rem;
+    border-radius: 99px;
+    white-space: nowrap;
+}
+.prp-thread-state--open     { background: rgba(13, 110, 253, .1);  color: #0d6efd; }
+.prp-thread-state--accepted { background: rgba(25, 135, 84, .12);  color: #198754; }
+.prp-thread-state--closed   { background: rgba(108, 117, 125, .12); color: var(--subtle-text-color); }
+.prp-graph-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }

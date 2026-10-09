@@ -1667,7 +1667,8 @@ def create_proposal_revision(previous_proposal_id, proposed_content, message, ed
     return True, new_proposal.id, None
 
 
-def bulk_manage_proposals(action: str, mode: str, selected_ids: list, excluded_ids: list, reviewed_by_id: int, is_admin: bool = False) -> dict:
+def bulk_manage_proposals(action: str, mode: str, selected_ids: list, excluded_ids: list, reviewed_by_id: int,
+                          is_admin: bool = False, search: str = '', edit_type: str = '') -> dict:
     """Bulk accept or reject proposals.
 
     Non-admins may only ever affect proposals against rules they own — this
@@ -1676,12 +1677,13 @@ def bulk_manage_proposals(action: str, mode: str, selected_ids: list, excluded_i
     proposals", never every pending proposal system-wide. Each proposal goes
     through decide_proposal, so accepting one supersedes the rest of its
     thread — a proposal superseded earlier in the same batch is skipped.
+    "mode=all" covers the pending proposals matching the list's `search` /
+    `edit_type` filters, as the Proposals page shows them.
     """
     try:
         if mode == "all":
-            query = RuleEditProposal.query.filter_by(status="pending")
-            if not is_admin:
-                query = query.join(Rule, Rule.id == RuleEditProposal.rule_id).filter(Rule.user_id == reviewed_by_id)
+            query = _proposal_list_query(owned_by=None if is_admin else reviewed_by_id, search=search,
+                                         status="pending", edit_type=edit_type).order_by(None)
             if excluded_ids:
                 query = query.filter(~RuleEditProposal.id.in_(excluded_ids))
             proposals = query.order_by(RuleEditProposal.timestamp.asc()).all()
@@ -1783,8 +1785,9 @@ def _proposal_tree(rule_id):
 
 def _build_thread(root, children):
     """One thread: the root and its revisions in reading order — depth-first,
-    oldest revision first — each with its depth and version number (v1 = the
-    first proposal, then by date)."""
+    oldest revision first — each with its depth and version number: its level
+    in the tree (v1 = the first proposal, v2 = any revision of it…), so two
+    revisions of the same version share a number."""
     ordered, stack, seen = [], [(root, 0)], set()
     while stack:
         node, depth = stack.pop()
@@ -1794,11 +1797,10 @@ def _build_thread(root, children):
         ordered.append((node, depth))
         for child in sorted(children.get(node.id, []), key=_proposal_time, reverse=True):
             stack.append((child, depth + 1))
-    versions = {p.id: n for n, p in enumerate(sorted((p for p, _ in ordered), key=_proposal_time), start=1)}
     statuses = {p.status for p, _ in ordered}
     return {
         "root": root,
-        "proposals": [(p, depth, versions[p.id]) for p, depth in ordered],
+        "proposals": [(p, depth, depth + 1) for p, depth in ordered],
         "last_activity": max(_proposal_time(p) for p, _ in ordered),
         "status": "accepted" if "accepted" in statuses else "open" if "pending" in statuses else "closed",
     }
@@ -1831,6 +1833,33 @@ def with_thread_positions(proposal_dicts):
         root_id, version, depth, size = positions.get(d["id"], (d["id"], 1, 0, 1))
         d.update(thread_root_id=root_id, thread_version=version, thread_depth=depth, thread_size=size)
     return proposal_dicts
+
+
+def _same_content(a, b):
+    """Rule contents compared ignoring formatting (all whitespace)."""
+    return "".join((a or "").split()) == "".join((b or "").split())
+
+
+def find_thread_duplicate(proposal, content):
+    """Where `content` already exists in the thread of `proposal` — any
+    version on any branch, or the rule as it was when the thread started
+    (going back to it after a few revisions is not a change). Returns a
+    message, or None when the content is new to the thread."""
+    thread = get_proposal_thread(proposal)
+    for p, _, version in thread["proposals"]:
+        if _same_content(p.proposed_content, content):
+            return f"It is identical to v{version} (proposal #{p.id}) of this thread."
+    if thread["root"].old_content is not None and _same_content(thread["root"].old_content, content):
+        return "It is identical to the rule as it was when this thread started."
+    return None
+
+
+def find_open_duplicate(rule_id, content):
+    """A pending proposal on the rule that already proposes `content`."""
+    for p in RuleEditProposal.query.filter_by(rule_id=rule_id, status="pending").all():
+        if _same_content(p.proposed_content, content):
+            return p
+    return None
 
 
 def can_revise_proposal(user, proposal):
@@ -1916,18 +1945,115 @@ def get_all_rule_proposal_user_id(user_id) -> RuleEditProposal:
     """Get all the rule edit porposal where the current user has part of """
     return RuleEditProposal.query.filter(RuleEditProposal.user_id == user_id).all()
 
-def get_my_proposals_page(page: int, user_id: int, search: str = '', status: str = ''):
-    query = RuleEditProposal.query.filter_by(user_id=user_id)
+PROPOSAL_LIST_STATUSES = ('pending', 'accepted', 'rejected', 'superseded')
+PROPOSAL_LIST_SORTS = ('recent', 'oldest', 'score', 'rule')
+
+
+def _proposal_list_query(user_id=None, *, owned_by=None, search='', status='', edit_type='', sort='recent'):
+    """Edit proposals on active rules, for the Proposals page — submitted by
+    `user_id` and/or on rules owned by `owned_by`, filtered by status, edit
+    type and text (rule title, justification, author's name or #id)."""
+    query = RuleEditProposal.query.join(Rule, RuleEditProposal.rule_id == Rule.id) \
+        .filter(Rule.is_deleted == False)
+    if user_id is not None:
+        query = query.filter(RuleEditProposal.user_id == user_id)
+    if owned_by is not None:
+        query = query.filter(Rule.user_id == owned_by)
     if search:
-        query = query.join(Rule, RuleEditProposal.rule_id == Rule.id).filter(
-            db.or_(
-                Rule.title.ilike(f'%{search}%'),
-                RuleEditProposal.message.ilike(f'%{search}%')
-            )
-        )
-    if status:
+        needle = search.strip().lstrip('#')
+        author = aliased(User)
+        query = query.join(author, RuleEditProposal.user_id == author.id)
+        clauses = [Rule.title.ilike(f'%{needle}%'),
+                   RuleEditProposal.message.ilike(f'%{needle}%'),
+                   (author.first_name + ' ' + author.last_name).ilike(f'%{needle}%')]
+        if needle.isdigit():
+            clauses.append(RuleEditProposal.id == int(needle))
+        query = query.filter(or_(*clauses))
+    if status in PROPOSAL_LIST_STATUSES:
         query = query.filter(RuleEditProposal.status == status)
-    return query.order_by(RuleEditProposal.timestamp.desc()).paginate(page=page, per_page=10, error_out=False)
+    if edit_type:
+        query = query.filter(RuleEditProposal.edit_type == edit_type)
+    order = {
+        'oldest': [RuleEditProposal.timestamp.asc()],
+        'score': [RuleEditProposal.change_score.desc().nullslast(), RuleEditProposal.timestamp.desc()],
+        'rule': [Rule.title.asc(), RuleEditProposal.timestamp.desc()],
+    }.get(sort, [RuleEditProposal.timestamp.desc()])
+    return query.order_by(*order)
+
+
+def _per_page(per_page):
+    return min(max(per_page or 10, 1), 100)
+
+
+def get_my_proposals_page(page: int, user_id: int, search: str = '', status: str = '',
+                          edit_type: str = '', sort: str = 'recent', per_page: int = 10):
+    """Proposals submitted by `user_id`."""
+    query = _proposal_list_query(user_id, search=search, status=status, edit_type=edit_type, sort=sort)
+    return query.paginate(page=page, per_page=_per_page(per_page), error_out=False)
+
+
+def get_proposal_list_threads(page: int, *, user_id: int = None, owned_by: int = None,
+                              per_page: int = 10, **filters):
+    """The Proposals page, grouped by thread: the threads holding at least
+    one proposal that matches (see _proposal_list_query), in the list's
+    order, paginated by thread — a thread is never split across pages. Each
+    thread comes whole (every version, every branch); the versions that do
+    not match the filters are flagged `in_filter=False`.
+
+    Returns (proposal dicts in thread order with their thread fields,
+    total_pages, number of threads, number of matching pending proposals).
+    """
+    matching = _proposal_list_query(user_id, owned_by=owned_by, **filters).all()
+    trees, root_of, order, matched = {}, {}, [], set()
+    for p in matching:
+        if p.rule_id not in trees:
+            roots, children = _proposal_tree(p.rule_id)
+            parent_of = {c.id: parent for parent, kids in children.items() for c in kids}
+            trees[p.rule_id] = ({r.id: r for r in roots}, children, parent_of)
+        _, _, parent_of = trees[p.rule_id]
+        root_id, seen = p.id, set()
+        while root_id in parent_of and root_id not in seen:
+            seen.add(root_id)
+            root_id = parent_of[root_id]
+        if root_id not in root_of:
+            root_of[root_id] = p.rule_id
+            order.append(root_id)
+        matched.add(p.id)
+
+    per_page = _per_page(per_page)
+    total_pages = max(1, -(-len(order) // per_page))
+    page = min(max(page or 1, 1), total_pages)
+    rows = []
+    for root_id in order[(page - 1) * per_page: page * per_page]:
+        roots, children, _ = trees[root_of[root_id]]
+        if root_id not in roots:
+            continue
+        thread = _build_thread(roots[root_id], children)
+        size = len(thread["proposals"])
+        for p, depth, version in thread["proposals"]:
+            d = p.to_json()
+            d.update(thread_root_id=root_id, thread_version=version, thread_depth=depth,
+                     thread_size=size, thread_status=thread["status"], in_filter=p.id in matched)
+            rows.append(d)
+    pending = sum(1 for p in matching if p.status == "pending")
+    return rows, total_pages, len(order), pending
+
+
+def get_proposal_stats(user_id: int, is_admin: bool = False) -> dict:
+    """Number of proposals per status — in the review queue (every proposal
+    for an admin, those on the user's rules otherwise) and among the user's
+    own submissions."""
+    def counts(query):
+        rows = query.with_entities(RuleEditProposal.status, db.func.count(RuleEditProposal.id)) \
+            .group_by(RuleEditProposal.status).order_by(None).all()
+        out = {s: 0 for s in PROPOSAL_LIST_STATUSES}
+        for st, n in rows:
+            if st in out:
+                out[st] = n
+        out['total'] = sum(out.values())
+        return out
+    review = _proposal_list_query(owned_by=None if is_admin else user_id)
+    return {"review": counts(review), "mine": counts(_proposal_list_query(user_id))}
 
 
 def get_rules_propose_edit_page(page: int, user_id: int, is_admin: bool = False):
@@ -1967,32 +2093,17 @@ def get_all_rules_edit_propose_user_part_from_page(page: int, user_id: int, sear
     return query.order_by(RuleEditProposal.timestamp.desc()).paginate(page=page, per_page=10, error_out=False)
 
 def get_rules_propose_edit_history_page(page: int, search: str = '', status: str = '',
-                                         user_id: int = None, is_admin: bool = False):
-    query = RuleEditProposal.query.filter(
-        RuleEditProposal.status.in_(['accepted', 'rejected', 'pending'])
-    )
-
-    # filter by ownership unless admin
-    if not is_admin and user_id:
-        owned_rule_ids = db.session.query(Rule.id).filter_by(user_id=user_id)
-        query = query.filter(RuleEditProposal.rule_id.in_(owned_rule_ids))
-
-    if search:
-        query = query.join(Rule, RuleEditProposal.rule_id == Rule.id).filter(
-            db.or_(
-                Rule.title.ilike(f'%{search}%'),
-                RuleEditProposal.message.ilike(f'%{search}%')
-            )
-        )
-
-    if status:
-        query = query.filter(RuleEditProposal.status == status)
-
-    total_pending = query.filter(RuleEditProposal.status == 'pending').count()
-
-    return query.order_by(RuleEditProposal.timestamp.desc()).paginate(
-        page=page, per_page=10, error_out=False
-    ), total_pending
+                                         user_id: int = None, is_admin: bool = False,
+                                         edit_type: str = '', sort: str = 'recent', per_page: int = 10):
+    """Review queue: every proposal for an admin, those on the user's rules
+    otherwise. Returns (page, number of pending proposals matching the text
+    and type filters)."""
+    owned_by = None if is_admin or not user_id else user_id
+    query = _proposal_list_query(owned_by=owned_by, search=search, status=status,
+                                 edit_type=edit_type, sort=sort)
+    total_pending = _proposal_list_query(owned_by=owned_by, search=search, status='pending',
+                                         edit_type=edit_type).order_by(None).count()
+    return query.paginate(page=page, per_page=_per_page(per_page), error_out=False), total_pending
 
 # Update
 
