@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
+{% block title %}Media — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/file-tree.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/media.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 mt-3" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-images banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Media</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-images"></i></div>
+            <div><h2 class="fw-bold mb-1">Media</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:680px;font-size:.95rem;">
+            The site's own images and every file stored by users. Replace an image under the same name and
+            nothing that points at it breaks; see where each one is used before renaming or deleting it.
+        </p>
+    </div>
+
+    <!-- One row: the page's sections on the left, then the admin menu -->
+    <div class="dr-nav mb-3" role="tablist" aria-label="Media sections">
+        <button type="button" :class="['dr-nav__item border-0 md-tab', { active: tab === 'library' }]" @click="setTab('library')">
+            <i class="fa-solid fa-image"></i><span>Site images</span>
+        </button>
+        <button type="button" :class="['dr-nav__item border-0 md-tab', { active: tab === 'uploads' }]" @click="setTab('uploads')">
+            <i class="fa-solid fa-cloud-arrow-up"></i><span>Uploads</span>
+        </button>
+        <span class="dr-nav__sep"></span>
+        <span class="dr-nav__label" style="padding:.5rem .25rem;">Admin</span>
+        {{ anav.admin_nav_toggle() }}
+    </div>
+    {{ anav.admin_nav_panel('media') }}
+
+    <div class="md-layout">
+    <!-- What is on disk: the real folders and files (FileTree, as for bundles) -->
+    <aside class="md-tree">
+        <div class="md-label">[[ tab === 'library' ? '/static/' + root + '/' : 'Stored files' ]]</div>
+        <file-tree ref="treeRef" :nodes="tab === 'library' ? libraryTree : uploadsTree" :loading="loading" mode="read"
+                   :row-actions="TREE_ACTIONS" @select="onTreeSelect" @row-action="onTreeAction"></file-tree>
+    </aside>
+    <div class="md-main">
+
+    <!-- ── Site images ── -->
+    <section v-if="tab === 'library'">
+        <div class="md-toolbar">
+            <div class="md-seg">
+                <button v-for="(label, key) in LIBRARY_ROOTS" :key="key" type="button"
+                        :class="['md-seg__btn', { active: root === key }]" @click="setRoot(key)">
+                    <span class="font-monospace">/static/[[ key ]]/</span> · [[ label ]]
+                </button>
+            </div>
+            <div class="md-chips">
+                <span :class="['md-chip', { active: folder === null }]" @click="folder = null">All <b>[[ library.files.length ]]</b></span>
+                <span v-for="f in library.folders" :key="f" :class="['md-chip', { active: folder === f }]" @click="folder = f">
+                    <i class="fa-solid fa-folder"></i>[[ f || '(root)' ]] <b>[[ countIn(f) ]]</b>
+                </span>
+            </div>
+            <div class="md-search"><i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" v-model="q" class="form-control form-control-sm" placeholder="Search a file…">
+            </div>
+            <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" @click="openAdd">
+                <i class="fa-solid fa-plus me-1"></i>Add image
+            </button>
+        </div>
+
+        <!-- Add an image: pick the folder (or make a new one), then the file -->
+        <div v-if="adding" class="md-add">
+            <div class="md-add__field">
+                <label class="md-label" for="md-add-folder">Folder</label>
+                <select id="md-add-folder" v-model="addFolder" class="form-select form-select-sm">
+                    <option v-for="f in folderOptions" :key="f" :value="f">/static/[[ root ]]/[[ f ? f + '/' : '' ]]</option>
+                    <option value="__new__">+ New folder…</option>
+                </select>
+            </div>
+            <div v-if="addFolder === '__new__'" class="md-add__field">
+                <label class="md-label" for="md-add-newfolder">New folder</label>
+                <input id="md-add-newfolder" v-model="addNewFolder" class="form-control form-control-sm" placeholder="e.g. covers or covers/2026">
+            </div>
+            <div class="md-add__field">
+                <label class="md-label" for="md-add-file">Image</label>
+                <input id="md-add-file" type="file" class="form-control form-control-sm" accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.ico,.bmp"
+                       @change="addFile = $event.target.files[0] || null">
+            </div>
+            <div class="d-flex gap-2 align-self-end">
+                <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" @click="uploadToLibrary" :disabled="!addFile || adding === 'busy'">
+                    <i class="fa-solid me-1" :class="adding === 'busy' ? 'fa-circle-notch fa-spin' : 'fa-upload'"></i>Upload
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="adding = false">Cancel</button>
+            </div>
+        </div>
+
+        <div v-if="loading" class="md-empty"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>
+        <div v-else-if="!libraryFiles.length" class="md-empty">No image here.</div>
+        <div v-else class="md-grid">
+            <article v-for="f in libraryFiles" :key="f.rel" class="md-card" @click="open('library', f)" tabindex="0" @keydown.enter="open('library', f)">
+                <button type="button" :class="['md-card__delete', { armed: armed === 'library:' + f.rel }]"
+                        :title="armed === 'library:' + f.rel ? 'Click again to delete' : 'Delete (click twice)'" aria-label="Delete"
+                        @click.stop="clickDelete('library', f)">
+                    <i class="fa-solid fa-trash"></i><span v-if="armed === 'library:' + f.rel">Again?</span>
+                </button>
+                <div class="md-card__preview"><img :src="f.url" :alt="f.name" loading="lazy"></div>
+                <div class="md-card__body">
+                    <input v-if="editingRel === f.rel" v-model="editName" class="form-control form-control-sm md-card__rename"
+                           @click.stop @dblclick.stop @keydown.enter.prevent="saveInlineRename(f)" @keydown.esc="editingRel = null"
+                           @blur="editingRel = null" :ref="el => el && el.focus()" aria-label="New name">
+                    <div v-else class="md-card__name" :title="f.rel + ' — double-click to rename'" @dblclick.stop="startInlineRename(f)">[[ f.name ]]</div>
+                    <div class="md-card__meta">
+                        <span v-if="f.folder" class="font-monospace">[[ f.folder ]]/</span>
+                        <span v-if="f.width">[[ f.width ]]×[[ f.height ]]</span>
+                        <span>[[ size(f.size) ]]</span>
+                    </div>
+                    <span :class="['md-badge', f.ref_count ? 'md-badge--used' : 'md-badge--unused']">
+                        [[ f.ref_count ? 'used ×' + f.ref_count : 'not referenced' ]]
+                    </span>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <!-- ── Uploads ── -->
+    <section v-else>
+        <div class="md-toolbar">
+            <div class="md-chips">
+                <span v-for="c in uploads" :key="c.key" :class="['md-chip', { active: category === c.key }]" @click="category = c.key">
+                    <i :class="['fa-solid', c.icon]"></i>[[ c.label ]] <b>[[ c.files.length ]]</b>
+                </span>
+            </div>
+            <span v-if="uploadFolder" class="md-chip active" @click="uploadFolder = null" title="Show the whole category">
+                <i class="fa-solid fa-folder"></i>[[ uploadFolder ]] <i class="fa-solid fa-xmark"></i>
+            </span>
+            <span :class="['md-chip', { active: orphansOnly }]" @click="orphansOnly = !orphansOnly" title="Files nothing points at any more">
+                <i class="fa-solid fa-ghost"></i>Unused only
+            </span>
+            <div class="md-search"><i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" v-model="q" class="form-control form-control-sm" placeholder="Search a file or an owner…">
+            </div>
+            <span v-if="currentCategory" class="text-muted small ms-auto">[[ currentCategory.files.length ]] files · [[ size(currentCategory.size) ]]</span>
+        </div>
+
+        <div v-if="loading" class="md-empty"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>
+        <div v-else-if="!uploadFiles.length" class="md-empty">Nothing here.</div>
+        <div v-else class="md-grid">
+            <article v-for="f in uploadFiles" :key="f.rel" class="md-card" @click="open('uploads', f)" tabindex="0" @keydown.enter="open('uploads', f)">
+                <button type="button" :class="['md-card__delete', { armed: armed === 'uploads:' + f.rel }]"
+                        :title="armed === 'uploads:' + f.rel ? 'Click again to delete' : 'Delete (click twice)'" aria-label="Delete"
+                        @click.stop="clickDelete('uploads', f)">
+                    <i class="fa-solid fa-trash"></i><span v-if="armed === 'uploads:' + f.rel">Again?</span>
+                </button>
+                <div class="md-card__preview">
+                    <img v-if="f.is_image" :src="f.url" :alt="f.name" loading="lazy">
+                    <i v-else :class="['fa-solid', fileIcon(f), 'md-card__fileicon']"></i>
+                </div>
+                <div class="md-card__body">
+                    <div class="md-card__name" :title="f.rel">[[ f.name ]]</div>
+                    <div class="md-card__meta"><span v-if="f.width">[[ f.width ]]×[[ f.height ]]</span><span>[[ size(f.size) ]]</span></div>
+                    <div v-if="f.owner" class="md-card__owner" :title="f.owner.label">[[ f.owner.label ]]</div>
+                    <span v-else class="md-badge md-badge--unused">not referenced</span>
+                </div>
+            </article>
+        </div>
+    </section>
+    </div><!-- /.md-main -->
+    </div><!-- /.md-layout -->
+
+    <!-- ── Detail drawer ── -->
+    <div v-if="current" class="md-drawer-backdrop" @click.self="current = null">
+        <aside class="md-drawer" role="dialog" aria-modal="true" :aria-label="current.file.name">
+            <div class="md-drawer__head">
+                <strong class="text-truncate">[[ current.file.name ]]</strong>
+                <button type="button" class="btn-close ms-auto" @click="current = null" aria-label="Close"></button>
+            </div>
+            <div class="md-drawer__preview">
+                <img v-if="current.file.is_image" :src="current.file.url" :alt="current.file.name">
+                <i v-else :class="['fa-solid', fileIcon(current.file), 'md-card__fileicon']"></i>
+            </div>
+            <dl class="md-facts">
+                <dt>Path</dt><dd class="font-monospace">[[ pathOf(current) ]]</dd>
+                <dt v-if="current.file.width">Size</dt><dd v-if="current.file.width">[[ current.file.width ]]×[[ current.file.height ]] px</dd>
+                <dt>Weight</dt><dd>[[ size(current.file.size) ]]</dd>
+                <dt>Modified</dt><dd>[[ new Date(current.file.mtime * 1000).toLocaleString() ]]</dd>
+                <template v-if="current.kind === 'uploads'">
+                    <dt>Belongs to</dt>
+                    <dd v-if="current.file.owner"><a v-if="current.file.owner.link" :href="current.file.owner.link" target="_blank" rel="noopener">[[ current.file.owner.label ]]</a><span v-else>[[ current.file.owner.label ]]</span></dd>
+                    <dd v-else class="text-muted">Nothing — an orphan file</dd>
+                </template>
+            </dl>
+
+            <div v-if="current.kind === 'library'" class="md-refs">
+                <div class="md-label">Used in</div>
+                <p v-if="!current.file.ref_count" class="text-muted small mb-0">Not referenced in the code nor by a blog post.</p>
+                <ul v-else class="mb-0">
+                    <li v-for="p in current.file.refs.code" :key="p" class="font-monospace small">[[ p ]]</li>
+                    <li v-for="p in current.file.refs.posts" :key="p.uuid" class="small"><i class="fa-solid fa-newspaper me-1"></i>cover of <a :href="'/blog/post/' + p.uuid" target="_blank" rel="noopener">[[ p.title ]]</a></li>
+                </ul>
+            </div>
+
+            <div class="md-actions">
+                <a :href="current.file.url" class="btn btn-sm btn-outline-secondary rounded-pill" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square me-1"></i>Open</a>
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" @click="copyPath"><i class="fa-regular fa-copy me-1"></i>Copy URL</button>
+                <label v-if="current.file.is_image" class="btn btn-sm btn-outline-primary rounded-pill mb-0" title="Upload a new version under the same name">
+                    <i class="fa-solid fa-arrows-rotate me-1"></i>Replace
+                    <input type="file" class="d-none" :accept="current.file.ext" @change="replaceCurrent">
+                </label>
+                <button type="button" class="btn btn-sm btn-outline-danger rounded-pill" @click="deleteCurrent">
+                    <i class="fa-solid fa-trash me-1"></i>Delete
+                </button>
+            </div>
+            <small class="text-muted md-hint">[[ deleteHint ]]</small>
+
+            <div v-if="current.kind === 'library'" class="md-rename">
+                <div class="md-label">Rename</div>
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" v-model="renameTo" :placeholder="current.file.name">
+                    <button type="button" class="btn btn-outline-primary" @click="renameCurrent" :disabled="!renameTo.trim() || renameTo.trim() === current.file.name">Rename</button>
+                </div>
+                <small class="text-muted">Blog covers using it follow; references in the code listed above must be updated by hand.</small>
+            </div>
+
+        </aside>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>window.MEDIA_LIBRARY_ROOTS = {{ library_roots | tojson }};</script>
+<script type="module" src="{{ url_for('static', filename='js/admin/media.js') }}"></script>
+{% endblock %}

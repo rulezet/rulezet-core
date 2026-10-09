@@ -157,6 +157,9 @@
                               <a href="/blog/admin/" class="dr-nav__item {% if request.path.startswith('/blog/admin') %}active{% endif %}">
                                  <i class="fa-solid fa-newspaper"></i><span>Blog</span>
                               </a>
+                              <a href="/admin/media" class="dr-nav__item {% if request.path.startswith('/admin/media') %}active{% endif %}">
+                                 <i class="fa-solid fa-images"></i><span>Media</span>
+                              </a>
                               <a href="/ai/admin/overview" class="dr-nav__item {% if request.path.startswith('/ai/admin') %}active{% endif %}">
                                  <i class="fa-solid fa-robot"></i><span>AI</span>
                               </a>
@@ -465,6 +468,7 @@
       { label: 'Admin: User Connections', url: '/admin/logs/connections', icon: 'fa-right-to-bracket', keywords: ['login', 'logout', 'connections', 'sign in', 'sign out'] },
       { label: 'Admin: API Activity', url: '/admin/logs/api', icon: 'fa-code', keywords: ['api', 'api logs', 'api requests'] },
       { label: 'Server Settings', url: '/admin/settings', icon: 'fa-sliders', keywords: ['server settings'] },
+      { label: 'Admin: Media', url: '/admin/media', icon: 'fa-images', keywords: ['media', 'images', 'uploads', 'files', 'avatars'] },
       {% endif %}
    ]
 
