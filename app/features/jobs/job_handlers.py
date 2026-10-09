@@ -4021,7 +4021,7 @@ def handle_blog_from_cve(job, app):
             log_job(job, f'{len(matched_bundle_ids)} matching bundle(s) found.', event='progress')
 
         # 3. Cover image — use the bundled Vulnerability Lookup default
-        cover_url = '/static/uploads/blog/vendor/vulnerability_to_rulezet.png'
+        cover_url = '/static/images/blog/vulnerability_to_rulezet.png'
 
         # 4. Parse v5 format + fetch EPSS for each CVE
         parsed_data = {}

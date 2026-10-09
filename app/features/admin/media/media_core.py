@@ -45,7 +45,6 @@ UPLOAD_CATEGORIES = {
     'workspace': ('Workspace files', 'fa-layer-group', ('uploads', 'workspace'), None),
     'pivotick':  ('Pivotick backgrounds', 'fa-diagram-project', ('static', 'uploads', 'pivotick_backgrounds'),
                   '/static/uploads/pivotick_backgrounds'),
-    'game':      ('Game', 'fa-gamepad', ('static', 'uploads', 'game'), '/static/uploads/game'),
 }
 
 

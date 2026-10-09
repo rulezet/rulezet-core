@@ -68,3 +68,6 @@ app/modules/misp-taxonomies
 app/media_overrides/
 # Generated at start-up from the themes in the database (config_core.regenerate_custom_themes_css)
 app/static/css/themes/custom-themes.css
+
+# Backups of .env made on servers
+.env.bak*
