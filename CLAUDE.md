@@ -1,6 +1,6 @@
 Flask + Vue.js 3 + PostgreSQL. Community platform for cybersecurity detection rules (YARA, Sigma, Suricata, Zeek, etc.). Live at rulezet.org.
 
-Preferred entrypoint is `manage.py` (wraps everything below): `python3 manage.py start` (dev server), `python3 manage.py test`, `python3 manage.py update` (post-`git pull` deps+db sync), `python3 manage.py deploy` (prod backup+update+restart), `python3 manage.py db-init` / `db-reload`, `python3 manage.py backup` / `restore`. Full list: `python3 manage.py --help`.
+Preferred entrypoint is `manage.py` (wraps everything below): `python3 manage.py start-dev` (dev server, auto-reload), `python3 manage.py test`, `python3 manage.py update` (post-`git pull` deps+db sync), `python3 manage.py deploy` (prod backup+update+restart), `python3 manage.py db-init` / `db-reload`, `python3 manage.py backup` / `restore`. Full list: `python3 manage.py --help`.
 Lower-level equivalents still used directly in dev: `source env/bin/activate && ./launch.sh -l` (run dev), `./launch.sh -t` or `FLASKENV=testing pytest tests` (run tests), `python3 app.py -i` (DB init) / `-r` (DB reset).
 Single test: `FLASKENV=testing pytest tests/rules/test_rule.py -k "test_name"`
 Test rework in progress: `tests/` = current suite run by CI on every commit; `tests_new/` = new suite by feature (access / CRUD / API / robustness), run with `FLASKENV=testing pytest tests_new` — plan and progress in `docs/design/test_restructure.md`. Never run two pytest processes in the same checkout (they share the SQLite file).

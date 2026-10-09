@@ -31,7 +31,7 @@ os.environ.setdefault('FLASKENV', 'development')
 load_dotenv()
 
 _cli_mode = args.init_db or args.recreate_db or args.delete_db or args.seed_defaults
-# manage.py's `start` launches worker.py as its own process alongside this
+# manage.py's `start-dev` launches worker.py as its own process alongside this
 # one (same split as production's start-prod/worker.py — see there for why)
 # and sets this so app.py doesn't ALSO start a second, duplicate copy of the
 # job worker/telemetry/scheduler threads. Running app.py directly (without

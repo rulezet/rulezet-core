@@ -131,7 +131,7 @@ def _sync_submodules() -> None:
     if result.returncode != 0:
         run(["git", "submodule", "update", "--remote"])
     run(["git", "submodule", "update", "--init", "app/modules/pivotick",
-         "app/modules/pivotick-converters"])
+         "app/modules/pivotick-converters", "app/modules/pivograph"])
 
 
 # ── Pivotick graph assets (no npm, no Node) ──────────────────────────────────
@@ -283,6 +283,55 @@ def _ensure_pivotick_assets(force: bool = False) -> None:
               "Run `python3 manage.py pivotick` on a machine with internet access.")
 
 
+# ── Pivograph (graph view of the Rule formats page) ──────────────────────────
+# app/modules/pivograph is the Pivograph app (github.com/ecrou-exact/project-graph),
+# pinned. /rule/formats embeds it in an <iframe> and hands it the graph with
+# postMessage. Like Pivotick, its browser build is committed so the server
+# never needs Node: `manage.py pivograph` (on a dev machine with npm) builds
+# the pinned commit and copies the app — not its docs or Hugo example — to
+# app/static/pivograph/, stamped with the commit in build.json.
+
+PIVOGRAPH_DIR    = ROOT / "app" / "modules" / "pivograph"
+PIVOGRAPH_STATIC = ROOT / "app" / "static" / "pivograph"
+PIVOGRAPH_KEEP   = ("index.html", "favicon.svg", "assets", "icons", "fonts", "logos")
+
+
+def _build_pivograph_assets() -> None:
+    import shutil
+    commit = _git_out(["rev-parse", "HEAD"], PIVOGRAPH_DIR)
+    if not commit:
+        raise RuntimeError("app/modules/pivograph is missing — run `git submodule update --init app/modules/pivograph`")
+    if not shutil.which("npm"):
+        raise RuntimeError("npm is required to build Pivograph (only on the machine that builds it, not on the server)")
+    info(f"Pivograph {commit[:8]}: npm ci + npm run build…")
+    run(["npm", "ci", "--no-audit", "--no-fund"], cwd=PIVOGRAPH_DIR)
+    run(["npm", "run", "build"], cwd=PIVOGRAPH_DIR)
+    dist = PIVOGRAPH_DIR / "dist"
+    if PIVOGRAPH_STATIC.exists():
+        shutil.rmtree(PIVOGRAPH_STATIC)
+    PIVOGRAPH_STATIC.mkdir(parents=True)
+    for name in PIVOGRAPH_KEEP:
+        src = dist / name
+        if src.is_dir():
+            shutil.copytree(src, PIVOGRAPH_STATIC / name)
+        elif src.exists():
+            shutil.copy2(src, PIVOGRAPH_STATIC / name)
+    (PIVOGRAPH_STATIC / "build.json").write_text(json.dumps({"pivograph": commit}, indent=2) + "\n")
+    ok(f"Pivograph → {PIVOGRAPH_STATIC.relative_to(ROOT)}")
+
+
+def _check_pivograph_assets() -> None:
+    """Warn (never fail) when the committed Pivograph build doesn't match the pinned submodule."""
+    commit = _git_out(["rev-parse", "HEAD"], PIVOGRAPH_DIR)
+    try:
+        built = json.loads((PIVOGRAPH_STATIC / "build.json").read_text()).get("pivograph")
+    except (OSError, ValueError):
+        built = None
+    if commit and built and commit != built:
+        error(f"app/static/pivograph was built from {built[:8]} but the submodule is at {commit[:8]} — "
+              "run `python3 manage.py pivograph` on a machine with npm and commit the result.")
+
+
 def _confirm(prompt: str) -> bool:
     """Ask for confirmation. Returns True if confirmed, False if cancelled (or Ctrl+C)."""
     try:
@@ -418,8 +467,9 @@ def cmd_help() -> None:
                   {D}  install deps from requirements.txt → init DB{R}
                   {D}→ Run once after cloning the repo{R}
 
-  {G}start{R}         {D}Start locally (FLASKENV=development): worker.py + gunicorn wsgi:app{R}
+  {G}start-dev{R}     {D}Start locally (FLASKENV=development): worker.py + gunicorn wsgi:app{R}
                   {D}  same launch as start-prod, just dev env/port — see start-prod{R}
+                  {D}  debug mode, reloads on code changes (Python and templates){R}
                   {D}→ Use this for local development{R}
 
   {G}start-prod{R}    {D}Full production launch:{R}
@@ -443,6 +493,10 @@ def cmd_help() -> None:
                   {D}  + app/modules/pivotick-converters (compiled with esbuild) — no npm{R}
                   {D}→ Run after bumping either submodule, then commit the result{R}
                   {D}  (update/start-prod rebuild automatically if they moved){R}
+
+  {G}pivograph{R}     {D}Rebuild the Pivograph app (graph view of /rule/formats) from{R}
+                  {D}  app/modules/pivograph into app/static/pivograph — needs npm{R}
+                  {D}→ Run after bumping the submodule, then commit the result{R}
 
   {G}backup{R}        {D}Backup PostgreSQL database to backup/dumps/{R}
 
@@ -468,10 +522,10 @@ def cmd_help() -> None:
   {D}# Fresh install{R}
   {G}python3 -m venv env{R}
   {G}python3 manage.py init{R}
-  {G}python3 manage.py start{R}
+  {G}python3 manage.py start-dev{R}
 
   {D}# Daily development{R}
-  {G}python3 manage.py start{R}
+  {G}python3 manage.py start-dev{R}
 
   {D}# After pulling new code{R}
   {G}python3 manage.py update{R}
@@ -505,7 +559,7 @@ def cmd_init() -> None:
     ok("Database initialised")
 
     header("Init complete")
-    ok("Ready. Run:  python3 manage.py start")
+    ok("Ready. Run:  python3 manage.py start-dev")
 
 
 # Launch settings manage.py itself reads — taken from .env too (the shell
@@ -529,9 +583,10 @@ def _load_launch_env() -> None:
             os.environ.setdefault(key, value.strip().strip('"').strip("'"))
 
 
-def _gunicorn_cmd(bind: str, threads: str, log_name: str) -> list:
+def _gunicorn_cmd(bind: str, threads: str, log_name: str, reload: bool = False) -> list:
     """One gunicorn serving wsgi:app. Logs go to stdout (the screen) unless
-    LOG_DIR is set, then to LOG_DIR/<log_name>-access.log / -error.log."""
+    LOG_DIR is set, then to LOG_DIR/<log_name>-access.log / -error.log.
+    `reload` (dev only): restart the workers when a Python file changes."""
     log_dir = os.environ.get("LOG_DIR", "").strip()
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
@@ -553,19 +608,23 @@ def _gunicorn_cmd(bind: str, threads: str, log_name: str) -> list:
         "--error-logfile", error_log,
         # [site] / [api] prefix so both streams stay readable when they share stdout
         "--access-logformat", f'[{log_name}] %(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s %(L)ss "%(f)s" "%(a)s"',
-    ]
+    ] + (["--reload"] if reload else [])
 
 
-def _run_gunicorn_with_worker(flaskenv: str, port: str) -> None:
+def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) -> None:
     """Starts worker.py (background job worker, telemetry loop, update-
     checker, both schedulers — its own process, never inside a gunicorn
     web worker, see start-prod's note below) plus gunicorn serving
-    wsgi:app. Shared by `start` and `start-prod` so dev runs on the exact
+    wsgi:app. Shared by `start-dev` and `start-prod` so dev runs on the exact
     same process shape as prod (same gunicorn flags, same worker split) —
     only FLASKENV/port differ — instead of dev using app.py's bundled
-    Werkzeug dev server. That means no code-reload-on-save in dev anymore,
-    traded for catching gunicorn/worker-split issues here instead of only
-    in prod.
+    Werkzeug dev server, so gunicorn/worker-split issues show up here
+    instead of only in prod.
+
+    `reload` (set by `start-dev`): gunicorn's --reload restarts the web workers
+    whenever a Python file changes; templates already reload on every
+    request in debug mode (DevelopmentConfig.DEBUG). worker.py is not
+    reloaded — restart `start-dev` after changing a job handler.
 
     Optional (.env), all off by default — nothing changes unless set:
       GUNICORN_BIND_HOST  address to listen on (default 0.0.0.0). Behind
@@ -591,11 +650,11 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str) -> None:
         if api_port:
             info(f"API process on {host}:{api_port} (route /api/ to it in nginx)")
             api_proc = subprocess.Popen(
-                _gunicorn_cmd(f"{host}:{api_port}", os.environ.get("API_GUNICORN_THREADS", "8"), "api"),
+                _gunicorn_cmd(f"{host}:{api_port}", os.environ.get("API_GUNICORN_THREADS", "8"), "api", reload),
                 cwd=ROOT, env={**_venv_env(), "FLASKENV": flaskenv},
             )
         threads = os.environ.get("GUNICORN_THREADS", "8")
-        run(_gunicorn_cmd(f"{host}:{port}", threads, "site"), extra_env={"FLASKENV": flaskenv})
+        run(_gunicorn_cmd(f"{host}:{port}", threads, "site", reload), extra_env={"FLASKENV": flaskenv})
     except KeyboardInterrupt:
         print("\n\033[0;37m  · Server stopped.\033[0m")
     finally:
@@ -609,14 +668,15 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str) -> None:
                     proc.kill()
 
 
-def cmd_start() -> None:
+def cmd_start_dev() -> None:
     _check_venv()
     port = os.environ.get("FLASK_PORT", "7009")
     url = f"http://{os.environ.get('FLASK_URL', '127.0.0.1')}:{port}"
     header(f"Starting Rulezet v{app_version()} (development)")
     info(f"Serving at {url}")
+    info("Debug mode — reloads on code changes (Python and templates)")
     info("Press CTRL+C to stop")
-    _run_gunicorn_with_worker("development", port)
+    _run_gunicorn_with_worker("development", port, reload=True)
 
 
 def cmd_start_prod() -> None:
@@ -650,7 +710,7 @@ def cmd_start_prod() -> None:
     run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "production"})
     ok("Default data up to date")
 
-    # 3. Start — same gunicorn+worker.py launch as `start`, see
+    # 3. Start — same gunicorn+worker.py launch as `start-dev`, see
     # _run_gunicorn_with_worker's docstring for why this isn't `flask run`
     # or an in-process worker.
     _load_launch_env()
@@ -722,6 +782,7 @@ def cmd_update() -> None:
     _sync_submodules()
     ok("Submodules up to date")
     _ensure_pivotick_assets()
+    _check_pivograph_assets()
 
     info("Syncing Python dependencies…")
     run([PIP, "install", "-r", "requirements.txt"])
@@ -744,6 +805,17 @@ def cmd_pivotick() -> None:
     _ensure_pivotick_assets(force=True)
     ok("Done — commit app/static/js/pivotick.iife.js, app/static/css/components/pivotick.css "
        "and app/static/js/pivotick/ together with the submodule bump")
+
+
+def cmd_pivograph() -> None:
+    """Rebuild the Pivograph app (graph view of /rule/formats) from the pinned submodule."""
+    header("Building Pivograph")
+    try:
+        _build_pivograph_assets()
+    except Exception as exc:
+        error(f"Pivograph build failed: {exc}")
+        sys.exit(1)
+    ok("Done — commit app/static/pivograph/ together with the submodule bump")
 
 
 def cmd_deploy() -> None:
@@ -780,7 +852,8 @@ def cmd_db_reload() -> None:
 
 COMMANDS: dict[str, object] = {
     "init":         cmd_init,
-    "start":        cmd_start,
+    "start-dev":    cmd_start_dev,
+    "start":        cmd_start_dev,   # former name, kept so old habits/scripts still work
     "start-prod":   cmd_start_prod,
     "restart-prod": cmd_restart_prod,
     "test":         cmd_test,
@@ -792,6 +865,7 @@ COMMANDS: dict[str, object] = {
     "db-init":      cmd_db_init,
     "db-reload":    cmd_db_reload,
     "pivotick":     cmd_pivotick,
+    "pivograph":    cmd_pivograph,
     "help":         cmd_help,
 }
 

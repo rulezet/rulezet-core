@@ -75,7 +75,7 @@ python3 manage.py db-init
 For local development:
 
 ```bash
-python3 manage.py start
+python3 manage.py start-dev
 
 ```
 
