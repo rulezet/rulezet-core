@@ -173,39 +173,77 @@
         return el;
     }
 
-    // Weather: snow comes and goes — snowfalls of varying intensity, then
-    // calm spells. Transitions fade over a few seconds (christmas.css), and
-    // the flakes' animation is paused while it's calm.
+    // ── Snow that starts and stops naturally ──────────────────────────
+    // Stopping never makes flakes vanish: each one finishes its fall to the
+    // bottom of the screen and is then not sent again. Starting sends every
+    // flake again from the top, each after its own short delay — the snow
+    // builds up progressively. Used by the weather cycle and by the corner
+    // switch alike.
     const rangeMs = (min, max) => (min + Math.random() * (max - min)) * 1000;
-    function weather(snowEl) {
+    const SNOW_OFF_KEY = 'rz-xmas-snow-off';
+    const snowOff = () => { try { return localStorage.getItem(SNOW_OFF_KEY) === '1'; } catch { return false; } };
+
+    function stopFalling(snowEl, onDone) {
+        let falling = 0;
+        Array.from(snowEl.children).forEach((f) => {
+            if (f._onFallEnd) f.removeEventListener('animationiteration', f._onFallEnd);
+            if (f.classList.contains('xmas-flake--done') || f.classList.contains('xmas-flake--off')) {
+                f.classList.add('xmas-flake--done');
+                return;
+            }
+            falling++;
+            f._onFallEnd = (e) => {
+                if (e.animationName !== 'xmas-fall') return;      // ignore the sway loop
+                f.removeEventListener('animationiteration', f._onFallEnd);
+                f._onFallEnd = null;
+                f.classList.add('xmas-flake--done');
+                if (--falling === 0 && onDone) onDone();
+            };
+            f.addEventListener('animationiteration', f._onFallEnd);
+        });
+        if (falling === 0 && onDone) onDone();
+    }
+
+    function startFalling(snowEl, intensity) {
         const flakes = Array.from(snowEl.children);
+        const visible = Math.round(flakes.length * intensity);
+        flakes.forEach((f, i) => {
+            if (f._onFallEnd) { f.removeEventListener('animationiteration', f._onFallEnd); f._onFallEnd = null; }
+            const [fall, sway] = f.style.animationDuration.split(',').map(parseFloat);
+            // restart from the top: drop the animation, reflow, put it back with a positive delay
+            f.style.animationName = 'none';
+            void f.offsetWidth;
+            f.style.animationName = '';
+            f.style.animationDelay = `${(Math.random() * fall * 0.8).toFixed(2)}s, ${(-Math.random() * sway).toFixed(2)}s`;
+            f.classList.toggle('xmas-flake--off', i >= visible);
+            f.classList.remove('xmas-flake--done');
+        });
+    }
+
+    // Weather: snowfalls of varying intensity (40–100% of the flakes), then
+    // calm spells. Held while the user turned the snow off.
+    function weather(snowEl) {
         const snowfall = () => {
-            const visible = Math.round(flakes.length * (0.4 + Math.random() * 0.6));   // 40–100% intensity
-            flakes.forEach((f, i) => f.classList.toggle('xmas-flake--off', i >= visible));
-            snowEl.classList.remove('xmas-snow--calm', 'xmas-snow--paused');
+            if (snowOff()) return;
+            startFalling(snowEl, 0.4 + Math.random() * 0.6);
             weatherTimer = setTimeout(calm, rangeMs(45, 90));
         };
         const calm = () => {
-            snowEl.classList.add('xmas-snow--calm');
-            // once faded out, stop animating the flakes
-            weatherTimer = setTimeout(() => {
-                snowEl.classList.add('xmas-snow--paused');
-                weatherTimer = setTimeout(snowfall, rangeMs(25, 50));
-            }, 6000);
+            stopFalling(snowEl, () => { if (!snowOff()) weatherTimer = setTimeout(snowfall, rangeMs(25, 50)); });
         };
-        weatherTimer = setTimeout(calm, rangeMs(45, 90));    // starts snowing, as before
+        snowEl._resume = () => { clearTimeout(weatherTimer); snowfall(); };
+        snowEl._halt = () => { clearTimeout(weatherTimer); stopFalling(snowEl); };
+        if (snowOff()) Array.from(snowEl.children).forEach((f) => f.classList.add('xmas-flake--done'));
+        else weatherTimer = setTimeout(calm, rangeMs(45, 90));    // page loads with snow already falling
     }
 
     // Small switch in a corner to turn the snow off (remembered in this browser).
-    const SNOW_OFF_KEY = 'rz-xmas-snow-off';
-    const snowOff = () => { try { return localStorage.getItem(SNOW_OFF_KEY) === '1'; } catch { return false; } };
     function snowSwitch(snowEl) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'xmas-snow-switch';
         const update = () => {
             const off = snowOff();
-            snowEl.classList.toggle('xmas-snow--off', off);
             btn.classList.toggle('is-off', off);
             btn.title = off ? 'Turn the snow back on' : 'Turn the snow off';
             btn.setAttribute('aria-label', btn.title);
@@ -213,7 +251,9 @@
         };
         btn.innerHTML = '<i class="fa-solid fa-snowflake"></i>';
         btn.addEventListener('click', () => {
-            try { localStorage.setItem(SNOW_OFF_KEY, snowOff() ? '0' : '1'); } catch { /* storage unavailable */ }
+            const turnOff = !snowOff();
+            try { localStorage.setItem(SNOW_OFF_KEY, turnOff ? '1' : '0'); } catch { /* storage unavailable */ }
+            if (turnOff) snowEl._halt(); else snowEl._resume();     // last flakes fall / snow starts from the top
             update();
         });
         update();

@@ -61,14 +61,10 @@
     user-select: none;
     animation: xmas-fall linear infinite, xmas-sway ease-in-out infinite alternate;
 }
-/* Snow comes and goes (christmas.js weather()): fades out for a calm spell,
-   flakes beyond the current intensity are hidden. */
-.xmas-snow { transition: opacity 6s ease; }
-.xmas-snow--calm { opacity: 0; }
-.xmas-snow--paused .xmas-flake { animation-play-state: paused; }
-.xmas-snow--off { display: none; }      /* turned off with the corner switch */
-.xmas-flake { transition: opacity 4s ease; }
-.xmas-flake.xmas-flake--off { opacity: 0 !important; }
+/* Snow starts and stops naturally (christmas.js): a stopped flake finishes
+   its fall, then stays hidden; flakes beyond the current intensity are off. */
+.xmas-flake.xmas-flake--done,
+.xmas-flake.xmas-flake--off { visibility: hidden; animation-play-state: paused; }
 @keyframes xmas-fall { to { transform: translateY(105vh); } }
 @keyframes xmas-sway { from { margin-left: -14px; } to { margin-left: 14px; } }
 
