@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% block title %}Roadmap — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/roadmap.css') }}">
+{% endblock %}
+
+{#
+  The public roadmap. Kept in sync with docs/future/ROADMAP.md (the detailed
+  version for contributors): one entry per big feature, in priority order.
+  `status`: shipped | progress | planned | idea — `effort`: free text.
+#}
+{% set items = [
+  {'n': 0, 'key': 'code-health', 'icon': 'fa-broom', 'title': 'Code health — a full review of the codebase',
+   'effort': 'Large, continuous', 'status': 'planned', 'foundation': True,
+   'pitch': 'A lighter, faster codebase that every other feature builds on — and that is easy to contribute to.',
+   'points': ['Performance: hunt down slow pages and endpoints — N+1 queries, missing indexes, heavy serialisation in lists, work that belongs in background jobs or the cache',
+              'Duplication: the same logic written several times (web routes vs API, per-feature helpers, copied tables, badges and dialogs) factored into shared helpers and components',
+              'Size: split the largest files by responsibility — the rule blueprint and core, the job handlers, the models, the biggest templates and components',
+              'Dead code removed, one consistent way to do each thing (permissions, pagination, errors, logs), the new test suite finished and run in CI',
+              'Shipped feature by feature — never a big-bang rewrite']},
+  {'n': 1, 'key': 'sightings', 'icon': 'fa-eye', 'title': 'Sightings — "I saw this rule fire"',
+   'effort': 'Small', 'status': 'idea',
+   'pitch': 'The signal that is missing today: does this rule work in real life?',
+   'points': ['Report in one click or through the API: true positive, false positive (with the kind of environment), deployed in production',
+              'Feeds the quality score, "most deployed" and "noisiest" sorts, and nudges towards a note or an edit proposal when false positives pile up',
+              'Rule and bundle pages show it: "deployed by 14 teams, 3 false-positive reports"']},
+  {'n': 2, 'key': 'cve-kit', 'icon': 'fa-bug', 'title': 'CVE response kit',
+   'effort': 'Medium', 'status': 'idea',
+   'pitch': 'When a critical vulnerability drops, every rule for it — in hours, in one place.',
+   'points': ['A page per CVE: every linked rule across formats, and the gaps ("no Sigma rule yet")',
+              'One-click AI drafts for the missing formats, a ready-made bundle to download or subscribe to',
+              'An alert when a new rule for it is published — built with Vulnerability-Lookup']},
+  {'n': 3, 'key': 'connectors', 'icon': 'fa-plug', 'title': 'Connectors per format',
+   'effort': 'Small → large', 'status': 'progress',
+   'pitch': 'Rulezet becomes the place your tools get their rules from — and learn from.',
+   'points': ['Deliver: a curated bundle, release or workspace reaches the tool natively — a feed, an API push, a package',
+              'Verify: the tool itself checks what was deployed (does it load on this version?) and reports back',
+              'Learn: anonymous counters from production improve the rules',
+              'Suricata first: a global suricata-update feed already exists; next, a feed per bundle without the rules failing the health checks']},
+  {'n': 4, 'key': 'lab', 'icon': 'fa-flask', 'title': 'Rulezet Lab',
+   'effort': 'Large', 'status': 'idea',
+   'pitch': 'Prove what each rule detects, before it reaches production — and give it a score.',
+   'points': ['Per format, a controlled environment: replayed network captures, known malware and known-clean files, attack logs',
+              'Detection, false positives and cost measured for every rule and every version — regressions caught automatically',
+              'A Lab score on each rule, added to its quality score',
+              'Replaces the current Rule Tester, which will be deprecated']},
+  {'n': 5, 'key': 'github-action', 'icon': 'fa-github', 'brand': True, 'title': 'rulezet-validate GitHub Action',
+   'effort': 'Medium', 'status': 'idea',
+   'pitch': 'Rulezet inside the repositories where teams keep their detection rules as code.',
+   'points': ['Every pull request validated with Rulezet\'s own parsers and health checks — syntax, duplicate ids, missing dependencies',
+              'Annotations directly on the diff; optional publication to a bundle on merge']},
+  {'n': 6, 'key': 'coverage', 'icon': 'fa-crosshairs', 'title': 'Coverage gap analysis',
+   'effort': 'Medium → large', 'status': 'idea',
+   'pitch': 'From "searching rules" to "knowing what to deploy".',
+   'points': ['Describe your context — sector, threats targeting you (an APT group, a MISP event, a report), your stack',
+              'See which ATT&CK techniques are covered and which are not, per format',
+              'Get a recommended bundle and AI drafts to fill the gaps']},
+  {'n': 7, 'key': 'families', 'icon': 'fa-diagram-project', 'title': 'Cross-format rule families',
+   'effort': 'Medium', 'status': 'idea',
+   'pitch': 'One threat, every format: "what do I use in my tool?"',
+   'points': ['Equivalent Suricata, Sigma and YARA rules linked into one family',
+              'Sigma converted to SIEM queries: "also available for Splunk, Elastic, Sentinel"']},
+  {'n': 8, 'key': 'signed', 'icon': 'fa-signature', 'title': 'Signed releases & verified publishers',
+   'effort': 'Medium', 'status': 'idea',
+   'pitch': 'Trust for automated deployment.',
+   'points': ['Bundle releases and feeds signed with the publisher\'s key',
+              'A verified-publisher badge for organisations and trusted contributors',
+              'Required as soon as sensors pull rules automatically']},
+] %}
+
+{% set status_labels = {'shipped': 'Shipped', 'progress': 'In progress', 'planned': 'Planned', 'idea': 'Idea'} %}
+
+{% block content %}
+<div class="container my-4">
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-road banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/why_choose_rulezet" class="text-decoration-none text-muted">Why Rulezet</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Roadmap</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-road"></i></div>
+            <div><h2 class="fw-bold mb-1">Roadmap</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            Where Rulezet is going: from the place where detection rules are shared and curated, to the place
+            where they are tested, deployed to real tools and improved by what happens in production.
+        </p>
+    </div>
+
+    <!-- The direction -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <div class="rm-section-title"><i class="fa-solid fa-compass"></i>The direction</div>
+            <div class="rm-flow">
+                <div class="rm-flow__step">
+                    <span class="rm-flow__icon"><i class="fa-solid fa-boxes-stacked"></i></span>
+                    <strong>Curate</strong>
+                    <p>Rules are shared, validated, reviewed and grouped into bundles — what Rulezet does today.</p>
+                </div>
+                <i class="fa-solid fa-arrow-right rm-flow__arrow"></i>
+                <div class="rm-flow__step">
+                    <span class="rm-flow__icon"><i class="fa-solid fa-flask"></i></span>
+                    <strong>Test</strong>
+                    <p>The Lab proves what each rule detects on reference data, and scores it.</p>
+                </div>
+                <i class="fa-solid fa-arrow-right rm-flow__arrow"></i>
+                <div class="rm-flow__step">
+                    <span class="rm-flow__icon"><i class="fa-solid fa-plug"></i></span>
+                    <strong>Deploy</strong>
+                    <p>Connectors deliver curated sets to the real tools, natively.</p>
+                </div>
+                <i class="fa-solid fa-arrow-right rm-flow__arrow"></i>
+                <div class="rm-flow__step">
+                    <span class="rm-flow__icon"><i class="fa-solid fa-arrows-rotate"></i></span>
+                    <strong>Learn</strong>
+                    <p>Sightings and production counters flow back and improve the rules.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Table of contents -->
+        <div class="col-lg-3 d-none d-lg-block">
+            <nav class="rm-toc">
+                <div class="rm-toc__title">On this page</div>
+                {% for it in items %}
+                <a href="#{{ it.key }}"><span class="rm-toc__n">{{ it.n }}</span>{{ it.title.split(' — ')[0] }}</a>
+                {% endfor %}
+            </nav>
+        </div>
+
+        <!-- Items -->
+        <div class="col-lg-9">
+            {% for it in items %}
+            <section id="{{ it.key }}" class="rm-item {% if it.foundation %}rm-item--foundation{% endif %}">
+                <div class="rm-item__head">
+                    <span class="rm-item__num">{{ it.n }}</span>
+                    <span class="rm-item__icon"><i class="{{ 'fa-brands' if it.brand else 'fa-solid' }} {{ it.icon }}"></i></span>
+                    <div class="flex-grow-1 min-w-0">
+                        <h3 class="rm-item__title">{{ it.title }}</h3>
+                        <p class="rm-item__pitch">{{ it.pitch }}</p>
+                    </div>
+                    <div class="rm-item__badges">
+                        <span class="rm-status rm-status--{{ it.status }}">{{ status_labels[it.status] }}</span>
+                        <span class="rm-effort"><i class="fa-solid fa-gauge-high me-1"></i>{{ it.effort }}</span>
+                    </div>
+                </div>
+                {% if it.foundation %}
+                <div class="rm-foundation-note"><i class="fa-solid fa-layer-group me-1"></i>Foundation — runs alongside every other item.</div>
+                {% endif %}
+                <ul class="rm-points">
+                    {% for p in it.points %}<li>{{ p }}</li>{% endfor %}
+                </ul>
+            </section>
+            {% endfor %}
+
+            <!-- Contribute -->
+            <div class="rm-contribute">
+                <div>
+                    <h3>Have an idea, or want to help?</h3>
+                    <p class="mb-0">The roadmap is discussed in the open. Suggest a feature, comment on one, or pick one up.</p>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="https://github.com/rulezet/rulezet-core/discussions" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary rounded-pill px-4">
+                        <i class="fa-solid fa-comments me-2"></i>Discussions
+                    </a>
+                    <a href="https://github.com/rulezet/rulezet-core/tree/main/docs/future" target="_blank" rel="noopener noreferrer" class="btn btn-primary rounded-pill px-4">
+                        <i class="fa-brands fa-github me-2"></i>Detailed plans
+                    </a>
+                </div>
+            </div>
+            <p class="rm-version">Rulezet v{{ version }}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

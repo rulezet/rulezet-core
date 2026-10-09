@@ -75,6 +75,13 @@ def why():
     return render_template("why.html", stats=stats, version=get_version())
 
 
+@home_blueprint.route("/roadmap")
+def roadmap():
+    """Public roadmap — where Rulezet is going (connectors, the Lab, sightings…).
+    Kept in sync with docs/future/ROADMAP.md."""
+    return render_template("roadmap.html", version=get_version())
+
+
 @home_blueprint.route("/starfield")
 def starfield():
     """Hidden easter egg — a small space game. Not linked from any nav/sitemap."""
