@@ -3,6 +3,7 @@ from sigma.backends.splunk import SplunkBackend
 from sigma.backends.elasticsearch import EqlBackend
 from sigma.backends.kusto import KustoBackend
 from sigma.pipelines.sentinelasim import sentinel_asim_pipeline
+from sigma.pipelines.microsoftxdr import microsoft_xdr_pipeline
 from sigma.backends.sumologic import SumoLogicCSERuleBackend
 from sigma.backends.secops import SecOpsBackend
 from sigma.backends.loki import LogQLBackend
@@ -12,6 +13,7 @@ import re
 SIGMA_CONVERT_TARGETS = {
     'splunk':    {'label': 'Splunk (SPL)',            'extension': 'spl'},
     'elastic':   {'label': 'Elastic (EQL)',            'extension': 'eql'},
+    'xdr':       {'label': 'Microsoft XDR (KQL)',      'extension': 'kql'},
     'sentinel':  {'label': 'Microsoft Sentinel (KQL)', 'extension': 'kql'},
     'sumologic': {'label': 'Sumo Logic (CSE)',         'extension': 'json'},
     'secops':    {'label': 'Google SecOps (UDM)',      'extension': 'txt'},
@@ -49,6 +51,8 @@ def _backend_for(target: str):
         return SplunkBackend()
     if target == 'elastic':
         return EqlBackend()
+    if target == 'xdr':
+        return KustoBackend(processing_pipeline=microsoft_xdr_pipeline())
     if target == 'sentinel':
         return KustoBackend(processing_pipeline=sentinel_asim_pipeline())
     if target == 'sumologic':
