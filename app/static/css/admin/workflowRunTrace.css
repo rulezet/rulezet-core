@@ -161,8 +161,8 @@
     white-space: nowrap;
 }
 
-.wrt-gantt-tick:first-child { transform: none; }
-.wrt-gantt-tick:last-child { transform: translateX(-100%); }
+.wrt-gantt-tick:last-of-type { transform: translateX(-100%); }
+.wrt-gantt-tick:first-of-type { transform: none; }
 
 .wrt-gantt-wait,
 .wrt-gantt-bar {
@@ -189,13 +189,26 @@
 .wrt-gantt-bar--running,
 .wrt-gantt-bar--pending { background: var(--wrt-running); animation: wrt-pulse 1.6s infinite; }
 
-.wrt-gantt-bar-label {
+/* Duration label — a sibling of the bar (not inside it), so a short bar
+   or one ending at the right edge never cuts it off. */
+.wrt-gantt-time {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
     padding: 0 .35rem;
-    font-size: .6rem;
+    font-size: .62rem;
     font-weight: 700;
-    color: #fff;
+    line-height: 1;
     white-space: nowrap;
+    color: var(--subtle-text-color);
+    pointer-events: none;
 }
+
+.wrt-gantt-time--done { color: var(--wrt-done); }
+.wrt-gantt-time--failed { color: var(--wrt-failed); }
+.wrt-gantt-time--running,
+.wrt-gantt-time--pending { color: var(--wrt-running); }
+.wrt-gantt-time--inside { color: #fff; }
 
 .wrt-gantt-legend {
     display: flex;

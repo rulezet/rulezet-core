@@ -82,12 +82,14 @@ const WorkflowRunTrace = {
                 const pct = t => Math.min(100, Math.max(0, ((t - start) / total) * 100));
                 const waitLeft = pct(queued);
                 const runLeft = began ? pct(began) : null;
+                const runWidth = began ? Math.max(1.2, pct(ended) - runLeft) : 0;
                 return {
                     ...s,
+                    labelStyle: began ? this.labelPlacement(runLeft, runWidth) : null,
                     waitLeft,
                     waitWidth: began ? Math.max(0, runLeft - waitLeft) : Math.max(0.8, pct(this.now) - waitLeft),
                     runLeft,
-                    runWidth: began ? Math.max(1.2, pct(ended) - runLeft) : 0,
+                    runWidth,
                 };
             });
         },
@@ -108,6 +110,15 @@ const WorkflowRunTrace = {
         syncTimer() {
             if (this.isRunning && !this.timer) this.timer = setInterval(() => { this.now = Date.now(); }, 1000);
             if (!this.isRunning && this.timer) { clearInterval(this.timer); this.timer = null; }
+        },
+        // The duration label sits next to its bar, never clipped: after the
+        // bar while there is room on the right, inside it when the bar is
+        // wide enough, otherwise before it (a short bar ending at 100%).
+        labelPlacement(left, width) {
+            const end = left + width;
+            if (end <= 82) return { cls: 'wrt-gantt-time--after', style: { left: end + '%' } };
+            if (width >= 14) return { cls: 'wrt-gantt-time--inside', style: { right: (100 - end) + '%' } };
+            return { cls: 'wrt-gantt-time--before', style: { right: (100 - left) + '%' } };
         },
         statusMeta(status) { return STATUS_META[status] || STATUS_META.pending; },
         skipMeta(kind) { return SKIP_META[kind] || SKIP_META.not_reached; },
@@ -181,9 +192,9 @@ const WorkflowRunTrace = {
                              :title="'Queued ' + fmt(r.wait_seconds)"></div>
                         <div v-if="r.runLeft !== null" class="wrt-gantt-bar" :class="'wrt-gantt-bar--' + r.status"
                              :style="{ left: r.runLeft + '%', width: r.runWidth + '%' }"
-                             :title="statusMeta(r.status).label + ' — ' + fmt(stepDuration(r))">
-                            <span class="wrt-gantt-bar-label">[[ fmt(stepDuration(r)) ]]</span>
-                        </div>
+                             :title="statusMeta(r.status).label + ' — ' + fmt(stepDuration(r))"></div>
+                        <span v-if="r.labelStyle" class="wrt-gantt-time" :class="[r.labelStyle.cls, 'wrt-gantt-time--' + r.status]"
+                              :style="r.labelStyle.style">[[ fmt(stepDuration(r)) ]]</span>
                     </div>
                 </div>
             </div>
