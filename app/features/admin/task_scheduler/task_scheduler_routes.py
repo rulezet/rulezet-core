@@ -80,6 +80,19 @@ def connectors():
     }), 200
 
 
+@task_scheduler_blueprint.route('/field_configs', methods=['GET'])
+def field_configs():
+    """Saved Field Parser / Platform Tags configs (from the Bulk Parse
+    Fields page) — feeds the 'saved_config' option of those task types."""
+    from app.features.rule.field_parser_core import get_all_configs
+    config_type = request.args.get('type', 'field_parser', type=str)
+    if config_type not in ('field_parser', 'platform_tags'):
+        return jsonify({"message": "Unknown config type.", "toast_class": "danger-subtle"}), 400
+    return jsonify({
+        "configs": [{"id": c.id, "name": c.name} for c in get_all_configs(config_type=config_type)]
+    }), 200
+
+
 @task_scheduler_blueprint.route('/config', methods=['GET'])
 def config():
     """Feeds the workflow modal's notification section — disable those
@@ -223,6 +236,15 @@ def workflow_runs(uuid):
         "total": pagination.total,
         "total_pages": pagination.pages,
     }), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/runs/<run_uuid>/trace', methods=['GET'])
+def workflow_run_trace(uuid, run_uuid):
+    """The execution path of one launch — see get_workflow_run_trace."""
+    trace = TaskSchedulerModel.get_workflow_run_trace(uuid, run_uuid)
+    if trace is None:
+        return jsonify({"message": "Launch not found.", "toast_class": "danger-subtle"}), 404
+    return jsonify({"trace": trace}), 200
 
 
 @task_scheduler_blueprint.route('/workflows/<uuid>/runs/bulk_delete', methods=['POST'])
@@ -374,6 +396,26 @@ def bulk_set_active():
                  extra={"count": count, "mode": mode, "is_active": is_active},
                  icon="fa-solid fa-list-check")
     return jsonify({"message": f"{count} task(s) {verb}.", "toast_class": "success-subtle", "count": count}), 200
+
+
+@task_scheduler_blueprint.route('/run_adhoc', methods=['POST'])
+def run_adhoc():
+    """The task form's "Now" trigger — queue one job of that task type right
+    away without saving a schedule. Built server-side like a scheduled
+    firing (registry job_type, fixed_payload, payload validation)."""
+    data = request.get_json(silent=True) or {}
+    job, err = TaskSchedulerModel.run_task_type_now(
+        data.get('task_type'), data.get('target_payload'), data.get('title'), current_user)
+    if err:
+        return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
+
+    log_activity("admin.task_run_adhoc",
+                 f"Ran '{job.label}' once, without saving a task",
+                 target_type="job",
+                 target_uuid=job.uuid,
+                 icon="fa-solid fa-list-check")
+    return jsonify({"message": "Job queued! Running in background…", "toast_class": "success-subtle",
+                    "job_uuid": job.uuid}), 202
 
 
 @task_scheduler_blueprint.route('/<uuid>/run_now', methods=['POST'])

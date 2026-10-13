@@ -57,3 +57,27 @@
 .task-form-subcard .rl-fp-select {
     width: 100%;
 }
+
+/* 'multiselect' task option (e.g. rule formats to re-parse) — a compact
+   two-column checkbox grid that scrolls instead of stretching the modal. */
+.task-form-multi {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: .15rem .75rem;
+    max-height: 190px;
+    overflow-y: auto;
+    padding: .5rem .75rem;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: .8rem;
+}
+
+.task-form-multi .form-check-label {
+    color: var(--text-color);
+}
+
+.task-form-multi-actions .btn-link {
+    font-size: .72rem;
+    text-decoration: none;
+}

@@ -1,0 +1,517 @@
+/* WorkflowRunTrace — execution path of one workflow launch (Admin Task
+   Scheduler). Status colours match the pipeline graph: green done, red
+   failed, blue running, grey cancelled/skipped. */
+
+.wrt {
+    --wrt-done: #198754;
+    --wrt-failed: #dc3545;
+    --wrt-running: #0d6efd;
+    --wrt-muted: #6c757d;
+    --wrt-wait: rgba(108, 117, 125, .22);
+}
+
+/* ── Summary ─────────────────────────────────────────────────────────── */
+.wrt-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .85rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--light-bg-color);
+    margin-bottom: 1.25rem;
+}
+
+.wrt-summary-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem 1.1rem;
+}
+
+.wrt-summary-meta {
+    font-size: .8rem;
+    color: var(--subtle-text-color);
+}
+
+.wrt-summary-meta strong { color: var(--text-color); }
+
+.wrt-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .25rem .7rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 700;
+    color: #fff;
+    background: var(--wrt-muted);
+    white-space: nowrap;
+}
+
+.wrt-status-pill--sm { font-size: .66rem; padding: .15rem .55rem; }
+.wrt-status-pill--done { background: var(--wrt-done); }
+.wrt-status-pill--failed { background: var(--wrt-failed); }
+.wrt-status-pill--running,
+.wrt-status-pill--pending { background: var(--wrt-running); }
+
+.wrt-counts {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .78rem;
+}
+
+.wrt-count {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .15rem .55rem;
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+.wrt-count--done { background: rgba(25, 135, 84, .12); color: var(--wrt-done); }
+.wrt-count--failed { background: rgba(220, 53, 69, .12); color: var(--wrt-failed); }
+.wrt-count--cancelled,
+.wrt-count--skipped { background: rgba(108, 117, 125, .14); color: var(--wrt-muted); }
+.wrt-count--running { background: rgba(13, 110, 253, .12); color: var(--wrt-running); }
+.wrt-count-total { color: var(--subtle-text-color); }
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+.wrt-section { margin-bottom: 1.25rem; }
+.wrt-section:last-child { margin-bottom: 0; }
+
+.wrt-section-title {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--subtle-text-color);
+    margin-bottom: .6rem;
+}
+
+.wrt-section-toggle {
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+/* ── Gantt ───────────────────────────────────────────────────────────── */
+.wrt-gantt {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: .5rem .75rem .6rem;
+    background: var(--card-bg-color);
+}
+
+.wrt-gantt-axis,
+.wrt-gantt-row {
+    display: grid;
+    grid-template-columns: minmax(110px, 30%) 1fr;
+    align-items: center;
+    gap: .75rem;
+}
+
+.wrt-gantt-row {
+    padding: .2rem 0;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.wrt-gantt-row:hover,
+.wrt-gantt-row--focused { background: var(--light-bg-color); }
+
+.wrt-gantt-label {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    min-width: 0;
+    font-size: .78rem;
+    color: var(--text-color);
+}
+
+.wrt-gantt-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wrt-gantt-track {
+    position: relative;
+    height: 18px;
+    border-radius: 4px;
+    background: repeating-linear-gradient(90deg, transparent 0, transparent calc(25% - 1px), var(--border-color) calc(25% - 1px), var(--border-color) 25%);
+}
+
+.wrt-gantt-track--axis {
+    height: 16px;
+    background: none;
+}
+
+.wrt-gantt-tick {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    font-size: .62rem;
+    color: var(--subtle-text-color);
+    white-space: nowrap;
+}
+
+.wrt-gantt-tick:first-child { transform: none; }
+.wrt-gantt-tick:last-child { transform: translateX(-100%); }
+
+.wrt-gantt-wait,
+.wrt-gantt-bar {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    border-radius: 4px;
+}
+
+.wrt-gantt-wait {
+    background: repeating-linear-gradient(45deg, var(--wrt-wait) 0, var(--wrt-wait) 3px, transparent 3px, transparent 6px);
+}
+
+.wrt-gantt-bar {
+    background: var(--wrt-muted);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    min-width: 4px;
+}
+
+.wrt-gantt-bar--done { background: var(--wrt-done); }
+.wrt-gantt-bar--failed { background: var(--wrt-failed); }
+.wrt-gantt-bar--running,
+.wrt-gantt-bar--pending { background: var(--wrt-running); animation: wrt-pulse 1.6s infinite; }
+
+.wrt-gantt-bar-label {
+    padding: 0 .35rem;
+    font-size: .6rem;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+}
+
+.wrt-gantt-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: .45rem;
+    font-size: .7rem;
+    color: var(--subtle-text-color);
+}
+
+.wrt-legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 8px;
+    border-radius: 2px;
+    margin-right: .35rem;
+    vertical-align: middle;
+}
+
+.wrt-legend-swatch--wait { background: repeating-linear-gradient(45deg, var(--wrt-wait) 0, var(--wrt-wait) 2px, transparent 2px, transparent 4px); border: 1px solid var(--border-color); }
+.wrt-legend-swatch--done { background: var(--wrt-done); }
+.wrt-legend-swatch--failed { background: var(--wrt-failed); }
+.wrt-legend-swatch--running { background: var(--wrt-running); }
+
+@keyframes wrt-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .6; }
+}
+
+/* ── Steps (vertical stepper) ────────────────────────────────────────── */
+.wrt-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.wrt-step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: .75rem;
+    padding-bottom: .9rem;
+}
+
+.wrt-step:last-child { padding-bottom: 0; }
+
+/* The rail line linking consecutive steps */
+.wrt-step::before {
+    content: '';
+    position: absolute;
+    left: 16px;
+    top: 34px;
+    bottom: 0;
+    width: 2px;
+    background: var(--border-color);
+}
+
+.wrt-step:last-child::before { display: none; }
+.wrt-step--done::before { background: rgba(25, 135, 84, .45); }
+.wrt-step--failed::before { background: rgba(220, 53, 69, .45); }
+
+.wrt-step-rail { padding-top: 1.35rem; }
+
+.wrt-step-num {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .85rem;
+    font-weight: 700;
+    color: #fff;
+    background: var(--wrt-muted);
+    box-shadow: 0 0 0 4px var(--card-bg-color);
+    position: relative;
+    z-index: 1;
+}
+
+.wrt-step-num--sm {
+    width: 18px;
+    height: 18px;
+    font-size: .6rem;
+    box-shadow: none;
+    flex-shrink: 0;
+}
+
+.wrt-step-num--done { background: var(--wrt-done); }
+.wrt-step-num--failed { background: var(--wrt-failed); }
+.wrt-step-num--running,
+.wrt-step-num--pending { background: var(--wrt-running); }
+
+.wrt-step-card {
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--wrt-muted);
+    border-radius: 10px;
+    padding: .65rem .85rem .7rem;
+    background: var(--card-bg-color);
+    cursor: pointer;
+    transition: box-shadow .12s ease, transform .12s ease;
+}
+
+.wrt-step-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+    transform: translateY(-1px);
+}
+
+.wrt-step--done .wrt-step-card { border-left-color: var(--wrt-done); }
+.wrt-step--failed .wrt-step-card { border-left-color: var(--wrt-failed); background: linear-gradient(90deg, rgba(220, 53, 69, .05), transparent 40%), var(--card-bg-color); }
+.wrt-step--running .wrt-step-card,
+.wrt-step--pending .wrt-step-card { border-left-color: var(--wrt-running); }
+.wrt-step--focused .wrt-step-card { box-shadow: 0 0 0 3px rgba(13, 110, 253, .25); }
+
+.wrt-step-trigger {
+    font-size: .7rem;
+    color: var(--subtle-text-color);
+    margin-bottom: .4rem;
+}
+
+.wrt-step-ref {
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.wrt-cond {
+    display: inline-block;
+    margin-left: .25rem;
+    padding: 0 .45rem;
+    border-radius: 999px;
+    font-size: .62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.wrt-cond--success { background: rgba(25, 135, 84, .12); color: var(--wrt-done); }
+.wrt-cond--failure { background: rgba(220, 53, 69, .12); color: var(--wrt-failed); }
+.wrt-cond--always { background: rgba(108, 117, 125, .15); color: var(--wrt-muted); }
+
+.wrt-step-head {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+}
+
+.wrt-step-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 110, 253, .1);
+    color: #0d6efd;
+    flex-shrink: 0;
+    font-size: .85rem;
+}
+
+.wrt-step-icon--muted { background: rgba(108, 117, 125, .12); color: var(--wrt-muted); }
+
+.wrt-step-titles { flex: 1 1 auto; min-width: 0; }
+
+.wrt-step-title {
+    font-weight: 600;
+    font-size: .9rem;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wrt-step-type {
+    font-size: .72rem;
+    color: var(--subtle-text-color);
+}
+
+.wrt-step-times {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem 1rem;
+    margin-top: .5rem;
+    font-size: .74rem;
+    color: var(--subtle-text-color);
+}
+
+.wrt-step-progress {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--light-bg-color);
+    overflow: hidden;
+    margin-top: .5rem;
+}
+
+.wrt-step-progress-bar {
+    height: 100%;
+    background: var(--wrt-muted);
+    transition: width .4s ease;
+}
+
+.wrt-step-progress-bar--done { background: var(--wrt-done); }
+.wrt-step-progress-bar--failed { background: var(--wrt-failed); }
+.wrt-step-progress-bar--running { background: var(--wrt-running); }
+
+.wrt-step-log,
+.wrt-step-error {
+    margin-top: .5rem;
+    padding: .35rem .55rem;
+    border-radius: 6px;
+    font-family: var(--bs-font-monospace, monospace);
+    font-size: .72rem;
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.wrt-step-log--success { color: var(--wrt-done); }
+.wrt-step-log--warning { color: #b8860b; }
+.wrt-step-log--error,
+.wrt-step-error { color: var(--wrt-failed); background: rgba(220, 53, 69, .07); }
+
+.wrt-step-actions {
+    display: flex;
+    gap: .4rem;
+    margin-top: .55rem;
+}
+
+.wrt-step-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: .15rem .6rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg-color);
+    color: var(--subtle-text-color);
+    font-size: .7rem;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.wrt-step-btn:hover { color: #0d6efd; border-color: #0d6efd; }
+
+/* ── Skipped tasks ───────────────────────────────────────────────────── */
+.wrt-skipped {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: .5rem;
+}
+
+.wrt-skip {
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    padding: .55rem .75rem;
+    border: 1px dashed var(--border-color);
+    border-radius: 10px;
+    background: var(--light-bg-color);
+    opacity: .85;
+}
+
+.wrt-skip-body { min-width: 0; }
+
+.wrt-skip-title {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.wrt-skip-kind {
+    margin-left: .35rem;
+    font-size: .62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--wrt-muted);
+}
+
+.wrt-skip--waiting .wrt-skip-kind { color: var(--wrt-running); }
+
+.wrt-skip-reason {
+    font-size: .74rem;
+    color: var(--subtle-text-color);
+}
+
+@media (max-width: 576px) {
+    .wrt-gantt-axis,
+    .wrt-gantt-row { grid-template-columns: 90px 1fr; gap: .4rem; }
+}
+
+/* ── Mini path in the launch history table: one chip per step, in order ── */
+.wrt-mini-path {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    row-gap: 4px;
+}
+
+.wrt-mini-path-step {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .6rem;
+    color: #fff;
+    background: #6c757d;
+}
+
+.wrt-mini-path-step--done { background: #198754; }
+.wrt-mini-path-step--failed { background: #dc3545; }
+.wrt-mini-path-step--running,
+.wrt-mini-path-step--pending { background: #0d6efd; animation: wrt-pulse 1.6s infinite; }
+
+.wrt-mini-path-link {
+    width: 10px;
+    height: 2px;
+    background: var(--border-color);
+}

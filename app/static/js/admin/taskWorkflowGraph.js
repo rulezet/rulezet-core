@@ -25,6 +25,12 @@
  *                 uuid, so two tasks running in parallel both stay lit up
  *                 instead of one dimming the other. Every non-focused node
  *                 dims when the array is non-empty.
+ *   runTrace    — optional trace of ONE launch (GET .../runs/<uuid>/trace).
+ *                 When set, the graph shows that launch's path instead of
+ *                 each task's latest run: step number on every node that ran,
+ *                 the edges actually taken drawn solid (animated while the
+ *                 child runs), branches not taken dashed, and tasks that
+ *                 didn't run greyed with why.
  * Emits:
  *   'select' (schedule) — node body clicked: show that task's logs.
  *   'edit'   (schedule) — pencil icon clicked.
@@ -38,6 +44,7 @@ const TaskWorkflowGraph = {
         liveStatus: { type: Object, default: () => ({}) },
         searchQuery: { type: String, default: '' },
         focusedUuids: { type: Array, default: () => [] },
+        runTrace: { type: Object, default: null },
     },
     emits: ['select', 'edit', 'run', 'delete'],
     delimiters: ['[[', ']]'],
@@ -49,6 +56,16 @@ const TaskWorkflowGraph = {
         };
     },
     computed: {
+        stepByTask() {
+            const map = {};
+            if (this.runTrace) for (const s of this.runTrace.steps) map[s.task_uuid] = s;
+            return map;
+        },
+        skippedByTask() {
+            const map = {};
+            if (this.runTrace) for (const k of this.runTrace.skipped) map[k.task_uuid] = k;
+            return map;
+        },
         columns() {
             const byId = new Map(this.schedules.map(s => [s.id, s]));
             const childrenOf = new Map();
@@ -80,6 +97,7 @@ const TaskWorkflowGraph = {
             handler() { this.$nextTick(() => this.recomputeEdges()); },
         },
         focusedUuids() { this.$nextTick(() => this.recomputeEdges()); },
+        runTrace() { this.$nextTick(() => this.recomputeEdges()); },
     },
     mounted() {
         this.$nextTick(() => this.recomputeEdges());
@@ -93,7 +111,22 @@ const TaskWorkflowGraph = {
         setNodeRef(id, el) {
             if (el) this.nodeRefs.set(id, el); else this.nodeRefs.delete(id);
         },
-        liveFor(s) { return this.liveStatus[s.uuid] || null; },
+        liveFor(s) {
+            if (this.runTrace) {
+                const step = this.stepByTask[s.uuid];
+                return step ? { job_uuid: step.job_uuid, job_status: step.status, done: step.done, total: step.total } : null;
+            }
+            return this.liveStatus[s.uuid] || null;
+        },
+        stepFor(s) { return this.stepByTask[s.uuid] || null; },
+        skipFor(s) { return this.skippedByTask[s.uuid] || null; },
+        formatDuration(seconds) {
+            if (seconds === null || seconds === undefined) return '';
+            if (seconds < 1) return '<1s';
+            const m = Math.floor(seconds / 60), sec = seconds % 60, h = Math.floor(m / 60);
+            if (h) return `${h}h ${m % 60}m`;
+            return m ? `${m}m ${sec}s` : `${sec}s`;
+        },
         matchesSearch(s) {
             if (!this.searchQuery) return true;
             const q = this.searchQuery.toLowerCase();
@@ -105,6 +138,12 @@ const TaskWorkflowGraph = {
             return false;
         },
         statusClass(s) {
+            if (this.runTrace) {
+                const step = this.stepFor(s);
+                if (!step) return 'twg-node--skipped';
+                if (['pending', 'running'].includes(step.status)) return 'twg-node--running';
+                return { done: 'twg-node--done', failed: 'twg-node--failed', cancelled: 'twg-node--cancelled' }[step.status] || 'twg-node--active';
+            }
             const live = this.liveFor(s);
             if (live && ['pending', 'running'].includes(live.job_status)) return 'twg-node--running';
             if (live && live.job_status === 'failed') return 'twg-node--failed';
@@ -125,7 +164,21 @@ const TaskWorkflowGraph = {
         // and falls back to the schedule's own last recorded outcome.
         outcomeStatus(s) {
             const live = this.liveFor(s);
+            if (this.runTrace) return live ? live.job_status : null;
             return (live && live.job_status) || s.last_run_status;
+        },
+        runSubLabel(s) {
+            const step = this.stepFor(s);
+            if (step) {
+                if (step.status === 'pending') return 'Queued…';
+                if (step.status === 'running') return step.total > 0 ? `Running — ${step.done}/${step.total}` : 'Running…';
+                const label = { done: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled' }[step.status] || step.status;
+                const d = this.formatDuration(step.duration_seconds);
+                return d ? `${label} · ${d}` : label;
+            }
+            const skip = this.skipFor(s);
+            if (!skip) return null;
+            return { branch_not_taken: 'Skipped — branch not taken', not_reached: 'Not reached', waiting: 'Waiting…', not_launched: 'Not launched' }[skip.kind] || 'Did not run';
         },
         outcomeIcon(s) {
             const status = this.outcomeStatus(s);
@@ -135,6 +188,7 @@ const TaskWorkflowGraph = {
             return null;
         },
         hasLogs(s) {
+            if (this.runTrace) return !!(this.stepFor(s) || {}).job_uuid;
             return !!((this.liveFor(s) || {}).job_uuid || s.last_run_job_uuid);
         },
         typeIcon(taskType) { return (this.taskTypes[taskType] || {}).icon || 'fa-solid fa-gear'; },
@@ -164,10 +218,18 @@ const TaskWorkflowGraph = {
 
                 const color = { success: '#198754', failure: '#dc3545', always: '#6c757d' }[s.depends_on_condition] || '#0d6efd';
                 const dimmed = this.focusedUuids.length > 0 && !this.focusedUuids.includes(s.uuid) && !(parent && this.focusedUuids.includes(parent.uuid));
+                // With a launch selected: 'taken' (the child fired), 'live'
+                // (taken and still running) or 'not-taken' (branch skipped).
+                let path = null;
+                if (this.runTrace) {
+                    const childStep = this.stepByTask[s.uuid];
+                    path = !childStep ? 'not-taken' : (['pending', 'running'].includes(childStep.status) ? 'live' : 'taken');
+                }
                 edges.push({
                     id: `${s.depends_on_schedule_id}-${s.id}`,
                     d: `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`,
-                    color, dimmed,
+                    color: path === 'not-taken' ? '#adb5bd' : color, dimmed, path,
+                    x2, y2,
                 });
             }
             this.edges = edges;
@@ -179,18 +241,31 @@ const TaskWorkflowGraph = {
             <span class="twg-legend-item"><span class="twg-dot" style="background:#198754;"></span>on success</span>
             <span class="twg-legend-item"><span class="twg-dot" style="background:#dc3545;"></span>on failure</span>
             <span class="twg-legend-item"><span class="twg-dot" style="background:#6c757d;"></span>always</span>
+            <template v-if="runTrace">
+                <span class="twg-legend-item"><span class="twg-legend-line twg-legend-line--taken"></span>path taken</span>
+                <span class="twg-legend-item"><span class="twg-legend-line twg-legend-line--not-taken"></span>branch not taken</span>
+            </template>
         </div>
         <div class="twg-wrap" ref="wrap">
             <svg class="twg-edges" :width="svgSize.w" :height="svgSize.h">
-                <path v-for="e in edges" :key="e.id" :d="e.d" :stroke="e.color" fill="none" stroke-width="2"
-                      :opacity="e.dimmed ? 0.15 : 0.8"></path>
+                <template v-for="e in edges" :key="e.id">
+                    <path :d="e.d" :stroke="e.color" fill="none"
+                          :class="e.path ? 'twg-edge twg-edge--' + e.path : 'twg-edge'"
+                          :stroke-width="e.path === 'taken' || e.path === 'live' ? 3.5 : 2"
+                          :opacity="e.dimmed ? 0.15 : (e.path === 'not-taken' ? 0.55 : 0.85)"></path>
+                    <circle v-if="e.path === 'taken' || e.path === 'live'" :cx="e.x2 - 2" :cy="e.y2" r="4" :fill="e.color"
+                            :opacity="e.dimmed ? 0.15 : 1"></circle>
+                </template>
             </svg>
             <div class="twg-columns">
                 <div v-for="(col, depth) in columns" :key="depth" class="twg-column">
                     <div v-for="node in col" :key="node.id"
                          :ref="el => setNodeRef(node.id, el)"
                          class="twg-node" :class="[statusClass(node), { 'twg-node--dimmed': isDimmed(node), 'twg-node--focused': focusedUuids.includes(node.uuid) }]"
+                         :title="skipFor(node) ? skipFor(node).reason : null"
                          @click="$emit('select', node)">
+                        <span v-if="stepFor(node)" class="twg-step-badge" :class="'twg-step-badge--' + stepFor(node).status"
+                              :title="'Step ' + stepFor(node).step + ' of this launch'">[[ stepFor(node).step ]]</span>
                         <div class="twg-node-icon">
                             <i :class="typeIcon(node.task_type)"></i>
                             <span v-if="outcomeIcon(node)" class="twg-outcome-badge" :class="'twg-outcome-badge--' + outcomeStatus(node)">
@@ -200,9 +275,10 @@ const TaskWorkflowGraph = {
                         <div class="twg-node-body">
                             <div class="twg-node-title">[[ node.title ]]</div>
                             <div class="twg-node-sub-row">
-                                <span class="twg-node-sub" v-if="liveProgressLabel(node)">[[ liveProgressLabel(node) ]]</span>
+                                <span class="twg-node-sub" v-if="runTrace && runSubLabel(node)">[[ runSubLabel(node) ]]</span>
+                                <span class="twg-node-sub" v-else-if="liveProgressLabel(node)">[[ liveProgressLabel(node) ]]</span>
                                 <span class="twg-node-sub" v-else>[[ typeLabel(node.task_type) ]]</span>
-                                <span class="twg-status-badge" :class="node.is_active ? 'twg-status-badge--active' : 'twg-status-badge--paused'">[[ node.is_active ? 'Active' : 'Paused' ]]</span>
+                                <span v-if="!runTrace" class="twg-status-badge" :class="node.is_active ? 'twg-status-badge--active' : 'twg-status-badge--paused'">[[ node.is_active ? 'Active' : 'Paused' ]]</span>
                             </div>
                         </div>
                         <div class="twg-node-actions" @click.stop>

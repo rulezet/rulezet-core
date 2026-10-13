@@ -690,6 +690,94 @@ def handle_github_repo_resync(job, app):
             level='success', event='done')
 
 
+# ─── github_import ─────────────────────────────────────────────────────────────
+
+@register_handler('github_import')
+def handle_github_import(job, app):
+    """Import every rule of a git repository — the GitHub Import page's
+    import (clone → scan → validate/import, bad rules kept for review,
+    result stored in the import history), as a background/schedulable job.
+    Runs the same Session_class with its worker threads and mirrors its
+    counters into the job's progress, so a re-run on a schedule just adds
+    whatever is new in the repo (existing rules are skipped as duplicates).
+
+    Payload: url (required), branch, license, is_generic_source.
+    """
+    import time as _time
+    from app.features.rule.rule_from_github.import_rule import session_class as SessionModel
+    from app.features.rule.rule_format.utils_format.utils_import_update import (
+        clone_or_access_repo, github_repo_metadata, generic_repo_metadata, valider_repo_github,
+    )
+
+    payload    = job.payload or {}
+    repo_url   = (payload.get('url') or '').strip()
+    branch     = (payload.get('branch') or '').strip() or None
+    license_   = (payload.get('license') or '').strip() or None
+    is_generic = bool(payload.get('is_generic_source'))
+
+    def _fail(message):
+        log_job(job, message, level='error', event='failed')
+        job.status = 'failed'
+        job.error  = message
+        db.session.commit()
+
+    if not valider_repo_github(repo_url, is_generic_source=is_generic):
+        return _fail(f'Invalid repository URL: {repo_url or "(empty)"}')
+
+    user = User.query.get(job.created_by)
+    if not user:
+        return _fail('The user who launched this import no longer exists.')
+
+    branch_label = f' (branch {branch})' if branch else ''
+    log_job(job, f'Cloning {repo_url}{branch_label}…', level='info', event='start')
+    repo_dir, _ = clone_or_access_repo(repo_url, branch=branch, is_generic_source=is_generic)
+    if not repo_dir:
+        return _fail('Failed to clone or access the repository.')
+
+    try:
+        info = (generic_repo_metadata(repo_url, license_, user) if is_generic
+                else github_repo_metadata(repo_url, license_))
+    except Exception as e:
+        return _fail(f'Could not read the repository metadata: {e}')
+    if branch:
+        info['branch'] = branch
+
+    session = SessionModel.Session_class(repo_dir, user, info)
+    log_job(job, 'Scanning the repository for rules…', level='info', event='scan')
+    session.start(app_obj=app, user_obj=user)
+    job.total = session.total
+    db.session.commit()
+    log_job(job, f'Found {session.total} rule(s) — importing.', level='info', event='progress')
+
+    log_activity("github.import_started",
+                 f"Started GitHub import from '{repo_url}'{branch_label} (scheduled task)",
+                 target_type="github_import", target_uuid=session.uuid,
+                 extra={"url": repo_url, "branch": branch, "job_uuid": job.uuid},
+                 is_public=True, icon="fa-brands fa-github", actor_id=user.id)
+
+    last_report = 0
+    while not session._save_done.wait(timeout=2):
+        if _is_cancelled(job):
+            session.jobs.queue.clear()   # workers drain and finalize on their own
+            session._save_done.wait(timeout=60)
+            log_job(job, f'Cancelled — {session.imported} imported, {session.skipped} skipped, '
+                         f'{session.bad_rules} bad before stopping.', level='warning', event='cancelled')
+            return
+        job.done = session.imported + session.skipped + session.bad_rules
+        db.session.commit()
+        if _time.monotonic() - last_report > 15:
+            last_report = _time.monotonic()
+            log_job(job, f'{job.done}/{job.total} — {session.imported} imported, {session.skipped} skipped, '
+                         f'{session.bad_rules} bad.', level='info', event='progress')
+
+    job.done = job.total
+    db.session.commit()
+    level = 'warning' if session.bad_rules and not session.imported else 'success'
+    log_job(job, f'Done — {session.imported} imported, {session.skipped} skipped (already there), '
+                 f'{session.bad_rules} bad rule(s) kept for review. Details in the GitHub import history.',
+            level=level, event='done')
+
+
 # ─── github_repo_branch_backfill ───────────────────────────────────────────────
 
 @register_handler('github_repo_branch_backfill')
@@ -3199,6 +3287,23 @@ def handle_bulk_parse_fields(job, app):
     fields_config = payload.get('fields_config', {})
     rescan_cve    = bool(payload.get('rescan_cve'))
     offset        = payload.get('_resume_offset', 0)
+
+    # A scheduled task (Admin Task Scheduler) points at a saved config
+    # instead of carrying its own copy — read it now, so an edit on the
+    # Bulk Parse Fields page applies to the next run.
+    if payload.get('config_id') and not fields_config:
+        from app.features.rule.field_parser_core import get_config, CONFIG_TYPE_FIELD_PARSER
+        cfg = get_config(payload.get('config_id'), config_type=CONFIG_TYPE_FIELD_PARSER)
+        if not cfg:
+            log_job(job, f"Field Parser config #{payload.get('config_id')} not found (deleted?) — aborting.",
+                    level='error', event='error')
+            job.status = 'failed'
+            job.error  = 'Config not found'
+            db.session.commit()
+            return
+        fields_config = cfg.config or {}
+        if offset == 0:
+            log_job(job, f'Using saved Field Parser config "{cfg.name}".', level='info', event='config')
 
     enabled_fields = [k for k, v in fields_config.items() if v.get('enabled')]
     if not enabled_fields and not rescan_cve:
