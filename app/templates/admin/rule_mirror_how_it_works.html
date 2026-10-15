@@ -159,7 +159,7 @@
         </div>
         <pre class="hiw-code">README.md                   auto-generated — sources, rule counts, Rulezet version
 rules/
-  &lt;source&gt;/                  where the rule came from — a GitHub Sources repo
+  &lt;source&gt;/                  where the rule came from — a Git Sources repo
                              (e.g. github.com_org_repo), or "manual" for
                              hand-authored rules
     &lt;format&gt;/                yara, sigma, suricata, splunk, elastic, kql, ...
@@ -174,7 +174,7 @@ rules/
                                  page + its uuid in plain text</pre>
         <div class="hiw-callout hiw-callout--info mt-3">
           <i class="fa-solid fa-circle-info me-1"></i>
-          Grouping by source first keeps rules pulled from the same GitHub
+          Grouping by source first keeps rules pulled from the same git
           repository together, since a busy instance can have many different
           import sources — format is the second-level split within each one.
         </div>
@@ -190,7 +190,7 @@ rules/
           <i class="fa-solid fa-circle-info me-1"></i>
           <code>rulezet_link.md</code> carries the rule's Rulezet uuid in
           plain text — a clone can be searched (<code>grep -rl &lt;uuid&gt;</code>)
-          to jump straight from a rule on Rulezet to its exact GitHub folder,
+          to jump straight from a rule on Rulezet to its exact folder on the git host,
           without recomputing any title slug.
         </div>
         <div class="hiw-callout hiw-callout--info mt-3">
@@ -279,7 +279,7 @@ rules/
               <div class="fw-bold mb-2"><i class="fa-solid fa-key text-primary me-2"></i>Its own token, on purpose</div>
               <p class="text-muted mb-0" style="font-size:.84rem;">
                 Use a token dedicated to this feature — not the <code>GITHUB_TOKEN</code> used
-                for GitHub rule import — ideally a fine-grained PAT restricted to just the
+                for rule import — ideally a fine-grained PAT restricted to just the
                 mirror repo (contents: read &amp; write, nothing else).
               </p>
             </div>
@@ -323,7 +323,7 @@ rules/
           <h4 class="fw-bold mb-0">Set it up on your own instance</h4>
         </div>
         <p style="font-size:.92rem;color:var(--subtle-text-color);">
-          Five steps, from a blank GitHub repository to a running mirror. You can repeat this
+          Five steps, from a blank git repository (GitHub, GitLab, Gitea…) to a running mirror. You can repeat this
           for as many repositories as you like — each one is its own independent entry in the
           Rulesets table, with its own URL, branch and token.
         </p>
@@ -332,7 +332,7 @@ rules/
           <div class="d-flex gap-3 align-items-start">
             <div class="hiw-step-num">1</div>
             <div style="font-size:.88rem;">
-              <strong>Create (or pick) a GitHub repository</strong><br>
+              <strong>Create (or pick) a git repository</strong> (GitHub, GitLab, Gitea / Forgejo…)<br>
               <span class="text-muted">
                 To hold the mirror — it can be completely empty. Public if you want it clonable
                 by anyone, private if it's just for your own team.
@@ -346,7 +346,9 @@ rules/
               <span class="text-muted">
                 On GitHub: Settings → Developer settings → Fine-grained personal access tokens
                 → New token, "Only select repositories" → your mirror repo, permission
-                <em>Contents: Read and write</em>, nothing else. The "?" next to the token field
+                <em>Contents: Read and write</em>, nothing else. On GitLab: a project access token
+                with the Developer role and <em>write_repository</em> + <em>read_api</em>. On Gitea /
+                Forgejo: an access token with repository write access. The "?" next to the token field
                 in Rulesets walks through this too.
               </span>
             </div>
@@ -368,7 +370,7 @@ rules/
               <span class="text-muted">
                 "Run now" always re-tests the connection first — it's not optional, and not just
                 a one-time check: every click confirms the token can still authenticate and has
-                write access to the repo before anything is pushed, so a token revoked on GitHub
+                write access to the repo before anything is pushed, so a token revoked on the git host
                 after the last successful run gets caught immediately instead of failing mid-sync.
                 The wifi icon on a row runs that same test on demand, without launching a sync.
                 Once "Run now" succeeds, track progress on the <a href="/jobs/list">Jobs page</a>

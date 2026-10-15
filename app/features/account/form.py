@@ -69,7 +69,7 @@ class EditUserForm(FlaskForm):
         validators=[Optional(), Length(max=256), web_address]
     )
     github_url = StringField(
-        'GitHub',
+        'GitHub / GitLab / Git profile',
         validators=[Optional(), Length(max=256), web_address]
     )
     twitter_url = StringField(

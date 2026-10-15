@@ -3,6 +3,7 @@ import GithubFilter from '/static/js/rule/github/githubFilter.js';
 import GithubActionModal from '/static/js/rule/github/githubActionModal.js';
 import JobTracker from '/static/js/jobs/JobTracker.js';
 import { message_list, create_message } from '/static/js/toaster.js'
+import { repoTreeUrl as gitTreeUrl, gitProviderIcon, gitProviderLabel } from '/static/js/components/git-links.js'
 
 // Columns hidden behind the column-picker (same pattern as ruleList.js) —
 // URL/Rules/Actions stay always visible, everything else is optional.
@@ -138,6 +139,8 @@ const GitHubSelectionTable = {
         document.removeEventListener('click', this.handleColPickerOutsideClick);
     },
     methods: {
+        gitProviderIcon,
+        gitProviderLabel,
         setSort(key) {
             if (this.sortKey === key) {
                 this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
@@ -219,7 +222,7 @@ const GitHubSelectionTable = {
 
         repoTreeUrl(item) {
             if (!item || !item.url) return item ? item.url : '';
-            return item.branch ? item.url.replace(/\.git$/, '') + '/tree/' + item.branch : item.url;
+            return item.branch ? gitTreeUrl(item.url, item.branch) : item.url;
         },
 
         toggleRow(key) {
@@ -467,12 +470,12 @@ const GitHubSelectionTable = {
             @loading="val => loading = val">
             <template #toolbar-extra>
                 <button v-if="isAdmin" class="dt-toolbar-btn" :disabled="resyncing"
-                        @click="resyncGithubRepos" title="Full recompute of the GitHub repo registry from current rule data">
+                        @click="resyncGithubRepos" title="Full recompute of the git repository registry from current rule data">
                     <i class="fas fa-rotate" :class="{ 'fa-spin': resyncing }"></i>
                     <span>[[ resyncing ? 'Resyncing…' : 'Resync' ]]</span>
                 </button>
                 <button v-if="isAdmin" class="dt-toolbar-btn" :disabled="backfilling"
-                        @click="backfillBranches" title="Backfill missing branch info for older imports, from each repo's real GitHub default branch">
+                        @click="backfillBranches" title="Backfill missing branch info for older imports, from each repo's real default branch (GitHub, GitLab, Gitea…)">
                     <i class="fas fa-code-branch" :class="{ 'fa-spin': backfilling }"></i>
                     <span>[[ backfilling ? 'Starting…' : 'Backfill branches' ]]</span>
                 </button>
@@ -596,8 +599,8 @@ const GitHubSelectionTable = {
                             </td>
                             <td class="dt-td">
                                 <div v-if="!isRepoGroupContinuation(index)" class="d-flex align-items-center">
-                                    <div class="bg-light rounded p-2 me-3 flex-shrink-0">
-                                        <i class="fab fa-github fa-lg"></i>
+                                    <div class="bg-light rounded p-2 me-3 flex-shrink-0" :title="gitProviderLabel(item.url)">
+                                        <i :class="gitProviderIcon(item.url)" class="fa-lg"></i>
                                     </div>
                                     <div class="fw-bold text-dark" style="white-space:nowrap;">
                                         [[ item.url ]]
@@ -815,7 +818,7 @@ const GitHubSelectionTable = {
                                                            style="font-size:0.7rem">Repository Link</small>
                                                     <a :href="repoTreeUrl(item)" target="_blank"
                                                        class="btn btn-sm btn-outline-dark w-100 text-truncate">
-                                                        <i class="fab fa-github me-2"></i>Open on GitHub
+                                                        <i :class="gitProviderIcon(item.url)" class="me-2"></i>Open on [[ gitProviderLabel(item.url) ]]
                                                     </a>
                                                 </div>
                                             </div>
@@ -926,7 +929,7 @@ const GitHubSelectionTable = {
 
             <div v-if="githubUrls.length === 0 && !loading" class="dt-empty">
                 <i class="fas fa-search dt-empty-icon"></i>
-                <p class="dt-empty-text">No GitHub URLs found matching your search.</p>
+                <p class="dt-empty-text">No repositories found matching your search.</p>
             </div>
         </div>
 

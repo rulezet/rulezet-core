@@ -1,11 +1,12 @@
 import PaginationComponent from '/static/js/rule/paginationComponent.js';
+import { gitProviderIcon, gitProviderLabel } from '/static/js/components/git-links.js';
 
 /**
  * Repo picker for Sync Schedules — true "select all N matching this filter"
  * bulk selection (selectedUrls/excludedUrls/isAllSelectedMode), mirroring
  * app/static/js/rule/ruleSelectionTable.js's pattern (the one fully-working
  * "select all across pages" implementation in the codebase) adapted to
- * GitHub repo rows instead of Rule rows, and to *emit* the current
+ * git repo rows (GitHub, GitLab, Gitea…) instead of Rule rows, and to *emit* the current
  * selection instead of submitting it — the parent Sync Schedule form
  * combines it with title/description/recurrence into one create/update call.
  */
@@ -70,6 +71,8 @@ const RepoSelectionTable = {
         this.fetchRepos(1);
     },
     methods: {
+        gitProviderIcon,
+        gitProviderLabel,
         async fetchRepos(page) {
             this.loading = true;
             const params = new URLSearchParams({ page });
@@ -178,7 +181,7 @@ const RepoSelectionTable = {
                 <div class="dt-search">
                     <i class="fas fa-search dt-search-icon"></i>
                     <input class="dt-search-input" type="text" placeholder="Search repository…"
-                        v-model="search" @input="onSearchInput" aria-label="Search GitHub repositories" />
+                        v-model="search" @input="onSearchInput" aria-label="Search git repositories" />
                 </div>
                 <input class="rl-fp-select" type="text" placeholder="Filter by author…"
                     v-model="authorFilter" @change="fetchRepos(1)" style="max-width:180px;" />
@@ -248,8 +251,8 @@ const RepoSelectionTable = {
                 <div class="spinner-border spinner-border-sm"></div>
             </div>
             <div v-else-if="repos.length === 0" class="dt-empty">
-                <div class="dt-empty-icon"><i class="fa-brands fa-github"></i></div>
-                <p class="dt-empty-text">No GitHub-sourced repositories found.</p>
+                <div class="dt-empty-icon"><i class="fa-brands fa-git-alt"></i></div>
+                <p class="dt-empty-text">No imported git repositories found.</p>
             </div>
         </div>
 
@@ -266,7 +269,7 @@ const RepoSelectionTable = {
                             <th class="dt-th">Repository</th>
                             <th class="dt-th text-center">Auto-accept updates</th>
                             <th class="dt-th text-center">Auto-add new rules</th>
-                            <th class="dt-th text-center">Non-GitHub</th>
+                            <th class="dt-th text-center">Host</th>
                             <th class="dt-th dt-th--checkbox"></th>
                         </tr>
                     </thead>
@@ -282,9 +285,9 @@ const RepoSelectionTable = {
                                     @change="updateRepoSetting(item.url, 'auto_add_new_rule', $event.target.checked)">
                             </td>
                             <td class="dt-td text-center">
-                                <input type="checkbox" class="dt-checkbox" :checked="repoSetting(item.url, 'is_generic_source')"
-                                    title="This repo isn't hosted on GitHub — skip GitHub API calls when syncing it"
-                                    @change="updateRepoSetting(item.url, 'is_generic_source', $event.target.checked)">
+                                <span class="small text-muted" :title="'Hosted on ' + gitProviderLabel(item.url) + ' — detected from the URL'">
+                                    <i :class="gitProviderIcon(item.url)" class="me-1"></i>[[ gitProviderLabel(item.url) ]]
+                                </span>
                             </td>
                             <td class="dt-td text-center">
                                 <button class="dt-action-btn dt-action-btn--danger" @click="updateSelection(item.url, false)" title="Remove">

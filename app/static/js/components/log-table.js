@@ -34,7 +34,7 @@ const CATEGORIES = [
     { value: 'admin',     label: 'Admin',     icon: 'fa-crown'         },
     { value: 'tag',       label: 'Tag',       icon: 'fa-tag'           },
     { value: 'job',       label: 'Job',       icon: 'fa-gears'         },
-    { value: 'github',    label: 'GitHub',    icon: 'fa-brands fa-github' },
+    { value: 'github',    label: 'Git',       icon: 'fa-brands fa-git-alt' },
     { value: 'connector', label: 'Connector', icon: 'fa-plug'          },
     { value: 'comment',   label: 'Comment',   icon: 'fa-comment'       },
     { value: 'blog',      label: 'Blog',      icon: 'fa-newspaper'     },

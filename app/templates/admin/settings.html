@@ -587,12 +587,78 @@
                                 </div>
                                 <div class="text-muted small mt-1">
                                     <i class="fa-solid fa-circle-info me-1"></i>
-                                    Hostname that "Import from GitHub" treats as GitHub — leave as <code>github.com</code>
+                                    Hostname treated as GitHub (its API is used for metadata and branches) — leave as <code>github.com</code>
                                     unless this instance imports from a self-hosted GitHub Enterprise Server or an offline
                                     mirror reachable at another hostname. That host's API is expected at
                                     <code>https://&lt;host&gt;/api/v3</code> (GitHub Enterprise Server convention), and
                                     repo URLs must be <code>https://&lt;host&gt;/owner/repo</code>. Applies immediately,
                                     no restart needed.
+                                </div>
+                            </div>
+
+                            <!-- Other git hosts (GitLab, Gitea, …) -->
+                            <div class="config-row">
+                                <div class="config-row__key">Other Git Hosts</div>
+                                <div class="config-row__value">
+                                    <span class="config-secret">[[ config.app.git_hosts || 'auto-detected only' ]]</span>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill ms-2 px-2 py-0" @click="editingGitHosts = !editingGitHosts" style="font-size:.72rem;">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="editingGitHosts" class="pb-2">
+                                <div class="env-edit-form flex-wrap gap-2">
+                                    <input type="text" v-model="gitHostsNew" class="form-control form-control-sm rounded-pill flex-grow-1"
+                                           placeholder="git.corp.lan=gitlab, code.example.org=gitea" style="font-family:monospace;font-size:.78rem;">
+                                    <button class="btn btn-sm btn-success rounded-pill px-3"
+                                            @click="saveEnvKey('GIT_HOSTS', gitHostsNew)" :disabled="!gitHostsNew">
+                                        <i class="fa-solid fa-check me-1"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2"
+                                            @click="editingGitHosts=false; gitHostsNew=''">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                                <div class="text-muted small mt-1">
+                                    <i class="fa-solid fa-circle-info me-1"></i>
+                                    Rules can be imported from any git repository. <code>github.com</code>, <code>gitlab.com</code>,
+                                    <code>codeberg.org</code>, <code>bitbucket.org</code> and hostnames containing
+                                    <code>gitlab</code> / <code>gitea</code> / <code>forgejo</code> are recognised on their own.
+                                    List any other host here, comma separated, with its type when the name doesn't tell it:
+                                    <code>gitlab</code>, <code>gitea</code>, <code>bitbucket</code>, <code>github</code> or
+                                    <code>generic</code> (plain git, no API). Applies immediately.
+                                </div>
+                            </div>
+
+                            <div class="config-row">
+                                <div class="config-row__key">Git Host Tokens</div>
+                                <div class="config-row__value">
+                                    <span class="config-secret">[[ config.app.git_token_hosts.length ? config.app.git_token_hosts.join(', ') + ' (••••)' : 'not set' ]]</span>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill ms-2 px-2 py-0" @click="editingGitTokens = !editingGitTokens" style="font-size:.72rem;">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="editingGitTokens" class="pb-2">
+                                <div class="env-edit-form flex-wrap gap-2">
+                                    <input type="text" v-model="gitTokensNew" class="form-control form-control-sm rounded-pill flex-grow-1"
+                                           placeholder="gitlab.com=glpat-…, git.corp.lan=…" style="font-family:monospace;font-size:.78rem;">
+                                    <button class="btn btn-sm btn-success rounded-pill px-3"
+                                            @click="saveEnvKey('GIT_HOST_TOKENS', gitTokensNew)" :disabled="!gitTokensNew">
+                                        <i class="fa-solid fa-check me-1"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2"
+                                            @click="editingGitTokens=false; gitTokensNew=''">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                                <div class="text-muted small mt-1">
+                                    <i class="fa-solid fa-circle-info me-1"></i>
+                                    One <code>host=token</code> per host, comma separated — replaces the whole list. Used to clone
+                                    and pull private repositories and to read repository metadata and branches through the
+                                    host's API. GitLab: a personal or project access token with <code>read_repository</code> and
+                                    <code>read_api</code>. Gitea / Forgejo: an access token with repository read access.
+                                    The token for the GitHub host stays in <strong>GitHub Token</strong> above.
                                 </div>
                             </div>
 
@@ -1228,6 +1294,10 @@ createApp({
         const githubTokenNew     = ref('')
         const editingGithubHost  = ref(false)
         const githubHostNew      = ref('')
+        const editingGitHosts    = ref(false)
+        const gitHostsNew        = ref('')
+        const editingGitTokens   = ref(false)
+        const gitTokensNew       = ref('')
 
         // Test email
         const testEmailRecipient = ref('')
@@ -1458,6 +1528,8 @@ createApp({
                 if (key === 'MAIL_PORT')     { editingMailPort.value = false; mailPortNew.value = '' }
                 if (key === 'GITHUB_TOKEN')  { editingGithubToken.value = false; githubTokenNew.value = '' }
                 if (key === 'GITHUB_HOST')   { editingGithubHost.value = false; githubHostNew.value = '' }
+                if (key === 'GIT_HOSTS')       { editingGitHosts.value = false; gitHostsNew.value = '' }
+                if (key === 'GIT_HOST_TOKENS') { editingGitTokens.value = false; gitTokensNew.value = '' }
                 configLoaded.value = false
                 loadConfig()
             }
@@ -1568,6 +1640,7 @@ createApp({
             editingMailPort, mailPortNew,
             editingGithubToken, githubTokenNew,
             editingGithubHost, githubHostNew,
+            editingGitHosts, gitHostsNew, editingGitTokens, gitTokensNew,
             editingSso, ssoSaving, ssoTesting, ssoTestResult, ssoSecretNew, sso, toggleSsoEdit, testSso, saveSso,
             saveEnvKey,
             testEmailRecipient, testEmailSending, testEmailResult, sendTestEmail,

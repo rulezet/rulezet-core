@@ -680,7 +680,7 @@ def handle_github_repo_resync(job, app):
     page's admin "Resync" button, wrapped as a schedulable/background job
     (see app.features.rule.github_repo_core.rebuild_github_repos_from_rules
     for the write-site list this repairs drift against)."""
-    log_job(job, 'Resyncing GitHub repo registry from current rule data…', level='info', event='start')
+    log_job(job, 'Resyncing git repository registry from current rule data…', level='info', event='start')
     from app.features.rule.github_repo_core import rebuild_github_repos_from_rules
     result = rebuild_github_repos_from_rules()
     job.total = result['repos']
@@ -750,7 +750,7 @@ def handle_github_import(job, app):
     log_job(job, f'Found {session.total} rule(s) — importing.', level='info', event='progress')
 
     log_activity("github.import_started",
-                 f"Started GitHub import from '{repo_url}'{branch_label} (scheduled task)",
+                 f"Started Git import from '{repo_url}'{branch_label} (scheduled task)",
                  target_type="github_import", target_uuid=session.uuid,
                  extra={"url": repo_url, "branch": branch, "job_uuid": job.uuid},
                  is_public=True, icon="fa-brands fa-github", actor_id=user.id)
@@ -774,7 +774,7 @@ def handle_github_import(job, app):
     db.session.commit()
     level = 'warning' if session.bad_rules and not session.imported else 'success'
     log_job(job, f'Done — {session.imported} imported, {session.skipped} skipped (already there), '
-                 f'{session.bad_rules} bad rule(s) kept for review. Details in the GitHub import history.',
+                 f'{session.bad_rules} bad rule(s) kept for review. Details in the Git import history.',
             level=level, event='done')
 
 
@@ -787,7 +787,7 @@ def handle_github_repo_branch_backfill(job, app):
     (never a hardcoded "main" guess — see
     github_repo_core.backfill_rule_branches_from_default). Background job
     since it's one HTTP request per distinct repo in the registry."""
-    log_job(job, 'Looking up each repo\'s default branch on GitHub…', level='info', event='start')
+    log_job(job, 'Looking up each repo\'s default branch on its git host…', level='info', event='start')
     from app.features.rule.github_repo_core import backfill_rule_branches_from_default
 
     def _progress(done, total):
@@ -3137,7 +3137,7 @@ def handle_github_proposal_bulk_import(job, app):
 
     log_job(job, f"Done — processed {done}/{job.total} proposal(s).", level='success', event='done')
     log_activity('admin.github_proposal_bulk_import',
-                 f"Imported {done} accepted GitHub proposal(s) (ownership: {ownership_mode})",
+                 f"Imported {done} accepted repository proposal(s) (ownership: {ownership_mode})",
                  target_type='job', target_id=job.id, target_uuid=job.uuid,
                  actor_id=job.created_by,
                  extra={'proposal_uuids': proposal_uuids, 'ownership_mode': ownership_mode})

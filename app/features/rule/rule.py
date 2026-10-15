@@ -3010,8 +3010,8 @@ def get_all_sources_owner():
                 return None
 
             parsed = urlparse(src)
-            if parsed.netloc != get_github_host():
-                return None  # ignore non-GitHub sources
+            if not RuleModel.is_valid_github_url(src):
+                return None  # ignore sources that aren't git repositories
 
             path = parsed.path
             if path:
@@ -4223,6 +4223,13 @@ def get_repo_branches():
     url = request.args.get('url', '').strip()
     if not url:
         return jsonify({'success': False, 'branches': [], 'error': 'No URL provided.'}), 400
+    # Asking an arbitrary server is reserved to the people allowed to import
+    # (a plain user could otherwise make this server probe internal hosts);
+    # everyone else gets branch suggestions for well-known git hosts only.
+    from app.features.rule.rule_format.utils_format.git_provider import is_known_git_host, split_repo_url
+    if not (current_user.is_admin() or current_user.has_permission('github.manage')) \
+            and not is_known_git_host(split_repo_url(url)[0]):
+        return jsonify({'success': False, 'branches': [], 'error': 'Branch suggestions are only available for known git hosts.'}), 200
     branches, error = get_github_branches(url)
     if error:
         return jsonify({'success': False, 'branches': [], 'error': error}), 200
@@ -4299,7 +4306,7 @@ def import_rules_from_github():
                             user         = local_user,
                             session_type = 'github_import',
                             session_uuid = session_th.uuid,
-                            label        = f'GitHub import running — {repo_url}',
+                            label        = f'Git import running — {repo_url}',
                             link         = '/rule/github/manage',
                         )
                     except Exception as _e:
@@ -4307,7 +4314,7 @@ def import_rules_from_github():
 
                     branch_label = f" (branch: {branch})" if branch else ""
                     log_activity("github.import_started",
-                                 f"Started GitHub import from '{repo_url}'{branch_label}",
+                                 f"Started Git import from '{repo_url}'{branch_label}",
                                  target_type="github_import",
                                  target_uuid=session_th.uuid,
                                  extra={"url": repo_url, "branch": branch},
@@ -4842,7 +4849,7 @@ def check_updates_by_url():
 
     valid_urls = [u.get("url") for u in urls if u.get("url") and valider_repo_github(u.get("url"))]
     if not valid_urls:
-        return {"message": "No valid GitHub URLs provided.", "toast_class": "danger-subtle"}, 400
+        return {"message": "No valid git repository URLs provided.", "toast_class": "danger-subtle"}, 400
 
     # Only urls[0] is ever actually used (Update_class only supports a single
     # repo per by_url session — see its __init__) — its branch (when the
@@ -4873,14 +4880,14 @@ def check_updates_by_url():
             user         = current_user,
             session_type = 'github_update',
             session_uuid = update_session.uuid,
-            label        = f'GitHub update check running — {len(valid_urls)} repo(s)',
+            label        = f'Git update check running — {len(valid_urls)} repo(s)',
             link         = '/rule/github/manage',
         )
     except Exception as _e:
         print(f"[rule] notify_admins_session_started (update_by_url) error: {_e}")
 
     log_activity("github.update_started",
-                 f"Started GitHub update check on {len(valid_urls)} repo(s)",
+                 f"Started Git update check on {len(valid_urls)} repo(s)",
                  target_type="github_update",
                  target_uuid=update_session.uuid,
                  extra={"urls": valid_urls},
@@ -4952,7 +4959,7 @@ def check_updates_by_rule():
             user         = current_user,
             session_type = 'github_update',
             session_uuid = update_session.uuid,
-            label        = f'GitHub update check running — {len(rule_ids)} rule(s)',
+            label        = f'Git update check running — {len(rule_ids)} rule(s)',
             link         = '/rule/github/manage',
         )
     except Exception as _e:
@@ -5065,7 +5072,8 @@ def delete_all_rule_github():
     if count > LARGE_DELETE_THRESHOLD:
         # ── large delete → background job ────────────────────────────────────
         import app.features.jobs.jobs_core as JobsModel
-        label = f"Delete {count} rule(s) from {url.split(get_github_host() + '/')[-1]}"
+        from app.features.rule.rule_format.utils_format.git_provider import repo_display_name
+        label = f"Delete {count} rule(s) from {repo_display_name(url)}"
         job = JobsModel.create_job(
             job_type='delete_github_rules',
             payload={'urls': [url.strip()]},
@@ -5079,7 +5087,7 @@ def delete_all_rule_github():
             }), 500
 
         log_activity("github.source_deleted",
-                     f"Queued deletion of {count} rule(s) from GitHub source '{url}'",
+                     f"Queued deletion of {count} rule(s) from git source '{url}'",
                      extra={"url": url, "rule_count": count, "job_uuid": job.uuid},
                      icon="fa-brands fa-github")
         return jsonify({
@@ -5142,7 +5150,7 @@ def bulk_action_github():
         success, message, nb = RuleModel.delete_all_rule_by_url(target_urls, current_user.id)
         if success:
             log_activity("github.source_deleted",
-                         f"Bulk-deleted {nb} rule(s) from {len(target_urls)} GitHub source(s)",
+                         f"Bulk-deleted {nb} rule(s) from {len(target_urls)} git source(s)",
                          extra={"urls": target_urls, "deleted_count": nb},
                          icon="fa-brands fa-github")
         return jsonify({
@@ -5178,7 +5186,7 @@ def resync_github_repos():
     from app.features.rule.github_repo_core import rebuild_github_repos_from_rules
     result = rebuild_github_repos_from_rules()
     log_activity("github.repos_resynced",
-                 f"Resynced GitHub repo registry: {result['repos']} repo(s), {result['rules_counted']} rule(s)",
+                 f"Resynced git repository registry: {result['repos']} repo(s), {result['rules_counted']} rule(s)",
                  extra=result, icon="fa-brands fa-github")
     return jsonify({
         "status": "success",
@@ -5204,13 +5212,13 @@ def backfill_github_branches():
     job = create_job(
         job_type='github_repo_branch_backfill',
         payload={},
-        label="Backfill rule branches from GitHub defaults",
+        label="Backfill rule branches from each repository's default branch",
         created_by=current_user.id,
     )
     if not job:
         return jsonify({"message": "Failed to queue job.", "toast_class": "danger-subtle"}), 500
 
-    log_activity("github.branch_backfill_queued", "Queued GitHub rule-branch backfill job",
+    log_activity("github.branch_backfill_queued", "Queued git rule-branch backfill job",
                  extra={"job_uuid": job.uuid}, is_public=False)
     return jsonify({
         "status": "success",
@@ -5243,7 +5251,7 @@ def github_repo_live_info_route():
     unauthenticated 60/hour cap constantly. See get_github_repo_live_info()."""
     url = request.args.get("url", type=str)
     if not url or not valider_repo_github(url):
-        return jsonify({"message": "No valid GitHub URL was provided."}), 400
+        return jsonify({"message": "No valid git repository URL was provided."}), 400
     return jsonify(get_github_repo_live_info(url)), 200
 
 
@@ -5255,7 +5263,7 @@ def github_detail():
     url = request.args.get("url", type=str)
 
     if not url:
-        flash("No GitHub URL was provided.", "warning")
+        flash("No git repository URL was provided.", "warning")
         return redirect(url_for("rule.list_github_url"))
 
     url = url.rstrip("/")

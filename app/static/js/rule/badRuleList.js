@@ -554,7 +554,7 @@ export default {
                         <i class="fas fa-link"></i><span>{{ rule.url || '—' }}</span>
                     </span>
                     <span v-if="rule.github_path" class="rl-meta-item" :title="rule.github_path">
-                        <i class="fa-brands fa-github"></i><span>{{ rule.github_path }}</span>
+                        <i class="fa-brands fa-git-alt"></i><span>{{ rule.github_path }}</span>
                     </span>
                 </div>
                 <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto">

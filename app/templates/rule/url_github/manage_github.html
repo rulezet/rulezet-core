@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Manage GitHub — Rulezet{% endblock %}
+{% block title %}Manage Git — Rulezet{% endblock %}
 {% import 'macros/form_macros.html' as f %}
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/components/dataTable.css') }}">
@@ -101,8 +101,8 @@
             <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
-                <li class="breadcrumb-item"><a href="/rule/url_github" class="text-decoration-none text-muted">GitHub Sources</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">Manage GitHub</li>
+                <li class="breadcrumb-item"><a href="/rule/url_github" class="text-decoration-none text-muted">Git Sources</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Manage Git</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
@@ -110,12 +110,12 @@
                 <i class="fa-solid fa-bars-progress"></i>
             </div>
             <div>
-                <h2 class="fw-bold mb-1">Manage GitHub</h2>
+                <h2 class="fw-bold mb-1">Manage Git</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
         <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-            Monitor imported repositories, review update history, and automate recurring GitHub syncs.
+            Monitor imported repositories, review update history, and automate recurring Git syncs.
         </p>
         {% if current_user.is_admin() or current_user.has_permission('github.manage') %}
         <!-- ── GitHub API quota — admin/GitHub-manager only, top-right corner
@@ -215,7 +215,7 @@
         </button>
         <button class="dr-nav__item" id="proposals-tab" data-bs-toggle="tab" data-bs-target="#proposals-pane"
             type="button" role="tab" aria-controls="proposals-pane" aria-selected="false">
-            <i class="fa-brands fa-github"></i>
+            <i class="fa-brands fa-git-alt"></i>
             <span>Community Proposals</span>
             <span v-if="totalProposals > 0" class="dr-nav__badge">[[ totalProposals ]]</span>
         </button>
@@ -297,7 +297,7 @@
                                     <tr>
                                         <th class="dt-th text-center" style="width:44px;">#</th>
                                         <th class="dt-th">
-                                            <div class="dt-th-inner">GitHub Importer</div>
+                                            <div class="dt-th-inner">Git Importer</div>
                                         </th>
                                         <th v-if="colVisible.imported" class="dt-th dt-th--sortable text-center" :class="{ 'dt-th--sorted': sortKey === 'imported' }" @click="setSort('imported')">
                                             <div class="dt-th-inner justify-content-center">Imported <i class="fas dt-sort-icon" :class="sortIcon('imported')"></i></div>
@@ -673,7 +673,7 @@
                     <template v-else-if="schedules.length === 0">
                         <div class="dt-empty">
                             <div class="dt-empty-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
-                            <p class="dt-empty-text">No Sync Schedules yet — create one to automate recurring GitHub updates.</p>
+                            <p class="dt-empty-text">No Sync Schedules yet — create one to automate recurring Git updates.</p>
                         </div>
                     </template>
 
@@ -746,7 +746,7 @@
                             </div>
                             <div class="dt-card-body">
                                 <p class="text-muted small mb-2" v-if="s.description">[[ s.description ]]</p>
-                                <div class="small mb-1"><i class="fa-brands fa-github me-1"></i>[[ s.repo_count ]] repo(s)</div>
+                                <div class="small mb-1"><i class="fa-brands fa-git-alt me-1"></i>[[ s.repo_count ]] repo(s)</div>
                                 <div class="small mb-1"><i class="fa-solid fa-clock me-1"></i>[[ frequencySummary(s) ]]</div>
                                 <div class="small mb-1">Next run: [[ s.next_run_at || '—' ]]</div>
                                 <span class="badge" :class="s.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
@@ -920,7 +920,7 @@
         setup() {
             // ── GitHub API quota (admin/GitHub-manager only) — fetched once
             // on mount + on-demand, never on a timer. Same backend endpoint
-            // as the GitHub Sources list / create-rule GitHub tab.
+            // as the Git Sources list / create-rule GitHub tab.
             const rateLimitStatus = ref(null)
             async function fetchRateLimitStatus() {
                 try {

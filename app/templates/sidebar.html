@@ -85,19 +85,19 @@
 
               
 
-               <!-- ── GitHub (hidden for non-admin GitHub Managers — they get
-                    the dedicated "GitHub Manager" dropdown below instead) ── -->
+               <!-- ── GitHub (hidden for non-admin Git Managers — they get
+                    the dedicated "Git Manager" dropdown below instead) ── -->
                {% if current_user.is_authenticated and (current_user.is_admin() or not current_user.has_permission('github.manage')) %}
                <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if '/github' in request.path %}active{% endif %}"
                      href="#" role="button" data-bs-toggle="dropdown">
-                     <i class="fa-brands fa-github fa-fw me-1"></i>Github
+                     <i class="fa-brands fa-git-alt fa-fw me-1"></i>Git
                   </a>
                   <ul class="dropdown-menu">
                      <li><a class="dropdown-item {% if request.path == '/rule/github/list_github_url' %}active{% endif %}"
-                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Github List</a></li>
+                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Git Sources</a></li>
                      <li><a class="dropdown-item {% if request.path == '/rule/github/manage' %}active{% endif %}"
-                           href="/rule/github/manage"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Github</a></li>
+                           href="/rule/github/manage"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Git</a></li>
                      <li><a class="dropdown-item" href="/rule/create_rule?tab=github">
                            <i class="fa-solid fa-file-import fa-fw me-2"></i>Import Rules</a></li>
                      <li>
@@ -295,18 +295,18 @@
                </li>
                {% endif %}
 
-               <!-- ── GitHub Manager (dropdown, github.manage non-admins only) ── -->
+               <!-- ── Git Manager (dropdown, github.manage non-admins only) ── -->
                {% if current_user.is_authenticated and not current_user.is_admin() and current_user.has_permission('github.manage') %}
                <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if '/github' in request.path %}active{% endif %}"
                      href="#" role="button" data-bs-toggle="dropdown">
-                     <i class="fa-brands fa-github fa-fw me-1"></i>GitHub Manager
+                     <i class="fa-brands fa-git-alt fa-fw me-1"></i>Git Manager
                   </a>
                   <ul class="dropdown-menu">
                      <li><a class="dropdown-item {% if request.path == '/rule/github/list_github_url' %}active{% endif %}"
-                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Github List</a></li>
+                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Git Sources</a></li>
                      <li><a class="dropdown-item {% if request.path == '/rule/github/manage' %}active{% endif %}"
-                           href="/rule/github/manage"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Github</a></li>
+                           href="/rule/github/manage"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Git</a></li>
                      <li><a class="dropdown-item" href="/rule/create_rule?tab=github">
                            <i class="fa-solid fa-file-import fa-fw me-2"></i>Import Rules</a></li>
                      <li>
@@ -437,7 +437,7 @@
       { label: 'Add Rules', url: '/rule/create_rule', icon: 'fa-file-circle-plus', keywords: ['create rule', 'add rule'] },
       { label: 'Proposals', url: '/rule/rule_propose_edit', icon: 'fa-lightbulb', keywords: ['proposals'] },
       { label: 'Bad Rules', url: '/rule/bad_rules_summary', icon: 'fa-bug', keywords: ['bad rules', 'invalid'] },
-      { label: 'Github Sources', url: '/rule/github/list_github_url', icon: 'fa-github', keywords: ['github'] },
+      { label: 'Git Sources', url: '/rule/github/list_github_url', icon: 'fa-code-branch', keywords: ['git', 'github', 'gitlab', 'repository'] },
       { label: 'Dashboard', url: '/dashboard/', icon: 'fa-gauge-high', keywords: ['dashboard'] },
       { label: 'Profile', url: '/account/', icon: 'fa-user-circle', keywords: ['profile', 'account'] },
       { label: 'Settings', url: '/settings', icon: 'fa-sliders', keywords: ['settings'] },

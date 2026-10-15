@@ -3939,7 +3939,7 @@ class Alert(db.Model):
         "cve_any":      false,   # any vulnerability id at all
         "tag_any":      false,   # any tag except the tlp:/pap: markings
         "attack_any":   false,   # any ATT&CK technique
-        "github_any":   false    # any rule imported from GitHub
+        "github_any":   false    # any rule imported from a git repository
     }
     Each "*_any" switch supersedes its specific list.
     Within one criterion any value matches (OR). match_mode says how the

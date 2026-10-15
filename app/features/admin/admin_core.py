@@ -216,6 +216,8 @@ def get_app_config() -> dict:
     mail_state = email_status()
     github_token = os.environ.get('GITHUB_TOKEN') or ''
     github_host = os.environ.get('GITHUB_HOST') or 'github.com'
+    from app.features.rule.rule_format.utils_format.git_provider import _parse_host_map, configured_hosts, detect_provider
+    git_tokens = _parse_host_map(os.environ.get('GIT_HOST_TOKENS'))
     return {
         'mail': {
             'server': cfg.get('MAIL_SERVER', ''),
@@ -241,6 +243,10 @@ def get_app_config() -> dict:
             'github_token_set': bool(github_token),
             'github_token_preview': '••••••••••••' if github_token else 'not set',
             'github_host': github_host,
+            'git_hosts': os.environ.get('GIT_HOSTS') or '',
+            # Hosts only — never the tokens themselves.
+            'git_token_hosts': sorted(git_tokens),
+            'git_hosts_detected': [{'host': h, 'provider': detect_provider(h)} for h in sorted(configured_hosts())],
         },
         'sso': {
             # OIDC SSO
@@ -280,7 +286,7 @@ _ENV_ALLOWED = {
     'MAIL_SERVER', 'MAIL_PORT', 'MAIL_USERNAME', 'MAIL_PASSWORD',
     'MAIL_USE_TLS', 'MAIL_USE_SSL', 'MAIL_DEFAULT_SENDER',
     'FLASK_URL', 'FLASK_PORT',
-    'GITHUB_TOKEN', 'GITHUB_HOST',
+    'GITHUB_TOKEN', 'GITHUB_HOST', 'GIT_HOSTS', 'GIT_HOST_TOKENS',
     'SURICATA_BINARY_PATH',
 }
 

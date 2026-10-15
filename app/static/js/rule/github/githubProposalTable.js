@@ -1,10 +1,11 @@
 import UserChip from '/static/js/components/UserChip.js';
+import { gitProviderIcon } from '/static/js/components/git-links.js';
 
 const { ref, reactive, computed, watch } = Vue;
 
 /**
- * GithubProposalTable — card/table renderer for non-admin GitHub import
- * proposals, admin review panel (Manage GitHub → Community Proposals).
+ * GithubProposalTable — card/table renderer for non-admin Git import
+ * proposals, admin review panel (Manage Git → Community Proposals).
  *
  * Structurally mirrors app/static/js/rule/similarity/duplicateTable.js
  * (card/table toggle, sortable columns, remote search, selection + bulk
@@ -188,6 +189,7 @@ const GithubProposalTable = {
         }
 
         return {
+            gitProviderIcon,
             viewMode, search, sortKey, sortDir, hiddenColumns, showColPicker,
             selectedIds, statusFilter, columns, visibleColumns, toggleColumn,
             rowKey, formatDate, goToDetail, highlight,
@@ -330,7 +332,7 @@ const GithubProposalTable = {
 
                         <td class="dt-td gpt-name-cell">
                             <div class="gpt-pair-cell">
-                                <i class="fa-brands fa-github text-muted"></i>
+                                <i :class="gitProviderIcon(item.repo_url)" class="text-muted"></i>
                                 <span class="gpt-title" :title="item.repo_url" v-html="highlight(item.repo_url)"></span>
                             </div>
                         </td>

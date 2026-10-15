@@ -364,14 +364,14 @@ class FavoriteRule(Resource):
 @rule_private_ns.route('/import_rules_from_github')
 @rule_private_ns.doc(
     description="""
-Import detection rules of **any supported format** (e.g., YARA, Sigma, Suricata) from a **GitHub repository** into the system.  
+Import detection rules of **any supported format** (e.g., YARA, Sigma, Suricata) from a **git repository** — GitHub, GitLab, Gitea / Forgejo, Bitbucket or any git server — into the system.  
 **Only admin users** are allowed to perform this operation.
 
 ### Query Parameters
 
 | Parameter | Type   | Required | Description |
 |-----------|--------|----------|-------------|
-| url       | string | Yes      | URL of the GitHub repository containing the rules to import. Must be a valid GitHub repository URL. |
+| url       | string | Yes      | URL of the git repository containing the rules to import (any host; private repositories need a token for their host in Admin → Settings). |
 | license   | string | Yes      | License to apply to the imported rules (e.g., MIT, GPL). |
 
 ### Headers
@@ -430,14 +430,14 @@ curl -X POST http://127.0.0.1:7009/api/rule/private/import_rules_from_github \
 class ImportRulesFromGithub(Resource):
     @api_required
     @rule_private_ns.doc(params={
-    "url": "Required. URL of the repository to import rules from",
+    "url": "Required. URL of the git repository to import rules from — GitHub, GitLab, Gitea / Forgejo, Bitbucket or any git server (host detected from the URL)",
     "license": "Required. License to apply to the imported rules (e.g., MIT, GPL)",
     "branch": "Optional. Branch to clone (default branch if omitted).",
-    "is_generic_source": "Optional. Set true for a non-GitHub git host (GitLab, Gitea, self-hosted, …) — "
-                          "skips the GitHub REST API checks and uses a plain git clone instead.",
+    "is_generic_source": "Optional, legacy. The host is detected from the URL; true additionally "
+                          "accepts a flat https://host/repo URL (some plain git servers).",
     })
     def post(self):
-        """Import rules of any supported format from a GitHub repository (admin only)"""
+        """Import rules of any supported format from a git repository — GitHub, GitLab, Gitea… (admin only)"""
         user = utils.get_user_from_api(request.headers)
         if not user:
             return {"success": False, "message": "Unauthorized"}, 403

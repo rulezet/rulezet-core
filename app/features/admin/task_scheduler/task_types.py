@@ -8,7 +8,7 @@ describes how the scheduling form should build its target_payload.
 
 Phase 1 subset: only task types whose job handler already exists AND whose
 payload shape is simple enough for a generic picker (§9 of the design doc
-lists what's excluded and why — e.g. Similarity/GitHub Import need a new
+lists what's excluded and why — e.g. Similarity/Git Import need a new
 handler first, Field Parser/Bulk Platform Tagging need a richer config
 picker than any target_picker below covers yet). Extending this dict is the
 whole point of the registry — see it as a starting set, not a ceiling.
@@ -106,11 +106,11 @@ TASK_TYPES = {
         'target_picker': 'connector_select',
     },
     'github_repo_resync': {
-        'label': 'GitHub Sources — resync registry',
-        'icon': 'fa-brands fa-github',
+        'label': 'Git Sources — resync registry',
+        'icon': 'fa-brands fa-git-alt',
         'job_type': 'github_repo_resync',
         'target_picker': 'none',
-        # Same full recompute as the GitHub Sources page's admin "Resync"
+        # Same full recompute as the Git Sources page's admin "Resync"
         # button — a correctness backstop for GithubRepo's incremental sync
         # (see github_repo_core.py), safe to run repeatedly/on a schedule.
     },
@@ -130,7 +130,7 @@ TASK_TYPES = {
         'target_picker': 'none',
         # Same job as Bulk Parse Fields → Imported Tags: idempotent, it also
         # detaches Imported tags a rule's content no longer yields — safe to
-        # run on a schedule (e.g. after a GitHub import task).
+        # run on a schedule (e.g. after a Git import task).
         'extra_options': [
             {'key': 'formats', 'type': 'multiselect', 'label': 'Rule formats to re-parse',
              'options': _NATIVE_TAG_FORMAT_OPTIONS, 'default': list(FORMAT_TAG_SOURCES)},
@@ -165,23 +165,22 @@ TASK_TYPES = {
         'required_options': ['config_id'],
     },
     'github_import': {
-        'label': 'GitHub — import rules from a repository',
-        'icon': 'fa-brands fa-github',
+        'label': 'Git — import rules from a repository (GitHub, GitLab, Gitea…)',
+        'icon': 'fa-brands fa-git-alt',
         'job_type': 'github_import',
         'target_picker': 'none',
-        # Same import as the GitHub Import page (results land in its import
+        # Same import as the Git Import page (results land in its import
         # history). Re-running it only adds the rules that are new since
         # last time — existing ones are skipped as duplicates.
         'extra_options': [
-            {'key': 'url', 'type': 'text', 'label': 'Repository URL (https://github.com/owner/repo)', 'default': ''},
+            {'key': 'url', 'type': 'text', 'label': 'Repository URL on any git host (https://gitlab.com/group/repo, https://github.com/owner/repo…)', 'default': ''},
             {'key': 'branch', 'type': 'text', 'label': 'Branch — blank uses the default branch', 'default': ''},
             {'key': 'license', 'type': 'text', 'label': 'License to apply when a rule has none (e.g. MIT)', 'default': ''},
-            {'key': 'is_generic_source', 'type': 'bool', 'label': 'Not on GitHub (any git host — no GitHub API metadata)', 'default': False},
         ],
         'required_options': ['url'],
     },
     'github_branch_backfill': {
-        'label': 'GitHub Sources — backfill missing rule branches',
+        'label': 'Git Sources — backfill missing rule branches',
         'icon': 'fa-solid fa-code-branch',
         'job_type': 'github_repo_branch_backfill',
         'target_picker': 'none',

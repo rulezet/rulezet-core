@@ -871,7 +871,7 @@ def notify_ownership_requested(ownership_request, rule, requester):
             link  = f'/requests/{ownership_request.id}'
         else:
             title = f'Ownership claim on source rules'
-            body  = f'{requester_name} is claiming ownership of rules from a GitHub source.'
+            body  = f'{requester_name} is claiming ownership of rules from a git repository source.'
             link  = f'/requests/{ownership_request.id}'
 
         notifs = [
@@ -962,7 +962,7 @@ def notify_github_proposal_submitted(proposal, requester):
         if not recipients:
             return
         requester_name = requester.get_username() if requester else 'Someone'
-        title = 'New GitHub import proposal'
+        title = 'New repository import proposal'
         body  = f'{requester_name} proposed importing {proposal.repo_url}'
         link  = f'/rule/github_proposal_detail/{proposal.uuid}'
 
@@ -991,7 +991,7 @@ def notify_github_proposal_decision(proposal, approved, note=None):
     try:
         notif_type = 'github_proposal_approved' if approved else 'github_proposal_rejected'
         verb       = 'accepted' if approved else 'rejected'
-        title      = f'GitHub proposal {verb}'
+        title      = f'Repository proposal {verb}'
         body       = f'Your proposal for {proposal.repo_url} was {verb}.'
         if note:
             body += f' Note: {note}'
@@ -1051,7 +1051,7 @@ def notify_rule_update_found(user_id, count, update_result_id=None):
         user_id    = user_id,
         notif_type = 'rule_update_found',
         title      = f'{count} rule update{"s" if count > 1 else ""} available',
-        body       = 'New versions detected for your imported GitHub rules.',
+        body       = 'New versions detected for your rules imported from git repositories.',
         link       = link,
         icon       = _TYPE_ICON['rule_update_found'],
     )

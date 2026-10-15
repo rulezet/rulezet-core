@@ -1112,22 +1112,19 @@ def get_rule_history_count(rule_id) -> int:
     ).count()
 
 from urllib.parse import urlparse
-from app.features.rule.rule_format.utils_format.utils_import_update import get_github_host
 
 def is_valid_github_url(url: str) -> bool:
     """
-    Check if a URL is a valid GitHub URL.
+    Check if a URL is a git repository URL (GitHub, GitLab, Gitea, any known
+    git host) — name kept for callers.
     """
-    try:
-        parsed = urlparse(url)
-        return parsed.scheme in ('http', 'https') and parsed.netloc == get_github_host()
-    except Exception:
-        return False
+    from app.features.rule.rule_format.utils_format.git_provider import is_git_repo_url
+    return is_git_repo_url(url)
 
 def get_sources_from_ids(rule_ids: List[int]) -> List[str]:
     """
     Given a list of rule IDs, retrieve the 'source' for each rule from the DB,
-    but only if the source is a valid GitHub URL and not already added.
+    but only if the source is a git repository URL and not already added.
     Returns a deduplicated list of sources.
     """
     if not rule_ids:
@@ -1428,8 +1425,9 @@ def get_all_rule_update(search=None, rule_type=None, sourceFilter=None) -> List[
         query = query.filter(Rule.format == rule_type)
 
     if sourceFilter:
+        # A bare "owner/repo" matches that repo on any git host.
         if not sourceFilter.startswith("http"):
-            sourceFilter = f"https://{get_github_host()}/{sourceFilter}"
+            sourceFilter = "/" + sourceFilter.strip("/")
 
         sourceFilter = sourceFilter.rstrip("/")
         if sourceFilter.endswith(".git"):
@@ -2637,13 +2635,8 @@ def filter_rules_owner_github(search=None, author=None, sort_by=None, rule_type=
     if source:    
         query = query.filter(Rule.source.ilike(f"%{source.lower()}%"))
 
-    _gh_host = get_github_host()
-    github_patterns = [f'%https://{_gh_host}/%', f'%http://{_gh_host}/%', f'%{_gh_host}/%']
-    query = query.filter(
-        or_(
-            Rule.source.ilike(pattern) for pattern in github_patterns
-        )
-    )
+    from app.features.rule.github_repo_core import git_source_filter
+    query = query.filter(git_source_filter())
 
     # Tri
     if sort_by == "newest":
@@ -3484,14 +3477,13 @@ def get_all_format() -> list[dict]:
     return [fmt.to_json() for fmt in formats]
 
 def get_all_github_urls_matching(search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None):
-    """Unpaginated list of distinct GitHub source URLs matching the same
-    filters as get_optimized_github_data — backs 'select all N matching this
-    filter' bulk actions (Sync Schedule repo picker), where the full matching
-    set (not just the current page) must be resolved server-side."""
-    github_pattern = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
-    author_expr = func.substring(Rule.source, r'github\.com/([^/]+)')
+    """Unpaginated list of distinct git repository URLs (any host) matching
+    the same filters as get_optimized_github_data — backs 'select all N
+    matching this filter' bulk actions (Sync Schedule repo picker), where the
+    full matching set (not just the current page) must be resolved server-side."""
+    author_expr = func.substring(Rule.source, r'^https?://[^/]+/([^/]+)')
     query = db.session.query(Rule.source.label("url")).filter(
-        Rule.source.op('~')(github_pattern), Rule.is_deleted == False
+        _git_source_filter(), Rule.is_deleted == False
     )
 
     if format_filter:
@@ -3516,7 +3508,6 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
 
 # Shared by get_optimized_github_data() and the facet-usage helpers below —
 # a repo's rules are whatever matches this against Rule.source.
-_GITHUB_URL_PATTERN = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
 
 
 def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc'):
@@ -3701,14 +3692,19 @@ def get_github_authors_usage(search_query: str = None):
     return [{"name": r.author, "count": r.count} for r in rows if r.author]
 
 
+def _git_source_filter():
+    from app.features.rule.github_repo_core import git_source_filter
+    return git_source_filter()
+
+
 def get_github_editors_usage(search_query: str = None):
-    """Distinct Rulezet users who own rules imported from a GitHub repo, with
+    """Distinct Rulezet users who own rules imported from a git repo, with
     counts — feeds the Editor mode of MultiPersonFilter on the same page."""
     editor_col = func.coalesce(User.username, func.concat(User.first_name, ' ', User.last_name))
     query = (
         db.session.query(editor_col.label('name'), func.count(Rule.id).label('count'))
         .join(User, User.id == Rule.user_id)
-        .filter(Rule.source.op('~')(_GITHUB_URL_PATTERN), Rule.is_deleted == False)
+        .filter(_git_source_filter(), Rule.is_deleted == False)
     )
 
     if search_query:
@@ -3734,8 +3730,7 @@ def get_github_licenses_usage():
 
 
 def get_rule_count_by_github_page(page: int = 1, search: str = None):
-        """Return paginated list of GitHub URLs with how many rules are linked to each."""
-        github_pattern = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
+        """Return paginated list of git repository URLs (any host) with how many rules are linked to each."""
 
         query = (
             db.session.query(
@@ -3743,7 +3738,7 @@ def get_rule_count_by_github_page(page: int = 1, search: str = None):
                 func.count(Rule.id).label("rule_count")
             )
             .filter(Rule.source.isnot(None))
-            .filter(Rule.source.op('~')(github_pattern))
+            .filter(_git_source_filter())
             .filter(Rule.is_deleted == False)
         )
 
@@ -4094,13 +4089,14 @@ def get_all_rule_by_url_github(url: str = None, current_user_: User = None, bran
 
 
 def get_all_rule_by_github_url_page(search: str = None, page: int = 1):
-    """Get paginated list of Rules whose source matches a specific GitHub project URL and belong to the current user."""
+    """Get paginated list of Rules whose source is a git repository (any host) and belong to the current user."""
+    from app.features.rule.github_repo_core import git_source_filter
     per_page = 10
 
-    # Base query: only rules that have a GitHub source and belong to the current user
+    # Base query: only rules imported from a git repository, owned by the current user
     query = _active().filter(
         Rule.source.isnot(None),
-        Rule.source.ilike(f"%{get_github_host()}%"),
+        git_source_filter(),
         Rule.user_id == current_user.id
     )
 
@@ -5085,9 +5081,10 @@ def count_rules_by_url(url):
     return _active().filter(Rule.source == url.strip()).count()
 
 def get_all_github_sources(exclude_urls=None):
-    """Returns unique active GitHub repository URLs (excludes trash)."""
+    """Returns unique active git repository URLs, any host (excludes trash)."""
+    from app.features.rule.github_repo_core import git_source_filter
     query = db.session.query(Rule.source).distinct()
-    query = query.filter(Rule.source.like(f'https://{get_github_host()}/%'))
+    query = query.filter(git_source_filter())
     query = query.filter(Rule.is_deleted == False)
     if exclude_urls:
         query = query.filter(Rule.source.notin_(exclude_urls))

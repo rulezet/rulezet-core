@@ -13,7 +13,7 @@
  *   mode                String   'read'|'select'|'manage'      default:'read'
  *   defaultView         String   'card'|'table'                default:'card'
  *   fetchUrl            String   paginated API endpoint        default:'/rule/data_table'
- *   source              String   GitHub source URL filter
+ *   source              String   Git repository source URL filter
  *   userId              Number   filter by owner
  *   currentUserId       Number   for OWNER badge
  *   currentUserIsAdmin  Boolean
@@ -66,6 +66,7 @@ import ReportModal              from '/static/js/components/ReportModal.js'
 import MultiAttackFilter        from '/static/js/attack/multiAttackFilter.js'
 import AttackDisplayList        from '/static/js/attack/attackDisplayList.js'
 import YaraMatchDetail           from '/static/js/rule_tester/YaraMatchDetail.js'
+import { repoTreeUrl as gitTreeUrl, repoBlobUrl as gitBlobUrl } from '/static/js/components/git-links.js'
 import FormatChip                from '/static/js/rule/formatChip.js'
 import { MASCOT_ENABLED }       from '/static/js/components/mascot.js'
 
@@ -2490,15 +2491,11 @@ export default {
                 .replace(/"/g, '&quot;')
         }
 
-        // ── GitHub source link (branch/file-aware when available) ──────────
+        // ── Git source link (branch/file-aware when available, any host) ──
         function githubLink(rule) {
             if (!rule || !rule.source) return rule ? rule.source : ''
-            const base = rule.source.replace(/\.git$/, '')
-            if (rule.github_path) {
-                const path = rule.github_path.replace(/^\/+/, '')
-                return base + '/blob/' + (rule.branch || 'HEAD') + '/' + path
-            }
-            if (rule.branch) return base + '/tree/' + rule.branch
+            if (rule.github_path) return gitBlobUrl(rule.source, rule.branch, rule.github_path)
+            if (rule.branch) return gitTreeUrl(rule.source, rule.branch)
             return rule.source
         }
 

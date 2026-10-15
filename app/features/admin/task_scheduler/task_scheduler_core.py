@@ -257,8 +257,8 @@ def _validate_target_payload(task_type, payload):
     if task_type == 'github_import':
         from app.features.rule.rule_format.utils_format.utils_import_update import valider_repo_github
         url = payload.get('url')
-        if not isinstance(url, str) or not valider_repo_github(url.strip(), is_generic_source=bool(payload.get('is_generic_source'))):
-            return "Enter a valid repository URL (https://github.com/owner/repo, or tick \"Not on GitHub\")."
+        if not isinstance(url, str) or not valider_repo_github(url.strip(), is_generic_source=True):
+            return "Enter a valid git repository URL (https://host/owner/repo — GitHub, GitLab, Gitea, …)."
         for key in ('branch', 'license'):
             if payload.get(key) is not None and not isinstance(payload.get(key), str):
                 return f"{key} must be text."

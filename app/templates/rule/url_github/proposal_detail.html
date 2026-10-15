@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}GitHub Proposal — Rulezet{% endblock %}
+{% block title %}Repository Proposal — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
@@ -14,8 +14,8 @@
     <nav aria-label="breadcrumb" class="mb-2">
         <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
             <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-            <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">Manage GitHub</a></li>
-            <li class="breadcrumb-item active text-muted" aria-current="page">GitHub Proposal</li>
+            <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">Manage Git</a></li>
+            <li class="breadcrumb-item active text-muted" aria-current="page">Repository Proposal</li>
         </ol>
     </nav>
 
@@ -26,13 +26,13 @@
     <template v-else-if="proposal">
         <!-- Main detail card -->
         <div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4" style="border-radius:12px;">
-            <div class="card-watermark-detail"><i class="fa-brands fa-github"></i></div>
+            <div class="card-watermark-detail"><i class="fa-brands fa-git-alt"></i></div>
             <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
                 <span :class="['gpt-status-badge', 'gpt-status-badge--' + proposal.status]">[[ proposal.status ]]</span>
             </div>
             <div class="card-body p-4 p-md-5">
                 <div class="d-flex align-items-center gap-3 mb-3">
-                    <i class="fa-brands fa-github" style="font-size:2rem;color:var(--text-color);flex-shrink:0;"></i>
+                    <i class="fa-brands fa-git-alt" style="font-size:2rem;color:var(--text-color);flex-shrink:0;"></i>
                     <div style="min-width:0;">
                         <h4 class="mb-1 fw-bold" style="color:var(--text-color);">
                             <span class="text-muted">[[ repoOwner ]]</span>

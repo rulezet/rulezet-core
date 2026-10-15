@@ -12,6 +12,9 @@ from urllib.parse import urlparse
 from git import Repo
 import requests
 
+from app.features.rule.rule_format.utils_format import git_provider
+from app.features.rule.rule_format.utils_format.git_provider import get_github_host  # noqa: F401 (re-exported)
+
 
 def _github_auth_headers() -> dict:
     """Authorization header for GitHub API calls, if GITHUB_TOKEN is configured.
@@ -19,14 +22,6 @@ def _github_auth_headers() -> dict:
     under normal admin usage (repeated imports/branch checks/metadata lookups)."""
     token = os.environ.get('GITHUB_TOKEN')
     return {'Authorization': f'Bearer {token}'} if token else {}
-
-
-def get_github_host() -> str:
-    """Hostname that rule-import features treat as "GitHub" — github.com by
-    default, or a self-hosted GitHub Enterprise Server / offline mirror when
-    GITHUB_HOST is configured (Admin -> Server Settings -> Security)."""
-    host = os.environ.get('GITHUB_HOST', 'github.com').strip().strip('/')
-    return host or 'github.com'
 
 
 def get_github_api_base() -> str:
@@ -124,12 +119,10 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
     If *branch* is specified the repo is cloned on that branch and cached in a
     separate directory so it does not collide with the default-branch clone.
 
-    is_generic_source=True skips the GitHub-API accessibility pre-check
-    (is_github_repo_accessible) — that check only works against github.com's
-    REST API, so for a non-GitHub git host it would always fail even for a
-    perfectly clonable repo. The clone itself (git protocol, not GitHub's
-    API) already reports a clear error via its own except block below if the
-    repo genuinely isn't reachable.
+    Works with any git host (GitHub, GitLab, Gitea/Forgejo, Bitbucket, plain
+    git): the host's token, if one is configured, is sent by git itself (see
+    git_provider.git_env). is_generic_source is kept for older callers — the
+    host is detected from the URL now.
     """
     base_dir = RULES_GITHUB_DIR
     os.makedirs(base_dir, exist_ok=True)
@@ -145,19 +138,23 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
     # Every part comes from user input: sanitised, and the result must stay
     # under base_dir (a URL ending in "/../.." must not escape it).
     dir_suffix = f"--{_safe_path_part(branch)}" if branch else ""
-    repo_dir = os.path.join(base_dir, _safe_path_part(owner), _safe_path_part(name) + dir_suffix)
+    # GitHub clones keep their historical owner/repo layout; any other host
+    # gets its own top folder so the same owner/repo on two hosts can't collide.
+    host = git_provider.split_repo_url(repo_url)[0]
+    host_dir = [] if git_provider.detect_provider(repo_url) == 'github' else [_safe_path_part(host)]
+    repo_dir = os.path.join(base_dir, *host_dir, _safe_path_part(owner), _safe_path_part(name) + dir_suffix)
     if not _inside(base_dir, repo_dir):
         raise Exception("Invalid repository path.")
 
     existe = os.path.exists(repo_dir)
     if not existe:
-        if not is_generic_source:
+        if git_provider.detect_provider(repo_url) == 'github':
             status, msg = is_github_repo_accessible(repo_url)
             if not status:
                 raise Exception(f"The repo {repo_url} is not accessible: {msg}")
         try:
             kwargs = {"branch": branch, "depth": 1} if branch else {"depth": 1}
-            Repo.clone_from(repo_url, repo_dir, **kwargs)
+            Repo.clone_from(repo_url, repo_dir, env=git_provider.git_env(repo_url), **kwargs)
         except Exception as e:
             # Remove the partially-created directory so a retry starts fresh
             if os.path.exists(repo_dir):
@@ -168,8 +165,8 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
                 raise Exception(f"Branch '{branch}' does not exist in this repository.")
             if "Repository not found" in err or "not found" in err.lower():
                 raise Exception("Repository not found or not accessible. Check the URL.")
-            if "Authentication failed" in err:
-                raise Exception("Authentication failed — the repository may be private.")
+            if "Authentication failed" in err or "could not read Username" in err:
+                raise Exception("Authentication failed — the repository may be private. Add a token for this host in Admin → Settings.")
             raise Exception(f"Clone failed: {err.split('stderr:')[-1].strip()[:200]}")
     else:
         # Repo already cached — make sure we are on the right branch and up-to-date
@@ -177,7 +174,8 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
             try:
                 repo = Repo(repo_dir)
                 repo.git.checkout(branch)
-                repo.remotes.origin.pull()
+                with repo.git.custom_environment(**git_provider.git_env(repo_url)):
+                    repo.remotes.origin.pull()
             except Exception as e:
                 err = str(e)
                 if "did not match any" in err or "pathspec" in err or "not found" in err.lower():
@@ -298,7 +296,8 @@ def get_github_repo_live_info(repo_url: str) -> dict:
     if resp is not None and resp.status_code == 200:
         contributors = resp.json()
 
-    return {'repo': repo, 'repo_error': repo_error, 'commits': commits,
+    return {'provider': 'github', 'provider_label': 'GitHub',
+            'repo': repo, 'repo_error': repo_error, 'commits': commits,
             'branches': branches, 'contributors': contributors}
 
 def delete_existing_repo_folder(local_dir):
@@ -317,11 +316,13 @@ def delete_existing_repo_folder(local_dir):
 #################
 
 def get_github_branches(repo_url: str) -> tuple[list[str], str | None]:
-    """Return (branch_names, error_message) for a GitHub repository.
+    """Return (branch_names, error_message) for a repository on any git host
+    (GitHub through its API, every other host through `git ls-remote`).
 
     error_message is None on success, a string on failure.
     """
-    import os
+    if git_provider.detect_provider(repo_url) != 'github':
+        return git_provider.list_branches(repo_url)
     clean = repo_url.rstrip('/')
     if clean.endswith('.git'):
         clean = clean[:-4]
@@ -432,6 +433,9 @@ def github_repo_metadata(repo_url: str, selected_license: str) -> dict:
     Returns:
         dict: Extracted repository metadata.
     """
+    if git_provider.detect_provider(repo_url) != 'github':
+        return git_provider.repo_metadata(repo_url, selected_license)
+
     # --- Build API URL ---
     api_url = github_repo_to_api_url(repo_url)
 
@@ -447,61 +451,30 @@ def github_repo_metadata(repo_url: str, selected_license: str) -> dict:
 
 def generic_repo_metadata(repo_url: str, selected_license: str, user) -> dict:
     """
-    Metadata for a non-GitHub ("generic source") repository — same shape as
-    extract_github_repo_metadata()'s output, filled locally instead of via
-    an API call that would only work against github.com. Rule formats' own
-    parse_metadata() only ever reads author/license/repo_url off this dict
-    (see e.g. splunk_format.py, sigma_format.py) — everything else is left
-    None/empty since there's no generic way to fetch it.
+    Metadata for a repository on any git host — same shape as
+    extract_github_repo_metadata()'s output. Read from the host's API when it
+    has one (GitLab, Gitea/Forgejo, Bitbucket, GitHub), otherwise filled from
+    the URL itself (owner, name). Rule formats' own parse_metadata() only
+    ever reads author/license/repo_url off this dict.
     """
-    return {
-        "id": None,
-        "name": get_repo_name_from_url(repo_url),
-        "full_name": get_repo_name_from_url(repo_url),
-        "private": None,
-        "author": getattr(user, "first_name", None) or "Unknown",
-        "author_url": None,
-        "author_avatar": None,
-        "repo_url": repo_url,
-        "api_url": None,
-        "description": None,
-        "homepage": None,
-        "language": None,
-        "topics": [],
-        "created_at": None,
-        "updated_at": None,
-        "pushed_at": None,
-        "license": selected_license,
-        "license_name": selected_license,
-        "stars": 0,
-        "watchers": 0,
-        "forks": 0,
-        "open_issues": 0,
-        "default_branch": None,
-        "visibility": None,
-        "archived": False,
-        "disabled": False,
-    }
+    return git_provider.repo_metadata(repo_url, selected_license, user)
 
 
 def valider_repo_github(repo_url: str, is_generic_source: bool = False) -> bool:
     """
-    Vérifie qu'une chaîne est bien une URL de dépôt valide.
+    Check that a string is a repository URL on any git host (GitHub, GitLab,
+    Gitea/Forgejo, Bitbucket, a self-hosted server, …): http(s) and
+    /owner/repo (GitLab may nest more groups in between). The clone itself
+    (GitPython) works against any git remote regardless of host.
 
-    is_generic_source=True skips the github.com/GITHUB_HOST hostname check —
-    any http(s) URL with a non-trivial path is accepted, since the actual
-    clone (GitPython) works against any git remote regardless of host.
+    is_generic_source=True also accepts a flat /repo path, which some plain
+    git servers use.
     """
     try:
         parsed = urlparse(repo_url)
-        if parsed.scheme not in ("http", "https"):
-            return False
-        if not is_generic_source and parsed.netloc != get_github_host():
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
             return False
         path_parts = [p for p in parsed.path.split('/') if p]
-        # GitHub-shaped URLs are always /owner/repo (2 segments); a generic
-        # git host may nest a repo under groups/subgroups (GitLab) or use a
-        # flat name, so only require a non-empty path there.
         min_parts = 1 if is_generic_source else 2
         if len(path_parts) < min_parts:
             return False
@@ -518,10 +491,21 @@ def get_licst_license() -> list:
                 licenses.append(line)
     return licenses
 
-def git_pull_repo(repo_dir):
+def git_pull_repo(repo_dir, repo_url=None):
+    """`git pull` in a clone — with the host's token when repo_url is given
+    (read from the clone's own remote otherwise)."""
+    if repo_url is None:
+        try:
+            repo_url = subprocess.run(
+                ["git", "-C", repo_dir, "remote", "get-url", "origin"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10,
+            ).stdout.strip()
+        except subprocess.TimeoutExpired:
+            repo_url = ''
     try:
         result = subprocess.run(
             ["git", "-C", repo_dir, "pull"],
+            env={**os.environ, **git_provider.git_env(repo_url or '')},
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

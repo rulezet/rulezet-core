@@ -174,7 +174,7 @@ def decide_proposals(uuids, decision, admin_user, ownership_mode=None, note=None
                 'proposal_uuids': [p.uuid for p in proposals],
                 'ownership_mode': ownership_mode,
             },
-            label=f"Import {len(proposals)} accepted GitHub proposal(s)",
+            label=f"Import {len(proposals)} accepted repository proposal(s)",
             created_by=admin_user.id,
             total=len(proposals),
         )

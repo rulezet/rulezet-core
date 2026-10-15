@@ -24,7 +24,7 @@ export const ANY_FLAGS = [
     { key: 'cve_any',    list: 'cves',         label: 'any CVE' },
     { key: 'tag_any',    list: 'tags',         label: 'any tag' },
     { key: 'attack_any', list: 'attacks',      label: 'any ATT&CK technique' },
-    { key: 'github_any', list: 'github_repos', label: 'any GitHub import' },
+    { key: 'github_any', list: 'github_repos', label: 'any git import' },
 ]
 
 export default {
