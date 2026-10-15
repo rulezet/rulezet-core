@@ -1,0 +1,51 @@
+/* Host filter of the Git Sources list — one pill per git host type. */
+.ghf-hosts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    margin: .25rem 0 1rem;
+}
+.ghf-hosts__label {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--subtle-text-color);
+    margin-right: .25rem;
+}
+.ghf-host {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .35rem .8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s, box-shadow .15s;
+}
+.ghf-host:hover { border-color: #0d6efd; }
+.ghf-host:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; }
+.ghf-host i { font-size: .95rem; opacity: .8; }
+.ghf-host__count {
+    min-width: 1.4rem;
+    padding: 0 .4rem;
+    border-radius: 999px;
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+    font-size: .72rem;
+    font-weight: 700;
+    text-align: center;
+}
+.ghf-host--active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(13, 110, 253, .25);
+}
+.ghf-host--active i { opacity: 1; }
+.ghf-host--active .ghf-host__count { background: rgba(255, 255, 255, .22); color: #fff; }

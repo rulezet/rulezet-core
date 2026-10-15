@@ -25,6 +25,7 @@ const GithubFilter = {
         const selectedLicense = Vue.ref(_p('license'))
         const selectedProvider = Vue.ref(_p('provider'))
         const availableProviders = Vue.ref([]);
+        const providersTotal = Vue.computed(() => availableProviders.value.reduce((n, p) => n + p.count, 0));
         const conflictsOnly   = Vue.ref(_p('conflicts_only') === 'true')
         const personFilter    = Vue.ref({
             mode:   _p('person_mode', 'author'),
@@ -44,7 +45,6 @@ const GithubFilter = {
         const activeFilterCount = Vue.computed(() =>
             (selectedFormat.value ? 1 : 0) +
             (selectedLicense.value ? 1 : 0) +
-            (selectedProvider.value ? 1 : 0) +
             (conflictsOnly.value ? 1 : 0) +
             (personFilter.value.values.length ? 1 : 0)
         );
@@ -150,7 +150,7 @@ const GithubFilter = {
 
         const resetFilters = () => {
             selectedFormat.value = '';
-            selectedLicense.value = ''; selectedProvider.value = '';
+            selectedLicense.value = '';
             conflictsOnly.value = false;
             personFilter.value = { mode: 'author', values: [] };
             fetchUrls(1);
@@ -165,11 +165,17 @@ const GithubFilter = {
             if (props.autoFetch) fetchUrls(currentPage.value);
         });
 
+        function setProvider(name) {
+            if (selectedProvider.value === name) return
+            selectedProvider.value = name
+            fetchUrls(1)
+        }
+
         return {
             searchQuery,
             searchField,
             selectedFormat,
-            selectedLicense, selectedProvider, availableProviders,
+            selectedLicense, selectedProvider, availableProviders, providersTotal, setProvider,
             conflictsOnly,
             personFilter,
             searchIsLoading,
@@ -220,6 +226,21 @@ const GithubFilter = {
             </div>
         </div>
 
+        <div v-if="availableProviders.length > 1" class="ghf-hosts" role="group" aria-label="Filter by git host">
+            <span class="ghf-hosts__label">Host</span>
+            <button type="button" class="ghf-host" :class="{ 'ghf-host--active': !selectedProvider }"
+                    :aria-pressed="!selectedProvider" @click="setProvider('')">
+                <i class="fa-solid fa-layer-group"></i>All
+                <span class="ghf-host__count">[[ providersTotal ]]</span>
+            </button>
+            <button v-for="p in availableProviders" :key="p.name" type="button" class="ghf-host"
+                    :class="{ 'ghf-host--active': selectedProvider === p.name }"
+                    :aria-pressed="selectedProvider === p.name" @click="setProvider(p.name)">
+                <i :class="p.icon"></i>[[ p.label ]]
+                <span class="ghf-host__count">[[ p.count ]]</span>
+            </button>
+        </div>
+
         <div v-show="filtersOpen" class="rl-filter-panel">
             <div class="rl-fp-row rl-fp-row--multi">
                 <div class="rl-fp-multi-item" style="min-width:240px;">
@@ -237,15 +258,6 @@ const GithubFilter = {
                                 :key="typeof fmt === 'object' ? fmt.name : fmt"
                                 :value="typeof fmt === 'object' ? fmt.name : fmt">
                             [[ typeof fmt === 'object' ? fmt.name : fmt ]]
-                        </option>
-                    </select>
-                </div>
-
-                <div class="rl-fp-item">
-                    <select v-model="selectedProvider" @change="fetchUrls(1)" class="rl-fp-select" aria-label="Host">
-                        <option value="">All hosts</option>
-                        <option v-for="p in availableProviders" :key="p.name" :value="p.name">
-                            [[ p.label ]] ([[ p.count ]])
                         </option>
                     </select>
                 </div>
