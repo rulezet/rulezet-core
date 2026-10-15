@@ -1,6 +1,8 @@
 const { ref, computed, watch } = Vue
 
-const REASONS = [
+// Fallback only — the list shown is the admin-editable `report.reasons`
+// setting, fetched from /api/config/settings/report.reasons.
+const DEFAULT_REASONS = [
     'Plagiarism',
     'Malicious content',
     'Incorrect or misleading',
@@ -27,6 +29,12 @@ const ReportModal = {
         const loading  = ref(false)
         const done     = ref(false)
         const errorMsg = ref('')
+        const REASONS  = ref(DEFAULT_REASONS)
+
+        fetch('/api/config/settings/report.reasons')
+            .then(r => (r.ok ? r.json() : null))
+            .then(data => { if (data && Array.isArray(data.value) && data.value.length) REASONS.value = data.value })
+            .catch(() => {})
 
         const labelMap = { rule: 'Rule', bundle: 'Bundle', comment: 'Comment' }
         const iconMap  = { rule: 'fa-shield-halved', bundle: 'fa-layer-group', comment: 'fa-comment' }

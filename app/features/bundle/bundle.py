@@ -17,6 +17,7 @@ import re
 import zipfile
 import json
 from flask import send_file
+from app.core.utils.app_settings import setting
 
 #############
 #   Bundle  #
@@ -490,21 +491,7 @@ NOTE_SEVERITIES = ("info", "warning", "critical")
 
 # Only these taxonomies make sense on a note ("this rule false-positives on…",
 # "needs review", "low confidence"…) — every other tag is refused.
-NOTE_TAG_PREFIXES = (
-    "false-positive:",                  # risk / confirmed
-    "use-case-applicability:",          # bad IOC / rule pattern, rule config error, test alert…
-    "incident-disposition:",            # faulty indicator, duplicate…
-    "misp-workflow:analysis=",          # false-positive, highly-likely-positive…
-    "workflow:",                        # todo / state
-    "priority-level:",                  # how urgent the fix is
-    "detection-engineering:",
-    "hunt-ex:",                         # data-source / detection gaps, environment-specific
-    "cti-evaluation:",                  # accuracy, clarity…
-    "estimative-language:",             # confidence / likelihood
-    "admiralty-scale:",                 # source reliability
-    "information-origin:",              # AI-generated / human-generated
-    "ioc:",                             # artifact-state
-)
+NOTE_TAG_PREFIXES = setting('bundle.note_tag_prefixes')  # app/config/bundle.note_tag_prefixes.json
 NOTE_MAX_TAGS = 8
 NOTE_MAX_PER_HOUR = 10          # per user, per bundle
 NOTE_MAX_MENTIONS = 10          # users notified per note / edit
@@ -512,7 +499,7 @@ _pylist = type([])     # the builtin — `list` is shadowed in this module by th
 
 
 def _note_tag_allowed(name):
-    return (name or "").lower().startswith(NOTE_TAG_PREFIXES)
+    return (name or "").lower().startswith(NOTE_TAG_PREFIXES.value)
 
 
 def _note_tags_from_request(data):
@@ -558,7 +545,7 @@ def search_note_tags():
         query = query.filter(Tag.name.ilike(f"%{q}%"))
     order = db.case(*[(Tag.name.ilike(p + "%"), i) for i, p in enumerate(NOTE_TAG_PREFIXES)], else_=99)
     tags = query.order_by(order, Tag.name).limit(40).all()
-    return jsonify({"success": True, "prefixes": [*NOTE_TAG_PREFIXES],
+    return jsonify({"success": True, "prefixes": list(NOTE_TAG_PREFIXES),
                     "tags": [{"id": t.id, "name": t.name, "color": t.color, "description": t.description} for t in tags]}), 200
 _MENTION_RE = re.compile(r"@\[[^\]]+\]\((\d+)\)")
 

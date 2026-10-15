@@ -3,16 +3,10 @@ import datetime
 from app import db
 from app.core.db_class.report import Report
 from app.core.db_class.user import User
+from app.core.utils.app_settings import setting
 
 VALID_TYPES   = {'rule', 'bundle', 'comment'}
-VALID_REASONS = [
-    'Plagiarism',
-    'Malicious content',
-    'Incorrect or misleading',
-    'Inappropriate content',
-    'Spam',
-    'Other',
-]
+VALID_REASONS = setting('report.reasons')  # app/config/report.reasons.json
 
 
 def create_report(user_id, object_type, object_id, reason, message=''):

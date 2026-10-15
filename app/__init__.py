@@ -126,6 +126,7 @@ def create_app(start_worker=True):
     from app.features.admin.task_scheduler.task_scheduler_routes import task_scheduler_blueprint
     from app.features.admin.rule_mirror.rule_mirror_routes import rule_mirror_blueprint
     from app.features.admin.media.media_routes import media_blueprint, media_static_blueprint
+    from app.features.admin.app_settings.app_settings_routes import app_settings_blueprint
     from app.features.alert.alert import alert_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
@@ -157,6 +158,7 @@ def create_app(start_worker=True):
     app.register_blueprint(rule_mirror_blueprint)
     app.register_blueprint(media_blueprint)
     app.register_blueprint(media_static_blueprint)
+    app.register_blueprint(app_settings_blueprint)
     app.register_blueprint(alert_blueprint, url_prefix='/alert')
 
     from app.api.api import api_blueprint

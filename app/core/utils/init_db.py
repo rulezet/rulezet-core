@@ -277,7 +277,8 @@ def insert_default_ai_agent_configs():
 
 
 def seed_default_tags(admin_user):
-    """Initialize MISP taxonomy submodule and import seed namespaces from config/default_tags.json."""
+    """Initialize MISP taxonomy submodule and import the seed namespaces of the
+    tags.defaults setting (app/config/tags.defaults.json)."""
     from app.features.tags.tags_core import (
         add_tags_from_misp_taxonomy,
         get_all_taxonomy_uuids_from_disk,
@@ -305,12 +306,8 @@ def seed_default_tags(admin_user):
     except Exception as e:
         print(f"  {W}submodule{R}  could not init: {e}")
 
-    config_path = Path("config/default_tags.json")
-    try:
-        with open(config_path) as f:
-            config = json.load(f)
-    except Exception:
-        config = {}
+    from app.core.utils.app_settings import get_setting
+    config = get_setting('tags.defaults')
 
     seed_namespaces = [s["namespace"] for s in config.get("seed_on_init", [])]
     if not seed_namespaces:

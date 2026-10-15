@@ -55,6 +55,7 @@ from app.core.db_class.git import RuleMirrorConfig
 from app.core.db_class.rule import Rule
 from app.core.utils.activity_log import log_activity
 from app.features.rule.rule_format.utils_format import git_provider
+from app.core.utils.app_settings import setting
 
 # One dirname() short of the repo root would land this under app/data/
 # instead of the top-level data/ used by every other regenerable-mirror
@@ -67,12 +68,7 @@ LOCAL_REPO_ROOT = os.path.join(ROOT_DIR, 'data', 'rule_mirror_repo')
 # Cosmetic only (so a plain `git clone` gets working syntax highlighting) —
 # never used for anything that affects correctness. Formats not listed here
 # fall back to '.txt'.
-_EXTENSION_BY_FORMAT = {
-    'yara': 'yar', 'sigma': 'yml', 'suricata': 'rules', 'zeek': 'zeek',
-    'wazuh': 'xml', 'nse': 'nse', 'crs': 'conf', 'nova': 'nov',
-    'splunk': 'yml', 'elastic': 'toml', 'kql': 'kql', 'atr': 'toml',
-    'plum': 'yaml',
-}
+_EXTENSION_BY_FORMAT = setting('rulesets.extension_by_format')  # app/config/rulesets.extension_by_format.json
 
 # Loose allow-list for the license_verified flag in metadata.yaml — not a
 # gate on whether a rule gets mirrored (everything active/public does),

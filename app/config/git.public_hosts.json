@@ -1,0 +1,17 @@
+{
+  "label": "Known public git hosts",
+  "category": "Git sources",
+  "description": "Host -> provider (github, gitlab, gitea, bitbucket, generic). Hosts of your own instance go in Admin → Settings → Other Git Hosts.",
+  "public": true,
+  "value": {
+    "github.com": "github",
+    "gitlab.com": "gitlab",
+    "framagit.org": "gitlab",
+    "salsa.debian.org": "gitlab",
+    "gitlab.gnome.org": "gitlab",
+    "invent.kde.org": "gitlab",
+    "codeberg.org": "gitea",
+    "gitea.com": "gitea",
+    "bitbucket.org": "bitbucket"
+  }
+}

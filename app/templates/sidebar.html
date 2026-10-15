@@ -213,6 +213,9 @@
                         <div class="col-4">
                            <div class="dr-nav-col__title">System</div>
                            <div class="dr-nav-col">
+                              <a href="/admin/configuration" class="dr-nav__item {% if request.path.startswith('/admin/configuration') %}active{% endif %}">
+                                 <i class="fa-solid fa-sliders"></i><span>Configuration</span>
+                              </a>
                               <a href="/connector/list" class="dr-nav__item {% if request.path.startswith('/connector') %}active{% endif %}">
                                  <i class="fa-solid fa-plug"></i><span>Connectors</span>
                               </a>
@@ -472,6 +475,7 @@
       { label: 'Admin: API Activity', url: '/admin/logs/api', icon: 'fa-code', keywords: ['api', 'api logs', 'api requests'] },
       { label: 'Server Settings', url: '/admin/settings', icon: 'fa-sliders', keywords: ['server settings'] },
       { label: 'Admin: Media', url: '/admin/media', icon: 'fa-images', keywords: ['media', 'images', 'uploads', 'files', 'avatars'] },
+      { label: 'Admin: Configuration', url: '/admin/configuration', icon: 'fa-sliders', keywords: ['configuration', 'settings', 'config', 'hardcoded', 'json', 'lists'] },
       {% endif %}
    ]
 

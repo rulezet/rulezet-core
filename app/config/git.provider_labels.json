@@ -1,0 +1,13 @@
+{
+  "label": "Git host names",
+  "category": "Git sources",
+  "description": "Name shown for each provider.",
+  "public": true,
+  "value": {
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "gitea": "Gitea / Forgejo",
+    "bitbucket": "Bitbucket",
+    "generic": "Git"
+  }
+}

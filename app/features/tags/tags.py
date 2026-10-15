@@ -5,6 +5,7 @@ import app.features.rule.rule_core as RuleModel
 from app import db
 from app.core.utils.activity_log import log_activity
 from app.core.utils.utils import as_db_id, json_object
+from app.core.utils.app_settings import setting
 
 
 tags_blueprint = Blueprint(
@@ -567,12 +568,7 @@ _RISK_LEVELS = ("high", "medium", "low", "cannot-be-judged")
 # than informative. This is a display-only override: the tag actually
 # applied is still the real taxonomy tag (id/name untouched), only the
 # swatch color shown here is muted.
-_RISK_DISPLAY_COLORS = {
-    "high":               "#C94A4A",
-    "medium":             "#C99A2E",
-    "low":                "#4C9A5B",
-    "cannot-be-judged":   "#B8752E",
-}
+_RISK_DISPLAY_COLORS = setting('tags.risk_colors')  # app/config/tags.risk_colors.json
 
 _RISK_LEVEL_BY_TAG_NAME = {f'false-positive:risk="{lvl}"': lvl for lvl in _RISK_LEVELS}
 

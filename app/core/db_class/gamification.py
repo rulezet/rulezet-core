@@ -5,6 +5,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import attributes
 from sqlalchemy.orm.attributes import PASSIVE_NO_INITIALIZE
 import datetime
+from app.core.utils.app_settings import setting
 
 
 ############################################
@@ -12,29 +13,11 @@ import datetime
 ############################################
 
 # --- Point Definitions (Used in Gamification Listener) ---
-POINTS = {
-    'suggestions_accepted': 100,
-    'rules_owned': 10,
-    'rules_liked_or_disliked': 1,
-    'consecutive_days_active': 1,
-    'rules_popular_score': 1,
-    'bundles_owned': 15,
-    'rule_tests_contributed': 1,
-    'attack_mappings_contributed': 5,
-}
+POINTS = setting('gamification.points')  # app/config/gamification.points.json
 
 
 # if you have more than 15000 points you will be level 3...
-LEVEL_THRESHOLDS = {
-    1: 0,
-    2: 500,
-    3: 15000,
-    4: 30000,
-    5: 50000,
-    10: 150000,
-    20: 300000,
-    100: 1500000
-}
+LEVEL_THRESHOLDS = setting('gamification.level_thresholds')  # app/config/gamification.level_thresholds.json
 
 
 class Gamification(db.Model):

@@ -1,0 +1,17 @@
+{
+  "label": "Points needed per level",
+  "category": "Gamification",
+  "description": "Level number -> minimum points.",
+  "public": false,
+  "python_type": "dict_int_keys",
+  "value": {
+    "1": 0,
+    "2": 500,
+    "3": 15000,
+    "4": 30000,
+    "5": 50000,
+    "10": 150000,
+    "20": 300000,
+    "100": 1500000
+  }
+}

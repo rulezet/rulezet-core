@@ -430,17 +430,12 @@ def count_deleted_rules() -> int:
     return Rule.query.filter(Rule.is_deleted == True).count()
 
 
-# Default tags automatically attached to every new rule — loaded from config/default_tags.json
-def _load_default_tag_names() -> list:
-    try:
-        from pathlib import Path
-        config_path = Path(__file__).parents[3] / "config" / "default_tags.json"
-        with open(config_path) as f:
-            return json.load(f).get("auto_attach", [])
-    except Exception:
-        return ["tlp:clear", "pap:clear"]
-
-_DEFAULT_TAG_NAMES = _load_default_tag_names()
+def _default_tag_names() -> list:
+    """Tags automatically attached to every new rule — `auto_attach` of the
+    tags.defaults setting (app/config/tags.defaults.json, editable in
+    Admin → Configuration)."""
+    from app.core.utils.app_settings import get_setting
+    return get_setting('tags.defaults').get('auto_attach', [])
 
 
 def _attach_default_tags(rule, user_id):
@@ -449,7 +444,7 @@ def _attach_default_tags(rule, user_id):
         row.tag_id
         for row in RuleTagAssociation.query.filter_by(rule_id=rule.id).all()
     }
-    for name in _DEFAULT_TAG_NAMES:
+    for name in _default_tag_names():
         tag = Tag.query.filter(Tag.name.ilike(name)).first()
         if tag and tag.id not in existing_ids:
             db.session.add(RuleTagAssociation(

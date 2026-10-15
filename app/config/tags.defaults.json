@@ -1,0 +1,20 @@
+{
+  "label": "Default tags",
+  "category": "Tags",
+  "description": "auto_attach: tags attached to every new rule. seed_on_init: MISP taxonomy namespaces imported when the database is initialised.",
+  "public": false,
+  "value": {
+    "auto_attach": [
+      "tlp:clear",
+      "PAP:CLEAR"
+    ],
+    "seed_on_init": [
+      {
+        "namespace": "tlp"
+      },
+      {
+        "namespace": "PAP"
+      }
+    ]
+  }
+}

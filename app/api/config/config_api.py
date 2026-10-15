@@ -10,7 +10,30 @@ from ...features.config.config_core import (
     reset_builtin_theme_core, get_valid_theme_keys, THEME_VAR_KEYS, BUILTIN_OVERRIDABLE,
 )
 
-config_ns = Namespace('config', description='User interface preferences')
+config_ns = Namespace('config', description='User interface preferences, public settings and the format list')
+
+
+@config_ns.route('/settings/<string:key>')
+class PublicSettingResource(Resource):
+    def get(self, key):
+        """Current value of a public setting (e.g. report.reasons, git.provider_icons)."""
+        from ...core.utils.app_settings import get_public_setting
+        value = get_public_setting(key)
+        if value is None:
+            return {'message': f"No public setting '{key}'"}, 404
+        return {'key': key, 'value': value}, 200
+
+
+@config_ns.route('/formats')
+class FormatListResource(Resource):
+    def get(self):
+        """Every rule format this instance knows — registered formats plus any
+        format a rule uses — with its description, links, file extensions,
+        whether it can be executed, and its number of active rules.
+        Always the current list: read from the database on each call."""
+        from ...features.rule.rule_core import get_formats_overview
+        formats = get_formats_overview()
+        return {'formats': formats, 'total': len(formats)}, 200
 
 
 @config_ns.route('/')

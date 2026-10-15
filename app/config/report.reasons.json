@@ -1,0 +1,14 @@
+{
+  "label": "Report reasons",
+  "category": "Community",
+  "description": "Reasons a user can pick when reporting content.",
+  "public": true,
+  "value": [
+    "Plagiarism",
+    "Malicious content",
+    "Incorrect or misleading",
+    "Inappropriate content",
+    "Spam",
+    "Other"
+  ]
+}

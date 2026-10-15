@@ -95,7 +95,7 @@ def _seed_default_user():
 
 
 def _seed_default_tags(created_by):
-    """The tags auto-attached to every new rule (config/default_tags.json)."""
+    """The tags auto-attached to every new rule (app/config/tags.defaults.json)."""
     import uuid
     from app.core.db_class.tag import Tag
     for name in ("tlp:clear", "PAP:CLEAR"):

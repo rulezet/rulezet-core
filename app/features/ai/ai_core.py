@@ -27,6 +27,7 @@ import requests as http_requests
 from flask import current_app
 
 import app.features.ai.agents as _agents_pkg
+from app.core.utils.app_settings import setting
 
 
 # ─── Exceptions ──────────────────────────────────────────────────────────────
@@ -276,19 +277,7 @@ def get_active_provider():
 # its calls (client.usage), run() turns them into a cost and stores it on
 # the AIExecutionLog row. USD per million tokens, Anthropic list prices
 # (Sept 2026); a provider's own price fields override them.
-CLAUDE_PRICES = {
-    'claude-fable-5-1':  (10.0, 50.0),
-    'claude-fable-5':    (10.0, 50.0),
-    'claude-opus-5-5':   (4.0, 20.0),
-    'claude-opus-5':     (5.0, 25.0),
-    'claude-opus-4-8':   (5.0, 25.0),
-    'claude-opus-4-7':   (5.0, 25.0),
-    'claude-opus-4-6':   (5.0, 25.0),
-    'claude-sonnet-5-5': (2.0, 10.0),
-    'claude-sonnet-5':   (2.0, 10.0),
-    'claude-sonnet-4-6': (3.0, 15.0),
-    'claude-haiku-4-5':  (1.0, 5.0),
-}
+CLAUDE_PRICES = setting('ai.claude_prices')  # app/config/ai.claude_prices.json
 
 
 def price_for(provider, model):

@@ -1,0 +1,12 @@
+{
+  "label": "False-positive risk colours",
+  "category": "Tags",
+  "description": "Colour per false-positive risk level.",
+  "public": false,
+  "value": {
+    "high": "#C94A4A",
+    "medium": "#C99A2E",
+    "low": "#4C9A5B",
+    "cannot-be-judged": "#B8752E"
+  }
+}
