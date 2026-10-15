@@ -204,8 +204,8 @@ def technique_kit_data(technique_id):
     if not tech:
         abort(404)
     data = AttackKit.build_kit(tech)
-    from app.features.rule.rule import _ai_generate_available
-    data['ai_draft'] = {'available': current_user.is_authenticated and _ai_generate_available(),
+    from app.features.rule.rule import can_draft_with_ai
+    data['ai_draft'] = {'available': can_draft_with_ai(),
                         'format': 'yara', 'prompt': AttackKit.ai_draft_prompt(tech)}
     return jsonify(data)
 

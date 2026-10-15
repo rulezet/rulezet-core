@@ -63,6 +63,15 @@ def _ai_generate_available() -> bool:
     return cfg.enabled if cfg else True
 
 
+def can_draft_with_ai() -> bool:
+    """May the current user use the AI rule generator? Logged in, admin or
+    holder of the 'ai.use' permission (same check as /ai_generate_rule), and
+    the generator enabled instance-wide. Gates every "Draft with AI" button."""
+    return (current_user.is_authenticated
+            and (current_user.is_admin() or current_user.has_permission('ai.use'))
+            and _ai_generate_available())
+
+
 def _is_github_manager() -> bool:
     """Admin, or holder of the 'github.manage' permission (GitHub Manager
     role) — full control over GitHub import/update/sync/proposals and every
