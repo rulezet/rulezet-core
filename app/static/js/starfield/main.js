@@ -11,6 +11,7 @@ import { tr, setLang, getLang, defaultLang, localizeData, localizeDom } from './
 import { makeStars, drawBackground, drawShip } from './render.js';
 import { createMap } from './worldmap.js';
 import { createLevel } from './level.js';
+import { reportRun } from './report.js';
 
 const $ = id => document.getElementById(id);
 const stage = $('sf-stage');
@@ -254,8 +255,31 @@ $('sf-pause-settings').addEventListener('click', () => { Sfx.move(); renderSetti
 $('sf-pause-restart').addEventListener('click', () => restart());
 $('sf-pause-quit').addEventListener('click', () => { const endless = current && current.endless; level = null; endless ? showTitle() : showMap(); });
 
+// Everything about a finished run, for the admin score tracking (report.js).
+function runReport(result, extra) {
+    return {
+        won: result.won, reason: result.reason || null, score: result.score, stars: result.stars,
+        crit: result.crit || [], wave: result.wave, kills: result.kills, hits: result.hits, maxCombo: result.maxCombo,
+        bytes: result.bytes, time: result.time, hpLeft: result.hpLeft, maxHp: result.maxHp, bombsLeft: result.bombsLeft,
+        bossName: result.bossName, stats: result.stats,
+        ship: S.skin, difficulty: S.difficulty, controls: S.settings.controls, assist: !!S.settings.assist,
+        upgrades: S.upgrades, weapons: Save.weaponsUnlocked(),
+        campaignStars: Object.values(S.stars || {}).reduce((a, b) => a + b, 0), campaignBytes: S.bytes,
+        ...extra,
+    };
+}
+
 function onLevelEnd(result) {
     const wasEndless = current && current.endless;
+    if (wasEndless) {
+        reportRun(runReport(result, { mode: 'endless', levelName: 'Threat hunt', levelKind: 'endless' }));
+    } else if (current) {
+        const def = levelDef(current.world, current.index);
+        reportRun(runReport(result, {
+            mode: 'level', world: current.world, levelIndex: current.index,
+            levelName: def.name, levelKind: def.kind,
+        }));
+    }
     if (!result.won) S.stats.deaths++;
     S.stats.kills += result.kills;
     stage.classList.remove('is-playing');

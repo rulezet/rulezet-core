@@ -84,11 +84,6 @@ def roadmap():
     return render_template("roadmap.html", version=get_version())
 
 
-@home_blueprint.route("/starfield")
-def starfield():
-    """Hidden easter egg — a small space game. Not linked from any nav/sitemap."""
-    return render_template("starfield.html")
-
 @home_blueprint.route("/")
 def home() -> render_template:
     """Go to home page"""
