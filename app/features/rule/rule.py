@@ -1641,9 +1641,13 @@ def get_sigma_convert(rule_id):
     rule = RuleModel.get_rule(rule_id)
     if not rule or (rule.format or '').lower() != 'sigma' or target not in SIGMA_CONVERT_TARGETS:
         return jsonify({"success": False, "content": None})
+    from app.features.rule.exporters.sigma_convert_exporter import SigmaConversionUnavailable
     try:
         content = convert_sigma_rule(rule, target)
         return jsonify({"success": True, "content": content})
+    except SigmaConversionUnavailable as e:
+        # The rule can't be expressed for this target — expected, not an app error.
+        return jsonify({"success": False, "content": None, "error": str(e)})
     except Exception as e:
         return jsonify({"success": False, "content": None, "error": internal_error(e, "Conversion failed for this rule.")})
 

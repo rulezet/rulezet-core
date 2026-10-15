@@ -13,6 +13,17 @@ from ...features.config.config_core import (
 config_ns = Namespace('config', description='User interface preferences, public settings and the format list')
 
 
+@config_ns.route('/settings')
+class PublicSettingsResource(Resource):
+    def get(self):
+        """Several public settings in one call: ?keys=a,b,c → {key: value}
+        (unknown or non-public keys are left out)."""
+        from ...core.utils.app_settings import get_public_setting
+        keys = [k.strip() for k in (request.args.get('keys') or '').split(',') if k.strip()][:50]
+        values = {k: get_public_setting(k) for k in keys}
+        return {'values': {k: v for k, v in values.items() if v is not None}}, 200
+
+
 @config_ns.route('/settings/<string:key>')
 class PublicSettingResource(Resource):
     def get(self, key):

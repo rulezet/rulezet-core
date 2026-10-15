@@ -11,6 +11,19 @@ const DEFAULT_REASONS = [
     'Other',
 ]
 
+// One request per page, made the first time any report modal opens — a list
+// page renders one modal per row, they all share this.
+let reasonsRequest = null
+function loadReasons() {
+    if (!reasonsRequest) {
+        reasonsRequest = fetch('/api/config/settings/report.reasons')
+            .then(r => (r.ok ? r.json() : null))
+            .then(data => (data && Array.isArray(data.value) && data.value.length ? data.value : DEFAULT_REASONS))
+            .catch(() => DEFAULT_REASONS)
+    }
+    return reasonsRequest
+}
+
 const ReportModal = {
     name: 'ReportModal',
     delimiters: ['[[', ']]'],
@@ -31,10 +44,6 @@ const ReportModal = {
         const errorMsg = ref('')
         const REASONS  = ref(DEFAULT_REASONS)
 
-        fetch('/api/config/settings/report.reasons')
-            .then(r => (r.ok ? r.json() : null))
-            .then(data => { if (data && Array.isArray(data.value) && data.value.length) REASONS.value = data.value })
-            .catch(() => {})
 
         const labelMap = { rule: 'Rule', bundle: 'Bundle', comment: 'Comment' }
         const iconMap  = { rule: 'fa-shield-halved', bundle: 'fa-layer-group', comment: 'fa-comment' }
@@ -50,6 +59,7 @@ const ReportModal = {
             errorMsg.value = ''
             visible.value  = true
             document.body.classList.add('report-modal-open')
+            loadReasons().then(list => { REASONS.value = list })
         }
 
         function close() {

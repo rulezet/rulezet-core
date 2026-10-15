@@ -23,16 +23,33 @@ export const PROVIDER_ICONS = {
 }
 
 // The maps above are fallbacks: the admin-editable values (Admin → Configuration,
-// git.public_hosts / git.provider_labels / git.provider_icons) are loaded once
-// per page and replace them in place, so every later call uses them.
-for (const [key, target] of [['git.public_hosts', PUBLIC_HOSTS],
-                             ['git.provider_labels', PROVIDER_LABELS],
-                             ['git.provider_icons', PROVIDER_ICONS]]) {
-    fetch('/api/config/settings/' + key)
-        .then(r => (r.ok ? r.json() : null))
-        .then(data => { if (data && data.value && typeof data.value === 'object') Object.assign(target, data.value) })
-        .catch(() => {})
+// git.public_hosts / git.provider_labels / git.provider_icons) replace them in
+// place. One request for the three, kept 10 minutes in sessionStorage so moving
+// from page to page doesn't ask again.
+const SETTINGS_KEYS = { 'git.public_hosts': PUBLIC_HOSTS, 'git.provider_labels': PROVIDER_LABELS, 'git.provider_icons': PROVIDER_ICONS }
+const CACHE_KEY = 'rulezet.git-links.settings'
+const CACHE_MS = 10 * 60 * 1000
+
+function applySettings(values) {
+    for (const [key, target] of Object.entries(SETTINGS_KEYS)) {
+        if (values && values[key] && typeof values[key] === 'object') Object.assign(target, values[key])
+    }
 }
+
+;(() => {
+    try {
+        const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || 'null')
+        if (cached && Date.now() - cached.at < CACHE_MS) return applySettings(cached.values)
+    } catch { /* storage unavailable — fetch below */ }
+    fetch('/api/config/settings?keys=' + Object.keys(SETTINGS_KEYS).join(','))
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => {
+            if (!data) return
+            applySettings(data.values)
+            try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), values: data.values })) } catch { /* ignore */ }
+        })
+        .catch(() => {})
+})()
 
 function hostOf(url) {
     try { return new URL(url).hostname.toLowerCase() } catch { return '' }

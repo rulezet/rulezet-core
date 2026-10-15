@@ -181,6 +181,27 @@ def create_app(start_worker=True):
     from app.features.account.oidc_core import register_oidc_client
     register_oidc_client(app)
 
+    # ── Static files: versioned URLs, cached for good (core/utils/static_versions.py) ──
+    from app.core.utils.static_versions import file_version, import_map
+
+    @app.url_defaults
+    def _version_static_urls(endpoint, values):
+        if endpoint == 'static' and 'filename' in values and 'v' not in values:
+            version = file_version(values['filename'])
+            if version:
+                values['v'] = version
+
+    app.jinja_env.globals['static_import_map'] = import_map
+
+    @app.after_request
+    def _cache_versioned_static(response):
+        # A versioned URL never changes content (a new file = a new ?v=), so the
+        # browser may keep it a year without asking again. Unversioned static
+        # URLs keep Flask's default (revalidate every time).
+        if request.endpoint == 'static' and request.args.get('v') and response.status_code == 200:
+            response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        return response
+
     @app.after_request
     def set_security_headers(response):
         # Stops a browser from ever re-interpreting a served file (e.g. a

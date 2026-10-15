@@ -23,6 +23,7 @@ Rules are soft-deleted (fields: `is_deleted`, `deleted_at`, `deleted_by_id`, `de
 Default tags `tlp:clear` and `pap:clear` auto-attached to every new rule via `_attach_default_tags()` (list in `app/config/tags.defaults.json`).
 
 Vue.js 3 UMD (not build step), ES modules, delimiters `['[[', ']]']` in templates.
+Static files are cached for good via versioned URLs (`app/core/utils/static_versions.py`): always reference them with `url_for('static', filename=…)` (adds `?v=<mtime>`, served `immutable`), never a hard-coded `/static/…` in a template. ES modules keep plain imports (`import X from '/static/js/…'`) — the import map in `base.html` versions them. A component rendered once per row (lists, tables) must never fetch on mount: share one module-level promise and fetch lazily (see `ReportModal.js`, `UserChip.js`).
 Toasts via `create_message(msg, class)` from `/static/js/toaster.js` — never inline alert divs.
 Pagination: use `PaginationComponent` from `/static/js/rule/paginationComponent.js`.
 `ChartViewer` needs `window.echarts` (ECharts CDN) loaded globally; data format: `{ categories: [...], series: [{ name, values: [...] }] }`.
