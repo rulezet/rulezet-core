@@ -153,7 +153,7 @@ def api_check(report_id):
     ok = check_report(int(rid), current_user.id)
     if not ok:
         return jsonify({'message': 'Report not found', 'toast_class': 'danger', 'success': False}), 404
-    from app.core.db_class.db import Report as ReportModel
+    from app.core.db_class.report import Report as ReportModel
     r = ReportModel.query.get(int(rid))
     return jsonify({'message': 'Report marked as checked', 'toast_class': 'success', 'success': True,
                     'checked_by_name': r.checked_by.get_username() if r.checked_by else None,
@@ -182,13 +182,13 @@ def api_delete_target(report_id):
     _require_admin()
     rid = str(report_id)
     if rid.startswith('legacy-'):
-        from app.core.db_class.db import RepportRule
+        from app.core.db_class.report import RepportRule
         r = RepportRule.query.get(int(rid[7:]))
         if not r:
             return jsonify({'message': 'Not found', 'toast_class': 'danger', 'success': False}), 404
         obj_type, obj_id = 'rule', r.rule_id
     else:
-        from app.core.db_class.db import Report as ReportModel
+        from app.core.db_class.report import Report as ReportModel
         r = ReportModel.query.get(int(rid))
         if not r:
             return jsonify({'message': 'Not found', 'toast_class': 'danger', 'success': False}), 404
@@ -208,7 +208,7 @@ def api_delete_target(report_id):
 @login_required
 def api_stats():
     _require_admin()
-    from app.core.db_class.db import Report as ReportModel, RepportRule
+    from app.core.db_class.report import Report as ReportModel, RepportRule
     from sqlalchemy import func
     from app import db
     stats = db.session.query(ReportModel.status, func.count(ReportModel.id)).group_by(ReportModel.status).all()
@@ -256,14 +256,14 @@ def api_bulk():
         for rid in ids:
             s = str(rid)
             if s.startswith('legacy-'):
-                from app.core.db_class.db import RepportRule
+                from app.core.db_class.report import RepportRule
                 r = RepportRule.query.get(int(s[7:]))
                 if r:
                     ok = delete_target_object('rule', r.rule_id, current_user.id)
                     if not ok:
                         errors += 1
             else:
-                from app.core.db_class.db import Report as ReportModel
+                from app.core.db_class.report import Report as ReportModel
                 r = ReportModel.query.get(int(rid))
                 if r:
                     ok = delete_target_object(r.object_type, r.object_id, current_user.id)

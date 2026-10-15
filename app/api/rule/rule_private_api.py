@@ -7,7 +7,7 @@ import json
 from flask_restx import Resource, Namespace
 
 from app.api.utils.rule_validation import *
-from app.core.db_class.db import Rule
+from app.core.db_class.rule import Rule
 
 from app.features.rule.rule_format.main_format import extract_rule_from_repo, verify_syntax_rule_by_format
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, delete_existing_repo_folder, generic_repo_metadata, github_repo_metadata, valider_repo_github

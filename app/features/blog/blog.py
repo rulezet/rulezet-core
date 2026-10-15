@@ -379,7 +379,8 @@ def _safe_filename(title: str, uuid_prefix: str, ext: str) -> str:
 def _build_render_context(post, base_url: str) -> dict:
     """Shared context for both PDF and Markdown renderers."""
     import datetime as _dt
-    from app.core.db_class.db import Rule, Bundle
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.rule import Rule
 
     cover = post.cover_image_url or ''
     if cover.startswith('/'):
@@ -636,7 +637,8 @@ def cve_rule_search():
     err = _admin_required()
     if err:
         return err
-    from app.core.db_class.db import Rule, Bundle
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.rule import Rule
 
     cve_ids = [c.strip() for c in request.args.get('cve_ids', '').split(',') if c.strip()][:10]
     formats = [f.strip() for f in request.args.get('formats', '').split(',') if f.strip()]
@@ -785,7 +787,7 @@ def create_from_release():
     if err:
         return err
     from app.features.tags import tags_core
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
 
     data = request.get_json(silent=True) or {}
     version = (data.get('version') or '').strip()
@@ -846,7 +848,9 @@ def resolve_import_refs():
     err = _admin_required()
     if err:
         return err
-    from app.core.db_class.db import Rule, Bundle, Tag
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.tag import Tag
     data        = request.get_json(silent=True) or {}
     rule_uuids  = [str(u) for u in (data.get('rule_uuids')  or [])[:100]]
     bundle_uuids= [str(u) for u in (data.get('bundle_uuids') or [])[:50]]
@@ -929,7 +933,7 @@ def admin_upload_cover(post_uuid):
 @blog_blueprint.route('/file/<string:file_uuid>')
 def public_file_download(file_uuid):
     """Download a file attached to a blog post. Respects post visibility."""
-    from app.core.db_class.db import BlogPostFile
+    from app.core.db_class.blog import BlogPostFile
     bf = BlogPostFile.query.filter_by(uuid=file_uuid).first()
     if not bf:
         abort(404)
@@ -995,7 +999,7 @@ def admin_file_upload(post_uuid):
     with open(dest, 'wb') as fp:
         fp.write(data)
 
-    from app.core.db_class.db import BlogPostFile
+    from app.core.db_class.blog import BlogPostFile
     from app import db
     import datetime
     bf = BlogPostFile(
@@ -1023,7 +1027,7 @@ def admin_file_download(file_uuid):
     if err:
         return err
 
-    from app.core.db_class.db import BlogPostFile
+    from app.core.db_class.blog import BlogPostFile
     bf = BlogPostFile.query.filter_by(uuid=file_uuid).first()
     if not bf:
         abort(404)
@@ -1042,7 +1046,7 @@ def admin_file_delete(file_uuid):
     if err:
         return err
 
-    from app.core.db_class.db import BlogPostFile
+    from app.core.db_class.blog import BlogPostFile
     from app import db
     bf = BlogPostFile.query.filter_by(uuid=file_uuid).first()
     if not bf:

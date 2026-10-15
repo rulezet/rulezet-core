@@ -2,7 +2,7 @@ from flask_restx import Namespace, Resource
 from flask import request, current_app
 from datetime import datetime, timedelta
 from app import db
-from app.core.db_class.db import RegisteredInstance
+from app.core.db_class.connector import RegisteredInstance
 
 instance_ns = Namespace('instance', description='Instance registry — phone-home endpoint')
 

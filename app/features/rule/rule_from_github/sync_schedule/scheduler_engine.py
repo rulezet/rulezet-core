@@ -54,7 +54,7 @@ def _fire_schedule(app, schedule_uuid):
     """Runs in the APScheduler thread. Only ever creates a GithubSyncRun +
     BackgroundJob row — the real work happens later on job_worker's thread."""
     from app import db
-    from app.core.db_class.db import GithubSyncSchedule, GithubSyncRun
+    from app.core.db_class.git import GithubSyncRun, GithubSyncSchedule
     from app.features.jobs.jobs_core import create_job
 
     with app.app_context():
@@ -122,7 +122,7 @@ def start_scheduler(app):
     """Boot-time loader — call once from create_app(), alongside start_worker
     and _start_telemetry. Rebuilds the exact trigger set from the DB."""
     from app import db
-    from app.core.db_class.db import GithubSyncSchedule
+    from app.core.db_class.git import GithubSyncSchedule
 
     with app.app_context():
         try:

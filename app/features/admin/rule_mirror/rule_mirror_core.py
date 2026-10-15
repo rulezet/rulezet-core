@@ -50,7 +50,9 @@ import requests
 from git import Repo, GitCommandError
 
 from app import db
-from app.core.db_class.db import ActivityLog, Rule, RuleMirrorConfig
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.git import RuleMirrorConfig
+from app.core.db_class.rule import Rule
 from app.core.utils.activity_log import log_activity
 from app.features.rule.rule_format.utils_format import git_provider
 
@@ -159,7 +161,7 @@ def _find_existing_rule_dir(base_path: str, rule) -> str:
 
 
 def _public_url_for(rule) -> str:
-    from app.core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
     cfg = InstanceConfig.query.first()
     base = (cfg.public_url if cfg and cfg.public_url else 'https://rulezet.org').rstrip('/')
     return f"{base}/rule/detail_rule/{rule.id}"
@@ -445,7 +447,7 @@ def delete_config(config: RuleMirrorConfig) -> tuple:
     active" and "a sync job active for this config" are the same check in
     practice — simpler and can't miss the sweep case.
     """
-    from app.core.db_class.db import BackgroundJob
+    from app.core.db_class.job import BackgroundJob
     active_sync = BackgroundJob.query.filter(
         BackgroundJob.job_type == 'rule_git_mirror_sync',
         BackgroundJob.status.in_(['pending', 'running']),

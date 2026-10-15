@@ -1,7 +1,9 @@
 import uuid as uuid_mod
 
 from app import db
-from app.core.db_class.db import AIGeneration, InstanceConfig, User
+from app.core.db_class.ai import AIGeneration
+from app.core.db_class.connector import InstanceConfig
+from app.core.db_class.user import User
 
 
 def _login(client, user_id):

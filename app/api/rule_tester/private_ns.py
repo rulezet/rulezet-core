@@ -184,7 +184,7 @@ class TestCreate(Resource):
             _record_test_gamification(actor.id)
 
             from app import db
-            from app.core.db_class.db import BackgroundJob
+            from app.core.db_class.job import BackgroundJob
             import uuid as _uuid
 
             job = BackgroundJob(
@@ -264,7 +264,7 @@ class TestResults(Resource):
         matched_only = request.args.get('matched') == '1'
         errors_only  = request.args.get('errors_only') == '1'
 
-        from app.core.db_class.db import RuleTestResult
+        from app.core.db_class.rule_tester import RuleTestResult
         q = RuleTestResult.query.filter_by(test_id=test.id)
         if matched_only:
             q = q.filter(RuleTestResult.matched == True)
@@ -291,9 +291,9 @@ def _enrich_results(results):
     a minimal snapshot (rule_title/rule_uuid/rule_format) when the underlying
     rule was deleted since testing."""
     import json as _json
-    from app.core.db_class.db import (
-        db, Rule, RuleAttackAssociation, AttackTechnique as _AT,
-    )
+    from app import db
+    from app.core.db_class.attack import AttackTechnique as _AT, RuleAttackAssociation
+    from app.core.db_class.rule import Rule
 
     rule_ids = [r.rule_id for r in results if r.rule_id]
     rules_by_id = {r.id: r for r in Rule.query.filter(Rule.id.in_(rule_ids)).all()} if rule_ids else {}

@@ -8,7 +8,7 @@ this endpoint has no @login_required, so an ungated is_admin would let any
 anonymous visitor enumerate who's an admin by hovering/fetching UserChip data.
 """
 
-from app.core.db_class.db import User
+from app.core.db_class.user import User
 from app.features.roles import roles_core
 
 

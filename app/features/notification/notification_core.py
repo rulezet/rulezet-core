@@ -30,7 +30,9 @@ Public surface:
 import datetime
 
 from app import db
-from app.core.db_class.db import Notification, UserFollow, BackgroundJob, NotificationPreference
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.notification import Notification, NotificationPreference
+from app.core.db_class.user import UserFollow
 
 # ── Icons per notification type ────────────────────────────────────────────────
 
@@ -125,7 +127,7 @@ def update_preference(user_id, prefs_dict):
 
 def _get_all_admin_ids():
     """Return IDs of all admin users."""
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     return [u.id for u in User.query.filter_by(admin=True).all()]
 
 
@@ -255,7 +257,7 @@ def notify_proposal_submitted(proposal, rule):
     Skips the submitter (they don't need to notify themselves).
     """
     try:
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         submitter = User.query.get(proposal.user_id)
         submitter_name = submitter.get_username() if submitter else 'Someone'
 
@@ -578,7 +580,7 @@ def notify_followers_new_rule(rule, author_user_id):
         if not follows:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         author = User.query.get(author_user_id)
         author_name = author.get_username() if author else 'Someone'
 
@@ -615,7 +617,7 @@ def notify_followers_new_bundle(bundle, author_user_id):
         if not follows:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         author = db.session.get(User, author_user_id)
         author_name = author.get_username() if author else 'Someone'
 
@@ -652,7 +654,7 @@ def notify_followers_new_comment(commenter_id, object_title, link, is_public=Tru
         if not follows:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         commenter = db.session.get(User, commenter_id)
         commenter_name = commenter.get_username() if commenter else 'Someone'
 
@@ -696,7 +698,7 @@ def notify_owner_new_comment(owner_user_id, commenter_id, notif_type, object_tit
         if not getattr(pref, pref_key, True):
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         commenter = db.session.get(User, commenter_id)
         commenter_name = commenter.get_username() if commenter else 'Someone'
 
@@ -720,7 +722,7 @@ def notify_proposal_comment(proposal_id, proposal_owner_id, commenter_id, rule_t
         if not pref.pref_proposal_comment:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         commenter = db.session.get(User, commenter_id)
         commenter_name = commenter.get_username() if commenter else 'Someone'
 
@@ -769,7 +771,8 @@ def notify_proposal_participants(proposal, actor_id, title, body=None, exclude=(
     except the one acting and `exclude` (already notified otherwise).
     Each recipient's `pref` preference is honoured."""
     try:
-        from app.core.db_class.db import Rule, UnifiedComment
+        from app.core.db_class.comment import UnifiedComment
+        from app.core.db_class.rule import Rule
         from app.features.rule.rule_core import get_proposal_thread
 
         versions = [p for p, _, _ in get_proposal_thread(proposal)['proposals']]
@@ -811,7 +814,7 @@ def notify_comment_reply(parent_comment_author_id, replier_id, object_title, lin
         if not pref.pref_comment_reply:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         replier = db.session.get(User, replier_id)
         replier_name = replier.get_username() if replier else 'Someone'
 
@@ -835,7 +838,7 @@ def notify_user_mentioned(mentioned_user_id, mentioner_id, object_title, link):
         if not pref.pref_mentioned:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         mentioner = db.session.get(User, mentioner_id)
         mentioner_name = mentioner.get_username() if mentioner else 'Someone'
 
@@ -1311,7 +1314,7 @@ def notify_blog_published(post):
     """
     if not post.is_public or post.is_draft:
         return
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     try:
         users = User.query.filter(User.id != post.user_id).all()
         link = f'/blog/post/{post.uuid}'

@@ -11,7 +11,9 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import ActivityLog, BackgroundJob, BackgroundJobLog, RuleTagAssociation
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.job import BackgroundJob, BackgroundJobLog
+from app.core.db_class.tag import RuleTagAssociation
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.jobs import (
     ADMIN_JOB_TYPE, FAKE_JOB_TYPE, add_log, fake_handler, make_job, run_next_job, with_special_roles,

@@ -13,7 +13,9 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import Rule, Bundle, User
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

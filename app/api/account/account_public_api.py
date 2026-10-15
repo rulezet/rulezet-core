@@ -6,7 +6,7 @@ from flask import current_app, request
 from wtforms.validators import Email, ValidationError
 
 
-from app.core.db_class.db import User
+from app.core.db_class.user import User
 from app.features.account import account_core as AccountModel
 from flask_restx import Namespace, Resource
 

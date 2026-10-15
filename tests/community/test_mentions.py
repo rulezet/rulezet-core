@@ -5,7 +5,9 @@ Tests for the @mention picker's backend pieces:
 """
 
 from app import db
-from app.core.db_class.db import Notification, Rule, User
+from app.core.db_class.notification import Notification
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 
 
 def _login(client, email, password):

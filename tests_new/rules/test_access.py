@@ -9,7 +9,9 @@ rule, nothing more.
 import pytest
 
 from app import db
-from app.core.db_class.db import Rule, RuleEditProposal, RuleFavoriteUser, RuleTagAssociation, RuleVote, Tag
+from app.core.db_class.rule import Rule, RuleFavoriteUser, RuleVote
+from app.core.db_class.rule_proposal import RuleEditProposal
+from app.core.db_class.tag import RuleTagAssociation, Tag
 from tests_new.helpers.access import FORBIDDEN, LOGIN, OK, assert_outcome, matrix
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.rules import edit_form, make_proposal, make_rule, new_rule_form, yara_rule

@@ -14,7 +14,7 @@ jobs, an ai_user a Rule Analysis run — nothing else.
 """
 import pytest
 
-from app.core.db_class.db import BackgroundJob
+from app.core.db_class.job import BackgroundJob
 from tests_new.helpers.access import FORBIDDEN, LOGIN, NOT_FOUND, OK, assert_outcome, matrix
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.jobs import ADMIN_JOB_TYPE, TAG_JOB_TYPES, add_log, make_job, with_special_roles

@@ -11,10 +11,9 @@ import zipfile
 import pytest
 
 from app import db
-from app.core.db_class.db import (
-    BackgroundJob, GithubProposal, GithubSyncSchedule, ImporterResult, InvalidRuleModel, NewRule, Rule,
-    RuleUpdateHistory, UpdateResult,
-)
+from app.core.db_class.git import GithubProposal, GithubSyncSchedule, ImporterResult, NewRule, UpdateResult
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import InvalidRuleModel, Rule, RuleUpdateHistory
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.formats import SAMPLES
 from tests_new.helpers.github import (

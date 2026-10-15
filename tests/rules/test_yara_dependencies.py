@@ -9,7 +9,9 @@ import datetime
 import uuid
 
 from app import db
-from app.core.db_class.db import Rule, RuleRelation, User
+from app.core.db_class.rule import Rule
+from app.core.db_class.rule_relation import RuleRelation
+from app.core.db_class.user import User
 from app.features.rule.rule_format.available_format.yara_format import (
     YaraRule, sync_yara_dependency_relations,
 )
@@ -249,7 +251,7 @@ def test_an_edit_removing_a_reference_removes_the_link(app):
 def test_dependency_download_logged_once_per_downloader(client, app, monkeypatch):
     """Public route: repeated downloads don't flood the activity log."""
     from app import memory_cache
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     store = {}
     monkeypatch.setattr(memory_cache, "get", lambda k: store.get(k))
     monkeypatch.setattr(memory_cache, "set", lambda k, v, timeout=None: store.__setitem__(k, v))

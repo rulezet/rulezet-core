@@ -7,7 +7,9 @@ import zipfile
 from flask import current_app
 from werkzeug.utils import secure_filename
 from ... import db
-from ...core.db_class.db import Workspace, WorkspaceRule, WorkspaceBundle, WorkspaceFile, Bundle, Rule
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.rule import Rule
+from app.core.db_class.workspace import Workspace, WorkspaceBundle, WorkspaceFile, WorkspaceRule
 
 
 # ── Workspace documents (notes / imported text files) ──────────────────

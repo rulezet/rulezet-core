@@ -12,7 +12,7 @@ import datetime
 import pytest
 
 from app import db
-from app.core.db_class.db import RegisteredInstance
+from app.core.db_class.connector import RegisteredInstance
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

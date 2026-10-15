@@ -1,7 +1,7 @@
 import copy
 
 from ... import db
-from ...core.db_class.db import PivotickGraphStyle
+from app.core.db_class.pivotick import PivotickGraphStyle
 
 
 # ── Built-in defaults ─────────────────────────────────────────────────────────

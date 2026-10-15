@@ -4,7 +4,7 @@ import itertools
 import uuid
 
 from app import db
-from app.core.db_class.db import Rule
+from app.core.db_class.rule import Rule
 
 _counter = itertools.count(1)
 
@@ -76,7 +76,7 @@ def edit_form(rule, **changes):
 def make_proposal(rule, author, *, previous=None, status="pending", minutes=0, content=None):
     """An edit proposal of `rule` by `author` — a revision of `previous` when
     given — dated `minutes` after a fixed start, so versions keep their order."""
-    from app.core.db_class.db import RuleEditProposal
+    from app.core.db_class.rule_proposal import RuleEditProposal
     proposal = RuleEditProposal(
         rule_id=rule.id, user_id=author.id,
         proposed_content=content or yara_rule(f"proposed_{next(_counter)}"),

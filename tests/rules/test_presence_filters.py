@@ -7,7 +7,10 @@ _build_rule_query ("select all matching").
 import uuid
 
 from app import db
-from app.core.db_class.db import AttackTechnique, Rule, RuleAttackAssociation, RuleTagAssociation, Tag, User
+from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from app.features.jobs.job_handlers import _build_rule_query
 
 

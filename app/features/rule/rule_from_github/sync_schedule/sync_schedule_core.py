@@ -9,7 +9,7 @@ import uuid as _uuid_mod
 from flask import current_app
 
 from app import db
-from app.core.db_class.db import GithubSyncSchedule, GithubSyncScheduleRepo
+from app.core.db_class.git import GithubSyncSchedule, GithubSyncScheduleRepo
 from app.features.rule import rule_core as RuleModel
 from app.features.rule.rule_format.utils_format.utils_import_update import valider_repo_github
 

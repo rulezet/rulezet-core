@@ -12,7 +12,9 @@ from sqlalchemy import delete, or_
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
-from app.core.db_class.db import Rule, SimilarResult, RuleSimilarity, User
+from app.core.db_class.rule import Rule
+from app.core.db_class.similarity import RuleSimilarity, SimilarResult
+from app.core.db_class.user import User
 from flask import current_app
 
 sessions = list()

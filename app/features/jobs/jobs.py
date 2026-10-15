@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, render_template, request, abort
 from flask_login import current_user, login_required
 
 import app.features.jobs.jobs_core as JobsModel
-from app.core.db_class.db import BackgroundJob
+from app.core.db_class.job import BackgroundJob
 from app.core.utils.activity_log import log_activity
 from app.core.utils.utils import as_db_id, json_object
 from app import db
@@ -528,7 +528,7 @@ def my_active_jobs():
     so the widget can briefly display 100% before the job disappears.
     """
     from datetime import datetime, timedelta, timezone
-    from app.core.db_class.db import BackgroundJob
+    from app.core.db_class.job import BackgroundJob
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=30)
     jobs = (BackgroundJob.query
             .filter(

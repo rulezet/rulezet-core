@@ -7,7 +7,8 @@ import json
 import uuid
 
 from app import db
-from app.core.db_class.db import Bundle, BundleTagAssociation, RuleTagAssociation, Tag
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag
 
 _counter = itertools.count(1)
 

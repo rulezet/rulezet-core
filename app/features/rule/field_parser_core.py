@@ -5,7 +5,8 @@ Used by the admin bulk parse page and the bulk_parse_fields background job.
 import json
 import re
 from app import db
-from app.core.db_class.db import FieldParserConfig, Tag
+from app.core.db_class.rule import FieldParserConfig
+from app.core.db_class.tag import Tag
 from app.core.utils.utils import detect_cve
 
 # FieldParserConfig.config_type values — see the model docstring in db.py.

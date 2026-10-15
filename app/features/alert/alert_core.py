@@ -53,10 +53,13 @@ from sqlalchemy import and_, func, or_
 from app import db
 from app.core.utils.activity_log import log_activity
 from app.features.rule.rule_format.utils_format.git_provider import is_git_repo_url
-from app.core.db_class.db import (
-    Alert, AlertMatch, AlertSweepState, Bundle, BundleTagAssociation, Notification,
-    Rule, RuleAttackAssociation, RuleTagAssociation, Tag, User,
-)
+from app.core.db_class.alert import Alert, AlertMatch, AlertSweepState
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.notification import Notification
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag
+from app.core.db_class.user import User
 
 # ─── Limits ──────────────────────────────────────────────────────────────────
 
@@ -900,7 +903,7 @@ def read_unsubscribe_token(token):
 
 
 def _public_base_url():
-    from app.core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
     cfg = InstanceConfig.query.first()
     base = (current_app.config.get('INSTANCE_PUBLIC_URL') or (cfg.public_url if cfg else None)
             or f"http://{current_app.config.get('FLASK_URL', '127.0.0.1')}:{current_app.config.get('FLASK_PORT', 7009)}")
@@ -917,7 +920,7 @@ def _email_is_due(alert, now, last_user_email):
 
 
 def _emails_sent_since(since, user_id=None) -> int:
-    from app.core.db_class.db import AlertEmailLog
+    from app.core.db_class.alert import AlertEmailLog
     q = db.session.query(func.count(AlertEmailLog.id)).filter(AlertEmailLog.sent_at >= since)
     if user_id is not None:
         q = q.filter(AlertEmailLog.user_id == user_id)
@@ -990,7 +993,7 @@ def _send_alert_email(user, alerts, now):
     """True when sent, False when there was nothing to send, None on SMTP failure."""
     from flask_mail import Message
     from app import mail
-    from app.core.db_class.db import AlertEmailLog
+    from app.core.db_class.alert import AlertEmailLog
 
     base = _public_base_url()
     # Keep the email short: EMAIL_MAX_ITEMS items across every alert, filled

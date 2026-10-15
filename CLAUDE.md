@@ -9,7 +9,7 @@ Environments via `FLASKENV`: `development` (pg, debug), `testing` (sqlite, no cs
 App runs on `127.0.0.1:7009` by default. Secrets in `.env` — see `.env_default` for the full set (includes `GITHUB_TOKEN` for GitHub rule import/issue filing, `MAIL_SERVER`/`MAIL_PORT`/etc., `INSTANCE_PUBLIC_URL`); chatbot feature also reads `OLLAMA_URL`/`OLLAMA_MODEL` from `config.py`.
 CI: `.github/workflows/main.yml` runs `./launch.sh -t` on every push; `.github/workflows/codeql.yml` runs CodeQL security scanning.
 
-All SQLAlchemy models in `app/core/db_class/db.py` (74 model classes, ~3500 lines — search, don't read linearly).
+SQLAlchemy models in `app/core/db_class/`, one module per feature (`rule.py`, `bundle.py`, `git.py`, `user.py`, `tag.py`, …). Import from the feature module: `from app.core.db_class.rule import Rule`. The package `__init__.py` loads every module (relationships are declared by class name); a new model module must be added there.
 Feature logic split: blueprint in `app/features/<feature>/<feature>.py`, DB logic in `*_core.py`.
 Feature folders under `app/features/`: `account`, `admin`, `attack`, `blog`, `bundle`, `chatbot` (Ollama-backed assistant), `community`, `config`, `connector`, `dashboard`, `docs`, `jobs`, `misp`, `notification`, `report`, `rule`, `rule_tester`, `tags`, `velociraptor`, `workspace`.
 REST API (Flask-RESTX, CSRF exempt) under `/api/`, swagger at `/api/`. Public/private namespaces per feature: `rule`, `bundle`, `connector`, `account`, `comment`, `config`, `log`, `instance`, `rule_tester`, `utils`.

@@ -8,7 +8,7 @@ from app.features.notification.notification_core import (
     get_follower_count, get_following_count,
     get_preference, update_preference,
 )
-from app.core.db_class.db import UserFollow, User
+from app.core.db_class.user import User, UserFollow
 
 notification_blueprint = Blueprint('notification', __name__)
 

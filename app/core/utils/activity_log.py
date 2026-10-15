@@ -118,7 +118,7 @@ def log_activity(
     """
     with suppress(Exception):
         from app import db
-        from app.core.db_class.db import ActivityLog
+        from app.core.db_class.activity_log import ActivityLog
         from flask import request as freq
         from flask_login import current_user
 

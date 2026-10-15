@@ -60,7 +60,9 @@ def why():
     except Exception:
         stats = None
     if stats is None:
-        from app.core.db_class.db import Rule, Bundle, User, FormatRule
+        from app.core.db_class.bundle import Bundle
+        from app.core.db_class.rule import FormatRule, Rule
+        from app.core.db_class.user import User
         from sqlalchemy import func
         stats = {
             'rules':   Rule.query.filter_by(is_deleted=False).count(),
@@ -90,14 +92,16 @@ def starfield():
 @home_blueprint.route("/")
 def home() -> render_template:
     """Go to home page"""
-    from app.core.db_class.db import Rule, Bundle, User
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.user import User
     get_flashed_messages()
     show_import_hint = (
         current_user.is_authenticated
         and current_user.is_admin()
         and RuleModel.get_total_rules_count() == 0
     )
-    from app.core.db_class.db import AttackTechnique
+    from app.core.db_class.attack import AttackTechnique
 
     # Platform-wide counts — same for every visitor and barely move given
     # how many rules Rulezet already has (a handful of new/edited rules is
@@ -155,7 +159,7 @@ def home_charts(tab):
     """
     import datetime, json as _json
     from sqlalchemy import func
-    from app.core.db_class.db import Rule
+    from app.core.db_class.rule import Rule
     from app import db
 
     if tab == 'total':
@@ -255,7 +259,7 @@ def home_charts(tab):
                         'series': [{'name': 'Rules', 'values': [c[1] for c in top]}]})
 
     if tab == 'activity_calendar':
-        from app.core.db_class.db import ActivityLog
+        from app.core.db_class.activity_log import ActivityLog
         period   = request.args.get('period', 'year')
         days_map = {'month': 30, '3months': 90, 'year': 365}
         subtitle_map = {'month': 'Last 30 days', '3months': 'Last 3 months', 'year': 'Last 12 months'}
@@ -282,7 +286,7 @@ def home_charts(tab):
         })
 
     if tab == 'top_atk':
-        from app.core.db_class.db import RuleAttackAssociation
+        from app.core.db_class.attack import RuleAttackAssociation
         rows = (db.session.query(RuleAttackAssociation.technique_id,
                                  func.count(RuleAttackAssociation.id).label('n'))
                 .join(Rule, Rule.id == RuleAttackAssociation.rule_id)
@@ -333,7 +337,7 @@ def get_last_rules() -> dict:
             item['cves'] = []
 
     if current_user.is_authenticated:
-        from app.core.db_class.db import RuleVote as _RV
+        from app.core.db_class.rule import RuleVote as _RV
         votes_map = {v.rule_id: v.vote_type for v in _RV.query.filter(
             _RV.rule_id.in_(rule_ids), _RV.user_id == current_user.id
         ).all()}
@@ -930,7 +934,7 @@ def _build_logs_query(search='', action='', category='', level='', user_id_f=Non
     actions (Connections: user.login/user.logout) or a category (API:
     'api') regardless of whatever action/category param a client sends —
     the dedicated endpoints below always pass these, the general one never does."""
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     from sqlalchemy import or_
     from datetime import datetime, timedelta
 
@@ -1048,7 +1052,7 @@ def delete_log(log_id):
     if not current_user.is_admin():
         return jsonify({"error": "Unauthorized"}), 401
 
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     from app import db
 
     entry = ActivityLog.query.get(log_id)
@@ -1094,7 +1098,9 @@ def delete_logs_bulk():
 @home_blueprint.route('/activity_feed', methods=['GET'])
 def activity_feed():
     """Public activity feed — only is_public=True entries whose target is still accessible."""
-    from app.core.db_class.db import ActivityLog, Rule, Bundle
+    from app.core.db_class.activity_log import ActivityLog
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.rule import Rule
     from app import db
 
     page     = request.args.get('page', 1, type=int)
@@ -1121,7 +1127,7 @@ def activity_feed():
                  else Bundle.query.get(extra['bundle_id']) if extra.get('bundle_id') else None)
             return b is not None and b.access
         if tt == 'blog_post':
-            from app.core.db_class.db import BlogPost
+            from app.core.db_class.blog import BlogPost
             p = (BlogPost.query.filter_by(uuid=log.target_uuid).first() if log.target_uuid
                  else BlogPost.query.get(log.target_id) if log.target_id else None)
             return p is not None and p.is_public and not p.is_draft
@@ -1153,7 +1159,7 @@ def edit_log(log_id):
     if not current_user.is_admin():
         return jsonify({"error": "Unauthorized"}), 401
 
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     from app import db
 
     entry = ActivityLog.query.get(log_id)
@@ -1178,7 +1184,7 @@ def get_log_actions():
     if not current_user.is_admin():
         return jsonify({"error": "Unauthorized"}), 401
 
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     from app import db
 
     actions = [r[0] for r in db.session.query(ActivityLog.action).distinct().order_by(ActivityLog.action).all()]
@@ -1520,7 +1526,8 @@ def admin_settings_generate_key():
 def admin_settings_instance():
     if not current_user.is_admin():
         return jsonify({'error': 'Unauthorized'}), 403
-    from .core.db_class.db import AIAgentConfig, InstanceConfig
+    from app.core.db_class.ai import AIAgentConfig
+    from app.core.db_class.connector import InstanceConfig
     cfg = InstanceConfig.query.first()
     if not cfg:
         return jsonify({'exists': False})
@@ -1553,7 +1560,7 @@ def admin_settings_instance_init():
     import uuid as _uuid_mod
     import datetime as _dt
     from app import db
-    from .core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
     from .core.utils.activity_log import log_activity
 
     cfg = InstanceConfig.query.first()
@@ -1592,7 +1599,7 @@ def admin_settings_email_toggle():
     if not current_user.is_admin():
         return jsonify({'error': 'Unauthorized'}), 403
     from app import db
-    from .core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
     from .core.utils.activity_log import log_activity
     from .core.utils.mail_status import email_status
 
@@ -1619,7 +1626,7 @@ def admin_settings_chatbot_toggle():
     if not current_user.is_admin():
         return jsonify({'error': 'Unauthorized'}), 403
     from app import db
-    from .core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
     from .core.utils.activity_log import log_activity
 
     data = request.get_json(silent=True) or {}
@@ -1653,10 +1660,14 @@ def platform_insights_data():
     import datetime
     from collections import defaultdict
     from sqlalchemy import func
-    from app.core.db_class.db import (
-        Rule, Bundle, User, Tag, Comment, RuleVote,
-        RuleEditProposal, ActivityLog, RuleTagAssociation, RuleAttackAssociation,
-    )
+    from app.core.db_class.activity_log import ActivityLog
+    from app.core.db_class.attack import RuleAttackAssociation
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.comment import Comment
+    from app.core.db_class.rule import Rule, RuleVote
+    from app.core.db_class.rule_proposal import RuleEditProposal
+    from app.core.db_class.tag import RuleTagAssociation, Tag
+    from app.core.db_class.user import User
     from app import db
 
     now = datetime.datetime.utcnow()

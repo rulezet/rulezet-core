@@ -20,7 +20,22 @@ from sqlalchemy.orm import aliased
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult, load_all_rule_formats
 
 from ... import db
-from ...core.db_class.db import *
+from sqlalchemy import func
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.comment import RuleCommentReaction
+from app.core.db_class.rule_relation import RuleRelation
+from app.core.db_class.user import User
+from app.core.db_class.bundle import BundleRuleAssociation
+from app.core.db_class.comment import Comment, purge_unified_comments
+from app.core.db_class.git import GithubRepo, ImporterResult, NewRule, RuleStatus, UpdateResult
+from app.core.db_class.report import RepportRule
+from app.core.db_class.rule import (
+    compute_rule_content_hash, FormatRule, RequestOwnerRule, Rule, RuleFavoriteUser, RuleScope,
+    RuleUpdateHistory, RuleVote,
+)
+from app.core.db_class.rule_proposal import RuleEditComment, RuleEditContribution, RuleEditProposal
+from app.core.db_class.similarity import RuleSimilarity, SimilarResult
+from app.core.db_class.tag import RuleTagAssociation, Tag
 
 from ..account import account_core as AccountModel
 from app.core.utils.utils import bump_version
@@ -2459,7 +2474,7 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
             query = query.filter(False)
 
     if attacks:
-        from app.core.db_class.db import RuleAttackAssociation as _RAA
+        from app.core.db_class.attack import RuleAttackAssociation as _RAA
         upper = [a.upper() for a in attacks]
         query = query.filter(
             Rule.id.in_(
@@ -2508,7 +2523,7 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
         )
 
     if workspace_uuid:
-        from app.core.db_class.db import WorkspaceRule, Workspace
+        from app.core.db_class.workspace import Workspace, WorkspaceRule
         from sqlalchemy import false as _false
         ws = Workspace.query.filter_by(uuid=workspace_uuid).first()
         if ws:
@@ -2518,7 +2533,7 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
             query = query.filter(_false())
 
     if exclude_workspace_uuid:
-        from app.core.db_class.db import WorkspaceRule, Workspace
+        from app.core.db_class.workspace import Workspace, WorkspaceRule
         ex_ws = Workspace.query.filter_by(uuid=exclude_workspace_uuid).first()
         if ex_ws:
             ex_ids = [wr.rule_id for wr in WorkspaceRule.query.filter_by(workspace_id=ex_ws.id).all()]
@@ -2757,7 +2772,7 @@ def delete_comment(comment_id) -> bool:
 
 
 def add_reaction_to_rule_comment(comment_id, user_id, reaction_type):
-    from app.core.db_class.db import RuleCommentReaction
+    from app.core.db_class.comment import RuleCommentReaction
     comment = get_comment_by_id(comment_id)
     if not comment:
         return False, "Comment not found"
@@ -3864,7 +3879,7 @@ def build_rules_data_table_query(search=None, sort=None,
     )
 
     if ids:
-        from app.core.db_class.db import Rule as _Rule
+        from app.core.db_class.rule import Rule as _Rule
         query = query.filter(_Rule.id.in_(ids))
 
     query = apply_presence_filters(query, has_cve=has_cve, has_tags=has_tags,
@@ -3876,7 +3891,7 @@ def build_rules_data_table_query(search=None, sort=None,
         query = query.filter(Rule.quality_score.isnot(None), Rule.quality_score <= quality_score_max)
 
     if has_ai_analysis:
-        from app.core.db_class.db import AIGeneration
+        from app.core.db_class.ai import AIGeneration
         analyzed_rule_ids = db.session.query(AIGeneration.rule_id).filter(
             AIGeneration.agent_key == 'rule_analysis',
             AIGeneration.rule_id.isnot(None),
@@ -3884,7 +3899,7 @@ def build_rules_data_table_query(search=None, sort=None,
         query = query.filter(Rule.id.in_(analyzed_rule_ids))
 
     if has_relations:
-        from app.core.db_class.db import RuleRelation
+        from app.core.db_class.rule_relation import RuleRelation
         related_rule_ids = db.session.query(RuleRelation.source_rule_id).union(
             db.session.query(RuleRelation.target_rule_id)
         )
@@ -3908,7 +3923,8 @@ def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
     entirely, like a validation job's quarantine result.
     """
     import json as _json
-    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique as _AT, RuleVote as _RV
+    from app.core.db_class.attack import AttackTechnique as _AT, RuleAttackAssociation
+    from app.core.db_class.rule import RuleVote as _RV
 
     rule_ids = [r.id for r in rules]
     tags_by_rule = get_tags_for_rules_batch(rule_ids)
@@ -4590,7 +4606,7 @@ def search_rules_by_cve_patterns(vulnerabilities: list[str]) -> dict:
 
     all_rules = query.order_by(Rule.last_modif.desc()).all()
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     user_ids = {r.user_id for r in all_rules if r.user_id}
     submitters_by_id = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
 

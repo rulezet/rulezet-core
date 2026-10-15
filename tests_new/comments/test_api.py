@@ -8,7 +8,7 @@ that matches no account.
 """
 import pytest
 
-from app.core.db_class.db import UnifiedComment, UnifiedCommentReaction
+from app.core.db_class.comment import UnifiedComment, UnifiedCommentReaction
 from tests_new.helpers.comments import API, list_url, make_bundle, make_comment, new_comment
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.rules import make_rule

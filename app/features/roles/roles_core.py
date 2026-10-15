@@ -4,7 +4,8 @@ import datetime
 from sqlalchemy import or_
 
 from app import db
-from app.core.db_class.db import Permission, Role, RolePermission, UserRole, User
+from app.core.db_class.role import Permission, Role, RolePermission, UserRole
+from app.core.db_class.user import User
 
 
 # ─── Permission catalog ──────────────────────────────────────────────────────

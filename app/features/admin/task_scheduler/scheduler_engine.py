@@ -131,7 +131,7 @@ def _creates_cycle(schedule_id, depends_on_schedule_id):
     """Walk the depends_on chain starting at depends_on_schedule_id — if we
     ever reach schedule_id, adding this edge would create a cycle. schedule_id
     may be None for a brand-new schedule (nothing to walk into yet)."""
-    from app.core.db_class.db import AdminTaskSchedule
+    from app.core.db_class.task_scheduler import AdminTaskSchedule
 
     seen = set()
     current_id = depends_on_schedule_id
@@ -164,7 +164,7 @@ def _fire_schedule(app, schedule_uuid, workflow_run_id=None, ignore_paused=False
     explicit launch (pausing only opts a task out of firing on its own
     schedule/automatically)."""
     from app import db
-    from app.core.db_class.db import AdminTaskSchedule, AdminTaskRun
+    from app.core.db_class.task_scheduler import AdminTaskRun, AdminTaskSchedule
     from app.features.jobs.jobs_core import create_job
     from app.features.admin.task_scheduler.task_types import TASK_TYPES
 
@@ -239,7 +239,7 @@ def tick(app, now=None):
     """Fire every due task once. Called by the worker's ticker thread every
     TICK_SECONDS; also callable directly from tests."""
     from app import db
-    from app.core.db_class.db import AdminTaskSchedule
+    from app.core.db_class.task_scheduler import AdminTaskSchedule
 
     now = now or datetime.datetime.utcnow()
     due = (AdminTaskSchedule.query
@@ -282,7 +282,7 @@ def start_scheduler(app):
     lacks one (rows from before this engine), then starts the ticker."""
     global _ticker_started
     from app import db
-    from app.core.db_class.db import AdminTaskSchedule
+    from app.core.db_class.task_scheduler import AdminTaskSchedule
 
     with app.app_context():
         try:
@@ -309,7 +309,7 @@ def on_job_finished(job):
     depends_on_schedule_id/depends_on_condition pair. Multi-parent AND/OR
     (AdminTaskDependency) is a Phase 3 addition, see §4bis of the design doc."""
     from app import db
-    from app.core.db_class.db import AdminTaskSchedule, AdminTaskRun
+    from app.core.db_class.task_scheduler import AdminTaskRun, AdminTaskSchedule
 
     run = AdminTaskRun.query.filter_by(job_uuid=job.uuid).first()
     if not run:

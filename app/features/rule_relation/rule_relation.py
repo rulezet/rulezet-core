@@ -7,7 +7,7 @@ rule_relation_blueprint = Blueprint('rule_relation_blueprint', __name__)
 
 
 def _load_rule_or_none(rule_id):
-    from ...core.db_class.db import Rule
+    from app.core.db_class.rule import Rule
     rule = Rule.query.get(rule_id)
     if not rule or rule.is_deleted:
         return None

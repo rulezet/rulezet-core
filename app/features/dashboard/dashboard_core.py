@@ -1,7 +1,7 @@
 from flask_login import current_user
 
 from app import db
-from app.core.db_class.db import UserConfig
+from app.core.db_class.user import UserConfig
 from app.features.config.config_core import get_user_config, create_default_config_core
 
 MAX_WIDGETS = 30

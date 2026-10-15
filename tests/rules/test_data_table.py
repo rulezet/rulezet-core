@@ -90,7 +90,8 @@ def test_github_source_stats_requires_url(client):
 def test_data_table_includes_linked_rules_count(app, client):
     import datetime
     from app import db
-    from app.core.db_class.db import Rule, User
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.user import User
     from app.features.rule_relation.rule_relation_core import add_relation
 
     with app.app_context():
@@ -118,7 +119,8 @@ def test_data_table_includes_linked_rules_count(app, client):
 def test_data_table_has_relations_filter(app, client):
     import datetime
     from app import db
-    from app.core.db_class.db import Rule, User
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.user import User
     from app.features.rule_relation.rule_relation_core import add_relation
 
     with app.app_context():
@@ -163,7 +165,9 @@ def test_data_table_has_ai_analysis_filter(app, client):
     with no analysis at all is excluded."""
     import uuid as uuid_mod
     from app import db
-    from app.core.db_class.db import AIGeneration, Rule, User
+    from app.core.db_class.ai import AIGeneration
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.user import User
 
     with app.app_context():
         rule = Rule.query.first()

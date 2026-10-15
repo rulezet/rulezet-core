@@ -13,7 +13,9 @@ from unittest.mock import patch
 import pytest
 
 from app import db
-from app.core.db_class.db import AIProvider, InstanceConfig, User
+from app.core.db_class.ai import AIProvider
+from app.core.db_class.connector import InstanceConfig
+from app.core.db_class.user import User
 from app.features.ai.ai_core import (
     AgentConnectionError,
     OllamaClient,

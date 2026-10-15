@@ -85,7 +85,7 @@ def _seed_default_user():
     """The account init_db.create_default_user() makes — built here with the
     cached password hash: hashing its random password (scrypt) on every test
     was most of the per-test setup time."""
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     from app.core.utils.utils import generate_api_key
     user = User(first_name="no editor", last_name="no editor", email="default@default.default",
                 password_hash=_password_hash(), admin=False, api_key=generate_api_key(), is_verified=True)
@@ -97,7 +97,7 @@ def _seed_default_user():
 def _seed_default_tags(created_by):
     """The tags auto-attached to every new rule (config/default_tags.json)."""
     import uuid
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     for name in ("tlp:clear", "PAP:CLEAR"):
         db.session.add(Tag(uuid=str(uuid.uuid4()), name=name, is_active=True, created_by=created_by.id))
     db.session.commit()

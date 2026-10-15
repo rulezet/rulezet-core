@@ -9,7 +9,7 @@ import itertools
 import uuid
 
 from app import db
-from app.core.db_class.db import BackgroundJob, BackgroundJobLog
+from app.core.db_class.job import BackgroundJob, BackgroundJobLog
 
 _counter = itertools.count(1)
 

@@ -10,7 +10,8 @@ import itertools
 import uuid
 
 from app import db
-from app.core.db_class.db import Bundle, Comment, UnifiedComment
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.comment import Comment, UnifiedComment
 
 API = "/api/comments"
 

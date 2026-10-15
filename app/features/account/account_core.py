@@ -15,7 +15,16 @@ from flask_mail import Message
 from app import mail
 
 from ... import db
-from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, Connector, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleAttackAssociation, RuleEditProposal, RuleFavoriteUser, RuleTest, RuleUpdateHistory, RuleVote, Tag, User, UserBadge, UserConfig
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.bundle import Bundle, BundleVote
+from app.core.db_class.connector import Connector
+from app.core.db_class.gamification import Gamification, UserBadge
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import RequestOwnerRule, Rule, RuleFavoriteUser, RuleUpdateHistory, RuleVote
+from app.core.db_class.rule_proposal import RuleEditProposal
+from app.core.db_class.rule_tester import RuleTest
+from app.core.db_class.tag import Tag
+from app.core.db_class.user import CustomTheme, User, UserConfig
 from .badges import BADGES
 from ...core.utils.utils import as_db_id, generate_api_key
 from ..rule import rule_core as RuleModel

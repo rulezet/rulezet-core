@@ -13,7 +13,10 @@ import pytest
 from pymisp import MISPEvent
 
 from app import db
-from app.core.db_class.db import ActivityLog, BackgroundJob, MispServer, Tag
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.misp import MispServer
+from app.core.db_class.tag import Tag
 from app.features.misp.misp_connector_core import _decrypt
 from tests_new.helpers.attack import link_technique, make_technique, trash
 from tests_new.helpers.comments import make_bundle

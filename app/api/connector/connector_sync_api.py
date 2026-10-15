@@ -15,7 +15,10 @@ from flask import request
 from flask_restx import Namespace, Resource
 from sqlalchemy import or_, func
 
-from app.core.db_class.db import Rule, Bundle, Tag, RuleTagAssociation, BundleTagAssociation, RuleUpdateHistory, RuleAttackAssociation
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.rule import Rule, RuleUpdateHistory
+from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag
 from app.features.connector.connector_core import bundle_structure_to_sync_json
 
 logger = logging.getLogger(__name__)
@@ -25,7 +28,7 @@ def _log_pull_event(rules_total: int) -> None:
     """Record one row in remote_pull_log. Never raises — sync must not fail because of logging."""
     try:
         from app import db
-        from app.core.db_class.db import RemotePullLog
+        from app.core.db_class.connector import RemotePullLog
         ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
         entry = RemotePullLog(
             instance_uuid=request.headers.get('X-Rulezet-Instance-UUID') or None,

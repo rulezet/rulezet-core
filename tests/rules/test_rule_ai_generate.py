@@ -4,7 +4,8 @@ Rule page: tab gating, route permissions, and the one-shot generate-then-
 validate flow in rule_generator_core.py.
 """
 
-from app.core.db_class.db import AIAgentConfig, AIGeneration, User
+from app.core.db_class.ai import AIAgentConfig, AIGeneration
+from app.core.db_class.user import User
 from app.features.ai.ai_core import AgentResult
 from app.features.rule.rules_core import rule_generator_core as RuleGeneratorModel
 from app import db

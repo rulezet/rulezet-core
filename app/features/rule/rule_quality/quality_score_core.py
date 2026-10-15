@@ -17,7 +17,9 @@ import math
 from typing import Any, Dict, Tuple
 
 from app import db
-from app.core.db_class.db import RuleAttackAssociation, RuleUpdateHistory, RuleTagAssociation, Tag
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.rule import RuleUpdateHistory
+from app.core.db_class.tag import RuleTagAssociation, Tag
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, load_all_rule_formats
 
 _PLACEHOLDER_VALUES = {"", "unknown", "n/a", "none", "null", "no description provided"}
@@ -270,7 +272,8 @@ def build_batch_context(rule_ids) -> Dict[str, Dict[int, Any]]:
         return {"meaningful_tags": {}, "has_attack": {}, "last_history_failed": {}, "favorites": {}, "comments": {}}
 
     from sqlalchemy import func
-    from app.core.db_class.db import Comment, RuleFavoriteUser
+    from app.core.db_class.comment import Comment
+    from app.core.db_class.rule import RuleFavoriteUser
 
     tag_rows = (
         db.session.query(RuleTagAssociation.rule_id, Tag.name)

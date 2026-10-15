@@ -12,7 +12,8 @@ import zipfile
 import pytest
 
 from app import db
-from app.core.db_class.db import Bundle, BundleNode, BundleRuleAssociation, BundleTagAssociation
+from app.core.db_class.bundle import Bundle, BundleNode, BundleRuleAssociation
+from app.core.db_class.tag import BundleTagAssociation
 from app.features.bundle import bundle_core as BundleModel
 from tests_new.helpers.bundles import add_rules, file, folder, make_bundle, make_release, make_tag, rule_node, share
 from tests_new.helpers.db import count, reload

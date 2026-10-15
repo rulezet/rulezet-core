@@ -6,7 +6,7 @@ from wtforms.validators import Email, ValidationError
 from app.core.utils.decorators import api_required
 from app.core.utils.utils import as_db_id
 
-from app.core.db_class.db import User
+from app.core.db_class.user import User
 from app.features.account import account_core as AccountModel
 from ...features.rule import rule_core as RuleModel
 

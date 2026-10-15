@@ -10,7 +10,10 @@ bulk_add is two-step: a preview (no job), then the same body with
 import pytest
 
 from app import db
-from app.core.db_class.db import BackgroundJob, RuleEditContribution, RuleTagAssociation, RuleUpdateHistory
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import RuleUpdateHistory
+from app.core.db_class.rule_proposal import RuleEditContribution
+from app.core.db_class.tag import RuleTagAssociation
 from app.features.jobs.job_handlers import handle_bulk_add_tag_to_rules
 from tests_new.helpers.db import count
 from tests_new.helpers.rules import make_rule

@@ -12,7 +12,9 @@ and the leaderboards are public.
 import pytest
 
 from app import db
-from app.core.db_class.db import BackgroundJob, Rule, RuleFavoriteUser, User
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import Rule, RuleFavoriteUser
+from app.core.db_class.user import User
 from tests_new.helpers.access import FORBIDDEN, LOGIN, NOT_FOUND, OK, assert_outcome, matrix
 from tests_new.helpers.account import captured_mails, give_email_change_token, profile_form
 from tests_new.helpers.db import count, reload

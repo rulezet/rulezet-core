@@ -5,7 +5,8 @@ as proper "attack-id" MISP object attributes — same object_relation pattern
 as the existing "cve-id" vulnerability attribute, not a custom top-level key.
 """
 from app import db
-from app.core.db_class.db import AttackTechnique, User
+from app.core.db_class.attack import AttackTechnique
+from app.core.db_class.user import User
 from app.features.attack.attack_core import add_technique_to_rule
 from app.features.misp.rule.misp_object import get_rule_misp_event, create_rulezet_metadata_misp_object
 from app.features.misp.bundle.misp_object import get_bundle_misp_event

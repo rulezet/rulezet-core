@@ -5,7 +5,9 @@ denylist, and the bounded repair loop in bad_rule_core.py::run_ai_fix.
 """
 
 from app import db
-from app.core.db_class.db import AIAgentConfig, AIGeneration, InvalidRuleModel, User
+from app.core.db_class.ai import AIAgentConfig, AIGeneration
+from app.core.db_class.rule import InvalidRuleModel
+from app.core.db_class.user import User
 from app.features.ai.ai_core import AgentResult
 from app.features.rule.rules_core import bad_rule_core as BadRuleModel
 

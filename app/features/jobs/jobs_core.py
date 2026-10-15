@@ -6,7 +6,7 @@ import uuid
 import datetime
 
 from app import db
-from app.core.db_class.db import BackgroundJob, BackgroundJobLog
+from app.core.db_class.job import BackgroundJob, BackgroundJobLog
 
 
 # ─── Query-string helpers ─────────────────────────────────────────────────────

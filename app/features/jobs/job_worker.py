@@ -84,7 +84,7 @@ def recover_interrupted_jobs(lane='default'):
     """Put back to pending the jobs of `lane` a server restart left 'running'
     (they resume from their last saved offset). Returns how many."""
     from app import db
-    from app.core.db_class.db import BackgroundJob, BackgroundJobLog
+    from app.core.db_class.job import BackgroundJob, BackgroundJobLog
 
     interrupted = _scope_to_lane(
         BackgroundJob.query.filter_by(status='running'), BackgroundJob, lane
@@ -124,7 +124,7 @@ def run_next_job(app, lane='default'):
     One step of the worker loop, callable on its own (needs an app context).
     Returns the uuid of the job it ran, or None when nothing was pending."""
     from app import db
-    from app.core.db_class.db import BackgroundJob, BackgroundJobLog
+    from app.core.db_class.job import BackgroundJob, BackgroundJobLog
 
     db.session.expire_all()
 

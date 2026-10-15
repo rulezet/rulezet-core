@@ -13,7 +13,8 @@ import zipfile
 import pytest
 
 from app import db
-from app.core.db_class.db import ActivityLog, Bundle, BundleNode, BundleRuleAssociation
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.bundle import Bundle, BundleNode, BundleRuleAssociation
 
 from bundle_helpers import D, F, R, as_anonymous, fresh, login, make_bundle, make_rule, owner, other, admin, save_structure, tag
 

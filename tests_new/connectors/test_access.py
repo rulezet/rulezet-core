@@ -9,7 +9,9 @@ remotes read (/api/sync, layer 3) is public.
 """
 import pytest
 
-from app.core.db_class.db import BackgroundJob, Connector, Tag
+from app.core.db_class.connector import Connector
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.tag import Tag
 from tests_new.helpers.access import FORBIDDEN, LOGIN, OK, assert_outcome, matrix
 from tests_new.helpers.connectors import API, connector_form, make_connector, no_network, remote  # noqa: F401
 from tests_new.helpers.db import count, reload

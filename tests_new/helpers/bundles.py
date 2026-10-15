@@ -3,7 +3,8 @@ import itertools
 import uuid
 
 from app import db
-from app.core.db_class.db import BundleNote, Tag
+from app.core.db_class.bundle import BundleNote
+from app.core.db_class.tag import Tag
 from app.features.bundle import bundle_core as BundleModel
 
 _counter = itertools.count(1)

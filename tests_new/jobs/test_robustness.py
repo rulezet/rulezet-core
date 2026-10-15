@@ -6,7 +6,7 @@ text — escaped when a page shows it, never interpreted.
 """
 import pytest
 
-from app.core.db_class.db import BackgroundJob
+from app.core.db_class.job import BackgroundJob
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.inputs import BAD_IDS, INJECTIONS, ODD_CHARACTERS, TOO_LONG, WRONG_TYPES
 from tests_new.helpers.jobs import ADMIN_JOB_TYPE, add_log, make_job, with_special_roles

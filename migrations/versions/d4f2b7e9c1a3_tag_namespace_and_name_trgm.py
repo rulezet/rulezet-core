@@ -42,7 +42,7 @@ def upgrade():
                        'ON tag USING gin (name gin_trgm_ops)')
         op.execute('ANALYZE tag')
     else:
-        from app.core.db_class.db import tag_namespace
+        from app.core.db_class.tag import tag_namespace
         rows = bind.execute(sa.text('SELECT id, name FROM tag')).fetchall()
         for tag_id, name in rows:
             bind.execute(sa.text('UPDATE tag SET namespace = :ns WHERE id = :id'),

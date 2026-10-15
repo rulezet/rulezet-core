@@ -60,7 +60,8 @@ def admin_conversations_data():
 
     from datetime import datetime, timedelta
 
-    from app.core.db_class.db import ChatbotConversation, User
+    from app.core.db_class.ai import ChatbotConversation
+    from app.core.db_class.user import User
 
     page       = request.args.get('page', 1, type=int)
     per_page   = min(100, request.args.get('per_page', 25, type=int))
@@ -135,7 +136,8 @@ def admin_conversations_users():
     from sqlalchemy import func
 
     from app import db
-    from app.core.db_class.db import ChatbotConversation, User
+    from app.core.db_class.ai import ChatbotConversation
+    from app.core.db_class.user import User
 
     rows = (
         db.session.query(User, func.count(ChatbotConversation.id))
@@ -156,7 +158,7 @@ def admin_conversation_detail(conversation_uuid):
     if not (current_user.is_admin() or current_user.has_permission('ai.manage')):
         return jsonify({"error": "Unauthorized"}), 401
 
-    from app.core.db_class.db import ChatbotConversation
+    from app.core.db_class.ai import ChatbotConversation
 
     conv = ChatbotConversation.query.filter_by(uuid=conversation_uuid).first()
     if not conv:
@@ -175,7 +177,7 @@ def admin_conversation_delete(conversation_uuid):
         return jsonify({"error": "Unauthorized"}), 401
 
     from app import db
-    from app.core.db_class.db import ChatbotConversation
+    from app.core.db_class.ai import ChatbotConversation
 
     conv = ChatbotConversation.query.filter_by(uuid=conversation_uuid).first()
     if not conv:

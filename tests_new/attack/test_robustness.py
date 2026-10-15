@@ -7,7 +7,8 @@ from unittest import mock
 
 import pytest
 
-from app.core.db_class.db import AttackTechnique, BackgroundJob, RuleAttackAssociation
+from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+from app.core.db_class.job import BackgroundJob
 from app.features.attack.attack_core import _extract_technique_ids
 from tests_new.helpers.attack import link_technique, make_technique
 from tests_new.helpers.db import count

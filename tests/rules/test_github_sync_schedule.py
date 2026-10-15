@@ -15,11 +15,13 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import (
-    User, Rule, GithubSyncSchedule, GithubSyncScheduleRepo, GithubSyncRun,
-    GithubSyncRunRepo, BackgroundJob, RuleStatus, UpdateResult, RuleUpdateHistory, Notification,
-    NotificationPreference,
+from app.core.db_class.git import (
+    GithubSyncRun, GithubSyncRunRepo, GithubSyncSchedule, GithubSyncScheduleRepo, RuleStatus, UpdateResult,
 )
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.notification import Notification, NotificationPreference
+from app.core.db_class.rule import Rule, RuleUpdateHistory
+from app.core.db_class.user import User
 from app.features.rule.rule_from_github.sync_schedule import sync_schedule_core as SyncScheduleModel
 from app.features.rule.rule_from_github.sync_schedule import scheduler_engine
 

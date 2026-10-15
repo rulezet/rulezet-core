@@ -13,7 +13,8 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from app.core.db_class.db import Rule, User
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 from app import db
 
 API_KEY_USER = "user_api_key"

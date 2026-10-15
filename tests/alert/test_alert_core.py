@@ -9,9 +9,14 @@ import uuid
 import pytest
 
 from app import db, mail
-from app.core.db_class.db import (
-    Alert, AlertMatch, AttackTechnique, Bundle, InstanceConfig, Notification, Rule, RuleAttackAssociation, RuleTagAssociation, Tag, User,
-)
+from app.core.db_class.alert import Alert, AlertMatch
+from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.connector import InstanceConfig
+from app.core.db_class.notification import Notification
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from app.features.alert import alert_core as A
 
 
@@ -303,7 +308,7 @@ def test_unsubscribe_token_roundtrip(ctx):
 # ── activity logs ────────────────────────────────────────────────────────────
 
 def _actions():
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     return [l.action for l in ActivityLog.query.filter(ActivityLog.action.like('alert.%')).all()]
 
 
@@ -318,7 +323,7 @@ def test_idle_pass_logs_nothing(ctx):
 def test_pass_with_matches_is_logged(ctx):
     # No email here: sending needs a mail sender configured at app start,
     # which the CI workflow doesn't have.
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     me, other = _users()
     alert = _alert(me, {'keywords': ['netscaler']})
     A.run_sweep()

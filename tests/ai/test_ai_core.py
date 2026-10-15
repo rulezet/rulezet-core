@@ -115,7 +115,8 @@ def test_check_rate_limit_true_when_no_user(app):
 
 def test_check_rate_limit_counts_recent_executions(app):
     from app import db
-    from app.core.db_class.db import AIExecutionLog, User
+    from app.core.db_class.ai import AIExecutionLog
+    from app.core.db_class.user import User
 
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()

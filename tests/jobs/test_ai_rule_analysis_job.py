@@ -9,7 +9,10 @@ import uuid
 from unittest.mock import patch
 
 from app import db
-from app.core.db_class.db import AIGeneration, BackgroundJob, Rule, User
+from app.core.db_class.ai import AIGeneration
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 from app.features.jobs.job_handlers import handle_rule_analysis
 
 CHAT = 'app.features.ai.ai_core.OllamaClient.chat'
@@ -184,7 +187,7 @@ def test_max_seconds_stops_early_without_failing_the_job(app):
 
 
 def test_stops_the_whole_job_on_systemic_failure(app):
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
 
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()
@@ -221,7 +224,8 @@ def test_per_rule_failure_does_not_stop_the_job(app):
 
 
 def test_uses_tags_and_attack_context_in_prompt(app):
-    from app.core.db_class.db import AttackTechnique, RuleAttackAssociation, RuleTagAssociation, Tag
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.tag import RuleTagAssociation, Tag
 
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()

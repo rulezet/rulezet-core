@@ -245,7 +245,8 @@ def create_app(start_worker=True):
     @app.context_processor
     def inject_globals():
         from flask import current_app
-        from app.core.db_class.db import AIAgentConfig, InstanceConfig
+        from app.core.db_class.ai import AIAgentConfig
+        from app.core.db_class.connector import InstanceConfig
         chatbot_enabled = True
         try:
             cfg = AIAgentConfig.query.filter_by(agent_key='chatbot').first()
@@ -278,7 +279,7 @@ def create_app(start_worker=True):
         if not (_cu.is_authenticated and _cu.is_admin()):
             return 0
         try:
-            from app.core.db_class.db import BackgroundJob
+            from app.core.db_class.job import BackgroundJob
             return BackgroundJob.query.filter(
                 BackgroundJob.status.in_(('pending', 'running'))
             ).count()
@@ -303,7 +304,7 @@ def create_app(start_worker=True):
             return 0
         if not hasattr(g, '_ai_pending_requests'):
             try:
-                from app.core.db_class.db import AIAnalysisRequest
+                from app.core.db_class.ai import AIAnalysisRequest
                 rows = (db.session.query(AIAnalysisRequest.target_type, db.func.count(AIAnalysisRequest.id))
                         .filter(AIAnalysisRequest.status == 'pending')
                         .group_by(AIAnalysisRequest.target_type).all())
@@ -365,7 +366,7 @@ def _init_instance_config(app):
     """
     import uuid as _uuid_mod
     import datetime
-    from app.core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
     with app.app_context():
         try:
             cfg = InstanceConfig.query.first()
@@ -399,7 +400,9 @@ def _start_telemetry(app):
     import time
     import uuid as _uuid_mod
     import requests as _req
-    from app.core.db_class.db import InstanceConfig, Rule, Bundle
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.connector import InstanceConfig
+    from app.core.db_class.rule import Rule
 
     PING_URL      = os.environ.get('TELEMETRY_URL', 'https://rulezet.org/api/instance/register')
     STARTUP_DELAY = int(os.environ.get('TELEMETRY_STARTUP_DELAY', 90))

@@ -14,7 +14,9 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import BundleRuleAssociation, RemotePullLog, RuleTagAssociation, Tag
+from app.core.db_class.bundle import BundleRuleAssociation
+from app.core.db_class.connector import RemotePullLog
+from app.core.db_class.tag import RuleTagAssociation, Tag
 from tests_new.helpers.attack import link_technique, make_technique, trash
 from tests_new.helpers.comments import make_bundle
 from tests_new.helpers.connectors import make_connector, no_network  # noqa: F401

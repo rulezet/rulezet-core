@@ -5,7 +5,7 @@ import io
 import zipfile
 
 from app import db
-from app.core.db_class.db import Bundle, BundleNode
+from app.core.db_class.bundle import Bundle, BundleNode
 
 from bundle_helpers import D, F, R, fresh, login, make_bundle, make_rule, other, owner, save_structure
 
@@ -207,7 +207,7 @@ def test_share_token_never_leaks_in_json(client, app):
 
 
 def test_share_key_never_leaks_in_referer_or_activity_log(client, app):
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     with app.app_context():
         b = make_bundle(public=False)
         login(client, owner())

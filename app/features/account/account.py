@@ -2,7 +2,8 @@ from typing import Union
 import threading
 import time
 import datetime
-from ...core.db_class.db import User, RegisteredInstance, InstanceConfig
+from app.core.db_class.connector import InstanceConfig, RegisteredInstance
+from app.core.db_class.user import User
 from ... import db
 from ... import oauth
 from flask import Blueprint, jsonify, render_template, redirect, url_for, request, flash, session, current_app, abort
@@ -112,7 +113,7 @@ def admin_instances():
     from flask import current_app, abort
     from sqlalchemy import func
     from app import db
-    from app.core.db_class.db import RemotePullLog
+    from app.core.db_class.connector import RemotePullLog
     if not current_user.is_admin() or not current_app.config.get('IS_OFFICIAL_INSTANCE'):
         abort(404)
     instances = RegisteredInstance.query.order_by(RegisteredInstance.last_seen.desc()).all()
@@ -167,7 +168,7 @@ def admin_instances():
 @login_required
 def admin_instance_pulls(instance_uuid):
     from flask import current_app, abort, jsonify
-    from app.core.db_class.db import RemotePullLog
+    from app.core.db_class.connector import RemotePullLog
     if not current_user.is_admin() or not current_app.config.get('IS_OFFICIAL_INSTANCE'):
         abort(404)
     logs = (RemotePullLog.query
@@ -352,7 +353,7 @@ def users_data_table():
         return jsonify({"error": "Unauthorized"}), 403
 
     from sqlalchemy import asc, desc, or_
-    from app.core.db_class.db import Rule
+    from app.core.db_class.rule import Rule
 
     page     = request.args.get('page',     1,        type=int)
     per_page = min(request.args.get('per_page', 20,   type=int), 100)
@@ -391,7 +392,7 @@ def users_data_table():
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
     from sqlalchemy import func
-    from app.core.db_class.db import Bundle
+    from app.core.db_class.bundle import Bundle
     from app import db
 
     user_ids = [u.id for u in pagination.items]
@@ -410,7 +411,7 @@ def users_data_table():
         .all()
     ) if user_ids else {}
 
-    from app.core.db_class.db import UserRole, Role
+    from app.core.db_class.role import Role, UserRole
     roles_by_user = {}
     if user_ids:
         role_rows = (
@@ -422,7 +423,7 @@ def users_data_table():
         for uid, rid, rname in role_rows:
             roles_by_user.setdefault(uid, []).append({'id': rid, 'name': rname})
 
-    from app.core.db_class.db import Connector
+    from app.core.db_class.connector import Connector
     protected_user_ids = set(
         uid for (uid,) in db.session.query(Connector.shadow_user_id)
         .filter(Connector.shadow_user_id.in_(user_ids), Connector.is_system == True)
@@ -912,7 +913,7 @@ def how_to_earn_points() -> str:
     straight from POINTS (db.py) and BADGES (badges.py) so it can never
     drift out of sync with the real values, unlike the old hand-duplicated
     frontend copy this replaces."""
-    from ...core.db_class.db import POINTS, LEVEL_THRESHOLDS
+    from app.core.db_class.gamification import LEVEL_THRESHOLDS, POINTS
     from .badges import badges_catalog_json
 
     point_sources = [

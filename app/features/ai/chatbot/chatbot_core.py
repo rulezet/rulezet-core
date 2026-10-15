@@ -121,7 +121,7 @@ def _chatbot_model_name() -> str:
     pick a model, so a chatbot-created rule's Source reflects reality
     regardless of whether this particular call went through a deterministic
     shortcut (no model consulted) or the real agent."""
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
     from app.features.ai.ai_core import get_default_ollama_model
 
     cfg = AIAgentConfig.query.filter_by(agent_key='chatbot').first()
@@ -220,7 +220,7 @@ def _split_format_tokens(raw) -> list:
 
 
 def _find_matching_tag(term: str):
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     exact = Tag.query.filter(Tag.name.ilike(term)).first()
     if exact:
         return exact.name
@@ -880,7 +880,7 @@ def _agent_gate_check(user):
     switch or a user's rate limit. Checked once, up front, so it applies
     uniformly whether a message ends up shortcut-served or model-served.
     Returns a refusal dict if blocked, else None."""
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
     from app.features.ai.ai_core import check_rate_limit
 
     agent_config = AIAgentConfig.query.filter_by(agent_key='chatbot').first()
@@ -1036,7 +1036,7 @@ def _persist_exchange(user, conversation_uuid: str, user_message: str, outcome: 
     import uuid as uuid_mod
 
     from app import db
-    from app.core.db_class.db import ChatbotConversation, ChatbotMessage
+    from app.core.db_class.ai import ChatbotConversation, ChatbotMessage
     from app.core.utils.activity_log import log_activity
 
     try:

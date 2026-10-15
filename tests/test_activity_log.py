@@ -4,7 +4,7 @@ edit...) show a "System" category badge next to a perfectly real actor,
 which read as if the action had no actor at all."""
 
 from app.core.utils.activity_log import _auto_category
-from app.core.db_class.db import ActivityLog
+from app.core.db_class.activity_log import ActivityLog
 
 
 def test_blog_actions_get_their_own_category():
@@ -18,7 +18,8 @@ def test_unknown_prefix_still_falls_back_to_system():
 
 def test_blog_view_log_has_real_actor_and_blog_category(app, client):
     from app import db
-    from app.core.db_class.db import BlogPost, User
+    from app.core.db_class.blog import BlogPost
+    from app.core.db_class.user import User
 
     with app.app_context():
         admin = User.query.filter_by(admin=True).first()

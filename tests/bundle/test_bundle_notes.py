@@ -3,7 +3,7 @@ write while public, lose access (even to your own note) when the bundle
 goes private — except through the share link."""
 
 from app import db
-from app.core.db_class.db import Bundle
+from app.core.db_class.bundle import Bundle
 
 from bundle_helpers import admin, as_anonymous, login, make_bundle, other, owner
 
@@ -94,13 +94,13 @@ def test_notes_cannot_be_touched_through_another_bundle(client, app):
         login(client, owner())                          # owner of b2 (and b1) — but wrong bundle id
         assert client.delete(f"/bundle/{b2.id}/notes/{note_id}").status_code == 404
         client.post(f"/bundle/delete?id={b1.id}")
-        from app.core.db_class.db import BundleNote
+        from app.core.db_class.bundle import BundleNote
         db.session.expire_all()
         assert BundleNote.query.filter_by(bundle_id=b1.id).count() == 0     # deleted with the bundle
 
 
 def _mention_count(user_id):
-    from app.core.db_class.db import Notification
+    from app.core.db_class.notification import Notification
     db.session.expire_all()
     return Notification.query.filter_by(user_id=user_id, notif_type="user_mentioned").count()
 

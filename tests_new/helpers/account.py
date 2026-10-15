@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from unittest.mock import patch
 
 from app import db, mail
-from app.core.db_class.db import User
+from app.core.db_class.user import User
 from tests_new.helpers.users import PASSWORD, make_user
 
 _counter = itertools.count(1)
