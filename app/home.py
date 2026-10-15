@@ -1639,8 +1639,9 @@ def admin_settings_chatbot_toggle():
 
 
 @home_blueprint.route('/platform/insights')
-@cache.cached(timeout=60 * 60 * 6)
 def platform_insights():
+    # Not cached: the page renders the logged-in user (navbar) — only its
+    # data endpoint below is, being the same for every visitor.
     return render_template('platform/stats.html')
 
 
