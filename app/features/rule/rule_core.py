@@ -3476,7 +3476,7 @@ def get_all_format() -> list[dict]:
     formats = FormatRule.query.all()
     return [fmt.to_json() for fmt in formats]
 
-def get_all_github_urls_matching(search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None):
+def get_all_github_urls_matching(search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, provider_filter: str = None):
     """Unpaginated list of distinct git repository URLs (any host) matching
     the same filters as get_optimized_github_data — backs 'select all N
     matching this filter' bulk actions (Sync Schedule repo picker), where the
@@ -3490,6 +3490,8 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
         query = query.filter(Rule.format == format_filter)
     if author_filter:
         query = query.filter(author_expr.ilike(f"%{author_filter}%"))
+    if provider_filter:
+        query = query.filter(Rule.git_provider == provider_filter)
     if search:
         if search_field == 'url':
             query = query.filter(Rule.source.ilike(f"%{search}%"))

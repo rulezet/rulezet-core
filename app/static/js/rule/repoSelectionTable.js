@@ -31,6 +31,8 @@ const RepoSelectionTable = {
             searchField: 'url',
             formatFilter: '',
             authorFilter: '',
+            providerFilter: '',
+            availableProviders: [],
 
             selectedUrls: new Set(this.initialSelectedUrls),
             excludedUrls: new Set(),
@@ -46,6 +48,7 @@ const RepoSelectionTable = {
                 search_field: this.searchField,
                 format: this.formatFilter || null,
                 author: this.authorFilter || null,
+                provider: this.providerFilter || null,
             };
         },
         selectedCount() {
@@ -61,7 +64,7 @@ const RepoSelectionTable = {
             const out = [];
             for (const url of this.selectedUrls) {
                 const repo = this.allLoadedRepos.get(url);
-                out.push({ url, rule_count: repo ? repo.rule_count : null });
+                out.push({ url, rule_count: repo ? repo.rule_count : null, git_provider: repo ? repo.git_provider : null });
                 if (out.length >= 100) break;
             }
             return out;
@@ -69,6 +72,10 @@ const RepoSelectionTable = {
     },
     mounted() {
         this.fetchRepos(1);
+        fetch('/rule/get_github_providers_usage')
+            .then(r => (r.ok ? r.json() : []))
+            .then(list => { this.availableProviders = list; })
+            .catch(() => {});
     },
     methods: {
         gitProviderIcon,
@@ -80,6 +87,7 @@ const RepoSelectionTable = {
             params.set('search_field', this.searchField);
             if (this.formatFilter) params.set('format', this.formatFilter);
             if (this.authorFilter) params.set('author', this.authorFilter);
+            if (this.providerFilter) params.set('provider', this.providerFilter);
 
             try {
                 const res = await fetch(this.apiEndpoint + '?' + params.toString());
@@ -98,6 +106,12 @@ const RepoSelectionTable = {
             } finally {
                 this.loading = false;
             }
+        },
+
+        setProvider(name) {
+            if (this.providerFilter === name) return;
+            this.providerFilter = name;
+            this.fetchRepos(1);
         },
 
         onSearchInput() {
@@ -196,6 +210,20 @@ const RepoSelectionTable = {
             </div>
         </div>
 
+        <div v-if="availableProviders.length > 1" class="ghf-hosts" role="group" aria-label="Filter by git host">
+            <span class="ghf-hosts__label">Host</span>
+            <button type="button" class="ghf-host" :class="{ 'ghf-host--active': !providerFilter }"
+                    :aria-pressed="!providerFilter" @click="setProvider('')">
+                <i class="fa-solid fa-layer-group"></i>All
+            </button>
+            <button v-for="p in availableProviders" :key="p.name" type="button" class="ghf-host"
+                    :class="{ 'ghf-host--active': providerFilter === p.name }"
+                    :aria-pressed="providerFilter === p.name" @click="setProvider(p.name)">
+                <i :class="p.icon"></i>[[ p.label ]]
+                <span class="ghf-host__count">[[ p.count ]]</span>
+            </button>
+        </div>
+
         <div v-if="isAllSelectedMode" class="rl-filter-panel mb-3">
             <div class="rl-fp-row">
                 <div class="rl-fp-item">
@@ -238,7 +266,10 @@ const RepoSelectionTable = {
                             <input type="checkbox" class="dt-checkbox" :checked="isRepoChecked(repo.url)"
                                 @change="updateSelection(repo.url, $event.target.checked)" />
                         </td>
-                        <td class="dt-td dt-td--truncate" style="max-width:320px;" :title="repo.url">[[ repo.url ]]</td>
+                        <td class="dt-td dt-td--truncate" style="max-width:320px;" :title="repo.url">
+                            <i :class="gitProviderIcon(repo.url, repo.git_provider)" class="me-2"
+                               :title="gitProviderLabel(repo.url, repo.git_provider)" style="color:var(--subtle-text-color);"></i>[[ repo.url ]]
+                        </td>
                         <td class="dt-td text-center">[[ repo.rule_count ]]</td>
                         <td class="dt-td">
                             <span v-for="fmt in repo.formats" :key="fmt" class="repo-fmt-badge">[[ fmt ]]</span>
@@ -275,7 +306,9 @@ const RepoSelectionTable = {
                     </thead>
                     <tbody>
                         <tr v-for="item in manuallySelectedRepos" :key="item.url" class="dt-row">
-                            <td class="dt-td dt-td--truncate" style="max-width:320px;" :title="item.url">[[ item.url ]]</td>
+                            <td class="dt-td dt-td--truncate" style="max-width:320px;" :title="item.url">
+                                <i :class="gitProviderIcon(item.url, item.git_provider)" class="me-2" style="color:var(--subtle-text-color);"></i>[[ item.url ]]
+                            </td>
                             <td class="dt-td text-center">
                                 <input type="checkbox" class="dt-checkbox" :checked="repoSetting(item.url, 'auto_accept_update')"
                                     @change="updateRepoSetting(item.url, 'auto_accept_update', $event.target.checked)">

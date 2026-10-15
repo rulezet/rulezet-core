@@ -2,6 +2,7 @@
 {% block title %}Manage Git — Rulezet{% endblock %}
 {% import 'macros/form_macros.html' as f %}
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/git-host-filter.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/importer.css') }}">
@@ -173,7 +174,7 @@
                      class="gh-running-row" @click="goto(running.uuid)">
                     <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
                     <div class="gh-running-info">
-                        <div class="gh-running-name">[[ running.info?.repo_url || (running.info?.repo_sources || []).join(', ') || 'Unknown source' ]]</div>
+                        <div class="gh-running-name"><i v-if="running.info?.repo_url" :class="gitProviderIcon(running.info.repo_url)" class="me-1"></i>[[ running.info?.repo_url || (running.info?.repo_sources || []).join(', ') || 'Unknown source' ]]</div>
                         <div class="gh-running-sub">by [[ running.info?.author || '—' ]]</div>
                     </div>
                     <span class="badge gh-badge-import">Import</span>
@@ -183,7 +184,7 @@
                      class="gh-running-row" @click="gotoUpdate(running.uuid)">
                     <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
                     <div class="gh-running-info">
-                        <div class="gh-running-name">[[ running.info?.repo_url || (running.info?.repo_sources || []).join(', ') || 'Unknown source' ]]</div>
+                        <div class="gh-running-name"><i v-if="running.info?.repo_url" :class="gitProviderIcon(running.info.repo_url)" class="me-1"></i>[[ running.info?.repo_url || (running.info?.repo_sources || []).join(', ') || 'Unknown source' ]]</div>
                         <div class="gh-running-sub">by [[ running.info?.author || '—' ]]</div>
                     </div>
                     <span class="badge gh-badge-update">Update</span>
@@ -327,7 +328,7 @@
                                         @click="goto(history.uuid)"
                                         style="cursor: pointer;">
                                         <td class="dt-td text-center">[[ (current_page - 1) * per_page + index + 1 ]]</td>
-                                        <td class="dt-td">[[ history.info.repo_url ]]</td>
+                                        <td class="dt-td"><i :class="gitProviderIcon(history.info.repo_url, history.git_provider)" class="me-2" style="color:var(--subtle-text-color);"></i>[[ history.info.repo_url ]]</td>
                                         <td v-if="colVisible.imported" class="dt-td text-center">[[ history.imported ]]</td>
                                         <td v-if="colVisible.bad_rules" class="dt-td text-center">[[ history.bad_rules ]]</td>
                                         <td v-if="colVisible.skipped" class="dt-td text-center">[[ history.skipped ]]</td>
@@ -516,11 +517,11 @@
                                                 <div v-if="Array.isArray(history.repo_sources)">
                                                     <span v-for="(repo, rIndex) in history.repo_sources" :key="rIndex"
                                                         class="badge bg-secondary me-1">
-                                                        [[ repo ]]
+                                                        <i :class="gitProviderIcon(repo)" class="me-1"></i>[[ repo ]]
                                                     </span>
                                                 </div>
                                                 <div v-else>
-                                                    [[ history.info.repo_url || '—' ]]
+                                                    <i v-if="history.info.repo_url" :class="gitProviderIcon(history.info.repo_url, history.git_provider)" class="me-1"></i>[[ history.info.repo_url || '—' ]]
                                                 </div>
                                             </template>
                                             <template v-else>
@@ -910,6 +911,7 @@
     import UserChip from '/static/js/components/UserChip.js'
     import GithubProposalTable from '/static/js/rule/github/githubProposalTable.js'
     import ChartViewer from '/static/js/components/chart-viewer.js'
+    import { gitProviderIcon } from '/static/js/components/git-links.js'
 
     const csrfToken = '{{ csrf_token() }}'
     const isGithubManager = {{ (current_user.is_admin() or current_user.has_permission('github.manage')) | tojson }}
@@ -1577,6 +1579,7 @@
             {% endif %}
 
             return {
+                gitProviderIcon,
                 rateLimitStatus, fetchRateLimitStatus, rateLimitResetLabel, rateLimitChartData,
                 message_list,
                 history_list,
@@ -1682,5 +1685,20 @@
             }
         }
     }).mount('#main-container')
+
+    // ── Active panel kept in the URL (?tab=imports|updates|schedules|proposals)
+    // so a reload or a shared link reopens the same panel. ──
+    const TAB_KEYS = { 'github-tab': 'imports', 'rule-tab': 'updates', 'schedule-tab': 'schedules', 'proposals-tab': 'proposals' }
+    const wantedTab = new URLSearchParams(window.location.search).get('tab')
+    const wantedId  = Object.keys(TAB_KEYS).find(id => TAB_KEYS[id] === wantedTab)
+    if (wantedId) bootstrap.Tab.getOrCreateInstance(document.getElementById(wantedId)).show()
+    Object.keys(TAB_KEYS).forEach(id => {
+        document.getElementById(id)?.addEventListener('shown.bs.tab', () => {
+            const p = new URLSearchParams(window.location.search)
+            if (id === 'github-tab') p.delete('tab'); else p.set('tab', TAB_KEYS[id])
+            const qs = p.toString()
+            history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+        })
+    })
 </script>
 {% endblock %}

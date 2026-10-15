@@ -186,10 +186,12 @@ def repo_candidates():
     search_field = request.args.get('search_field', 'url', type=str)
     format_filter = request.args.get('format', None, type=str)
     author_filter = request.args.get('author', None, type=str)
+    provider_filter = request.args.get('provider', None, type=str) or None
 
     github_data, total, total_pages = RuleModel.get_optimized_github_data(
         page=page, search=search, search_field=search_field,
         format_filter=format_filter, author_filter=author_filter,
+        provider_filter=provider_filter,
     )
     return jsonify({"repos": github_data, "total": total, "total_pages": total_pages}), 200
 
