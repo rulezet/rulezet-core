@@ -18,8 +18,8 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.pat
 MODULES_DIR = os.path.join(STATIC_DIR, 'js')
 REFRESH_SECONDS = 2   # how often the import map is rebuilt (cheap: one stat per file)
 # Never listed in the import map, which is in every page's source: the hidden
-# game must stay hidden. Its modules still load (unversioned) on its own page.
-HIDDEN_DIRS = (os.path.join(MODULES_DIR, 'starfield'),)
+# games must stay hidden. Its modules still load (unversioned) on its own page.
+HIDDEN_DIRS = (os.path.join(MODULES_DIR, 'starfield'), os.path.join(MODULES_DIR, 'nightshift'))
 
 _map_cache = {'built_at': 0.0, 'imports': {}}
 

