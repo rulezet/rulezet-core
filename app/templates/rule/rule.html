@@ -908,7 +908,11 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   'deep-validate-suricata': DeepValidateSuricata,
             },
             setup() {
-                  const requestedTab = new URLSearchParams(window.location.search).get('tab');
+                  const pageParams   = new URLSearchParams(window.location.search);
+                  const requestedTab = pageParams.get('tab');
+                  // Prefill from a link (e.g. the CVE response kit): ?format=sigma&cve=CVE-…&prompt=…
+                  const requestedCve    = (pageParams.get('cve') || '').trim().toUpperCase();
+                  const requestedPrompt = (pageParams.get('prompt') || '').slice(0, 2000);
                   const activeTab = ref(VALID_TABS.includes(requestedTab) ? requestedTab : 'manual');
 
                   // Keep ?tab= in sync so a reload (or a copy-pasted link) lands
@@ -921,7 +925,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   });
 
                   const manualContent = ref(window.__manual_content || '');
-                  const manualFormat  = ref(window.__manual_format  || '');
+                  const manualFormat  = ref(window.__manual_format  || (pageParams.get('format') || '').toLowerCase());
                   const manualLicense = ref(window.__manual_license || '');
                   const parseContent  = ref('');
                   const jsonContent = ref('');
@@ -1020,7 +1024,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   }
 
                   // ── Generate with AI (Beta) ──────────────────────────────
-                  const aiGenDescription = ref('');
+                  const aiGenDescription = ref(requestedPrompt);
                   const aiGenSample      = ref('');
                   const aiGenBusy        = ref(false);
                   const aiGenSteps       = ref([]);
@@ -1244,7 +1248,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         is_loading_zip.value = false;
                   }
 
-                  const detectedVulnerabilities = ref([]);
+                  const detectedVulnerabilities = ref(/^[A-Z0-9][A-Z0-9-]{3,40}$/.test(requestedCve) ? [requestedCve] : []);
                   const selectedTags = ref([]);
                   const selectedAttacks = ref([]);
                   const selectedRelatedRules = ref([]);

@@ -128,6 +128,7 @@ def create_app(start_worker=True):
     from app.features.admin.media.media_routes import media_blueprint, media_static_blueprint
     from app.features.admin.app_settings.app_settings_routes import app_settings_blueprint
     from app.features.starfield.starfield import starfield_blueprint
+    from app.features.vulnerability.vulnerability import vulnerability_blueprint
     from app.features.alert.alert import alert_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
@@ -161,6 +162,7 @@ def create_app(start_worker=True):
     app.register_blueprint(media_static_blueprint)
     app.register_blueprint(app_settings_blueprint)
     app.register_blueprint(starfield_blueprint)
+    app.register_blueprint(vulnerability_blueprint)
     app.register_blueprint(alert_blueprint, url_prefix='/alert')
 
     from app.api.api import api_blueprint
@@ -363,6 +365,18 @@ def create_app(start_worker=True):
         if request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json':
             return jsonify({"error": "Forbidden."}), 403
         return render_template('access_denied.html'), 403
+
+    from flask_wtf.csrf import CSRFError
+
+    @app.errorhandler(CSRFError)
+    def csrf_error(e):
+        # A fetch() call (it sends the token in a header, or JSON) gets JSON it
+        # can show — not an HTML error page its response.json() chokes on.
+        if (request.headers.get('X-CSRFToken') is not None or request.is_json
+                or request.accept_mimetypes.best == 'application/json' or request.path.startswith('/api/')):
+            return jsonify({'success': False, 'toast_class': 'danger-subtle',
+                            'message': f'{e.description} Reload the page and try again.'}), 400
+        return e
 
     @app.errorhandler(404)
     def page_not_found(e):

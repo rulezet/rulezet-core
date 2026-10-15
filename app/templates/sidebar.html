@@ -48,6 +48,8 @@
                            href="/attack/heatmap"><i class="fa-solid fa-crosshairs"></i>ATT&amp;CK Heatmap</a></li>
                      <li><a class="dropdown-item {% if request.path == '/rule/formats' %}active{% endif %}"
                            href="/rule/formats"><i class="fa-solid fa-layer-group me-2"></i>Rule Formats</a></li>
+                     <li><a class="dropdown-item {% if request.path.startswith('/vulnerability') %}active{% endif %}"
+                           href="/vulnerability/"><i class="fa-solid fa-bug-slash me-2"></i>CVE Response Kits</a></li>
                      <li><a class="dropdown-item {% if request.path == '/rule/create_rule' %}active{% endif %}"
                            href="/rule/create_rule"><i class="fa-solid fa-file-circle-plus me-2"></i>Add Rules</a></li>
 
@@ -475,6 +477,7 @@
       { label: 'Admin: API Activity', url: '/admin/logs/api', icon: 'fa-code', keywords: ['api', 'api logs', 'api requests'] },
       { label: 'Server Settings', url: '/admin/settings', icon: 'fa-sliders', keywords: ['server settings'] },
       { label: 'Admin: Media', url: '/admin/media', icon: 'fa-images', keywords: ['media', 'images', 'uploads', 'files', 'avatars'] },
+      { label: 'CVE Response Kits', url: '/vulnerability/', icon: 'fa-bug-slash', keywords: ['cve', 'vulnerability', 'ghsa', 'response kit', 'vulnerabilities'] },
       { label: 'Admin: Configuration', url: '/admin/configuration', icon: 'fa-sliders', keywords: ['configuration', 'settings', 'config', 'hardcoded', 'json', 'lists'] },
       {% endif %}
    ]
