@@ -309,7 +309,7 @@ def notify_admins_github_token_invalid(reason=None):
                 notif_type = 'github_token_invalid',
                 title      = 'GitHub token is invalid or expired',
                 body       = reason or ('GITHUB_TOKEN was rejected by the GitHub API. '
-                                         'Set a new one in Server Settings to restore GitHub features.'),
+                                         'Set a new one in Manage Git → Git tokens & hosts to restore GitHub features.'),
                 link       = '/admin/settings',
                 icon       = _TYPE_ICON['github_token_invalid'],
                 is_read    = False,

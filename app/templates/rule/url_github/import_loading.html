@@ -69,7 +69,7 @@
                 <div v-else-if="rateLimitStatus.remaining === 0" style="font-size:.82rem;color:var(--text-color);">
                     <i class="fas fa-hourglass-half me-1" style="color:#dc3545;"></i>
                     <strong>GitHub API rate limit reached</strong> — resets in [[ rateLimitResetLabel ]].
-                    <span v-if="!rateLimitStatus.authenticated">Add a <code>GITHUB_TOKEN</code> (Admin → Settings) to raise it from 60 to 5000 requests/hour.</span>
+                    <span v-if="!rateLimitStatus.authenticated">Add a <code>GITHUB_TOKEN</code> (Manage Git → Git tokens & hosts) to raise it from 60 to 5000 requests/hour.</span>
                 </div>
                 <div v-else style="font-size:.78rem;color:var(--subtle-text-color);">
                     <i class="fa-brands fa-github me-1"></i>GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]] requests remaining — this failure wasn't rate-limiting.

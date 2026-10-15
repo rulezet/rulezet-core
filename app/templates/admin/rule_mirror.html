@@ -31,12 +31,15 @@
         </p>
     </div>
 
+    {# Git Managers reach this page too — the admin menu is for admins only. #}
+    {% if current_user.is_admin() %}
     <div class="dr-nav mb-3" role="tablist">
         <span class="dr-nav__label" style="padding:.5rem .25rem;">Admin</span>
         <span class="dr-nav__sep"></span>
         {{ anav.admin_nav_toggle() }}
     </div>
     {{ anav.admin_nav_panel('rule_mirror') }}
+    {% endif %}
 
     <!-- ── How it works + official repo — link to doc page and to GitHub ─────────── -->
     <div class="mb-4 d-flex flex-wrap gap-2">
@@ -67,6 +70,7 @@
         </div>
     </div>
 
+    {% if current_user.is_admin() %}
     <div class="alert alert-info border-0 rounded-3 small">
         <i class="fa-solid fa-circle-info me-2"></i>
         Recurring syncs are scheduled the same way as every other admin job — create a
@@ -74,6 +78,7 @@
         <a href="/admin/tasks/">Workflows</a>. A scheduled task with no repository picked
         syncs every currently-enabled repository above.
     </div>
+    {% endif %}
 
 </div>
 

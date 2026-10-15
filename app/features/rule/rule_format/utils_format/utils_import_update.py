@@ -166,7 +166,7 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
             if "Repository not found" in err or "not found" in err.lower():
                 raise Exception("Repository not found or not accessible. Check the URL.")
             if "Authentication failed" in err or "could not read Username" in err:
-                raise Exception("Authentication failed — the repository may be private. Add a token for this host in Admin → Settings.")
+                raise Exception("Authentication failed — the repository may be private. Add a token for this host in Manage Git → Git tokens & hosts.")
             raise Exception(f"Clone failed: {err.split('stderr:')[-1].strip()[:200]}")
     else:
         # Repo already cached — make sure we are on the right branch and up-to-date
@@ -198,11 +198,11 @@ def _clean_github_error(response) -> str:
             when = f"in {mins} min" if mins < 60 else f"in {mins // 60}h {mins % 60}m"
         else:
             when = "soon"
-        token_hint = "" if os.environ.get('GITHUB_TOKEN') else " Add a GITHUB_TOKEN (Admin → Settings) to raise it from 60 to 5000 requests/hour."
+        token_hint = "" if os.environ.get('GITHUB_TOKEN') else " Add a GITHUB_TOKEN (Manage Git → Git tokens & hosts) to raise it from 60 to 5000 requests/hour."
         return f"GitHub API rate limit exceeded — resets {when}.{token_hint}"
 
     if response.status_code == 401:
-        return "GITHUB_TOKEN was rejected by GitHub (401 Bad credentials) — it is invalid or revoked. Generate a new one at https://github.com/settings/tokens and update it in Admin → Settings."
+        return "GITHUB_TOKEN was rejected by GitHub (401 Bad credentials) — it is invalid or revoked. Generate a new one at https://github.com/settings/tokens and update it in Manage Git → Git tokens & hosts."
 
     # Secondary rate limit / abuse detection (a 403 without
     # X-RateLimit-Remaining: 0 — GitHub uses Retry-After for this one).
@@ -474,7 +474,7 @@ def valider_repo_github(repo_url: str, is_generic_source: bool = False) -> bool:
       "github.com@evil.example" trick), localhost and any private, loopback,
       link-local or reserved IP address (cloud metadata at 169.254.169.254…);
     - accepted: a known git host — GitHub (and GITHUB_HOST), GitLab, Codeberg,
-      Bitbucket…, plus the hosts declared in Admin → Settings (GIT_HOSTS /
+      Bitbucket…, plus the hosts declared in Manage Git → Git tokens & hosts (GIT_HOSTS /
       GIT_HOST_TOKENS); see git_provider.is_known_git_host;
     - any other host only when the caller explicitly marks it as a generic
       git server (is_generic_source=True) — a self-hosted server by name.

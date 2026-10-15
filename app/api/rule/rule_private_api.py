@@ -371,7 +371,7 @@ Import detection rules of **any supported format** (e.g., YARA, Sigma, Suricata)
 
 | Parameter | Type   | Required | Description |
 |-----------|--------|----------|-------------|
-| url       | string | Yes      | URL of the git repository containing the rules to import (any host; private repositories need a token for their host in Admin → Settings). |
+| url       | string | Yes      | URL of the git repository containing the rules to import (any host; private repositories need a token for their host in Manage Git → Git tokens & hosts). |
 | license   | string | Yes      | License to apply to the imported rules (e.g., MIT, GPL). |
 
 ### Headers

@@ -8,7 +8,7 @@ Everything that needs "the branches of this repo", "its metadata", "its
 default branch" or "clone it with credentials" goes through here, so
 callers never hard-code one host's API.
 
-Configuration (.env, editable in Admin → Settings):
+Configuration (.env, editable in Admin → Settings and in Manage Git → Git tokens & hosts):
     GITHUB_TOKEN     token for GITHUB_HOST (unchanged)
     GITHUB_HOST      github.com, or a GitHub Enterprise host
     GIT_HOSTS        extra git hosts, comma separated, optionally with their
@@ -70,7 +70,7 @@ def _parse_host_map(raw: str) -> dict:
 
 def get_github_host() -> str:
     """Host treated as GitHub — github.com, or a GitHub Enterprise Server set
-    as GITHUB_HOST (Admin → Settings)."""
+    as GITHUB_HOST (Admin → Settings, or Manage Git → Git tokens & hosts)."""
     host = os.environ.get('GITHUB_HOST', 'github.com').strip().strip('/').lower()
     return host or 'github.com'
 
@@ -228,7 +228,7 @@ def ls_remote_branches(url: str) -> tuple[list[str], str | None]:
     if result.returncode != 0:
         err = result.stderr.lower()
         if 'authentication' in err or 'could not read username' in err:
-            return [], 'Authentication failed — the repository may be private (add a token for this host in Admin → Settings).'
+            return [], 'Authentication failed — the repository may be private (add a token for this host in Manage Git → Git tokens & hosts).'
         return [], 'Repository not found or not reachable.'
     names = [line.split('refs/heads/', 1)[1] for line in result.stdout.splitlines() if 'refs/heads/' in line]
     return sorted(names), None
@@ -297,11 +297,11 @@ def api_error_message(url: str, response) -> str:
     if response is None:
         return f'Could not reach {label}.'
     if response.status_code == 401:
-        return f'The {label} token was rejected (401) — it is invalid or revoked. Update it in Admin → Settings.'
+        return f'The {label} token was rejected (401) — it is invalid or revoked. Update it in Manage Git → Git tokens & hosts.'
     if response.status_code == 404:
         return 'Repository not found, or the token can\'t see it (private repo?).'
     if response.status_code in (403, 429):
-        return f'{label} API rate limit reached or access refused — try again later, or configure a token in Admin → Settings.'
+        return f'{label} API rate limit reached or access refused — try again later, or configure a token in Manage Git → Git tokens & hosts.'
     return f'{label} API returned an unexpected status ({response.status_code}).'
 
 
@@ -545,7 +545,7 @@ def _live_info_from_git(url: str, info: dict) -> dict:
     if api_error and detect_provider(url) != 'generic':
         host = split_repo_url(url)[0]
         info['repo_notice'] = (f'{api_error} Showing what git itself provides — add a token for '
-                               f'{host} in Admin → Settings → Git Host Tokens for full details.')
+                               f'{host} in Manage Git → Git tokens & hosts for full details.')
     return info
 
 

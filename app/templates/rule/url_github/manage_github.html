@@ -119,6 +119,18 @@
             Monitor imported repositories, review update history, and automate recurring Git syncs.
         </p>
         {% if current_user.is_admin() or current_user.has_permission('github.manage') %}
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <a href="/rule/github/settings" class="btn btn-sm rounded-pill px-3"
+               style="background:transparent;border:1px solid var(--border-color);color:var(--text-color);">
+                <i class="fa-solid fa-key me-1"></i>Git tokens &amp; hosts
+            </a>
+            <a href="/admin/rule_mirror" class="btn btn-sm rounded-pill px-3"
+               style="background:transparent;border:1px solid var(--border-color);color:var(--text-color);">
+                <i class="fa-brands fa-git-alt me-1"></i>Rulesets
+            </a>
+        </div>
+        {% endif %}
+        {% if current_user.is_admin() or current_user.has_permission('github.manage') %}
         <!-- ── GitHub API quota — admin/GitHub-manager only, top-right corner
              of the banner (same "badges in the corner" idiom used on detail
              pages). Donut = used vs remaining out of the hourly limit;

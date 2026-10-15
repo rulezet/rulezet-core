@@ -145,3 +145,24 @@
 .kit-menu .dropdown-item { color: var(--text-color); }
 .kit-menu__hint { display: block; margin-left: 1.6rem; font-size: .72rem; color: var(--subtle-text-color); }
 .kit-lock { font-size: .7rem; color: var(--subtle-text-color); }
+
+/* Git tokens & hosts page (rule/url_github/git_settings.html) */
+.gs-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; padding: .85rem 0; border-bottom: 1px dashed var(--border-color); }
+.gs-row:last-of-type { border-bottom: 0; }
+.gs-row__label { flex: 1 1 360px; min-width: 0; }
+.gs-row__value { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.gs-hint { font-size: .8rem; color: var(--subtle-text-color); max-width: 620px; }
+.gs-state { display: inline-flex; align-items: center; gap: .35rem; font-size: .82rem; font-weight: 600; }
+.gs-state--ok { color: #198754; }
+.gs-state--off { color: var(--subtle-text-color); }
+.gs-edit { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .25rem 0 .75rem; }
+.gs-edit .form-control { flex: 1 1 320px; max-width: 520px; }
+.gs-test { margin: .25rem 0 .5rem; font-size: .82rem; }
+.gs-test--ok { color: #198754; }
+.gs-test--ko { color: #dc3545; }
+.gs-host { padding: .15rem .6rem; border-radius: 999px; background: var(--light-bg-color); font-size: .78rem; }
+
+/* Git tokens & hosts — "How do I generate this token?" */
+.gs-help { margin: .5rem 0 1rem; font-size: .85rem; }
+.gs-help summary { cursor: pointer; color: var(--bs-primary); }
+.gs-help ol { margin-bottom: .5rem; }

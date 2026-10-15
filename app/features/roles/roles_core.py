@@ -36,7 +36,7 @@ DEFAULT_PERMISSIONS = [
     {
         "key": "github.manage",
         "label": "Manage Git imports",
-        "description": "Import/update/sync git repositories (GitHub, GitLab, Gitea…), decide import proposals, "
+        "description": "Import/update/sync git repositories (GitHub, GitLab, Gitea…), manage the Rulesets mirrors, decide import proposals, "
                         "and manage bad rules from any source.",
     },
 ]
@@ -65,7 +65,7 @@ DEFAULT_ROLES = [
         "name": "Git Manager",
         # Renamed in place on startup — same role, same members.
         "legacy_names": ["GitHub Manager"],
-        "description": "Full control over Git import/update/sync (GitHub, GitLab, Gitea…) and proposals, "
+        "description": "Full control over Git import/update/sync (GitHub, GitLab, Gitea…), the Rulesets mirrors and proposals, "
                         "plus access to all bad rules.",
         "permission_keys": ["github.manage"],
     },

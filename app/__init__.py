@@ -129,6 +129,7 @@ def create_app(start_worker=True):
     from app.features.admin.app_settings.app_settings_routes import app_settings_blueprint
     from app.features.starfield.starfield import starfield_blueprint
     from app.features.vulnerability.vulnerability import vulnerability_blueprint
+    from app.features.rule.rule_from_github.git_settings.git_settings_routes import git_settings_blueprint
     from app.features.alert.alert import alert_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
@@ -163,6 +164,7 @@ def create_app(start_worker=True):
     app.register_blueprint(app_settings_blueprint)
     app.register_blueprint(starfield_blueprint)
     app.register_blueprint(vulnerability_blueprint)
+    app.register_blueprint(git_settings_blueprint)
     app.register_blueprint(alert_blueprint, url_prefix='/alert')
 
     from app.api.api import api_blueprint

@@ -23,9 +23,11 @@ rule_mirror_blueprint = Blueprint(
 
 @rule_mirror_blueprint.before_request
 def _require_admin():
+    """Admins and Git Managers (github.manage) — Rulesets is part of keeping
+    the rules in sync with Git, the Git Manager's job."""
     if not current_user.is_authenticated:
         return redirect(url_for('account.login'))
-    if not current_user.is_admin():
+    if not (current_user.is_admin() or current_user.has_permission('github.manage')):
         abort(403)
 
 

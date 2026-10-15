@@ -100,6 +100,10 @@
                            href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Git Sources</a></li>
                      <li><a class="dropdown-item {% if request.path == '/rule/github/manage' %}active{% endif %}"
                            href="/rule/github/manage"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Git</a></li>
+                     {% if current_user.is_admin() %}
+                     <li><a class="dropdown-item {% if request.path == '/rule/github/settings' %}active{% endif %}"
+                           href="/rule/github/settings"><i class="fa-solid fa-key fa-fw me-2"></i>Git tokens &amp; hosts</a></li>
+                     {% endif %}
                      <li><a class="dropdown-item" href="/rule/create_rule?tab=github">
                            <i class="fa-solid fa-file-import fa-fw me-2"></i>Import Rules</a></li>
                      <li>
@@ -321,6 +325,10 @@
                            <span v-if="update_to_validate > 0" class="badge rounded-pill bg-danger ms-2">[[ update_to_validate ]]</span>
                         </a>
                      </li>
+                     <li><a class="dropdown-item {% if request.path.startswith('/admin/rule_mirror') %}active{% endif %}"
+                           href="/admin/rule_mirror"><i class="fa-brands fa-git-alt fa-fw me-2"></i>Rulesets</a></li>
+                     <li><a class="dropdown-item {% if request.path == '/rule/github/settings' %}active{% endif %}"
+                           href="/rule/github/settings"><i class="fa-solid fa-key fa-fw me-2"></i>Git tokens &amp; hosts</a></li>
                   </ul>
                </li>
                {% endif %}
