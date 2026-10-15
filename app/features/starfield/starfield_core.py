@@ -119,6 +119,11 @@ def record_run(data, user_id=None):
     )
     db.session.add(run)
     db.session.commit()
+    if user_id:
+        # Badges are evaluated on the profile's gamification row — make sure a
+        # player who never contributed has one, so the hidden badges can unlock.
+        from app.features.account.account_core import get_or_create_gamification_profile
+        get_or_create_gamification_profile(user_id)
     return run, None
 
 

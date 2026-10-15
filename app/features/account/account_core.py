@@ -1425,10 +1425,17 @@ def get_user_contributions_data(user_id: int) -> dict:
     new_badges = evaluate_badges(stats)
     unlocked = UserBadge.query.filter_by(user_id=user_id).all()
 
+    # Secret badges aren't in the public catalog — send the ones this
+    # profile has, so they show up (and only them).
+    from .badges import badges_catalog_json
+    unlocked_keys = {b.badge_key for b in unlocked}
+    secret_badges = [b for b in badges_catalog_json(unlocked_keys) if b['secret']]
+
     return {
         "user_stats": stats.to_json(),
         "badges": [b.to_json() for b in unlocked],
         "new_badges": new_badges,
+        "secret_badges": secret_badges,
     }
 
 def recompute_gamification_batch(user_ids: list) -> int:

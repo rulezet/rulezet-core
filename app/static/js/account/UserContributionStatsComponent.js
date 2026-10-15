@@ -82,6 +82,10 @@ const UserContributionStatsComponent = {
 
                 const badges = data.badges || [];
                 unlockedKeys.value = new Set(badges.map(b => b.badge_key));
+                // Secret badges only exist once unlocked — add this profile's to the catalog.
+                const known = new Set(badgeCatalog.value.map(b => b.key));
+                const secrets = (data.secret_badges || []).filter(b => !known.has(b.key));
+                if (secrets.length) badgeCatalog.value = [...badgeCatalog.value, ...secrets];
                 const newBadges = data.new_badges || [];
 
                 if (mascotEnabled && newBadges.length && badgeCatalog.value.length) {
