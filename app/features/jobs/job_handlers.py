@@ -695,6 +695,88 @@ def handle_github_repo_resync(job, app):
             level='success', event='done')
 
 
+# ─── relink_rules ──────────────────────────────────────────────────────────────
+
+# Formats whose rules link to each other automatically: Wazuh (if_sid /
+# if_matched_sid parents), Kunai (shared hash), YARA (rules a condition names).
+RELINK_FORMATS = ('wazuh', 'kunai', 'yara')
+
+
+@register_handler('relink_rules')
+def handle_relink_rules(job, app):
+    """Look again for the links between rules already in the database — the
+    same detection an import runs, for rules imported before their parent
+    (Wazuh), in another import than their peers (Kunai) or before the rule
+    they name (YARA). Only adds links: existing ones (manual or automatic)
+    are kept and never duplicated.
+
+    Payload: formats (list, default all of RELINK_FORMATS), source (optional,
+    a repository URL — only that source's rules).
+    """
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.rule_relation import RuleRelation
+    from app.features.rule.rule_core import _active
+    from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, load_all_rule_formats
+    from app.features.rule.rule_format.available_format.yara_format import sync_yara_dependency_relations
+    from app.features.rule_relation.rule_relation_core import resolve_and_link_relations
+
+    payload = job.payload or {}
+    formats = [f for f in (payload.get('formats') or RELINK_FORMATS) if f in RELINK_FORMATS]
+    source = (payload.get('source') or '').strip() or None
+    if not formats:
+        log_job(job, 'No format to relink.', level='error', event='failed')
+        job.status, job.error = 'failed', 'No format to relink.'
+        db.session.commit()
+        return
+
+    load_all_rule_formats()
+    instances = {ri.format: ri for ri in (cls() for cls in RuleType.__subclasses__()) if ri.format in formats}
+
+    query = _active().filter(Rule.format.in_(formats))
+    if source:
+        query = query.filter(Rule.source == source)
+    rule_ids = [rid for (rid,) in query.with_entities(Rule.id).order_by(Rule.format, Rule.id).all()]
+    job.total = len(rule_ids)
+    db.session.commit()
+    links_before = RuleRelation.query.count()
+    log_job(job, f"Looking for links between {len(rule_ids)} rule(s) — {', '.join(formats)}"
+                 f"{f' from {source}' if source else ''}…", level='info', event='start')
+
+    # One map for the whole run: Kunai rules sharing a hash are linked even
+    # when they came in through different imports.
+    correlation_seen = {}
+    errors = 0
+    for i, rule_id in enumerate(rule_ids, start=1):
+        if i % 50 == 0 and _is_cancelled(job):
+            log_job(job, f'Cancelled after {job.done}/{job.total} rule(s).', level='warning', event='cancelled')
+            return
+        rule = db.session.get(Rule, rule_id)
+        try:
+            if rule.format == 'yara':
+                sync_yara_dependency_relations(rule)
+            elif rule.format in instances:
+                metadata = {'format': rule.format, 'source': rule.source, 'title': rule.title,
+                            'github_path': rule.github_path, 'branch': rule.branch}
+                resolve_and_link_relations(instances[rule.format], rule.to_string or '', metadata, rule,
+                                           correlation_seen)
+        except Exception as e:
+            db.session.rollback()
+            errors += 1
+            if errors <= 20:
+                log_job(job, f'Rule {rule_id} ({rule.format}) skipped: {str(e)[:200]}', level='warning', event='progress')
+        job.done = i
+        if i % 50 == 0 or i == len(rule_ids):
+            db.session.commit()
+            if i % 500 == 0:
+                log_job(job, f'{i}/{len(rule_ids)} — {RuleRelation.query.count() - links_before} new link(s) so far.',
+                        level='info', event='progress')
+
+    created = RuleRelation.query.count() - links_before
+    log_job(job, f'Done — {created} new link(s) across {len(rule_ids)} rule(s)'
+                 f"{f', {errors} rule(s) skipped on an error' if errors else ''}.",
+            level='warning' if errors else 'success', event='done')
+
+
 # ─── git_cache_pull ────────────────────────────────────────────────────────────
 
 @register_handler('git_cache_pull')

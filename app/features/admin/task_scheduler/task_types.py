@@ -114,6 +114,25 @@ TASK_TYPES = {
         # button — a correctness backstop for GithubRepo's incremental sync
         # (see github_repo_core.py), safe to run repeatedly/on a schedule.
     },
+    'relink_rules': {
+        'label': 'Linked rules — look again for links between rules (Wazuh, Kunai, YARA)',
+        'icon': 'fa-solid fa-diagram-project',
+        'job_type': 'relink_rules',
+        'target_picker': 'none',
+        # The detection an import runs, over rules already in the database:
+        # Wazuh children imported before their parent, Kunai rules sharing a
+        # hash across imports, YARA rules imported before a rule they name.
+        # Only adds links, never duplicates — safe after every Git import.
+        'extra_options': [
+            {'key': 'formats', 'type': 'multiselect', 'label': 'Rule formats',
+             'options': [{'value': 'wazuh', 'label': 'Wazuh — if_sid / if_matched_sid parents'},
+                         {'value': 'kunai', 'label': 'Kunai — rules sharing a hash'},
+                         {'value': 'yara', 'label': 'YARA — rules a condition names (long: compiles every rule, ~30 min for 250k)'}],
+             'default': ['wazuh', 'kunai']},
+            {'key': 'source', 'type': 'text', 'label': 'Only rules from this repository URL (optional)', 'default': ''},
+        ],
+        'required_options': ['formats'],
+    },
     'rule_git_mirror_sync': {
         'label': 'Rulesets — sync',
         'icon': 'fa-brands fa-git-alt',
