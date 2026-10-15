@@ -166,6 +166,16 @@ BADGES = [
 BADGES_BY_KEY = {b['key']: b for b in BADGES}
 
 
+def secret_badges_json() -> list:
+    """The secret badges, for the "Hidden badges" teaser on How to earn
+    points — name and cryptic description only, never how to get them."""
+    return [
+        {'key': b['key'], 'name': b['name'], 'description': b['description'],
+         'icon': b['icon'], 'color': b['color'], 'rulezy_pose': b['rulezy_pose']}
+        for b in BADGES if b.get('secret')
+    ]
+
+
 def badges_catalog_json(unlocked_keys=None) -> list:
     """Badge catalog without the check() lambdas — safe to serialize for
     the API / the "How to earn points" page. Secret badges are left out,

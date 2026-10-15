@@ -17,6 +17,9 @@ import time
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'static')
 MODULES_DIR = os.path.join(STATIC_DIR, 'js')
 REFRESH_SECONDS = 2   # how often the import map is rebuilt (cheap: one stat per file)
+# Never listed in the import map, which is in every page's source: the hidden
+# game must stay hidden. Its modules still load (unversioned) on its own page.
+HIDDEN_DIRS = (os.path.join(MODULES_DIR, 'starfield'),)
 
 _map_cache = {'built_at': 0.0, 'imports': {}}
 
@@ -36,6 +39,8 @@ def import_map():
         return _map_cache['imports']
     imports = {}
     for root, _dirs, files in os.walk(MODULES_DIR):
+        if root.startswith(HIDDEN_DIRS):
+            continue
         for name in files:
             if not name.endswith('.js'):
                 continue

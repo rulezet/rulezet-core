@@ -914,7 +914,8 @@ def how_to_earn_points() -> str:
     drift out of sync with the real values, unlike the old hand-duplicated
     frontend copy this replaces."""
     from app.core.db_class.gamification import LEVEL_THRESHOLDS, POINTS
-    from .badges import badges_catalog_json
+    from .badges import badges_catalog_json, secret_badges_json
+    from app.core.db_class.gamification import UserBadge
 
     point_sources = [
         {**copy, 'key': key, 'points': POINTS[key]}
@@ -926,6 +927,8 @@ def how_to_earn_points() -> str:
         point_sources=point_sources,
         level_thresholds=sorted(LEVEL_THRESHOLDS.items()),
         badges=badges_catalog_json(),
+        secret_badges=secret_badges_json(),
+        my_badge_keys={b.badge_key for b in UserBadge.query.filter_by(user_id=current_user.id)},
     )
 
 
