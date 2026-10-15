@@ -77,6 +77,23 @@ def _auto_title(action: str) -> str:
     return ' '.join(p.capitalize() for p in parts)
 
 
+_GIT_ICONS = ('fa-brands fa-github', 'fab fa-github', 'fa-brands fa-git-alt')
+
+
+def _git_host_icon(icon, extra):
+    """A git-repository log entry gets its host's icon (GitHub, GitLab,
+    Gitea…) — read from the repository URL in `extra` (url / repo_url /
+    the first of urls); the generic git icon when there is none."""
+    if icon not in _GIT_ICONS:
+        return icon
+    extra = extra or {}
+    url = extra.get('url') or extra.get('repo_url') or next(iter(extra.get('urls') or []), None)
+    if not isinstance(url, str) or not url.startswith(('http://', 'https://')):
+        return 'fa-brands fa-git-alt'
+    from app.features.rule.rule_format.utils_format.git_provider import PROVIDER_ICONS, detect_provider
+    return PROVIDER_ICONS[detect_provider(url)]
+
+
 def log_activity(
     action: str,
     description: str,
@@ -177,6 +194,7 @@ def log_activity(
             else (action in _PUBLIC_ACTIONS))
         resolved_icon      = icon if icon is not None else (
             (override or {}).get('icon') or _default_icon(action))
+        resolved_icon      = _git_host_icon(resolved_icon, extra)
         resolved_title     = title if title is not None else (
             (override or {}).get('title') or _auto_title(action))
         resolved_category  = category if category is not None else (

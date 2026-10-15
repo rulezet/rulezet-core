@@ -44,7 +44,7 @@ _TYPE_ICON = {
     'job_created':             'fa-solid fa-clock',
     'job_finished':            'fa-solid fa-circle-check',
     'job_failed':              'fa-solid fa-circle-xmark',
-    'github_import_done':      'fa-brands fa-github',
+    'github_import_done':      'fa-brands fa-git-alt',
     'github_update_done':      'fa-solid fa-code-branch',
     'proposal_submitted':      'fa-solid fa-code-pull-request',
     'proposal_comment':        'fa-solid fa-message',
@@ -62,10 +62,10 @@ _TYPE_ICON = {
     'blog_published':          'fa-solid fa-newspaper',
     'github_token_invalid':    'fa-solid fa-key',
     'sync_run_finished':       'fa-solid fa-arrows-rotate',
-    'github_proposal_submitted':   'fa-brands fa-github',
+    'github_proposal_submitted':   'fa-brands fa-git-alt',
     'github_proposal_approved':    'fa-solid fa-circle-check',
     'github_proposal_rejected':    'fa-solid fa-circle-xmark',
-    'github_proposal_import_done': 'fa-brands fa-github',
+    'github_proposal_import_done': 'fa-brands fa-git-alt',
     'role_granted':             'fa-solid fa-user-shield',
     'role_removed':             'fa-solid fa-user-slash',
     'workflow_run_started':     'fa-solid fa-code-branch',
@@ -379,7 +379,7 @@ def notify_admins_session_started(user, session_type, session_uuid, label, link)
             return
 
         _icons = {
-            'github_import': 'fa-brands fa-github',
+            'github_import': 'fa-brands fa-git-alt',
             'github_update': 'fa-solid fa-code-branch',
             'similarity':    'fa-solid fa-code-compare',
         }
