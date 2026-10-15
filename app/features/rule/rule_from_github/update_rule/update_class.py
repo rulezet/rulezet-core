@@ -100,6 +100,10 @@ class Update_class:
         self._finalized    = False
         self._save_done    = Event()
         self._workers_done = 0
+        # Keep the clone cache (Manage Git → Clear cache) from being emptied
+        # while this update reads the repositories.
+        from app.features.rule.rule_format.utils_format.utils_import_update import hold_repo_cache
+        hold_repo_cache(self._save_done.is_set)
 
     # ------------------ MAIN METHODS ------------------
 

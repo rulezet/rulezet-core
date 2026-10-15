@@ -158,6 +158,46 @@
                 </div>
             </div>
         </div>
+
+        <!-- Clone cache -->
+        <div class="h-card">
+            <div class="h-card__header">
+                <div class="h-card__accent"></div>
+                <i class="fa-solid fa-hard-drive kit-head-icon"></i>
+                <span class="h-card__title">Clone cache</span>
+            </div>
+            <div class="h-card__body">
+                <div class="gs-row">
+                    <div class="gs-row__label">
+                        <div class="fw-semibold">Cloned repositories</div>
+                        <div class="gs-hint">Every repository imported or updated is kept on the server, so the next update doesn't
+                            download it again. <strong>Pull all</strong> fetches the latest commits of every clone (before re-importing
+                            a repository that changed, for instance); <strong>Clear cache</strong> frees the disk space — each
+                            repository is simply cloned again the next time it is needed. Both are refused while a Git import or
+                            update is running, and an import started meanwhile waits for them.</div>
+                    </div>
+                    <div class="gs-row__value">
+                        <span v-if="!cache" class="spinner-border spinner-border-sm text-secondary"></span>
+                        <span v-else class="gs-state" :class="cache.repos ? 'gs-state--ok' : 'gs-state--off'">
+                            <i class="fa-solid fa-box-archive"></i>[[ cache.repos ]] clone[[ cache.repos === 1 ? '' : 's' ]] · [[ formatSize(cache.size_bytes) ]]
+                        </span>
+                        <button type="button" class="kit-btn" @click="pullAll" :disabled="pulling || !cache || !cache.repos">
+                            <span v-if="pulling" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fa-solid fa-code-pull-request me-1"></i>Pull all
+                        </button>
+                        <button type="button" :class="['kit-btn', confirmClear ? 'kit-btn--danger' : '']" @click="clearCache"
+                                :disabled="clearing || !cache || !cache.repos">
+                            <span v-if="clearing" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fa-solid fa-broom me-1"></i>[[ confirmClear ? 'Click again to clear' : 'Clear cache' ]]
+                        </button>
+                    </div>
+                </div>
+                <div v-if="pullJob" class="gs-test gs-test--ok">
+                    <i class="fa-solid fa-code-pull-request me-1"></i>Pull running in the background —
+                    <a :href="'/jobs/detail/' + pullJob">follow it on its job page</a>.
+                </div>
+            </div>
+        </div>
     </template>
 </div>
 {% endblock %}

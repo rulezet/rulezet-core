@@ -63,6 +63,8 @@
 .kit-btn:hover { border-color: #0d6efd; color: #0d6efd; }
 .kit-btn:disabled { opacity: .6; pointer-events: none; }
 .kit-btn--muted { color: var(--subtle-text-color); }
+.kit-btn--danger { color: #fff; background: #dc3545; border-color: #dc3545; }
+.kit-btn--danger:hover { color: #fff; background: #b02a37; border-color: #b02a37; }
 
 /* Section card headers (h-card from detail_rule_section_card.css) */
 .kit-head-icon { font-size: .8rem; color: var(--subtle-text-color); }

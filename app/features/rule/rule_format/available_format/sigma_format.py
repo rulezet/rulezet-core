@@ -9,6 +9,9 @@ from jsonschema import ValidationError
 from jsonschema.validators import validator_for
 
 from sigma.collection import SigmaCollection
+
+_TOP_LOGSOURCE = re.compile(r'^logsource:[ \t]*$', re.MULTILINE)
+_TOP_DETECTION = re.compile(r'^detection:[ \t]*$', re.MULTILINE)
 from sigma.validation import SigmaValidator
 from sigma.validators.base import SigmaValidationIssueSeverity
 from sigma.validators.core import validators as _sigma_validators
@@ -168,13 +171,13 @@ class SigmaRule(RuleType):
         try:
             doc = yaml.safe_load(content)
         except Exception:
-            return False
-        if not isinstance(doc, dict):
-            return False
-        return (
-            isinstance(doc.get('logsource'), dict) and
-            isinstance(doc.get('detection'), dict)
-        )
+            doc = None
+        if isinstance(doc, dict):
+            return isinstance(doc.get('logsource'), dict) and isinstance(doc.get('detection'), dict)
+        # Not parseable as one YAML document — the caller may only pass the
+        # first few KB of a big file, cut mid-rule. Fall back to the two
+        # top-level keys themselves.
+        return bool(_TOP_LOGSOURCE.search(content) and _TOP_DETECTION.search(content))
 
     ##############################
     #     DOCUMENTATION SIGNALS  #

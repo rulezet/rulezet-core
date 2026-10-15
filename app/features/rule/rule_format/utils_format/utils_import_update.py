@@ -1,9 +1,13 @@
 #---------------------------------------------------------------------------------------For_all_rules_types----------------------------------------------------------------------------------------------------------#
 
+import contextlib
+import fcntl
 import os
 import re
 import shutil
 import subprocess
+import threading
+import time
 from urllib.parse import urlparse
 from flask_login import current_user
 import datetime
@@ -87,6 +91,67 @@ def get_repo_name_from_url(repo_url):
   
 
 RULES_GITHUB_DIR = "app/rule_from_github/Rules_Github"
+
+# ── Clone cache lock ──
+# Every import / update holds a SHARED lock on this file for as long as it
+# uses the clones; clearing the cache needs the EXCLUSIVE lock, so it is
+# refused while anything is reading a clone, and an import started during a
+# clear waits for it to finish. flock() works across the gunicorn workers and
+# the job worker, and the OS drops the lock if a process dies.
+_CACHE_LOCK_FILE = os.path.join(os.path.dirname(RULES_GITHUB_DIR), '.clone_cache.lock')
+CLONE_LEASE_SECONDS = 300          # from the clone until the import / update session takes over
+MAX_CACHE_HOLD_SECONDS = 6 * 3600  # a session that never finishes can't block the clear forever
+
+
+def _open_cache_lock(mode):
+    os.makedirs(os.path.dirname(_CACHE_LOCK_FILE), exist_ok=True)
+    handle = open(_CACHE_LOCK_FILE, 'a')
+    try:
+        fcntl.flock(handle, mode)
+    except BaseException:
+        handle.close()
+        raise
+    return handle
+
+
+def _release_cache_lock(handle):
+    try:
+        fcntl.flock(handle, fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+
+@contextlib.contextmanager
+def repo_cache_in_use():
+    """Hold the clone cache for the duration of the block."""
+    handle = _open_cache_lock(fcntl.LOCK_SH)
+    try:
+        yield
+    finally:
+        _release_cache_lock(handle)
+
+
+def hold_repo_cache(done=None, max_seconds=MAX_CACHE_HOLD_SECONDS):
+    """Hold the clone cache from now until done() returns True (checked every
+    2 s) or max_seconds have passed — for imports / updates whose threads
+    outlive the call that started them."""
+    handle = _open_cache_lock(fcntl.LOCK_SH)
+
+    def _wait():
+        deadline = time.monotonic() + max_seconds
+        try:
+            while time.monotonic() < deadline:
+                try:
+                    if done is not None and done():
+                        return
+                except Exception:
+                    return
+                time.sleep(2)
+        finally:
+            _release_cache_lock(handle)
+
+    threading.Thread(target=_wait, daemon=True, name='clone-cache-hold').start()
+
 # A git branch name as a user may type it: no ".." (path escape), no leading
 # "-" (read as an option by `git checkout <branch>`) or "/".
 _BRANCH_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/+-]{0,199}$')
@@ -126,6 +191,9 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
     """
     base_dir = RULES_GITHUB_DIR
     os.makedirs(base_dir, exist_ok=True)
+    # Covers the clone and the few calls until the import / update session
+    # takes the cache over (see hold_repo_cache).
+    hold_repo_cache(max_seconds=CLONE_LEASE_SECONDS)
 
     if branch and not is_valid_branch_name(branch):
         raise Exception(f"Invalid branch name: '{str(branch)[:80]}'.")
@@ -169,18 +237,15 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
                 raise Exception("Authentication failed — the repository may be private. Add a token for this host in Manage Git → Git tokens & hosts.")
             raise Exception(f"Clone failed: {err.split('stderr:')[-1].strip()[:200]}")
     else:
-        # Repo already cached — make sure we are on the right branch and up-to-date
-        if branch:
-            try:
-                repo = Repo(repo_dir)
-                repo.git.checkout(branch)
-                with repo.git.custom_environment(**git_provider.git_env(repo_url)):
-                    repo.remotes.origin.pull()
-            except Exception as e:
-                err = str(e)
-                if "did not match any" in err or "pathspec" in err or "not found" in err.lower():
-                    raise Exception(f"Branch '{branch}' does not exist in this repository.")
-                raise Exception(f"Error switching to branch '{branch}': {err.split('stderr:')[-1].strip()[:200]}")
+        # Repo already cached — bring it to the remote's latest commit, or
+        # start over with a fresh clone when that fails (a re-import must
+        # never read stale files).
+        ok, message = refresh_clone(repo_dir, repo_url, branch)
+        if not ok:
+            if branch and ("couldn't find remote ref" in message or "not found" in message.lower()):
+                raise Exception(f"Branch '{branch}' does not exist in this repository.")
+            shutil.rmtree(repo_dir, ignore_errors=True)
+            return clone_or_access_repo(repo_url, branch=branch, is_generic_source=is_generic_source)
 
     return repo_dir, existe
 
@@ -304,6 +369,66 @@ def get_github_repo_live_info(repo_url: str) -> dict:
     return {'provider': 'github', 'provider_label': 'GitHub',
             'repo': repo, 'repo_error': repo_error, 'commits': commits,
             'branches': branches, 'contributors': contributors}
+
+def repo_cache_stats():
+    """Size of the local clone cache (RULES_GITHUB_DIR) and how many clones it holds."""
+    size, repos = 0, 0
+    if not os.path.isdir(RULES_GITHUB_DIR):
+        return {'size_bytes': 0, 'repos': 0}
+    for root, dirs, files in os.walk(RULES_GITHUB_DIR):
+        if '.git' in dirs:
+            repos += 1
+        for f in files:
+            try:
+                size += os.lstat(os.path.join(root, f)).st_size
+            except OSError:
+                pass
+    return {'size_bytes': size, 'repos': repos}
+
+
+def list_cached_clones():
+    """Every clone in the cache (folders holding a .git), sorted."""
+    clones = []
+    if os.path.isdir(RULES_GITHUB_DIR):
+        for root, dirs, _files in os.walk(RULES_GITHUB_DIR):
+            if '.git' in dirs:
+                clones.append(root)
+                dirs[:] = []          # don't walk into the clone itself
+    return sorted(clones)
+
+
+@contextlib.contextmanager
+def repo_cache_exclusive():
+    """Yield True with the clone cache to ourselves (nothing imports or
+    updates meanwhile), or False when an import / update is using it."""
+    try:
+        handle = _open_cache_lock(fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        yield False
+        return
+    try:
+        yield True
+    finally:
+        _release_cache_lock(handle)
+
+
+def clear_repo_cache():
+    """Delete every clone kept after an import or update — they are cloned
+    again the next time they are needed. Returns the stats of what was
+    removed, or None when an import / update is using the cache right now."""
+    with repo_cache_exclusive() as free:
+        if not free:
+            return None
+        removed = repo_cache_stats()
+        if os.path.isdir(RULES_GITHUB_DIR):
+            for entry in os.listdir(RULES_GITHUB_DIR):
+                path = os.path.join(RULES_GITHUB_DIR, entry)
+                if os.path.isdir(path) and not os.path.islink(path):
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    os.remove(path)
+        return removed
+
 
 def delete_existing_repo_folder(local_dir):
     """Delete the existing folder if it exists — only ever a clone under
@@ -518,30 +643,43 @@ def get_licst_license() -> list:
                 licenses.append(line)
     return licenses
 
-def git_pull_repo(repo_dir, repo_url=None):
-    """`git pull` in a clone — with the host's token when repo_url is given
-    (read from the clone's own remote otherwise)."""
-    if repo_url is None:
-        try:
-            repo_url = subprocess.run(
-                ["git", "-C", repo_dir, "remote", "get-url", "origin"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10,
-            ).stdout.strip()
-        except subprocess.TimeoutExpired:
-            repo_url = ''
+def _git(repo_dir, *args, env=None, timeout=120):
+    return subprocess.run(["git", "-C", repo_dir, *args], env=env, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True, timeout=timeout)
+
+
+def refresh_clone(repo_dir, repo_url=None, branch=None):
+    """Make a cached clone exactly the remote's latest commit: fetch the tip of
+    its branch, `reset --hard` onto it and drop untracked files. Unlike `git
+    pull`, this works on the shallow (--depth 1) clones kept here and can't
+    stop on a merge or a local change. Returns (ok, message)."""
     try:
-        result = subprocess.run(
-            ["git", "-C", repo_dir, "pull"],
-            env={**os.environ, **git_provider.git_env(repo_url or '')},
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True,
-            timeout=120,
-        )
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return False
+        if repo_url is None:
+            repo_url = _git(repo_dir, "remote", "get-url", "origin", timeout=10).stdout.strip()
+        if not branch:
+            branch = _git(repo_dir, "rev-parse", "--abbrev-ref", "HEAD", timeout=10).stdout.strip()
+        if not branch or branch == 'HEAD' or not is_valid_branch_name(branch):
+            return False, 'Unknown branch.'
+        env = {**os.environ, **git_provider.git_env(repo_url or '')}
+        fetched = _git(repo_dir, "fetch", "--depth", "1", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}", env=env)
+        if fetched.returncode != 0:
+            return False, fetched.stderr.strip()[:300]
+        for args in (("checkout", "-q", "-f", "-B", branch, f"origin/{branch}"),
+                     ("reset", "-q", "--hard", f"origin/{branch}"),
+                     ("clean", "-q", "-fdx")):
+            done = _git(repo_dir, *args, env=env, timeout=60)
+            if done.returncode != 0:
+                return False, done.stderr.strip()[:300]
+        return True, 'Up to date.'
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return False, str(e)[:300]
+
+
+def git_pull_repo(repo_dir, repo_url=None):
+    """Bring a cached clone to the remote's latest commit (see refresh_clone) —
+    with the host's token when repo_url is given (read from the clone's own
+    remote otherwise)."""
+    return refresh_clone(repo_dir, repo_url)[0]
 
 
 def get_repo_head_sha(repo_dir):

@@ -10,7 +10,7 @@ from app.api.utils.rule_validation import *
 from app.core.db_class.rule import Rule
 
 from app.features.rule.rule_format.main_format import extract_rule_from_repo, verify_syntax_rule_by_format
-from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, delete_existing_repo_folder, generic_repo_metadata, github_repo_metadata, valider_repo_github
+from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, delete_existing_repo_folder, repo_cache_in_use, generic_repo_metadata, github_repo_metadata, valider_repo_github
 from app.core.utils import utils
 from app.core.utils.decorators import api_required
 from app.core.utils.activity_log import log_activity
@@ -483,7 +483,8 @@ class ImportRulesFromGithub(Resource):
         if branch:
             info['branch'] = branch
         try:
-            bad_rules, imported, skipped = asyncio.run(extract_rule_from_repo(repo_dir, info , user))
+            with repo_cache_in_use():
+                bad_rules, imported, skipped = asyncio.run(extract_rule_from_repo(repo_dir, info , user))
             delete_existing_repo_folder("Rules_Github")
             log_activity(
                 "github.import_started",

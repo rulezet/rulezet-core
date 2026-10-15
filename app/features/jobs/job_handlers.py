@@ -695,6 +695,48 @@ def handle_github_repo_resync(job, app):
             level='success', event='done')
 
 
+# ─── git_cache_pull ────────────────────────────────────────────────────────────
+
+@register_handler('git_cache_pull')
+def handle_git_cache_pull(job, app):
+    """`git pull` every clone kept in the clone cache (Manage Git → Git tokens
+    & hosts → Pull all), so the next re-import or update reads the latest
+    files. Holds the cache exclusively: refused while an import / update is
+    reading a clone, and imports / updates started meanwhile wait for it."""
+    import os as _os
+    from app.features.rule.rule_format.utils_format.utils_import_update import (
+        RULES_GITHUB_DIR, git_pull_repo, list_cached_clones, repo_cache_exclusive,
+    )
+    with repo_cache_exclusive() as free:
+        if not free:
+            message = 'A Git import or update is using the cache right now — try again once it is done.'
+            log_job(job, message, level='error', event='failed')
+            job.status = 'failed'
+            job.error = message
+            db.session.commit()
+            return
+        clones = list_cached_clones()
+        job.total = len(clones)
+        db.session.commit()
+        log_job(job, f'Pulling {len(clones)} cached clone(s)…', level='info', event='start')
+        failed = 0
+        for path in clones:
+            if _is_cancelled(job):
+                log_job(job, f'Cancelled after {job.done}/{job.total}.', level='warning', event='cancelled')
+                return
+            name = _os.path.relpath(path, RULES_GITHUB_DIR)
+            if git_pull_repo(path):
+                log_job(job, f'{name} — up to date', level='info', event='progress')
+            else:
+                failed += 1
+                log_job(job, f'{name} — could not be refreshed (repository gone, token rejected or branch removed) — it will be cloned again on its next import',
+                        level='warning', event='progress')
+            job.done += 1
+            db.session.commit()
+    level = 'warning' if failed else 'success'
+    log_job(job, f'Done — {len(clones) - failed} pulled, {failed} failed.', level=level, event='done')
+
+
 # ─── github_import ─────────────────────────────────────────────────────────────
 
 @register_handler('github_import')

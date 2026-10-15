@@ -68,3 +68,53 @@ def test_github_token():
     """Is the GitHub token accepted, and how much API quota is left?"""
     from app.features.rule.rule_format.utils_format.utils_import_update import get_github_rate_limit_status
     return jsonify(get_github_rate_limit_status())
+
+
+# Jobs that clone into, or read from, the clone cache — clearing it under them
+# would break them mid-run.
+GIT_JOB_TYPES = ('github_import', 'github_repo_resync', 'github_repo_branch_backfill',
+                 'github_proposal_bulk_import', 'github_sync_schedule_run', 'delete_github_rules',
+                 'git_cache_pull')
+
+
+@git_settings_blueprint.route('/rule/github/settings/cache', methods=['GET'])
+def repo_cache():
+    from app.features.rule.rule_format.utils_format.utils_import_update import repo_cache_stats
+    return jsonify(repo_cache_stats())
+
+
+@git_settings_blueprint.route('/rule/github/settings/cache/clear', methods=['POST'])
+def clear_repo_cache():
+    """Delete the local clones kept after imports / updates (re-cloned when needed)."""
+    from app.core.db_class.job import BackgroundJob
+    from app.features.rule.rule_format.utils_format.utils_import_update import clear_repo_cache as clear
+    busy = BackgroundJob.query.filter(BackgroundJob.job_type.in_(GIT_JOB_TYPES),
+                                      BackgroundJob.status.in_(('pending', 'running', 'paused'))).count()
+    if busy:
+        return jsonify({'success': False,
+                        'message': f'{busy} Git job(s) running, waiting or paused — try again once they are done.'}), 409
+    removed = clear()
+    if removed is None:
+        return jsonify({'success': False,
+                        'message': 'A Git import or update is using the cache right now — try again once it is done.'}), 409
+    log_activity('github.cache_cleared', f"Cleared the git clone cache ({removed['repos']} clones)",
+                 extra=removed, is_public=False, icon='fa-solid fa-broom')
+    return jsonify({'success': True, 'removed': removed,
+                    'message': f"Cache cleared — {removed['repos']} clone(s) removed."})
+
+
+@git_settings_blueprint.route('/rule/github/settings/cache/pull', methods=['POST'])
+def pull_repo_cache():
+    """`git pull` every cached clone, as a background job (progress on its job page)."""
+    from app.core.db_class.job import BackgroundJob
+    from app.features.jobs import jobs_core
+    running = BackgroundJob.query.filter(BackgroundJob.job_type == 'git_cache_pull',
+                                         BackgroundJob.status.in_(('pending', 'running'))).first()
+    if running:
+        return jsonify({'success': True, 'job_uuid': running.uuid, 'message': 'A pull is already running.'})
+    job = jobs_core.create_job('git_cache_pull', {}, 'Git pull — every cached clone', current_user.id)
+    if job is None:
+        return jsonify({'success': False, 'message': 'Could not start the pull.'}), 500
+    log_activity('github.cache_pull', 'Started a git pull of every cached clone',
+                 extra={'job_uuid': job.uuid}, is_public=False, icon='fa-solid fa-code-pull-request')
+    return jsonify({'success': True, 'job_uuid': job.uuid, 'message': 'Pull started — follow it on the job page.'})

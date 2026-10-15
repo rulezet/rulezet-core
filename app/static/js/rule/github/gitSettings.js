@@ -1,6 +1,7 @@
 // Git tokens & hosts (templates/rule/url_github/git_settings.html, backend
 // features/rule/rule_from_github/git_settings): admins and Git Managers set
-// the GitHub token / host and the other git hosts and their tokens.
+// the GitHub token / host and the other git hosts and their tokens, and pull
+// or clear the cache of cloned repositories.
 import { create_message } from '/static/js/toaster.js';
 
 const { createApp, ref, onMounted } = Vue;
@@ -62,7 +63,65 @@ createApp({
             }
         }
 
-        onMounted(load);
-        return { loading, cfg, editing, draft, saving, testing, test, edit, cancel, save, testGithub };
+        // ── Clone cache ──
+        const cache = ref(null);
+        const clearing = ref(false);
+        const confirmClear = ref(false);
+        let confirmTimer = null;
+
+        async function loadCache() {
+            cache.value = await fetch('/rule/github/settings/cache').then(r => r.json()).catch(() => null);
+        }
+
+        function formatSize(bytes) {
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let i = 0;
+            while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+            return `${bytes.toFixed(i ? 1 : 0)} ${units[i]}`;
+        }
+
+        // Two clicks instead of a confirm() dialog: the first arms the button for 4 s.
+        async function clearCache() {
+            if (!confirmClear.value) {
+                confirmClear.value = true;
+                clearTimeout(confirmTimer);
+                confirmTimer = setTimeout(() => { confirmClear.value = false; }, 4000);
+                return;
+            }
+            confirmClear.value = false;
+            clearing.value = true;
+            try {
+                const res = await fetch('/rule/github/settings/cache/clear', {
+                    method: 'POST', headers: { 'X-CSRFToken': csrf(), Accept: 'application/json' },
+                });
+                const data = await res.json().catch(() => ({ success: false, message: `HTTP ${res.status}` }));
+                create_message(data.message, data.success ? 'success-subtle' : 'danger-subtle');
+                await loadCache();
+            } finally {
+                clearing.value = false;
+            }
+        }
+
+        const pulling = ref(false);
+        const pullJob = ref(null);
+        async function pullAll() {
+            pulling.value = true;
+            try {
+                const res = await fetch('/rule/github/settings/cache/pull', {
+                    method: 'POST', headers: { 'X-CSRFToken': csrf(), Accept: 'application/json' },
+                });
+                const data = await res.json().catch(() => ({ success: false, message: `HTTP ${res.status}` }));
+                create_message(data.message, data.success ? 'success-subtle' : 'danger-subtle');
+                if (data.job_uuid) pullJob.value = data.job_uuid;
+            } finally {
+                pulling.value = false;
+            }
+        }
+
+        onMounted(() => { load(); loadCache(); });
+        return {
+            loading, cfg, editing, draft, saving, testing, test, edit, cancel, save, testGithub,
+            cache, clearing, confirmClear, clearCache, formatSize, pulling, pullJob, pullAll,
+        };
     },
 }).mount('#main-container');
