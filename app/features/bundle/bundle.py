@@ -545,7 +545,7 @@ def search_note_tags():
         query = query.filter(Tag.name.ilike(f"%{q}%"))
     order = db.case(*[(Tag.name.ilike(p + "%"), i) for i, p in enumerate(NOTE_TAG_PREFIXES)], else_=99)
     tags = query.order_by(order, Tag.name).limit(40).all()
-    return jsonify({"success": True, "prefixes": list(NOTE_TAG_PREFIXES),
+    return jsonify({"success": True, "prefixes": [*NOTE_TAG_PREFIXES.value],
                     "tags": [{"id": t.id, "name": t.name, "color": t.color, "description": t.description} for t in tags]}), 200
 _MENTION_RE = re.compile(r"@\[[^\]]+\]\((\d+)\)")
 

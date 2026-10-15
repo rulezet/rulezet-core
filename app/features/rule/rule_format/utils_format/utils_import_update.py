@@ -467,24 +467,46 @@ def generic_repo_metadata(repo_url: str, selected_license: str, user) -> dict:
 
 def valider_repo_github(repo_url: str, is_generic_source: bool = False) -> bool:
     """
-    Check that a string is a repository URL on any git host (GitHub, GitLab,
-    Gitea/Forgejo, Bitbucket, a self-hosted server, …): http(s) and
-    /owner/repo (GitLab may nest more groups in between). The clone itself
-    (GitPython) works against any git remote regardless of host.
+    Is this a repository URL the server may clone / query? The server fetches
+    it, so this is also the SSRF gate:
 
-    is_generic_source=True also accepts a flat /repo path, which some plain
-    git servers use.
+    - always refused: credentials in the URL (user@host — also the
+      "github.com@evil.example" trick), localhost and any private, loopback,
+      link-local or reserved IP address (cloud metadata at 169.254.169.254…);
+    - accepted: a known git host — GitHub (and GITHUB_HOST), GitLab, Codeberg,
+      Bitbucket…, plus the hosts declared in Admin → Settings (GIT_HOSTS /
+      GIT_HOST_TOKENS); see git_provider.is_known_git_host;
+    - any other host only when the caller explicitly marks it as a generic
+      git server (is_generic_source=True) — a self-hosted server by name.
+
+    Path: /owner/repo (GitLab may nest groups); is_generic_source=True also
+    accepts a flat /repo, which some plain git servers use.
     """
+    import ipaddress
     try:
         parsed = urlparse(repo_url)
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return False
+        if '@' in parsed.netloc:
+            return False
+        host = parsed.hostname.lower().rstrip('.')
+        if host == 'localhost' or host.endswith('.localhost'):
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = None
+        if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local
+                               or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return False
+        if not is_generic_source and not git_provider.is_known_git_host(host):
             return False
         path_parts = [p for p in parsed.path.split('/') if p]
         min_parts = 1 if is_generic_source else 2
         if len(path_parts) < min_parts:
             return False
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 def get_licst_license() -> list:
