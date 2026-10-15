@@ -599,10 +599,10 @@ const GitHubSelectionTable = {
                             </td>
                             <td class="dt-td">
                                 <div v-if="!isRepoGroupContinuation(index)" class="d-flex align-items-center">
-                                    <div class="bg-light rounded p-2 me-3 flex-shrink-0" :title="gitProviderLabel(item.url, item.git_provider)">
+                                    <div class="ghst-icon-box rounded p-2 me-3 flex-shrink-0" :title="gitProviderLabel(item.url, item.git_provider)">
                                         <i :class="gitProviderIcon(item.url, item.git_provider)" class="fa-lg"></i>
                                     </div>
-                                    <div class="fw-bold text-dark" style="white-space:nowrap;">
+                                    <div class="fw-bold" style="white-space:nowrap;color:var(--text-color);">
                                         [[ item.url ]]
                                         <span v-if="isRepoGroupStart(index)"
                                               class="badge bg-primary-soft text-primary rounded-pill ms-1"
@@ -630,7 +630,7 @@ const GitHubSelectionTable = {
                             </td>
                             <td v-show="colVisible.branches" class="dt-td">
                                 <span v-if="item.branch"
-                                      class="badge bg-light text-muted fw-normal border-0"
+                                      class="badge ghst-chip fw-normal border-0"
                                       style="font-size:.7rem;"
                                       :title="item.branches.length > 1 ? 'This repo has rules from ' + item.branches.length + ' branches — this row is just ' + item.branch : 'Rules from this repo were imported from this branch'">
                                     <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ item.branch ]]
@@ -639,16 +639,16 @@ const GitHubSelectionTable = {
                             </td>
                             <td v-show="colVisible.license" class="dt-td" @click.stop>
                                 <span v-for="lic in (item.licensesExpanded ? item.licenses : (item.licenses || []).slice(0, 10))" :key="lic"
-                                      class="badge bg-light text-muted fw-normal border-0 me-1"
+                                      class="badge ghst-chip fw-normal border-0 me-1"
                                       style="font-size:.7rem;">[[ lic ]]</span>
                                 <button v-if="item.licenses && item.licenses.length > 10 && !item.licensesExpanded"
-                                        class="badge bg-light text-muted fw-normal border-0"
+                                        class="badge ghst-chip fw-normal border-0"
                                         style="font-size:.7rem;cursor:pointer;"
                                         @click="item.licensesExpanded = true">
                                     +[[ item.licenses.length - 10 ]]
                                 </button>
                                 <button v-else-if="item.licenses && item.licenses.length > 10"
-                                        class="badge bg-light text-muted fw-normal border-0"
+                                        class="badge ghst-chip fw-normal border-0"
                                         style="font-size:.7rem;cursor:pointer;"
                                         @click="item.licensesExpanded = false">
                                     <i class="fas fa-angle-up"></i>
@@ -690,7 +690,7 @@ const GitHubSelectionTable = {
                                                     <div class="text-danger mb-3">
                                                         <i class="fas fa-exclamation-triangle fa-3x"></i>
                                                     </div>
-                                                    <p class="mb-0 text-dark">
+                                                    <p class="mb-0 ghst-text">
                                                         Delete all rules for:<br>
                                                         <strong class="text-break">[[ item.url ]]</strong>?
                                                     </p>
@@ -782,7 +782,7 @@ const GitHubSelectionTable = {
                                                            style="font-size:0.7rem">Detected Formats</small>
                                                     <div class="d-flex flex-wrap gap-1">
                                                         <span v-for="fmt in item.formats" :key="fmt"
-                                                              class="badge border text-dark fw-normal">
+                                                              class="badge border ghst-text fw-normal">
                                                             [[ fmt ]]
                                                         </span>
                                                         <span v-if="!item.formats.length"
@@ -793,7 +793,7 @@ const GitHubSelectionTable = {
                                                     <div class="d-flex flex-wrap gap-1">
                                                         <span v-for="br in item.branches" :key="br"
                                                               class="badge fw-normal"
-                                                              :class="br === item.branch ? 'bg-primary text-white' : 'border text-dark'"
+                                                              :class="br === item.branch ? 'bg-primary text-white' : 'border ghst-text'"
                                                               :title="br === item.branch ? 'This row' : ''">
                                                             <i class="fas fa-code-branch me-1" style="font-size:.6rem;"></i>[[ br ]]
                                                         </span>
@@ -861,7 +861,7 @@ const GitHubSelectionTable = {
                                                             <span class="badge rounded-pill"
                                                                   :class="item.last_import.bad_rules > 0
                                                                       ? 'bg-danger text-white'
-                                                                      : 'bg-light text-muted px-3'">
+                                                                      : 'ghst-chip px-3'">
                                                                 [[ item.last_import.bad_rules ]]
                                                             </span>
                                                         </div>

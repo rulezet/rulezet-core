@@ -49,3 +49,14 @@
 }
 .ghf-host--active i { opacity: 1; }
 .ghf-host--active .ghf-host__count { background: rgba(255, 255, 255, .22); color: #fff; }
+
+/* Git Sources table — host icon box and branch / licence chips, readable in dark mode. */
+.ghst-icon-box {
+    background: var(--light-bg-color);
+    color: var(--text-color);
+}
+.ghst-chip {
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+}
+.ghst-text { color: var(--text-color); }
