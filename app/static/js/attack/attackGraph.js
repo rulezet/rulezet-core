@@ -199,7 +199,8 @@ export function rulesUrlForSelection(nodeData, nodeId) {
         return ids ? `/rule/rules_list?attacks=${ids}` : null
     }
     if (nodeData.type === 'technique' || nodeData.type === 'subtechnique') {
-        return nodeId ? `/rule/rules_list?attacks=${nodeId}` : null
+        // A technique has its own page: every rule for it, coverage, gaps.
+        return nodeId ? `/attack/technique/${encodeURIComponent(nodeId)}` : null
     }
     return null
 }
