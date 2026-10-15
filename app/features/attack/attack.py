@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from app import cache, memory_cache
 from app.core.utils.utils import as_db_id, json_object
 from . import attack_core as AttackModel
+from . import attack_kit_core as AttackKit
 from ..jobs import jobs_core as JobModel
 
 attack_blueprint = Blueprint('attack_blueprint', __name__)
@@ -190,12 +191,64 @@ def heatmap_data():
 
 @attack_blueprint.route('/technique/<string:technique_id>')
 def technique_detail(technique_id):
-    """Public technique detail page."""
-    from app.core.db_class.attack import AttackTechnique
-    tech = AttackTechnique.query.filter_by(technique_id=technique_id.upper()).first()
+    """Public technique page — built like the CVE response kit (attack_kit_core.py)."""
+    tech = AttackKit.get_technique(technique_id)
     if not tech:
         abort(404)
     return render_template('attack/technique_detail.html', technique=tech)
+
+
+@attack_blueprint.route('/technique/<string:technique_id>/kit_data')
+def technique_kit_data(technique_id):
+    tech = AttackKit.get_technique(technique_id)
+    if not tech:
+        abort(404)
+    data = AttackKit.build_kit(tech)
+    from app.features.rule.rule import _ai_generate_available
+    data['ai_draft'] = {'available': current_user.is_authenticated and _ai_generate_available(),
+                        'format': 'yara', 'prompt': AttackKit.ai_draft_prompt(tech)}
+    return jsonify(data)
+
+
+@attack_blueprint.route('/technique/<string:technique_id>/kit_stats')
+def technique_kit_stats(technique_id):
+    """The Coverage card's charts — fetched only when the card is opened."""
+    tech = AttackKit.get_technique(technique_id)
+    if not tech:
+        abort(404)
+    return jsonify(AttackKit.build_stats(tech))
+
+
+@attack_blueprint.route('/technique/<string:technique_id>/download')
+def technique_download(technique_id):
+    from flask import send_file
+    from app.core.utils.activity_log import log_activity
+    tech = AttackKit.get_technique(technique_id)
+    if not tech:
+        abort(404)
+    buffer, count = AttackKit.build_zip(tech)
+    if not count:
+        return jsonify({'success': False, 'message': 'There is no rule for this technique yet.'}), 404
+    log_activity('attack.kit_download', f'Downloaded the {tech.technique_id} detection kit ({count} rules)',
+                 extra={'technique_id': tech.technique_id, 'rules': count}, is_public=False, icon='fa-solid fa-file-zipper')
+    return send_file(buffer, mimetype='application/zip', as_attachment=True,
+                     download_name=f'{tech.technique_id}-rulezet-kit.zip')
+
+
+@attack_blueprint.route('/technique/<string:technique_id>/bundle', methods=['POST'])
+@login_required
+def technique_bundle(technique_id):
+    from app.core.utils.activity_log import log_activity
+    tech = AttackKit.get_technique(technique_id)
+    if not tech:
+        abort(404)
+    bundle, message = AttackKit.create_kit_bundle(tech, current_user)
+    if not bundle:
+        return jsonify({'success': False, 'message': message}), 400
+    log_activity('attack.kit_bundle', f'Created the bundle "{bundle.name}" from the {tech.technique_id} technique page',
+                 target_type='bundle', target_id=bundle.id, target_uuid=bundle.uuid,
+                 extra={'technique_id': tech.technique_id}, is_public=True, icon='fa-solid fa-boxes-stacked')
+    return jsonify({'success': True, 'message': message, 'bundle_id': bundle.id, 'url': f'/bundle/detail/{bundle.id}'})
 
 
 @attack_blueprint.route('/technique/<string:technique_id>/stats')

@@ -1250,7 +1250,11 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
 
                   const detectedVulnerabilities = ref(/^[A-Z0-9][A-Z0-9-]{3,40}$/.test(requestedCve) ? [requestedCve] : []);
                   const selectedTags = ref([]);
-                  const selectedAttacks = ref([]);
+                  // ?attack=T1003&attack_name=… (technique page's "Write it" links)
+                  const requestedAttack = (pageParams.get('attack') || '').trim().toUpperCase();
+                  const selectedAttacks = ref(/^T\d{4}(\.\d{3})?$/.test(requestedAttack)
+                        ? [{ technique_id: requestedAttack, name: (pageParams.get('attack_name') || requestedAttack).slice(0, 200), tactic_keys: [] }]
+                        : []);
                   const selectedRelatedRules = ref([]);
 
                   const formData = Vue.reactive({

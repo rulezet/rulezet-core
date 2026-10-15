@@ -1,0 +1,7 @@
+{
+  "label": "ATT&CK technique page — formats expected",
+  "category": "ATT&CK",
+  "description": "Formats a technique page checks for: a format in this list with no rule mapped to the technique is shown as a gap (\"no Sigma rule yet\"). Formats outside the list still appear when a rule exists.",
+  "public": true,
+  "value": ["sigma", "yara", "suricata", "zeek", "elastic", "splunk", "kql"]
+}
