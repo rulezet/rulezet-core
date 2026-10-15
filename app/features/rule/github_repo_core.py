@@ -53,7 +53,8 @@ import datetime
 from sqlalchemy.exc import IntegrityError
 
 from ... import db
-from ...core.db_class.db import Rule, GithubRepo
+from app.core.db_class.git import GithubRepo
+from app.core.db_class.rule import Rule
 
 from app.features.rule.rule_format.utils_format import git_provider
 
@@ -344,7 +345,7 @@ def sync_conflict_counts() -> dict:
     edit/delete sites into, since it's itself a batch/corpus-wide
     recompute, not a per-rule side effect."""
     from sqlalchemy import func
-    from ...core.db_class.db import RuleSimilarity
+    from app.core.db_class.similarity import RuleSimilarity
 
     rows = (
         db.session.query(Rule.source, func.count(func.distinct(Rule.id)))
@@ -376,7 +377,7 @@ def rebuild_github_repos_from_rules() -> dict:
     Returns {'repos': N, 'rules_counted': N} for a confirmation message.
     """
     from sqlalchemy import func, or_
-    from ...core.db_class.db import RuleSimilarity
+    from app.core.db_class.similarity import RuleSimilarity
 
     active_github = (git_source_filter(), Rule.is_deleted == False)
 

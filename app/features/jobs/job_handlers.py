@@ -25,7 +25,12 @@ from pathlib import Path
 
 from app.features.jobs.job_worker import register_handler
 from app import db
-from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJob, BackgroundJobLog, ActivityLog, RequestOwnerRule, User, GithubProposal
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.git import GithubProposal
+from app.core.db_class.job import BackgroundJob, BackgroundJobLog
+from app.core.db_class.rule import RequestOwnerRule, Rule
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from app.features.rule.rule_core import _wipe_rule_children, create_rule_history, add_contributor
 from app.core.utils.activity_log import log_activity
 
@@ -947,7 +952,7 @@ def handle_update_misp_data(job, app):
       Step 2 — update ALREADY-IMPORTED taxonomies only (add new tags, skip existing)
       Step 3 — update ALREADY-IMPORTED galaxies only (add new clusters, skip existing)
     """
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     from app.features.tags import tags_core
 
     user = User.query.get(job.created_by)
@@ -1050,7 +1055,7 @@ def handle_import_all_taxonomies(job, app):
     """Import every taxonomy found on disk — brand new ones included.
     add_tags_from_misp_taxonomy() already skips a namespace that's already
     imported, so this is safe to re-run."""
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     from app.features.tags import tags_core
 
     user = User.query.get(job.created_by)
@@ -1096,7 +1101,7 @@ def handle_import_all_galaxies(job, app):
     """Import every galaxy found on disk — brand new ones included.
     add_tags_from_misp_galaxy() already skips a type that's already
     imported, so this is safe to re-run."""
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     from app.features.tags import tags_core
 
     user = User.query.get(job.created_by)
@@ -1277,7 +1282,9 @@ def handle_connector_pull(job, app):
     import datetime
     import requests as http_requests
     from concurrent.futures import ThreadPoolExecutor
-    from app.core.db_class.db import Connector, Rule, RuleTagAssociation
+    from app.core.db_class.connector import Connector
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.tag import RuleTagAssociation
     from app.features.connector.connector_core import (
         _get_or_create_shadow_user, _upsert_rule, _upsert_bundle,
         _extract_tag_family, build_tag_cache,
@@ -1295,7 +1302,7 @@ def handle_connector_pull(job, app):
     t_start      = _time.monotonic()
 
     with app.app_context():
-        from app.core.db_class.db import BackgroundJob as BJ
+        from app.core.db_class.job import BackgroundJob as BJ
         job = BJ.query.filter_by(uuid=job_uuid).first()
         connector = Connector.query.get(connector_id)
         if not connector or not connector.is_active:
@@ -1314,7 +1321,7 @@ def handle_connector_pull(job, app):
             headers['X-API-KEY'] = connector.api_key_outbound
         # Identify this instance on the remote so it can track pull history
         try:
-            from app.core.db_class.db import InstanceConfig as _IC
+            from app.core.db_class.connector import InstanceConfig as _IC
             import os as _os
             _cfg = _IC.query.first()
             if _cfg:
@@ -1524,7 +1531,7 @@ def handle_connector_pull(job, app):
         attack_install_triggered = False  # only trigger the install job once
 
         # ── Check if ATT&CK data is installed ─────────────────────────────────
-        from app.core.db_class.db import AttackTechnique as _ATK
+        from app.core.db_class.attack import AttackTechnique as _ATK
         if not _ATK.query.first():
             log_job(job,
                     "ATT&CK technique database is empty — queuing an install now. "
@@ -2626,7 +2633,7 @@ def handle_bulk_new_rules_decision(job, app):
             get_valid_new_rules_by_sid, reject_all_new_rules_by_sid,
             import_single_new_rule,
         )
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
 
         if action == 'reject':
             reject_all_new_rules_by_sid(sid)
@@ -3176,7 +3183,7 @@ def handle_bulk_parse_attack_rules(job, app):
     offset   = payload.get('_resume_offset', 0)
 
     from app.features.attack.attack_core import _extract_technique_ids
-    from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
     import datetime as _dt
 
     # Build query
@@ -4075,7 +4082,8 @@ def handle_blog_from_cve(job, app):
 
     with app.app_context():
         import requests as _req
-        from app.core.db_class.db import BlogPost, Bundle
+        from app.core.db_class.blog import BlogPost
+        from app.core.db_class.bundle import Bundle
         from app.features.blog.blog_core import _sync_tags, _sync_rules, _sync_bundles, _make_slug
 
         post = BlogPost.query.get(post_id)
@@ -4271,7 +4279,7 @@ def handle_blog_from_cve(job, app):
 @register_handler('rule_test_bulk')
 def handle_rule_test_bulk(job, app):
     import time as _time
-    from app.core.db_class.db import RuleTest
+    from app.core.db_class.rule_tester import RuleTest
     from app.features.rule_tester import rule_tester_core as TesterModel
     from app.features.rule_tester.drivers import registry
 
@@ -4480,7 +4488,7 @@ def handle_github_sync_schedule_run(job, app):
     (a per-rule progress bar across N repos would reintroduce the exact
     "0→N jump" bug the whole GitHub import/update rework started from).
     """
-    from app.core.db_class.db import GithubSyncSchedule, GithubSyncRun, GithubSyncRunRepo
+    from app.core.db_class.git import GithubSyncRun, GithubSyncRunRepo, GithubSyncSchedule
     from app.features.rule.rule_core import (
         get_updater_result, get_rule_update_list_filtered, accept_all_update,
         get_valid_new_rules_by_sid, import_single_new_rule,
@@ -4622,7 +4630,7 @@ def handle_velociraptor_push(job, app):
         server_id : int — local VelociraptorServer.id to push to
         rule_id   : int — local Rule.id to generate the artifact from
     """
-    from app.core.db_class.db import VelociraptorServer
+    from app.core.db_class.velociraptor import VelociraptorServer
     from app.features.rule import rule_core as RuleModel
     from app.features.velociraptor import velociraptor_core as VelociraptorModel
     from app.features.rule.exporters.velociraptor_exporter import (
@@ -4706,7 +4714,7 @@ def handle_misp_push(job, app):
         bundle_id : int — local Bundle.id to build the event from (bundle push)
         push_type : 'object' | 'event' — bundles only support 'event'
     """
-    from app.core.db_class.db import MispServer
+    from app.core.db_class.misp import MispServer
     from app.features.rule import rule_core as RuleModel
     from app.features.bundle import bundle_core as BundleModel
     from app.features.misp import misp_connector_core as MispModel
@@ -5014,7 +5022,8 @@ def handle_rule_analysis(job, app):
     import time as _time
     from types import SimpleNamespace
 
-    from app.core.db_class.db import AIGeneration, AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.ai import AIGeneration
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
     from app.features.ai.ai_core import get_agent
 
     payload = job.payload or {}
@@ -5288,7 +5297,8 @@ def _bundle_step(job, stage, text, level='info'):
 
 @register_handler('ai_bundle_analysis')
 def handle_bundle_analysis(job, app):
-    from app.core.db_class.db import AIGeneration, Bundle
+    from app.core.db_class.ai import AIGeneration
+    from app.core.db_class.bundle import Bundle
     from app.features.ai.ai_core import get_agent
     from app.features.bundle.bundle_ai_core import build_bundle_context
 

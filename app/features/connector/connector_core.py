@@ -19,11 +19,12 @@ logger = logging.getLogger(__name__)
 import json as _json
 
 from app import db
-from app.core.db_class.db import (
-    Bundle, BundleRuleAssociation, BundleTagAssociation, Connector, Rule, User,
-    RuleTagAssociation, Tag, ActivityLog, RuleUpdateHistory,
-    OFFICIAL_LOGO_AVATAR_SENTINEL,
-)
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.bundle import Bundle, BundleRuleAssociation
+from app.core.db_class.connector import Connector
+from app.core.db_class.rule import Rule, RuleUpdateHistory
+from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag
+from app.core.db_class.user import OFFICIAL_LOGO_AVATAR_SENTINEL, User
 from sqlalchemy import func
 from app.core.utils.activity_log import log_activity
 from app.features.jobs.jobs_core import create_job
@@ -1064,7 +1065,7 @@ def _sync_attacks(rule, technique_ids: list, user_id: int,
     if not technique_ids:
         return []
 
-    from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
     import datetime as _dt
 
     # Check if ATT&CK data exists at all
@@ -1182,7 +1183,7 @@ def bundle_structure_to_sync_json(bundle_id: int) -> list:
     (`structure`) and compared on the pulling side: rules are referenced by
     uuid (never by local id), custom files carry their content, trashed
     rules are left out. Two queries for the whole tree."""
-    from app.core.db_class.db import BundleNode
+    from app.core.db_class.bundle import BundleNode
     nodes = BundleNode.query.filter_by(bundle_id=bundle_id).order_by(BundleNode.id).all()
     if not nodes:
         return []
@@ -1262,7 +1263,7 @@ def _resolve_remote_structure(structure: list) -> list | None:
 def _local_structure_for_compare(bundle_id: int) -> list:
     """Local tree in the editor's shape (rule_id) — same shape as
     _resolve_remote_structure's output, so both compare with ==."""
-    from app.core.db_class.db import BundleNode
+    from app.core.db_class.bundle import BundleNode
     nodes = BundleNode.query.filter_by(bundle_id=bundle_id).order_by(BundleNode.id).all()
     live = {rid for (rid,) in db.session.query(Rule.id).filter(
         Rule.id.in_({n.rule_id for n in nodes if n.rule_id} or {-1}), Rule.is_deleted == False)}
@@ -1283,7 +1284,7 @@ def _local_structure_for_compare(bundle_id: int) -> list:
 
 def _write_structure(bundle_id: int, structure: list) -> None:
     """Replace a bundle's tree (no commit — the pull job commits per batch)."""
-    from app.core.db_class.db import BundleNode
+    from app.core.db_class.bundle import BundleNode
     for old in BundleNode.query.filter_by(bundle_id=bundle_id).all():
         db.session.delete(old)
     db.session.flush()
@@ -1309,7 +1310,7 @@ def _ensure_rules_in_structure(bundle: Bundle) -> bool:
     the tree go into an "Unsorted" root folder (existing nodes untouched).
     Covers remotes that don't send a `structure` (older Rulezet) and rules a
     local user added. No commit. Returns True if nodes were added."""
-    from app.core.db_class.db import BundleNode
+    from app.core.db_class.bundle import BundleNode
     placed = {rid for (rid,) in db.session.query(BundleNode.rule_id)
               .filter(BundleNode.bundle_id == bundle.id, BundleNode.rule_id.isnot(None))}
     missing = (db.session.query(Rule.id, Rule.title)

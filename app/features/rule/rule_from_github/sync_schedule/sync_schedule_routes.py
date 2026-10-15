@@ -8,7 +8,7 @@ from flask import Blueprint, abort, jsonify, redirect, render_template, request,
 from flask_login import current_user
 
 import app.features.rule.rule_core as RuleModel
-from app.core.db_class.db import GithubSyncRun
+from app.core.db_class.git import GithubSyncRun
 from app.core.utils.activity_log import log_activity
 from app.core.utils.utils import json_object
 from app.features.rule.rule_from_github.sync_schedule import sync_schedule_core as SyncScheduleModel

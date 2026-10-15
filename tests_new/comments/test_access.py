@@ -13,7 +13,7 @@ the rule / bundle it is posted on; "user" is anyone else.
 import pytest
 
 from app import db
-from app.core.db_class.db import Comment, RuleCommentReaction, UnifiedComment, UnifiedCommentReaction
+from app.core.db_class.comment import Comment, RuleCommentReaction, UnifiedComment, UnifiedCommentReaction
 from tests_new.helpers.access import FORBIDDEN, LOGIN, NOT_FOUND, OK, assert_outcome, matrix
 from tests_new.helpers.comments import (
     API, list_url, make_bundle, make_comment, make_legacy_comment, new_comment, trash,

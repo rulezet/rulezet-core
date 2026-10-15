@@ -27,7 +27,8 @@ import hashlib
 import uuid as uuid_mod
 
 from app import db
-from app.core.db_class.db import ActivityLog, VelociraptorServer
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.velociraptor import VelociraptorServer
 from app.core.utils.activity_log import log_activity
 from app.features.jobs.jobs_core import create_job
 

@@ -1,17 +1,12 @@
 import datetime
 
 from app import db
-from app.core.db_class.db import Report, User
+from app.core.db_class.report import Report
+from app.core.db_class.user import User
+from app.core.utils.app_settings import setting
 
 VALID_TYPES   = {'rule', 'bundle', 'comment'}
-VALID_REASONS = [
-    'Plagiarism',
-    'Malicious content',
-    'Incorrect or misleading',
-    'Inappropriate content',
-    'Spam',
-    'Other',
-]
+VALID_REASONS = setting('report.reasons')  # app/config/report.reasons.json
 
 
 def create_report(user_id, object_type, object_id, reason, message=''):
@@ -84,7 +79,8 @@ class _Page:
 def get_combined_page(page, per_page=20, object_type=None, status=None, search=None,
                       sort='created_at', direction='desc'):
     """Query both Report and RepportRule, merge, sort and paginate."""
-    from app.core.db_class.db import RepportRule, Rule
+    from app.core.db_class.report import RepportRule
+    from app.core.db_class.rule import Rule
 
     # ── Report rows ──────────────────────────────────────────────────────────
     q = Report.query
@@ -161,7 +157,7 @@ def delete_report(report_id):
 
 
 def delete_legacy_report(legacy_id):
-    from app.core.db_class.db import RepportRule
+    from app.core.db_class.report import RepportRule
     r = RepportRule.query.get(legacy_id)
     if not r:
         return False
@@ -190,7 +186,7 @@ def dismiss_report(report_id):
 
 def bulk_delete_reports(report_ids):
     """Accept a mix of plain int IDs (Report) and 'legacy-<n>' IDs (RepportRule)."""
-    from app.core.db_class.db import RepportRule
+    from app.core.db_class.report import RepportRule
     new_ids    = []
     legacy_ids = []
     for rid in report_ids:
@@ -225,7 +221,7 @@ def bulk_dismiss_reports(report_ids):
 
 
 def count_pending():
-    from app.core.db_class.db import RepportRule
+    from app.core.db_class.report import RepportRule
     new_count    = Report.query.filter_by(status='pending').count()
     legacy_count = RepportRule.query.count()
     return new_count + legacy_count
@@ -235,7 +231,7 @@ def notify_admins(report, reporter):
     """Send an in-app notification to all admins for a new report."""
     try:
         import datetime as _dt
-        from app.core.db_class.db import Notification
+        from app.core.db_class.notification import Notification
         from app.features.notification.notification_core import _get_all_admin_ids
         admin_ids = _get_all_admin_ids()
         if not admin_ids:
@@ -318,7 +314,7 @@ def delete_target_object(object_type, object_id, admin_user_id):
             from app.features.bundle.bundle_core import delete_bundle
             delete_bundle(object_id)
         elif object_type == 'comment':
-            from app.core.db_class.db import UnifiedComment
+            from app.core.db_class.comment import UnifiedComment
             c = UnifiedComment.query.get(object_id)
             if c:
                 c.is_active = False
@@ -329,7 +325,7 @@ def delete_target_object(object_type, object_id, admin_user_id):
             object_type=object_type, object_id=object_id
         ).delete(synchronize_session=False)
         if object_type == 'rule':
-            from app.core.db_class.db import RepportRule
+            from app.core.db_class.report import RepportRule
             RepportRule.query.filter_by(rule_id=object_id).delete(synchronize_session=False)
         db.session.commit()
         return True

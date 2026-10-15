@@ -15,10 +15,10 @@ in a list, a search, a filter facet or a count.
 import pytest
 
 from app import db
-from app.core.db_class.db import (
-    Bundle, BundleFavoriteUser, BundleNode, BundleNote, BundleRelease, BundleRuleAssociation,
-    BundleTagAssociation, BundleVote, Tag,
+from app.core.db_class.bundle import (
+    Bundle, BundleFavoriteUser, BundleNode, BundleNote, BundleRelease, BundleRuleAssociation, BundleVote,
 )
+from app.core.db_class.tag import BundleTagAssociation, Tag
 from app.features.bundle import bundle_core as BundleModel
 from app.features.bundle import bundle_layout_core as BundleLayoutModel
 from tests_new.helpers.access import FORBIDDEN, LOGIN, OK, assert_outcome, matrix

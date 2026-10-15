@@ -9,7 +9,9 @@ import datetime
 import pytest
 
 from app import db
-from app.core.db_class.db import User, AdminWorkflow, AdminTaskSchedule, AdminTaskRun, BackgroundJob
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.task_scheduler import AdminTaskRun, AdminTaskSchedule, AdminWorkflow
+from app.core.db_class.user import User
 from app.features.admin.task_scheduler import task_scheduler_core as TaskSchedulerModel
 from app.features.admin.task_scheduler import scheduler_engine
 from app.features.admin.task_scheduler.task_types import TASK_TYPES
@@ -920,7 +922,7 @@ def test_run_workflow_now_returns_the_created_run(app):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_run_workflow_now_notifies_admins_it_started(app):
-    from app.core.db_class.db import Notification
+    from app.core.db_class.notification import Notification
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()
         workflow = _make_workflow(admin)
@@ -940,7 +942,7 @@ def test_run_workflow_now_notifies_admins_it_started(app):
 
 
 def test_workflow_run_finished_notification_fires_once_the_only_task_settles(app):
-    from app.core.db_class.db import Notification
+    from app.core.db_class.notification import Notification
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()
         workflow = _make_workflow(admin)
@@ -966,7 +968,7 @@ def test_workflow_run_finished_notification_fires_once_the_only_task_settles(app
 
 
 def test_workflow_run_finished_notification_waits_for_the_full_chain(app):
-    from app.core.db_class.db import Notification
+    from app.core.db_class.notification import Notification
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()
         workflow = _make_workflow(admin)
@@ -1007,7 +1009,7 @@ def test_workflow_run_finished_notification_waits_for_the_full_chain(app):
 
 
 def test_stop_workflow_triggers_a_finished_notification(app):
-    from app.core.db_class.db import Notification
+    from app.core.db_class.notification import Notification
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()
         workflow = _make_workflow(admin)
@@ -1029,7 +1031,7 @@ def test_stop_workflow_triggers_a_finished_notification(app):
 
 
 def test_workflow_run_notifications_respect_the_preference_toggle(app):
-    from app.core.db_class.db import Notification
+    from app.core.db_class.notification import Notification
     from app.features.notification.notification_core import update_preference
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()
@@ -1219,7 +1221,7 @@ def _root_and_child(admin, workflow):
 
 
 def test_due_first_task_launches_the_whole_workflow(app):
-    from app.core.db_class.db import AdminWorkflowRun
+    from app.core.db_class.task_scheduler import AdminWorkflowRun
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()
         workflow = _make_workflow(admin)

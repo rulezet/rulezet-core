@@ -15,7 +15,7 @@ config_blueprint = Blueprint('config', __name__)
 def admin_jobs_list():
     if not current_user.is_admin():
         abort(403)
-    from app.core.db_class.db import BackgroundJob
+    from app.core.db_class.job import BackgroundJob
     running_count = BackgroundJob.query.filter(BackgroundJob.status == 'running').count()
     return render_template('jobs/admin_list.html', running_jobs_count=running_count)
 

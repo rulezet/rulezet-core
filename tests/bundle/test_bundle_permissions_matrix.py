@@ -66,7 +66,7 @@ def test_private_bundle_routes_refuse_outsiders(client, app):
 
         # and the bundle is intact
         from app import db
-        from app.core.db_class.db import Bundle, BundleNode, BundleRelease
+        from app.core.db_class.bundle import Bundle, BundleNode, BundleRelease
         db.session.expire_all()
         assert db.session.get(Bundle, b.id) is not None
         assert BundleNode.query.filter_by(bundle_id=b.id, rule_id=rule.id).count() == 1
@@ -86,7 +86,7 @@ ALLOWED_WRITES_ON_PUBLIC = {
 
 def test_public_bundle_writes_refused_for_non_owner(client, app):
     from app import db
-    from app.core.db_class.db import Bundle, BundleNode
+    from app.core.db_class.bundle import Bundle, BundleNode
     with app.app_context():
         rule = make_rule("public rule", "yara", "rule pub { condition: true }")
         b = make_bundle(public=True)

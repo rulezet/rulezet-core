@@ -10,7 +10,8 @@ like every other admin bulk action. See docs/design/admin_task_scheduler.md.
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 
-from app.core.db_class.db import Connector, Rule
+from app.core.db_class.connector import Connector
+from app.core.db_class.rule import Rule
 from app.core.utils.activity_log import log_activity
 from app.features.admin.task_scheduler import task_scheduler_core as TaskSchedulerModel
 from app.features.admin.task_scheduler.task_types import serialize_task_types
@@ -291,7 +292,7 @@ def picker():
     to one workflow — excludes exclude_uuid (the task being edited) so it
     can't depend on itself in the dropdown (the server still re-validates
     on save)."""
-    from app.core.db_class.db import AdminTaskSchedule
+    from app.core.db_class.task_scheduler import AdminTaskSchedule
     workflow = _workflow_or_none(request.args.get('workflow_uuid'))
     if not workflow:
         return jsonify({"message": "Workflow not found.", "toast_class": "danger-subtle"}), 404

@@ -9,8 +9,10 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import (Bundle, BundleTagAssociation, Rule, RuleTagAssociation, Tag, User,
-                                  tag_namespace)
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag, tag_namespace
+from app.core.db_class.user import User
 
 
 def _user(email):

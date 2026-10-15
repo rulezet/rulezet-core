@@ -24,7 +24,8 @@ import uuid as uuid_mod
 from sqlalchemy import func
 
 from app import db
-from app.core.db_class.db import Rule, RuleTagAssociation, Tag
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import RuleTagAssociation, Tag
 
 IMPORTED_SOURCE = "Imported"
 IMPORTED_TAG_ICON = "fa-user-tag"
@@ -286,7 +287,7 @@ def reserved_namespaces() -> set:
 
 
 def _is_admin(user_id) -> bool:
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     user = db.session.get(User, user_id) if user_id else None
     return bool(user and user.is_admin())
 
@@ -378,8 +379,10 @@ def attach_imported_tags(rule: Rule, user_id: int | None, cache: dict | None = N
 def delete_orphan_imported_tags() -> int:
     """Delete Imported tags nothing uses any more (no rule, bundle, bundle
     note, workspace or blog post) — leftovers of a prune. No commit."""
-    from app.core.db_class.db import (BundleTagAssociation, BundleNoteTag, WorkspaceTagAssociation,
-                                      BlogPostTagAssociation)
+    from app.core.db_class.blog import BlogPostTagAssociation
+    from app.core.db_class.bundle import BundleNoteTag
+    from app.core.db_class.tag import BundleTagAssociation
+    from app.core.db_class.workspace import WorkspaceTagAssociation
     used = db.session.query(RuleTagAssociation.tag_id)
     for model in (BundleTagAssociation, BundleNoteTag, WorkspaceTagAssociation, BlogPostTagAssociation):
         used = used.union(db.session.query(model.tag_id))

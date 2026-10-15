@@ -9,7 +9,9 @@ the route already writes its own correctly-categorized log_activity() call."""
 import uuid as uuid_mod
 
 from app import db
-from app.core.db_class.db import ActivityLog, UnifiedComment, User
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.comment import UnifiedComment
+from app.core.db_class.user import User
 
 
 def _login(client, email):

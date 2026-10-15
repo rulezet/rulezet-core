@@ -12,7 +12,7 @@ import uuid as _uuid_mod
 from flask import current_app
 
 from app import db
-from app.core.db_class.db import AdminTaskSchedule, AdminWorkflow
+from app.core.db_class.task_scheduler import AdminTaskSchedule, AdminWorkflow
 from app.features.admin.task_scheduler.task_types import TASK_TYPES
 from app.features.admin.task_scheduler.scheduler_engine import _creates_cycle
 
@@ -481,7 +481,7 @@ def run_schedule_now(schedule_uuid):
     Returns the new run's job_uuid (still truthy, like the old `True`) so the
     caller can jump straight to that job's detail instead of waiting for the
     next live-status poll to discover it."""
-    from app.core.db_class.db import AdminTaskRun
+    from app.core.db_class.task_scheduler import AdminTaskRun
     from app.features.admin.task_scheduler.scheduler_engine import _fire_schedule
     schedule = AdminTaskSchedule.query.filter_by(uuid=schedule_uuid).first()
     if not schedule:
@@ -517,7 +517,7 @@ def launch_workflow(workflow, roots, triggered_by=None):
     launch-history table and fires the given root tasks under it; the
     chain's workflow_run_id is propagated to every task it triggers through
     on_job_finished(). triggered_by is None for a scheduled launch."""
-    from app.core.db_class.db import AdminWorkflowRun
+    from app.core.db_class.task_scheduler import AdminWorkflowRun
     from app.features.admin.task_scheduler.scheduler_engine import _fire_schedule
 
     workflow_run = AdminWorkflowRun(
@@ -554,7 +554,8 @@ def stop_workflow_jobs(workflow_uuid):
     directly (not via job_worker's own completion path) does NOT trigger
     on_job_finished(), so the chain simply stops — no child task fires from
     a cancelled run, which is exactly the intent of stopping a workflow."""
-    from app.core.db_class.db import AdminTaskRun, BackgroundJob
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun
     from app.features.jobs.jobs_core import cancel_job
 
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
@@ -589,7 +590,9 @@ def _finalize_workflow_run_if_done(workflow_run_id):
     on_job_finished on its own. Idempotent: skips if already notified."""
     if not workflow_run_id:
         return
-    from app.core.db_class.db import AdminTaskRun, AdminWorkflowRun, BackgroundJob, Notification
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.notification import Notification
+    from app.core.db_class.task_scheduler import AdminTaskRun, AdminWorkflowRun
 
     workflow_run = AdminWorkflowRun.query.get(workflow_run_id)
     if not workflow_run:
@@ -639,7 +642,7 @@ def _finalize_workflow_run_if_done(workflow_run_id):
 def get_workflow_runs_page(workflow_uuid, page=1, per_page=10):
     """Launch history — one row per 'Run Workflow' click, each summarizing
     every task run it directly fired or chained afterwards."""
-    from app.core.db_class.db import AdminWorkflowRun
+    from app.core.db_class.task_scheduler import AdminWorkflowRun
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
     if not workflow:
         return None
@@ -653,7 +656,7 @@ def bulk_delete_workflow_runs(workflow_uuid, run_uuids):
     bookkeeping row — the AdminTaskRun rows it grouped keep existing (their
     workflow_run_id is set to NULL by the FK's ON DELETE SET NULL), so a
     task's own last_run_status/logs are unaffected."""
-    from app.core.db_class.db import AdminWorkflowRun
+    from app.core.db_class.task_scheduler import AdminWorkflowRun
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
     if not workflow:
         return None, "Workflow not found."
@@ -670,7 +673,8 @@ def bulk_delete_workflow_runs(workflow_uuid, run_uuids):
 
 
 def serialize_workflow_run(run):
-    from app.core.db_class.db import AdminTaskRun, BackgroundJob
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun
 
     db.session.expire_all()
     task_runs = AdminTaskRun.query.filter_by(workflow_run_id=run.id).order_by(AdminTaskRun.started_at.asc()).all()
@@ -774,7 +778,8 @@ def get_workflow_run_trace(workflow_uuid, run_uuid):
     line — plus every task of the workflow that did NOT run, with the
     reason (branch not taken, never reached, paused…). Feeds the run trace
     panel and the graph's 'path taken' highlighting. None if not found."""
-    from app.core.db_class.db import AdminTaskRun, AdminWorkflowRun, BackgroundJob, BackgroundJobLog
+    from app.core.db_class.job import BackgroundJob, BackgroundJobLog
+    from app.core.db_class.task_scheduler import AdminTaskRun, AdminWorkflowRun
 
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
     if not workflow:
@@ -898,7 +903,8 @@ def get_workflow_live_status(workflow_uuid):
     live BackgroundJob state — feeds the graph view's running/done/failed
     node highlighting and the 'Live runs' log panel while a workflow is in
     flight. Returns None if the workflow doesn't exist."""
-    from app.core.db_class.db import AdminTaskRun, BackgroundJob
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun
 
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
     if not workflow:

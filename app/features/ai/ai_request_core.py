@@ -15,8 +15,12 @@ from sqlalchemy import or_
 from sqlalchemy.orm import aliased
 
 from app import db
-from app.core.db_class.db import (AIAnalysisRequest, Bundle, Notification, Permission, RolePermission,
-                                  Rule, User, UserRole)
+from app.core.db_class.ai import AIAnalysisRequest
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.notification import Notification
+from app.core.db_class.role import Permission, RolePermission, UserRole
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 
 TARGET_TYPES = ('rule', 'bundle')
 SCRIPTS = {'rule': ('standard', 'deep'), 'bundle': ('full',)}

@@ -10,7 +10,7 @@ import json
 import pytest
 
 from app import db
-from app.core.db_class.db import MispServer
+from app.core.db_class.misp import MispServer
 from tests_new.helpers.attack import trash
 from tests_new.helpers.comments import make_bundle
 from tests_new.helpers.db import count, reload

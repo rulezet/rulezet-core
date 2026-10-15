@@ -50,9 +50,12 @@ import requests
 from git import Repo, GitCommandError
 
 from app import db
-from app.core.db_class.db import ActivityLog, Rule, RuleMirrorConfig
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.git import RuleMirrorConfig
+from app.core.db_class.rule import Rule
 from app.core.utils.activity_log import log_activity
 from app.features.rule.rule_format.utils_format import git_provider
+from app.core.utils.app_settings import setting
 
 # One dirname() short of the repo root would land this under app/data/
 # instead of the top-level data/ used by every other regenerable-mirror
@@ -65,12 +68,7 @@ LOCAL_REPO_ROOT = os.path.join(ROOT_DIR, 'data', 'rule_mirror_repo')
 # Cosmetic only (so a plain `git clone` gets working syntax highlighting) —
 # never used for anything that affects correctness. Formats not listed here
 # fall back to '.txt'.
-_EXTENSION_BY_FORMAT = {
-    'yara': 'yar', 'sigma': 'yml', 'suricata': 'rules', 'zeek': 'zeek',
-    'wazuh': 'xml', 'nse': 'nse', 'crs': 'conf', 'nova': 'nov',
-    'splunk': 'yml', 'elastic': 'toml', 'kql': 'kql', 'atr': 'toml',
-    'plum': 'yaml',
-}
+_EXTENSION_BY_FORMAT = setting('rulesets.extension_by_format')  # app/config/rulesets.extension_by_format.json
 
 # Loose allow-list for the license_verified flag in metadata.yaml — not a
 # gate on whether a rule gets mirrored (everything active/public does),
@@ -159,7 +157,7 @@ def _find_existing_rule_dir(base_path: str, rule) -> str:
 
 
 def _public_url_for(rule) -> str:
-    from app.core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
     cfg = InstanceConfig.query.first()
     base = (cfg.public_url if cfg and cfg.public_url else 'https://rulezet.org').rstrip('/')
     return f"{base}/rule/detail_rule/{rule.id}"
@@ -445,7 +443,7 @@ def delete_config(config: RuleMirrorConfig) -> tuple:
     active" and "a sync job active for this config" are the same check in
     practice — simpler and can't miss the sweep case.
     """
-    from app.core.db_class.db import BackgroundJob
+    from app.core.db_class.job import BackgroundJob
     active_sync = BackgroundJob.query.filter(
         BackgroundJob.job_type == 'rule_git_mirror_sync',
         BackgroundJob.status.in_(['pending', 'running']),

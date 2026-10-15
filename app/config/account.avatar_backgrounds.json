@@ -1,0 +1,68 @@
+{
+  "label": "Avatar backgrounds",
+  "category": "Accounts",
+  "description": "Name -> [label, top colour, bottom colour].",
+  "public": false,
+  "value": {
+    "blue": [
+      "Blue",
+      "#4d94ff",
+      "#0a58ca"
+    ],
+    "sky": [
+      "Sky",
+      "#bfe3ff",
+      "#6bb6ff"
+    ],
+    "teal": [
+      "Teal",
+      "#5fd3c4",
+      "#0f8a7a"
+    ],
+    "green": [
+      "Green",
+      "#7fd88f",
+      "#2b8a3e"
+    ],
+    "purple": [
+      "Purple",
+      "#b197fc",
+      "#6741d9"
+    ],
+    "pink": [
+      "Pink",
+      "#ffb3d9",
+      "#e64980"
+    ],
+    "orange": [
+      "Orange",
+      "#ffc078",
+      "#f76707"
+    ],
+    "red": [
+      "Red",
+      "#ff8787",
+      "#c92a2a"
+    ],
+    "gold": [
+      "Gold",
+      "#ffe066",
+      "#f59f00"
+    ],
+    "slate": [
+      "Slate",
+      "#adb5bd",
+      "#495057"
+    ],
+    "night": [
+      "Night",
+      "#364fc7",
+      "#0b1026"
+    ],
+    "white": [
+      "White",
+      "#ffffff",
+      "#e9ecef"
+    ]
+  }
+}

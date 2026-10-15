@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.db_class.db import User
+from app.core.db_class.user import User
 from app.features.ai.ai_core import get_agent
 from app.features.ai.chatbot import chatbot_core
 from app.features.ai.chatbot.chatbot_core import handle_message
@@ -133,7 +133,7 @@ def test_create_bundle_shortcut_handles_reported_case_never_calls_ollama(app):
         assert 'link' in result
 
         from app import db
-        from app.core.db_class.db import Bundle
+        from app.core.db_class.bundle import Bundle
         bundle = Bundle.query.filter_by(name="Ransomware Toolkit").first()
         assert bundle is not None
         db.session.delete(bundle)
@@ -412,7 +412,7 @@ def test_search_shortcut_handles_attack_technique_id(app):
 def test_search_shortcut_handles_known_tag(app):
     import uuid as uuid_mod
     from app import db
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
 
     with app.app_context():
         db.session.add(Tag(uuid=str(uuid_mod.uuid4()), name='ransomware'))
@@ -642,7 +642,7 @@ def test_create_rule_shortcut_defaults_license_and_source(app):
     # used to show "Unknown" for both — now defaults to a real license and
     # attributes the source to Rulezy + the model it's actually configured
     # to run on, instead of leaving the fields blank.
-    from app.core.db_class.db import Rule
+    from app.core.db_class.rule import Rule
 
     with app.app_context():
         user = User.query.filter_by(email="admin@admin.admin").first()
@@ -656,7 +656,7 @@ def test_create_rule_shortcut_defaults_license_and_source(app):
 
 
 def test_create_rule_shortcut_never_overrides_a_license_the_rule_specifies(app):
-    from app.core.db_class.db import Rule
+    from app.core.db_class.rule import Rule
 
     content = """rule Own_License_Test {
     meta:
@@ -752,7 +752,7 @@ def test_search_shortcut_never_hijacks_plain_format_question(app):
 
 def test_dispatch_reports_disabled_status_when_agent_config_disabled(app):
     from app import db
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
 
     with app.app_context():
         db.session.add(AIAgentConfig(agent_key='chatbot', enabled=False))
@@ -770,7 +770,7 @@ def test_dispatch_reports_rate_limited_status(app):
     import uuid as uuid_mod
 
     from app import db
-    from app.core.db_class.db import AIAgentConfig, AIExecutionLog
+    from app.core.db_class.ai import AIAgentConfig, AIExecutionLog
 
     with app.app_context():
         user = User.query.filter_by(email="admin@admin.admin").first()

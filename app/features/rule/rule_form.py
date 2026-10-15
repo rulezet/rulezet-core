@@ -12,7 +12,7 @@ from app.core.utils.utils import detect_cve
 
 from . import rule_core as RuleModel
 from .rule_core import _active
-from ...core.db_class.db import FormatRule, Rule
+from app.core.db_class.rule import FormatRule, Rule
 
 class AddNewRuleForm(FlaskForm):
     format = SelectField('Format', choices=[], validators=[InputRequired()])

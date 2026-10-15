@@ -5,7 +5,9 @@ analysis job is queued) or reject it on the admin pages.
 Roles: "user" can't launch anything (requests), "admin" can launch and
 reviews the requests.
 """
-from app.core.db_class.db import AIAnalysisRequest, BackgroundJob, Notification
+from app.core.db_class.ai import AIAnalysisRequest
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.notification import Notification
 from tests_new.helpers.bundles import make_bundle
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.rules import make_rule

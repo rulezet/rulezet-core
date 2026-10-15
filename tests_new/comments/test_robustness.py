@@ -5,7 +5,7 @@ text stored as plain text — returned verbatim in JSON, never interpreted.
 """
 import pytest
 
-from app.core.db_class.db import Comment, RuleCommentReaction, UnifiedComment, UnifiedCommentReaction
+from app.core.db_class.comment import Comment, RuleCommentReaction, UnifiedComment, UnifiedCommentReaction
 from tests_new.helpers.comments import API, list_url, make_comment, make_legacy_comment, new_comment
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.inputs import BAD_IDS, BLANK, EMPTY, INJECTIONS, ODD_CHARACTERS, TOO_LONG, WRONG_TYPES

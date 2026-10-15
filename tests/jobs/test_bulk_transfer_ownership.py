@@ -6,7 +6,10 @@ Tests for the admin "Manual Ownership" bulk transfer job
 import uuid
 
 from app import db
-from app.core.db_class.db import BackgroundJob, Notification, Rule, RequestOwnerRule, User
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.notification import Notification
+from app.core.db_class.rule import RequestOwnerRule, Rule
+from app.core.db_class.user import User
 from app.features.jobs.job_handlers import handle_bulk_transfer_ownership
 
 

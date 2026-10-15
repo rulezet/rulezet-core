@@ -5,6 +5,7 @@ import app.features.rule.rule_core as RuleModel
 from app import db
 from app.core.utils.activity_log import log_activity
 from app.core.utils.utils import as_db_id, json_object
+from app.core.utils.app_settings import setting
 
 
 tags_blueprint = Blueprint(
@@ -28,7 +29,7 @@ def _admin_only():
 
 def _can_edit_tag(tag_id):
     """Return error response if current user cannot edit this tag."""
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     tag_id = as_db_id(tag_id)
     tag = db.session.get(Tag, tag_id) if tag_id else None
     if not tag:
@@ -41,7 +42,7 @@ def _can_edit_tag(tag_id):
 
 def _can_delete_tag(tag_id):
     """Return error response if current user cannot delete this tag."""
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     tag_id = as_db_id(tag_id)
     tag = db.session.get(Tag, tag_id) if tag_id else None
     if not tag:
@@ -233,7 +234,7 @@ def delete_family():
 def remove_tag():
     err = _admin_only()
     if err: return err
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     tag_id = as_db_id(request.args.get("tag_id"))
     if not tag_id or not db.session.get(Tag, tag_id):
         return {"status": "error", "message": "Tag not found.", "toast_class": "danger-subtle"}, 404
@@ -257,7 +258,7 @@ def remove_tags_bulk():
 
     # non-admins: filter to only their own tags
     if not current_user.is_admin():
-        from app.core.db_class.db import Tag
+        from app.core.db_class.tag import Tag
         owned = {t.id for t in Tag.query.filter(
             Tag.id.in_(ids),
             Tag.created_by == current_user.id,
@@ -567,12 +568,7 @@ _RISK_LEVELS = ("high", "medium", "low", "cannot-be-judged")
 # than informative. This is a display-only override: the tag actually
 # applied is still the real taxonomy tag (id/name untouched), only the
 # swatch color shown here is muted.
-_RISK_DISPLAY_COLORS = {
-    "high":               "#C94A4A",
-    "medium":             "#C99A2E",
-    "low":                "#4C9A5B",
-    "cannot-be-judged":   "#B8752E",
-}
+_RISK_DISPLAY_COLORS = setting('tags.risk_colors')  # app/config/tags.risk_colors.json
 
 _RISK_LEVEL_BY_TAG_NAME = {f'false-positive:risk="{lvl}"': lvl for lvl in _RISK_LEVELS}
 
@@ -580,7 +576,7 @@ _RISK_LEVEL_BY_TAG_NAME = {f'false-positive:risk="{lvl}"': lvl for lvl in _RISK_
 def _risk_tag_colors():
     """{level: {id, color}} for the 4 MISP 'false-positive' taxonomy 'risk'
     tags — resolved once per request rather than per rule."""
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     rows = Tag.query.filter(Tag.name.in_([f'false-positive:risk="{lvl}"' for lvl in _RISK_LEVELS])).all()
     by_name = {t.name: t for t in rows}
     return {
@@ -781,7 +777,7 @@ def validation_dismiss():
     if not rule_ids:
         return jsonify({"success": False, "message": "No rule ids given"}), 400
 
-    from app.core.db_class.db import db
+    from app import db
 
     p = dict(job.payload or {})
     result = dict(p.get('result') or {})

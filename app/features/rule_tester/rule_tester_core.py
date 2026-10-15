@@ -5,7 +5,7 @@ from flask_login import current_user
 from sqlalchemy import or_, select
 
 from app import db
-from app.core.db_class.db import RuleTest, RuleTestResult
+from app.core.db_class.rule_tester import RuleTest, RuleTestResult
 
 
 # ── Visibility helpers ────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ def create_result(
 # ── Update ────────────────────────────────────────────────────────────────────
 
 def count_matched_results(test_id: int) -> int:
-    from app.core.db_class.db import RuleTestResult
+    from app.core.db_class.rule_tester import RuleTestResult
     return RuleTestResult.query.filter_by(test_id=test_id, matched=True).count()
 
 

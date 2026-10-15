@@ -3,9 +3,9 @@ notifications, checked in the database."""
 import pytest
 
 from app import db
-from app.core.db_class.db import (
-    ActivityLog, Comment, Notification, RuleCommentReaction, UnifiedComment, UnifiedCommentReaction,
-)
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.comment import Comment, RuleCommentReaction, UnifiedComment, UnifiedCommentReaction
+from app.core.db_class.notification import Notification
 from tests_new.helpers.comments import (
     API, list_url, make_bundle, make_comment, make_legacy_comment, mention, new_comment, trash,
 )

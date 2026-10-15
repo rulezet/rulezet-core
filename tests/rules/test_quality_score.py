@@ -9,15 +9,10 @@ import datetime
 import uuid
 
 from app import db
-from app.core.db_class.db import (
-    AttackTechnique,
-    Rule,
-    RuleAttackAssociation,
-    RuleTagAssociation,
-    RuleUpdateHistory,
-    Tag,
-    User,
-)
+from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+from app.core.db_class.rule import Rule, RuleUpdateHistory
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from app.features.rule.rule_quality.quality_score_core import (
     compute_engagement_boost,
     compute_quality_score,

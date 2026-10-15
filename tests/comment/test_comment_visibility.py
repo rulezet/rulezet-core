@@ -8,7 +8,10 @@ import uuid
 from flask import g
 
 from app import db
-from app.core.db_class.db import BlogPost, Rule, UnifiedComment, User
+from app.core.db_class.blog import BlogPost
+from app.core.db_class.comment import UnifiedComment
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 from app.features.bundle import bundle_core as BM
 
 

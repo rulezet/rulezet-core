@@ -12,7 +12,9 @@ import datetime
 from sqlalchemy import or_
 
 from app import db
-from app.core.db_class.db import GithubProposal, Rule, User
+from app.core.db_class.git import GithubProposal
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 from app.features.jobs import jobs_core
 from app.features.rule import rule_core as RuleModel
 from app.features.rule.rule_format.utils_format.utils_import_update import is_valid_branch_name, valider_repo_github

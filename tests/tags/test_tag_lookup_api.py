@@ -7,7 +7,8 @@ find a tag's id/uuid by name. Same rule.tag_any-or-admin gate as bulk_add.
 import uuid
 
 from app import db
-from app.core.db_class.db import Tag, User
+from app.core.db_class.tag import Tag
+from app.core.db_class.user import User
 from app.features.roles import roles_core
 
 

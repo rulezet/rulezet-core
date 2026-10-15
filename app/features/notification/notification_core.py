@@ -30,52 +30,14 @@ Public surface:
 import datetime
 
 from app import db
-from app.core.db_class.db import Notification, UserFollow, BackgroundJob, NotificationPreference
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.notification import Notification, NotificationPreference
+from app.core.db_class.user import UserFollow
+from app.core.utils.app_settings import setting
 
 # ── Icons per notification type ────────────────────────────────────────────────
 
-_TYPE_ICON = {
-    'new_rule':                'fa-solid fa-shield-halved',
-    'follow_new_bundle':       'fa-solid fa-layer-group',
-    'follow_new_comment':      'fa-solid fa-comment',
-    'rule_comment':            'fa-solid fa-comment-dots',
-    'bundle_comment':          'fa-solid fa-comment-dots',
-    'rule_update_found':       'fa-solid fa-rotate',
-    'job_created':             'fa-solid fa-clock',
-    'job_finished':            'fa-solid fa-circle-check',
-    'job_failed':              'fa-solid fa-circle-xmark',
-    'github_import_done':      'fa-brands fa-git-alt',
-    'github_update_done':      'fa-solid fa-code-branch',
-    'proposal_submitted':      'fa-solid fa-code-pull-request',
-    'proposal_comment':        'fa-solid fa-message',
-    'proposal_accepted':       'fa-solid fa-circle-check',
-    'proposal_rejected':       'fa-solid fa-circle-xmark',
-    'proposal_thread':         'fa-solid fa-code-branch',
-    'comment_reply':           'fa-solid fa-reply',
-    'user_mentioned':          'fa-solid fa-at',
-    'session_running':         'fa-solid fa-spinner',
-    'session_done':            'fa-solid fa-circle-check',
-    'report_submitted':        'fa-solid fa-triangle-exclamation',
-    'ownership_requested':     'fa-solid fa-user-pen',
-    'ownership_approved':      'fa-solid fa-user-check',
-    'ownership_rejected':      'fa-solid fa-user-xmark',
-    'blog_published':          'fa-solid fa-newspaper',
-    'github_token_invalid':    'fa-solid fa-key',
-    'sync_run_finished':       'fa-solid fa-arrows-rotate',
-    'github_proposal_submitted':   'fa-brands fa-git-alt',
-    'github_proposal_approved':    'fa-solid fa-circle-check',
-    'github_proposal_rejected':    'fa-solid fa-circle-xmark',
-    'github_proposal_import_done': 'fa-brands fa-git-alt',
-    'role_granted':             'fa-solid fa-user-shield',
-    'role_removed':             'fa-solid fa-user-slash',
-    'workflow_run_started':     'fa-solid fa-code-branch',
-    'workflow_run_finished':    'fa-solid fa-code-branch',
-    'workflow_run_failed':      'fa-solid fa-circle-xmark',
-    'alert_match':              'fa-solid fa-bell',
-    'ai_analysis_requested':    'fa-solid fa-robot',
-    'ai_analysis_accepted':     'fa-solid fa-wand-magic-sparkles',
-    'ai_analysis_rejected':     'fa-solid fa-circle-xmark',
-}
+_TYPE_ICON = setting('notification.type_icons')  # app/config/notification.type_icons.json
 
 
 # ── Preference helpers ─────────────────────────────────────────────────────────
@@ -125,7 +87,7 @@ def update_preference(user_id, prefs_dict):
 
 def _get_all_admin_ids():
     """Return IDs of all admin users."""
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     return [u.id for u in User.query.filter_by(admin=True).all()]
 
 
@@ -255,7 +217,7 @@ def notify_proposal_submitted(proposal, rule):
     Skips the submitter (they don't need to notify themselves).
     """
     try:
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         submitter = User.query.get(proposal.user_id)
         submitter_name = submitter.get_username() if submitter else 'Someone'
 
@@ -578,7 +540,7 @@ def notify_followers_new_rule(rule, author_user_id):
         if not follows:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         author = User.query.get(author_user_id)
         author_name = author.get_username() if author else 'Someone'
 
@@ -615,7 +577,7 @@ def notify_followers_new_bundle(bundle, author_user_id):
         if not follows:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         author = db.session.get(User, author_user_id)
         author_name = author.get_username() if author else 'Someone'
 
@@ -652,7 +614,7 @@ def notify_followers_new_comment(commenter_id, object_title, link, is_public=Tru
         if not follows:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         commenter = db.session.get(User, commenter_id)
         commenter_name = commenter.get_username() if commenter else 'Someone'
 
@@ -696,7 +658,7 @@ def notify_owner_new_comment(owner_user_id, commenter_id, notif_type, object_tit
         if not getattr(pref, pref_key, True):
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         commenter = db.session.get(User, commenter_id)
         commenter_name = commenter.get_username() if commenter else 'Someone'
 
@@ -720,7 +682,7 @@ def notify_proposal_comment(proposal_id, proposal_owner_id, commenter_id, rule_t
         if not pref.pref_proposal_comment:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         commenter = db.session.get(User, commenter_id)
         commenter_name = commenter.get_username() if commenter else 'Someone'
 
@@ -769,7 +731,8 @@ def notify_proposal_participants(proposal, actor_id, title, body=None, exclude=(
     except the one acting and `exclude` (already notified otherwise).
     Each recipient's `pref` preference is honoured."""
     try:
-        from app.core.db_class.db import Rule, UnifiedComment
+        from app.core.db_class.comment import UnifiedComment
+        from app.core.db_class.rule import Rule
         from app.features.rule.rule_core import get_proposal_thread
 
         versions = [p for p, _, _ in get_proposal_thread(proposal)['proposals']]
@@ -811,7 +774,7 @@ def notify_comment_reply(parent_comment_author_id, replier_id, object_title, lin
         if not pref.pref_comment_reply:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         replier = db.session.get(User, replier_id)
         replier_name = replier.get_username() if replier else 'Someone'
 
@@ -835,7 +798,7 @@ def notify_user_mentioned(mentioned_user_id, mentioner_id, object_title, link):
         if not pref.pref_mentioned:
             return
 
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         mentioner = db.session.get(User, mentioner_id)
         mentioner_name = mentioner.get_username() if mentioner else 'Someone'
 
@@ -1311,7 +1274,7 @@ def notify_blog_published(post):
     """
     if not post.is_public or post.is_draft:
         return
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     try:
         users = User.query.filter(User.id != post.user_id).all()
         link = f'/blog/post/{post.uuid}'

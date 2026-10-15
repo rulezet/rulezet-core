@@ -11,7 +11,9 @@ from unittest import mock
 
 import pytest
 
-from app.core.db_class.db import BackgroundJob, RuleAttackAssociation, RuleEditContribution
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule_proposal import RuleEditContribution
 from tests_new.helpers.access import FORBIDDEN, LOGIN, OK, assert_outcome, matrix
 from tests_new.helpers.attack import link_technique, make_technique
 from tests_new.helpers.db import count

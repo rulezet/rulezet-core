@@ -17,7 +17,9 @@ from app.features.bundle import bundle_core as BundleModel
 from app.core.utils.decorators import api_required
 from app.core.utils.utils import as_db_id, json_object
 from app.core.utils.activity_log import log_activity
-from app.core.db_class.db import Bundle, Rule, Tag
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import Tag
 from .bundle_public_api import bundle_structure_json, MAX_PER_PAGE
 
 bundle_private_ns = Namespace(
@@ -237,7 +239,7 @@ class CreateBundle(Resource):
 def _add_rules(bundle, rules, folder=None, description=None):
     """Attach rules (skipping ones already in the bundle) and give each a
     place in the folder tree. Returns the number of newly attached rules."""
-    from app.core.db_class.db import BundleRuleAssociation
+    from app.core.db_class.bundle import BundleRuleAssociation
     import datetime
     from app.features.bundle.bundle_history_core import track_bundle_change
     with track_bundle_change(bundle.id, "rules", user=current_user):

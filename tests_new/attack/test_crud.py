@@ -6,7 +6,9 @@ from unittest import mock
 
 import pytest
 
-from app.core.db_class.db import AttackTechnique, BackgroundJob, RuleAttackAssociation, RuleUpdateHistory
+from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import RuleUpdateHistory
 from app.features.attack import attack_core
 from app.features.jobs.job_handlers import handle_bulk_parse_attack_rules, handle_update_attack_data
 from tests_new.helpers.attack import link_technique, make_technique, trash

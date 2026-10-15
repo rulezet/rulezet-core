@@ -255,7 +255,7 @@ def _log_api_request(response):
         try:
             import uuid as _uuid
             from app import db
-            from app.core.db_class.db import ActivityLog
+            from app.core.db_class.activity_log import ActivityLog
 
             # reset any uncommitted/failed transaction left by the view
             try:

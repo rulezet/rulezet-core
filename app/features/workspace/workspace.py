@@ -134,7 +134,8 @@ def workspace_kpis(ws_uuid):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'total': 0, 'draft': 0, 'testing': 0, 'production': 0, 'deprecated': 0})
-    from app.core.db_class.db import WorkspaceRule, Rule
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.workspace import WorkspaceRule
     from app import db
     from sqlalchemy import func
     wr_subq = db.session.query(WorkspaceRule.rule_id).filter_by(workspace_id=ws.id).subquery()
@@ -172,7 +173,7 @@ def list_documents(ws_uuid):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify([])
-    from app.core.db_class.db import WorkspaceDocument
+    from app.core.db_class.workspace import WorkspaceDocument
     docs = WorkspaceDocument.query.filter_by(workspace_id=ws.id).order_by(WorkspaceDocument.updated_at.desc()).all()
     return jsonify([d.to_json() for d in docs])
 
@@ -186,7 +187,7 @@ def create_document(ws_uuid):
     fields, error = WsModel.validate_document_fields(request.get_json(silent=True))
     if error:
         return jsonify({'success': False, 'message': error}), 400
-    from app.core.db_class.db import WorkspaceDocument
+    from app.core.db_class.workspace import WorkspaceDocument
     from app import db
     doc = WorkspaceDocument(workspace_id=ws.id, **fields)
     db.session.add(doc)
@@ -200,7 +201,7 @@ def update_document(ws_uuid, doc_id):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import WorkspaceDocument
+    from app.core.db_class.workspace import WorkspaceDocument
     from app import db
     doc = WorkspaceDocument.query.filter_by(id=doc_id, workspace_id=ws.id).first()
     if not doc:
@@ -220,7 +221,7 @@ def delete_document(ws_uuid, doc_id):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import WorkspaceDocument
+    from app.core.db_class.workspace import WorkspaceDocument
     from app import db
     doc = WorkspaceDocument.query.filter_by(id=doc_id, workspace_id=ws.id).first()
     if not doc:
@@ -305,7 +306,7 @@ def list_links(ws_uuid):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify([])
-    from app.core.db_class.db import WorkspaceLink
+    from app.core.db_class.workspace import WorkspaceLink
     links = WorkspaceLink.query.filter_by(workspace_id=ws.id).order_by(WorkspaceLink.created_at.desc()).all()
     return jsonify([l.to_json() for l in links])
 
@@ -319,7 +320,7 @@ def create_link(ws_uuid):
     data = request.get_json(force=True)
     if not data.get('url') or not data.get('title'):
         return jsonify({'success': False, 'message': 'URL and title required'}), 400
-    from app.core.db_class.db import WorkspaceLink
+    from app.core.db_class.workspace import WorkspaceLink
     from app import db
     link = WorkspaceLink(
         workspace_id=ws.id,
@@ -338,7 +339,7 @@ def delete_link(ws_uuid, link_id):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import WorkspaceLink
+    from app.core.db_class.workspace import WorkspaceLink
     from app import db
     link = WorkspaceLink.query.filter_by(id=link_id, workspace_id=ws.id).first()
     if not link:
@@ -354,7 +355,7 @@ def update_rule_note(ws_uuid, rule_id):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import WorkspaceRule
+    from app.core.db_class.workspace import WorkspaceRule
     from app import db
     assoc = WorkspaceRule.query.filter_by(workspace_id=ws.id, rule_id=rule_id).first()
     if not assoc:
@@ -520,7 +521,7 @@ def list_workspace_tags(ws_uuid):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify([])
-    from app.core.db_class.db import WorkspaceTagAssociation
+    from app.core.db_class.workspace import WorkspaceTagAssociation
     rows = WorkspaceTagAssociation.query.filter_by(workspace_id=ws.id).all()
     return jsonify([r.tag.to_json() for r in rows if r.tag])
 
@@ -531,7 +532,8 @@ def add_workspace_tag(ws_uuid):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import WorkspaceTagAssociation, Tag
+    from app.core.db_class.tag import Tag
+    from app.core.db_class.workspace import WorkspaceTagAssociation
     from app import db
     tag_id = (request.get_json(force=True) or {}).get('tag_id')
     if not tag_id or not Tag.query.get(tag_id):
@@ -551,7 +553,7 @@ def remove_workspace_tag(ws_uuid, tag_id):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import WorkspaceTagAssociation
+    from app.core.db_class.workspace import WorkspaceTagAssociation
     from app import db
     assoc = WorkspaceTagAssociation.query.filter_by(workspace_id=ws.id, tag_id=tag_id).first()
     if assoc:
@@ -568,7 +570,7 @@ def list_workspace_attacks(ws_uuid):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify([])
-    from app.core.db_class.db import WorkspaceAttackAssociation
+    from app.core.db_class.workspace import WorkspaceAttackAssociation
     rows = WorkspaceAttackAssociation.query.filter_by(workspace_id=ws.id).all()
     return jsonify([{
         'technique_id': r.technique.technique_id,
@@ -583,7 +585,8 @@ def add_workspace_attack(ws_uuid):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import WorkspaceAttackAssociation, AttackTechnique
+    from app.core.db_class.attack import AttackTechnique
+    from app.core.db_class.workspace import WorkspaceAttackAssociation
     from app import db
     technique_id = (request.get_json(force=True) or {}).get('technique_id')
     if not technique_id or not AttackTechnique.query.filter_by(technique_id=technique_id).first():
@@ -600,7 +603,7 @@ def remove_workspace_attack(ws_uuid, technique_id):
     ws = WsModel.get_workspace_by_uuid(ws_uuid)
     if not ws or (ws.user_id != current_user.id and not current_user.is_admin()):
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import WorkspaceAttackAssociation
+    from app.core.db_class.workspace import WorkspaceAttackAssociation
     from app import db
     assoc = WorkspaceAttackAssociation.query.filter_by(workspace_id=ws.id, technique_id=technique_id).first()
     if assoc:

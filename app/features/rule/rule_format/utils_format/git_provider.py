@@ -28,37 +28,16 @@ import subprocess
 from urllib.parse import urlparse, quote
 
 import requests
+from app.core.utils.app_settings import setting
 
 
 PROVIDERS = ('github', 'gitlab', 'gitea', 'bitbucket', 'generic')
 
-PROVIDER_LABELS = {
-    'github': 'GitHub',
-    'gitlab': 'GitLab',
-    'gitea': 'Gitea / Forgejo',
-    'bitbucket': 'Bitbucket',
-    'generic': 'Git',
-}
+PROVIDER_LABELS = setting('git.provider_labels')  # app/config/git.provider_labels.json
 
-PROVIDER_ICONS = {
-    'github': 'fa-brands fa-github',
-    'gitlab': 'fa-brands fa-gitlab',
-    'gitea': 'fa-solid fa-mug-hot',
-    'bitbucket': 'fa-brands fa-bitbucket',
-    'generic': 'fa-brands fa-git-alt',
-}
+PROVIDER_ICONS = setting('git.provider_icons')  # app/config/git.provider_icons.json
 
-_PUBLIC_HOSTS = {
-    'github.com': 'github',
-    'gitlab.com': 'gitlab',
-    'framagit.org': 'gitlab',
-    'salsa.debian.org': 'gitlab',
-    'gitlab.gnome.org': 'gitlab',
-    'invent.kde.org': 'gitlab',
-    'codeberg.org': 'gitea',
-    'gitea.com': 'gitea',
-    'bitbucket.org': 'bitbucket',
-}
+_PUBLIC_HOSTS = setting('git.public_hosts')  # app/config/git.public_hosts.json
 
 _HOST_HINTS = (('gitlab', 'gitlab'), ('forgejo', 'gitea'), ('gitea', 'gitea'))
 

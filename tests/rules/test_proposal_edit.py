@@ -5,7 +5,10 @@ accept/reject (GET /rule/validate_proposal).
 """
 
 from app import db
-from app.core.db_class.db import ActivityLog, Rule, RuleEditProposal, User
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.rule import Rule
+from app.core.db_class.rule_proposal import RuleEditProposal
+from app.core.db_class.user import User
 
 
 def _login(client, email, password):

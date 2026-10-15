@@ -10,7 +10,7 @@ import difflib
 import contextlib
 from urllib.parse import urlparse
 from flask import request
-from ..db_class.db import User
+from app.core.db_class.user import User
 
 
 @contextlib.contextmanager

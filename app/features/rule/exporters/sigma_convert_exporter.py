@@ -6,6 +6,8 @@ from sigma.pipelines.sentinelasim import sentinel_asim_pipeline
 from sigma.backends.sumologic import SumoLogicCSERuleBackend
 from sigma.backends.secops import SecOpsBackend
 from sigma.backends.loki import LogQLBackend
+from sigma.exceptions import SigmaError
+import re
 
 SIGMA_CONVERT_TARGETS = {
     'splunk':    {'label': 'Splunk (SPL)',            'extension': 'spl'},
@@ -15,6 +17,31 @@ SIGMA_CONVERT_TARGETS = {
     'secops':    {'label': 'Google SecOps (UDM)',      'extension': 'txt'},
     'loki':      {'label': 'Grafana Loki (LogQL)',     'extension': 'logql'},
 }
+
+
+class SigmaConversionUnavailable(ValueError):
+    """The rule is valid but can't be expressed for this target (a field the
+    target doesn't know, a logsource with no mapping…) — an expected outcome,
+    shown to the visitor as is, not an application error."""
+
+
+_FIELD_RE = re.compile(r'Invalid SigmaDetectionItem field name encountered: ([^.\s]+)')
+
+
+def _unavailable_message(target: str, error: Exception) -> str:
+    """Short, readable reason from a pySigma error (whose own message can be
+    a multi-paragraph list of every field the pipeline knows)."""
+    label = SIGMA_CONVERT_TARGETS[target]['label']
+    text = str(error)
+    field = _FIELD_RE.search(text)
+    if field:
+        return (f"This rule uses the field '{field.group(1)}', which {label} doesn't have for this "
+                f"rule's log source — conversion isn't available for this rule.")
+    if 'Unable to determine table name' in text:
+        return (f"This rule's logsource isn't mapped to a {label} table yet — "
+                f"conversion isn't available for this rule.")
+    first_line = text.strip().splitlines()[0] if text.strip() else type(error).__name__
+    return f"{label} can't express this rule: {first_line[:200]}"
 
 
 def _backend_for(target: str):
@@ -37,21 +64,13 @@ def convert_sigma_rule(rule, target: str) -> str:
     """Convert a Sigma rule's raw content into the given target query language via pySigma."""
     if target not in SIGMA_CONVERT_TARGETS:
         raise ValueError(f"Unknown Sigma conversion target: {target}")
-    collection = SigmaCollection.from_yaml(rule.to_string)
     try:
+        collection = SigmaCollection.from_yaml(rule.to_string)
         queries = _backend_for(target).convert(collection)
-    except Exception as e:
-        # pySigma-backend-kusto's ASIM pipeline can only pick a target table from a
-        # fixed category/EventID -> table map (see its mappings.py); a rule whose
-        # logsource isn't in that map raises this instead of guessing a table, and
-        # we don't want to guess one either — a wrong table would look like a valid
-        # query instead of clearly failing. Surface a short, honest message instead
-        # of the library's multi-paragraph internal error (which talks about
-        # "query_table" / "sigma-cli", irrelevant to a Rulezet visitor).
-        if target == 'sentinel' and 'Unable to determine table name' in str(e):
-            raise ValueError(
-                "This rule's logsource isn't mapped to a Microsoft Sentinel ASIM table yet — "
-                "conversion isn't available for this specific rule."
-            ) from e
-        raise
+    except SigmaError as e:
+        # pySigma refusing a rule for a target is expected — e.g. the Sentinel
+        # ASIM pipeline only knows the fields of its tables and only maps some
+        # logsources to a table; it raises rather than guessing, and so do we:
+        # a guessed query would look valid while matching nothing.
+        raise SigmaConversionUnavailable(_unavailable_message(target, e)) from e
     return '\n\n'.join(queries)

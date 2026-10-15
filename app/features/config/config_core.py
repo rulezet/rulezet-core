@@ -5,7 +5,9 @@ from datetime import datetime
 from flask import current_app
 from flask_login import current_user
 from ... import db
-from ...core.db_class.db import UserConfig, CustomTheme, THEME_CHOICES, _slugify, PivotickBackground
+from app.core.db_class.common import _slugify
+from app.core.db_class.pivotick import PivotickBackground
+from app.core.db_class.user import CustomTheme, THEME_CHOICES, UserConfig
 
 
 # CSS variable keys that admins can customise per-theme.

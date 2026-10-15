@@ -4,14 +4,12 @@ from sqlalchemy import and_, case, func, literal, or_
 from sqlalchemy.orm import aliased
 
 from app import db
-from app.core.db_class.db import (
-    BlogPost,
-    Bundle,
-    Rule,
-    RuleEditProposal,
-    UnifiedComment,
-    User,
-)
+from app.core.db_class.blog import BlogPost
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.comment import UnifiedComment
+from app.core.db_class.rule import Rule
+from app.core.db_class.rule_proposal import RuleEditProposal
+from app.core.db_class.user import User
 from app.features.rule.rule_core import _active
 
 _SORT_KEYS = {'last_activity', 'comment_count', 'title', 'object_type'}

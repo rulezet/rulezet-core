@@ -17,6 +17,7 @@ import re
 import zipfile
 import json
 from flask import send_file
+from app.core.utils.app_settings import setting
 
 #############
 #   Bundle  #
@@ -490,21 +491,7 @@ NOTE_SEVERITIES = ("info", "warning", "critical")
 
 # Only these taxonomies make sense on a note ("this rule false-positives on…",
 # "needs review", "low confidence"…) — every other tag is refused.
-NOTE_TAG_PREFIXES = (
-    "false-positive:",                  # risk / confirmed
-    "use-case-applicability:",          # bad IOC / rule pattern, rule config error, test alert…
-    "incident-disposition:",            # faulty indicator, duplicate…
-    "misp-workflow:analysis=",          # false-positive, highly-likely-positive…
-    "workflow:",                        # todo / state
-    "priority-level:",                  # how urgent the fix is
-    "detection-engineering:",
-    "hunt-ex:",                         # data-source / detection gaps, environment-specific
-    "cti-evaluation:",                  # accuracy, clarity…
-    "estimative-language:",             # confidence / likelihood
-    "admiralty-scale:",                 # source reliability
-    "information-origin:",              # AI-generated / human-generated
-    "ioc:",                             # artifact-state
-)
+NOTE_TAG_PREFIXES = setting('bundle.note_tag_prefixes')  # app/config/bundle.note_tag_prefixes.json
 NOTE_MAX_TAGS = 8
 NOTE_MAX_PER_HOUR = 10          # per user, per bundle
 NOTE_MAX_MENTIONS = 10          # users notified per note / edit
@@ -512,12 +499,12 @@ _pylist = type([])     # the builtin — `list` is shadowed in this module by th
 
 
 def _note_tag_allowed(name):
-    return (name or "").lower().startswith(NOTE_TAG_PREFIXES)
+    return (name or "").lower().startswith(NOTE_TAG_PREFIXES.value)
 
 
 def _note_tags_from_request(data):
     """Validated Tag objects for data['tag_ids'] — (tags, error)."""
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     raw = data.get("tag_ids")
     if raw is None:
         return None, None                          # not sent → leave the note's tags alone
@@ -533,7 +520,7 @@ def _note_tags_from_request(data):
 
 
 def _set_note_tags(note, tags):
-    from app.core.db_class.db import BundleNoteTag
+    from app.core.db_class.bundle import BundleNoteTag
     if tags is None:
         return
     wanted = {t.id for t in tags}
@@ -550,7 +537,7 @@ def _set_note_tags(note, tags):
 def search_note_tags():
     """Tags usable on a bundle note (curated taxonomies only), searchable."""
     from sqlalchemy import or_
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     q = (request.args.get("q") or "").strip()
     query = Tag.query.filter(Tag.is_active == True,
                              or_(*[Tag.name.ilike(p + "%") for p in NOTE_TAG_PREFIXES]))
@@ -558,7 +545,7 @@ def search_note_tags():
         query = query.filter(Tag.name.ilike(f"%{q}%"))
     order = db.case(*[(Tag.name.ilike(p + "%"), i) for i, p in enumerate(NOTE_TAG_PREFIXES)], else_=99)
     tags = query.order_by(order, Tag.name).limit(40).all()
-    return jsonify({"success": True, "prefixes": [*NOTE_TAG_PREFIXES],
+    return jsonify({"success": True, "prefixes": list(NOTE_TAG_PREFIXES),
                     "tags": [{"id": t.id, "name": t.name, "color": t.color, "description": t.description} for t in tags]}), 200
 _MENTION_RE = re.compile(r"@\[[^\]]+\]\((\d+)\)")
 
@@ -572,7 +559,7 @@ def _notify_note_mentions(bundle, note, previous_text=""):
     if they can see the bundle (public, or owner / admin of a private one —
     share-link holders can't be known server-side and the key is never sent
     in a notification). Returns the ids that could NOT be notified."""
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     from app.features.notification.notification_core import notify_user_mentioned
     new_ids = _mentioned_ids(note.content) - _mentioned_ids(previous_text) - {current_user.id}
     skipped = []
@@ -619,7 +606,7 @@ def _note_payload():
 
 @bundle_blueprint.route("/<int:bundle_id>/notes", methods=['GET'])
 def list_bundle_notes(bundle_id):
-    from app.core.db_class.db import BundleNote
+    from app.core.db_class.bundle import BundleNote
     bundle, err = _note_guard(bundle_id)
     if err:
         return err
@@ -648,7 +635,7 @@ def list_bundle_notes(bundle_id):
 @login_required
 def create_bundle_note(bundle_id):
     import uuid as _uuid
-    from app.core.db_class.db import BundleNote
+    from app.core.db_class.bundle import BundleNote
     bundle, err = _note_guard(bundle_id, write=True)
     if err:
         return err
@@ -681,7 +668,7 @@ def create_bundle_note(bundle_id):
 
 
 def _own_note_or_error(bundle, note_id, need="edit"):
-    from app.core.db_class.db import BundleNote
+    from app.core.db_class.bundle import BundleNote
     note = BundleNote.query.filter_by(bundle_id=bundle.id, id=note_id).first()
     if not note:
         return None, ({"success": False, "message": "Note not found", "toast_class": "danger"}, 404)
@@ -823,7 +810,7 @@ def _release_guard(bundle_id, manage=False):
 
 def _release_or_current(bundle_id, ref):
     from .bundle_release_core import build_snapshot
-    from app.core.db_class.db import BundleRelease
+    from app.core.db_class.bundle import BundleRelease
     if ref in (None, "", "current"):
         return "current", build_snapshot(bundle_id)
     rel_id = as_db_id(str(ref))
@@ -860,7 +847,7 @@ def view_bundle_release(bundle_id, ref):
 @bundle_blueprint.route("/<int:bundle_id>/releases", methods=['GET'])
 def list_bundle_releases(bundle_id):
     from .bundle_release_core import status_since
-    from app.core.db_class.db import BundleRelease
+    from app.core.db_class.bundle import BundleRelease
     bundle, err = _release_guard(bundle_id)
     if err:
         return err
@@ -905,7 +892,7 @@ def create_bundle_release(bundle_id):
 @bundle_blueprint.route("/<int:bundle_id>/releases/<int:release_id>", methods=['DELETE'])
 @login_required
 def delete_bundle_release(bundle_id, release_id):
-    from app.core.db_class.db import BundleRelease
+    from app.core.db_class.bundle import BundleRelease
     bundle, err = _release_guard(bundle_id, manage=True)
     if err:
         return err
@@ -958,7 +945,7 @@ def bundle_release_rule_diff(bundle_id, release_id, rule_id):
 @bundle_blueprint.route("/<int:bundle_id>/releases/<int:release_id>/download", methods=['GET'])
 def download_bundle_release(bundle_id, release_id):
     from .bundle_release_core import release_zip
-    from app.core.db_class.db import BundleRelease
+    from app.core.db_class.bundle import BundleRelease
     bundle, err = _release_guard(bundle_id)
     if err:
         return err
@@ -1307,7 +1294,7 @@ def evaluate():
             _ = AccountModel.update_like_gamification(profil_game_user.id, "add_one_to_dislike")
             _ = AccountModel.update_like_gamification(profil_game_user.id, "remove_one_to_like")
 
-    from app.core.db_class.db import BundleVote as _BV
+    from app.core.db_class.bundle import BundleVote as _BV
     new_bv = _BV.query.filter_by(bundle_id=bundle_id, user_id=current_user.id).first()
     user_vote = new_bv.vote_type if new_bv else None
 
@@ -1334,7 +1321,7 @@ def bundle_voters():
     if not BundleModel.can_view_bundle(bundle):
         return jsonify({"message": "You don't have the permission to view this bundle"}), 403
 
-    from app.core.db_class.db import BundleVote as _BV
+    from app.core.db_class.bundle import BundleVote as _BV
     q = (_BV.query.filter_by(bundle_id=bundle_id, vote_type=vote_type)
          .order_by(_BV.created_at.desc()))
     total = q.count()
@@ -1900,7 +1887,7 @@ def add_comment():
 
     message, success = BundleModel.add_comment_to_bundle(bundle_id, current_user, content, parent_comment_id)
     if success:
-        from app.core.db_class.db import CommentBundle
+        from app.core.db_class.comment import CommentBundle
         new_c = CommentBundle.query.filter_by(bundle_id=bundle_id, user_id=current_user.id).order_by(CommentBundle.id.desc()).first()
         if new_c:
             log_activity("comment.add", f"Added comment on bundle id={bundle_id}",
@@ -2091,7 +2078,8 @@ def get_all_vulnerabilities_usage():
     
 @bundle_blueprint.route('/get_bundle_creators_usage')
 def get_bundle_creators_usage():
-    from app.core.db_class.db import Bundle, User
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.user import User
     from sqlalchemy import func
     from sqlalchemy import or_
     from app import db
@@ -2189,7 +2177,7 @@ def get_bundle_page():
 
     bundle_data = bundle.to_json() if hasattr(bundle, 'to_json') else {}
     if current_user.is_authenticated:
-        from app.core.db_class.db import BundleVote as _BV
+        from app.core.db_class.bundle import BundleVote as _BV
         _bv = _BV.query.filter_by(bundle_id=bundle_id, user_id=current_user.id).first()
         bundle_data['user_vote'] = _bv.vote_type if _bv else None
         bundle_data['is_favorited'] = BundleModel.is_bundle_favorited(current_user.id, bundle_id)
@@ -2298,7 +2286,8 @@ def add_single_rule_to_bundle():
 @bundle_blueprint.route("/data_table", methods=['GET'])
 def bundle_data_table():
     """Standardised paginated endpoint consumed by the BundleList Vue component."""
-    from app.core.db_class.db import Bundle, Tag, BundleTagAssociation
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.tag import BundleTagAssociation, Tag
     from sqlalchemy import asc, desc, or_
 
     page     = request.args.get('page',     1,    type=int)
@@ -2330,7 +2319,7 @@ def bundle_data_table():
         # the current user's favorite bundles (visibility rules below still apply)
         if not current_user.is_authenticated:
             return jsonify({'items': [], 'total': 0, 'total_pages': 0})
-        from app.core.db_class.db import BundleFavoriteUser
+        from app.core.db_class.bundle import BundleFavoriteUser
         fav_ids = db.session.query(BundleFavoriteUser.bundle_id).filter(BundleFavoriteUser.user_id == current_user.id)
         query = query.filter(Bundle.id.in_(fav_ids))
 
@@ -2354,13 +2343,14 @@ def bundle_data_table():
         query = query.filter(Bundle.user_id == user_id)
 
     if creator_list:
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         query = (query
                  .join(User, User.id == Bundle.user_id, isouter=False)
                  .filter(User.first_name.in_(creator_list)))
 
     if attack_ids:
-        from app.core.db_class.db import BundleRuleAssociation, RuleAttackAssociation
+        from app.core.db_class.attack import RuleAttackAssociation
+        from app.core.db_class.bundle import BundleRuleAssociation
         query = (query
                  .join(BundleRuleAssociation, BundleRuleAssociation.bundle_id == Bundle.id)
                  .join(RuleAttackAssociation, RuleAttackAssociation.rule_id == BundleRuleAssociation.rule_id)
@@ -2406,7 +2396,7 @@ def bundle_data_table():
     page_ids = [b.id for b in pagination.items]
     if page_ids:
         from sqlalchemy import func as _f, case as _case
-        from app.core.db_class.db import BundleNode as _BN, BundleRelease as _BR
+        from app.core.db_class.bundle import BundleNode as _BN, BundleRelease as _BR
         counts = {bid: (files or 0, folders or 0) for bid, files, folders in (
             db.session.query(
                 _BN.bundle_id,
@@ -2436,7 +2426,7 @@ def bundle_data_table():
         pass
 
     if current_user.is_authenticated:
-        from app.core.db_class.db import BundleVote as _BV
+        from app.core.db_class.bundle import BundleVote as _BV
         bundle_ids = [b.id for b in pagination.items]
         bv_rows = _BV.query.filter(
             _BV.bundle_id.in_(bundle_ids),
@@ -2463,9 +2453,8 @@ def bundle_data_table():
 def bundle_attacks_usage():
     """Return techniques used in at least one bundle's rules (for the filter dropdown)."""
     from app import db
-    from app.core.db_class.db import (
-        BundleRuleAssociation, RuleAttackAssociation, AttackTechnique
-    )
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.bundle import BundleRuleAssociation
     from sqlalchemy import func
 
     rows = (
@@ -2562,7 +2551,7 @@ def _viewable_bundle_or_error(bundle_id):
 
 
 def _visible_bundle_analysis(bundle_id, analysis_id):
-    from app.core.db_class.db import AIGeneration
+    from app.core.db_class.ai import AIGeneration
     gen = AIGeneration.query.filter_by(id=analysis_id, bundle_id=bundle_id, agent_key='bundle_analysis').first()
     if not gen or (not gen.is_public and not _is_ai_manager()):
         return None
@@ -2582,7 +2571,7 @@ def _analysis_json(gen):
 
 @bundle_blueprint.route("/<int:bundle_id>/ai_analysis/list", methods=['GET'])
 def bundle_ai_analysis_list(bundle_id):
-    from app.core.db_class.db import AIGeneration
+    from app.core.db_class.ai import AIGeneration
     bundle, err = _viewable_bundle_or_error(bundle_id)
     if err:
         return err
@@ -2635,7 +2624,7 @@ def bundle_ai_analysis_models():
     """Launch card: is the agent enabled + which models can be picked
     (Ollama's list minus the ones disabled on the Models & Security page)."""
     from flask import current_app
-    from app.core.db_class.db import AIAgentConfig, AIModelConfig
+    from app.core.db_class.ai import AIAgentConfig, AIModelConfig
     from app.features.ai.ai_core import AgentConnectionError, list_active_models
     if not _is_ai_manager():
         return jsonify({"error": "Forbidden."}), 403
@@ -2656,7 +2645,7 @@ def bundle_ai_analysis_models():
 
 
 def _running_bundle_analysis_job(bundle_id):
-    from app.core.db_class.db import BackgroundJob
+    from app.core.db_class.job import BackgroundJob
     for job in (BackgroundJob.query.filter(BackgroundJob.job_type == 'ai_bundle_analysis',
                                            BackgroundJob.status.in_(('pending', 'running', 'paused')))
                 .order_by(BackgroundJob.id.desc()).limit(50).all()):
@@ -2699,7 +2688,7 @@ def bundle_ai_analysis_launch(bundle_id):
 def bundle_ai_analysis_job(bundle_id):
     """Progress of a run as Rulezy thinking steps: the job's step:<stage>
     log lines. ?job=<uuid> for a specific run, else the one in progress."""
-    from app.core.db_class.db import BackgroundJob, BackgroundJobLog
+    from app.core.db_class.job import BackgroundJob, BackgroundJobLog
     if not _is_ai_manager():
         return jsonify({"error": "Forbidden."}), 403
     bundle, err = _viewable_bundle_or_error(bundle_id)
@@ -2723,7 +2712,7 @@ def bundle_ai_analysis_job(bundle_id):
 @bundle_blueprint.route("/<int:bundle_id>/ai_analysis/<int:analysis_id>/visibility", methods=['POST'])
 @login_required
 def bundle_ai_analysis_visibility(bundle_id, analysis_id):
-    from app.core.db_class.db import AIGeneration
+    from app.core.db_class.ai import AIGeneration
     if not _is_ai_manager():
         return jsonify({"success": False, "message": "Forbidden."}), 403
     gen = AIGeneration.query.filter_by(id=analysis_id, bundle_id=bundle_id, agent_key='bundle_analysis').first()
@@ -2740,7 +2729,7 @@ def bundle_ai_analysis_visibility(bundle_id, analysis_id):
 @bundle_blueprint.route("/<int:bundle_id>/ai_analysis/<int:analysis_id>", methods=['DELETE'])
 @login_required
 def bundle_ai_analysis_delete(bundle_id, analysis_id):
-    from app.core.db_class.db import AIGeneration
+    from app.core.db_class.ai import AIGeneration
     if not _is_ai_manager():
         return jsonify({"success": False, "message": "Forbidden."}), 403
     gen = AIGeneration.query.filter_by(id=analysis_id, bundle_id=bundle_id, agent_key='bundle_analysis').first()

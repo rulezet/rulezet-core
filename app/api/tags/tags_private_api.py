@@ -2,7 +2,8 @@ from flask import request
 from flask_restx import Namespace, Resource
 from sqlalchemy import or_
 
-from app.core.db_class.db import Rule, Tag
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import Tag
 from app.core.utils.decorators import api_required
 from app.core.utils.utils import as_db_id, get_user_from_api
 from app.features.jobs.jobs_core import create_job

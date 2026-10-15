@@ -10,7 +10,8 @@ import io
 import pytest
 
 from app import db
-from app.core.db_class.db import RuleFavoriteUser, User
+from app.core.db_class.rule import RuleFavoriteUser
+from app.core.db_class.user import User
 from tests_new.helpers.account import (
     NEW_PASSWORD, captured_mails, enable_oidc, give_reset_token, logged_in_user_id, login, make_pending_user,
     password_change, profile_form, register_form,

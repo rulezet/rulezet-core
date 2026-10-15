@@ -8,7 +8,8 @@ from uuid import uuid4
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, load_all_rule_formats
 
 from ..... import db
-from .....core.db_class.db import ImporterResult, User
+from app.core.db_class.git import ImporterResult
+from app.core.db_class.user import User
 from app.features.rule import rule_core as RuleModel
 from app.features.rule.rules_core import bad_rule_core as BadRuleModel
 from flask import current_app

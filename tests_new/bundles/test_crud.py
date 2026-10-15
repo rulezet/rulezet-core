@@ -8,10 +8,12 @@ import json
 import zipfile
 
 from app import db
-from app.core.db_class.db import (
+from app.core.db_class.bundle import (
     Bundle, BundleFavoriteUser, BundleHistory, BundleNode, BundleNote, BundleRelease, BundleRuleAssociation,
-    BundleTagAssociation, BundleVote, UserConfig,
+    BundleVote,
 )
+from app.core.db_class.tag import BundleTagAssociation
+from app.core.db_class.user import UserConfig
 from app.features.bundle import bundle_core as BundleModel
 from app.features.bundle import bundle_layout_core as BundleLayoutModel
 from tests_new.helpers.bundles import (

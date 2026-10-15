@@ -6,7 +6,7 @@ no account.
 """
 import pytest
 
-from app.core.db_class.db import Rule, RuleFavoriteUser
+from app.core.db_class.rule import Rule, RuleFavoriteUser
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.rules import make_rule, yara_rule
 from tests_new.helpers.users import api_headers

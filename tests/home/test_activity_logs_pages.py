@@ -5,7 +5,7 @@ server-side (fixed_actions / fixed_category in _build_logs_query) —
 these tests mainly guard that scoping, plus that the general endpoint's
 own action/category filters still work after the refactor."""
 
-from app.core.db_class.db import User
+from app.core.db_class.user import User
 from app.core.utils.activity_log import log_activity
 
 

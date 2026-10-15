@@ -5,7 +5,9 @@ this system only ever grants a non-admin extra capability, never restricts one.
 """
 
 from app import db
-from app.core.db_class.db import Notification, Permission, Role, RolePermission, UserRole, User
+from app.core.db_class.notification import Notification
+from app.core.db_class.role import Permission, Role, RolePermission, UserRole
+from app.core.db_class.user import User
 from app.features.roles import roles_core
 
 

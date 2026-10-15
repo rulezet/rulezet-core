@@ -4,7 +4,8 @@ Route-level smoke tests for the Roles & Permissions admin feature
 DataTable-compatible JSON endpoints.
 """
 
-from app.core.db_class.db import Role, User
+from app.core.db_class.role import Role
+from app.core.db_class.user import User
 from app.features.roles import roles_core
 
 

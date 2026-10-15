@@ -4,7 +4,8 @@ from flask_login import current_user
 
 from ...features.bundle import bundle_core as BundleModel
 from app.core.utils.decorators import api_optional
-from app.core.db_class.db import Bundle, BundleNode, BundleRelease, Rule
+from app.core.db_class.bundle import Bundle, BundleNode, BundleRelease
+from app.core.db_class.rule import Rule
 
 bundle_public_ns = Namespace(
     "Public action on Bundle ✅",
@@ -270,7 +271,7 @@ class BundleRules(Resource):
         bundle, err = viewable_bundle_or_error(bundle_ref)
         if err:
             return err
-        from app.core.db_class.db import BundleRuleAssociation
+        from app.core.db_class.bundle import BundleRuleAssociation
         page, per_page = _page_args()
         pagination = (Rule.query
                       .join(BundleRuleAssociation, BundleRuleAssociation.rule_id == Rule.id)

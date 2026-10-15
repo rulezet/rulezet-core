@@ -5,7 +5,7 @@ import yara
 from app.features.rule.rule_core import get_rule, _active
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult
 from app.core.utils.utils import detect_cve
-from app.core.db_class.db import Rule
+from app.core.db_class.rule import Rule
 from flask import current_app
 
 
@@ -144,7 +144,7 @@ def find_trusted_dependency_rule(var_name: str, rule_id: int = None, source: str
         if hit:
             return hit
     if rule_id:
-        from app.core.db_class.db import RuleRelation
+        from app.core.db_class.rule_relation import RuleRelation
         linked = {tid for (tid,) in RuleRelation.query.filter_by(source_rule_id=rule_id)
                   .with_entities(RuleRelation.target_rule_id)}
         hit = next((c for c in candidates if c.id in linked), None)
@@ -257,7 +257,7 @@ def _prune_stale_yara_links(rule, dependencies) -> int:
     """Drop the rule's own auto `yara_condition_ref` links whose target it no
     longer references. Only auto links of that type — never a hand-made one."""
     from app import db
-    from app.core.db_class.db import RuleRelation
+    from app.core.db_class.rule_relation import RuleRelation
     still = {d.id for d in dependencies if _condition_references(rule.to_string, d.title)}
     stale = (RuleRelation.query.filter_by(source_rule_id=rule.id, relation_type='yara_condition_ref', source='auto')
              .filter(RuleRelation.target_rule_id.notin_(still or {-1})).all())

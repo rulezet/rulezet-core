@@ -41,7 +41,8 @@ def techniques_usage():
     Cached 60s (see the comment above get_rules_sources_usage in rule.py
     for the same pattern/reasoning) — this refetches on every other filter
     change too."""
-    from ...core.db_class.db import RuleAttackAssociation, AttackTechnique, Rule
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.rule import Rule
     from app import db
     from sqlalchemy import func
     from app.features.rule import rule_core as RuleModel
@@ -195,7 +196,7 @@ def heatmap_data():
 @attack_blueprint.route('/technique/<string:technique_id>')
 def technique_detail(technique_id):
     """Public technique detail page."""
-    from app.core.db_class.db import AttackTechnique
+    from app.core.db_class.attack import AttackTechnique
     tech = AttackTechnique.query.filter_by(technique_id=technique_id.upper()).first()
     if not tech:
         abort(404)
@@ -208,7 +209,8 @@ def technique_stats(technique_id):
     import datetime
     from collections import defaultdict
     from app import db
-    from app.core.db_class.db import RuleAttackAssociation, Rule, AttackTechnique
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.rule import Rule
 
     tid = technique_id.upper()
     tech = AttackTechnique.query.filter_by(technique_id=tid).first()
@@ -318,7 +320,7 @@ def admin_techniques():
         return jsonify({'error': 'Forbidden'}), 403
 
     from app import db
-    from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
     from sqlalchemy import func, asc, desc, cast, Text
 
     search          = request.args.get('search', '').strip()[:AttackModel.MAX_SEARCH_LENGTH + 1]

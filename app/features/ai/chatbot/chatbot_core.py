@@ -13,7 +13,41 @@ import datetime
 import difflib
 import re
 
-_VALID_FORMATS = {'yara', 'sigma', 'suricata', 'zeek', 'wazuh', 'nse', 'crs', 'nova', 'elastic', 'splunk', 'plum'}
+_DEFAULT_FORMATS = {'yara', 'sigma', 'suricata', 'zeek', 'wazuh', 'nse', 'crs', 'nova', 'elastic', 'splunk', 'plum'}
+
+
+class _LiveFormats:
+    """The formats registered on this instance (FormatRule), read from the
+    database — so a format an admin adds is known to the assistant without
+    a code change. Falls back to _DEFAULT_FORMATS outside an app context."""
+    _cache = {'at': 0.0, 'names': None}
+
+    def _names(self):
+        import time
+        now = time.monotonic()
+        if self._cache['names'] is not None and now - self._cache['at'] < 60:
+            return self._cache['names']
+        try:
+            from app.core.db_class.rule import FormatRule
+            names = {(f.name or '').strip().lower() for f in FormatRule.query.all()}
+            names.discard('')
+            names.discard('no format')
+        except Exception:
+            return _DEFAULT_FORMATS
+        self._cache.update(at=now, names=names or _DEFAULT_FORMATS)
+        return self._cache['names']
+
+    def __iter__(self):
+        return iter(self._names())
+
+    def __contains__(self, name):
+        return name in self._names()
+
+    def __len__(self):
+        return len(self._names())
+
+
+_VALID_FORMATS = _LiveFormats()
 
 # destination_key -> (path, minimum role). "admin" destinations are refused
 # for a non-admin caller in _navigate() below — the model only ever picks a
@@ -64,16 +98,16 @@ _ROUTES = {
     # Not a permission bug to fix, a destination that's intentionally absent.
 }
 
-SYSTEM_PROMPT = """You are Rulezy, Rulezet's assistant — that IS your name. When addressed by name ("hi Rulezy", "are you good, Rulezy?") or asked how you are, respond naturally in first person as yourself (e.g. "Doing great, thanks for asking!") — never talk about "Rulezy" as if it were someone else, and never echo the name back confused about who it refers to.
-Rulezet: open-source platform for cybersecurity detection rules (""" + ', '.join(sorted(_VALID_FORMATS)) + """). Users write/import rules, group into bundles, tag them (MISP/ATT&CK), propose edits, comment/vote, sync via connectors.
+_SYSTEM_PROMPT_TEMPLATE = """You are Rulezy, Rulezet's assistant — that IS your name. When addressed by name ("hi Rulezy", "are you good, Rulezy?") or asked how you are, respond naturally in first person as yourself (e.g. "Doing great, thanks for asking!") — never talk about "Rulezy" as if it were someone else, and never echo the name back confused about who it refers to.
+Rulezet: open-source platform for cybersecurity detection rules (__FORMATS__). Users write/import rules, group into bundles, tag them (MISP/ATT&CK), propose edits, comment/vote, sync via connectors.
 Always reply in English, even if the user writes in another language or in gibberish.
 If the message is gibberish/unclear/off-topic -> action "ask", reply politely asking them to rephrase what they'd like to do — never leave "reply" blank.
 If asked "what is Rulezet" -> brief chat summary of the above, nothing invented.
 If asked what a detection rule is, or what a specific format does/is for -> action "chat", one concise accurate sentence, never invent a capability.
-If asked what formats are supported/available/exist (this is NOT search_rules, there is nothing to search for) -> action "chat", answer exactly: """ + ', '.join(sorted(_VALID_FORMATS)) + """.
+If asked what formats are supported/available/exist (this is NOT search_rules, there is nothing to search for) -> action "chat", answer exactly: __FORMATS__.
 
 Pick ONE action, or just chat:
-- create_rule: user wants a NEW rule WRITTEN ("write/create/make/generate a rule..."). Needs format (one of: """ + ', '.join(sorted(_VALID_FORMATS)) + """) and content. Title is auto-extracted from the rule content itself — never ask for one.
+- create_rule: user wants a NEW rule WRITTEN ("write/create/make/generate a rule..."). Needs format (one of: __FORMATS__) and content. Title is auto-extracted from the rule content itself — never ask for one.
 - create_bundle: needs name. Optional: description.
 - navigate: user wants to GO TO a page. Needs "destination" = EXACTLY one key from this list, nothing else, never a raw URL: """ + ', '.join(sorted(_ROUTES)) + """
 - search_rules: user wants to FIND existing rules ("rules for CVE-X", "rules tagged X") — NOT create_rule unless they said write/create/make/generate. Optional fields (lists unless noted): search (text), rule_type (usually one format, pass through as typed even if misspelled e.g. "ayara" — backend fuzzy-matches it; if the user names SEVERAL formats at once, e.g. "suricata and yara", pass them all as a list ["suricata","yara"] — backend proposes one link per format, the list can only be filtered by one at a time), tags, sources, licenses, vulnerabilities (CVE ids), attacks (ATT&CK ids), authors OR editors, terms (a value with NO field word attached, e.g. "tlp:clear" alone — backend tries it as tag, then CVE, then free text).
@@ -109,6 +143,11 @@ Reply with ONLY a single JSON object, no other text, in exactly one of these sha
 Never invent a rule's content or a missing required field yourself — use "ask" instead. Keep "reply" short and plain text (no markdown)."""
 
 
+def build_system_prompt():
+    """The system prompt, with the formats registered on this instance."""
+    return _SYSTEM_PROMPT_TEMPLATE.replace('__FORMATS__', ', '.join(sorted(_VALID_FORMATS)))
+
+
 # Calling Ollama directly used to happen here (call_ollama()) — now routed
 # through ChatbotAgent + the shared OllamaClient (app/features/ai/ai_core.py),
 # see _dispatch_message() below, so the concurrency governor, rate limiting,
@@ -121,7 +160,7 @@ def _chatbot_model_name() -> str:
     pick a model, so a chatbot-created rule's Source reflects reality
     regardless of whether this particular call went through a deterministic
     shortcut (no model consulted) or the real agent."""
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
     from app.features.ai.ai_core import get_default_ollama_model
 
     cfg = AIAgentConfig.query.filter_by(agent_key='chatbot').first()
@@ -220,7 +259,7 @@ def _split_format_tokens(raw) -> list:
 
 
 def _find_matching_tag(term: str):
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     exact = Tag.query.filter(Tag.name.ilike(term)).first()
     if exact:
         return exact.name
@@ -804,23 +843,16 @@ _EXPLAIN_RE = re.compile(
 # One sentence per format, matching README.md's "Supported Rule Formats" table —
 # kept here instead of left to the model for the same reason as _maybe_format_question:
 # a fixed, factual answer shouldn't depend on a small model reproducing it faithfully.
-_FORMAT_INFO = {
-    'yara':     "YARA rules match patterns (strings, byte sequences, conditions) inside files or memory — the standard way to fingerprint and hunt for malware samples.",
-    'sigma':    "Sigma is a generic, SIEM-agnostic signature format for log-based detections — you write one Sigma rule and it can be converted to many query languages.",
-    'suricata': "Suricata rules describe network traffic patterns for an IDS/IPS engine — they inspect packets in real time and can alert on or block matching traffic.",
-    'zeek':     "Zeek rules are scripts for the Zeek network monitor — they analyze traffic and produce rich logs/events rather than simple pattern matches.",
-    'crs':      "CRS (OWASP Core Rule Set) rules protect web applications by detecting attack patterns like SQL injection or XSS at the WAF layer (ModSecurity/Coraza).",
-    'nova':     "Nova rules hunt for malicious or anomalous behavior with a condition-based syntax, often used for threat hunting across structured data.",
-    'nse':      "NSE (Nmap Scripting Engine) scripts extend Nmap to run scans, detect vulnerabilities, or gather extra info during a network scan.",
-    'wazuh':    "Wazuh rules detect threats from host-based data — logs, file integrity, syscalls — feeding a SIEM/XDR pipeline.",
-    'elastic':  "Elastic Security rules detect threats directly inside the Elastic Stack (logs, endpoint data) using EQL/KQL-style queries.",
-}
+def _format_info(fmt):
+    """One-sentence description of a format, from the admin-editable format
+    catalog (formats.catalog setting) — the same text as the Rule formats page."""
+    from app.features.rule.rule_format.format_catalog import get_format_info
+    return get_format_info(fmt)['description']
 
-_DETECTION_RULE_EXPLANATION = (
-    "A detection rule is a piece of logic — a pattern, signature, or condition — written in a format like "
-    + ', '.join(sorted(_VALID_FORMATS))
-    + ", so a tool can automatically flag matching files, network traffic, logs, or behavior as suspicious or malicious."
-)
+def _detection_rule_explanation():
+    return ("A detection rule is a piece of logic — a pattern, signature, or condition — written in a format like "
+            + ', '.join(sorted(_VALID_FORMATS))
+            + ", so a tool can automatically flag matching files, network traffic, logs, or behavior as suspicious or malicious.")
 
 
 def _maybe_explain_question(message: str):
@@ -833,12 +865,12 @@ def _maybe_explain_question(message: str):
         return None
 
     msg_lower = message.lower()
-    for fmt in sorted(_FORMAT_INFO):
+    for fmt in sorted(_VALID_FORMATS):
         if re.search(rf'\b{re.escape(fmt)}\b', msg_lower):
-            return {"action": "chat", "reply": _FORMAT_INFO[fmt], "success": True}
+            return {"action": "chat", "reply": _format_info(fmt), "success": True}
 
     if re.search(r'\bdetection rules?\b', msg_lower):
-        return {"action": "chat", "reply": _DETECTION_RULE_EXPLANATION, "success": True}
+        return {"action": "chat", "reply": _detection_rule_explanation(), "success": True}
 
     return None
 
@@ -880,7 +912,7 @@ def _agent_gate_check(user):
     switch or a user's rate limit. Checked once, up front, so it applies
     uniformly whether a message ends up shortcut-served or model-served.
     Returns a refusal dict if blocked, else None."""
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
     from app.features.ai.ai_core import check_rate_limit
 
     agent_config = AIAgentConfig.query.filter_by(agent_key='chatbot').first()
@@ -1036,7 +1068,7 @@ def _persist_exchange(user, conversation_uuid: str, user_message: str, outcome: 
     import uuid as uuid_mod
 
     from app import db
-    from app.core.db_class.db import ChatbotConversation, ChatbotMessage
+    from app.core.db_class.ai import ChatbotConversation, ChatbotMessage
     from app.core.utils.activity_log import log_activity
 
     try:

@@ -1,0 +1,40 @@
+{
+  "label": "Avatar borders",
+  "category": "Accounts",
+  "description": "Name -> [label, ring colour].",
+  "public": false,
+  "value": {
+    "none": [
+      "None",
+      null
+    ],
+    "blue": [
+      "Blue",
+      "#0d6efd"
+    ],
+    "white": [
+      "White",
+      "#ffffff"
+    ],
+    "gold": [
+      "Gold",
+      "#f5b301"
+    ],
+    "green": [
+      "Green",
+      "#2b8a3e"
+    ],
+    "red": [
+      "Red",
+      "#e03131"
+    ],
+    "purple": [
+      "Purple",
+      "#7048e8"
+    ],
+    "dark": [
+      "Dark",
+      "#1e293b"
+    ]
+  }
+}

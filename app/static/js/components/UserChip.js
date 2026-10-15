@@ -16,11 +16,16 @@ const { defineComponent, ref, computed, onMounted, onBeforeUnmount, h, Teleport 
 
 const _cache = {};
 
+// The request itself is cached (not just its result), so several chips of
+// the same user hovered quickly share one call; a failed one may be retried.
 function fetchMini(userId) {
-    if (_cache[userId]) return Promise.resolve(_cache[userId]);
-    return fetch(`/account/user_mini/${userId}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(data => { if (data) _cache[userId] = data; return data; });
+    if (!_cache[userId]) {
+        _cache[userId] = fetch(`/account/user_mini/${userId}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => { if (!data) delete _cache[userId]; return data; })
+            .catch(() => { delete _cache[userId]; return null; });
+    }
+    return _cache[userId];
 }
 
 function getInitials(name) {

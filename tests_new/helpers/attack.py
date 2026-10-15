@@ -3,7 +3,7 @@ import datetime
 import uuid
 
 from app import db
-from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
+from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
 
 _NAMES = {
     "T1059": "Command and Scripting Interpreter",

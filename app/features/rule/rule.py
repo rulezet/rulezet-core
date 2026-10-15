@@ -57,7 +57,7 @@ def _ai_generate_available() -> bool:
     """Gate for the "Generate with AI (Beta)" tab — off when the rule_generator
     agent is disabled instance-wide. YARA-only for now: the prompt/skeleton
     (rule_generator_agent.py) has only been designed and tested against YARA."""
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
 
     cfg = AIAgentConfig.query.filter_by(agent_key='rule_generator').first()
     return cfg.enabled if cfg else True
@@ -205,7 +205,7 @@ def ai_generate_rule():
     user_id = current_user.id
 
     def generate():
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         fresh_user = User.query.get(user_id)
         for event in RuleGeneratorModel.run_ai_generate_streaming(fresh_user, description, sample=sample):
             yield json.dumps(event) + "\n"
@@ -386,7 +386,8 @@ def get_rules_page_filter() -> jsonify:
     # Batch-fetch submitters and (for a logged-in viewer) favorite status for
     # this page's rules — one query each instead of Rule.to_json() issuing
     # one per rule. See its docstring.
-    from app.core.db_class.db import User, RuleFavoriteUser
+    from app.core.db_class.rule import RuleFavoriteUser
+    from app.core.db_class.user import User
     user_ids = {r.user_id for r in rules if r.user_id}
     submitters_by_id = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
 
@@ -472,7 +473,7 @@ def vote_rule() -> jsonify:
                  target_type="rule", target_id=rule_id,
                  target_uuid=rule.uuid if rule else None)
 
-    from app.core.db_class.db import RuleVote as _RuleVote
+    from app.core.db_class.rule import RuleVote as _RuleVote
     new_vote = _RuleVote.query.filter_by(rule_id=rule_id, user_id=current_user.id).first()
     user_vote = new_vote.vote_type if new_vote else None
 
@@ -498,7 +499,7 @@ def rule_voters(rule_id):
     if not rule:
         return jsonify({"message": "Rule not found"}), 404
 
-    from app.core.db_class.db import RuleVote as _RuleVote
+    from app.core.db_class.rule import RuleVote as _RuleVote
     q = (_RuleVote.query.filter_by(rule_id=rule_id, vote_type=vote_type)
          .order_by(_RuleVote.created_at.desc()))
     total = q.count()
@@ -947,7 +948,7 @@ def detail_rule_by_uuid(rule_uuid):
     active_tab = request.args.get('tab', 'detail')
     current_user_vote = None
     if current_user.is_authenticated:
-        from app.core.db_class.db import RuleVote as _RV
+        from app.core.db_class.rule import RuleVote as _RV
         _rv = _RV.query.filter_by(rule_id=rule.id, user_id=current_user.id).first()
         current_user_vote = _rv.vote_type if _rv else None
     if rule:
@@ -984,22 +985,22 @@ def detail_rule_by_uuid(rule_uuid):
 
 
 def _rule_similarity_count(rule_id):
-    from app.core.db_class.db import RuleSimilarity
+    from app.core.db_class.similarity import RuleSimilarity
     return RuleSimilarity.query.filter_by(rule_id=rule_id).count()
 
 
 def _rule_history_count(rule_id):
-    from app.core.db_class.db import RuleUpdateHistory
+    from app.core.db_class.rule import RuleUpdateHistory
     return RuleUpdateHistory.query.filter_by(rule_id=rule_id).count()
 
 
 def _rule_proposal_count(rule_id):
-    from app.core.db_class.db import RuleEditProposal
+    from app.core.db_class.rule_proposal import RuleEditProposal
     return RuleEditProposal.query.filter_by(rule_id=rule_id).count()
 
 
 def _rule_scope_count(rule_id):
-    from app.core.db_class.db import RuleScope
+    from app.core.db_class.rule import RuleScope
     return RuleScope.query.filter_by(rule_id=rule_id).count()
 
 
@@ -1010,7 +1011,7 @@ def _rule_test_count(rule_id):
 
 
 def _rule_ai_analysis_count(rule_id):
-    from app.core.db_class.db import AIGeneration
+    from app.core.db_class.ai import AIGeneration
     q = AIGeneration.query.filter_by(agent_key='rule_analysis', rule_id=rule_id)
     if not (current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.manage'))):
         q = q.filter_by(is_public=True)
@@ -1076,7 +1077,7 @@ def detail_rule(rule_id)-> render_template:
     active_tab = request.args.get('tab', 'detail')
     current_user_vote = None
     if current_user.is_authenticated:
-        from app.core.db_class.db import RuleVote as _RV
+        from app.core.db_class.rule import RuleVote as _RV
         _rv = _RV.query.filter_by(rule_id=rule.id, user_id=current_user.id).first()
         current_user_vote = _rv.vote_type if _rv else None
     if rule:
@@ -1224,7 +1225,7 @@ def detail_rule_ai_analysis_list(rule_id):
     """History of AI analyses for one rule, newest first. Regular users only
     ever see is_public=True entries; admins see everything (including
     private ones, so they can review/toggle/delete them)."""
-    from app.core.db_class.db import AIGeneration
+    from app.core.db_class.ai import AIGeneration
     q = AIGeneration.query.filter_by(agent_key='rule_analysis', rule_id=rule_id)
     if not (current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.manage'))):
         q = q.filter_by(is_public=True)
@@ -1284,7 +1285,7 @@ def ai_analysis_models():
     than a separate admin-curated table, since none exists yet. Defense in
     depth: the launch card itself is only shown to admins/ai.use holders in
     the template."""
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
     from app.features.ai.ai_core import AgentConnectionError, list_active_models
 
     if not (current_user.is_admin() or current_user.has_permission('ai.use')):
@@ -1309,7 +1310,7 @@ def ai_analysis_models():
 def _get_visible_ai_generation_or_none(rule_id, analysis_id):
     """A private analysis is only visible to an admin or AI Manager — same
     rule as detail_rule_ai_analysis_list above."""
-    from app.core.db_class.db import AIGeneration
+    from app.core.db_class.ai import AIGeneration
     analysis = AIGeneration.query.filter_by(
         id=analysis_id, rule_id=rule_id, agent_key='rule_analysis',
     ).first()
@@ -1421,7 +1422,7 @@ def detail_rule_ai_analysis_download_pdf(rule_id, analysis_id):
 def detail_rule_ai_analysis_visibility(rule_id, analysis_id):
     """Moderation lever (admin or AI Manager): an AI-generated report can be
     wrong on a given rule — hide it without losing it."""
-    from app.core.db_class.db import AIGeneration
+    from app.core.db_class.ai import AIGeneration
 
     if not (current_user.is_admin() or current_user.has_permission('ai.manage')):
         return jsonify({"success": False, "message": "Forbidden."}), 403
@@ -1445,7 +1446,7 @@ def detail_rule_ai_analysis_visibility(rule_id, analysis_id):
 @login_required
 def detail_rule_ai_analysis_delete(rule_id, analysis_id):
     """Delete a single AI analysis entry (admin or AI Manager)."""
-    from app.core.db_class.db import AIGeneration
+    from app.core.db_class.ai import AIGeneration
 
     if not (current_user.is_admin() or current_user.has_permission('ai.manage')):
         return jsonify({"success": False, "message": "Forbidden."}), 403
@@ -1467,7 +1468,7 @@ def detail_rule_ai_analysis_delete(rule_id, analysis_id):
 @login_required
 def history_activity_delete(log_uuid):
     """Delete a single ActivityLog entry — rule creator or admin only."""
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     # target_id is a plain integer PK reused across unrelated tables
     # (bundle, user, tag, job, ...) — without the target_type filter, a
     # rule owner could delete any log row whose target_id happened to equal
@@ -1490,7 +1491,7 @@ def history_activity_delete(log_uuid):
 @login_required
 def history_update_delete(update_id):
     """Delete a RuleUpdateHistory entry — rule creator or admin only."""
-    from app.core.db_class.db import RuleUpdateHistory
+    from app.core.db_class.rule import RuleUpdateHistory
     entry = RuleUpdateHistory.query.get(update_id)
     if not entry:
         return jsonify({"success": False, "message": "Entry not found."}), 404
@@ -1513,7 +1514,9 @@ def rule_history_data(rule_id):
     if not rule:
         return jsonify({"items": []})
 
-    from app.core.db_class.db import ActivityLog, RuleUpdateHistory, User
+    from app.core.db_class.activity_log import ActivityLog
+    from app.core.db_class.rule import RuleUpdateHistory
+    from app.core.db_class.user import User
     events = []
 
     # ── Activity logs targeting this rule ────────────────────────────────────
@@ -1638,9 +1641,13 @@ def get_sigma_convert(rule_id):
     rule = RuleModel.get_rule(rule_id)
     if not rule or (rule.format or '').lower() != 'sigma' or target not in SIGMA_CONVERT_TARGETS:
         return jsonify({"success": False, "content": None})
+    from app.features.rule.exporters.sigma_convert_exporter import SigmaConversionUnavailable
     try:
         content = convert_sigma_rule(rule, target)
         return jsonify({"success": True, "content": content})
+    except SigmaConversionUnavailable as e:
+        # The rule can't be expressed for this target — expected, not an app error.
+        return jsonify({"success": False, "content": None, "error": str(e)})
     except Exception as e:
         return jsonify({"success": False, "content": None, "error": internal_error(e, "Conversion failed for this rule.")})
 
@@ -2170,7 +2177,7 @@ def propose_edit(rule_id) -> redirect:
 
     try:
         from app.features.notification.notification_core import notify_proposal_submitted
-        from app.core.db_class.db import RuleEditProposal as ProposalModel
+        from app.core.db_class.rule_proposal import RuleEditProposal as ProposalModel
         proposal_obj = ProposalModel.query.get(proposal_id)
         if proposal_obj:
             notify_proposal_submitted(proposal_obj, rule)
@@ -2203,7 +2210,7 @@ def propose_revision(proposal_id) -> redirect:
 
     Returns JSON when Accept: application/json.
     """
-    from app.core.db_class.db import RuleEditProposal
+    from app.core.db_class.rule_proposal import RuleEditProposal
 
     is_ajax = request.headers.get('Accept', '').startswith('application/json')
 
@@ -2452,7 +2459,7 @@ def post_rule_edit_comment() -> jsonify:
         new_comment = RuleModel.create_comment_discuss(proposal_id, current_user.id, content)
         try:
             from app.features.notification.notification_core import notify_proposal_comment
-            from app.core.db_class.db import RuleEditProposal as ProposalModel
+            from app.core.db_class.rule_proposal import RuleEditProposal as ProposalModel
             proposal_obj = ProposalModel.query.get(proposal_id)
             if proposal_obj:
                 rule_for_notif = RuleModel.get_rule(proposal_obj.rule_id)
@@ -2568,7 +2575,7 @@ def get_history_rule():
 @login_required
 def get_proposal() -> jsonify:
     """Get the detail porposal"""
-    from app.core.db_class.db import UnifiedComment
+    from app.core.db_class.comment import UnifiedComment
     proposalId = as_db_id(request.args.get('id'))
     proposal = RuleModel.get_rule_proposal(proposalId) if proposalId else None
     if not proposal or not RuleModel.get_rule(proposal.rule_id):
@@ -2627,7 +2634,8 @@ def get_proposal() -> jsonify:
 def _build_proposal_system_events(proposal) -> list:
     """Build the GitHub-style system-event feed for a proposal: created,
     justification edits, and the final accept/reject decision."""
-    from app.core.db_class.db import ActivityLog, RuleEditProposal
+    from app.core.db_class.activity_log import ActivityLog
+    from app.core.db_class.rule_proposal import RuleEditProposal
 
     events = []
 
@@ -2699,7 +2707,7 @@ def _build_proposal_system_events(proposal) -> list:
 def edit_proposal_message(proposal_id) -> jsonify:
     """Edit the author's justification of a proposal (its author or an admin),
     whatever the proposal's status."""
-    from app.core.db_class.db import RuleEditProposal
+    from app.core.db_class.rule_proposal import RuleEditProposal
     from app.core.utils.utils import json_object
 
     proposal = db.session.get(RuleEditProposal, proposal_id)
@@ -2732,7 +2740,7 @@ def edit_proposal_message(proposal_id) -> jsonify:
 @login_required
 def delete_proposal_message(proposal_id) -> jsonify:
     """Delete the author's justification of a proposal (its author or an admin)."""
-    from app.core.db_class.db import RuleEditProposal
+    from app.core.db_class.rule_proposal import RuleEditProposal
 
     proposal = db.session.get(RuleEditProposal, proposal_id)
     if not proposal:
@@ -2925,7 +2933,7 @@ def decision_rule() -> jsonify:
     rule_ = RuleModel.get_rule(history.rule_id)
     if not rule_:
         return {"message": "Rule Not found", 'toast_class': "danger-subtle"}, 404
-    from app.core.db_class.db import RuleStatus
+    from app.core.db_class.git import RuleStatus
     if not RuleStatus.query.filter_by(rule_id=str(rule_.id), update_result_id=updater.id).first():
         return {"message": "This rule is not part of that update check", 'toast_class': "danger-subtle"}, 404
 
@@ -3120,7 +3128,7 @@ def _ai_fix_available_for(bad_rule) -> bool:
     formats (Zeek/NSE) — a targeted edit to already-broken code would be
     exactly as dangerous as generating new code from scratch even if it
     were otherwise supported."""
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
 
     if (bad_rule.rule_type or '').lower() != 'yara':
         return False
@@ -3217,7 +3225,7 @@ def bad_rule_link_dependency(rule_id):
     if not target_rule_id:
         return jsonify({"success": False, "error": "target_rule_id required."}), 400
 
-    from app.core.db_class.db import Rule
+    from app.core.db_class.rule import Rule
     target_rule = Rule.query.get(int(target_rule_id))
     if not target_rule or target_rule.is_deleted:
         return jsonify({"success": False, "error": "Target rule not found."}), 404
@@ -3281,7 +3289,7 @@ def bad_rule_ai_fix(rule_id):
     user_id = current_user.id
 
     def generate():
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         fresh_bad_rule = BadRuleModel.get_invalid_rule_by_id(bad_rule_id)
         fresh_user = User.query.get(user_id)
         for event in BadRuleModel.run_ai_fix_streaming(fresh_bad_rule, fresh_user):
@@ -3680,7 +3688,7 @@ def replace_format_rule():
 @rule_blueprint.route("/formats_data_table", methods=['GET'])
 def formats_data_table():
     """Paginated + searchable format list for the admin component."""
-    from app.core.db_class.db import FormatRule
+    from app.core.db_class.rule import FormatRule
     page     = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 20, type=int), 100)
     search   = (request.args.get('search', '') or '').strip()
@@ -3788,7 +3796,7 @@ def get_last_cve_rules() -> dict:
             item['cves'] = []
 
     if current_user.is_authenticated:
-        from app.core.db_class.db import RuleVote as _RV2
+        from app.core.db_class.rule import RuleVote as _RV2
         votes_map2 = {v.rule_id: v.vote_type for v in _RV2.query.filter(
             _RV2.rule_id.in_(rule_ids), _RV2.user_id == current_user.id
         ).all()}
@@ -3832,7 +3840,7 @@ def suricata_audit_result(job_uuid) -> jsonify:
     if not current_user.is_admin():
         return jsonify({"success": False, "message": "Forbidden"}), 403
 
-    from app.core.db_class.db import BackgroundJob
+    from app.core.db_class.job import BackgroundJob
     job = BackgroundJob.query.filter_by(uuid=job_uuid, job_type='audit_suricata_rules').first()
     if not job:
         return jsonify({"success": False, "message": "Job not found."}), 404
@@ -3891,7 +3899,7 @@ def suricata_deep_validate_result(job_uuid) -> jsonify:
     if not current_user.is_admin():
         return jsonify({"success": False, "message": "Forbidden"}), 403
 
-    from app.core.db_class.db import BackgroundJob
+    from app.core.db_class.job import BackgroundJob
     job = BackgroundJob.query.filter_by(uuid=job_uuid, job_type='deep_validate_suricata_rules').first()
     if not job:
         return jsonify({"success": False, "message": "Job not found."}), 404
@@ -4508,7 +4516,7 @@ def history_github_importer_list():
 @login_required
 def find_history_page():
     """Return the page number where a given session UUID appears in the history."""
-    from app.core.db_class.db import ImporterResult, UpdateResult
+    from app.core.db_class.git import ImporterResult, UpdateResult
     uuid_param = request.args.get('uuid', type=str)
     kind       = request.args.get('type', 'import')   # 'import' | 'update'
     per_page   = 20
@@ -5368,7 +5376,7 @@ def rules_data_table():
 @rule_blueprint.route("/<int:rule_id>/status", methods=['PATCH'])
 @login_required
 def update_rule_status(rule_id):
-    from app.core.db_class.db import Rule
+    from app.core.db_class.rule import Rule
     rule = RuleModel._active().filter(Rule.id == rule_id).first()
     if not rule:
         return jsonify({'success': False, 'message': 'Rule not found'}), 404
@@ -5387,7 +5395,8 @@ def update_rule_status(rule_id):
 @login_required
 def quick_meta(rule_id):
     """Patch tags, CVEs, and ATT&CK techniques on a rule from workspace quick-edit."""
-    from app.core.db_class.db import Rule, RuleTagAssociation, Tag
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.tag import RuleTagAssociation, Tag
     rule = RuleModel._active().filter(Rule.id == rule_id).first()
     if not rule:
         return jsonify({'success': False}), 404
@@ -5401,7 +5410,7 @@ def quick_meta(rule_id):
 
     # Allow edit if owner, admin, or the rule is in one of the user's workspaces
     if rule.user_id != current_user.id and not current_user.is_admin():
-        from app.core.db_class.db import WorkspaceRule, Workspace
+        from app.core.db_class.workspace import Workspace, WorkspaceRule
         in_own_ws = (db.session.query(WorkspaceRule)
                      .join(Workspace, WorkspaceRule.workspace_id == Workspace.id)
                      .filter(WorkspaceRule.rule_id == rule_id, Workspace.user_id == current_user.id)
@@ -5522,7 +5531,7 @@ def rules_data_table_votes():
     rule_ids     = [r.id for r in pagination.items]
     tags_by_rule = RuleModel.get_tags_for_rules_batch(rule_ids)
 
-    from app.core.db_class.db import RuleVote as _RV
+    from app.core.db_class.rule import RuleVote as _RV
     votes_map = {}
     if rule_ids:
         rows = _RV.query.filter(
@@ -6511,7 +6520,7 @@ def trash():
 def get_trash_rules():
     if not current_user.is_admin():
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import User as UserModel
+    from app.core.db_class.user import User as UserModel
     page         = request.args.get('page', 1, type=int)
     search       = request.args.get('search', '').strip() or None
     source       = request.args.get('source', '').strip() or None
@@ -6695,7 +6704,7 @@ def restore_rules_bulk():
 def restore_batch(batch_uuid):
     if not current_user.is_admin():
         return jsonify({'success': False}), 403
-    from app.core.db_class.db import Rule as _Rule
+    from app.core.db_class.rule import Rule as _Rule
     count = _Rule.query.filter(_Rule.is_deleted == True, _Rule.delete_batch_uuid == batch_uuid).count()
 
     if count > TRASH_JOB_THRESHOLD:
@@ -6736,7 +6745,7 @@ def permanent_delete_bulk():
     if error:
         return jsonify({'success': False, 'message': error}), 400
     if batch_uuid:
-        from app.core.db_class.db import Rule as _Rule
+        from app.core.db_class.rule import Rule as _Rule
         ids = [r.id for r in _Rule.query.filter(_Rule.is_deleted == True,
                                                 _Rule.delete_batch_uuid == batch_uuid).all()]
     count      = len(ids) if (ids or batch_uuid) else RuleModel.count_deleted_rules()

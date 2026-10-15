@@ -138,6 +138,12 @@
 <nav class="dr-nav mb-4">
     <span class="dr-nav__label">System</span>
 
+    <a href="/admin/configuration"
+       class="dr-nav__item {% if active == 'configuration' %}active{% endif %}">
+        <i class="fa-solid fa-sliders"></i>
+        <span>Configuration</span>
+    </a>
+
     <a href="/connector/list"
        class="dr-nav__item {% if active == 'connectors' %}active{% endif %}">
         <i class="fa-solid fa-plug"></i>

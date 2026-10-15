@@ -18,7 +18,7 @@ import git
 import pytest
 
 from app import db
-from app.core.db_class.db import Rule
+from app.core.db_class.rule import Rule
 from app.features.admin.rule_mirror import rule_mirror_core as mirror
 
 

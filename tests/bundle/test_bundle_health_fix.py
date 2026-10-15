@@ -4,7 +4,8 @@ resolves its finding — scoped to the bundle and to its owner / admins."""
 import uuid
 
 from app import db
-from app.core.db_class.db import BundleNode, BundleRuleAssociation, RuleTagAssociation
+from app.core.db_class.bundle import BundleNode, BundleRuleAssociation
+from app.core.db_class.tag import RuleTagAssociation
 
 from bundle_helpers import D, F, R, SURICATA, admin, login, make_bundle, make_rule, other, owner, save_structure, tag
 

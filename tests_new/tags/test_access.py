@@ -14,7 +14,8 @@ owner or an admin.
 """
 import pytest
 
-from app.core.db_class.db import BackgroundJob, BundleTagAssociation, Tag
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.tag import BundleTagAssociation, Tag
 from tests_new.helpers.access import FORBIDDEN, LOGIN, OK, assert_outcome, matrix
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.rules import make_rule

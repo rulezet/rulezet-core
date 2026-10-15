@@ -2,7 +2,8 @@ import os
 
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult, load_all_rule_formats
 from .... import db
-from ....core.db_class.db import *
+from app.core.db_class.rule import InvalidRuleModel, Rule
+from app.core.db_class.user import User
 from app.features.rule.rule_format.available_format import *
 
 from app.features.rule import rule_core as RuleModel

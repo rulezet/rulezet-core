@@ -13,7 +13,10 @@ import uuid
 import pytest
 import requests
 
-from app.core.db_class.db import Bundle, Connector, Rule, RuleUpdateHistory, Tag
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.connector import Connector
+from app.core.db_class.rule import Rule, RuleUpdateHistory
+from app.core.db_class.tag import Tag
 from tests_new.helpers.connectors import (  # noqa: F401
     API, REMOTE_URL, connector_form, make_connector, no_network, pull_jobs, remote, remote_bundle, remote_rule,
     run_pull,

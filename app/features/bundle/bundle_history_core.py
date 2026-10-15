@@ -30,9 +30,9 @@ from contextlib import contextmanager
 from flask_login import current_user
 
 from app import db
-from app.core.db_class.db import (
-    Bundle, BundleHistory, BundleNode, BundleRuleAssociation, BundleTagAssociation, Rule, Tag,
-)
+from app.core.db_class.bundle import Bundle, BundleHistory, BundleNode, BundleRuleAssociation
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, Tag
 
 COALESCE_WINDOW = datetime.timedelta(minutes=10)
 COALESCED_ACTIONS = {"structure", "tags", "rules", "details"}

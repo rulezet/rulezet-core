@@ -6,7 +6,11 @@ Tests for the cross-object Comments Hub
 import uuid
 
 from app import db
-from app.core.db_class.db import Bundle, Rule, RuleEditProposal, UnifiedComment, User
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.comment import UnifiedComment
+from app.core.db_class.rule import Rule
+from app.core.db_class.rule_proposal import RuleEditProposal
+from app.core.db_class.user import User
 
 
 # ── Auth helpers (same pattern as tests/connector/test_connector_crud.py) ─────

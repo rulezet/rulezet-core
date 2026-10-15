@@ -9,7 +9,7 @@ from flask_login import current_user
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import joinedload
 from app import db
-from app.core.db_class.db import Tag
+from app.core.db_class.tag import Tag
 
 
 # ─── Untrusted query-string values ───────────────────────────────────────────
@@ -79,7 +79,7 @@ def _inject_usage_counts(tags):
 
     tag_ids = [t.id for t in tags]
 
-    from app.core.db_class.db import RuleTagAssociation, BundleTagAssociation
+    from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation
     from sqlalchemy import func
 
     rule_counts = dict(
@@ -199,7 +199,7 @@ def _delete_tag_associations_bulk(int_ids):
         return
     # A raw "IN :ids" with a tuple only works with psycopg2 — SQLAlchemy's
     # in_() expands the list on every database.
-    from app.core.db_class.db import RuleTagAssociation, BundleTagAssociation
+    from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation
     for model in (RuleTagAssociation, BundleTagAssociation):
         model.query.filter(model.tag_id.in_(list(int_ids))).delete(synchronize_session=False)
 

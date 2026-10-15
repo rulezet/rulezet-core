@@ -27,9 +27,9 @@ class ChatbotAgent(AIAgent):
         # SYSTEM_PROMPT (with its closed _ROUTES vocabulary) stays defined in
         # chatbot_core.py — imported here rather than duplicated so there is
         # exactly one copy of it.
-        from app.features.ai.chatbot.chatbot_core import SYSTEM_PROMPT
+        from app.features.ai.chatbot.chatbot_core import build_system_prompt
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": build_system_prompt()}]
         messages.extend(history or [])
         # The live user message is exactly as attacker-controlled as rule
         # content is — wrap it the same way, even though today's prompt

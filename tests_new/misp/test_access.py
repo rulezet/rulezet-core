@@ -13,7 +13,7 @@ a private one only for its owner and admins.
 import pytest
 
 from app import db
-from app.core.db_class.db import MispServer
+from app.core.db_class.misp import MispServer
 from tests_new.helpers.access import FORBIDDEN, LOGIN, OK, assert_outcome, matrix
 from tests_new.helpers.attack import trash
 from tests_new.helpers.comments import make_bundle

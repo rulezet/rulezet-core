@@ -11,7 +11,8 @@ updates, error handling, return shapes) instead.
 import pytest
 
 from app import db
-from app.core.db_class.db import User, VelociraptorServer
+from app.core.db_class.user import User
+from app.core.db_class.velociraptor import VelociraptorServer
 from app.features.velociraptor import velociraptor_core as core
 
 

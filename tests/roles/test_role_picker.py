@@ -5,7 +5,7 @@ user's currently assigned roles so the picker can render checked/unchecked
 state without a second round-trip per row.
 """
 
-from app.core.db_class.db import User
+from app.core.db_class.user import User
 from app.features.roles import roles_core
 
 

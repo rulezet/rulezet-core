@@ -1,6 +1,8 @@
 const { ref, computed, watch } = Vue
 
-const REASONS = [
+// Fallback only — the list shown is the admin-editable `report.reasons`
+// setting, fetched from /api/config/settings/report.reasons.
+const DEFAULT_REASONS = [
     'Plagiarism',
     'Malicious content',
     'Incorrect or misleading',
@@ -8,6 +10,19 @@ const REASONS = [
     'Spam',
     'Other',
 ]
+
+// One request per page, made the first time any report modal opens — a list
+// page renders one modal per row, they all share this.
+let reasonsRequest = null
+function loadReasons() {
+    if (!reasonsRequest) {
+        reasonsRequest = fetch('/api/config/settings/report.reasons')
+            .then(r => (r.ok ? r.json() : null))
+            .then(data => (data && Array.isArray(data.value) && data.value.length ? data.value : DEFAULT_REASONS))
+            .catch(() => DEFAULT_REASONS)
+    }
+    return reasonsRequest
+}
 
 const ReportModal = {
     name: 'ReportModal',
@@ -27,6 +42,8 @@ const ReportModal = {
         const loading  = ref(false)
         const done     = ref(false)
         const errorMsg = ref('')
+        const REASONS  = ref(DEFAULT_REASONS)
+
 
         const labelMap = { rule: 'Rule', bundle: 'Bundle', comment: 'Comment' }
         const iconMap  = { rule: 'fa-shield-halved', bundle: 'fa-layer-group', comment: 'fa-comment' }
@@ -42,6 +59,7 @@ const ReportModal = {
             errorMsg.value = ''
             visible.value  = true
             document.body.classList.add('report-modal-open')
+            loadReasons().then(list => { REASONS.value = list })
         }
 
         function close() {

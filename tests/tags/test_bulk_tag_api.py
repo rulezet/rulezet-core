@@ -15,9 +15,11 @@ field some rules also carry.
 import uuid
 
 from app import db
-from app.core.db_class.db import (
-    BackgroundJob, Rule, RuleEditContribution, RuleTagAssociation, RuleUpdateHistory, Tag, User,
-)
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import Rule, RuleUpdateHistory
+from app.core.db_class.rule_proposal import RuleEditContribution
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from app.features.jobs.job_handlers import handle_bulk_add_tag_to_rules
 from app.features.roles import roles_core
 

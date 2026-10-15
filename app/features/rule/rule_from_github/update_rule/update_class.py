@@ -10,7 +10,9 @@ from flask import current_app
 
 from app import db
 
-from app.core.db_class.db import Rule, RuleStatus, UpdateResult, User, NewRule, compute_rule_content_hash
+from app.core.db_class.git import NewRule, RuleStatus, UpdateResult
+from app.core.db_class.rule import compute_rule_content_hash, Rule
+from app.core.db_class.user import User
 from app.features.rule import rule_core as RuleModel
 
 

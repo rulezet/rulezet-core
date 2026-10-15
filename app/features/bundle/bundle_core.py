@@ -3,8 +3,15 @@ import uuid
 from sqlalchemy import and_, or_
 from flask_login import current_user
 from ... import db
-from ...core.db_class.db import *
-from app.core.db_class.db import Bundle, BundleRuleAssociation
+from sqlalchemy import func
+from app.core.db_class.bundle import BundleNode
+from app.core.db_class.comment import CommentBundle
+from app.core.db_class.bundle import BundleVote
+from app.core.db_class.comment import BundleReactionComment, purge_unified_comments
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, Tag
+from app.core.db_class.user import User
+from app.core.db_class.bundle import Bundle, BundleRuleAssociation
 from typing import Dict, Any, Union , List
 from ..rule import rule_core as RuleModel
 from .bundle_history_core import tracked, record_bundle_created
@@ -795,7 +802,7 @@ def get_rule_paths_in_bundles(rule_id: int, bundle_ids: list) -> dict:
     bundle's folder structure. Walks up from the rule's nodes one level per
     query (depth-bounded) instead of loading every bundle's whole tree.
     A bundle holding the rule without placing it in the tree maps to []."""
-    from app.core.db_class.db import BundleNode
+    from app.core.db_class.bundle import BundleNode
     if not bundle_ids:
         return {}
     leaves = (db.session.query(BundleNode.id, BundleNode.bundle_id, BundleNode.parent_id, BundleNode.name)
@@ -1297,7 +1304,7 @@ def add_comment_to_bundle(bundle_id: int, user: User, content: str , parent_comm
             notify_followers_new_comment(user.id, bundle.name if bundle else '', link,
                                          is_public=is_public)
             if parent_comment_id:
-                from app.core.db_class.db import CommentBundle
+                from app.core.db_class.comment import CommentBundle
                 parent = CommentBundle.query.get(parent_comment_id)
                 # Reply notification: only if the parent author can access the bundle
                 # (i.e. they're the bundle owner, or the bundle is public)
@@ -1655,7 +1662,7 @@ def get_attack_coverage(bundle_id: int, snapshot_rules: dict | None = None) -> d
     (rules deleted since keep their mapping; the fallback parses the
     frozen content).
     """
-    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
 
     bundle = Bundle.query.get(bundle_id)
     if not bundle:
@@ -1828,7 +1835,7 @@ def _get_attack_coverage_parsed(bundle_id: int, rule_map: dict, total_rules: int
 def toggle_bundle_favorite(user_id: int, bundle_id: int) -> bool:
     """Adds the bundle to the user's favorites, or removes it if already
     there. Returns the new state (True = favorited)."""
-    from app.core.db_class.db import BundleFavoriteUser
+    from app.core.db_class.bundle import BundleFavoriteUser
     fav = BundleFavoriteUser.query.filter_by(user_id=user_id, bundle_id=bundle_id).first()
     if fav:
         db.session.delete(fav)
@@ -1840,13 +1847,13 @@ def toggle_bundle_favorite(user_id: int, bundle_id: int) -> bool:
 
 
 def is_bundle_favorited(user_id: int, bundle_id: int) -> bool:
-    from app.core.db_class.db import BundleFavoriteUser
+    from app.core.db_class.bundle import BundleFavoriteUser
     return BundleFavoriteUser.query.filter_by(user_id=user_id, bundle_id=bundle_id).first() is not None
 
 
 def favorite_bundle_ids(user_id: int, bundle_ids: list) -> set:
     """Which of these bundles the user has favorited — one query for a page."""
-    from app.core.db_class.db import BundleFavoriteUser
+    from app.core.db_class.bundle import BundleFavoriteUser
     if not bundle_ids:
         return set()
     return {bid for (bid,) in db.session.query(BundleFavoriteUser.bundle_id)

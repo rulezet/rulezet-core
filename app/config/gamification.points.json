@@ -1,0 +1,16 @@
+{
+  "label": "Points per contribution",
+  "category": "Gamification",
+  "description": "Points a user earns per item of each kind; the leaderboard and levels are computed from them.",
+  "public": false,
+  "value": {
+    "suggestions_accepted": 100,
+    "rules_owned": 10,
+    "rules_liked_or_disliked": 1,
+    "consecutive_days_active": 1,
+    "rules_popular_score": 1,
+    "bundles_owned": 15,
+    "rule_tests_contributed": 1,
+    "attack_mappings_contributed": 5
+  }
+}
