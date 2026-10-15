@@ -599,8 +599,8 @@ const GitHubSelectionTable = {
                             </td>
                             <td class="dt-td">
                                 <div v-if="!isRepoGroupContinuation(index)" class="d-flex align-items-center">
-                                    <div class="bg-light rounded p-2 me-3 flex-shrink-0" :title="gitProviderLabel(item.url)">
-                                        <i :class="gitProviderIcon(item.url)" class="fa-lg"></i>
+                                    <div class="bg-light rounded p-2 me-3 flex-shrink-0" :title="gitProviderLabel(item.url, item.git_provider)">
+                                        <i :class="gitProviderIcon(item.url, item.git_provider)" class="fa-lg"></i>
                                     </div>
                                     <div class="fw-bold text-dark" style="white-space:nowrap;">
                                         [[ item.url ]]
@@ -818,7 +818,7 @@ const GitHubSelectionTable = {
                                                            style="font-size:0.7rem">Repository Link</small>
                                                     <a :href="repoTreeUrl(item)" target="_blank"
                                                        class="btn btn-sm btn-outline-dark w-100 text-truncate">
-                                                        <i :class="gitProviderIcon(item.url)" class="me-2"></i>Open on [[ gitProviderLabel(item.url) ]]
+                                                        <i :class="gitProviderIcon(item.url, item.git_provider)" class="me-2"></i>Open on [[ gitProviderLabel(item.url, item.git_provider) ]]
                                                     </a>
                                                 </div>
                                             </div>

@@ -23,6 +23,8 @@ const GithubFilter = {
         const searchField     = Vue.ref(_p('search_field', 'url'))
         const selectedFormat  = Vue.ref(_p('format'))
         const selectedLicense = Vue.ref(_p('license'))
+        const selectedProvider = Vue.ref(_p('provider'))
+        const availableProviders = Vue.ref([]);
         const conflictsOnly   = Vue.ref(_p('conflicts_only') === 'true')
         const personFilter    = Vue.ref({
             mode:   _p('person_mode', 'author'),
@@ -42,6 +44,7 @@ const GithubFilter = {
         const activeFilterCount = Vue.computed(() =>
             (selectedFormat.value ? 1 : 0) +
             (selectedLicense.value ? 1 : 0) +
+            (selectedProvider.value ? 1 : 0) +
             (conflictsOnly.value ? 1 : 0) +
             (personFilter.value.values.length ? 1 : 0)
         );
@@ -53,6 +56,12 @@ const GithubFilter = {
                 availableFormats.value = data.formats || [];
             } catch (e) {
                 availableFormats.value = [];
+            }
+            try {
+                const res = await fetch('/rule/get_github_providers_usage');
+                availableProviders.value = res.ok ? await res.json() : [];
+            } catch (e) {
+                availableProviders.value = [];
             }
             try {
                 const res = await fetch('/rule/get_github_licenses_usage');
@@ -70,6 +79,7 @@ const GithubFilter = {
             _upd('search_field',   searchField.value !== 'url' ? searchField.value : null)
             _upd('format',         selectedFormat.value || null)
             _upd('license',        selectedLicense.value || null)
+            _upd('provider',       selectedProvider.value || null)
             _upd('conflicts_only', conflictsOnly.value ? 'true' : null)
             _upd('page',           currentPage.value > 1 ? currentPage.value : null)
             if (props.sortKey) { p.set('sort', props.sortKey); p.set('dir', props.sortDir) }
@@ -99,6 +109,7 @@ const GithubFilter = {
                 search_field: searchField.value,
                 format: selectedFormat.value,
                 license: selectedLicense.value || '',
+                provider: selectedProvider.value || '',
                 conflicts_only: conflictsOnly.value ? 'true' : 'false',
             });
             if (props.sortKey) {
@@ -139,7 +150,7 @@ const GithubFilter = {
 
         const resetFilters = () => {
             selectedFormat.value = '';
-            selectedLicense.value = '';
+            selectedLicense.value = ''; selectedProvider.value = '';
             conflictsOnly.value = false;
             personFilter.value = { mode: 'author', values: [] };
             fetchUrls(1);
@@ -158,7 +169,7 @@ const GithubFilter = {
             searchQuery,
             searchField,
             selectedFormat,
-            selectedLicense,
+            selectedLicense, selectedProvider, availableProviders,
             conflictsOnly,
             personFilter,
             searchIsLoading,
@@ -226,6 +237,15 @@ const GithubFilter = {
                                 :key="typeof fmt === 'object' ? fmt.name : fmt"
                                 :value="typeof fmt === 'object' ? fmt.name : fmt">
                             [[ typeof fmt === 'object' ? fmt.name : fmt ]]
+                        </option>
+                    </select>
+                </div>
+
+                <div class="rl-fp-item">
+                    <select v-model="selectedProvider" @change="fetchUrls(1)" class="rl-fp-select" aria-label="Host">
+                        <option value="">All hosts</option>
+                        <option v-for="p in availableProviders" :key="p.name" :value="p.name">
+                            [[ p.label ]] ([[ p.count ]])
                         </option>
                     </select>
                 </div>

@@ -729,8 +729,8 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                    target="_blank" rel="noopener noreferrer"
                                    class="btn btn-sm rounded-pill px-3"
                                    style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
-                                   :title="'View source file on ' + gitProviderLabel(currentRule.source)">
-                                    <i :class="gitProviderIcon(currentRule.source)" class="me-1"></i>[[ gitProviderLabel(currentRule.source) ]]
+                                   :title="'View source file on ' + gitProviderLabel(currentRule.source, currentRule.git_provider)">
+                                    <i :class="gitProviderIcon(currentRule.source, currentRule.git_provider)" class="me-1"></i>[[ gitProviderLabel(currentRule.source, currentRule.git_provider) ]]
                                 </a>
 
                                 <!-- Rulesets mirror(s) — server-rendered (not part of currentRule's
@@ -760,7 +760,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                         {% for mirror in mirror_github_urls %}
                                         <li>
                                             <a class="dropdown-item small" href="{{ mirror.url }}" target="_blank" rel="noopener noreferrer" style="color:var(--text-color);">
-                                                <i class="fab fa-github me-2 opacity-50"></i>{{ mirror.name }}
+                                                <i class="{{ git_provider_icon(mirror.url) }} me-2 opacity-50"></i>{{ mirror.name }}
                                             </a>
                                         </li>
                                         {% endfor %}

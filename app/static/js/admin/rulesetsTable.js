@@ -19,6 +19,7 @@
  */
 
 import { create_message } from '/static/js/toaster.js'
+import { gitProviderIcon } from '/static/js/components/git-links.js'
 
 const { ref, computed, onMounted } = Vue
 
@@ -205,6 +206,7 @@ const RulesetRow = {
     }
 
     return {
+        gitProviderIcon,
       actionBusy, testing, expanded, historyLoading, historyItems, visibleHistory, hasMoreHistory,
       actionBadgeClass, actionIcon, dotClass,
       toggleHistory, loadMoreHistory, testConnection, toggleEnabled, runNow, deleteConfig,
@@ -255,7 +257,7 @@ const RulesetRow = {
         <i class="fa-solid fa-clock-rotate-left"></i>
       </button>
       <button class="rms-btn" title="Repo info" @click="toggleRepoInfo" :disabled="!c.repo_url || !c.has_token" :class="{ 'rms-btn--active': repoInfoExpanded }">
-        <i class="fa-brands fa-github"></i>
+        <i :class="gitProviderIcon(c.repo_url, c.git_provider)"></i>
       </button>
       <button class="rms-btn" title="Test connection" @click="testConnection" :disabled="testing || !c.repo_url || !c.has_token">
         <span v-if="testing" class="spinner-border spinner-border-sm"></span>
@@ -339,7 +341,7 @@ const RulesetRow = {
             <div v-if="repoInfo.description" class="text-muted" style="font-size:.8rem;">[[ repoInfo.description ]]</div>
           </div>
           <a :href="repoInfo.html_url" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill px-3" style="font-size:.75rem;white-space:nowrap;">
-            <i class="fa-brands fa-github me-1"></i>Go to repository<i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:.65rem;"></i>
+            <i :class="gitProviderIcon(c.repo_url, c.git_provider)" class="me-1"></i>Go to repository<i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:.65rem;"></i>
           </a>
           <button class="rms-btn" title="Refresh" @click="fetchRepoInfo">
             <i class="fa-solid fa-rotate"></i>

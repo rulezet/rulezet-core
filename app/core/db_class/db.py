@@ -316,6 +316,10 @@ class Rule(db.Model):
     cve_id = db.Column(db.String , nullable=True)
 
     github_path = db.Column(db.String , nullable=True)
+    # Git host the item comes from: github | gitlab | gitea | bitbucket | generic
+    # (None = not from a git repository). Kept up to date by the listeners at
+    # the end of this file — see git_provider.detect_provider().
+    git_provider = db.Column(db.String(20), nullable=True, index=True)
     # Git branch this rule was imported from (e.g. "main", "dev") — set at
     # import time from the branch picked in the import UI. NULL for rules
     # imported before this column existed, or not imported from GitHub at
@@ -407,6 +411,7 @@ class Rule(db.Model):
             "cve_id": self.cve_id if self.cve_id is not None else [],
             "editor": editor_name,
             "github_path": self.github_path if self.github_path else None,
+            "git_provider": self.git_provider,
             "branch": self.branch if self.branch else None,
             "editor_avatar": submitter_avatar,
             "sync_instance_url": self.sync_instance_url,
@@ -536,6 +541,7 @@ class Rule(db.Model):
                 "description": self.description,
                 "source": self.source,
                 "github_path": self.github_path,
+                "git_provider": self.git_provider,
                 "extension": self.get_extension(),
             },
 
@@ -879,6 +885,10 @@ class InvalidRuleModel(db.Model):
     license = db.Column(db.Text)
 
     github_path = db.Column(db.String , nullable=True)
+    # Git host the item comes from: github | gitlab | gitea | bitbucket | generic
+    # (None = not from a git repository). Kept up to date by the listeners at
+    # the end of this file — see git_provider.detect_provider().
+    git_provider = db.Column(db.String(20), nullable=True, index=True)
 
     user = db.relationship('User', backref=db.backref('user', lazy='dynamic', cascade='all, delete-orphan'))
 
@@ -894,6 +904,7 @@ class InvalidRuleModel(db.Model):
             "url": self.url,
             "license": self.license,
             "github_path": self.github_path if self.github_path else None,
+            "git_provider": self.git_provider,
             # Sent eagerly (not just user_id) so the UI can show the editor's
             # name right away instead of a "?" placeholder until a UserChip
             # hover triggers its own lazy /account/user_mini/<id> fetch.
@@ -1823,6 +1834,10 @@ class ImporterResult(db.Model):
     query_date = db.Column(db.DateTime, index=True)
     user_id = db.Column(db.Integer, index=True)
     count_per_format = db.Column(db.String)
+    # Git host the item comes from: github | gitlab | gitea | bitbucket | generic
+    # (None = not from a git repository). Kept up to date by the listeners at
+    # the end of this file — see git_provider.detect_provider().
+    git_provider = db.Column(db.String(20), nullable=True, index=True)
 
     def to_json(self):
         json_dict = {
@@ -1835,7 +1850,8 @@ class ImporterResult(db.Model):
             "total": self.total,
             "query_date": self.query_date.strftime('%Y-%m-%d %H:%M'),
             "user_id": self.user_id,
-            "count_per_format": json.loads(self.count_per_format)
+            "count_per_format": json.loads(self.count_per_format),
+            "git_provider": self.git_provider
         }
         return json_dict
     
@@ -1857,6 +1873,10 @@ class UpdateResult(db.Model):
 
     thread_count = db.Column(db.Integer, default=4)
     query_date = db.Column(db.DateTime, index=True)
+    # Git host the item comes from: github | gitlab | gitea | bitbucket | generic
+    # (None = not from a git repository). Kept up to date by the listeners at
+    # the end of this file — see git_provider.detect_provider().
+    git_provider = db.Column(db.String(20), nullable=True, index=True)
 
     # Relationships
     rule_statuses = db.relationship(
@@ -1913,6 +1933,7 @@ class UpdateResult(db.Model):
             "skipped": self.skipped,
             "total": self.total,
             "thread_count": self.thread_count,
+            "git_provider": self.git_provider,
             "query_date": self.query_date.strftime('%Y-%m-%d %H:%M') if self.query_date else None,
             "rules": [rule.to_json() for rule in self.rule_statuses] if self.rule_statuses else [],
             "new_rules": [nr.to_json() for nr in self.new_rules] if self.new_rules else []
@@ -2125,6 +2146,10 @@ class GithubSyncScheduleRepo(db.Model):
     auto_accept_update = db.Column(db.Boolean, default=False)
     auto_add_new_rule  = db.Column(db.Boolean, default=False)
     is_generic_source  = db.Column(db.Boolean, default=False, nullable=False)
+    # Git host the item comes from: github | gitlab | gitea | bitbucket | generic
+    # (None = not from a git repository). Kept up to date by the listeners at
+    # the end of this file — see git_provider.detect_provider().
+    git_provider = db.Column(db.String(20), nullable=True, index=True)
 
     __table_args__ = (db.UniqueConstraint('schedule_id', 'repo_url', name='uq_schedule_repo'),)
 
@@ -2135,6 +2160,7 @@ class GithubSyncScheduleRepo(db.Model):
             "auto_accept_update": self.auto_accept_update,
             "auto_add_new_rule": self.auto_add_new_rule,
             "is_generic_source": self.is_generic_source,
+            "git_provider": self.git_provider,
         }
 
 
@@ -2441,6 +2467,10 @@ class GithubProposal(db.Model):
     license  = db.Column(db.String(128), nullable=True)
     message  = db.Column(db.Text, nullable=True)
     is_generic_source = db.Column(db.Boolean, default=False, nullable=False)
+    # Git host the item comes from: github | gitlab | gitea | bitbucket | generic
+    # (None = not from a git repository). Kept up to date by the listeners at
+    # the end of this file — see git_provider.detect_provider().
+    git_provider = db.Column(db.String(20), nullable=True, index=True)
 
     # pending | accepted | rejected | imported | failed
     # ('transferred' is a legacy value from before accepting always imported
@@ -2474,6 +2504,7 @@ class GithubProposal(db.Model):
             "license": self.license,
             "message": self.message,
             "is_generic_source": self.is_generic_source,
+            "git_provider": self.git_provider,
             "status": self.status,
             "ownership_mode": self.ownership_mode,
             "decided_by_id": self.decided_by_id,
@@ -3458,6 +3489,10 @@ class RuleMirrorConfig(db.Model):
     name            = db.Column(db.String(255), nullable=False, default='Rulesets mirror')
     enabled         = db.Column(db.Boolean, default=False, nullable=False)
     repo_url        = db.Column(db.String(512), nullable=True)
+    # Git host the item comes from: github | gitlab | gitea | bitbucket | generic
+    # (None = not from a git repository). Kept up to date by the listeners at
+    # the end of this file — see git_provider.detect_provider().
+    git_provider = db.Column(db.String(20), nullable=True, index=True)
     github_token    = db.Column(db.String(512), nullable=True)
     branch          = db.Column(db.String(128), default='main', nullable=False)
     last_synced_at  = db.Column(db.DateTime, nullable=True)
@@ -3475,6 +3510,7 @@ class RuleMirrorConfig(db.Model):
 
     def to_json(self):
         return {
+            "git_provider": self.git_provider,
             'id':             self.id,
             'uuid':           self.uuid,
             'name':           self.name,
@@ -4180,6 +4216,10 @@ class GithubRepo(db.Model):
     id             = db.Column(db.Integer, primary_key=True, autoincrement=True)
     uuid           = db.Column(db.String(36), unique=True, nullable=False, index=True)
     url            = db.Column(db.String(500), unique=True, nullable=False, index=True)
+    # Git host the item comes from: github | gitlab | gitea | bitbucket | generic
+    # (None = not from a git repository). Kept up to date by the listeners at
+    # the end of this file — see git_provider.detect_provider().
+    git_provider = db.Column(db.String(20), nullable=True, index=True)
     author         = db.Column(db.String(255), nullable=True, index=True)
     rule_count     = db.Column(db.Integer, nullable=False, default=0)
     format_counts  = db.Column(db.JSON, nullable=False, default=dict)
@@ -4198,6 +4238,7 @@ class GithubRepo(db.Model):
 
     def to_json(self):
         return {
+            "git_provider": self.git_provider,
             'id':         self.id,
             'uuid':       self.uuid,
             'url':        self.url,
@@ -5051,3 +5092,50 @@ class AIGeneration(db.Model):
             'is_public':  self.is_public,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
+
+
+# ─── git_provider, kept in sync with each item's repository URL ──────────────
+
+def _detect_git_provider(url):
+    from app.features.rule.rule_format.utils_format.git_provider import detect_provider
+    if not url or not isinstance(url, str) or not url.startswith(('http://', 'https://')):
+        return None
+    return detect_provider(url)
+
+
+def _git_url_of(target):
+    if isinstance(target, Rule):
+        if not target.github_path:
+            from app.features.rule.rule_format.utils_format.git_provider import is_git_repo_url
+            return target.source if is_git_repo_url(target.source) else None
+        return target.source
+    if isinstance(target, InvalidRuleModel):
+        return target.url
+    if isinstance(target, (GithubRepo, GithubProposal, GithubSyncScheduleRepo, RuleMirrorConfig)):
+        return target.url if isinstance(target, GithubRepo) else target.repo_url
+    if isinstance(target, ImporterResult):
+        try:
+            return (json.loads(target.info or '{}') or {}).get('repo_url')
+        except (ValueError, AttributeError):
+            return None
+    if isinstance(target, UpdateResult):
+        if target.mode == 'by_rule':
+            return None
+        try:
+            sources = json.loads(target.repo_sources) if target.repo_sources else None
+        except ValueError:
+            return None
+        if isinstance(sources, list):
+            sources = next((x for x in sources if isinstance(x, str)), None)
+        return sources if isinstance(sources, str) else None
+    return None
+
+
+def _set_git_provider(_mapper, _connection, target):
+    target.git_provider = _detect_git_provider(_git_url_of(target))
+
+
+for _model in (Rule, InvalidRuleModel, ImporterResult, UpdateResult, GithubSyncScheduleRepo,
+               GithubProposal, RuleMirrorConfig, GithubRepo):
+    event.listen(_model, 'before_insert', _set_git_provider)
+    event.listen(_model, 'before_update', _set_git_provider)

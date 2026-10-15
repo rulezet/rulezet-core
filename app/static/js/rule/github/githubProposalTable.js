@@ -332,7 +332,7 @@ const GithubProposalTable = {
 
                         <td class="dt-td gpt-name-cell">
                             <div class="gpt-pair-cell">
-                                <i :class="gitProviderIcon(item.repo_url)" class="text-muted"></i>
+                                <i :class="gitProviderIcon(item.repo_url, item.git_provider)" class="text-muted"></i>
                                 <span class="gpt-title" :title="item.repo_url" v-html="highlight(item.repo_url)"></span>
                             </div>
                         </td>

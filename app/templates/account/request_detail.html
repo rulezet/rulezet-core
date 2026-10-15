@@ -194,7 +194,7 @@
                     <!-- Rule or Source -->
                     <div class="rd-info-cell" v-if="current_request.rule_source">
                         <div class="rd-info-icon" style="background:rgba(13,110,253,.07);color:#0d6efd;">
-                            <i class="fa-brands fa-github"></i>
+                            <i :class="gitProviderIcon(current_request.rule_source)"></i>
                         </div>
                         <div>
                             <div class="rd-info-label">Source</div>
@@ -406,6 +406,7 @@
 <script type="module">
 const { createApp, ref, computed, onMounted } = Vue;
 import { create_message } from '/static/js/toaster.js';
+import { gitProviderIcon } from '/static/js/components/git-links.js'
 import UserChip               from '/static/js/components/UserChip.js';
 import RuleList               from '/static/js/rule/ruleList.js';
 import TagsDisplaysList       from '/static/js/tags/tagsDisplaysList.js';
@@ -555,6 +556,7 @@ createApp({
         onMounted(fetchCurrentRequest);
 
         return {
+            gitProviderIcon,
             requestId, current_request, singleRule, loadingRule,
             singleSelected, submitting, ruleListRef,
             transferring, transferLabel,

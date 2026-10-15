@@ -17,7 +17,7 @@ export const CRITERIA_KINDS = [
     { key: 'keywords',     label: 'Keyword',   icon: 'fa-magnifying-glass', cls: 'al-chip--keyword' },
     { key: 'formats',      label: 'Format',    icon: 'fa-file-code',      cls: 'al-chip--format' },
     { key: 'users',        label: 'User',      icon: 'fa-user',           cls: 'al-chip--user' },
-    { key: 'github_repos', label: 'Repo',      icon: 'fa-brands fa-github', cls: 'al-chip--github al-chip--mono' },
+    { key: 'github_repos', label: 'Repo',      icon: 'fa-brands fa-git-alt', cls: 'al-chip--github al-chip--mono' },
 ]
 
 export const ANY_FLAGS = [

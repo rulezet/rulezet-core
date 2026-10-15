@@ -242,7 +242,7 @@
                       :title="rule.source"
                       @click="sourceFilter = rule.source; fetchRules(1)"
                       style="color:var(--subtle-text-color); font-size:.75rem;">
-                  <i class="fa-brands fa-git-alt me-1 opacity-60"></i>[[ shortSource(rule.source) ]]
+                  <i :class="gitProviderIcon(rule.source, rule.git_provider)" class="me-1 opacity-60"></i>[[ shortSource(rule.source) ]]
                 </span>
                 <span v-else style="color:var(--subtle-text-color); font-size:.75rem;">—</span>
               </td>
@@ -420,7 +420,7 @@
 <script type="module">
 import PaginationComponent from '/static/js/rule/paginationComponent.js'
 import { create_message }  from '/static/js/toaster.js'
-import { repoTreeUrl } from '/static/js/components/git-links.js'
+import { repoTreeUrl, gitProviderIcon } from '/static/js/components/git-links.js'
 const { createApp, ref, computed, watch, nextTick, onMounted } = Vue
 const csrf = document.querySelector('input[name="csrf_token"]')?.value || ''
 
@@ -641,6 +641,7 @@ createApp({
     onMounted(() => { fetchRules(1); fetchFormats() })
 
     return {
+        gitProviderIcon,
       rules, batches, totalCount, total, totalPages, page, loading,
       search, fmtFilter, batchFilter, sourceFilter, deletedFrom, deletedTo,
       formats, selectedIds, contentRule, codeEl,

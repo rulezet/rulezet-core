@@ -5002,6 +5002,7 @@ def get_url_github():
     author_filter = request.args.get("author", "")
     license_filter = request.args.get("license", default=None, type=str)
     conflicts_only = request.args.get("conflicts_only", default='false', type=str) == 'true'
+    provider_filter = request.args.get("provider", default=None, type=str) or None
     page = request.args.get("page", default=1, type=int)
     sort = request.args.get("sort", default=None, type=str)
     sort_dir = request.args.get("dir", default='asc', type=str)
@@ -5021,6 +5022,7 @@ def get_url_github():
         editor_names=editor_names,
         license_filter=license_filter,
         conflicts_only=conflicts_only,
+        provider_filter=provider_filter,
         sort=sort,
         sort_dir=sort_dir
     )
@@ -5045,6 +5047,14 @@ def get_github_authors_usage_route():
 def get_github_editors_usage_route():
     search_query = request.args.get('q', '').strip()
     return jsonify(RuleModel.get_github_editors_usage(search_query=search_query))
+
+
+@rule_blueprint.route("/get_github_providers_usage", methods=['GET'])
+@login_required
+def get_github_providers_usage_route():
+    """Repositories per git host type (GitHub, GitLab, …) — the Host filter
+    of the Git Sources list."""
+    return jsonify(RuleModel.get_github_providers_usage())
 
 
 @rule_blueprint.route("/get_github_licenses_usage", methods=['GET'])

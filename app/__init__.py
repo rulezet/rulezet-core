@@ -287,6 +287,11 @@ def create_app(start_worker=True):
 
     app.jinja_env.globals['admin_jobs_running_count'] = admin_jobs_running_count
 
+    def git_provider_icon(url, provider=None):
+        from app.features.rule.rule_format.utils_format.git_provider import PROVIDER_ICONS, detect_provider
+        return PROVIDER_ICONS.get(provider or detect_provider(url or ''), PROVIDER_ICONS['generic'])
+    app.jinja_env.globals['git_provider_icon'] = git_provider_icon
+
     def ai_pending_requests(target_type=None):
         """Pending AI analysis requests (users asking for a rule / bundle
         analysis) — the badges of the AI menus, for admins and AI managers

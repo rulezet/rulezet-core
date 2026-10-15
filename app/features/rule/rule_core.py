@@ -3510,7 +3510,7 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
 # a repo's rules are whatever matches this against Rule.source.
 
 
-def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc'):
+def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc', provider_filter: str = None):
     """Paginates AND filters/sorts entirely off GithubRepo (a small,
     incrementally-synced table — see github_repo_core.py) instead of
     running a live GROUP BY / per-rule scan over the whole Rule table.
@@ -3558,6 +3558,9 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             Rule.source == GithubRepo.url, Rule.is_deleted == False,
             Rule.user_id == User.id, editor_col.in_(editor_names)
         )))
+
+    if provider_filter:
+        query = query.filter(GithubRepo.git_provider == provider_filter)
 
     if license_filter:
         query = query.filter(GithubRepo.license_counts[license_filter].as_integer() > 0)
@@ -3633,6 +3636,7 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
 
         base_row = {
             "url": url,
+            "git_provider": repo.git_provider,
             "author": repo.author,
             "formats": sorted((repo.format_counts or {}).keys()),
             "licenses": sorted((repo.license_counts or {}).keys()),
@@ -3727,6 +3731,15 @@ def get_github_licenses_usage():
             totals[name] = totals.get(name, 0) + count
     return [{"name": name, "count": count}
             for name, count in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
+
+
+def get_github_providers_usage():
+    """[{name, label, icon, count}] — repositories per git host type."""
+    from app.features.rule.rule_format.utils_format.git_provider import PROVIDER_LABELS, PROVIDER_ICONS
+    rows = (db.session.query(GithubRepo.git_provider, func.count(GithubRepo.id))
+            .group_by(GithubRepo.git_provider).all())
+    return [{"name": p, "label": PROVIDER_LABELS.get(p, p), "icon": PROVIDER_ICONS.get(p), "count": c}
+            for p, c in sorted(rows, key=lambda r: -r[1]) if p]
 
 
 def get_rule_count_by_github_page(page: int = 1, search: str = None):

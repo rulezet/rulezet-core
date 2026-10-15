@@ -511,7 +511,7 @@ def repo_live_info(url: str) -> dict:
     resp = api_get(url)
     if resp is not None and resp.status_code == 200:
         raw = resp.json()
-        info['repo'] = raw if kind in ('github', 'gitea') else _github_shaped_repo(_normalize_metadata(kind, raw))
+        info['repo'] = raw if kind == 'github' else _github_shaped_repo(_normalize_metadata(kind, raw))
     else:
         info['repo_error'] = api_error_message(url, resp)
 

@@ -188,7 +188,7 @@
                         <td class="dt-td">
                             <span v-if="req.rule_source" class="badge rounded-pill"
                                   style="font-size:.7rem;background:rgba(13,110,253,.12);color:#0d6efd;border:1px solid rgba(13,110,253,.2);">
-                                <i class="fa-brands fa-github me-1"></i>Source
+                                <i :class="gitProviderIcon(req.rule_source)" class="me-1"></i>Source
                             </span>
                             <span v-else-if="req.rule_id" class="badge rounded-pill"
                                   style="font-size:.7rem;background:rgba(25,135,84,.12);color:#146c43;border:1px solid rgba(25,135,84,.25);">
@@ -373,6 +373,7 @@
 <script type="module">
 const { createApp, ref, computed } = Vue;
 import { create_message } from '/static/js/toaster.js';
+import { gitProviderIcon } from '/static/js/components/git-links.js'
 import UserChip from '/static/js/components/UserChip.js';
 import RuleList from '/static/js/rule/ruleList.js';
 import UserPicker from '/static/js/account/UserPicker.js';
@@ -593,6 +594,7 @@ createApp({
         fetchHistory(1);
 
         return {
+            gitProviderIcon,
             loading, activeTab, search, perPage, page,
             currentItems, filteredItems, pagedItems,
             totalPages, visiblePages, pendingTotal, processTotal,

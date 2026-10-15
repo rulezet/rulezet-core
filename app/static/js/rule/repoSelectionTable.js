@@ -285,8 +285,8 @@ const RepoSelectionTable = {
                                     @change="updateRepoSetting(item.url, 'auto_add_new_rule', $event.target.checked)">
                             </td>
                             <td class="dt-td text-center">
-                                <span class="small text-muted" :title="'Hosted on ' + gitProviderLabel(item.url) + ' — detected from the URL'">
-                                    <i :class="gitProviderIcon(item.url)" class="me-1"></i>[[ gitProviderLabel(item.url) ]]
+                                <span class="small text-muted" :title="'Hosted on ' + gitProviderLabel(item.url, item.git_provider) + ' — detected from the URL'">
+                                    <i :class="gitProviderIcon(item.url, item.git_provider)" class="me-1"></i>[[ gitProviderLabel(item.url, item.git_provider) ]]
                                 </span>
                             </td>
                             <td class="dt-td text-center">

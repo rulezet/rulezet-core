@@ -375,7 +375,7 @@ def rebuild_github_repos_from_rules() -> dict:
 
     Returns {'repos': N, 'rules_counted': N} for a confirmation message.
     """
-    from sqlalchemy import func
+    from sqlalchemy import func, or_
     from ...core.db_class.db import RuleSimilarity
 
     active_github = (git_source_filter(), Rule.is_deleted == False)
@@ -449,6 +449,13 @@ def rebuild_github_repos_from_rules() -> dict:
         repo.branch_counts   = branch_counts_by_url.get(source, {})
         repo.cve_count       = cve_count_by_url.get(source, 0)
         repo.conflict_count  = conflict_count_by_url.get(source, 0)
+        # Recomputed here too so a host declared later in Admin → Settings
+        # (GIT_HOSTS, e.g. a self-hosted GitLab) is reflected on the repo and
+        # its rules after a Resync.
+        provider = git_provider.detect_provider(source)
+        repo.git_provider = provider
+        Rule.query.filter(Rule.source == source, or_(Rule.git_provider.is_(None), Rule.git_provider != provider)) \
+            .update({'git_provider': provider}, synchronize_session=False)
 
     # Prune rows for sources that no longer have any active rules.
     for url, repo in existing.items():

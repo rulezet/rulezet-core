@@ -252,7 +252,12 @@ def get_github_repo_live_info(repo_url: str) -> dict:
     Each of the 4 calls fails independently — a repo-info failure doesn't
     block the other three, matching the old client-side Promise.allSettled
     behavior. Returns {'repo', 'repo_error', 'commits', 'branches',
-    'contributors'}."""
+    'contributors'}.
+
+    Non-GitHub hosts (GitLab, Gitea, …) go through git_provider.repo_live_info,
+    which returns the same shape."""
+    if git_provider.detect_provider(repo_url) != 'github':
+        return git_provider.repo_live_info(repo_url)
     clean = repo_url.rstrip('/')
     if clean.endswith('.git'):
         clean = clean[:-4]
