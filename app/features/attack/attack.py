@@ -242,12 +242,13 @@ def technique_bundle(technique_id):
     tech = AttackKit.get_technique(technique_id)
     if not tech:
         abort(404)
-    bundle, message = AttackKit.create_kit_bundle(tech, current_user)
+    public = (request.get_json(silent=True) or {}).get('public', True) is not False
+    bundle, message = AttackKit.create_kit_bundle(tech, current_user, public=public)
     if not bundle:
         return jsonify({'success': False, 'message': message}), 400
     log_activity('attack.kit_bundle', f'Created the bundle "{bundle.name}" from the {tech.technique_id} technique page',
                  target_type='bundle', target_id=bundle.id, target_uuid=bundle.uuid,
-                 extra={'technique_id': tech.technique_id}, is_public=True, icon='fa-solid fa-boxes-stacked')
+                 extra={'technique_id': tech.technique_id, 'public': public}, is_public=public, icon='fa-solid fa-boxes-stacked')
     return jsonify({'success': True, 'message': message, 'bundle_id': bundle.id, 'url': f'/bundle/detail/{bundle.id}'})
 
 

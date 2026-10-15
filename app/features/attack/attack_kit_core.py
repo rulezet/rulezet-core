@@ -83,9 +83,9 @@ def build_kit(tech) -> dict:
     if rule_ids:
         rows = (db.session.query(Bundle, func.count(BundleRuleAssociation.id))
                 .join(BundleRuleAssociation, BundleRuleAssociation.bundle_id == Bundle.id)
-                .filter(BundleRuleAssociation.rule_id.in_(rule_ids), Bundle.access == True)  # noqa: E712
+                .filter(BundleRuleAssociation.rule_id.in_(rule_ids), kit_core.visible_bundles_filter())
                 .group_by(Bundle.id).order_by(func.count(BundleRuleAssociation.id).desc()).limit(10).all())
-        bundles = [{'id': b.id, 'uuid': b.uuid, 'name': b.name, 'rule_count': n} for b, n in rows]
+        bundles = [{'id': b.id, 'uuid': b.uuid, 'name': b.name, 'rule_count': n, 'private': not b.access} for b, n in rows]
 
     return {
         'id': tech.technique_id,
@@ -135,11 +135,11 @@ def build_zip(tech):
     return kit_core.zip_rules(rules, f'{tech.technique_id} — Rulezet detection kit', lines), len(rules)
 
 
-def create_kit_bundle(tech, user):
+def create_kit_bundle(tech, user, public: bool = True):
     rules = rules_for(technique_ids(tech))
     if not rules:
         return None, 'There is no rule for this technique yet.'
     description = (f"Every Rulezet rule mapped to MITRE ATT&CK {tech.technique_id} — {tech.name}"
                    + ('' if tech.is_subtechnique else ' (sub-techniques included)') + '.')
-    bundle = kit_core.bundle_from_rules(f'{tech.technique_id} {tech.name}'[:200], description, rules, user)
+    bundle = kit_core.bundle_from_rules(f'{tech.technique_id} {tech.name}'[:200], description, rules, user, public=public)
     return bundle, f'Bundle created with {len(rules)} rule(s).'

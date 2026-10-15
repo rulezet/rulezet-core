@@ -78,11 +78,13 @@ createApp({
             }
         }
 
-        async function createBundle() {
+        async function createBundle(isPublic = true) {
             bundleBusy.value = true;
             try {
                 const res = await fetch(base + '/bundle', {
-                    method: 'POST', headers: { 'X-CSRFToken': csrf(), Accept: 'application/json' },
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf(), Accept: 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ public: isPublic }),
                 });
                 let data;
                 try { data = await res.json(); }

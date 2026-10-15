@@ -81,8 +81,20 @@ def zip_rules(rules: list, readme_title: str, readme_lines: list) -> io.BytesIO:
     return buffer
 
 
-def bundle_from_rules(name: str, description: str, rules: list, user, vulnerability_ids=None):
-    """A public bundle owned by *user* with *rules*, one folder per format.
+def visible_bundles_filter():
+    """Bundles a kit page may list: public ones, plus the viewer's own
+    private ones — never another user's private bundle."""
+    from flask_login import current_user
+    from sqlalchemy import or_, and_
+    from app.core.db_class.bundle import Bundle
+    if current_user.is_authenticated:
+        return or_(Bundle.access == True, and_(Bundle.access == False, Bundle.user_id == current_user.id))  # noqa: E712
+    return Bundle.access == True  # noqa: E712
+
+
+def bundle_from_rules(name: str, description: str, rules: list, user, vulnerability_ids=None, public: bool = True):
+    """A bundle owned by *user* with *rules*, one folder per format — public,
+    or private (only the owner sees it) when public=False.
     The name gets " (2)", " (3)"… if the user already has one with it."""
     from app.features.bundle import bundle_core as BundleModel
     final_name, n = name, 2
@@ -90,7 +102,7 @@ def bundle_from_rules(name: str, description: str, rules: list, user, vulnerabil
         final_name = f'{name} ({n})'
         n += 1
     bundle = BundleModel.create_bundle({
-        'name': final_name, 'description': description, 'public': True,
+        'name': final_name, 'description': description, 'public': bool(public),
         'vulnerability_identifiers': list(vulnerability_ids or []),
     }, user)
     # Folders first (one per format), then the rules: add_rules_to_bundle only

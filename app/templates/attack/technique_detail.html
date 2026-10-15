@@ -50,10 +50,18 @@
                 <i class="fa-solid fa-file-zipper me-1"></i>Download all
             </a>
             {% if current_user.is_authenticated %}
-            <button v-if="kit.total_rules" type="button" class="kit-btn" @click="createBundle" :disabled="bundleBusy">
-                <span v-if="bundleBusy" class="spinner-border spinner-border-sm me-1"></span>
-                <i v-else class="fa-solid fa-boxes-stacked me-1"></i>Make it a bundle
-            </button>
+            <div v-if="kit.total_rules" class="dropdown">
+                <button type="button" class="kit-btn dropdown-toggle" data-bs-toggle="dropdown" :disabled="bundleBusy">
+                    <span v-if="bundleBusy" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="fa-solid fa-boxes-stacked me-1"></i>Make it a bundle
+                </button>
+                <ul class="dropdown-menu shadow border-0 kit-menu">
+                    <li><button class="dropdown-item small" type="button" @click="createBundle(true)">
+                        <i class="fa-solid fa-globe me-2 opacity-50"></i>Public bundle <span class="kit-menu__hint">everyone can see it</span></button></li>
+                    <li><button class="dropdown-item small" type="button" @click="createBundle(false)">
+                        <i class="fa-solid fa-lock me-2 opacity-50"></i>Private bundle <span class="kit-menu__hint">only you can see it</span></button></li>
+                </ul>
+            </div>
             <a :href="alertUrl" class="kit-btn" title="Get notified when a new rule mapped to it is published">
                 <i class="fa-solid fa-bell me-1"></i>Alert me on new rules
             </a>
@@ -203,7 +211,7 @@
                     </div>
                     <div class="h-card__body" v-show="!collapsed.bundles">
                         <a v-for="b in kit.bundles" :key="b.id" :href="'/bundle/detail/' + b.id" class="kit-bundle">
-                            <span class="text-truncate">[[ b.name ]]</span>
+                            <span class="text-truncate"><i v-if="b.private" class="fa-solid fa-lock me-1 kit-lock" title="Private — only you can see it"></i>[[ b.name ]]</span>
                             <span class="kit-bundle__count">[[ b.rule_count ]] rules</span>
                         </a>
                     </div>

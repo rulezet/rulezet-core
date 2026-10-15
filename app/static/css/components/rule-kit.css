@@ -139,3 +139,9 @@
     background: rgba(25, 135, 84, .12); color: #198754;
 }
 .kit-related__count--zero { background: var(--light-bg-color); color: var(--subtle-text-color); }
+
+/* "Make it a bundle" menu, private bundles */
+.kit-menu { border-radius: 12px; background: var(--card-bg-color); }
+.kit-menu .dropdown-item { color: var(--text-color); }
+.kit-menu__hint { display: block; margin-left: 1.6rem; font-size: .72rem; color: var(--subtle-text-color); }
+.kit-lock { font-size: .7rem; color: var(--subtle-text-color); }
